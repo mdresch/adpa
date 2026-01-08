@@ -5,9 +5,11 @@
 
 const fs = require('fs');
 const path = require('path');
-const { Pool } = require('pg');
+const db = require('../src/lib/db');
 // Always load .env from the server root
 require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
+
+(async function(){ try{ await db.initDb() } catch(e){} })();
 
 const MIGRATION_FILE = path.resolve(__dirname, '../migrations', '326_create_portfolio_risks_table.sql');
 
@@ -16,13 +18,13 @@ async function runMigration() {
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   try {
     console.log('Running migration 326...');
-    await pool.query(sql);
+    await db.query(sql);
     console.log('Migration 326 applied successfully.');
   } catch (err) {
     console.error('Migration 326 failed:', err.message);
     process.exit(1);
   } finally {
-    await pool.end();
+    try { await db.end() } catch (e) {}
   }
 }
 

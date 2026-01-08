@@ -33,7 +33,8 @@ import type {
   EnrichedContext,
   ResolutionStrategy,
   ResolutionMetrics,
-  VariableUsageStats
+  VariableUsageStats,
+  DocumentTemplate
 } from './types'
 
 export interface VariableResolutionEngineConfig {
@@ -107,9 +108,10 @@ export class VariableResolutionEngine implements IVariableResolutionEngine {
 
       // Enrich context
       const enrichedContext = await this.enrichContext(request.context, request.variables)
+      const resolutionContext = enrichedContext as unknown as ResolutionContext
 
       // Optimize resolution strategy
-      const optimizedStrategy = await this.optimizeResolutionStrategy(request.variables, enrichedContext)
+      const optimizedStrategy = await this.optimizeResolutionStrategy(request.variables, resolutionContext)
 
       // Resolve variables
       const resolvedVariables: VariableResolution[] = []
@@ -117,7 +119,7 @@ export class VariableResolutionEngine implements IVariableResolutionEngine {
 
       for (const variable of request.variables) {
         try {
-          const resolution = await this.resolveVariable(variable, enrichedContext)
+          const resolution = await this.resolveVariable(variable, resolutionContext)
           resolvedVariables.push(resolution)
         } catch (error) {
           unresolvedVariables.push({
@@ -161,7 +163,7 @@ export class VariableResolutionEngine implements IVariableResolutionEngine {
         metadata: {
           resolution_time: resolutionTime,
           variables_analyzed: request.variables.length,
-          strategies_used: optimizedStrategy.resolution_strategies || [],
+          strategies_used: optimizedStrategy ? [optimizedStrategy.strategy_type] : [],
           context_enriched: true
         }
       }

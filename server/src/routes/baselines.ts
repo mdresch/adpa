@@ -10,6 +10,7 @@ import { validate, validateQuery } from '../middleware/validation'
 import { baselineService } from '../services/baselineService'
 import { logger } from '../utils/logger'
 import { generateFormalBaselineDocument, identifyMissingBaselineDocuments } from '../services/baselineDocumentGenerator'
+import { pool } from '../database/connection'
 
 const router = express.Router()
 
@@ -24,7 +25,6 @@ router.get(
   async (req, res) => {
     try {
       const { projectId } = req.params
-      const { pool } = await import('../database/connection')
 
       const result = await pool.query(
         `SELECT 
@@ -527,10 +527,9 @@ router.get(
   async (req, res) => {
     try {
       const { projectId } = req.params
-      const { pool } = await import('../database/connection')
 
       // Get active baseline
-      const baseline = await baselineService.getActiveBaseline(projectId)
+      const baseline: any = await baselineService.getActiveBaseline(projectId)
 
       if (!baseline) {
         return res.json({

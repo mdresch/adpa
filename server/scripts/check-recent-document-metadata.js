@@ -1,16 +1,16 @@
 /**
  * Check the generation_metadata of the most recent document
  */
-const { Pool } = require('pg');
+const dbModule = require('../src/lib/db')
+const db = dbModule.default || dbModule
 
 async function checkMetadata() {
   if (!process.env.DATABASE_URL) {
     throw new Error('DATABASE_URL environment variable is not set. Please provide a valid database connection string.');
   }
   
-  const pool = new Pool({
-    connectionString: process.env.DATABASE_URL
-  });
+  try {
+    await db.initDb()
 
   try {
     const result = await pool.query(`
@@ -40,7 +40,7 @@ async function checkMetadata() {
   } catch (error) {
     console.error('Error:', error);
   } finally {
-    await pool.end();
+    await db.end();
   }
 }
 

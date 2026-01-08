@@ -572,7 +572,7 @@ export async function calculateAssignmentCostImpact(
 
     // Calculate new cost
     const newHours = changes.plannedHours !== undefined ? changes.plannedHours : row.planned_hours;
-    const newRate = changes.hourlyRate !== undefined ? changes.hourly_rate : row.hourly_rate;
+    const newRate = changes.hourlyRate !== undefined ? changes.hourlyRate : row.hourly_rate;
     const newAllocation = changes.allocationPercentage !== undefined ? changes.allocationPercentage : row.allocation_percentage;
 
     const effectiveHours = (newHours * newAllocation) / 100;

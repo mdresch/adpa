@@ -1,13 +1,11 @@
-import { Pool } from 'pg'
 import * as dotenv from 'dotenv'
+const dbModule = require('../src/lib/db')
+const db = dbModule.default || dbModule
 
 dotenv.config()
 
 async function checkOptimizationReady() {
-  const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false
-  })
+  await db.initDb()
 
   try {
     const templateId = 'b04ab57d-9cab-49bf-99ba-c39daf1c241b' // Quality Management Plan
@@ -30,7 +28,7 @@ async function checkOptimizationReady() {
     console.log('')
 
     // Check for optimization suggestions
-    const optimizations = await pool.query(
+    const optimizations = await db.query(
       `SELECT id, status, priority, expected_quality_gain, 
               created_at, suggested_improvements, improvement_rationale
        FROM template_improvement_suggestions
@@ -50,7 +48,7 @@ async function checkOptimizationReady() {
       console.log('\nLet me check quality audits...\n')
 
       // Check quality audits for this template
-      const audits = await pool.query(
+      const audits = await db.query(
         `SELECT qa.overall_score, qa.audited_at, d.semantic_version
          FROM quality_audits qa
          JOIN documents d ON qa.document_id = d.id
@@ -141,7 +139,7 @@ async function checkOptimizationReady() {
     console.error('❌ Error:', error.message)
     console.error('Stack:', error.stack)
   } finally {
-    await pool.end()
+    await db.end()
   }
 }
 

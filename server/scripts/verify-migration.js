@@ -1,8 +1,10 @@
-const { Pool } = require('pg');
+const db = require('../src/lib/db');
 const path = require('path');
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
+
+(async function(){ try{ await db.initDb() } catch(e){} })();
 
 async function verifyMigration() {
   const pool = new Pool({
@@ -14,7 +16,7 @@ async function verifyMigration() {
     console.log('🔍 Verifying migration...\n');
     
     // Check if program_id column exists
-    const columnCheck = await pool.query(`
+    const columnCheck = await db.query(`
       SELECT column_name, data_type, is_nullable
       FROM information_schema.columns
       WHERE table_name = 'projects' AND column_name = 'program_id'
@@ -29,7 +31,7 @@ async function verifyMigration() {
     }
     
     // Check if index exists
-    const indexCheck = await pool.query(`
+    const indexCheck = await db.query(`
       SELECT indexname
       FROM pg_indexes
       WHERE tablename = 'projects' AND indexname = 'idx_projects_program_id'
@@ -42,7 +44,7 @@ async function verifyMigration() {
     }
     
     // Count projects by program assignment
-    const statsQuery = await pool.query(`
+    const statsQuery = await db.query(`
       SELECT 
         COUNT(*) FILTER (WHERE program_id IS NOT NULL) as assigned_projects,
         COUNT(*) FILTER (WHERE program_id IS NULL) as unassigned_projects,
@@ -59,7 +61,7 @@ async function verifyMigration() {
     console.error('❌ Verification failed:', error.message);
     process.exit(1);
   } finally {
-    await pool.end();
+    try { await db.end() } catch (e) {}
   }
 }
 

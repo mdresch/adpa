@@ -15,6 +15,10 @@ import { cache } from '../../utils/redis'
 import { logger } from '../../utils/logger'
 import { documentTemplateService } from '../documentTemplates/service'
 import { adobePdfService } from '../../services/adobePdfService'
+import {
+  OutputFormat,
+  GenerationStatus
+} from './types'
 import type {
   DocumentGenerationRequest,
   DocumentGenerationResponse,
@@ -23,11 +27,8 @@ import type {
   TemplateData,
   ProcessedTemplate,
   GenerationJob,
-  OutputFormat,
-  GenerationStatus,
   DocumentGeneratorConfig,
   AuthenticatedUser,
-  GenerationError,
   GenerationStats
 } from './types'
 
@@ -283,8 +284,12 @@ export class DocumentGeneratorService {
       content = `${frontmatter}\n\n${content}`
     }
 
+    const encoding: BufferEncoding = this.config.markdown_options.encoding === 'utf16'
+      ? 'utf16le'
+      : this.config.markdown_options.encoding
+
     // Write file
-    await fs.writeFile(filePath, content, { encoding: this.config.markdown_options.encoding })
+    await fs.writeFile(filePath, content, { encoding })
 
     return filePath
   }
@@ -492,7 +497,7 @@ export class DocumentGeneratorService {
   /**
    * Get DOCX heading level
    */
-  private getHeadingLevel(level: number): HeadingLevel {
+  private getHeadingLevel(level: number) {
     switch (level) {
       case 1: return HeadingLevel.HEADING_1
       case 2: return HeadingLevel.HEADING_2
@@ -759,7 +764,6 @@ export class DocumentGeneratorService {
       // Enqueue Confluence publishing job
       const { addJob } = await import('../../services/queueService')
       const jobId = await addJob(
-        'confluence-publishing',
         'publish-to-confluence',
         {
           jobId: response.id,

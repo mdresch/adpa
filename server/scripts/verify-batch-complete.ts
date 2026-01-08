@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { Pool } from 'pg';
+const db = require('../src/lib/db');
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
@@ -18,7 +18,7 @@ async function verifyBatchComplete() {
     console.log('='.repeat(60));
 
     // Check batch status
-    const batch = await pool.query(`
+    const batch = await db.query(`
       SELECT * FROM upload_batches WHERE id = $1
     `, [batchId]);
 
@@ -30,7 +30,7 @@ async function verifyBatchComplete() {
     console.log(`   Failed: ${batch.rows[0].failed_files}`);
 
     // Check documents
-    const docs = await pool.query(`
+    const docs = await db.query(`
       SELECT 
         id,
         name,
@@ -53,7 +53,7 @@ async function verifyBatchComplete() {
     });
 
     // Check quality audits
-    const audits = await pool.query(`
+    const audits = await db.query(`
       SELECT COUNT(*) as audit_count
       FROM quality_audits qa
       JOIN documents d ON qa.document_id = d.id
@@ -64,7 +64,7 @@ async function verifyBatchComplete() {
     console.log(`   Generated: ${audits.rows[0].audit_count}`);
 
     // Check assessment
-    const assessment = await pool.query(`
+    const assessment = await db.query(`
       SELECT 
         id,
         status,
@@ -108,7 +108,7 @@ async function verifyBatchComplete() {
       console.log('\n⚠️  Some issues detected\n');
     }
 
-    await pool.end();
+    try { await db.end() } catch (e) {}
   } catch (error) {
     console.error('Error:', error);
     process.exit(1);

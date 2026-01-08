@@ -7,16 +7,12 @@
  * Usage: node scripts/backfill-audit-logs.js
  */
 
-const { Pool } = require('pg');
+const dbModule = require('../src/lib/db')
+const db = dbModule.default || dbModule
 require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 
 async function backfillAuditLogs() {
-  const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: process.env.DB_SSL === 'true' || process.env.DATABASE_URL?.includes('supabase') 
-      ? { rejectUnauthorized: true } 
-      : false
-  });
+  await db.initDb()
 
   try {
     console.log('📊 Starting Audit Log Backfill for AI Analytics...\n');
@@ -24,7 +20,7 @@ async function backfillAuditLogs() {
     // Step 1: Find completed AI generation jobs that don't have audit logs
     console.log('🔍 Finding completed AI generation jobs without audit logs...');
     
-    const jobsResult = await pool.query(`
+    const jobsResult = await db.query(`
       SELECT 
         j.id as job_id,
         j.created_by as user_id,
@@ -54,7 +50,7 @@ async function backfillAuditLogs() {
     }
 
     // Step 2: Get provider mapping (name -> id)
-    const providersResult = await pool.query('SELECT id, name FROM ai_providers');
+    const providersResult = await db.query('SELECT id, name FROM ai_providers');
     const providerMap = new Map(providersResult.rows.map(p => [p.name, p.id]));
     console.log(`📋 Loaded ${providerMap.size} AI providers:`, Array.from(providerMap.keys()).join(', '), '\n');
 
@@ -91,7 +87,7 @@ async function backfillAuditLogs() {
         const documentId = jobResult?.documentId || null;
 
         // Create audit log
-        await pool.query(
+        await db.query(
           `INSERT INTO audit_logs (user_id, action, resource_type, resource_id, new_values, created_at)
            VALUES ($1, $2, $3, $4, $5, $6)`,
           [
@@ -140,7 +136,7 @@ async function backfillAuditLogs() {
 
     // Step 5: Show current analytics counts
     console.log('\n📈 Current AI Analytics Stats:');
-    const statsResult = await pool.query(`
+    const statsResult = await db.query(`
       SELECT 
         COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days') as last_7d,
         COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '30 days') as last_30d,
@@ -162,7 +158,7 @@ async function backfillAuditLogs() {
     console.error('\n❌ FATAL ERROR:', error);
     process.exit(1);
   } finally {
-    await pool.end();
+    await db.end();
   }
 }
 

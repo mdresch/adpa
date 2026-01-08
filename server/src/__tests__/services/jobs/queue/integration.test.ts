@@ -12,6 +12,8 @@ import { createMockQueueService } from '../../../../services/jobs/queue/QueueSer
 import type { QueueServiceDependencies } from '../../../../services/jobs/queue/QueueDependencies'
 import type { IQueue } from '../../../../services/jobs/queue/IQueue'
 import type { JobData } from '../../../../services/jobs/types'
+import { RabbitQueueAdapter } from '../../../../services/jobs/queue/RabbitQueueAdapter'
+import { connect as mockConnect } from 'amqp-connection-manager'
 import { v4 as uuidv4 } from 'uuid'
 
 describe('QueueService Integration Tests', () => {
@@ -261,6 +263,97 @@ describe('QueueService Integration Tests', () => {
       // Performance monitoring should be called (mocked in QueueService.test.ts)
       // This test verifies the integration works
       expect(databaseQueries.length).toBeGreaterThan(0)
+    })
+  })
+
+  describe('Rabbit adapter integration', () => {
+    afterAll(() => {
+      jest.useRealTimers()
+    })
+
+    let connection: any
+    let channelWrapper: any
+    let confirmChannel: any
+
+    it('adds a job, fails it, sends to DLQ, and reports stats', async () => {
+      // Build a minimal Rabbit adapter with mocked connection/channel
+      confirmChannel = {
+        assertQueue: jest.fn().mockResolvedValue(undefined),
+        prefetch: jest.fn().mockResolvedValue(undefined),
+        consume: jest.fn(async (_queue: string, onMessage: any) => {
+          setImmediate(() => onMessage(testMessage))
+          return { consumerTag: 'ctag' }
+        }),
+        sendToQueue: jest.fn().mockResolvedValue(undefined),
+        checkQueue: jest.fn().mockResolvedValue({ messageCount: 1 }),
+        ack: jest.fn().mockResolvedValue(undefined),
+        cancel: jest.fn().mockResolvedValue(undefined),
+      }
+
+      channelWrapper = {
+        addSetup: jest.fn(async (fn: any) => fn(confirmChannel as any)),
+        sendToQueue: jest.fn().mockResolvedValue(undefined),
+        ack: jest.fn(),
+        cancel: jest.fn(),
+        close: jest.fn(),
+      }
+
+      connection = {
+        createChannel: jest.fn(() => channelWrapper),
+        close: jest.fn(),
+        on: jest.fn(),
+      }
+
+      jest.spyOn(require('amqp-connection-manager'), 'connect').mockReturnValue(connection as any)
+
+      const adapter = new RabbitQueueAdapter({
+        connection: connection as any,
+        queueName: 'integration-queue',
+        prefetch: 1,
+        defaultAttempts: 1,
+        defaultBackoffMs: 50,
+      })
+
+      const queueServiceWithRabbit = createMockQueueService(mockDependencies)
+      queueServiceWithRabbit.registerQueue('integration-queue' as any, adapter)
+
+      const testMessage = {
+        content: Buffer.from(JSON.stringify({ jobId: 'dlq-1', type: 'integration-fail', data: { foo: 'bar' } })),
+        properties: { headers: { jobType: 'integration-fail', attemptsUsed: 0, maxAttempts: 1, backoffDelay: 50, backoffType: 'fixed' } },
+      }
+
+      // Register a failing processor
+      adapter.process('integration-fail', 1, async () => {
+        throw new Error('boom')
+      })
+
+      // Add job (publishes to main queue)
+      const job = await adapter.add('integration-fail', { foo: 'bar' })
+      expect(job.id).toBeDefined()
+      expect(channelWrapper.sendToQueue).toHaveBeenCalledWith(
+        'integration-queue',
+        expect.objectContaining({ type: 'integration-fail' }),
+        expect.objectContaining({ headers: expect.any(Object) })
+      )
+
+      // Allow the consumer to run and fail once (goes to DLQ)
+      await new Promise((resolve) => setTimeout(resolve, 10))
+
+      expect(channelWrapper.sendToQueue).toHaveBeenCalledWith(
+        'integration-queue.dlq',
+        expect.objectContaining({ jobId: 'dlq-1' }),
+        expect.objectContaining({ headers: expect.objectContaining({ attemptsUsed: 1 }) })
+      )
+
+      const stats = await adapter.getStats()
+      expect(confirmChannel.checkQueue).toHaveBeenCalledWith('integration-queue')
+      expect(stats.waiting).toBe(1)
+    })
+
+    afterEach(() => {
+      // Explicit teardown to silence open-handle warnings
+      if (channelWrapper?.close) channelWrapper.close()
+      if (connection?.close) connection.close()
     })
   })
 })

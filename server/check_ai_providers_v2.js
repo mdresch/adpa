@@ -1,22 +1,19 @@
-const { Pool } = require('pg');
 const dotenv = require('dotenv');
 const path = require('path');
-
 dotenv.config({ path: path.join(__dirname, '.env') });
-
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const dbModule = require('./src/lib/db')
+const db = dbModule.default || dbModule
 
 async function checkAIProviders() {
     try {
-        const cols = await pool.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'ai_providers'");
-        console.log('AI Providers Columns:', cols.rows.map(r => r.column_name));
-
-        const res = await pool.query("SELECT * FROM ai_providers LIMIT 5");
-        console.log('AI Providers:', JSON.stringify(res.rows, null, 2));
-        await pool.end();
+        await db.initDb()
+        const res = await db.query('SELECT id, name, provider_type, is_active FROM ai_providers ORDER BY name');
+        console.log(res.rows);
     } catch (err) {
         console.error('Query error:', err.message);
         process.exit(1);
+    } finally {
+        await db.end();
     }
 }
 

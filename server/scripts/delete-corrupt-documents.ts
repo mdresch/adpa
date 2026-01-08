@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { Pool } from 'pg';
+const db = require('../src/lib/db');
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
@@ -15,7 +15,7 @@ async function deleteCorruptDocuments() {
     const batchId = '13e79f1f-fb52-476b-9f88-1c31d2e540e3';
 
     // First, show what we're about to delete
-    const docsToDelete = await pool.query(`
+    const docsToDelete = await db.query(`
       SELECT id, name, LENGTH(content) as content_length
       FROM documents
       WHERE metadata->>'upload_batch_id' = $1
@@ -30,12 +30,12 @@ async function deleteCorruptDocuments() {
 
     if (docsToDelete.rows.length === 0) {
       console.log('\nNo corrupt documents found.');
-      await pool.end();
+      try { await db.end() } catch (e) {}
       return;
     }
 
     // Delete quality_audits for these documents first (foreign key constraint)
-    const auditDelete = await pool.query(`
+    const auditDelete = await db.query(`
       DELETE FROM quality_audits
       WHERE document_id IN (
         SELECT id FROM documents
@@ -48,7 +48,7 @@ async function deleteCorruptDocuments() {
     console.log(`\n✅ Deleted ${auditDelete.rowCount} quality audit records`);
 
     // Delete the documents
-    const docDelete = await pool.query(`
+    const docDelete = await db.query(`
       DELETE FROM documents
       WHERE metadata->>'upload_batch_id' = $1
       AND LENGTH(content) = 15
@@ -59,7 +59,7 @@ async function deleteCorruptDocuments() {
     console.log(`✅ Deleted ${docDelete.rowCount} documents`);
 
     // Also delete the assessment record for this batch
-    const assessmentDelete = await pool.query(`
+    const assessmentDelete = await db.query(`
       DELETE FROM assessments
       WHERE batch_id = $1
       RETURNING id
@@ -70,7 +70,7 @@ async function deleteCorruptDocuments() {
     }
 
     // Mark the batch as failed so it can be re-uploaded
-    await pool.query(`
+    await db.query(`
       UPDATE upload_batches
       SET 
         status = 'failed',
@@ -88,7 +88,7 @@ async function deleteCorruptDocuments() {
 
     console.log('\n✨ Cleanup complete! You can now re-upload the documents.\n');
 
-    await pool.end();
+    try { await db.end() } catch (e) {}
   } catch (error) {
     console.error('Error:', error);
     process.exit(1);

@@ -1,20 +1,17 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { Pool } from 'pg';
+const dbModule = require('../src/lib/db')
+const db = dbModule.default || dbModule
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-});
 
 async function checkAIProviders() {
   try {
     console.log('\n🤖 AI PROVIDER CONFIGURATION:\n');
 
-    const result = await pool.query(`
+    await db.initDb()
+    const result = await db.query(`
       SELECT 
         name,
         type,
@@ -63,7 +60,7 @@ async function checkAIProviders() {
       console.log('   Entity extraction will fail until you add at least one API key.\n');
     }
 
-    await pool.end();
+    await db.end();
   } catch (error) {
     console.error('❌ Error:', error);
     process.exit(1);

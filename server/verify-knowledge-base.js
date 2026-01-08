@@ -3,19 +3,18 @@
  * Verifies the Knowledge Base database schema and basic functionality
  */
 
-const { Pool } = require('pg')
+const dbModule = require('./src/lib/db')
+const db = dbModule.default || dbModule
 
 async function verifyKnowledgeBase() {
   console.log('🧠 Verifying Knowledge Base Implementation...\n')
   
-  const pool = new Pool({
-    connectionString: 'postgresql://postgres:QueIQ4ADPA$@db.blxzjbxczpmmgiwbtmdo.supabase.co:5432/postgres?sslmode=require'
-  })
+  await db.initDb()
   
   try {
     // Test 1: Check tables exist
     console.log('📋 Checking Knowledge Base Tables...')
-    const tablesResult = await pool.query(`
+    const tablesResult = await db.query(`
       SELECT table_name 
       FROM information_schema.tables 
       WHERE table_schema = 'public' 
@@ -31,7 +30,7 @@ async function verifyKnowledgeBase() {
     // Test 2: Check table structures
     console.log('\n🏗️ Checking Table Structures...')
     
-    const entriesColumns = await pool.query(`
+    const entriesColumns = await db.query(`
       SELECT column_name, data_type, is_nullable 
       FROM information_schema.columns 
       WHERE table_name = 'knowledge_base_entries' 
@@ -40,7 +39,7 @@ async function verifyKnowledgeBase() {
     
     console.log(`✅ knowledge_base_entries table has ${entriesColumns.rows.length} columns`)
     
-    const appsColumns = await pool.query(`
+    const appsColumns = await db.query(`
       SELECT column_name, data_type 
       FROM information_schema.columns 
       WHERE table_name = 'knowledge_base_applications' 
@@ -49,7 +48,7 @@ async function verifyKnowledgeBase() {
     
     console.log(`✅ knowledge_base_applications table has ${appsColumns.rows.length} columns`)
     
-    const reviewsColumns = await pool.query(`
+    const reviewsColumns = await db.query(`
       SELECT column_name, data_type 
       FROM information_schema.columns 
       WHERE table_name = 'knowledge_base_reviews' 
@@ -60,7 +59,7 @@ async function verifyKnowledgeBase() {
     
     // Test 3: Check indexes
     console.log('\n📊 Checking Indexes...')
-    const indexResult = await pool.query(`
+    const indexResult = await db.query(`
       SELECT indexname 
       FROM pg_indexes 
       WHERE tablename LIKE 'knowledge_base%'
@@ -76,7 +75,7 @@ async function verifyKnowledgeBase() {
     console.log('\n✍️ Testing Basic CRUD Operations...')
     
     // Insert test entry
-    const insertResult = await pool.query(`
+    const insertResult = await db.query(`
       INSERT INTO knowledge_base_entries (
         project_id, entry_type, category, title, description,
         improved_approach, replication_guide, value_metrics,
@@ -97,7 +96,7 @@ async function verifyKnowledgeBase() {
     console.log(`✅ Created test entry: ${insertResult.rows[0].title} (Status: ${insertResult.rows[0].status})`)
     
     // Read entry
-    const selectResult = await pool.query(`
+    const selectResult = await db.query(`
       SELECT id, title, entry_type, status, created_at
       FROM knowledge_base_entries 
       WHERE id = $1
@@ -106,7 +105,7 @@ async function verifyKnowledgeBase() {
     console.log(`✅ Retrieved entry: ${selectResult.rows[0].title}`)
     
     // Update entry
-    await pool.query(`
+    await db.query(`
       UPDATE knowledge_base_entries 
       SET status = 'published', view_count = 1
       WHERE id = $1
@@ -115,7 +114,7 @@ async function verifyKnowledgeBase() {
     console.log('✅ Updated entry status to published')
     
     // Create application
-    const appResult = await pool.query(`
+    const appResult = await db.query(`
       INSERT INTO knowledge_base_applications (
         knowledge_base_entry_id, target_project_id, status,
         implementation_notes, expected_value, applied_by
@@ -128,7 +127,7 @@ async function verifyKnowledgeBase() {
     console.log('✅ Created test application record')
     
     // Create review
-    await pool.query(`
+    await db.query(`
       INSERT INTO knowledge_base_reviews (
         knowledge_base_entry_id, reviewer_id, rating, 
         recommendation, review_text, review_type
@@ -142,7 +141,7 @@ async function verifyKnowledgeBase() {
     
     // Test 5: Verify statistics
     console.log('\n📊 Testing Statistics...')
-    const statsResult = await pool.query(`
+    const statsResult = await db.query(`
       SELECT 
         COUNT(*) as total_entries,
         COUNT(*) FILTER (WHERE status = 'published') as published_entries,
@@ -162,9 +161,9 @@ async function verifyKnowledgeBase() {
     
     // Cleanup test data
     console.log('\n🧹 Cleaning up test data...')
-    await pool.query(`DELETE FROM knowledge_base_reviews WHERE knowledge_base_entry_id = $1`, [entryId])
-    await pool.query(`DELETE FROM knowledge_base_applications WHERE knowledge_base_entry_id = $1`, [entryId])
-    await pool.query(`DELETE FROM knowledge_base_entries WHERE id = $1`, [entryId])
+    await db.query(`DELETE FROM knowledge_base_reviews WHERE knowledge_base_entry_id = $1`, [entryId])
+    await db.query(`DELETE FROM knowledge_base_applications WHERE knowledge_base_entry_id = $1`, [entryId])
+    await db.query(`DELETE FROM knowledge_base_entries WHERE id = $1`, [entryId])
     console.log('✅ Test data cleaned up')
     
     console.log('\n🎉 Knowledge Base Implementation Verification COMPLETE!')
@@ -177,7 +176,7 @@ async function verifyKnowledgeBase() {
     console.error('\n❌ Knowledge Base verification failed:', error.message)
     throw error
   } finally {
-    await pool.end()
+    await db.end()
   }
 }
 

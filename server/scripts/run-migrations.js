@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { Pool } = require('pg');
+const db = require('../src/lib/db');
 require('dotenv').config();
 
 const pool = new Pool({
@@ -42,7 +42,7 @@ async function runMigrations() {
     
   } finally {
     client.release();
-    await pool.end();
+    try { await db.end() } catch (e) {}
   }
 }
 

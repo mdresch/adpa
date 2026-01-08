@@ -2,7 +2,7 @@
  * Check version history for a specific document
  */
 
-import { Pool } from 'pg'
+const db = require('../src/lib/db')
 import * as dotenv from 'dotenv'
 import path from 'path'
 
@@ -21,7 +21,7 @@ async function checkVersions() {
     console.log(`🔍 Checking version history for document: ${documentId}\n`)
     
     // Check current document
-    const currentDoc = await pool.query(`
+    const currentDoc = await db.query(`
       SELECT id, name, version, semantic_version, updated_at
       FROM documents
       WHERE id = $1
@@ -40,7 +40,7 @@ async function checkVersions() {
     
     // Check version history
     console.log('\n📚 Version History (document_versions table):')
-    const versions = await pool.query(`
+    const versions = await db.query(`
       SELECT id, version, semantic_version, change_type, change_description, created_at
       FROM document_versions
       WHERE document_id = $1
@@ -65,8 +65,7 @@ async function checkVersions() {
   } catch (error: any) {
     console.error('❌ Error:', error.message)
   } finally {
-    await pool.end()
-  }
+    try { await db.end() } catch (e) {}}
 }
 
 checkVersions()

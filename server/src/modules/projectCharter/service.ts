@@ -48,9 +48,9 @@ import type {
   ConstraintClassification,
   StandardsRuleCheck,
   PowerInterestMatrix,
-  ProjectCharterConfig,
-  DEFAULT_CHARTER_CONFIG
+  ProjectCharterConfig
 } from './types'
+import { DEFAULT_CHARTER_CONFIG } from './types'
 
 export class ProjectCharterAgentService {
   private config: ProjectCharterConfig

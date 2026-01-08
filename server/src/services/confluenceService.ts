@@ -405,7 +405,6 @@ export class ConfluenceService {
       marked.setOptions({
         gfm: true,
         breaks: false, // Don't convert line breaks to <br>
-        headerIds: false, // Don't add IDs to headers
         mangle: false
       })
 

@@ -306,7 +306,7 @@ router.get('/replications/change-request/:changeRequestId', authenticateToken, a
     // Filter replications that match this change request's drift record
     const relevantReplications = replications.filter(r => {
       const crDriftId = metadata.drift_record_id
-      return !crDriftId || r.source_drift_id === crDriftId
+      return !crDriftId || r.sourceDriftId === crDriftId
     })
 
     res.json({
@@ -386,12 +386,12 @@ router.post('/replications/change-request/:changeRequestId/execute', authenticat
     // Filter by drift record if available
     const crDriftId = metadata.drift_record_id
     if (crDriftId) {
-      replications = replications.filter(r => r.source_drift_id === crDriftId)
+      replications = replications.filter(r => r.sourceDriftId === crDriftId)
     }
 
     // Filter by target project IDs if provided
     if (targetProjectIds && Array.isArray(targetProjectIds) && targetProjectIds.length > 0) {
-      replications = replications.filter(r => targetProjectIds.includes(r.target_project_id))
+      replications = replications.filter(r => targetProjectIds.includes(r.targetProjectId))
     }
 
     if (replications.length === 0) {
@@ -406,9 +406,9 @@ router.post('/replications/change-request/:changeRequestId/execute', authenticat
     for (const replication of replications) {
       try {
         // Update status based on current status
-        const newStatus = replication.replication_status === 'identified' 
+        const newStatus = replication.replicationStatus === 'identified' 
           ? 'approved' 
-          : replication.replication_status === 'pending_approval'
+          : replication.replicationStatus === 'pending_approval'
           ? 'in_progress'
           : 'in_progress'
 

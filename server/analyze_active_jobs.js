@@ -1,13 +1,15 @@
 
-const { Pool } = require('pg');
+const db = require('./src/lib/db');
 require('dotenv').config();
+
+(async function(){ try{ await db.initDb() } catch(e){} })();
 
 async function analyzeJobs() {
     const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
     try {
         console.log('--- All Active Jobs ---');
-        const jobsRes = await pool.query(
+        const jobsRes = await db.query(
             `SELECT id, type, status, progress, created_at, processing_started_at, worker_id, error_message, project_id, data
        FROM jobs 
        WHERE status = 'processing' 
@@ -32,7 +34,7 @@ async function analyzeJobs() {
 
         // Also check for jobs that might be "stuck" in pending
         console.log('\n--- Jobs Stuck in Pending (> 10 mins) ---');
-        const pendingRes = await pool.query(
+        const pendingRes = await db.query(
             `SELECT id, type, created_at 
        FROM jobs 
        WHERE status = 'pending' 
@@ -45,7 +47,7 @@ async function analyzeJobs() {
     } catch (err) {
         console.error(err);
     } finally {
-        await pool.end();
+        try { await db.end() } catch (e) {}
     }
 }
 

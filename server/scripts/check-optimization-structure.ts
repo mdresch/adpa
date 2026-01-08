@@ -1,17 +1,13 @@
-import { Pool } from 'pg';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
-
 dotenv.config({ path: path.join(__dirname, '../.env') });
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false
-});
+const dbModule = require('../src/lib/db')
+const db = dbModule.default || dbModule
 
 async function checkStructure() {
   try {
-    const result = await pool.query(`
+    await db.initDb()
+    const result = await db.query(`
       SELECT 
         id,
         suggested_improvements
@@ -46,7 +42,7 @@ async function checkStructure() {
       });
     }
     
-    await pool.end();
+    await db.end();
     process.exit(0);
   } catch (error: any) {
     console.error('Error:', error.message);

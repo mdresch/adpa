@@ -3,6 +3,7 @@ import { documentCompressionService } from '../services/documentCompressionServi
 import { authMiddleware } from '../middleware/auth'
 import { validate } from '../middleware/validation'
 import { logger } from '../utils/logger'
+import Joi from 'joi'
 
 const router = Router()
 
@@ -13,14 +14,12 @@ router.use(authMiddleware)
  * POST /api/compression/feedback
  * Collect user feedback for compression quality
  */
-router.post('/feedback', validate({
-  body: {
-    documentId: { type: 'string', required: true },
-    rating: { type: 'number', required: true, min: 1, max: 5 },
-    feedback: { type: 'string', required: false },
-    compressionMethod: { type: 'string', required: true }
-  }
-}), async (req, res) => {
+router.post('/feedback', validate(Joi.object({
+  documentId: Joi.string().required(),
+  rating: Joi.number().min(1).max(5).required(),
+  feedback: Joi.string().allow('').optional(),
+  compressionMethod: Joi.string().required()
+})), async (req, res) => {
   try {
     const { documentId, rating, feedback, compressionMethod } = req.body
     const userId = req.user?.id
@@ -114,13 +113,11 @@ router.get('/strategies', async (req, res) => {
  * POST /api/compression/optimize
  * Get optimal compression strategy for specific content
  */
-router.post('/optimize', validate({
-  body: {
-    content: { type: 'string', required: true },
-    projectType: { type: 'string', required: false },
-    documentType: { type: 'string', required: false }
-  }
-}), async (req, res) => {
+router.post('/optimize', validate(Joi.object({
+  content: Joi.string().required(),
+  projectType: Joi.string().optional(),
+  documentType: Joi.string().optional()
+})), async (req, res) => {
   try {
     const { content, projectType, documentType } = req.body
 
@@ -161,12 +158,10 @@ router.post('/optimize', validate({
  * POST /api/compression/compare
  * Compare multiple compression strategies
  */
-router.post('/compare', validate({
-  body: {
-    content: { type: 'string', required: true },
-    strategies: { type: 'array', required: true }
-  }
-}), async (req, res) => {
+router.post('/compare', validate(Joi.object({
+  content: Joi.string().required(),
+  strategies: Joi.array().items(Joi.string(), Joi.object()).min(1).required()
+})), async (req, res) => {
   try {
     const { content, strategies } = req.body
 
@@ -217,12 +212,10 @@ router.get('/analytics', async (req, res) => {
  * POST /api/compression/quality-metrics
  * Calculate quality metrics for compressed content
  */
-router.post('/quality-metrics', validate({
-  body: {
-    compressedContent: { type: 'string', required: true },
-    originalContent: { type: 'string', required: true }
-  }
-}), async (req, res) => {
+router.post('/quality-metrics', validate(Joi.object({
+  compressedContent: Joi.string().required(),
+  originalContent: Joi.string().required()
+})), async (req, res) => {
   try {
     const { compressedContent, originalContent } = req.body
 

@@ -2,9 +2,10 @@
 // Script to apply migration 325_fix_team_agreements_uuid_types.sql using node-postgres
 // Usage: node migrate325.js
 
-const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
+const dbModule = require('./src/lib/db')
+const db = dbModule.default || dbModule
 
 // Load environment variables from .env if present
 require('dotenv').config();
@@ -25,10 +26,12 @@ async function runMigration() {
     sslConfig = { rejectUnauthorized: false };
   }
   // If error is self-signed cert, print a clear message
-  const pool = new Pool({
-    connectionString: process.env.DATABASE_URL || process.env.POSTGRES_URL,
-    ssl: sslConfig,
-  });
+  try {
+    await db.initDb()
+  } catch (e) {
+    console.error('Failed to initialize DB:', e?.message || e)
+    process.exit(1)
+  }
 
   let sql;
   try {
@@ -40,7 +43,7 @@ async function runMigration() {
 
   try {
     console.log('Running migration 325...');
-    await pool.query(sql);
+    await db.query(sql);
     console.log('Migration 325 applied successfully.');
     process.exit(0);
   } catch (err) {
@@ -52,7 +55,7 @@ async function runMigration() {
     }
     process.exit(1);
   } finally {
-    await pool.end();
+    await db.end();
   }
 }
 

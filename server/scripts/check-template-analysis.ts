@@ -1,19 +1,15 @@
-import { Pool } from 'pg';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
-
 // Load environment variables
 dotenv.config({ path: path.join(__dirname, '../.env') });
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false
-});
+const dbModule = require('../src/lib/db')
+const db = dbModule.default || dbModule
 
 async function checkTemplateAnalysis() {
   try {
+    await db.initDb()
     // Get recent quality audits
-    const audits = await pool.query(`
+    const audits = await db.query(`
       SELECT 
         qa.id as audit_id,
         qa.document_id,
@@ -64,7 +60,7 @@ async function checkTemplateAnalysis() {
     });
     
     // Check for template improvement suggestions
-    const suggestions = await pool.query(`
+    const suggestions = await db.query(`
       SELECT 
         tis.id,
         tis.template_id,
@@ -118,7 +114,7 @@ async function checkTemplateAnalysis() {
       });
     }
     
-    await pool.end();
+    await db.end();
     process.exit(0);
   } catch (error: any) {
     console.error('❌ Error:', error.message);

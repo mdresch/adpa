@@ -19,6 +19,7 @@ import type {
   EnhancedTemplate,
   TemplateRecommendation,
   TemplateQualityAssessment,
+  TemplateProcessingMetrics,
   ValidationResult,
   TemplateOptimization,
   DocumentTemplate,

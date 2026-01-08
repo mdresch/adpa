@@ -3,7 +3,7 @@
  * Displays admin user email for login
  */
 
-import { Pool } from 'pg';
+const db = require('../src/lib/db');
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 
@@ -17,7 +17,7 @@ const pool = new Pool({
 
 async function showAdminCredentials() {
   try {
-    const result = await pool.query(`
+    const result = await db.query(`
       SELECT email, name, role, created_at
       FROM users
       WHERE role = 'admin'
@@ -51,7 +51,7 @@ async function showAdminCredentials() {
     console.error('Error:', error);
     process.exit(1);
   } finally {
-    await pool.end();
+    try { await db.end() } catch (e) {}
   }
 }
 

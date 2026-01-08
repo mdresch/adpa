@@ -2,7 +2,7 @@
  * Pipeline Worker
  * Processes pipeline jobs from the queue
  */
-
+import "../tracing"
 import { logger } from '../utils/logger'
 import { pool } from '../database/connection'
 import { PipelineOrchestrator } from '../modules/multiStageDocumentProcessor/services/pipelineOrchestrator'
@@ -37,18 +37,17 @@ export async function processPipelineJob(job: any) {
       [jobId]
     )
 
-    // Build document processing request
+    // Build document processing request using snake_case to match DocumentProcessingRequest type
     const request: DocumentProcessingRequest = {
       request_id: requestId,
       template_id: templateId,
       project_id: projectId,
       user_id: userId,
-      context_bundle: contextBundle || {},
-      processing_config: processingConfig || {},
-      enhancement_config: enhancementConfig || {},
+      processing_config: processingConfig || {} as any,
+      context_config: contextBundle || {},
       quality_config: qualityConfig || {},
       output_config: outputConfig || {},
-      created_at: new Date()
+      createdAt: new Date()
     }
 
     // Execute the pipeline
@@ -131,7 +130,7 @@ export async function processPipelineJob(job: any) {
           
           // Calculate compression ratio (if compression was applied)
           const aiGenResult = stageResults.find(r => r.stage_type === 'ai_generation')
-          const originalLength = aiGenResult?.input?.input_data?.processed_template?.content?.length || finalContent.length
+          const originalLength = aiGenResult?.output?.output_data?.processed_template?.content?.length || finalContent.length
           const compressionRatio = originalLength > 0 ? (finalContent.length / originalLength).toFixed(3) : '1.000'
           
           // Calculate total tokens used across all AI calls
@@ -219,9 +218,7 @@ export async function processPipelineJob(job: any) {
               stage_type: stage.stage_type,
               status: stage.status,
               execution_time_ms: stage.execution_time,
-              quality_score: stage.quality_score,
-              started_at: stage.started_at,
-              completed_at: stage.completed_at
+              quality_score: stage.quality_score
             })),
             
             // Context gathering metrics
@@ -427,10 +424,14 @@ export async function processPipelineJob(job: any) {
 /**
  * Register pipeline worker with queue service
  */
-export function registerPipelineWorker(queueService: any) {
-  logger.info('Registering pipeline worker')
-  
-  queueService.process('pipeline-processing', async (job: any) => {
+import { pipelineQueue } from '../services/queueService'
+
+export function registerPipelineWorker() {
+  logger.info('Registering pipeline worker (direct to pipelineQueue)')
+
+  // Register processor directly on the Rabbit queue exported from queueService
+  const PIPELINE_CONCURRENCY = 4
+  pipelineQueue.process('pipeline-processing', PIPELINE_CONCURRENCY, async (job: any) => {
     return await processPipelineJob(job)
   })
 

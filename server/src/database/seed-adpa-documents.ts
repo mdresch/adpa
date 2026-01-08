@@ -1,15 +1,9 @@
-import { Pool } from "pg"
+import db from "../lib/db"
 import { readFileSync, readdirSync, statSync } from "fs"
 import { join, extname } from "path"
 import { logger } from "../utils/logger"
 
-const pool = new Pool({
-  user: process.env.DB_USER || "postgres",
-  host: process.env.DB_HOST || "localhost",
-  database: process.env.DB_NAME || "adpa_db",
-  password: process.env.DB_PASSWORD || "password",
-  port: parseInt(process.env.DB_PORT || "5432"),
-})
+// Uses shared DB singleton via `server/src/lib/db.ts`
 
 interface DocumentCategory {
   name: string
@@ -98,7 +92,7 @@ const documentCategories: Record<string, DocumentCategory> = {
 async function findOrCreateAdpaProject(): Promise<string> {
   try {
     // Check if ADPA project exists
-    const existingProject = await pool.query(
+    const existingProject = await db.query(
       "SELECT id FROM projects WHERE name = $1",
       ["ADPA - Advanced Document Processing Automation"]
     )
@@ -109,7 +103,7 @@ async function findOrCreateAdpaProject(): Promise<string> {
     }
 
     // Get test user ID for project creation
-    const testUser = await pool.query(
+    const testUser = await db.query(
       "SELECT id FROM users WHERE email = $1",
       ["test@example.com"]
     )
@@ -121,7 +115,7 @@ async function findOrCreateAdpaProject(): Promise<string> {
     const userId = testUser.rows[0].id
 
     // Create ADPA project
-    const newProject = await pool.query(
+    const newProject = await db.query(
       `INSERT INTO projects (
         id, name, description, framework, status, owner_id, created_by,
         team_members, settings, metadata, created_at, updated_at
@@ -294,10 +288,10 @@ async function seedAdpaDocuments() {
         }
 
         // Check if document already exists
-        const existingDoc = await pool.query(
-          "SELECT id FROM documents WHERE name = $1 AND project_id = $2",
-          [metadata.title, projectId]
-        )
+        const existingDoc = await db.query(
+              "SELECT id FROM documents WHERE name = $1 AND project_id = $2",
+              [metadata.title, projectId]
+            )
 
         if (existingDoc.rows.length > 0) {
           logger.info(`Document already exists: ${metadata.title}`)
@@ -306,7 +300,7 @@ async function seedAdpaDocuments() {
         }
 
         // Insert document
-        await pool.query(
+        await db.query(
           `INSERT INTO documents (
             id, name, content, project_id, framework, status, metadata, created_by, updated_by, created_at, updated_at
           ) VALUES (
@@ -346,8 +340,8 @@ async function seedAdpaDocuments() {
   } catch (error) {
     logger.error("Failed to seed ADPA documents:", error)
     throw error
-  } finally {
-    await pool.end()
+    } finally {
+    await db.end()
   }
 }
 

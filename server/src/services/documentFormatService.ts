@@ -1,3 +1,4 @@
+;(async function(){ try{ await (require('../lib/db')).initDb() } catch(e){} })();
 /**
  * Document Format Service
  * Handles document format conversion and storage
@@ -5,7 +6,7 @@
 
 import { MultiFormatOutputEngine, FormatConversionOptions, ConversionResult } from '../modules/multiStageDocumentProcessor/engines/multiFormatOutputEngine'
 import { logger } from '../utils/logger'
-import { Pool } from 'pg'
+import type { Pool } from 'pg'
 
 export interface DocumentFormatRequest {
   documentId: string

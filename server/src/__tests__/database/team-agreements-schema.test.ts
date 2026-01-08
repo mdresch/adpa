@@ -4,7 +4,7 @@
  * Tests the database structure for team_agreements and team_agreement_adherence_log tables
  */
 
-import { Pool } from 'pg'
+const db = require('../../lib/db')
 import dotenv from 'dotenv'
 
 dotenv.config()
@@ -28,12 +28,11 @@ describe('Team Agreements Database Schema (TASK-138)', () => {
   })
 
   afterAll(async () => {
-    await pool.end()
-  })
+    try { await db.end() } catch (e) {}})
 
   describe('team_agreements table', () => {
     it('should exist', async () => {
-      const result = await pool.query(`
+      const result = await db.query(`
         SELECT EXISTS (
           SELECT FROM information_schema.tables 
           WHERE table_schema = 'public' 
@@ -44,7 +43,7 @@ describe('Team Agreements Database Schema (TASK-138)', () => {
     })
 
     it('should have correct columns', async () => {
-      const result = await pool.query(`
+      const result = await db.query(`
         SELECT column_name, data_type, is_nullable, column_default
         FROM information_schema.columns
         WHERE table_name = 'team_agreements'
@@ -75,7 +74,7 @@ describe('Team Agreements Database Schema (TASK-138)', () => {
     })
 
     it('should have id as UUID primary key', async () => {
-      const result = await pool.query(`
+      const result = await db.query(`
         SELECT 
           c.column_name,
           c.data_type,
@@ -97,7 +96,7 @@ describe('Team Agreements Database Schema (TASK-138)', () => {
     })
 
     it('should have project_id as foreign key to projects', async () => {
-      const result = await pool.query(`
+      const result = await db.query(`
         SELECT
           tc.constraint_name,
           tc.constraint_type,
@@ -119,7 +118,7 @@ describe('Team Agreements Database Schema (TASK-138)', () => {
     })
 
     it('should have category check constraint with valid values', async () => {
-      const result = await pool.query(`
+      const result = await db.query(`
         SELECT constraint_name, check_clause
         FROM information_schema.check_constraints
         WHERE constraint_name LIKE '%team_agreements%category%'
@@ -142,7 +141,7 @@ describe('Team Agreements Database Schema (TASK-138)', () => {
     })
 
     it('should have status check constraint with valid values', async () => {
-      const result = await pool.query(`
+      const result = await db.query(`
         SELECT constraint_name, check_clause
         FROM information_schema.check_constraints
         WHERE constraint_name LIKE '%team_agreements%status%'
@@ -159,7 +158,7 @@ describe('Team Agreements Database Schema (TASK-138)', () => {
     })
 
     it('should have adherence_score check constraint (1.0 to 10.0)', async () => {
-      const result = await pool.query(`
+      const result = await db.query(`
         SELECT constraint_name, check_clause
         FROM information_schema.check_constraints
         WHERE constraint_name LIKE '%team_agreements%adherence_score%'
@@ -172,7 +171,7 @@ describe('Team Agreements Database Schema (TASK-138)', () => {
     })
 
     it('should have violations_count default to 0', async () => {
-      const result = await pool.query(`
+      const result = await db.query(`
         SELECT column_default
         FROM information_schema.columns
         WHERE table_name = 'team_agreements'
@@ -183,7 +182,7 @@ describe('Team Agreements Database Schema (TASK-138)', () => {
     })
 
     it('should have agreed_by as JSONB with default empty array', async () => {
-      const result = await pool.query(`
+      const result = await db.query(`
         SELECT data_type, column_default
         FROM information_schema.columns
         WHERE table_name = 'team_agreements'
@@ -197,7 +196,7 @@ describe('Team Agreements Database Schema (TASK-138)', () => {
 
   describe('team_agreement_adherence_log table', () => {
     it('should exist', async () => {
-      const result = await pool.query(`
+      const result = await db.query(`
         SELECT EXISTS (
           SELECT FROM information_schema.tables 
           WHERE table_schema = 'public' 
@@ -208,7 +207,7 @@ describe('Team Agreements Database Schema (TASK-138)', () => {
     })
 
     it('should have correct columns', async () => {
-      const result = await pool.query(`
+      const result = await db.query(`
         SELECT column_name, data_type, is_nullable
         FROM information_schema.columns
         WHERE table_name = 'team_agreement_adherence_log'
@@ -227,7 +226,7 @@ describe('Team Agreements Database Schema (TASK-138)', () => {
     })
 
     it('should have agreement_id as foreign key to team_agreements', async () => {
-      const result = await pool.query(`
+      const result = await db.query(`
         SELECT
           tc.constraint_name,
           tc.constraint_type,
@@ -251,7 +250,7 @@ describe('Team Agreements Database Schema (TASK-138)', () => {
 
   describe('Indexes', () => {
     it('should have indexes on team_agreements', async () => {
-      const result = await pool.query(`
+      const result = await db.query(`
         SELECT indexname
         FROM pg_indexes
         WHERE tablename = 'team_agreements'
@@ -266,7 +265,7 @@ describe('Team Agreements Database Schema (TASK-138)', () => {
     })
 
     it('should have indexes on team_agreement_adherence_log', async () => {
-      const result = await pool.query(`
+      const result = await db.query(`
         SELECT indexname
         FROM pg_indexes
         WHERE tablename = 'team_agreement_adherence_log'
@@ -282,7 +281,7 @@ describe('Team Agreements Database Schema (TASK-138)', () => {
 
   describe('Triggers', () => {
     it('should have updated_at trigger on team_agreements', async () => {
-      const result = await pool.query(`
+      const result = await db.query(`
         SELECT trigger_name, event_manipulation, action_timing
         FROM information_schema.triggers
         WHERE event_object_table = 'team_agreements'
@@ -301,13 +300,13 @@ describe('Team Agreements Database Schema (TASK-138)', () => {
 
     beforeAll(async () => {
       // Get or create a test project
-      const projectResult = await pool.query(`
+      const projectResult = await db.query(`
         SELECT id FROM projects LIMIT 1
       `)
       
       if (projectResult.rows.length === 0) {
         // Create a test project
-        const newProject = await pool.query(`
+        const newProject = await db.query(`
           INSERT INTO projects (id, name, status, owner_id)
           VALUES (gen_random_uuid(), 'Test Project', 'active', gen_random_uuid())
           RETURNING id
@@ -319,7 +318,7 @@ describe('Team Agreements Database Schema (TASK-138)', () => {
     })
 
     it('should insert a team agreement', async () => {
-      const result = await pool.query(`
+      const result = await db.query(`
         INSERT INTO team_agreements (
           project_id,
           title,
@@ -348,7 +347,7 @@ describe('Team Agreements Database Schema (TASK-138)', () => {
 
     it('should reject invalid category', async () => {
       await expect(
-        pool.query(`
+        db.query(`
           INSERT INTO team_agreements (
             project_id,
             title,
@@ -370,7 +369,7 @@ describe('Team Agreements Database Schema (TASK-138)', () => {
 
     it('should reject invalid status', async () => {
       await expect(
-        pool.query(`
+        db.query(`
           INSERT INTO team_agreements (
             project_id,
             title,
@@ -392,7 +391,7 @@ describe('Team Agreements Database Schema (TASK-138)', () => {
 
     it('should reject adherence_score outside 1.0-10.0 range', async () => {
       await expect(
-        pool.query(`
+        db.query(`
           INSERT INTO team_agreements (
             project_id,
             title,
@@ -415,7 +414,7 @@ describe('Team Agreements Database Schema (TASK-138)', () => {
     })
 
     it('should insert adherence log entry', async () => {
-      const result = await pool.query(`
+      const result = await db.query(`
         INSERT INTO team_agreement_adherence_log (
           agreement_id,
           adherence_score,
@@ -436,8 +435,8 @@ describe('Team Agreements Database Schema (TASK-138)', () => {
     afterAll(async () => {
       // Clean up test data
       if (testAgreementId) {
-        await pool.query('DELETE FROM team_agreement_adherence_log WHERE agreement_id = $1', [testAgreementId])
-        await pool.query('DELETE FROM team_agreements WHERE id = $1', [testAgreementId])
+        await db.query('DELETE FROM team_agreement_adherence_log WHERE agreement_id = $1', [testAgreementId])
+        await db.query('DELETE FROM team_agreements WHERE id = $1', [testAgreementId])
       }
     })
   })

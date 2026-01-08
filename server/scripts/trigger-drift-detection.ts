@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { Pool } from 'pg';
+const db = require('../src/lib/db');
 import axios from 'axios';
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -20,7 +20,7 @@ async function triggerDriftDetection() {
     console.log('=' .repeat(70));
 
     // Get the 3 most recent documents
-    const docsResult = await pool.query(`
+    const docsResult = await db.query(`
       SELECT id, name, created_at
       FROM documents
       WHERE project_id = $1
@@ -47,20 +47,20 @@ async function triggerDriftDetection() {
     if (strategicDocs.length === 0) {
       console.log('⚠️  No strategic vision documents found in recent uploads.');
       console.log('   Looking for files with: vision, implementation, immediate, portal, maturity\n');
-      await pool.end();
+      try { await db.end() } catch (e) {}
       return;
     }
 
     console.log(`\n🎯 Found ${strategicDocs.length} strategic document(s):\n`);
 
     // Get admin token (for API calls)
-    const userResult = await pool.query(`
+    const userResult = await db.query(`
       SELECT id, email FROM users WHERE role = 'admin' LIMIT 1
     `);
 
     if (userResult.rows.length === 0) {
       console.log('❌ No admin user found. Cannot trigger drift detection via API.');
-      await pool.end();
+      try { await db.end() } catch (e) {}
       return;
     }
 
@@ -104,7 +104,7 @@ async function triggerDriftDetection() {
     console.log('\n' + '=' .repeat(70));
     console.log('\n✨ DRIFT DETECTION COMPLETE!\n');
 
-    await pool.end();
+    try { await db.end() } catch (e) {}
   } catch (error) {
     console.error('Error:', error);
     process.exit(1);

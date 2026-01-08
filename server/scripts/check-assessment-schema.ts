@@ -1,19 +1,15 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { Pool } from 'pg';
+const dbModule = require('../src/lib/db')
+const db = dbModule.default || dbModule
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-});
 
 async function checkAssessmentSchema() {
   try {
     // Get table schema
-    const schema = await pool.query(`
+    const schema = await db.query(`
       SELECT column_name, data_type 
       FROM information_schema.columns 
       WHERE table_name = 'assessments'
@@ -25,8 +21,9 @@ async function checkAssessmentSchema() {
       console.log(`   ${col.column_name} (${col.data_type})`);
     });
 
+    await db.initDb()
     // Get the actual assessment
-    const assessment = await pool.query(`
+    const assessment = await db.query(`
       SELECT * FROM assessments 
       WHERE batch_id = $1
     `, ['bd916951-641a-4990-954a-ca1c6e9efa70']);
@@ -36,7 +33,7 @@ async function checkAssessmentSchema() {
       console.log(JSON.stringify(assessment.rows[0], null, 2));
     }
 
-    await pool.end();
+    await db.end();
   } catch (error) {
     console.error('Error:', error);
     process.exit(1);

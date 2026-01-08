@@ -290,7 +290,7 @@ router.post('/:id/log-hours',
       }
       
       // Add the new hours to existing actual_hours (or set if null)
-      const currentHours = task.actualHours || task.actual_hours || 0
+      const currentHours = task.actualHours ?? 0
       const newHours = currentHours + actual_hours
       
       // Since updateTask doesn't support actualHours yet, let's update it directly

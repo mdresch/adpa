@@ -11,11 +11,12 @@
  * Usage: npm run check:ai-providers
  */
 
-import { Pool } from 'pg'
 import * as dotenv from 'dotenv'
 import { AIService } from '../src/services/aiService'
 import AnalyticsTrackingService from '../src/services/analyticsTrackingService'
 import { connectDatabase } from '../src/database/connection'
+const dbModule = require('../src/lib/db')
+const db = dbModule.default || dbModule
 
 dotenv.config()
 
@@ -26,13 +27,7 @@ if (!DATABASE_URL) {
   process.exit(1)
 }
 
-// Create a pool for the script's direct queries
-const pool = new Pool({
-  connectionString: DATABASE_URL,
-  ssl: DATABASE_URL.includes('sslmode=require') || DATABASE_URL.includes('supabase') 
-    ? { rejectUnauthorized: false } 
-    : undefined
-})
+// Use shared DB wrapper for script
 
 interface ProviderInfo {
   id: string
@@ -50,7 +45,7 @@ async function checkProviders(): Promise<ProviderInfo[]> {
   console.log('🔍 Checking AI providers...')
   console.log('')
 
-  const result = await pool.query(`
+  const result = await db.query(`
     SELECT 
       id, name, provider_type, is_active, priority,
       default_model, available_models, 
@@ -97,7 +92,7 @@ async function fixProviderModels(provider: ProviderInfo, aiService: AIService): 
     
     const updatedModels = [...expectedModels, ...validExtraModels]
     
-    await pool.query(
+    await db.query(
       `UPDATE ai_providers 
        SET available_models = $1, updated_at = CURRENT_TIMESTAMP
        WHERE id = $2`,
@@ -112,7 +107,7 @@ async function fixProviderModels(provider: ProviderInfo, aiService: AIService): 
 
   // Set default_model if missing
   if (!provider.default_model && expectedModels.length > 0) {
-    await pool.query(
+    await db.query(
       `UPDATE ai_providers 
        SET default_model = $1, updated_at = CURRENT_TIMESTAMP
        WHERE id = $2`,
@@ -145,7 +140,7 @@ async function testMetricsTracking(provider: ProviderInfo): Promise<void> {
     })
 
     // Verify it was tracked
-    const result = await pool.query(
+    const result = await db.query(
       `SELECT id, total_tokens, response_time_ms, success
        FROM ai_usage_logs 
        WHERE provider_id = $1
@@ -190,7 +185,7 @@ async function testErrorTracking(provider: ProviderInfo): Promise<void> {
       })
     }
 
-    const result = await pool.query(
+    const result = await db.query(
       `SELECT COUNT(*) as count, 
               COUNT(CASE WHEN success = false THEN 1 END) as errors
        FROM ai_usage_logs 
@@ -239,7 +234,7 @@ async function testCostCalculation(provider: ProviderInfo): Promise<void> {
 }
 
 async function getProviderHealthMetrics(provider: ProviderInfo): Promise<any> {
-  const result = await pool.query(
+  const result = await db.query(
     `SELECT 
        COUNT(*) as total_requests,
        SUM(CASE WHEN success = true THEN 1 ELSE 0 END) as successful,
@@ -278,8 +273,8 @@ async function main() {
       console.warn('   Analytics tracking tests will be skipped')
     }
 
-    const client = await pool.connect()
-    console.log('✅ Connected to database')
+    await db.initDb()
+    console.log('✅ Connected to database (via shared DB wrapper)')
     console.log('')
 
     try {
@@ -371,7 +366,7 @@ async function main() {
       }
 
     } finally {
-      client.release()
+      // nothing to release from db wrapper; connection pool managed centrally
     }
 
   } catch (error: any) {
@@ -380,7 +375,7 @@ async function main() {
     console.error('')
     process.exit(1)
   } finally {
-    await pool.end()
+    await db.end()
   }
 }
 

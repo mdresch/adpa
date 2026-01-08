@@ -13,7 +13,7 @@
  * Usage: npx ts-node server/scripts/run-migration-400.ts
  */
 
-import { Pool } from 'pg'
+const db = require('../src/lib/db')
 import * as fs from 'fs'
 import * as path from 'path'
 import * as dotenv from 'dotenv'
@@ -30,7 +30,7 @@ const pool = new Pool({
 })
 
 async function checkTableExists(tableName: string): Promise<boolean> {
-  const result = await pool.query(
+  const result = await db.query(
     `SELECT EXISTS (
       SELECT 1
       FROM information_schema.tables
@@ -48,7 +48,7 @@ async function runMigration() {
   try {
     // Test database connection
     console.log('🔌 Testing database connection...')
-    await pool.query('SELECT 1')
+    await db.query('SELECT 1')
     console.log('✅ Database connected successfully\n')
 
     // Read migration file
@@ -85,7 +85,7 @@ async function runMigration() {
 
     // Run migration
     console.log('\n📝 Running migration SQL...')
-    await pool.query(migrationSql)
+    await db.query(migrationSql)
     console.log('✅ Migration SQL executed successfully\n')
 
     // Verify all tables were created
@@ -106,7 +106,7 @@ async function runMigration() {
       
       // Check indexes
       console.log('\n📊 Checking indexes...')
-      const indexResult = await pool.query(`
+      const indexResult = await db.query(`
         SELECT indexname 
         FROM pg_indexes 
         WHERE tablename LIKE 'context_%' 
@@ -129,8 +129,7 @@ async function runMigration() {
     }
     process.exit(1)
   } finally {
-    await pool.end()
-  }
+    try { await db.end() } catch (e) {}}
 }
 
 runMigration()

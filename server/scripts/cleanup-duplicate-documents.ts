@@ -1,4 +1,4 @@
-import { Pool } from 'pg'
+const db = require('../src/lib/db')
 import dotenv from 'dotenv'
 import path from 'path'
 
@@ -17,7 +17,7 @@ async function cleanupDuplicates() {
     console.log('─'.repeat(80))
     
     // For each template, keep only the LATEST version and soft-delete older ones
-    const result = await pool.query(`
+    const result = await db.query(`
       WITH ranked_docs AS (
         SELECT 
           d.id,
@@ -56,7 +56,7 @@ async function cleanupDuplicates() {
     console.log('─'.repeat(80))
     
     // Soft delete the duplicates
-    const deleteResult = await pool.query(`
+    const deleteResult = await db.query(`
       WITH ranked_docs AS (
         SELECT 
           d.id,
@@ -80,7 +80,7 @@ async function cleanupDuplicates() {
     console.log(`\n✅ Soft-deleted ${deleteResult.rowCount} duplicate documents`)
     
     // Show what remains
-    const remainingResult = await pool.query(`
+    const remainingResult = await db.query(`
       SELECT 
         d.id,
         d.name,
@@ -107,8 +107,7 @@ async function cleanupDuplicates() {
   } catch (error) {
     console.error('Error:', error)
   } finally {
-    await pool.end()
-  }
+    try { await db.end() } catch (e) {}}
 }
 
 cleanupDuplicates()

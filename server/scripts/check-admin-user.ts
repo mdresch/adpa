@@ -3,17 +3,13 @@
  * Verify admin user exists and can access admin features
  */
 
-import { Pool } from 'pg';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
+const dbModule = require('../src/lib/db')
+const db = dbModule.default || dbModule
 
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false
-});
 
 async function checkAdminUser() {
   console.log('👤 Admin User Status Check\n');
@@ -21,7 +17,8 @@ async function checkAdminUser() {
 
   try {
     // Check admin users
-    const adminResult = await pool.query(`
+    await db.initDb()
+    const adminResult = await db.query(`
       SELECT id, email, name, role, created_at
       FROM users
       WHERE role = 'admin'
@@ -87,7 +84,7 @@ async function checkAdminUser() {
     console.error(error);
     process.exit(1);
   } finally {
-    await pool.end();
+    await db.end();
   }
 }
 

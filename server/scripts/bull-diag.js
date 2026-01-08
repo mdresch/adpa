@@ -1,11 +1,7 @@
-const { Pool } = require('pg');
 const Queue = require('bull');
 require('dotenv').config();
-
-const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false
-});
+const dbModule = require('../src/lib/db')
+const db = dbModule.default || dbModule
 
 // Initialize Bull queue connection
 const extractionQueue = new Queue('project-data-extraction', process.env.REDIS_URL || 'redis://127.0.0.1:6379');
@@ -65,7 +61,7 @@ async function diagnose() {
         console.error(error);
     } finally {
         await extractionQueue.close();
-        await pool.end();
+        await db.end();
     }
 }
 

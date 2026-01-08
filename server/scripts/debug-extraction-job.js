@@ -1,19 +1,16 @@
 #!/usr/bin/env node
 require('dotenv').config();
-const { Pool } = require('pg');
 const Bull = require('bull');
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
-});
+const dbModule = require('../src/lib/db')
+const db = dbModule.default || dbModule
 
 async function main() {
   const jobId = process.argv[2] || '3930585d-2b76-4ddb-94cd-466f86bfffeb';
   
   try {
+    await db.initDb()
     // Get job details
-    const jobResult = await pool.query(`
+    const jobResult = await db.query(`
       SELECT id, type, status, progress, data, error_message, created_at, started_at, completed_at
       FROM jobs 
       WHERE id = $1
@@ -96,7 +93,7 @@ async function main() {
   } catch (error) {
     console.error('Error:', error);
   } finally {
-    await pool.end();
+    await db.end();
   }
 }
 

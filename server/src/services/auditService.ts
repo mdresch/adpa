@@ -11,7 +11,7 @@ export class AuditService {
   static async log(options: {
     table: string
     rowId?: string
-    action: 'read' | 'create' | 'update' | 'delete'
+    action: 'read' | 'create' | 'update' | 'delete' | 'soft_delete' | 'restore' | 'permanent_delete'
     reason?: string
     oldValues?: any
     newValues?: any

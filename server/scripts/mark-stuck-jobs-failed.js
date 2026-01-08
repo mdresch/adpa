@@ -1,5 +1,7 @@
-const { Pool } = require('pg');
+const db = require('../src/lib/db');
 require('dotenv').config();
+
+(async function(){ try{ await db.initDb() } catch(e){} })();
 
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
@@ -20,7 +22,7 @@ async function markStuckJobsFailed() {
     ];
 
     try {
-        const result = await pool.query(`
+        const result = await db.query(`
       UPDATE jobs 
       SET status = 'failed', 
           error_message = 'Job exceeded timeout - child jobs failed with UUID parsing errors',
@@ -37,7 +39,7 @@ async function markStuckJobsFailed() {
     } catch (error) {
         console.error('❌ Failed to mark jobs:', error.message);
     } finally {
-        await pool.end();
+        try { await db.end() } catch (e) {}
     }
 }
 

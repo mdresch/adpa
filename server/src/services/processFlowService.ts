@@ -1,13 +1,15 @@
+;(async function(){ try{ await (require('../lib/db')).initDb() } catch(e){} })();
 /**
  * Process Flow Workflow Service
  * Handles template processing with project information injection and document prioritization
  */
 
-import { Pool } from 'pg'
+const db = require('../lib/db')
 import crypto from 'crypto'
 import { logger } from '../utils/logger'
 import { documentCompressionService, DocumentCompressionOptions } from './documentCompressionService'
 import { qualityAuditService } from './qualityAuditService'
+import type { Pool } from 'pg'
 
 export interface ProcessFlowStep {
   id: number
@@ -62,9 +64,11 @@ export interface WorkflowConfiguration {
 
 class ProcessFlowService {
   private pool: Pool
+  private db: Pool
 
   constructor(pool: Pool) {
     this.pool = pool
+    this.db = pool
   }
 
   /**
@@ -72,7 +76,7 @@ class ProcessFlowService {
    */
   async getAvailableTemplates(): Promise<any[]> {
     try {
-      const result = await this.pool.query(`
+      const result = await this.db.query(`
         SELECT 
           id,
           name,
@@ -136,7 +140,7 @@ class ProcessFlowService {
    */
   async getAvailableProjects(): Promise<any[]> {
     try {
-      const result = await this.pool.query(`
+      const result = await this.db.query(`
         SELECT 
           id,
           name,
@@ -160,7 +164,7 @@ class ProcessFlowService {
    */
   async getProjectDocuments(projectId: string): Promise<any[]> {
     try {
-      const result = await this.pool.query(`
+      const result = await this.db.query(`
         SELECT 
           d.id,
           d.name,
@@ -193,7 +197,7 @@ class ProcessFlowService {
   async getProviderModels(providerId: string): Promise<any[]> {
     try {
       // Get provider information and available models from database-driven configuration
-      const result = await this.pool.query(`
+      const result = await this.db.query(`
         SELECT 
           id as provider_id,
           name as provider_name,
@@ -599,7 +603,7 @@ class ProcessFlowService {
     } else {
       // AI summarization with automatic fallback - get count of active providers
       try {
-        const providerResult = await this.pool.query(
+        const providerResult = await this.db.query(
           `SELECT provider_type FROM ai_providers 
            WHERE is_active = true 
            ORDER BY priority ASC`
@@ -668,7 +672,7 @@ class ProcessFlowService {
         }
 
       // Get document content from database
-      const docResult = await this.pool.query(
+      const docResult = await this.db.query(
         'SELECT content FROM documents WHERE id = $1',
         [doc.documentId]
       )
@@ -699,7 +703,7 @@ class ProcessFlowService {
             const templateContextHash = crypto.createHash('md5').update(templateContextStr).digest('hex')
             
             // Try to get cached summary using hash
-            const cachedResult = await this.pool.query(
+            const cachedResult = await this.db.query(
               `SELECT * FROM document_summaries 
                WHERE document_id = $1 
                  AND compression_method = $2 
@@ -715,7 +719,7 @@ class ProcessFlowService {
               const cached = cachedResult.rows[0]
               
               // Update reuse statistics
-              await this.pool.query(
+              await this.db.query(
                 `UPDATE document_summaries 
                  SET times_reused = times_reused + 1, 
                      last_reused_at = CURRENT_TIMESTAMP 
@@ -766,7 +770,7 @@ class ProcessFlowService {
               const templateContextStr = templateContext ? JSON.stringify(templateContext) : ''
               const templateContextHash = crypto.createHash('md5').update(templateContextStr).digest('hex')
               
-              await this.pool.query(
+              await this.db.query(
                 `INSERT INTO document_summaries (
                   document_id, compression_method, compression_level,
                   original_content, original_tokens,
@@ -928,11 +932,11 @@ class ProcessFlowService {
   ): Promise<ContextWindowAnalysis> {
     try {
       // Get template and project information
-      const templateResult = await this.pool.query(
+      const templateResult = await this.db.query(
         'SELECT name, description, content, LENGTH(content::text) as content_length FROM templates WHERE id = $1',
         [templateId]
       )
-      const projectResult = await this.pool.query(
+      const projectResult = await this.db.query(
         'SELECT name, description, framework FROM projects WHERE id = $1',
         [projectId]
       )
@@ -1102,7 +1106,7 @@ class ProcessFlowService {
       steps[0].status = 'processing'
       logger.info('Step 1: Analyzing template structure')
       
-      const templateResult = await this.pool.query(
+      const templateResult = await this.db.query(
         'SELECT name, description, content, LENGTH(content::text) as content_length, system_prompt, template_paragraphs FROM templates WHERE id = $1',
         [config.templateId]
       )
@@ -1164,7 +1168,7 @@ class ProcessFlowService {
       steps[1].status = 'processing'
       logger.info('Step 2: Extracting project information')
       
-      const projectResult = await this.pool.query(
+      const projectResult = await this.db.query(
         'SELECT name, description, framework FROM projects WHERE id = $1',
         [config.projectId]
       )
@@ -1200,7 +1204,7 @@ class ProcessFlowService {
         logger.info('Step 2.5: Extracting stakeholder information')
         steps[2].status = 'processing' // Stakeholder step is at index 2
         
-        const stakeholderResult = await this.pool.query(
+        const stakeholderResult = await this.db.query(
           'SELECT name, role, email, department, stakeholder_type, stakeholder_category FROM stakeholders WHERE project_id = $1',
           [config.projectId]
         )
@@ -1472,7 +1476,7 @@ class ProcessFlowService {
       const { aiService } = await import('./aiService')
       
       // Get the first available active AI provider with its type
-      const activeProviderResult = await this.pool.query(
+      const activeProviderResult = await this.db.query(
         "SELECT name, provider_type FROM ai_providers WHERE is_active = true ORDER BY priority ASC, name ASC LIMIT 1"
       )
       
@@ -1793,7 +1797,7 @@ class ProcessFlowService {
       }
       
       // Insert document into database with both metadata and generation_metadata
-      const result = await this.pool.query(`
+      const result = await this.db.query(`
         INSERT INTO documents (
           id, 
           name, 
@@ -1838,7 +1842,7 @@ class ProcessFlowService {
       try {
         const { v4: uuidv4 } = await import('uuid')
         
-        await this.pool.query(
+        await this.db.query(
           `INSERT INTO document_versions 
            (id, document_id, version, semantic_version, content, author_id, created_at, change_type, change_description, generation_metadata)
            VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7, $8, $9)

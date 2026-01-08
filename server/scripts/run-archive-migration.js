@@ -1,9 +1,11 @@
-const { Pool } = require('pg');
+const db = require('../src/lib/db');
 const fs = require('fs');
 const path = require('path');
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
+
+(async function(){ try{ await db.initDb() } catch(e){} })();
 
 async function runMigration() {
   const pool = new Pool({
@@ -19,7 +21,7 @@ async function runMigration() {
     
     console.log('📄 Running migration: 202_add_program_archive_fields.sql');
     
-    const result = await pool.query(migrationSQL);
+    const result = await db.query(migrationSQL);
     
     console.log('✅ Archive migration completed successfully!');
     if (result.rows && result.rows.length > 0) {
@@ -30,7 +32,7 @@ async function runMigration() {
     console.error('❌ Migration failed:', error.message);
     process.exit(1);
   } finally {
-    await pool.end();
+    try { await db.end() } catch (e) {}
     console.log('🔌 Database connection closed');
   }
 }

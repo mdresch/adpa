@@ -5,6 +5,7 @@
 
 import { logger } from '../../../utils/logger'
 import { ContextGatheringStage as EnhancedContextGatheringStage } from '../../contextGathering/contextGatheringStage'
+import type { ContextGatheringRequest, ContextSource } from '../../contextGathering/types'
 import type { StageInput, StageOutput } from '../types'
 
 export class ContextGatheringStage {
@@ -27,7 +28,30 @@ export class ContextGatheringStage {
       const { template_id, project_id, user_id } = input.input_data
 
       // Use enhanced context gathering stage
-      const gatheringRequest = {
+      const contextSources: ContextSource[] = [
+        {
+          source_id: 'project_database',
+          source_type: 'project_database',
+          source_name: 'Project Database',
+          source_config: {},
+          enabled: true,
+          priority: 1,
+          reliability_score: 0.9,
+          last_updated: new Date()
+        },
+        {
+          source_id: 'user_profile',
+          source_type: 'user_profile',
+          source_name: 'User Profile',
+          source_config: {},
+          enabled: true,
+          priority: 2,
+          reliability_score: 0.8,
+          last_updated: new Date()
+        }
+      ]
+
+      const gatheringRequest: ContextGatheringRequest = {
         request_id: input.metadata?.request_id || `req_${Date.now()}`,
         template_id,
         project_id,
@@ -44,28 +68,7 @@ export class ContextGatheringStage {
           include_historical_patterns: true,
           include_collaboration_data: true,
           include_performance_metrics: true,
-          context_sources: [
-            {
-              source_id: 'project_database',
-              source_type: 'project_database',
-              source_name: 'Project Database',
-              source_config: {},
-              enabled: true,
-              priority: 1,
-              reliability_score: 0.9,
-              last_updated: new Date()
-            },
-            {
-              source_id: 'user_profile',
-              source_type: 'user_profile',
-              source_name: 'User Profile',
-              source_config: {},
-              enabled: true,
-              priority: 2,
-              reliability_score: 0.8,
-              last_updated: new Date()
-            }
-          ],
+          context_sources: contextSources,
           analysis_depth: 'deep',
           priority_filters: []
         },
@@ -78,25 +81,26 @@ export class ContextGatheringStage {
       const gatheringResult = await this.enhancedContextGatheringStage.execute(gatheringRequest)
 
       const processingTime = Date.now() - startTime
+      const contextData: any = gatheringResult.context_data || {}
 
       // 🔍 DEBUG: Log what context was gathered
       logger.info('📊 CONTEXT GATHERING DEBUG', {
         project_id,
         template_id,
         sources_accessed: gatheringResult.gathering_metrics.total_sources_accessed,
-        context_data_keys: Object.keys(gatheringResult.context_data || {}),
-        context_size_bytes: JSON.stringify(gatheringResult.context_data).length,
+        context_data_keys: Object.keys(contextData),
+        context_size_bytes: JSON.stringify(contextData).length,
         quality_score: gatheringResult.quality_analysis.overall_quality_score,
-        has_project_data: !!gatheringResult.context_data?.project,
-        has_documents: !!gatheringResult.context_data?.documents,
-        document_count: gatheringResult.context_data?.documents?.length || 0
+        has_project_data: !!contextData.project,
+        has_documents: !!contextData.documents,
+        document_count: contextData.documents?.length || 0
       })
 
       // 🔍 DEBUG: Log sample of gathered context
-      if (gatheringResult.context_data?.documents?.length > 0) {
+      if (contextData.documents?.length > 0) {
         logger.info('📄 GATHERED DOCUMENTS SAMPLE', {
           project_id,
-          sample_documents: gatheringResult.context_data.documents.slice(0, 3).map(doc => ({
+          sample_documents: contextData.documents.slice(0, 3).map((doc: any) => ({
             name: doc.name || 'unnamed',
             content_length: doc.content?.length || 0,
             content_preview: doc.content?.substring(0, 100) || 'no content'
@@ -109,12 +113,12 @@ export class ContextGatheringStage {
       // Prepare context bundle for pipeline
       const contextBundle = {
         bundle_id: `bundle_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        context_data: gatheringResult.context_data,
+        context_data: contextData,
         quality_assessment: gatheringResult.quality_analysis,
         metadata: {
           created_at: new Date(),
           sources_count: gatheringResult.gathering_metrics.total_sources_accessed,
-          total_size: JSON.stringify(gatheringResult.context_data).length,
+          total_size: JSON.stringify(contextData).length,
           quality_score: gatheringResult.quality_analysis.overall_quality_score
         }
       }
@@ -125,7 +129,7 @@ export class ContextGatheringStage {
         output_data: {
           context_bundle: contextBundle,
           context_quality: gatheringResult.quality_analysis,
-          sources_used: gatheringResult.context_data.metadata.context_sources_used,
+          sources_used: contextData.metadata?.context_sources_used,
           gathering_time: processingTime,
           context_gaps: gatheringResult.context_gaps,
           recommendations: gatheringResult.recommendations

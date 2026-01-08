@@ -539,7 +539,8 @@ export class QueueService {
     status: string,
     progress?: number,
     workerId?: string,
-    queueName?: string
+    queueName?: string,
+    errorMessage?: string
   ): Promise<void> {
     const endTiming = PerformanceMonitor.start('QueueService.updateJobStatus')
     try {
@@ -563,6 +564,11 @@ export class QueueService {
       if (queueName) {
         updates.push(`queue_name = $${paramIndex++}`)
         values.push(queueName)
+      }
+
+      if (errorMessage !== undefined) {
+        updates.push(`error_message = $${paramIndex++}`)
+        values.push(errorMessage)
       }
 
       if (status === 'processing' && !updates.some(u => u.includes('processing_started_at'))) {

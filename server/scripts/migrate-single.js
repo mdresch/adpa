@@ -6,7 +6,7 @@
  * Usage: node scripts/migrate-single.js <migration-number>
  */
 
-const { Pool } = require('pg');
+const db = require('../src/lib/db');
 const fs = require('fs');
 const path = require('path');
 
@@ -151,7 +151,7 @@ async function applyMigration() {
         }
     } finally {
         client.release();
-        await pool.end();
+        try { await db.end() } catch (e) {}
     }
 }
 

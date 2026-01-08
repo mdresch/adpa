@@ -6,7 +6,6 @@
  * implementations (Bull, BullMQ, custom, etc.) and easier testing.
  */
 
-import type Bull from 'bull'
 import type { JobType, JobData, JobOptions } from '../types'
 
 /**

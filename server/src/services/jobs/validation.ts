@@ -152,10 +152,15 @@ const jobTypeSchemaMap: Record<JobType, Joi.ObjectSchema> = {
  */
 export function getSchemaForJobType(type: JobType): Joi.ObjectSchema {
   const schema = jobTypeSchemaMap[type]
-  if (!schema) {
-    throw new Error(`No validation schema found for job type: ${type}`)
+  if (schema) return schema
+
+  // Allow dynamic entity extraction job types like 'extract-entity-stakeholders'
+  if (typeof type === 'string' && (type as string).startsWith('extract-entity-')) {
+    // Reuse the project data extraction schema for entity-specific extraction jobs
+    return projectDataExtractionJobDataSchema
   }
-  return schema
+
+  throw new Error(`No validation schema found for job type: ${type}`)
 }
 
 /**
@@ -278,6 +283,7 @@ export function validateJobType(type: string): JobType {
     'document-regeneration',
     'quality-audit',
     'pipeline-processing',
+    'publish-to-confluence',
   ]
 
   if (normalizedType.startsWith('extract-entity-')) {

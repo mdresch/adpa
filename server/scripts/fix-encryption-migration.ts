@@ -41,7 +41,7 @@ if (!loaded) {
   process.exit(1)
 }
 
-import { Pool } from 'pg'
+const db = require('../src/lib/db')
 
 console.log('POSTGRES_URL set:', !!process.env.POSTGRES_URL)
 console.log('')
@@ -77,7 +77,7 @@ async function fixEncryption() {
     console.log('')
 
     // Check what we have
-    const existing = await pool.query(
+    const existing = await db.query(
       `SELECT setting_key, is_encrypted, created_at 
        FROM system_settings 
        WHERE setting_key IN ('ai_gateway_api_key', 'master_encryption_key')
@@ -103,7 +103,7 @@ async function fixEncryption() {
 
     // Delete old encrypted data
     console.log('🗑️  Deleting old encrypted data...')
-    const result = await pool.query(
+    const result = await db.query(
       `DELETE FROM system_settings 
        WHERE setting_key IN ('ai_gateway_api_key', 'master_encryption_key')
        RETURNING setting_key`
@@ -130,8 +130,7 @@ async function fixEncryption() {
     console.error('❌ Error during migration:', error)
     process.exit(1)
   } finally {
-    await pool.end()
-  }
+    try { await db.end() } catch (e) {}}
 }
 
 // Run

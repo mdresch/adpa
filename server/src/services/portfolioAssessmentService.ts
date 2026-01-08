@@ -1,3 +1,4 @@
+;(async function(){ try{ await (require('../lib/db')).initDb() } catch(e){} })();
 /**
  * Portfolio Assessment Service
  * 
@@ -9,7 +10,7 @@
  * @module portfolioAssessmentService
  */
 
-import { Pool } from 'pg';
+const db = require('../lib/db');
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../utils/logger';
 import { aiRecommendationsService } from './aiRecommendationsService';
@@ -871,7 +872,7 @@ async function getAssessment(assessmentId: string, userId: string): Promise<any>
     LIMIT 1
   `;
   
-  const result = await pool.query(query, [assessmentId]);
+  const result = await db.query(query, [assessmentId]);
   return result.rows[0] || null;
 }
 
@@ -889,7 +890,7 @@ async function getAssessmentByBatchId(batchId: string, userId: string): Promise<
     LIMIT 1
   `;
   
-  const result = await pool.query(query, [batchId]);
+  const result = await db.query(query, [batchId]);
   return result.rows[0] || null;
 }
 

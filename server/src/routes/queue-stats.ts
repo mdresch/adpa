@@ -17,6 +17,8 @@ import {
   extractionQueue
 } from "../services/queueService"
 import { logger, childLogger } from "../utils/logger"
+import { getRedisCircuitState } from "../utils/redis"
+import { getDbCircuitState } from "../database/connection"
 
 const router = express.Router()
 
@@ -41,13 +43,7 @@ router.get("/overview", authenticateToken, async (req, res) => {
     const queueStats = await Promise.all(
       queues.map(async ({ name, queue }) => {
         try {
-          const [active, waiting, completed, failed, delayed] = await Promise.all([
-            queue.getActiveCount(),
-            queue.getWaitingCount(),
-            queue.getCompletedCount(),
-            queue.getFailedCount(),
-            queue.getDelayedCount()
-          ])
+          const { active, waiting, completed, failed, delayed } = await queue.getStats()
 
           // Get active workers for this queue from database
           // Exclude jobs with error_message (they're actually failed, not processing)
@@ -356,7 +352,11 @@ router.get("/health", authenticateToken, async (req, res) => {
       status: health,
       failedJobs,
       stalledJobs,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      dependencies: {
+        redis: getRedisCircuitState(),
+        database: getDbCircuitState()
+      }
     })
   } catch (error) {
     logger.error("Failed to get health status:", error)

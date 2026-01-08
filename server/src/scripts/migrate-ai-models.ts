@@ -20,9 +20,8 @@ import { fileURLToPath } from 'url'
 import { pool } from '../database/connection'
 import { logger } from '../utils/logger'
 
-// ES module equivalents for __dirname
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
+// CommonJS __dirname is available
+const __dirname = __dirname
 
 // Load environment variables
 dotenv.config()

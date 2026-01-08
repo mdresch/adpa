@@ -1,5 +1,6 @@
 import { createClient } from "redis"
 import { logger } from "./logger"
+import CircuitBreaker from "./circuitBreaker"
 
 // Simple localhost Redis connection for local development
 const redisConnectionMethods = [
@@ -48,16 +49,24 @@ const createRedisConfig = (host: string) => {
 }
 
 let redisClient: any = null
+// Circuit breaker for Redis to avoid hammering a failing service
+const redisBreaker = new CircuitBreaker(3, 30000) // open after 3 failures, reset after 30s
 
 const getRedisClient = () => {
   logger.info("getRedisClient called")
+  if (redisBreaker.isOpen()) {
+    logger.warn('Redis circuit breaker open - skipping client creation')
+    return null
+  }
+
   if (!redisClient) {
     logger.info("Creating new Redis client")
     const host = process.env.REDIS_HOST || "localhost"
     redisClient = createClient(createRedisConfig(host))
-    
+
     redisClient.on("error", (err: any) => {
       logger.error("Redis Client Error:", err)
+      redisBreaker.recordFailure()
     })
 
     redisClient.on("connect", () => {
@@ -66,6 +75,7 @@ const getRedisClient = () => {
 
     redisClient.on("ready", () => {
       logger.info("Redis client ready")
+      redisBreaker.recordSuccess()
     })
   } else {
     logger.info("Using existing Redis client")
@@ -74,8 +84,8 @@ const getRedisClient = () => {
 }
 
 export async function connectRedis() {
-  const maxRetriesPerMethod = 2
-  const retryDelay = 2000 // 2 seconds
+  const maxRetriesPerMethod = 4
+  const baseRetryDelay = 1000 // 1 second
   
   // Try each connection method
   for (const method of redisConnectionMethods) {
@@ -101,7 +111,8 @@ export async function connectRedis() {
         })
         
         // Add timeout to prevent hanging
-        const connectionTimeout = 5000 // 5 seconds
+        // Exponential backoff for connect attempts
+        const connectionTimeout = 5000 + (attempt - 1) * 2000
         await Promise.race([
           testClient.connect(),
           new Promise((_, reject) => 
@@ -114,6 +125,7 @@ export async function connectRedis() {
           await redisClient.disconnect().catch(() => {})
         }
         redisClient = testClient
+        redisBreaker.recordSuccess()
         logger.info(`Redis connection established successfully via ${method.description}`)
         return
       } catch (error) {
@@ -125,6 +137,7 @@ export async function connectRedis() {
           console.error(`   Stack: ${errorStack.split('\n').slice(0, 3).join('\n')}`)
         }
         logger.warn(`Redis connection attempt ${attempt} failed via ${method.description}:`, errorMessage)
+        redisBreaker.recordFailure()
         
         // Clean up failed client
         if (testClient) {
@@ -134,8 +147,9 @@ export async function connectRedis() {
         }
         
         if (attempt < maxRetriesPerMethod) {
-          console.log(`🔄 Retrying Redis connection in ${retryDelay}ms...`)
-          await new Promise(resolve => setTimeout(resolve, retryDelay))
+          const delay = baseRetryDelay * Math.pow(2, attempt - 1)
+          console.log(`🔄 Retrying Redis connection in ${delay}ms...`)
+          await new Promise(resolve => setTimeout(resolve, delay))
         }
       }
     }
@@ -160,6 +174,10 @@ export const cache = {
   async get(key: string) {
     try {
       const client = getRedisClient()
+      if (!client) {
+        logger.warn(`Redis client unavailable (circuit open or not connected) - get key ${key}`)
+        return null
+      }
       const value = await client.get(key)
       return value ? JSON.parse(value) : null
     } catch (error) {
@@ -171,6 +189,10 @@ export const cache = {
   async set(key: string, value: any, ttl: number = 3600) {
     try {
       const client = getRedisClient()
+      if (!client) {
+        logger.warn(`Redis client unavailable (circuit open or not connected) - set key ${key}`)
+        return false
+      }
       await client.setEx(key, ttl, JSON.stringify(value))
       return true
     } catch (error) {
@@ -182,6 +204,10 @@ export const cache = {
   async del(key: string) {
     try {
       const client = getRedisClient()
+      if (!client) {
+        logger.warn(`Redis client unavailable (circuit open or not connected) - del key ${key}`)
+        return false
+      }
       await client.del(key)
       return true
     } catch (error) {
@@ -193,6 +219,10 @@ export const cache = {
   async exists(key: string) {
     try {
       const client = getRedisClient()
+      if (!client) {
+        logger.warn(`Redis client unavailable (circuit open or not connected) - exists key ${key}`)
+        return false
+      }
       return await client.exists(key)
     } catch (error) {
       logger.error(`Cache exists error for key ${key}:`, error)
@@ -203,6 +233,10 @@ export const cache = {
   async flush() {
     try {
       const client = getRedisClient()
+      if (!client) {
+        logger.warn(`Redis client unavailable (circuit open or not connected) - flushDb`)
+        return false
+      }
       await client.flushDb()
       return true
     } catch (error) {
@@ -213,3 +247,11 @@ export const cache = {
 }
 
 export { getRedisClient as redisClient }
+
+export function getRedisCircuitState() {
+  try {
+    return redisBreaker.getState()
+  } catch (e) {
+    return 'unknown'
+  }
+}

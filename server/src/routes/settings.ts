@@ -106,7 +106,10 @@ async function initializeEncryptionKey(): Promise<string> {
       `SELECT setting_value, is_encrypted FROM system_settings WHERE setting_key = 'master_encryption_key' LIMIT 1`
     )
 
-    if (result.rows.length > 0 && result.rows[0].setting_value) {
+    if (!result || !result.rows) {
+      logger.warn('Settings: initializeEncryptionKey query returned no result; generating temporary master key')
+      // Fall through to generate a new master key
+    } else if (result.rows.length > 0 && result.rows[0].setting_value) {
       const storedValue = result.rows[0].setting_value
       const isEncrypted = result.rows[0].is_encrypted
 
@@ -311,7 +314,8 @@ export async function getAIGatewayKey(): Promise<string | null> {
        LIMIT 1`
     )
 
-    if (result.rows.length === 0) {
+    if (!result || !result.rows || result.rows.length === 0) {
+      logger.warn('Settings: getAIGatewayKey query returned no rows')
       return null
     }
 

@@ -1,3 +1,4 @@
+;(async function(){ try{ await (require('../lib/db')).initDb() } catch(e){} })();
 /**
  * Drift Detection Notification Integration
  * TASK-741: Integrates notification service with drift detection
@@ -5,7 +6,7 @@
  * Automatically sends notifications when drift is detected
  */
 
-import { Pool } from 'pg';
+const db = require('../lib/db');
 import { getNotificationService, NotificationPayload } from '../services/notificationService';
 
 // ============================================================================
@@ -72,7 +73,7 @@ async function getProjectNotificationRecipients(
           )
     `;
 
-    const result = await pool.query(query, [projectId, notificationType, severity]);
+    const result = await db.query(query, [projectId, notificationType, severity]);
     return result.rows;
 }
 
@@ -101,7 +102,7 @@ async function getProjectStakeholders(
             END
     `;
 
-    const result = await pool.query(query, [projectId]);
+    const result = await db.query(query, [projectId]);
     return result.rows;
 }
 
@@ -109,7 +110,7 @@ async function getProjectStakeholders(
  * Get project name
  */
 async function getProjectName(pool: Pool, projectId: string): Promise<string> {
-    const result = await pool.query(
+    const result = await db.query(
         'SELECT name FROM projects WHERE id = $1',
         [projectId]
     );
@@ -187,7 +188,7 @@ export async function sendBudgetOverrunAlert(
         console.log(`Budget overrun alert sent for drift ${driftData.id}:`, results);
 
         // Update drift detection record
-        await pool.query(
+        await db.query(
             `UPDATE baseline_drift_detection 
              SET alert_sent = true, alert_sent_at = NOW() 
              WHERE id = $1`,
@@ -278,7 +279,7 @@ export async function sendPositiveDriftNotification(
         console.log(`Positive drift notification sent for drift ${driftData.id}:`, results);
 
         // Update drift detection record
-        await pool.query(
+        await db.query(
             `UPDATE baseline_drift_detection 
              SET alert_sent = true, alert_sent_at = NOW() 
              WHERE id = $1`,

@@ -9,6 +9,25 @@ import { baselineService, BaselineComparison } from './baselineService'
 import { entityExtractionService, ExtractedEntity } from './entityExtractionService'
 import { v4 as uuidv4 } from 'uuid'
 
+// Normalized drift point with snake_case fields from storage plus camelCase helpers used by
+// downstream resolution/notification services.
+export interface DriftPoint {
+  drift_type: string
+  driftType?: string
+  drift_severity: string
+  driftSeverity?: string
+  drift_description?: string
+  description?: string
+  detection_type?: string
+  detectionType?: string
+  details?: any
+  entityType?: string
+  variance?: number
+  baselineValue?: any
+  currentValue?: any
+  requiresApproval?: boolean
+}
+
 export type DriftType = 'scope' | 'timeline' | 'resource' | 'risk' | 'compliance' | 'quality' | 'other'
 export type DriftSeverity = 'critical' | 'warning' | 'info'
 
@@ -61,6 +80,66 @@ export interface DriftDetectionOptions {
 }
 
 export class DriftDetectionService {
+  async checkForDrift(projectId: string, documentId?: string): Promise<{ hasDrift: boolean; driftPoints: DriftPoint[]; severity: DriftSeverity }> {
+    const drifts = await this.detectDrift(projectId)
+    const driftPoints: DriftPoint[] = drifts.map(d => ({
+      drift_type: d.drift_type,
+      driftType: d.drift_type,
+      drift_severity: d.severity,
+      driftSeverity: d.severity,
+      drift_description: d.description,
+      description: d.description,
+      detection_type: d.drift_category,
+      detectionType: d.drift_category,
+      details: d.drift_data,
+      entityType: d.drift_category,
+      variance: (d.drift_data as any)?.variance,
+      baselineValue: (d.drift_data as any)?.baseline_value,
+      currentValue: (d.drift_data as any)?.current_value,
+      requiresApproval: (d.drift_data as any)?.requires_approval
+    }))
+    const hasDrift = driftPoints.length > 0
+    const severity: DriftSeverity = driftPoints.some(dp => dp.drift_severity === 'critical')
+      ? 'critical'
+      : driftPoints.some(dp => dp.drift_severity === 'warning') ? 'warning' : 'info'
+    return { hasDrift, driftPoints, severity }
+  }
+
+  async createDriftRecord(params: {
+    projectId: string
+    documentId: string
+    baselineId?: string
+    driftPoints: DriftPoint[]
+    severity: DriftSeverity
+    triggeredBy?: string
+  }): Promise<{ id: string; drift_severity: DriftSeverity }> {
+    const id = uuidv4()
+    try {
+      await pool.query(
+        `INSERT INTO baseline_drift_detection (id, project_id, source_document_id, baseline_id, drift_severity, drift_description, ai_processing_metadata, status, detected_at, detected_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'detected', CURRENT_TIMESTAMP, $8)
+         ON CONFLICT (id) DO NOTHING`,
+        [
+          id,
+          params.projectId,
+          params.documentId,
+          params.baselineId || null,
+          params.severity,
+          params.driftPoints.map(d => d.drift_description).filter(Boolean).join('; ') || null,
+          JSON.stringify({ drift_points: params.driftPoints }),
+          params.triggeredBy || null,
+        ]
+      )
+    } catch (error: any) {
+      logger.warn('[DRIFT] Failed to persist drift record, returning in-memory object', { error: error.message })
+    }
+    return { id, drift_severity: params.severity }
+  }
+
+  async checkAndTriggerEscalation(_driftRecord: { id: string }, _driftPoints: DriftPoint[]): Promise<void> {
+    // Placeholder for escalation matrix; no-op but keeps API stable
+    return
+  }
   /**
    * Detect drift for a project
    */
@@ -161,7 +240,7 @@ export class DriftDetectionService {
         rules,
         projectId,
         baselineId,
-        comparison.comparison_id
+        baselineId
       )
       if (scopeDrift && (!options.minSeverity || this.isSeverityAbove(scopeDrift.severity, options.minSeverity))) {
         drifts.push(scopeDrift)
@@ -175,7 +254,7 @@ export class DriftDetectionService {
         rules,
         projectId,
         baselineId,
-        comparison.comparison_id
+        baselineId
       )
       if (removalDrift && (!options.minSeverity || this.isSeverityAbove(removalDrift.severity, options.minSeverity))) {
         drifts.push(removalDrift)
@@ -190,7 +269,7 @@ export class DriftDetectionService {
         rules,
         projectId,
         baselineId,
-        comparison.comparison_id
+        baselineId
       )
       drifts.push(...modifiedDrifts.filter(d => 
         !options.minSeverity || this.isSeverityAbove(d.severity, options.minSeverity)

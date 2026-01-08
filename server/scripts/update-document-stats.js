@@ -1,11 +1,13 @@
 /**
  * Update word_count and character_count for existing documents
  */
-const { Pool } = require('pg');
+const db = require('../src/lib/db');
 
 async function updateDocumentStats() {
   // Load .env file
   require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
+
+(async function(){ try{ await db.initDb() } catch(e){} })();
   
   const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
@@ -18,7 +20,7 @@ async function updateDocumentStats() {
     console.log('🔍 Fetching documents with missing stats...');
     
     // Get all documents
-    const result = await pool.query(`
+    const result = await db.query(`
       SELECT id, name, content
       FROM documents
       WHERE word_count IS NULL OR character_count IS NULL OR word_count = 0
@@ -40,7 +42,7 @@ async function updateDocumentStats() {
         const wordCount = content.split(/\s+/).filter(word => word.length > 0).length;
         const characterCount = content.length;
 
-        await pool.query(`
+        await db.query(`
           UPDATE documents
           SET word_count = $1, character_count = $2
           WHERE id = $3
@@ -58,7 +60,7 @@ async function updateDocumentStats() {
   } catch (error) {
     console.error('❌ Error:', error);
   } finally {
-    await pool.end();
+    try { await db.end() } catch (e) {}
   }
 }
 

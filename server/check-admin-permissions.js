@@ -1,7 +1,9 @@
-const { Pool } = require('pg');
+const db = require('./src/lib/db');
 // Only load .env if not running in Docker
 if (!process.env.POSTGRES_URL) {
   require('dotenv').config();
+
+(async function(){ try{ await db.initDb() } catch(e){} })();
 }
 
 // Database configuration
@@ -44,7 +46,7 @@ async function checkAndFixAdminPermissions() {
 
   try {
     // Get current admin user
-    const adminResult = await pool.query(
+    const adminResult = await db.query(
       'SELECT id, email, role, permissions, is_active FROM users WHERE email = $1',
       ['admin@adpa.com']
     );
@@ -87,7 +89,7 @@ async function checkAndFixAdminPermissions() {
         "jobs.admin": true,
       };
 
-      await pool.query(`
+      await db.query(`
         INSERT INTO users (id, email, password_hash, name, role, permissions, is_active)
         VALUES ($1, $2, $3, $4, $5, $6, $7)
       `, [
@@ -145,7 +147,7 @@ async function checkAndFixAdminPermissions() {
           updatedPermissions[perm] = true;
         });
         
-        await pool.query(
+        await db.query(
           'UPDATE users SET permissions = $1, updated_at = CURRENT_TIMESTAMP WHERE email = $2',
           [JSON.stringify(updatedPermissions), 'admin@adpa.com']
         );
@@ -167,7 +169,7 @@ async function checkAndFixAdminPermissions() {
   } catch (error) {
     console.error('❌ Error checking admin permissions:', error);
   } finally {
-    await pool.end();
+    try { await db.end() } catch (e) {}
   }
 }
 

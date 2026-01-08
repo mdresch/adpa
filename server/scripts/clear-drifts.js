@@ -1,5 +1,7 @@
-const { Pool } = require('pg');
+const db = require('../src/lib/db');
 require('dotenv').config();
+
+(async function(){ try{ await db.initDb() } catch(e){} })();
 
 const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
 
@@ -15,7 +17,7 @@ async function clearDrifts() {
     console.log('🔍 Finding Communications Management Plan drifts...\n');
     
     // Check existing drifts
-    const existingDrifts = await pool.query(`
+    const existingDrifts = await db.query(`
       SELECT 
         bdd.id,
         bdd.detection_type,
@@ -45,7 +47,7 @@ async function clearDrifts() {
     console.log('\n🔄 Marking drifts as resolved...\n');
     
     // Mark drifts as resolved
-    const result = await pool.query(`
+    const result = await db.query(`
       UPDATE baseline_drift_detection
       SET 
         status = 'resolved',
@@ -76,7 +78,7 @@ async function clearDrifts() {
       console.error(`   Error Code: ${error.code}`);
     }
   } finally {
-    await pool.end();
+    try { await db.end() } catch (e) {}
   }
 }
 

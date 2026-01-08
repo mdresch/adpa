@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+const db = require('../src/lib/db');
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 
@@ -11,7 +11,7 @@ const pool = new Pool({
 
 async function getTemplateId() {
   try {
-    const result = await pool.query(`
+    const result = await db.query(`
       SELECT id, name, framework
       FROM templates
       WHERE name ILIKE '%ideation%'
@@ -37,7 +37,7 @@ async function getTemplateId() {
       console.log('❌ Ideation Template not found in database');
     }
     
-    await pool.end();
+    try { await db.end() } catch (e) {}
     process.exit(0);
   } catch (error: any) {
     console.error('❌ Error:', error.message);

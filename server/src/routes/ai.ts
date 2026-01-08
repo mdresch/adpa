@@ -11,30 +11,22 @@ import { v4 as uuidv4 } from "uuid"
 import { openaiConnector } from "../modules/ai/openai"
 import { googleConnector } from "../modules/ai/google"
 import { mistralConnector } from "../modules/ai/mistral"
-import { 
-  calculateDocumentMetadata, 
-  analyzeDocumentQuality, 
-  formatMetadataForDisplay,
-  logGenerationMetadata 
-} from "../utils/documentMetadata"
-import { trackActivity } from "../middleware/analyticsMiddleware"
-import { cache } from "../utils/redis"
+import { getCache, setCache, makeKey } from "../utils/cache"
 
 const router = express.Router()
 
-// Generate content using AI
-router.post("/generate", 
-  authenticateToken, 
+// Generate content using AI (queued flow only)
+router.post(
+  "/generate",
+  authenticateToken,
   requirePermission("ai.generate"),
   validate(schemas.aiGenerate),
   async (req, res) => {
     const log = childLogger({ requestId: (req as any).requestId })
-    const generationStart = new Date()
-    
+
     try {
-      log.info('🚀 [BACKEND-1/10] AI generation request received')
       const { prompt, provider, model, temperature, max_tokens, template_id, variables } = req.body
-      log.info('📊 [BACKEND-2/10] Request params:', {
+      log.info('🚀 AI generation request received', {
         provider,
         model,
         temperature,
@@ -43,47 +35,27 @@ router.post("/generate",
         hasVariables: !!variables
       })
 
-      // Check if provider exists and is active
-      log.info('🔍 [BACKEND-3/10] Checking if provider exists and is active...')
-      let providerCheck
-      try {
-        providerCheck = await pool.query(
-          "SELECT id, name, provider_type FROM ai_providers WHERE name = $1 AND is_active = true",
-          [provider]
-        )
-      } catch (dbError: unknown) {
-        log.error('❌ [DATABASE] Failed to query providers:', dbError)
-        return res.status(500).json({ 
-          error: "Database connection error",
-          details: dbError instanceof Error ? dbError.message : 'Unknown database error'
-        })
-      }
+      const providerCheck = await pool.query(
+        "SELECT id, name, provider_type FROM ai_providers WHERE name = $1 AND is_active = true",
+        [provider]
+      )
 
       if (providerCheck.rows.length === 0) {
-        log.error('❌ [BACKEND] Provider not found or inactive:', provider)
+        log.error('Provider not found or inactive:', provider)
         return res.status(400).json({ error: "Provider not found or inactive" })
       }
-      log.info('✅ [BACKEND-4/10] Provider validated:', providerCheck.rows[0].name)
 
-      // Use job queue for ALL document generation to enable background processing
-      // This allows users to continue working while documents are generated
-      log.info('🔄 [BACKEND-5/10] Using background job queue for generation')
-      
       const useContext = req.query.use_context === 'true' || !!req.body.project_id || !!req.body.document_ids || !!req.body.template_id
-      log.info('🔀 [BACKEND-6/10] Generation mode:', useContext ? 'Context-Aware' : 'Direct')
-      
-      // CRITICAL FIX: Prevent duplicate submissions within 10 seconds
-      const dedupeKey = `ai-gen:${req.user?.id}:${template_id}:${req.body.project_id}`
-      let recentJobId
-      try {
-        recentJobId = await cache.get(dedupeKey)
-      } catch (cacheError: unknown) {
-        log.warn('⚠️ [CACHE] Redis unavailable for deduplication, continuing:', cacheError)
-        // Continue without deduplication if Redis is down
-      }
-      
+
+      const dedupeKey = makeKey([
+        'ai-gen',
+        req.user?.id,
+        template_id,
+        req.body.project_id
+      ])
+      const recentJobId = getCache<string>(dedupeKey)
       if (recentJobId) {
-        log.warn('⚠️ [DEDUPE] Duplicate request detected, returning existing job ID:', recentJobId)
+        log.warn('Duplicate request detected, returning existing job ID:', recentJobId)
         return res.json({
           message: "Document generation already in progress",
           jobId: recentJobId,
@@ -91,20 +63,10 @@ router.post("/generate",
           deduplicated: true
         })
       }
-      
-      // Generate unique job ID (UUID format required by database)
+
       const jobId = uuidv4()
-      log.info('🆔 [BACKEND-7/10] Created job ID:', jobId)
-      
-      // Store job ID for deduplication (10 second window)
-      try {
-        await cache.set(dedupeKey, jobId, 10)
-      } catch (cacheError: unknown) {
-        log.warn('⚠️ [CACHE] Failed to set deduplication key, continuing:', cacheError)
-        // Continue without caching if Redis is down
-      }
-      
-      // Add job to queue using QueueService (creates database record)
+      setCache(dedupeKey, jobId, 10)
+
       const jobData = {
         jobId,
         userId: req.user?.id,
@@ -122,293 +84,22 @@ router.post("/generate",
         include_integrations: req.body.include_integrations,
         custom_context: req.body.custom_context,
       }
-      
-      try {
-        // Use QueueService.addJob instead of directly adding to Bull queue
-        // This ensures the job record is created in the database for the jobs page
-        const { getQueueService } = await import('../services/queueService')
-        const queueService = getQueueService()
-        const createdJobId = await queueService.addJob('ai-generate', jobData, {
-          jobId, // Use the pre-generated jobId
-        })
-        log.info('✅ [BACKEND-8/10] Job added to queue and database', { jobId: createdJobId })
-      } catch (queueError: unknown) {
-        log.error('❌ [QUEUE] Failed to add job to queue:', queueError)
-        return res.status(500).json({ 
-          error: "Failed to queue document generation",
-          details: queueError instanceof Error ? queueError.message : 'Queue service unavailable'
-        })
-      }
-      
-      // Return immediately with job ID
-      log.info('🎉 [BACKEND-9/10] Returning job ID to client')
-      
+
+      const { getQueueService } = await import('../services/queueService')
+      const queueService = getQueueService()
+      await queueService.addJob('ai-generate', jobData, { jobId })
+
       res.json({
         message: "Document generation started",
         jobId,
         status: "queued"
       })
-      
-      log.info('✅ [BACKEND-10/10] Response sent - generation will continue in background')
-      return // Exit early, job will process asynchronously
-      
-      // The code below is unreachable but kept for reference
-      const metadata = calculateDocumentMetadata(
-        content,
-        result,
-        generationStart,
-        generationEnd,
-        {
-          provider,
-          model: model || result.model || 'unknown',
-          temperature: temperature || 0.7,
-          templateId: template_id,
-          templateName: req.body.template_name,
-          framework: req.body.framework,
-          projectId: req.body.project_id || 'unknown',
-          projectName: req.body.project_name || 'Unknown Project',
-          userId: req.user?.id || 'unknown',
-          userName: req.user?.name || 'Unknown User',
-          promptLength: prompt.length,
-          sourceDocuments: req.body.source_documents || [],
-          contextStats: req.body.context_stats || null
-        }
-      )
-      
-      // Analyze quality with source document count
-      const sourceDocCount = (req.body.source_documents?.length || req.body.context_stats?.documents_used || 0)
-      const quality = analyzeDocumentQuality(content, metadata, sourceDocCount)
-      
-      // Format for display
-      const formattedMetadata = formatMetadataForDisplay(metadata, quality)
-      
-      // Log comprehensive metadata
-      logGenerationMetadata(metadata, quality)
-
-      // Track AI generation activity
-      if (req.user?.id) {
-        trackActivity.aiGeneration(
-          req.user.id,
-          template_id ? 'template_based' : 'direct_prompt',
-          {
-            provider,
-            model: model || result.model,
-            template_id,
-            prompt_length: prompt.length,
-            tokens_used: metadata.totalTokens,
-            quality_score: quality.overallQuality,
-            processing_time_ms: metadata.processingTimeMs
-          }
-        )
-      }
-
-      // Track template validation (for template lifecycle tracking)
-      if (template_id && quality.overallQuality) {
-        try {
-          await pool.query(
-            'SELECT update_template_validation($1, $2, $3)',
-            [template_id, quality.overallQuality / 100, req.user?.id]
-          )
-          log.info('✅ Template validation tracked', {
-            template_id,
-            quality_score: quality.overallQuality,
-            validation_count_incremented: true
-          })
-          
-          // IMPORTANT: Clear template cache so UI shows updated metrics immediately
-          await cache.del(`template:${template_id}`)
-          log.info('🔄 Template cache cleared for fresh metrics display')
-        } catch (error) {
-          log.warn('⚠️ Failed to track template validation:', error.message)
-        }
-      }
-
-      // Track template usage with comprehensive metrics if template was used
-      if (template_id && req.body.document_id) {
-        try {
-          await pool.query(`
-            UPDATE template_usage
-            SET 
-              generation_time_ms = $1,
-              quality_score = $2,
-              ai_provider = $3,
-              ai_model = $4,
-              token_count = $5
-            WHERE document_id = $6
-          `, [
-            metadata.processingTimeMs,
-            quality.overallQuality,
-            provider,
-            model || result.model,
-            metadata.totalTokens,
-            req.body.document_id
-          ])
-        } catch (error) {
-          logger.warn('Failed to update template usage metrics:', error)
-        }
-      }
-
-  // Log the generation to audit logs
-      await pool.query(
-        `
-        INSERT INTO audit_logs (user_id, action, resource_type, resource_id, new_values)
-        VALUES ($1, 'ai_generate', 'ai_provider', $2, $3)
-      `,
-        [req.user?.id, providerCheck.rows[0].id, JSON.stringify({
-          prompt_length: prompt.length,
-          provider,
-          model: result.model,
-          usage: result.usage,
-          metadata: formattedMetadata,
-          quality_score: quality.overallQuality,
-          template_id: template_id
-        })]
-      )
-
-      log.info('✅ [BACKEND-10/10] Metadata calculated and logged')
-
-      // AUTO-SAVE: If project_id is provided, automatically save the document to the project
-      let savedDocumentId = null
-      if (req.body.project_id && req.body.project_id !== 'unknown') {
-        try {
-          log.info('💾 [AUTO-SAVE] Saving document to project', {
-            projectId: req.body.project_id,
-            projectName: req.body.project_name
-          })
-
-          const documentId = require('crypto').randomUUID()
-          const templateData = template_id ? await pool.query('SELECT name FROM templates WHERE id = $1', [template_id]) : null
-          
-          // Use database time for consistent, correct dates
-          const { getFormattedDateForTitle } = require('../utils/dateUtils')
-          const formattedDate = await getFormattedDateForTitle()
-          
-          const documentTitle = templateData?.rows[0]?.name 
-            ? `${templateData.rows[0].name} - ${formattedDate}`
-            : `AI Generated Document - ${formattedDate}`
-
-          await pool.query(
-            `INSERT INTO documents 
-             (id, project_id, name, content, template_id, generation_metadata, created_by, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
-             RETURNING id`,
-            [
-              documentId,
-              req.body.project_id,
-              documentTitle,  // Changed column from 'title' to 'name'
-              content,
-              template_id || null,
-              JSON.stringify({
-                prompt: prompt,
-                provider: provider,
-                model: model || result.model,
-                template_id: template_id,
-                quality: quality,
-                ...formattedMetadata
-              }),
-              req.user?.id
-            ]
-          )
-
-          savedDocumentId = documentId
-          log.info('✅ [AUTO-SAVE] Document saved to project', {
-            documentId,
-            projectId: req.body.project_id,
-            title: documentTitle
-          })
-
-          // 🚀 Automatic Entity Extraction: Trigger extraction for newly created document
-          // This runs asynchronously and doesn't block the response
-          if (content && content.trim().length > 0) {
-            try {
-              const { extractionQueue } = await import('../services/queueService')
-              
-              // Create extraction job record
-              const extractionJobResult = await pool.query(
-                `INSERT INTO jobs (
-                  type, status, data, created_by, project_id
-                ) VALUES ($1, $2, $3, $4, $5)
-                RETURNING id`,
-                [
-                  'project-data-extraction',
-                  'pending',
-                  JSON.stringify({ 
-                    projectId: req.body.project_id, 
-                    documentIds: [documentId], // Extract only from this newly created document
-                    autoTriggered: true,
-                    sourceDocumentId: documentId,
-                    sourceDocumentName: documentTitle
-                  }),
-                  req.user?.id,
-                  req.body.project_id
-                ]
-              )
-
-              const extractionJobId = extractionJobResult.rows[0].id
-
-              // Enqueue extraction job (non-blocking)
-              await extractionQueue.add('extract-project-data', {
-                jobId: extractionJobId,
-                projectId: req.body.project_id,
-                userId: req.user?.id,
-                documentIds: [documentId], // Extract entities from this document only
-                aiProvider: undefined, // Use default provider
-                aiModel: undefined // Use default model
-              })
-
-              log.info('🚀 Automatic entity extraction triggered for AI-generated document', {
-                documentId,
-                documentName: documentTitle,
-                extractionJobId,
-                projectId: req.body.project_id
-              })
-            } catch (extractionError: any) {
-              // Don't fail document creation if extraction trigger fails
-              log.warn('⚠️ Failed to trigger automatic entity extraction', {
-                documentId,
-                error: extractionError.message,
-                stack: extractionError.stack
-              })
-            }
-          }
-        } catch (saveError) {
-          log.error('❌ [AUTO-SAVE] Failed to save document to project:', saveError)
-          // Continue anyway - user can manually save if auto-save fails
-        }
-      }
-
-      log.info('🎉 [BACKEND-10/10] Sending response to client')
-
-      res.json({
-        message: "Content generated successfully",
-        result,
-        metadata: formattedMetadata,
-        quality: quality,
-        savedToProject: !!savedDocumentId,
-        documentId: savedDocumentId,
-        projectId: req.body.project_id !== 'unknown' ? req.body.project_id : null
-      })
-      
-      log.info('✅ [BACKEND] AI generation COMPLETE! Document ready.')
     } catch (error: unknown) {
-      log.error("❌ [BACKEND-ERROR] AI generation failed:", error)
-      log.error("❌ [BACKEND-ERROR] Error details:", {
-        message: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
-        type: error instanceof Error ? error.constructor.name : typeof error
-      })
-      
-      // Provide detailed error information for debugging
+      log.error("AI generation failed", error)
       const errorMessage = error instanceof Error ? error.message : String(error)
-      const isRedisError = errorMessage.includes('Redis') || errorMessage.includes('ECONNREFUSED')
-      const isDatabaseError = errorMessage.includes('database') || errorMessage.includes('postgres')
-      
       res.status(500).json({ 
         error: "AI generation failed",
-        details: errorMessage,
-        hint: isRedisError ? 'Redis connection unavailable - check REDIS_URL environment variable' 
-              : isDatabaseError ? 'Database connection error - check DATABASE_URL' 
-              : 'Check backend logs for details'
+        details: errorMessage
       })
     }
   }
@@ -1284,7 +975,7 @@ router.get(
                 throw new Error(`Ollama API returned ${ollamaResponse.status}: ${ollamaResponse.statusText}`)
               }
               
-              const ollamaData = await ollamaResponse.json()
+              const ollamaData: { models?: OllamaModel[] } = await ollamaResponse.json()
               
               // Transform Ollama models to our format
               interface OllamaModel {

@@ -64,6 +64,7 @@ export interface StageConfig {
   timeout: number
   retry_attempts: number
   quality_threshold: number
+  fail_on_error?: boolean
   config: Record<string, any>
 }
 
@@ -300,14 +301,33 @@ export interface ContextData {
   user_context: UserContext
   historical_context: HistoricalContext
   external_context: ExternalContext
+  stakeholder_context?: StakeholderContext
+  business_context?: BusinessContext
+  organization_context?: OrganizationContext
 }
 
 export interface ProjectContext {
   project_data: Record<string, any>
-  stakeholders: Stakeholder[]
-  requirements: Requirement[]
-  constraints: Constraint[]
-  risks: Risk[]
+  stakeholders?: Stakeholder[]
+  requirements?: Requirement[]
+  constraints?: Constraint[]
+  risks?: Risk[]
+  project_id?: string
+  project_name?: string
+  project_description?: string
+  project_status?: string
+  start_date?: Date | string
+  end_date?: Date | string
+  budget?: number
+  priority?: string
+  owner?: {
+    name?: string
+    email?: string
+  }
+  metadata?: Record<string, any>
+  created_at?: Date | string
+  updated_at?: Date | string
+  industry_terms?: TerminologyPreference[]
 }
 
 export interface UserContext {
@@ -328,6 +348,52 @@ export interface ExternalContext {
   external_data: Record<string, any>
   api_responses: Record<string, any>
   integrations: Integration[]
+}
+
+export interface StakeholderContext {
+  stakeholders?: StakeholderProfile[]
+  total_stakeholders?: number
+  high_influence?: number
+  high_interest?: number
+  preferred_terminology?: TerminologyPreference[]
+}
+
+export interface StakeholderProfile {
+  id?: string
+  stakeholder_id?: string
+  name?: string
+  role?: string
+  organization?: string
+  email?: string
+  phone?: string
+  interest_level?: string
+  influence_level?: string
+  engagement_strategy?: string
+  communication_preferences?: Record<string, any>
+  expectations?: Record<string, any>
+  concerns?: Record<string, any>
+  metadata?: Record<string, any>
+}
+
+export interface TerminologyPreference {
+  generic_term: string
+  preferred_term: string
+  context?: string
+}
+
+export interface BusinessContext {
+  industry?: string
+  company_profile?: Record<string, any>
+  objectives?: string[]
+  strategy?: string
+  metadata?: Record<string, any>
+}
+
+export interface OrganizationContext {
+  terminology?: TerminologyPreference[]
+  values?: string[]
+  culture?: string
+  metadata?: Record<string, any>
 }
 
 export interface PersonalizationData {
@@ -553,6 +619,8 @@ export interface StageOutput {
 export interface ProcessingStatus {
   status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
   progress: number
+  started_at?: Date
+  completed_at?: Date
   current_stage?: string
   stages_completed: string[]
   stages_remaining: string[]
@@ -586,6 +654,9 @@ export interface StageResult {
   execution_time: number
   quality_score: number
   output: StageOutput
+  input?: any
+  startedAt?: Date
+  completedAt?: Date
   error?: ProcessingError
   metadata: Record<string, any>
 }

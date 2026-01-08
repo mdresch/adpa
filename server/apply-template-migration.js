@@ -1,33 +1,10 @@
 const fs = require('fs');
 const path = require('path');
 
-// Simple database connection using environment variables
-const { Pool } = require('pg');
-
-// SSL configuration - use proper SSL settings for production
-// For Supabase and other managed databases, use proper SSL configuration
-const getSSLConfig = () => {
-  if (process.env.NODE_ENV === 'production') {
-    // In production, use proper SSL configuration
-    // Only disable certificate validation if explicitly configured (not recommended)
-    if (process.env.DATABASE_SSL_REJECT_UNAUTHORIZED === 'false') {
-      console.warn('⚠️  WARNING: SSL certificate validation is disabled. This is not recommended for production.');
-      return { rejectUnauthorized: false };
-    }
-    // Default: use SSL with proper certificate validation
-    return { rejectUnauthorized: true };
-  }
-  return false;
-};
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || process.env.POSTGRES_URL,
-  ssl: getSSLConfig()
-});
+const db = require('./src/lib/db')
 
 async function applyMigration() {
-  const client = await pool.connect();
-  
+  await db.initDb()
   try {
     console.log('🚀 Applying Template Purpose Analytics Migration...');
     
@@ -56,7 +33,7 @@ async function applyMigration() {
     }
     
     // Check current state
-    const columnCheck = await client.query(`
+    const columnCheck = await db.query(`
       SELECT column_name, data_type, is_nullable, column_default
       FROM information_schema.columns
       WHERE table_name = 'documents'
@@ -75,11 +52,11 @@ async function applyMigration() {
     
     // Apply migration
     console.log('\n📄 Executing migration SQL...');
-    await client.query(migrationSql);
+    await db.query(migrationSql);
     console.log('✅ Migration SQL executed successfully');
     
     // Verify results
-    const verifyDocs = await client.query(`
+    const verifyDocs = await db.query(`
       SELECT column_name, data_type, is_nullable, column_default
       FROM information_schema.columns
       WHERE table_name = 'documents'
@@ -93,7 +70,7 @@ async function applyMigration() {
     });
     
     // Check template_entity_profile table
-    const templateProfileCheck = await client.query(`
+    const templateProfileCheck = await db.query(`
       SELECT column_name, data_type
       FROM information_schema.columns
       WHERE table_name = 'template_entity_profile'
@@ -110,7 +87,7 @@ async function applyMigration() {
     }
     
     // Check helper views
-    const viewCheck = await client.query(`
+    const viewCheck = await db.query(`
       SELECT table_name, table_type
       FROM information_schema.tables
       WHERE table_schema = 'public'
@@ -136,8 +113,7 @@ async function applyMigration() {
     console.error('❌ Migration failed:', error.message);
     throw error;
   } finally {
-    client.release();
-    await pool.end();
+    try { await db.end() } catch (e) {}
   }
 }
 

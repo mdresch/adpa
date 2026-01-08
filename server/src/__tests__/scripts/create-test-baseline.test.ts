@@ -6,7 +6,7 @@
  * works correctly for various scenarios.
  */
 
-import { Pool } from 'pg'
+const db = require('../../lib/db')
 
 // Mock the database connection
 const mockPool = {

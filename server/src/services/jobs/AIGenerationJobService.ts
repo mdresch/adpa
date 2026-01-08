@@ -15,7 +15,7 @@ import { aiService } from '../aiService'
 import { ContextAwareAIService } from '../../modules/context/integration'
 import { io } from '../../server'
 import { v4 as uuidv4 } from 'uuid'
-import type Bull from 'bull'
+import type { IQueueJob } from './queue/IQueue'
 // Phase 3: Use centralized types
 import type { AIGenerationJobData, JobStatus, QueueName } from './types'
 // Phase 5: Dependency injection
@@ -62,7 +62,7 @@ export class AIGenerationJobService {
   /**
    * Process an AI generation job (instance method with DI)
    */
-  async processJob(job: Bull.Job, options: ProcessJobOptions): Promise<any> {
+  async processJob(job: IQueueJob, options: ProcessJobOptions): Promise<any> {
     return AIGenerationJobService.processJob(job, options, {
       database: this.database,
       websocket: this.websocket,
@@ -76,7 +76,7 @@ export class AIGenerationJobService {
    * Process an AI generation job (static method for backward compatibility)
    * Phase 5: Now accepts optional dependencies parameter
    */
-  static async processJob(job: Bull.Job, options: ProcessJobOptions, deps?: QueueServiceDependencies): Promise<any> {
+  static async processJob(job: IQueueJob, options: ProcessJobOptions, deps?: QueueServiceDependencies): Promise<any> {
     // Phase 5: Use injected dependencies or fall back to global imports
     const db = deps?.database || { query: pool.query.bind(pool) } as any
     const log = deps?.logger || logger
@@ -448,32 +448,35 @@ export class AIGenerationJobService {
     const log = deps?.logger || logger
     let currentProgress = startProgress
 
-    return setInterval(async () => {
+    return setInterval(() => {
       // Small random increments to make it feel natural (1-3%)
       const increment = Math.floor(Math.random() * 2) + 1
       if (currentProgress + increment < maxProgress) {
         currentProgress += increment
 
-        try {
-          // Update database
-          await updateJobStatus(jobId, "processing", currentProgress, workerId, "ai-processing")
-          log.info(`[HEARTBEAT] Job ${jobId} progress: ${currentProgress}%`)
-
-          // Emit WebSocket event for real-time UI updates
-          if (ws) {
-            ws.emit("job:status", {
-              jobId,
-              userId: jobData?.userId,
-              progress: currentProgress,
-              status: "processing",
-              projectId: jobData?.projectId || jobData?.variables?.project_id,
-              message: "Processing..."
-            })
-          }
-        } catch (err) {
-          // Ignore heartbeat errors - not critical if we miss a step
-          log.debug(`[HEARTBEAT] Failed to update progress for job ${jobId}`)
-        }
+        // Update database using promise chaining to avoid top-level await in callbacks
+        updateJobStatus(jobId, "processing", currentProgress, workerId, "ai-processing")
+          .then(() => {
+            log.info(`[HEARTBEAT] Job ${jobId} progress: ${currentProgress}%`)
+            if (ws) {
+              try {
+                ws.emit("job:status", {
+                  jobId,
+                  userId: jobData?.userId,
+                  progress: currentProgress,
+                  status: "processing",
+                  projectId: jobData?.projectId || jobData?.variables?.project_id,
+                  message: "Processing..."
+                })
+              } catch (e) {
+                // ignore websocket emit errors
+              }
+            }
+          })
+          .catch(() => {
+            // Ignore heartbeat errors - not critical if we miss a step
+            log.debug(`[HEARTBEAT] Failed to update progress for job ${jobId}`)
+          })
       }
     }, 4000) // Update every 4 seconds
   }

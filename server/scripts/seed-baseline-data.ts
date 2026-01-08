@@ -106,7 +106,7 @@ if (require.main === module) {
  * Tests that baseline_components, baseline_drift_detection, and baseline_compliance_reviews work
  */
 
-import { Pool } from 'pg'
+const db = require('../src/lib/db')
 import dotenv from 'dotenv'
 import path from 'path'
 
@@ -125,7 +125,7 @@ async function seedBaselineData() {
 
   try {
     // 1. Get existing baselines
-    const baselines = await pool.query(
+    const baselines = await db.query(
       `SELECT id, project_id, version, created_by FROM project_baselines ORDER BY created_at DESC LIMIT 3`
     )
 
@@ -208,7 +208,7 @@ async function seedBaselineData() {
       ]
 
       for (const component of components) {
-        await pool.query(
+        await db.query(
           `INSERT INTO baseline_components (
             baseline_id, component_type, title, description, priority, confidence_score
           ) VALUES ($1, $2, $3, $4, $5, $6)
@@ -221,7 +221,7 @@ async function seedBaselineData() {
 
       // 3. Seed baseline_compliance_reviews
       try {
-        await pool.query(
+        await db.query(
           `INSERT INTO baseline_compliance_reviews (
             baseline_id,
             review_type,
@@ -277,7 +277,7 @@ async function seedBaselineData() {
 
       for (const drift of drifts) {
         try {
-          await pool.query(
+          await db.query(
             `INSERT INTO baseline_drift_detection (
               baseline_id,
               project_id,
@@ -313,17 +313,17 @@ async function seedBaselineData() {
     // 5. Verify seeded data
     console.log('📊 Verification:\n')
 
-    const componentCount = await pool.query(
+    const componentCount = await db.query(
       'SELECT COUNT(*) as count FROM baseline_components'
     )
     console.log(`  baseline_components: ${componentCount.rows[0].count} rows`)
 
-    const driftCount = await pool.query(
+    const driftCount = await db.query(
       'SELECT COUNT(*) as count FROM baseline_drift_detection'
     )
     console.log(`  baseline_drift_detection: ${driftCount.rows[0].count} rows`)
 
-    const complianceCount = await pool.query(
+    const complianceCount = await db.query(
       'SELECT COUNT(*) as count FROM baseline_compliance_reviews'
     )
     console.log(`  baseline_compliance_reviews: ${complianceCount.rows[0].count} rows\n`)
@@ -338,8 +338,7 @@ async function seedBaselineData() {
     console.error('❌ Error seeding data:', error)
     throw error
   } finally {
-    await pool.end()
-  }
+    try { await db.end() } catch (e) {}}
 }
 
 seedBaselineData()

@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { Pool } from 'pg';
+const db = require('../src/lib/db');
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
@@ -21,7 +21,7 @@ async function testStrategicDrift() {
     const { driftDetectionService } = await import('../src/services/driftDetectionService');
 
     // Get the 3 strategic documents
-    const docsResult = await pool.query(`
+    const docsResult = await db.query(`
       SELECT id, name, created_at
       FROM documents
       WHERE project_id = $1
@@ -43,14 +43,14 @@ async function testStrategicDrift() {
 
     if (docsResult.rows.length === 0) {
       console.log('⚠️  No strategic documents found!');
-      await pool.end();
+      try { await db.end() } catch (e) {}
       return;
     }
 
     console.log('=' .repeat(70));
 
     // Get baseline info
-    const baselineResult = await pool.query(`
+    const baselineResult = await db.query(`
       SELECT id, version, status, 
              jsonb_array_length(document_corpus) as doc_count
       FROM project_baselines
@@ -131,7 +131,7 @@ async function testStrategicDrift() {
     console.log('\n✨ DRIFT DETECTION TEST COMPLETE!\n');
 
     // Show all drift records in database
-    const allDrifts = await pool.query(`
+    const allDrifts = await db.query(`
       SELECT 
         id,
         detection_type,
@@ -161,7 +161,7 @@ async function testStrategicDrift() {
     }
 
     console.log('\n');
-    await pool.end();
+    try { await db.end() } catch (e) {}
     
   } catch (error) {
     console.error('❌ Error:', error);

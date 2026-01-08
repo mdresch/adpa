@@ -40,6 +40,38 @@ export class ContextRetrievalService implements IContextRetrievalService {
     this.relevanceScoringEngine = new RelevanceScoringEngine(relevanceScoringConfig)
   }
 
+  private getEmptyContextTypeDistribution(): Record<ContextType, number> {
+    return {
+      project_data: 0,
+      user_preferences: 0,
+      document_history: 0,
+      external_api: 0,
+      database_query: 0,
+      file_content: 0,
+      stakeholder_info: 0,
+      requirements: 0,
+      constraints: 0,
+      risks: 0,
+      best_practices: 0,
+      patterns: 0,
+      quality_metrics: 0,
+      expertise: 0,
+      collaboration_preferences: 0
+    }
+  }
+
+  private getEmptySearchStrategyDistribution(): Record<SearchStrategy, number> {
+    return {
+      semantic: 0,
+      keyword: 0,
+      hybrid: 0,
+      vector_similarity: 0,
+      full_text: 0,
+      fuzzy: 0,
+      exact_match: 0
+    }
+  }
+
   /**
    * Search precomputed document chunks (RAG) using hybrid strategy
    */
@@ -123,8 +155,11 @@ export class ContextRetrievalService implements IContextRetrievalService {
 
       // Calculate relevance scores for all results
       const userContext = await this.getUserContext(request.userId, request.projectId, request.templateId)
-      const scoredResults = await Promise.all(
-        results.map(result => this.calculateRelevanceScore(result, request.query, userContext))
+      const scoredResults: ContextRetrievalResult[] = await Promise.all(
+        results.map(async (result) => {
+          const relevanceScore = await this.calculateRelevanceScore(result, request.query, userContext)
+          return { ...result, relevanceScore }
+        })
       )
 
       // Filter by minimum relevance score
@@ -266,14 +301,10 @@ export class ContextRetrievalService implements IContextRetrievalService {
     }
   }
 
-  async calculateRelevanceScore(result: ContextRetrievalResult, query: string, userContext?: any): Promise<ContextRetrievalResult> {
+  async calculateRelevanceScore(result: ContextRetrievalResult, query: string, userContext?: any): Promise<number> {
     try {
       const relevanceScore = await this.relevanceScoringEngine.calculateRelevanceScore(result, query, userContext)
-      
-      return {
-        ...result,
-        relevanceScore
-      }
+      return relevanceScore
 
     } catch (error) {
       logger.error('Failed to calculate relevance score', {
@@ -281,11 +312,7 @@ export class ContextRetrievalService implements IContextRetrievalService {
         query: query.substring(0, 50),
         error: error.message
       })
-      
-      return {
-        ...result,
-        relevanceScore: 0
-      }
+      return 0
     }
   }
 
@@ -538,8 +565,8 @@ export class ContextRetrievalService implements IContextRetrievalService {
           medium: parseInt(metrics.medium_relevance) || 0,
           low: parseInt(metrics.low_relevance) || 0
         },
-        contextTypeDistribution: {},
-        searchStrategyDistribution: {},
+        contextTypeDistribution: this.getEmptyContextTypeDistribution(),
+        searchStrategyDistribution: this.getEmptySearchStrategyDistribution(),
         errorRate: parseFloat(metrics.error_rate) || 0,
         topQueries: [],
         performanceMetrics: {
@@ -560,8 +587,8 @@ export class ContextRetrievalService implements IContextRetrievalService {
         averageResponseTime: 0,
         cacheHitRate: 0,
         relevanceScoreDistribution: { high: 0, medium: 0, low: 0 },
-        contextTypeDistribution: {},
-        searchStrategyDistribution: {},
+        contextTypeDistribution: this.getEmptyContextTypeDistribution(),
+        searchStrategyDistribution: this.getEmptySearchStrategyDistribution(),
         errorRate: 0,
         topQueries: [],
         performanceMetrics: {

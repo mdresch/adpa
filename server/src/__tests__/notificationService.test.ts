@@ -3,7 +3,7 @@
  * TASK-741: Tests for multi-channel notification system
  */
 
-import { Pool } from 'pg';
+const db = require('../lib/db');
 import { NotificationService } from '../services/notificationService';
 
 // Mock dependencies

@@ -1,19 +1,16 @@
-import { Pool } from 'pg';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
+const dbModule = require('../src/lib/db')
+const db = dbModule.default || dbModule
 
 dotenv.config({ path: path.join(__dirname, '../.env') });
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false
-});
-
 async function checkAIUsage() {
   try {
-    // Check ai_usage_logs
-    const logsResult = await pool.query(`
+    await db.initDb()
+      // Check ai_usage_logs
+      const logsResult = await db.query(`
       SELECT COUNT(*) as count
       FROM ai_usage_logs
       WHERE created_at > NOW() - INTERVAL '24 hours'
@@ -23,7 +20,7 @@ async function checkAIUsage() {
     console.log(`ai_usage_logs entries: ${logsResult.rows[0].count}`);
     
     // Check quality audits
-    const auditsResult = await pool.query(`
+    const auditsResult = await db.query(`
       SELECT 
         COUNT(*) as total,
         COUNT(CASE WHEN ai_provider IS NOT NULL THEN 1 END) as with_provider,
@@ -40,7 +37,7 @@ async function checkAIUsage() {
     console.log(`  Total Cost: $${parseFloat(auditsResult.rows[0].total_cost || 0).toFixed(4)}`);
     
     // Check template improvements
-    const improvementsResult = await pool.query(`
+    const improvementsResult = await db.query(`
       SELECT 
         COUNT(*) as total,
         COUNT(CASE WHEN analyzer_ai_provider IS NOT NULL THEN 1 END) as with_provider,
@@ -85,7 +82,7 @@ async function checkAIUsage() {
       console.log('⚠️  No quality audits or template improvements with AI found');
     }
     
-    await pool.end();
+    await db.end();
     process.exit(0);
   } catch (error: any) {
     console.error('❌ Error:', error.message);

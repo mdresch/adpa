@@ -283,7 +283,7 @@ export class TimeBasedPrioritizer {
     return (frequencyScore * 0.3 + trendScore * 0.2 + recencyScore * 0.3 + peakAccessScore * 0.2)
   }
 
-  private calculateUpdateFrequencyScore(context: ContextItem): Promise<number> {
+  private calculateUpdateFrequencyScore(context: ContextItem): number {
     // Calculate score based on update frequency
     const updateFrequency = context.freshness.update_frequency
     const timeSinceUpdate = this.calculateTimeSinceUpdate(context)

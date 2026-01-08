@@ -1,19 +1,14 @@
 require('dotenv').config();
-const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
+const dbModule = require('./src/lib/db')
+const db = dbModule.default || dbModule
 
 // ⚠️ DEVELOPMENT MIGRATION SCRIPT ONLY - NOT FOR PRODUCTION USE
 // This script runs ONE-TIME database migrations during development
 // TLS verification disabled for self-signed certificates (Neon/Supabase dev)
 // codacy-disable-next-line SecurityRisk: Development script for local migrations only
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  // codacy-disable-line SecurityRisk: Self-signed certificates acceptable for dev
-  ssl: process.env.NODE_ENV === 'production' 
-    ? { rejectUnauthorized: true }  // Production: verify certificates
-    : { rejectUnauthorized: false }  // Development: allow self-signed
-});
+// Using shared db singleton instead of creating a local Pool
 
 (async () => {
   try {
@@ -32,7 +27,8 @@ const pool = new Pool({
     console.log('🚀 Running migration...');
     // codacy-disable-next-line SQLInjection: Trusted file source, development migration only
     // This SQL is read from a trusted migration file (not user input - safe for development)
-    await pool.query(upSQL);
+    await db.initDb()
+    await db.query(upSQL);
     
     console.log('✅ Programs table created successfully!');
     console.log('   - programs table created');
@@ -46,7 +42,7 @@ const pool = new Pool({
       console.log('ℹ️  Table already exists - this is OK!');
     }
   } finally {
-    await pool.end();
+    await db.end();
   }
 })();
 

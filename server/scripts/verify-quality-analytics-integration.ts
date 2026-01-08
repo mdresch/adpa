@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+const db = require('../src/lib/db');
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 
@@ -13,7 +13,7 @@ const pool = new Pool({
 async function verifyIntegration() {
   try {
     // Get quality audits with tokens
-    const auditsResult = await pool.query(`
+    const auditsResult = await db.query(`
       SELECT 
         id,
         document_id,
@@ -46,7 +46,7 @@ async function verifyIntegration() {
       // Now check if these are in ai_usage_logs
       console.log('🔍 Checking ai_usage_logs for matching entries...\n');
       
-      const logsResult = await pool.query(`
+      const logsResult = await db.query(`
         SELECT 
           COUNT(*) as total,
           SUM(total_tokens) as total_tokens,
@@ -81,7 +81,7 @@ async function verifyIntegration() {
       console.log('   Generate a document to test tracking');
     }
     
-    await pool.end();
+    try { await db.end() } catch (e) {}
     process.exit(0);
   } catch (error: any) {
     console.error('❌ Error:', error.message);

@@ -92,6 +92,6 @@ async function demonstrateContextInjection() {
 export { demonstrateContextInjection }
 
 // Run demo if this file is executed directly
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (require.main === module) {
   demonstrateContextInjection().catch(console.error)
 }

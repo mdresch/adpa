@@ -6,7 +6,7 @@
 import { logger } from '@/utils/logger'
 import { pool } from '@/database/connection'
 import { ContextRetrievalService } from '@/modules/contextRetrieval/contextRetrievalService'
-import type { ProjectContextData } from '../types'
+import type { BaselineDriftFindingData, BaselineSnapshotData, DriftRootCauseData, ProjectContextData } from '../types'
 
 export class ProjectContextAnalyzer {
   private retrieval?: ContextRetrievalService
@@ -135,7 +135,7 @@ export class ProjectContextAnalyzer {
     }
   }
 
-  private async gatherBaselineSnapshots(projectId: string): Promise<any[]> {
+  private async gatherBaselineSnapshots(projectId: string): Promise<BaselineSnapshotData[]> {
     try {
       const res = await pool.query(`
         SELECT b.id, b.project_id, b.baseline_type, b.created_at, b.created_by,
@@ -161,7 +161,7 @@ export class ProjectContextAnalyzer {
     }
   }
 
-  private async gatherBaselineDriftFindings(projectId: string): Promise<any[]> {
+  private async gatherBaselineDriftFindings(projectId: string): Promise<BaselineDriftFindingData[]> {
     try {
       const res = await pool.query(`
         SELECT d.id, d.project_id, d.category, d.severity, d.status, d.detected_at, d.resolved_at,
@@ -190,7 +190,7 @@ export class ProjectContextAnalyzer {
     }
   }
 
-  private async gatherDriftRootCauses(projectId: string): Promise<any[]> {
+  private async gatherDriftRootCauses(projectId: string): Promise<DriftRootCauseData[]> {
     try {
       const res = await pool.query(`
         SELECT r.id, r.project_id, r.cause_category, r.cause_detail, r.recurring,

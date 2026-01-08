@@ -1,4 +1,4 @@
-import { Pool } from 'pg'
+const db = require('../src/lib/db')
 import * as dotenv from 'dotenv'
 
 dotenv.config()
@@ -16,7 +16,7 @@ async function triggerOptimization() {
     console.log('\n🔧 Manually Triggering Template Optimization...\n')
 
     // Get both quality audits
-    const audits = await pool.query(
+    const audits = await db.query(
       `SELECT qa.*
        FROM quality_audits qa
        JOIN documents d ON qa.document_id = d.id
@@ -65,8 +65,7 @@ async function triggerOptimization() {
     console.error('❌ Error:', error.message)
     console.error('Stack:', error.stack)
   } finally {
-    await pool.end()
-  }
+    try { await db.end() } catch (e) {}}
 }
 
 triggerOptimization()

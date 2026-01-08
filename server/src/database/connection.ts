@@ -7,6 +7,7 @@ if (process.env.NODE_ENV !== "production") {
 import { Pool } from "pg"
 import type { PoolConfig } from "pg"
 import { logger } from "../utils/logger"
+import CircuitBreaker from "../utils/circuitBreaker"
 import dns from "dns"
 import { promisify } from "util"
 
@@ -81,15 +82,28 @@ const createPool = (host: string) => {
 }
 
 let pool: Pool | null = null // Initialize lazily to prevent hanging on module load
+// Circuit breaker for DB to avoid hammering DB when it's unstable
+const dbBreaker = new CircuitBreaker(3, 30000) // open after 3 failures, reset after 30s
 
 function patchPoolQuery(p: Pool) {
   try {
     const orig = (p as any).query.bind(p)
     ;(p as any).query = async (text: any, params?: any) => {
+      // If circuit is open, short-circuit and return null so callers can handle service-unavailable
+      if (dbBreaker.isOpen()) {
+        logger.warn('[DB-GUARD] Database circuit open - short-circuiting query', { sql: text, params })
+        return null
+      }
+
       try {
-        return await orig(text, params)
+        const res = await orig(text, params)
+        // record success on any successful query
+        dbBreaker.recordSuccess()
+        return res
       } catch (err: any) {
         logger.error('[DB-GUARD] Unhandled pool.query error', { sql: text, params, message: err?.message })
+        // record failure and possibly open circuit
+        dbBreaker.recordFailure()
         return null
       }
     }
@@ -273,6 +287,38 @@ export async function connectDatabase() {
         detail: error.detail,
         stack: error.stack
       })
+
+      // Quick-retry for self-signed certs / dev environments: retry with insecure TLS
+      const errMsg = (error && (error.message || '')).toLowerCase()
+      const shouldRetryInsecure = !!process.env.ADPA_ALLOW_INSECURE_TLS || errMsg.includes('self-signed') || errMsg.includes('self signed') || errMsg.includes('certificate')
+      if (shouldRetryInsecure) {
+        try {
+          logger.warn('Retrying DATABASE_URL connection with insecure TLS (ADPA_ALLOW_INSECURE_TLS) due to certificate error')
+          const insecurePoolConfig = { ...poolConfig, ssl: { rejectUnauthorized: false } }
+          const insecurePool = new Pool(insecurePoolConfig)
+          insecurePool.setMaxListeners(20)
+
+          const client = await Promise.race([
+            insecurePool.connect(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Database connection timeout (insecure retry)')), 30000))
+          ]) as any
+
+          await Promise.race([
+            client.query("SELECT NOW()"),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Database query timeout (insecure retry)')), 15000))
+          ])
+          client.release()
+
+          pool = insecurePool
+          try { patchPoolQuery(pool) } catch (e) {}
+          logger.info('✅ Database connected successfully via DATABASE_URL (insecure TLS)')
+          return
+        } catch (insecureErr) {
+          logger.error('Retry with insecure TLS failed:', insecureErr?.message || insecureErr)
+          try { await insecureErr?.end?.() } catch (e) {}
+        }
+      }
+
       await testPool.end().catch(() => {})
     }
   }
@@ -338,3 +384,11 @@ export async function connectDatabase() {
 }
 
 export { pool }
+
+export function getDbCircuitState() {
+  try {
+    return dbBreaker.getState()
+  } catch (e) {
+    return 'unknown'
+  }
+}

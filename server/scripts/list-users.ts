@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+const db = require('../src/lib/db');
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 
@@ -11,7 +11,7 @@ const pool = new Pool({
 
 async function listUsers() {
   try {
-    const result = await pool.query(`
+    const result = await db.query(`
       SELECT id, email, role, created_at
       FROM users
       ORDER BY created_at ASC
@@ -34,7 +34,7 @@ async function listUsers() {
     console.log('💡 Use one of these emails to log in at:');
     console.log('   http://localhost:3000/auth/login\n');
     
-    await pool.end();
+    try { await db.end() } catch (e) {}
     process.exit(0);
   } catch (error: any) {
     console.error('❌ Error:', error.message);

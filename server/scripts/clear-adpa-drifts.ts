@@ -1,16 +1,7 @@
-import { Pool } from 'pg'
 import dotenv from 'dotenv'
-
 dotenv.config()
-
-const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL
-
-const pool = new Pool({
-  connectionString,
-  ssl: (connectionString?.includes('supabase.co') || connectionString?.includes('azure') || process.env.DB_SSL === 'true')
-    ? { rejectUnauthorized: false }
-    : false
-})
+const dbModule = require('../src/lib/db')
+const db = dbModule.default || dbModule
 
 async function clearADPADrifts() {
   const projectId = '45083436-7e90-4ecf-aa42-e4a73c4b64b7'
@@ -18,8 +9,9 @@ async function clearADPADrifts() {
   try {
     console.log('🔍 Finding drift records for ADPA project...\n')
     
+    await db.initDb()
     // First, verify the project exists
-    const projectCheck = await pool.query(
+    const projectCheck = await db.query(
       'SELECT id, name FROM projects WHERE id = $1',
       [projectId]
     )
@@ -33,7 +25,7 @@ async function clearADPADrifts() {
     console.log(`✅ Found project: ${projectName} (${projectId})\n`)
     
     // Check existing drifts
-    const existingDrifts = await pool.query(`
+    const existingDrifts = await db.query(`
       SELECT 
         bdd.id,
         bdd.detection_type,
@@ -70,7 +62,7 @@ async function clearADPADrifts() {
     console.log('\n🔄 Clearing all drift records...\n')
     
     // Delete all drift records for this project
-    const result = await pool.query(`
+    const result = await db.query(`
       DELETE FROM baseline_drift_detection
       WHERE project_id = $1
       RETURNING id, detection_type, drift_severity, status
@@ -96,7 +88,7 @@ async function clearADPADrifts() {
       console.error(`   Stack: ${error.stack}`)
     }
   } finally {
-    await pool.end()
+    await db.end()
   }
 }
 

@@ -1,4 +1,4 @@
-import { Pool } from 'pg'
+const db = require('../src/lib/db')
 import * as dotenv from 'dotenv'
 import * as path from 'path'
 
@@ -15,7 +15,7 @@ const pool = new Pool({
 })
 
 async function main() {
-  const result = await pool.query(`
+  const result = await db.query(`
     SELECT p.id, p.name, p.budget, p.actual_cost, p.internal_labor_cost, prog.name as program_name
     FROM projects p
     JOIN programs prog ON p.program_id = prog.id
@@ -34,8 +34,7 @@ async function main() {
     console.log('')
   }
   
-  await pool.end()
-}
+  try { await db.end() } catch (e) {}}
 
 main()
 

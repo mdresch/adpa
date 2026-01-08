@@ -1,12 +1,12 @@
 const Bull = require('bull');
-const { Pool } = require('pg');
 const dotenv = require('dotenv');
 const path = require('path');
+const dbModule = require('./src/lib/db')
+const db = dbModule.default || dbModule
 
 dotenv.config({ path: path.join(__dirname, '.env') });
 
 const redisUrl = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 const typeToQueue = {
     'ai-generate': 'ai-processing',
@@ -21,7 +21,8 @@ const typeToQueue = {
 
 async function verifyJobs() {
     try {
-        const res = await pool.query("SELECT id, type, status FROM jobs WHERE status = 'pending' LIMIT 5");
+        await db.initDb()
+        const res = await db.query("SELECT id, type, status FROM jobs WHERE status = 'pending' LIMIT 5");
         console.log(`Found ${res.rows.length} pending jobs in DB to check.`);
 
         for (const row of res.rows) {
@@ -50,7 +51,7 @@ async function verifyJobs() {
             await q.close();
         }
 
-        await pool.end();
+        await db.end();
     } catch (err) {
         console.error('Verification error:', err.message);
     }

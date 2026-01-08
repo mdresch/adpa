@@ -8,7 +8,7 @@
  *   npm run migrate --all        # Force re-run all migrations
  */
 
-import { Pool } from 'pg';
+const db = require('../src/lib/db');
 import * as fs from 'fs';
 import * as path from 'path';
 import * as dotenv from 'dotenv';
@@ -63,7 +63,7 @@ function getMigrationFiles(): MigrationFile[] {
  * Create migrations tracking table if it doesn't exist
  */
 async function ensureMigrationsTable() {
-  await pool.query(`
+  await db.query(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
       id SERIAL PRIMARY KEY,
       migration_number INTEGER UNIQUE NOT NULL,
@@ -77,7 +77,7 @@ async function ensureMigrationsTable() {
  * Check if migration has already been run
  */
 async function isMigrationExecuted(migrationNumber: number): Promise<boolean> {
-  const result = await pool.query(
+  const result = await db.query(
     'SELECT 1 FROM schema_migrations WHERE migration_number = $1',
     [migrationNumber]
   );
@@ -88,7 +88,7 @@ async function isMigrationExecuted(migrationNumber: number): Promise<boolean> {
  * Mark migration as executed
  */
 async function markMigrationExecuted(migration: MigrationFile) {
-  await pool.query(
+  await db.query(
     'INSERT INTO schema_migrations (migration_number, migration_name) VALUES ($1, $2)',
     [migration.number, migration.filename]
   );
@@ -112,7 +112,7 @@ async function runMigration(migration: MigrationFile, force: boolean = false) {
     const sql = fs.readFileSync(migration.filepath, 'utf8');
     
     // Execute migration
-    await pool.query(sql);
+    await db.query(sql);
     
     // Mark as executed
     if (!alreadyExecuted) {
@@ -139,7 +139,7 @@ async function runMigrations() {
   try {
     // Test database connection
     console.log('🔌 Testing database connection...');
-    await pool.query('SELECT 1');
+    await db.query('SELECT 1');
     console.log('✅ Database connected successfully\n');
 
     // Ensure migrations tracking table exists
@@ -215,7 +215,7 @@ async function runMigrations() {
     console.error(error);
     process.exit(1);
   } finally {
-    await pool.end();
+    try { await db.end() } catch (e) {}
   }
 }
 

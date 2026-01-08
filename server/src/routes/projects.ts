@@ -1750,14 +1750,18 @@ router.post("/:projectId/documents", authenticateToken, async (req, res) => {
         const extractionJobId = extractionJobResult.rows[0].id
 
         // Enqueue extraction job (non-blocking)
-        await extractionQueue.add('extract-project-data', {
-          jobId: extractionJobId,
-          projectId,
-          userId,
-          documentIds: [documentId], // Extract entities from this document only
-          aiProvider: undefined, // Use default provider
-          aiModel: undefined // Use default model
-        })
+        await extractionQueue.add(
+          'extract-project-data',
+          {
+            jobId: extractionJobId,
+            projectId,
+            userId,
+            documentIds: [documentId], // Extract entities from this document only
+            aiProvider: undefined, // Use default provider
+            aiModel: undefined // Use default model
+          },
+          { jobId: extractionJobId }
+        )
 
         log.info('🚀 Automatic entity extraction triggered for new document', {
           documentId,

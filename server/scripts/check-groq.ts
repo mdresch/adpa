@@ -1,16 +1,13 @@
-import { Pool } from 'pg';
 import dotenv from 'dotenv';
+const dbModule = require('../src/lib/db')
+const db = dbModule.default || dbModule
 
 dotenv.config();
 
-const pool = new Pool({
-  connectionString: process.env.POSTGRES_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
-});
-
 async function checkGroq() {
   try {
-    const result = await pool.query(`
+    await db.initDb()
+    const result = await db.query(`
       SELECT 
         name, 
         provider_type, 
@@ -38,7 +35,7 @@ async function checkGroq() {
     }
     
     // Also check what providers are active
-    const activeResult = await pool.query(`
+    const activeResult = await db.query(`
       SELECT name, provider_type, is_active, priority, default_model
       FROM ai_providers 
       WHERE is_active = true
@@ -53,7 +50,7 @@ async function checkGroq() {
   } catch (error) {
     console.error('Error:', error);
   } finally {
-    await pool.end();
+    await db.end();
   }
 }
 

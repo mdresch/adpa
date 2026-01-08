@@ -409,7 +409,7 @@ async function seedDatabase() {
 }
 
 // Run seeding if this file is executed directly
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (require.main === module) {
   seedDatabase()
     .then(() => {
       console.log("Seeding completed")

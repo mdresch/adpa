@@ -25,24 +25,6 @@ export { MultiModelAIGenerationService } from '../../services/multiModelAIGenera
 export { DocumentRefinementEngine } from '../../services/documentRefinementEngine'
 
 export type {
-  // Main service types
-  MultiStageDocumentProcessor as IMultiStageDocumentProcessor,
-  PipelineOrchestrator as IPipelineOrchestrator,
-  JobManager as IJobManager,
-  MetricsCollector as IMetricsCollector,
-
-  // Stage types
-  ContextGatheringStage as IContextGatheringStage,
-  TemplateProcessingStage as ITemplateProcessingStage,
-  AIGenerationStage as IAIGenerationStage,
-  ContextInjectionStage as IContextInjectionStage,
-  QualityAssuranceStage as IQualityAssuranceStage,
-  OutputFormattingStage as IOutputFormattingStage,
-
-  // Format conversion types
-  FormatConversionOptions,
-  ConversionResult,
-
   // Main processing types
   DocumentProcessingRequest,
   DocumentProcessingResult,

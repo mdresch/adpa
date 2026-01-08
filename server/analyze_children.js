@@ -1,6 +1,8 @@
 
-const { Pool } = require('pg');
+const db = require('./src/lib/db');
 require('dotenv').config();
+
+(async function(){ try{ await db.initDb() } catch(e){} })();
 
 async function analyzeChildren() {
     const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -11,7 +13,7 @@ async function analyzeChildren() {
         for (const parentId of parentIds) {
             console.log(`\n=== Analyzing Parent Job: ${parentId} ===`);
 
-            const childrenRes = await pool.query(
+            const childrenRes = await db.query(
                 `SELECT id, type, status, progress, error_message, processing_started_at
          FROM jobs 
          WHERE data->>'parentJobId' = $1 
@@ -52,7 +54,7 @@ async function analyzeChildren() {
     } catch (err) {
         console.error(err);
     } finally {
-        await pool.end();
+        try { await db.end() } catch (e) {}
     }
 }
 

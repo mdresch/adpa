@@ -2,7 +2,7 @@
 // Script to run migration 051_create_portfolio_domains_table.sql
 import fs from 'fs';
 import path from 'path';
-import { Pool } from 'pg';
+const db = require('../src/lib/db');
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -61,7 +61,7 @@ async function runMigration() {
     process.exit(1);
   } finally {
     client.release();
-    await pool.end();
+    try { await db.end() } catch (e) {}
   }
 }
 

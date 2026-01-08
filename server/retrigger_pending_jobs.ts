@@ -1,11 +1,10 @@
 import { addJob, initializeQueues } from './src/services/queueService';
 import dotenv from 'dotenv';
 import path from 'path';
-import { Pool } from 'pg';
+const dbModule = require('./src/lib/db')
+const db = dbModule.default || dbModule
 
 dotenv.config({ path: path.join(__dirname, '.env') });
-
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 async function retrigger() {
     try {
@@ -28,7 +27,8 @@ async function retrigger() {
         };
 
         // Clean up DB for fresh start
-        await pool.query("DELETE FROM jobs WHERE id = $1", [jobId]);
+        await db.initDb()
+        await db.query("DELETE FROM jobs WHERE id = $1", [jobId]);
         console.log('Cleaned up previous job record.');
 
         // Initialize queues
@@ -38,7 +38,7 @@ async function retrigger() {
         const newJobId = await addJob('extract-project-data', data, { jobId });
 
         console.log(`Successfully re-triggered job. ID: ${newJobId}`);
-        await pool.end();
+        await db.end();
         process.exit(0);
     } catch (err) {
         console.error('Retrigger error:', err);

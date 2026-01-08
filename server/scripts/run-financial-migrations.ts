@@ -9,7 +9,7 @@
  *   npx tsx server/scripts/run-financial-migrations.ts
  */
 
-import { Pool } from 'pg'
+const db = require('../src/lib/db')
 import fs from 'fs'
 import path from 'path'
 import dotenv from 'dotenv'
@@ -61,7 +61,7 @@ interface MigrationResult {
 async function createMigrationTrackingTable(pool: Pool): Promise<void> {
   console.log('📋 Checking migration tracking table...')
   
-  await pool.query(`
+  await db.query(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
       id SERIAL PRIMARY KEY,
       migration_number VARCHAR(10) NOT NULL UNIQUE,
@@ -78,7 +78,7 @@ async function createMigrationTrackingTable(pool: Pool): Promise<void> {
 }
 
 async function isMigrationApplied(pool: Pool, migrationNumber: string): Promise<boolean> {
-  const result = await pool.query(
+  const result = await db.query(
     'SELECT 1 FROM schema_migrations WHERE migration_number = $1',
     [migrationNumber]
   )
@@ -91,7 +91,7 @@ async function recordMigration(
   migrationName: string,
   description: string
 ): Promise<void> {
-  await pool.query(
+  await db.query(
     `INSERT INTO schema_migrations (migration_number, migration_name, description)
      VALUES ($1, $2, $3)
      ON CONFLICT (migration_number) DO NOTHING`,
@@ -135,16 +135,16 @@ async function runMigration(
     console.log(`   ${migration.description}`)
 
     // Execute migration in a transaction
-    await pool.query('BEGIN')
+    await db.query('BEGIN')
     
     try {
       // Execute the migration SQL
-      await pool.query(sql)
+      await db.query(sql)
       
       // Record successful migration
       await recordMigration(pool, migration.number, migration.name, migration.description)
       
-      await pool.query('COMMIT')
+      await db.query('COMMIT')
       
       const duration = Date.now() - startTime
       console.log(`✅ Migration ${migration.number} completed successfully (${duration}ms)\n`)
@@ -157,7 +157,7 @@ async function runMigration(
         duration
       }
     } catch (error) {
-      await pool.query('ROLLBACK')
+      await db.query('ROLLBACK')
       throw error
     }
   } catch (error: any) {
@@ -190,7 +190,7 @@ async function verifyMigrations(pool: Pool): Promise<void> {
   ]
 
   for (const table of tables) {
-    const result = await pool.query(`
+    const result = await db.query(`
       SELECT EXISTS (
         SELECT FROM information_schema.tables 
         WHERE table_schema = 'public' 
@@ -220,7 +220,7 @@ async function verifyMigrations(pool: Pool): Promise<void> {
   ]
 
   for (const func of functions) {
-    const result = await pool.query(`
+    const result = await db.query(`
       SELECT EXISTS (
         SELECT FROM pg_proc 
         WHERE proname = $1
@@ -245,7 +245,7 @@ async function verifyMigrations(pool: Pool): Promise<void> {
   ]
 
   for (const view of views) {
-    const result = await pool.query(`
+    const result = await db.query(`
       SELECT EXISTS (
         SELECT FROM information_schema.views 
         WHERE table_schema = 'public' 
@@ -321,7 +321,7 @@ async function main() {
 
   try {
     // Test connection
-    await pool.query('SELECT NOW()')
+    await db.query('SELECT NOW()')
     console.log('✅ Database connection successful\n')
 
     // Create migration tracking table
@@ -382,8 +382,7 @@ async function main() {
     console.error(error.stack)
     process.exit(1)
   } finally {
-    await pool.end()
-  }
+    try { await db.end() } catch (e) {}}
 }
 
 // Run migrations

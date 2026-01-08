@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+const db = require('../src/lib/db');
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 
@@ -11,7 +11,7 @@ const pool = new Pool({
 
 async function verifyVersion() {
   try {
-    const result = await pool.query(`
+    const result = await db.query(`
       SELECT 
         id, 
         name, 
@@ -54,7 +54,7 @@ async function verifyVersion() {
       console.log(`❓ Unexpected version: ${t.prompt_version}`);
     }
     
-    await pool.end();
+    try { await db.end() } catch (e) {}
     process.exit(0);
   } catch (error: any) {
     console.error('Error:', error.message);

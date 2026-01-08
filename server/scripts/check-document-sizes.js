@@ -1,14 +1,7 @@
-const { Pool } = require('pg');
+const dbModule = require('../src/lib/db')
+const db = dbModule.default || dbModule
 require('dotenv').config();
-
 const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
-
-const pool = new Pool({ 
-  connectionString,
-  ssl: (connectionString?.includes('supabase.co') || connectionString?.includes('azure') || process.env.DB_SSL === 'true')
-    ? { rejectUnauthorized: false }
-    : false
-});
 
 async function checkDocumentSizes() {
   try {
@@ -16,7 +9,8 @@ async function checkDocumentSizes() {
     
     console.log('🔍 Checking document sizes for truncation analysis...\n');
     
-    const result = await pool.query(`
+    await db.initDb()
+    const result = await db.query(`
       SELECT 
         name,
         word_count,
@@ -100,7 +94,7 @@ LIMIT 20;
       `);
     }
   } finally {
-    await pool.end();
+    await db.end();
   }
 }
 

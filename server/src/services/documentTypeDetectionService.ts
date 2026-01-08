@@ -11,10 +11,11 @@
  * @module services/documentTypeDetectionService
  */
 
-import { Pool } from 'pg';
+const db = require('../lib/db');
 import { logger } from '../utils/logger';
 import OpenAI from 'openai';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import type { Pool } from 'pg'
 
 export interface DetectionResult {
   detected_type: string;

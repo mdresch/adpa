@@ -89,21 +89,23 @@ export class SemanticSearchIntegrationService {
       )
 
       // Convert to ContextRetrievalResult format
-      const results: ContextRetrievalResult[] = similarResults.map(result => ({
-        id: result.id,
-        type: this.determineContextType(result.content),
-        content: result.content,
-        title: this.extractTitle(result.content),
-        relevanceScore: result.similarity,
-        source: 'semantic_search',
-        sourceId: result.id,
-        metadata: await this.getContextMetadata(result.id),
-        keywords: await this.extractKeywords(result.content),
-        timestamp: new Date(),
-        freshness: 1,
-        authority: 0.8,
-        popularity: 0.5
-      }))
+      const results: ContextRetrievalResult[] = await Promise.all(
+        similarResults.map(async result => ({
+          id: result.id,
+          type: this.determineContextType(result.content),
+          content: result.content,
+          title: this.extractTitle(result.content),
+          relevanceScore: result.similarity,
+          source: 'semantic_search',
+          sourceId: result.id,
+          metadata: await this.getContextMetadata(result.id),
+          keywords: await this.extractKeywords(result.content),
+          timestamp: new Date(),
+          freshness: 1,
+          authority: 0.8,
+          popularity: 0.5
+        }))
+      )
 
       // Filter by context types if specified
       const filteredResults = contextTypes.length > 0
@@ -245,21 +247,23 @@ export class SemanticSearchIntegrationService {
       const filteredResults = similarResults.filter(result => result.id !== documentId)
 
       // Convert to ContextRetrievalResult format
-      const results: ContextRetrievalResult[] = filteredResults.map(result => ({
-        id: result.id,
-        type: 'document_history' as ContextType,
-        content: result.content,
-        title: this.extractTitle(result.content),
-        relevanceScore: result.similarity,
-        source: 'semantic_search',
-        sourceId: result.id,
-        metadata: await this.getContextMetadata(result.id),
-        keywords: await this.extractKeywords(result.content),
-        timestamp: new Date(),
-        freshness: 1,
-        authority: 0.8,
-        popularity: 0.5
-      }))
+      const results: ContextRetrievalResult[] = await Promise.all(
+        filteredResults.map(async result => ({
+          id: result.id,
+          type: 'document_history' as ContextType,
+          content: result.content,
+          title: this.extractTitle(result.content),
+          relevanceScore: result.similarity,
+          source: 'semantic_search',
+          sourceId: result.id,
+          metadata: await this.getContextMetadata(result.id),
+          keywords: await this.extractKeywords(result.content),
+          timestamp: new Date(),
+          freshness: 1,
+          authority: 0.8,
+          popularity: 0.5
+        }))
+      )
 
       logger.info('Similar documents found', {
         documentId,

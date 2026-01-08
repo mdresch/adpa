@@ -2,16 +2,13 @@ import { pool } from './connection'
 import { logger } from '../utils/logger'
 import fs from 'fs'
 import path from 'path'
-import { fileURLToPath } from 'url'
 
 
 async function runOpenAIEnhancedMigration() {
   try {
     logger.info('Starting OpenAI enhanced features migration...')
 
-  // Read the migration SQL file (ESM-safe path resolution)
-  const __filename = fileURLToPath(import.meta.url)
-  const __dirname = path.dirname(__filename)
+  // Read the migration SQL file
   const migrationPath = path.join(__dirname, 'migrations', 'add_openai_enhanced_fields.sql')
   const migrationSQL = fs.readFileSync(migrationPath, 'utf8')
 

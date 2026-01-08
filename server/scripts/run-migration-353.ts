@@ -7,7 +7,7 @@
  * Usage: npm run migrate:353
  */
 
-import { Pool } from 'pg'
+const db = require('../src/lib/db')
 import * as fs from 'fs'
 import * as path from 'path'
 import * as dotenv from 'dotenv'
@@ -129,8 +129,7 @@ async function runMigration(): Promise<void> {
     
     process.exit(1)
   } finally {
-    await pool.end()
-  }
+    try { await db.end() } catch (e) {}}
 }
 
 // Run the migration

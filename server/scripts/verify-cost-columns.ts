@@ -2,7 +2,7 @@
  * Verify Cost Columns in Projects Table
  */
 
-import { Pool } from 'pg'
+const db = require('../src/lib/db')
 import * as dotenv from 'dotenv'
 import * as path from 'path'
 
@@ -27,7 +27,7 @@ async function main() {
     console.log('🔍 Checking projects table columns...\n')
     
     // Get all columns in projects table
-    const result = await pool.query(`
+    const result = await db.query(`
       SELECT column_name, data_type, is_nullable, column_default
       FROM information_schema.columns
       WHERE table_name = 'projects'
@@ -43,7 +43,7 @@ async function main() {
     console.log('\n📊 Checking sample project data...\n')
     
     // Get a sample project with cost data
-    const projectResult = await pool.query(`
+    const projectResult = await db.query(`
       SELECT 
         id, 
         name, 
@@ -73,12 +73,9 @@ async function main() {
       console.log('❌ No projects found')
     }
     
-    await pool.end()
-    
-  } catch (error) {
+    try { await db.end() } catch (e) {}} catch (error) {
     console.error('❌ Error:', error)
-    await pool.end()
-    process.exit(1)
+    try { await db.end() } catch (e) {}process.exit(1)
   }
 }
 

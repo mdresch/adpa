@@ -6,7 +6,7 @@
  *   tsx scripts/run-specific-migrations.ts 058 059
  */
 
-import { Pool } from 'pg';
+const db = require('../src/lib/db');
 import * as fs from 'fs';
 import * as path from 'path';
 import * as dotenv from 'dotenv';
@@ -26,7 +26,7 @@ interface MigrationFile {
 }
 
 async function ensureMigrationsTable() {
-  await pool.query(`
+  await db.query(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
       id SERIAL PRIMARY KEY,
       migration_number INTEGER UNIQUE NOT NULL,
@@ -37,7 +37,7 @@ async function ensureMigrationsTable() {
 }
 
 async function isMigrationExecuted(migrationNumber: number): Promise<boolean> {
-  const result = await pool.query(
+  const result = await db.query(
     'SELECT 1 FROM schema_migrations WHERE migration_number = $1',
     [migrationNumber]
   );
@@ -45,7 +45,7 @@ async function isMigrationExecuted(migrationNumber: number): Promise<boolean> {
 }
 
 async function markMigrationExecuted(migration: MigrationFile) {
-  await pool.query(
+  await db.query(
     'INSERT INTO schema_migrations (migration_number, migration_name) VALUES ($1, $2) ON CONFLICT DO NOTHING',
     [migration.number, migration.filename]
   );
@@ -71,7 +71,7 @@ async function runSpecificMigrations() {
 
     // Test connection
     console.log('🔌 Testing database connection...');
-    await pool.query('SELECT 1');
+    await db.query('SELECT 1');
     console.log('✅ Database connected\n');
 
     // Ensure tracking table
@@ -116,7 +116,7 @@ async function runSpecificMigrations() {
       
       try {
         const sql = fs.readFileSync(filepath, 'utf8');
-        await pool.query(sql);
+        await db.query(sql);
         await markMigrationExecuted(migration);
         console.log(`✅ Successfully executed: ${filename}\n`);
         successCount++;
@@ -143,7 +143,7 @@ async function runSpecificMigrations() {
     console.error(error);
     process.exit(1);
   } finally {
-    await pool.end();
+    try { await db.end() } catch (e) {}
   }
 }
 

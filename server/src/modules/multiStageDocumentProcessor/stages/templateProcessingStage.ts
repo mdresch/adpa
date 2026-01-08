@@ -40,6 +40,8 @@ export interface ProcessedTemplate {
   template_id: string
   template_name: string
   framework: string
+  system_prompt?: string
+  content?: string
   sections: TemplateSection[]
   variables: Record<string, any>
   ai_enhanced: boolean
@@ -50,6 +52,7 @@ export interface ProcessedTemplate {
 export interface TemplateSection {
   section_id: string
   section_name: string
+  section_type?: string
   content: string
   variables: string[]
   ai_enhanced: boolean
@@ -434,57 +437,124 @@ export class TemplateProcessingStage {
     context: ContextData,
     config: TemplateProcessingConfig
   ): Promise<Record<string, any>> {
+    const projectData = context.project_context?.project_data || {}
+
     const resolutionContext: ResolutionContext = {
       context_id: `ctx_${Date.now()}`,
       project_context: {
-        project_id: context.project_context?.project_data?.project_id || '',
-        project_name: context.project_context?.project_data?.project_name || '',
-        project_description: context.project_context?.project_data?.description || '',
-        project_type: context.project_context?.project_data?.type || 'general',
-        stakeholders: context.project_context?.stakeholders || [],
-        requirements: context.project_context?.requirements || [],
-        constraints: context.project_context?.constraints || [],
-        risks: context.project_context?.risks || [],
+        project_id: projectData.project_id || '',
+        project_name: projectData.project_name || '',
+        project_description: projectData.description || '',
+        project_type: projectData.type || 'general',
+        stakeholders: (context.project_context?.stakeholders || []).map((stakeholder: any, idx: number) => ({
+          stakeholder_id: stakeholder.stakeholder_id || stakeholder.id || `stakeholder_${idx}`,
+          name: stakeholder.name || stakeholder.full_name || 'Unknown Stakeholder',
+          role: stakeholder.role || 'participant',
+          contact_info: stakeholder.contact_info || stakeholder.email || '',
+          influence: stakeholder.influence || 'medium',
+          interest: stakeholder.interest || 'medium'
+        })),
+        requirements: (context.project_context?.requirements || []).map((req: any, idx: number) => ({
+          requirement_id: req.requirement_id || req.id || `requirement_${idx}`,
+          title: req.title || req.name || 'Requirement',
+          description: req.description || '',
+          priority: req.priority || 'medium',
+          status: (req.status as any) || 'draft'
+        })),
+        constraints: (context.project_context?.constraints || []).map((constraint: any, idx: number) => ({
+          constraint_id: constraint.constraint_id || constraint.id || `constraint_${idx}`,
+          title: constraint.title || 'Constraint',
+          description: constraint.description || '',
+          type: constraint.type && ['technical','business','regulatory','resource'].includes(constraint.type)
+            ? constraint.type
+            : 'technical',
+          impact: constraint.impact || 'medium'
+        })),
+        risks: (context.project_context?.risks || []).map((risk: any, idx: number) => ({
+          risk_id: risk.risk_id || risk.id || `risk_${idx}`,
+          title: risk.title || 'Risk',
+          description: risk.description || '',
+          probability: risk.probability || 'medium',
+          impact: risk.impact || 'medium',
+          mitigation: risk.mitigation || ''
+        })),
         milestones: [],
         phases: [],
-        metadata: context.project_context?.project_data || {}
+        metadata: projectData
       },
       user_context: {
         user_id: context.user_context?.user_profile?.user_id || '',
-        user_name: context.user_context?.user_profile?.name || '',
-        user_role: context.user_context?.user_profile?.role || '',
-        user_department: context.user_context?.user_profile?.department || '',
-        user_expertise: context.user_context?.user_profile?.expertise_areas || [],
-        writing_style: context.user_context?.writing_style ||{
-          tone: 'professional',
-          voice: 'third_person',
-          complexity: 'moderate',
-          length_preference: 'detailed'
+        user_profile: {
+          user_id: context.user_context?.user_profile?.user_id || '',
+          name: context.user_context?.user_profile?.name || '',
+          email: context.user_context?.user_profile?.email || '',
+          role: context.user_context?.user_profile?.role || '',
+          department: context.user_context?.user_profile?.department || '',
+          expertise_areas: context.user_context?.user_profile?.expertise_areas || [],
+          preferences: (context.user_context?.user_profile as any)?.preferences || {}
         },
+        user_preferences: [],
+        user_expertise: (context.user_context?.user_profile?.expertise_areas || []).map((domain: string, idx: number) => ({
+          expertise_id: `expertise_${idx}`,
+          domain,
+          skill_level: 'intermediate',
+          years_of_experience: 0,
+          certifications: []
+        })),
+        user_writing_style: {
+          style_id: 'default',
+          tone: context.user_context?.writing_style?.tone || 'professional',
+          formality: 'professional',
+          structure_preference: (context.user_context?.writing_style as any)?.structure || 'structured',
+          length_preference: 'medium'
+        },
+        user_domain_knowledge: [],
+        user_collaboration_preferences: [],
         metadata: {}
       },
       template_context: {
         template_id: context.project_context?.project_data?.template_id || '',
-        template_name: '',
-        template_type: '',
-        framework: '',
-        methodology: '',
-        variables: [],
-        sections: [],
-        metadata: {}
+        template_name: context.project_context?.project_data?.template_name || '',
+        template_framework: projectData.framework || '',
+        template_category: projectData.category || '',
+        template_variables: [],
+        template_structure: {
+          structure_id: 'default',
+          sections: [],
+          hierarchy: {
+            root_section: 'root',
+            section_relationships: []
+          },
+          metadata: {}
+        },
+        template_metadata: {}
       },
       historical_context: {
-        similar_documents: context.historical_context?.similar_documents || [],
-        best_practices: context.historical_context?.best_practices || [],
-        patterns: context.historical_context?.patterns || [],
-        lessons_learned: [],
-        metadata: {}
+        document_history: [],
+        usage_patterns: [],
+        quality_trends: [],
+        best_practices: (context.historical_context?.best_practices || []).map((practice: any, idx: number) => ({
+          practice_id: practice.practice_id || `practice_${idx}`,
+          practice_name: practice.practice_name || practice.name || 'Best Practice',
+          practice_description: practice.practice_description || practice.description || '',
+          practice_category: practice.practice_category || 'general',
+          practice_effectiveness: practice.practice_effectiveness || 0.5
+        })),
+        lessons_learned: []
       },
       external_context: {
-        api_data: context.external_context?.api_responses || {},
-        integration_data: {},
-        third_party_data: {},
-        metadata: context.external_context?.external_data || {}
+        external_sources: [],
+        api_responses: (Array.isArray(context.external_context?.api_responses)
+          ? context.external_context?.api_responses
+          : []).map((resp: any, idx: number) => ({
+            response_id: resp.response_id || `api_${idx}`,
+            api_endpoint: resp.api_endpoint || resp.endpoint || 'unknown',
+            response_data: resp.response_data || resp.data || resp,
+            response_status: resp.response_status || resp.status || 200,
+            response_timestamp: resp.response_timestamp || new Date()
+          })),
+        file_contents: [],
+        database_results: []
       },
       metadata: {
         context_quality: 0.8,

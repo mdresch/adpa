@@ -1,3 +1,4 @@
+;(async function(){ try{ await (require('../lib/db')).initDb() } catch(e){} })();
 /**
  * Approval Workflow Service
  * TASK-745: Approval workflow integration
@@ -11,6 +12,8 @@ import { logger } from '../utils/logger'
 import { emailNotificationService } from './emailNotificationService'
 import { v4 as uuidv4 } from 'uuid'
 import { PoolClient } from 'pg'
+
+const db = pool
 
 // ============================================================================
 // TYPES
@@ -385,7 +388,7 @@ export class ApprovalWorkflowService {
    */
   async getApprovalRequest(requestId: string): Promise<ApprovalRequest | null> {
     try {
-      const result = await pool.query(
+      const result = await db.query(
         'SELECT * FROM approval_requests WHERE id = $1',
         [requestId]
       )
@@ -402,7 +405,7 @@ export class ApprovalWorkflowService {
    */
   async getApprovalSteps(requestId: string): Promise<ApprovalStep[]> {
     try {
-      const result = await pool.query(
+      const result = await db.query(
         `SELECT * FROM approval_steps 
          WHERE approval_request_id = $1 
          ORDER BY step_order ASC`,
@@ -424,7 +427,7 @@ export class ApprovalWorkflowService {
    */
   async getPendingApprovalsForUser(userId: string): Promise<ApprovalRequest[]> {
     try {
-      const result = await pool.query(
+      const result = await db.query(
         `SELECT DISTINCT ar.*
          FROM approval_requests ar
          WHERE (
@@ -465,7 +468,7 @@ export class ApprovalWorkflowService {
       logger.info('[APPROVAL-WORKFLOW] Checking for SLA breaches')
 
       // Find requests approaching or past SLA
-      const result = await pool.query(
+      const result = await db.query(
         `SELECT * FROM approval_requests
          WHERE status IN ('pending', 'in_progress')
            AND sla_deadline IS NOT NULL

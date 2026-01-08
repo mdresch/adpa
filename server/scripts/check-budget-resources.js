@@ -1,20 +1,14 @@
-const { Pool } = require('pg');
 require('dotenv').config();
-
 const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
-
-const pool = new Pool({ 
-  connectionString,
-  ssl: (connectionString?.includes('supabase.co') || connectionString?.includes('azure') || process.env.DB_SSL === 'true')
-    ? { rejectUnauthorized: false }
-    : false
-});
+const dbModule = require('../src/lib/db')
+const db = dbModule.default || dbModule
 
 async function checkBudgetResources() {
   try {
     console.log('🔍 Checking budget resources for EcoTrack...\n');
     
-    const result = await pool.query(`
+    await db.initDb()
+    const result = await db.query(`
       SELECT 
         id,
         name,
@@ -83,7 +77,7 @@ async function checkBudgetResources() {
   } catch (error) {
     console.error('❌ Error:', error.message);
   } finally {
-    await pool.end();
+    await db.end();
   }
 }
 

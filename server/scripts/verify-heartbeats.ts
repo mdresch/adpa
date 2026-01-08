@@ -1,5 +1,5 @@
 
-import { Pool } from 'pg';
+const db = require('../src/lib/db');
 import * as path from 'path';
 import * as dotenv from 'dotenv';
 
@@ -13,7 +13,7 @@ const pool = new Pool({
 async function verify() {
     try {
         console.log('Querying worker_heartbeats...');
-        const res = await pool.query("SELECT * FROM worker_heartbeats");
+        const res = await db.query("SELECT * FROM worker_heartbeats");
         console.log('Rows found:', res.rowCount);
         res.rows.forEach(row => {
             console.log(`Worker: ${row.worker_id}, PID: ${row.worker_process_id}, CPU: ${row.cpu_usage_percent}%, Mem: ${row.memory_usage_mb} MB, Last: ${row.last_heartbeat}`);
@@ -21,7 +21,7 @@ async function verify() {
     } catch (err) {
         console.error('Error:', err);
     } finally {
-        await pool.end();
+        try { await db.end() } catch (e) {}
     }
 }
 

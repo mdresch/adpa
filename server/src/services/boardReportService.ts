@@ -1,3 +1,4 @@
+;(async function(){ try{ await (require('../lib/db')).initDb() } catch(e){} })();
 /**
  * Board Report Service
  * 
@@ -10,10 +11,10 @@
  * Integrates with document generator and AI services for intelligent report creation.
  */
 
-import { Pool } from 'pg';
 import { logger } from '../utils/logger';
 import { aiService } from './aiService';
 import Handlebars from 'handlebars';
+import { Pool } from 'pg';
 
 export interface BoardReportRequest {
   templateId: 'board-ceo-portfolio-report' | 'board-cfo-financial-report' | 'board-audit-committee-report' | 'board-program-details-report';
@@ -160,20 +161,20 @@ export class BoardReportService {
     });
 
     // Use AI service to generate content
-    const aiResponse = await aiService.generateText({
+    const aiResponse = await aiService.generate({
       prompt: userPrompt,
-      systemPrompt: systemPrompt,
+      system_prompt: systemPrompt,
       provider: aiProvider || 'openai',
       model: 'gpt-4',
       temperature: 0.7,
-      maxTokens: 4000
+      max_tokens: 4000
     });
 
-    if (!aiResponse || !aiResponse.text) {
+    if (!aiResponse || !aiResponse.content) {
       throw new Error('AI service returned no content');
     }
 
-    return aiResponse.text;
+    return aiResponse.content;
   }
 
   /**

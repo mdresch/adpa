@@ -161,6 +161,7 @@ export type ResolutionHintType =
   | 'file_path'
   | 'computation_expression'
   | 'ai_prompt'
+  | 'conditional_logic'
 
 export interface VariableMetadata {
   created_at: Date

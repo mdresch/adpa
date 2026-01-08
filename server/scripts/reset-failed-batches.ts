@@ -7,7 +7,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { Pool } from 'pg';
+const db = require('../src/lib/db');
 
 async function resetBatches() {
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -20,7 +20,7 @@ async function resetBatches() {
     console.log('🧹 Resetting failed/corrupted batches...\n');
 
     // Delete assessments with no documents (ghost records)
-    const deleteAssessments = await pool.query(`
+    const deleteAssessments = await db.query(`
       DELETE FROM assessments 
       WHERE total_documents = 0 OR status = 'processing'
       RETURNING id
@@ -28,7 +28,7 @@ async function resetBatches() {
     console.log(`✅ Deleted ${deleteAssessments.rowCount} incomplete assessments`);
 
     // Reset corrupted upload batches (where processed > total)
-    const resetBatches = await pool.query(`
+    const resetBatches = await db.query(`
       UPDATE upload_batches
       SET processed_files = successful_files + failed_files,
           status = CASE 
@@ -52,7 +52,7 @@ async function resetBatches() {
 
     console.log('\n✅ Database cleaned! Ready for fresh upload.\n');
     
-    await pool.end();
+    try { await db.end() } catch (e) {}
     process.exit(0);
   } catch (err: any) {
     console.error('❌ Error:', err.message);

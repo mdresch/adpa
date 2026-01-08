@@ -1,4 +1,4 @@
-import { Pool } from 'pg'
+const db = require('../src/lib/db')
 import { v4 as uuidv4 } from 'uuid'
 import * as dotenv from 'dotenv'
 
@@ -17,7 +17,7 @@ async function createTestOptimization() {
 
     const suggestionId = uuidv4()
 
-    await pool.query(
+    await db.query(
       `INSERT INTO template_improvement_suggestions
        (id, template_id, status, priority, expected_quality_gain, current_avg_quality,
         analysis_period_start, analysis_period_end, documents_analyzed,
@@ -126,8 +126,7 @@ The project team establishes this Quality Management Plan to define how the team
     console.error('❌ Error:', error.message)
     console.error('Stack:', error.stack)
   } finally {
-    await pool.end()
-  }
+    try { await db.end() } catch (e) {}}
 }
 
 createTestOptimization()

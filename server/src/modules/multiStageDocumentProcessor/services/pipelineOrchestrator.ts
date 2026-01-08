@@ -615,7 +615,16 @@ export class PipelineOrchestrator {
           description: 'Gather and analyze context from various sources',
           order: 1,
           enabled: true,
-          config: { fail_on_error: true },
+          config: {
+            stage_id: 'context_gathering',
+            stage_type: 'context_gathering',
+            enabled: true,
+            timeout: 30000,
+            retry_attempts: 3,
+            fail_on_error: true,
+            quality_threshold: 0.8,
+            config: { fail_on_error: true }
+          },
           dependencies: [],
           timeout: 30000,
           retry_attempts: 3
@@ -627,7 +636,16 @@ export class PipelineOrchestrator {
           description: 'Process and enhance template with context',
           order: 2,
           enabled: true,
-          config: { fail_on_error: true },
+          config: {
+            stage_id: 'template_processing',
+            stage_type: 'template_processing',
+            enabled: true,
+            timeout: 30000,
+            retry_attempts: 3,
+            fail_on_error: true,
+            quality_threshold: 0.8,
+            config: { fail_on_error: true }
+          },
           dependencies: ['context_gathering'],
           timeout: 30000,
           retry_attempts: 3
@@ -639,7 +657,16 @@ export class PipelineOrchestrator {
           description: 'Generate document content using AI models',
           order: 3,
           enabled: true,
-          config: { fail_on_error: true },
+            config: {
+              stage_id: 'ai_generation',
+              stage_type: 'ai_generation',
+              enabled: true,
+              timeout: 120000,
+              retry_attempts: 2,
+              fail_on_error: true,
+              quality_threshold: 0.8,
+              config: { fail_on_error: true }
+            },
           dependencies: ['template_processing'],
           timeout: 120000,
           retry_attempts: 2
@@ -651,7 +678,16 @@ export class PipelineOrchestrator {
           description: 'Inject context and personalize document',
           order: 4,
           enabled: true,
-          config: { fail_on_error: true },
+            config: {
+              stage_id: 'context_injection',
+              stage_type: 'context_injection',
+              enabled: true,
+              timeout: 30000,
+              retry_attempts: 3,
+              fail_on_error: true,
+              quality_threshold: 0.8,
+              config: { fail_on_error: true }
+            },
           dependencies: ['ai_generation'],
           timeout: 30000,
           retry_attempts: 3
@@ -663,7 +699,16 @@ export class PipelineOrchestrator {
           description: 'Assess and validate document quality',
           order: 5,
           enabled: true,
-          config: { fail_on_error: false },
+            config: {
+              stage_id: 'quality_assurance',
+              stage_type: 'quality_assurance',
+              enabled: true,
+              timeout: 45000,
+              retry_attempts: 2,
+              fail_on_error: false,
+              quality_threshold: 0.85,
+              config: { fail_on_error: false }
+            },
           dependencies: ['context_injection'],
           timeout: 45000,
           retry_attempts: 2
@@ -675,7 +720,16 @@ export class PipelineOrchestrator {
           description: 'Format document for final output',
           order: 6,
           enabled: true,
-          config: { fail_on_error: true },
+            config: {
+              stage_id: 'output_formatting',
+              stage_type: 'output_formatting',
+              enabled: true,
+              timeout: 30000,
+              retry_attempts: 3,
+              fail_on_error: true,
+              quality_threshold: 0.8,
+              config: { fail_on_error: true }
+            },
           dependencies: ['quality_assurance'],
           timeout: 30000,
           retry_attempts: 3

@@ -1649,14 +1649,18 @@ router.post("/project/:projectId",
           log.info('✅ [AUTO-EXTRACTION] Extraction job record created', { extractionJobId })
 
           // Enqueue extraction job (non-blocking)
-          const bullJob = await extractionQueue.add('extract-project-data', {
-            jobId: extractionJobId,
-            projectId,
-            userId: req.user?.id,
-            documentIds: [id], // Extract entities from this document only
-            aiProvider: undefined, // Use default provider
-            aiModel: undefined // Use default model
-          })
+          const bullJob = await extractionQueue.add(
+            'extract-project-data',
+            {
+              jobId: extractionJobId,
+              projectId,
+              userId: req.user?.id,
+              documentIds: [id], // Extract entities from this document only
+              aiProvider: undefined, // Use default provider
+              aiModel: undefined // Use default model
+            },
+            { jobId: extractionJobId }
+          )
 
           log.info('🚀 [AUTO-EXTRACTION] Automatic entity extraction triggered for new document', {
             documentId: id,
@@ -2789,9 +2793,9 @@ router.post(
   "/bulk-export/pdf",
   authenticateToken,
   requirePermission("documents.read"),
-  validate(
+    validate(
     Joi.object({
-      document_ids: Joi.array().items(schemas.uuid).min(1).max(50).required(),
+      document_ids: Joi.array().items(schemas.uuid).min(1).max(100).required(),
     })
   ),
   async (req, res) => {
@@ -3361,7 +3365,7 @@ router.post(
   requirePermission("documents.read"),
   validate(
     Joi.object({
-      document_ids: Joi.array().items(schemas.uuid).min(1).max(50).required(),
+      document_ids: Joi.array().items(schemas.uuid).min(1).max(100).required(),
     })
   ),
   async (req, res) => {
@@ -3493,7 +3497,7 @@ router.post(
   requirePermission("documents.read"),
   validate(
     Joi.object({
-      document_ids: Joi.array().items(schemas.uuid).min(1).max(50).required(),
+      document_ids: Joi.array().items(schemas.uuid).min(1).max(100).required(),
     })
   ),
   async (req, res) => {

@@ -1,3 +1,4 @@
+;(async function(){ try{ await (require('../../../lib/db')).initDb() } catch(e){} })();
 /**
  * Queue Service Dependencies
  * Phase 5: Add Abstraction Layers and Dependency Injection

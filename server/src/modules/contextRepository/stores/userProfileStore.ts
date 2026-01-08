@@ -12,7 +12,10 @@ import type {
   WritingStyle,
   DomainKnowledge,
   CollaborationPreferences,
-  UserFilters
+  UserFilters,
+  NotificationPreferences,
+  AccessibilityPreferences,
+  PrivacyPreferences
 } from '../types'
 
 export class UserProfileStore {
@@ -749,30 +752,30 @@ export class UserProfileStore {
     }
   }
 
-  private getDefaultNotificationPreferences() {
+  private getDefaultNotificationPreferences(): NotificationPreferences {
     return {
       email: true,
       push: false,
       sms: false,
       in_app: true,
-      frequency: 'immediate',
+      frequency: 'immediate' as 'immediate' | 'daily' | 'weekly' | 'monthly',
       categories: ['system', 'documents', 'collaboration']
     }
   }
 
-  private getDefaultAccessibilityPreferences() {
+  private getDefaultAccessibilityPreferences(): AccessibilityPreferences {
     return {
-      font_size: 'medium',
-      color_scheme: 'default',
+      font_size: 'medium' as 'small' | 'medium' | 'large',
+      color_scheme: 'default' as 'default' | 'high_contrast' | 'color_blind_friendly',
       screen_reader: false,
       keyboard_navigation: true,
       reduced_motion: false
     }
   }
 
-  private getDefaultPrivacyPreferences() {
+  private getDefaultPrivacyPreferences(): PrivacyPreferences {
     return {
-      profile_visibility: 'team',
+      profile_visibility: 'team' as 'public' | 'team' | 'private',
       data_sharing: true,
       analytics_opt_in: true,
       marketing_opt_in: false,

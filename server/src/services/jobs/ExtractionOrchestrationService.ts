@@ -17,7 +17,8 @@ import { logger } from '@/utils/logger'
 import { io } from '../../server'
 import { PMBOK_DOMAINS } from '@/types/pmbok'
 import type { PmbokDomain } from '@/types/pmbok'
-import type Bull from 'bull'
+import type { IQueueJob } from './queue/IQueue'
+import { v4 as uuidv4 } from 'uuid'
 // Phase 3: Use centralized types
 import type { ProjectDataExtractionJobData, JobStatus, QueueName } from './types'
 // Phase 5: Dependency injection
@@ -524,7 +525,7 @@ export class ExtractionOrchestrationService {
   /**
    * Process an extraction orchestration job (instance method with DI)
    */
-  async processJob(job: Bull.Job, options: ProcessJobOptions): Promise<any> {
+  async processJob(job: IQueueJob, options: ProcessJobOptions): Promise<any> {
     return ExtractionOrchestrationService.processJob(job, options, {
       database: this.database,
       websocket: this.websocket,
@@ -536,7 +537,7 @@ export class ExtractionOrchestrationService {
    * Process an extraction orchestration job (static method for backward compatibility)
    * Phase 5: Now accepts optional dependencies parameter
    */
-  static async processJob(job: Bull.Job, options: ProcessJobOptions, deps?: QueueServiceDependencies): Promise<any> {
+  static async processJob(job: IQueueJob, options: ProcessJobOptions, deps?: QueueServiceDependencies): Promise<any> {
     // Phase 5: Use injected dependencies or fall back to global imports
     // Ensure pool is available before creating fallback
     let db: any
@@ -625,7 +626,9 @@ export class ExtractionOrchestrationService {
 
       // Create child jobs for each entity type via QueueService.addJob (creates DB row + enqueues)
       const childJobPromises = entityTypesForRun.map(async (entityType, index) => {
+        const childJobId = uuidv4()
         const jobData = {
+          jobId: childJobId,
           parentJobId: jobId,
           projectId,
           userId,
@@ -637,8 +640,9 @@ export class ExtractionOrchestrationService {
           totalEntities: entityTypesForRun.length
         }
 
-        // addJob will insert a DB row and enqueue with jobId set to the inserted UUID
-        const childJobId = await addJob(`extract-entity-${entityType}` as any, jobData, {
+        // addJob will insert a DB row and enqueue with the provided jobId
+        await addJob(`extract-entity-${entityType}` as any, jobData, {
+          jobId: childJobId,
           attempts: 3,
           backoff: { type: 'exponential', delay: 5000 }
         })

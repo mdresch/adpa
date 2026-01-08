@@ -57,41 +57,40 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '18'
-          cache: 'npm'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.24.0
 
       - name: Install dependencies
         run: |
-          cd server
-          npm ci
+          pnpm install
 
       - name: Run unit tests
         run: |
-          cd server
-          npm run test -- server/src/__tests__/services/jobs/queue/QueueService.test.ts
+          pnpm test:queue-service
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adpa_test
           REDIS_URL: redis://localhost:6379
 
       - name: Run adapter tests
         run: |
-          cd server
-          npm run test -- server/src/__tests__/services/jobs/queue/BullQueueAdapter.test.ts
+          pnpm test:queue-adapters
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adpa_test
           REDIS_URL: redis://localhost:6379
 
       - name: Run integration tests
         run: |
-          cd server
-          npm run test -- server/src/__tests__/services/jobs/queue/integration.test.ts
+          pnpm test:queue-integration
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adpa_test
           REDIS_URL: redis://localhost:6379
 
       - name: Run all queue tests with coverage
         run: |
-          cd server
-          npm run test -- server/src/__tests__/services/jobs/queue/ --coverage
+          pnpm test:queue-all -- --coverage
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adpa_test
           REDIS_URL: redis://localhost:6379

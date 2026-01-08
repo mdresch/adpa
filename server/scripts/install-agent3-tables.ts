@@ -3,7 +3,7 @@
  * Directly creates notification_logs and sla_violations tables
  */
 
-import { Pool } from 'pg';
+const db = require('../src/lib/db');
 import * as fs from 'fs';
 import * as path from 'path';
 import * as dotenv from 'dotenv';
@@ -23,7 +23,7 @@ async function installAgent3Tables() {
   try {
     // Test connection
     console.log('🔌 Testing database connection...');
-    await pool.query('SELECT 1');
+    await db.query('SELECT 1');
     console.log('✅ Database connected\n');
 
     // Run notification_logs migration
@@ -32,7 +32,7 @@ async function installAgent3Tables() {
       path.resolve(__dirname, '../migrations/058_add_notification_logs.sql'),
       'utf8'
     );
-    await pool.query(notificationSql);
+    await db.query(notificationSql);
     console.log('✅ notification_logs table created\n');
 
     // Run sla_violations migration
@@ -41,12 +41,12 @@ async function installAgent3Tables() {
       path.resolve(__dirname, '../migrations/059_add_sla_violations.sql'),
       'utf8'
     );
-    await pool.query(slaSql);
+    await db.query(slaSql);
     console.log('✅ sla_violations table created\n');
 
     // Verify tables exist
     console.log('🔍 Verifying tables...');
-    const verifyResult = await pool.query(`
+    const verifyResult = await db.query(`
       SELECT table_name
       FROM information_schema.tables
       WHERE table_schema = 'public'
@@ -73,7 +73,7 @@ async function installAgent3Tables() {
       process.exit(1);
     }
   } finally {
-    await pool.end();
+    try { await db.end() } catch (e) {}
   }
 }
 

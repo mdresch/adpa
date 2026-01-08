@@ -12,7 +12,7 @@
 import { pool } from '@/database/connection'
 import { logger } from '@/utils/logger'
 import { io } from '../../server'
-import type Bull from 'bull'
+import type { IQueueJob } from './queue/IQueue'
 // Phase 3: Use centralized types
 import type { BaselineExtractionJobData, JobStatus, QueueName } from './types'
 // Phase 5: Dependency injection
@@ -53,7 +53,7 @@ export class BaselineExtractionJobService {
   /**
    * Process a baseline extraction job (instance method with DI)
    */
-  async processJob(job: Bull.Job, options: ProcessJobOptions): Promise<any> {
+  async processJob(job: IQueueJob, options: ProcessJobOptions): Promise<any> {
     return BaselineExtractionJobService.processJob(job, options, {
       database: this.database,
       websocket: this.websocket,
@@ -65,7 +65,7 @@ export class BaselineExtractionJobService {
    * Process a baseline extraction job (static method for backward compatibility)
    * Phase 5: Now accepts optional dependencies parameter
    */
-  static async processJob(job: Bull.Job, options: ProcessJobOptions, deps?: QueueServiceDependencies): Promise<any> {
+  static async processJob(job: IQueueJob, options: ProcessJobOptions, deps?: QueueServiceDependencies): Promise<any> {
     // Phase 5: Use injected dependencies or fall back to global imports
     const db = deps?.database || { query: pool.query.bind(pool) } as any
     const ws = deps?.websocket || io

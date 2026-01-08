@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { Pool } from 'pg';
+const db = require('../src/lib/db');
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
@@ -22,7 +22,7 @@ async function monitorUpload() {
     checkCount++;
     
     // Get most recent batch (excluding the old one)
-    const batch = await pool.query(`
+    const batch = await db.query(`
       SELECT id, total_files, successful_files, failed_files, status, created_at
       FROM upload_batches
       WHERE id != $1
@@ -52,7 +52,7 @@ async function monitorUpload() {
     }
 
     // Get documents from this batch
-    const docs = await pool.query(`
+    const docs = await db.query(`
       SELECT 
         id,
         name,
@@ -124,11 +124,11 @@ async function monitorUpload() {
         console.log(`   Preview: ${sample.content.substring(0, 200).replace(/\n/g, ' ')}...`);
       }
       
-      await pool.end();
+      try { await db.end() } catch (e) {}
       process.exit(0);
     } else if (currentBatch.status === 'failed') {
       console.log('\n❌ BATCH FAILED!');
-      await pool.end();
+      try { await db.end() } catch (e) {}
       process.exit(1);
     }
 

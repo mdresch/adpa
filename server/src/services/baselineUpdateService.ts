@@ -1,3 +1,4 @@
+;(async function(){ try{ await (require('../lib/db')).initDb() } catch(e){} })();
 /**
  * Baseline Update Service
  * TASK-746: Baseline update upon approval
@@ -9,6 +10,8 @@
 import { pool } from '../database/connection'
 import { logger } from '../utils/logger'
 import { PoolClient } from 'pg'
+
+const db = pool
 
 export interface BaselineUpdateResult {
   updateId?: string
@@ -120,7 +123,7 @@ export async function getBaselineUpdateHistory(
   limit: number = 50
 ): Promise<any[]> {
   try {
-    const result = await pool.query(
+    const result = await db.query(
       `SELECT 
         bcu.*,
         pb.version as current_baseline_version,
@@ -149,7 +152,7 @@ export async function getBaselineUpdateHistory(
  */
 export async function getBaselineUpdateDetails(updateId: string): Promise<any> {
   try {
-    const result = await pool.query(
+    const result = await db.query(
       `SELECT 
         bcu.*,
         pb.id as baseline_id,
@@ -189,7 +192,7 @@ export async function previewBaselineChanges(
   changeRequestId: string
 ): Promise<any> {
   try {
-    const result = await pool.query(
+    const result = await db.query(
       `SELECT extract_baseline_changes_from_cr($1) as baseline_changes`,
       [changeRequestId]
     )
@@ -236,7 +239,7 @@ export async function manuallyUpdateBaseline(
 ): Promise<BaselineUpdateResult> {
   try {
     // Verify CR is approved
-    const crResult = await pool.query(
+    const crResult = await db.query(
       `SELECT status, type, project_id 
        FROM documents 
        WHERE id = $1`,
@@ -272,7 +275,7 @@ export async function hasBaselineBeenUpdated(
   changeRequestId: string
 ): Promise<boolean> {
   try {
-    const result = await pool.query(
+    const result = await db.query(
       `SELECT COUNT(*) as count 
        FROM baseline_cr_updates 
        WHERE change_request_id = $1`,

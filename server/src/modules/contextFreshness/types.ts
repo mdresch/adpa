@@ -634,6 +634,9 @@ export interface FreshnessMetrics {
   stale_contexts: number
   expired_contexts: number
   average_freshness_score: number
+  average_quality_score?: number
+  refresh_success_rate?: number
+  policy_compliance_rate?: number
   freshness_distribution: FreshnessDistribution
   staleness_trends: StalenessTrend[]
   refresh_statistics: RefreshStatistics
@@ -803,13 +806,20 @@ export interface ActionItem {
 }
 
 export interface FreshnessHealthStatus {
-  overall_health: 'excellent' | 'good' | 'fair' | 'poor' | 'critical'
+  health_id?: string
+  policy_id?: string
+  overall_health?: 'excellent' | 'good' | 'fair' | 'poor' | 'critical'
   health_score: number
-  component_health: ComponentHealth[]
-  alerts: HealthAlert[]
-  recommendations: HealthRecommendation[]
-  last_assessment: Date
-  next_assessment: Date
+  health_status?: 'healthy' | 'warning' | 'critical'
+  health_factors?: string[]
+  health_metrics?: FreshnessMetrics
+  health_timestamp?: Date
+  health_metadata?: Record<string, any>
+  component_health?: ComponentHealth[]
+  alerts?: HealthAlert[]
+  recommendations?: HealthRecommendation[]
+  last_assessment?: Date
+  next_assessment?: Date
 }
 
 export interface ComponentHealth {

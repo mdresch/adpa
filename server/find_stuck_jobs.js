@@ -1,10 +1,9 @@
-const { Pool } = require('pg');
 const dotenv = require('dotenv');
 const path = require('path');
+const dbModule = require('./src/lib/db')
+const db = dbModule.default || dbModule
 
 dotenv.config({ path: path.join(__dirname, '.env') });
-
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 async function findStuckJobs() {
     try {
@@ -17,9 +16,10 @@ async function findStuckJobs() {
         OR processing_started_at < NOW() - INTERVAL '1 hour'
       )
     `;
-        const res = await pool.query(sql);
+        await db.initDb()
+        const res = await db.query(sql);
         console.log('Stuck Processing Jobs:', res.rows);
-        await pool.end();
+        await db.end();
     } catch (err) {
         console.error('Query error:', err.message);
         process.exit(1);

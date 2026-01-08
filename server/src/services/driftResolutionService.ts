@@ -1,3 +1,4 @@
+;(async function(){ try{ await (require('../lib/db')).initDb() } catch(e){} })();
 /**
  * Drift Resolution Service
  * CR-2026-001: AI-Powered Drift Resolution
@@ -17,6 +18,8 @@ import { approvalWorkflowService } from './approvalWorkflowService'
 import { createKnowledgeBaseFromDrift } from '../modules/knowledgeBase/integration'
 import { createHash } from 'crypto'
 import { redis } from '../database/redis'
+
+const db = pool
 
 export interface ResolutionResult {
   resolvedContent: string
@@ -232,7 +235,7 @@ export class DriftResolutionService {
     document: Document
   }> {
     try {
-      const result = await pool.query(
+      const result = await db.query(
         `SELECT 
           bdd.id as drift_id,
           bdd.project_id,
@@ -310,7 +313,7 @@ export class DriftResolutionService {
    */
   private async getDriftRecord(driftRecordId: string): Promise<DriftRecord> {
     try {
-      const result = await pool.query(
+      const result = await db.query(
         `SELECT * FROM baseline_drift_detection WHERE id = $1`,
         [driftRecordId]
       )
@@ -331,7 +334,7 @@ export class DriftResolutionService {
    */
   private async getBaseline(baselineId: string): Promise<Baseline> {
     try {
-      const result = await pool.query(
+      const result = await db.query(
         `SELECT * FROM project_baselines WHERE id = $1`,
         [baselineId]
       )
@@ -352,7 +355,7 @@ export class DriftResolutionService {
    */
   private async getDocument(documentId: string): Promise<Document> {
     try {
-      const result = await pool.query(
+      const result = await db.query(
         `SELECT * FROM documents WHERE id = $1`,
         [documentId]
       )
@@ -786,7 +789,7 @@ OUTPUT: Revised document (Markdown only, no explanations)`
       // Create a knowledge-base entry from the drift detection asynchronously.
       // Do this after the DB transaction commits so KB creation doesn't affect the primary flow.
       try {
-        const driftRes = await pool.query('SELECT * FROM baseline_drift_detection WHERE id = $1', [driftRecordId])
+        const driftRes = await db.query('SELECT * FROM baseline_drift_detection WHERE id = $1', [driftRecordId])
         if (driftRes.rows.length > 0) {
           const driftRow = driftRes.rows[0]
           // Call KB integration but do not fail the main flow if it errors.

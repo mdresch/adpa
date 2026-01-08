@@ -9,7 +9,7 @@
  * - Migrations were run manually before tracking existed
  */
 
-import { Pool } from 'pg';
+const db = require('../src/lib/db');
 import * as fs from 'fs';
 import * as path from 'path';
 import * as dotenv from 'dotenv';
@@ -56,7 +56,7 @@ function getMigrationFiles(): MigrationFile[] {
  * Check if a table exists
  */
 async function tableExists(tableName: string): Promise<boolean> {
-  const result = await pool.query(`
+  const result = await db.query(`
     SELECT EXISTS (
       SELECT FROM information_schema.tables 
       WHERE table_schema = 'public' 
@@ -92,7 +92,7 @@ async function isMigrationApplied(migration: MigrationFile): Promise<boolean> {
  */
 async function ensureMigrationsTable() {
   // Create table if it doesn't exist
-  await pool.query(`
+  await db.query(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
       id SERIAL PRIMARY KEY,
       migration_number INTEGER UNIQUE NOT NULL,
@@ -102,7 +102,7 @@ async function ensureMigrationsTable() {
   `);
 
   // Check if executed_at column exists, add it if missing
-  const columnCheck = await pool.query(`
+  const columnCheck = await db.query(`
     SELECT column_name 
     FROM information_schema.columns 
     WHERE table_schema = 'public' 
@@ -112,7 +112,7 @@ async function ensureMigrationsTable() {
 
   if (columnCheck.rows.length === 0) {
     console.log('   Adding executed_at column to schema_migrations...');
-    await pool.query(`
+    await db.query(`
       ALTER TABLE schema_migrations 
       ADD COLUMN executed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     `);
@@ -123,7 +123,7 @@ async function ensureMigrationsTable() {
  * Mark migration as executed
  */
 async function markMigrationExecuted(migration: MigrationFile) {
-  await pool.query(`
+  await db.query(`
     INSERT INTO schema_migrations (migration_number, migration_name, executed_at)
     VALUES ($1, $2, NOW())
     ON CONFLICT (migration_number) DO NOTHING
@@ -140,7 +140,7 @@ async function initializeMigrationTracking() {
   try {
     // Test connection
     console.log('🔌 Testing database connection...');
-    await pool.query('SELECT 1');
+    await db.query('SELECT 1');
     console.log('✅ Database connected\n');
 
     // Ensure tracking table exists
@@ -164,7 +164,7 @@ async function initializeMigrationTracking() {
       
       if (isApplied) {
         // Check if already tracked
-        const tracked = await pool.query(
+        const tracked = await db.query(
           'SELECT 1 FROM schema_migrations WHERE migration_number = $1',
           [migration.number]
         );
@@ -210,7 +210,7 @@ async function initializeMigrationTracking() {
     console.error(error);
     process.exit(1);
   } finally {
-    await pool.end();
+    try { await db.end() } catch (e) {}
   }
 }
 

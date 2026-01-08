@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+const db = require('../src/lib/db');
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 import axios from 'axios';
@@ -18,7 +18,7 @@ async function triggerTestQualityAudit() {
 
   try {
     // 1. Get a recent document
-    const docResult = await pool.query(`
+    const docResult = await db.query(`
       SELECT d.id, d.title, p.id as project_id, u.id as user_id
       FROM documents d
       JOIN projects p ON d.project_id = p.id
@@ -37,7 +37,7 @@ async function triggerTestQualityAudit() {
     console.log(`📄 Document: ${doc.title} (${doc.id.substring(0, 8)}...)`);
 
     // 2. Get user token for API call
-    const userResult = await pool.query(
+    const userResult = await db.query(
       'SELECT id, email FROM users WHERE id = $1',
       [doc.user_id]
     );
@@ -81,7 +81,7 @@ async function triggerTestQualityAudit() {
     await new Promise(resolve => setTimeout(resolve, 30000));
 
     // 5. Check audit result
-    const auditResult = await pool.query(`
+    const auditResult = await db.query(`
       SELECT 
         id,
         overall_score,
@@ -121,7 +121,7 @@ async function triggerTestQualityAudit() {
       console.error('Response:', error.response?.data);
     }
   } finally {
-    await pool.end();
+    try { await db.end() } catch (e) {}
   }
 }
 

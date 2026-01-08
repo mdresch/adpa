@@ -181,22 +181,11 @@ export class AIGenerationStage {
         has_context: !!input.context,
         context_keys: Object.keys(input.context || {}),
         context_size_bytes: JSON.stringify(input.context || {}).length,
-        has_project_data: !!input.context?.project,
-        has_documents: !!input.context?.documents,
-        document_count: Array.isArray(input.context?.documents) ? input.context.documents.length : 0,
+        has_project_context: !!input.context?.project_context,
+        has_user_context: !!input.context?.user_context,
         input_data_keys: Object.keys(input.input_data || {}),
         has_processed_template: !!input.input_data?.processed_template
       })
-
-      // 🔍 DEBUG: Log sample of context if available
-      if (input.context?.documents && Array.isArray(input.context.documents) && input.context.documents.length > 0) {
-        logger.info('📚 CONTEXT DOCUMENTS AVAILABLE', {
-          document_count: input.context.documents.length,
-          sample_doc_names: input.context.documents.slice(0, 3).map((d: any) => d.name || 'unnamed')
-        })
-      } else {
-        logger.warn('⚠️ NO CONTEXT DOCUMENTS AVAILABLE FOR AI GENERATION')
-      }
 
       // Extract configuration - load model configs from database
       const defaultModelConfigs = await this.getDefaultModelConfigs()
@@ -610,7 +599,7 @@ Return ONLY the section content in markdown format. Do not include section heade
         processing_time_ms: processingTime,
         tokens_used: response.usage?.total_tokens || 0,
         quality_score: 0.8, // Will be calculated later
-        confidence: response.confidence || 0.8,
+        confidence: (response as any)?.confidence || 0.8,
         metadata: {
           temperature: model.temperature,
           max_tokens: model.max_tokens,
@@ -1035,6 +1024,16 @@ Ensure the content is:
       metadata: result.metadata
     }))
 
+    const qualityScores: QualityScores = {
+      overall: 0.85,
+      content_quality: 0.8,
+      methodology_compliance: 0.9,
+      technical_accuracy: 0.8,
+      readability: 0.85,
+      completeness: 0.9,
+      consistency: 0.8
+    }
+
     return {
       document_id: documentId,
       template_id: template.template_id,
@@ -1049,16 +1048,14 @@ Ensure the content is:
         methodology_compliance: {} as MethodologyCompliance
       },
       sections,
-      metadata: {},
-      quality_scores: {
-        overall: 0.85,
-        content_quality: 0.8,
-        methodology_compliance: 0.9,
-        technical_accuracy: 0.8,
-        readability: 0.85,
-        completeness: 0.9,
-        consistency: 0.8
+      metadata: {
+        template_id: template.template_id,
+        generation_timestamp: new Date(),
+        models_used: results.map(r => r.model_used),
+        quality_scores: qualityScores,
+        refinement_iterations: 0
       },
+      quality_scores: qualityScores,
       generation_timestamp: new Date()
     }
   }

@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+const db = require('../src/lib/db');
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -10,7 +10,7 @@ const pool = new Pool({
 
 async function findTemplate() {
   try {
-    const result = await pool.query(`
+    const result = await db.query(`
       SELECT id, name, framework, category, is_public 
       FROM templates 
       WHERE LOWER(name) LIKE '%market%' 
@@ -36,7 +36,7 @@ async function findTemplate() {
     }
     
     // Also show all available templates
-    const allTemplates = await pool.query(`
+    const allTemplates = await db.query(`
       SELECT id, name, framework, category 
       FROM templates 
       WHERE is_public = true
@@ -52,7 +52,7 @@ async function findTemplate() {
   } catch (error) {
     console.error('Error:', error);
   } finally {
-    await pool.end();
+    try { await db.end() } catch (e) {}
   }
 }
 

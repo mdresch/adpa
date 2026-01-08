@@ -13,7 +13,7 @@
  *   npx tsx server/scripts/seed-financial-test-data.ts
  */
 
-import { Pool } from 'pg'
+const db = require('../src/lib/db')
 import path from 'path'
 import dotenv from 'dotenv'
 
@@ -139,12 +139,12 @@ async function main() {
 
   try {
     // Test connection
-    await pool.query('SELECT NOW()')
+    await db.query('SELECT NOW()')
     console.log('✅ Database connected\n')
 
     // Get or create admin user
     let userId: string
-    const userResult = await pool.query(
+    const userResult = await db.query(
       `SELECT id FROM users WHERE email = 'admin@adpa.com' LIMIT 1`
     )
     
@@ -160,7 +160,7 @@ async function main() {
     // Create test program
     console.log('📦 Creating test program: "Digital Transformation Initiative"...')
     
-    const programResult = await pool.query(
+    const programResult = await db.query(
       `INSERT INTO programs (
         name, 
         description, 
@@ -212,7 +212,7 @@ async function main() {
       const materialsCost = project.actualCost * 0.01
       const overheadCost = project.actualCost * 0.01
       
-      const result = await pool.query(
+      const result = await db.query(
         `INSERT INTO projects (
           name,
           description,
@@ -284,7 +284,7 @@ async function main() {
     // Create program budget
     console.log('📦 Creating program budget for FY 2026 Q4...')
     
-    await pool.query(
+    await db.query(
       `INSERT INTO program_budgets (
         program_id,
         fiscal_year,
@@ -333,7 +333,7 @@ async function main() {
     ]
 
     for (const benefit of benefits) {
-      await pool.query(
+      await db.query(
         `INSERT INTO program_benefits (
           program_id,
           project_id,
@@ -368,7 +368,7 @@ async function main() {
     console.log('=' .repeat(60))
     console.log('')
 
-    const summaryResult = await pool.query(`
+    const summaryResult = await db.query(`
       SELECT 
         COALESCE(SUM(budget), 0) as total_budget,
         COALESCE(SUM(actual_cost), 0) as total_spent,
@@ -421,7 +421,7 @@ async function main() {
     console.log(`   VAC (Var at Comp):   $${(VAC / 1000000).toFixed(2)}M ${VAC >= 0 ? '✅' : '⚠️ OVERRUN'}`)
     console.log('')
 
-    const benefitsResult = await pool.query(`
+    const benefitsResult = await db.query(`
       SELECT COALESCE(SUM(expected_value), 0) as total_benefits
       FROM program_benefits
       WHERE program_id = $1
@@ -471,8 +471,7 @@ async function main() {
     console.error(error.stack)
     process.exit(1)
   } finally {
-    await pool.end()
-  }
+    try { await db.end() } catch (e) {}}
 }
 
 main()

@@ -4,5 +4,5 @@
  */
 
 export type { IQueue, IQueueJob, IQueueOptions, QueueProcessor } from './IQueue'
-export { BullQueueAdapter } from './BullQueueAdapter'
+export { RabbitQueueAdapter } from './RabbitQueueAdapter'
 

@@ -3,9 +3,10 @@
  * Determines which status values are allowed in the database
  */
 
-import { Pool } from 'pg'
 import * as dotenv from 'dotenv'
 import * as path from 'path'
+const dbModule = require('../src/lib/db')
+const db = dbModule.default || dbModule
 
 // Load .env from server directory
 dotenv.config({ path: path.join(__dirname, '../.env') })
@@ -17,11 +18,6 @@ if (!connectionString) {
   console.error('Set DATABASE_URL or POSTGRES_URL in server/.env')
   process.exit(1)
 }
-
-const pool = new Pool({
-  connectionString,
-  ssl: { rejectUnauthorized: false } // Supabase requires SSL but uses self-signed cert
-})
 
 async function checkStatusConstraint() {
   console.log('🔍 Checking project_tasks status constraint...\n')
@@ -37,7 +33,8 @@ async function checkStatusConstraint() {
       OR (conrelid = 'project_tasks'::regclass AND contype = 'c' AND consrc LIKE '%status%')
     `
 
-    const result = await pool.query(constraintQuery)
+    await db.initDb()
+    const result = await db.query(constraintQuery)
 
     if (result.rows.length > 0) {
       console.log('✅ Found status constraint(s):\n')
@@ -60,7 +57,7 @@ async function checkStatusConstraint() {
         ORDER BY conname
       `
       
-      const allConstraints = await pool.query(allConstraintsQuery)
+      const allConstraints = await db.query(allConstraintsQuery)
       
       console.log(`Found ${allConstraints.rows.length} constraints on project_tasks:\n`)
       allConstraints.rows.forEach(row => {
@@ -90,7 +87,7 @@ async function checkStatusConstraint() {
       AND column_name = 'status'
     `
     
-    const columnResult = await pool.query(columnQuery)
+    const columnResult = await db.query(columnQuery)
     
     if (columnResult.rows.length > 0) {
       const col = columnResult.rows[0]
@@ -110,7 +107,7 @@ async function checkStatusConstraint() {
       ORDER BY count DESC
     `
     
-    const statusValues = await pool.query(statusValuesQuery)
+    const statusValues = await db.query(statusValuesQuery)
     
     if (statusValues.rows.length > 0) {
       console.log('Status values currently in database:')
@@ -131,7 +128,7 @@ async function checkStatusConstraint() {
       ORDER BY count DESC
     `
     
-    const activitiesStatus = await pool.query(activitiesStatusQuery)
+    const activitiesStatus = await db.query(activitiesStatusQuery)
     
     if (activitiesStatus.rows.length > 0) {
       console.log('Status values in activities table:')
@@ -145,7 +142,7 @@ async function checkStatusConstraint() {
     console.error('❌ Error:', error.message)
     console.error('Stack:', error.stack)
   } finally {
-    await pool.end()
+    await db.end()
   }
 }
 

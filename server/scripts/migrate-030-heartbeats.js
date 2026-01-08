@@ -8,7 +8,7 @@
 
 const path = require('path');
 const fs = require('fs');
-const { Pool } = require('pg');
+const db = require('../src/lib/db');
 const dotenv = require('dotenv');
 
 // Load environment variables
@@ -48,7 +48,7 @@ async function applyMigration() {
         console.error('❌ Migration failed:', error);
         process.exit(1);
     } finally {
-        await pool.end();
+        try { await db.end() } catch (e) {}
     }
 }
 

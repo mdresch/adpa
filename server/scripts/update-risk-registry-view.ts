@@ -8,7 +8,7 @@ import dotenv from 'dotenv'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import { readFileSync } from 'fs'
-import { Pool } from 'pg'
+const db = require('../src/lib/db')
 
 // Load environment variables
 dotenv.config({ path: join(process.cwd(), '.env') })
@@ -76,8 +76,7 @@ async function updateRiskRegistryView() {
     process.exit(1)
   } finally {
     client.release()
-    await pool.end()
-  }
+    try { await db.end() } catch (e) {}}
 }
 
 updateRiskRegistryView()

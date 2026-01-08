@@ -3,7 +3,7 @@
  * Updates the constraint to allow current status values including 'in_progress'
  */
 
-import { Pool } from 'pg';
+const db = require('../src/lib/db');
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 
@@ -22,12 +22,12 @@ async function fixTaskStatusConstraint() {
   try {
     // Test connection
     console.log('🔌 Testing database connection...');
-    await pool.query('SELECT 1');
+    await db.query('SELECT 1');
     console.log('✅ Database connected\n');
 
     // Drop old constraint if exists
     console.log('🗑️  Dropping old constraint...');
-    await pool.query(`
+    await db.query(`
       ALTER TABLE project_tasks 
       DROP CONSTRAINT IF EXISTS project_tasks_status_check
     `);
@@ -35,7 +35,7 @@ async function fixTaskStatusConstraint() {
 
     // Add new constraint with all valid statuses
     console.log('➕ Adding updated constraint...');
-    await pool.query(`
+    await db.query(`
       ALTER TABLE project_tasks
       ADD CONSTRAINT project_tasks_status_check
       CHECK (status IN (
@@ -54,7 +54,7 @@ async function fixTaskStatusConstraint() {
 
     // Verify
     console.log('🔍 Verifying constraint...');
-    const result = await pool.query(`
+    const result = await db.query(`
       SELECT constraint_name, check_clause
       FROM information_schema.check_constraints
       WHERE constraint_schema = 'public'
@@ -68,7 +68,7 @@ async function fixTaskStatusConstraint() {
 
     // Check existing statuses in database
     console.log('📊 Current status values in database:');
-    const statusResult = await pool.query(`
+    const statusResult = await db.query(`
       SELECT DISTINCT status, COUNT(*) as count
       FROM project_tasks
       GROUP BY status
@@ -88,7 +88,7 @@ async function fixTaskStatusConstraint() {
     console.error(error);
     process.exit(1);
   } finally {
-    await pool.end();
+    try { await db.end() } catch (e) {}
   }
 }
 

@@ -1,3 +1,4 @@
+;(async function(){ try{ await (require('../lib/db')).initDb() } catch(e){} })();
 /**
  * Document Upload Service
  * 
@@ -7,8 +8,7 @@
  * @module documentUploadService
  */
 
-import { Pool } from 'pg';
-import Queue, { Job } from 'bull';
+const db = require('../lib/db');
 import { v4 as uuidv4 } from 'uuid';
 import * as crypto from 'crypto';
 import { logger } from '../utils/logger';
@@ -17,6 +17,8 @@ import { documentConversionService, ConversionOptions } from './documentConversi
 import { qualityAuditService } from './qualityAuditService';
 import { portfolioAssessmentService } from './portfolioAssessmentService';
 import { io } from '../server'; // WebSocket for real-time updates
+import { documentUploadQueue } from './queueService';
+import type { IQueueJob } from './jobs/queue/IQueue';
 
 // ============================================================================
 // TYPES & INTERFACES
@@ -85,20 +87,6 @@ export interface BatchStatusResponse {
 // ============================================================================
 
 // Use shared pool imported from ../database/connection (has correct Supabase SSL config)
-
-// Create Bull queue for document processing
-const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
-export const documentUploadQueue = new Queue<FileProcessingJob>('document-upload', REDIS_URL, {
-  defaultJobOptions: {
-    attempts: 3,
-    backoff: {
-      type: 'exponential',
-      delay: 2000
-    },
-    removeOnComplete: false, // Keep for tracking
-    removeOnFail: false
-  }
-});
 
 // ============================================================================
 // UPLOAD BATCH MANAGEMENT
@@ -343,7 +331,7 @@ async function enqueueFileProcessing(
   uploadedBy: string,
   file: Express.Multer.File,
   index: number
-): Promise<Job<FileProcessingJob>> {
+): Promise<IQueueJob<FileProcessingJob>> {
   const fileId = uuidv4();
   
   // Calculate file hash for deduplication
@@ -373,7 +361,7 @@ async function enqueueFileProcessing(
     }
   };
 
-  return await documentUploadQueue.add(jobData, {
+  return await documentUploadQueue.add('file-process', jobData, {
     jobId: fileId,
     priority: index + 1 // Process in upload order
   });
@@ -404,7 +392,7 @@ function detectFileFormat(file: Express.Multer.File): string {
  * Workflow: Convert → Detect Type → Create Document → Run Quality Audit
  */
 export async function processUploadedFile(
-  job: Job<FileProcessingJob>
+  job: IQueueJob<FileProcessingJob>
 ): Promise<FileProcessingResult> {
   const { batchId, fileId, projectId, uploadedBy, filename, originalFormat, buffer, fileHash } = job.data;
 
@@ -960,7 +948,7 @@ async function updateBatchProgress(
       WHERE id = $1
     `;
     
-    const batchResult = await pool.query(batchQuery, [batchId]);
+    const batchResult = await db.query(batchQuery, [batchId]);
     if (batchResult.rows.length === 0) return;
     
     const batch = batchResult.rows[0];
@@ -992,7 +980,7 @@ async function updateBatchProgress(
       RETURNING total_files, processed_files, successful_files, failed_files
     `;
 
-    const result_db = await pool.query(updateQuery, [batchId, JSON.stringify(metadata)]);
+    const result_db = await db.query(updateQuery, [batchId, JSON.stringify(metadata)]);
     
     if (result_db.rows.length > 0) {
       const row = result_db.rows[0];
@@ -1008,7 +996,7 @@ async function updateBatchProgress(
           FROM upload_batches
           WHERE id = $1
         `;
-        const batchInfoResult = await pool.query(batchInfoQuery, [batchId]);
+        const batchInfoResult = await db.query(batchInfoQuery, [batchId]);
         
         if (batchInfoResult.rows.length > 0) {
           const batchInfo = batchInfoResult.rows[0];
@@ -1017,7 +1005,7 @@ async function updateBatchProgress(
           const industryVertical = batchInfo.batch_metadata?.industryVertical || 'technology';
           
           // Update batch status
-          await pool.query(`
+          await db.query(`
             UPDATE upload_batches
             SET status = $1, completed_at = NOW()
             WHERE id = $2
@@ -1083,7 +1071,7 @@ async function updateBatchProgress(
                 RETURNING id
               `;
               
-              const assessmentUpdateResult = await pool.query(assessmentUpdateQuery, [
+              const assessmentUpdateResult = await db.query(assessmentUpdateQuery, [
                 assessmentResult.portfolio_summary.maturity_level,
                 assessmentResult.portfolio_summary.maturity_label,
                 assessmentResult.portfolio_summary.avg_quality_score,
@@ -1119,7 +1107,7 @@ async function updateBatchProgress(
               });
               
               // Update assessment status to 'failed' if generation failed
-              await pool.query(`
+              await db.query(`
                 UPDATE assessments
                 SET status = 'failed',
                     updated_at = NOW()
@@ -1128,7 +1116,7 @@ async function updateBatchProgress(
             }
           } else if (status === 'failed') {
             // Update assessment status to 'failed' if batch failed
-            await pool.query(`
+            await db.query(`
               UPDATE assessments
               SET status = 'failed',
                   updated_at = NOW()
@@ -1177,7 +1165,7 @@ export async function getBatchStatus(batchId: string): Promise<BatchStatusRespon
     GROUP BY ub.id
   `;
 
-  const result = await pool.query(batchQuery, [batchId]);
+  const result = await db.query(batchQuery, [batchId]);
   
   if (result.rows.length === 0) {
     return null;
@@ -1215,7 +1203,7 @@ export async function getUploadedDocuments(projectId: string): Promise<any[]> {
     ORDER BY d.created_at DESC
   `;
 
-  const result = await pool.query(query, [projectId]);
+  const result = await db.query(query, [projectId]);
   return result.rows;
 }
 
@@ -1276,6 +1264,5 @@ export const documentUploadService = {
   addDocumentsToExistingBatch,
   processUploadedFile,
   getBatchStatus,
-  getUploadedDocuments,
-  documentUploadQueue
+  getUploadedDocuments
 };

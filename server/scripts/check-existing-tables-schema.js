@@ -4,20 +4,16 @@
  * Check existing table schemas to understand what needs to be migrated
  */
 
-const { Pool } = require('pg');
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 require('dotenv').config({ path: path.join(__dirname, '..', 'server', '.env') });
-
-const pool = new Pool({
-    connectionString: process.env.DATABASE_URL || process.env.POSTGRES_URL,
-    ssl: process.env.DATABASE_URL?.includes('supabase.co') || process.env.DATABASE_URL?.includes('pooler.supabase.com')
-        ? { rejectUnauthorized: false }
-        : false
-});
+const dbModule = require('../src/lib/db')
+const db = dbModule.default || dbModule
 
 async function checkTables() {
+    await db.initDb()
+    const pool = db.getPool()
     const client = await pool.connect();
     try {
         const tables = ['lessons_learned', 'improvement_suggestions', 'entity_extractions', 'project_entity_baselines'];
@@ -49,7 +45,7 @@ async function checkTables() {
         }
     } finally {
         client.release();
-        await pool.end();
+        await db.end();
     }
 }
 

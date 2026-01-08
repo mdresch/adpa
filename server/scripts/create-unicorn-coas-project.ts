@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+const db = require('../src/lib/db');
 import { v4 as uuidv4 } from 'uuid';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
@@ -16,7 +16,7 @@ const pool = new Pool({
 async function createProject() {
   try {
     // Get admin user
-    const userResult = await pool.query(`
+    const userResult = await db.query(`
       SELECT id, email FROM users WHERE role = 'admin' LIMIT 1
     `);
     
@@ -29,7 +29,7 @@ async function createProject() {
     const projectId = uuidv4();
     
     // Create project
-    const result = await pool.query(`
+    const result = await db.query(`
       INSERT INTO projects (
         id,
         name,
@@ -112,7 +112,7 @@ async function createProject() {
     console.log('4. Create baseline');
     console.log('5. Start Phase 1 implementation!\n');
     
-    await pool.end();
+    try { await db.end() } catch (e) {}
     process.exit(0);
   } catch (error: any) {
     console.error('❌ Error:', error.message);

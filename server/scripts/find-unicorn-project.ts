@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { Pool } from 'pg';
+const db = require('../src/lib/db');
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
@@ -13,7 +13,7 @@ const pool = new Pool({
 async function findUnicornProject() {
   try {
     // Search for Unicorn COAS project
-    const projects = await pool.query(`
+    const projects = await db.query(`
       SELECT 
         id, name, description, framework, 
         created_by, created_at
@@ -39,7 +39,7 @@ async function findUnicornProject() {
 
       // Check for batches in these projects
       const projectIds = projects.rows.map(p => p.id);
-      const batches = await pool.query(`
+      const batches = await db.query(`
         SELECT 
           ub.id as batch_id,
           ub.project_id,
@@ -70,7 +70,7 @@ async function findUnicornProject() {
       }
     }
 
-    await pool.end();
+    try { await db.end() } catch (e) {}
   } catch (error) {
     console.error('Error:', error);
     process.exit(1);

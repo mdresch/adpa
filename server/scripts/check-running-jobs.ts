@@ -1,23 +1,17 @@
-import { Pool } from 'pg';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
-
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || process.env.POSTGRES_URL,
-  ssl: (process.env.DATABASE_URL || process.env.POSTGRES_URL)?.includes('supabase.co') 
-    ? { rejectUnauthorized: false } 
-    : false
-});
+const dbModule = require('../src/lib/db')
+const db = dbModule.default || dbModule
 
 async function checkJobs() {
   try {
     console.log('🔍 CHECKING RUNNING JOBS\n');
     console.log('='.repeat(80));
     
+    await db.initDb()
     // Check recent jobs (last hour)
-    const jobsResult = await pool.query(`
+    const jobsResult = await db.query(`
       SELECT 
         id,
         type,
@@ -53,7 +47,7 @@ async function checkJobs() {
     }
     
     // Check for stuck jobs (processing but not updated in last 5 minutes)
-    const stuckJobsResult = await pool.query(`
+    const stuckJobsResult = await db.query(`
       SELECT id, type, status, progress, created_at
       FROM jobs
       WHERE status = 'processing'
@@ -75,7 +69,7 @@ async function checkJobs() {
     }
     
     // Check pipeline executions
-    const pipelineResult = await pool.query(`
+    const pipelineResult = await db.query(`
       SELECT 
         id,
         template_id,
@@ -115,7 +109,7 @@ async function checkJobs() {
   } catch (error) {
     console.error('Error:', error);
   } finally {
-    await pool.end();
+    await db.end();
   }
 }
 

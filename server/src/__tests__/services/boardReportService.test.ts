@@ -8,7 +8,7 @@
  * - Program Details Report
  */
 
-import { Pool } from 'pg';
+const db = require('../../lib/db');
 import { BoardReportService, BoardReportRequest } from '../../services/boardReportService';
 
 // Mock the dependencies

@@ -1,17 +1,14 @@
-const { Pool } = require('pg');
 require('dotenv').config();
-
-const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false
-});
+const dbModule = require('../src/lib/db')
+const db = dbModule.default || dbModule
 
 async function checkSchema() {
     console.log('🔍 Checking team_agreements table schema...\n');
 
     try {
-        // 1. Check table structure
-        const schema = await pool.query(`
+                await db.initDb()
+                // 1. Check table structure
+                const schema = await db.query(`
       SELECT 
         column_name, 
         data_type, 
@@ -28,7 +25,7 @@ async function checkSchema() {
 
         // 2. Check constraints
         console.log('\n[2] Table Constraints:');
-        const constraints = await pool.query(`
+                const constraints = await db.query(`
       SELECT 
         conname as constraint_name,
         contype as constraint_type,
@@ -45,7 +42,7 @@ async function checkSchema() {
 
         // 3. Check indexes
         console.log('[3] Table Indexes:');
-        const indexes = await pool.query(`
+                const indexes = await db.query(`
       SELECT indexname, indexdef
       FROM pg_indexes
       WHERE tablename = 'team_agreements'
@@ -59,7 +56,7 @@ async function checkSchema() {
 
         // 4. Sample some data to see what's actually in agreed_by
         console.log('\n[4] Sample Data (agreed_by field):');
-        const samples = await pool.query(`
+                const samples = await db.query(`
       SELECT id, title, agreed_by, facilitated_by
       FROM team_agreements
       LIMIT 5
@@ -80,7 +77,7 @@ async function checkSchema() {
         console.error('❌ Schema check failed:', error.message);
         console.error(error);
     } finally {
-        await pool.end();
+        await db.end();
     }
 }
 

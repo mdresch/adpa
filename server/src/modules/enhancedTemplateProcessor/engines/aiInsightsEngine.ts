@@ -81,12 +81,12 @@ export class AIInsightsEngine {
         insight_id: insight.insight_id,
         enhancement_type: insight.insight_type,
         enhancement_description: `Applied ${insight.insight_title}`,
-        enhancement_impact: insight.impact_score,
+        enhancement_impact: insight.expected_impact,
         enhancement_confidence: insight.confidence_score,
         applied_at: new Date(),
         metadata: {
           template_id: template.id,
-          insight_metadata: insight.metadata
+          insight_title: insight.insight_title
         }
       }))
 

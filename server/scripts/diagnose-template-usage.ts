@@ -7,7 +7,7 @@
  *   npx tsx server/scripts/diagnose-template-usage.ts <template-id>
  */
 
-import { Pool } from 'pg'
+const db = require('../src/lib/db')
 import dotenv from 'dotenv'
 import path from 'path'
 
@@ -34,7 +34,7 @@ async function diagnoseTemplate(templateId: string) {
 
     // 1. Check current template stats
     console.log('📊 Current Template Statistics:')
-    const templateResult = await pool.query(`
+    const templateResult = await db.query(`
       SELECT 
         id,
         name,
@@ -61,7 +61,7 @@ async function diagnoseTemplate(templateId: string) {
 
     // 2. Check template_usage table
     console.log('📝 Template Usage History (template_usage table):')
-    const usageResult = await pool.query(`
+    const usageResult = await db.query(`
       SELECT 
         COUNT(*) as total_entries,
         MIN(used_at) as first_use,
@@ -77,7 +77,7 @@ async function diagnoseTemplate(templateId: string) {
 
     // 3. Check document_history table
     console.log('📄 Document History (document_history table):')
-    const historyResult = await pool.query(`
+    const historyResult = await db.query(`
       SELECT 
         COUNT(*) as total_documents,
         MIN(created_at) as first_document,
@@ -92,7 +92,7 @@ async function diagnoseTemplate(templateId: string) {
 
     // 4. Check documents table
     console.log('📋 Documents Created (documents table):')
-    const docsResult = await pool.query(`
+    const docsResult = await db.query(`
       SELECT 
         COUNT(*) as total_documents,
         MIN(created_at) as first_document,
@@ -112,13 +112,13 @@ async function diagnoseTemplate(templateId: string) {
     
     // Simulate calling the function (won't actually update, just test if it runs)
     try {
-      await pool.query('SELECT update_template_validation($1, $2, $3)', 
+      await db.query('SELECT update_template_validation($1, $2, $3)', 
         [templateId, 0.85, template.last_validated_by || '00000000-0000-0000-0000-000000000000']
       )
       console.log('✅ Function executed successfully')
       
       // Check if it actually incremented
-      const afterTest = await pool.query(`
+      const afterTest = await db.query(`
         SELECT validation_count, success_count, last_validated_at
         FROM templates
         WHERE id = $1
@@ -133,7 +133,7 @@ async function diagnoseTemplate(templateId: string) {
 
     // 6. Check for constraints
     console.log('🔒 Checking database constraints:')
-    const constraintResult = await pool.query(`
+    const constraintResult = await db.query(`
       SELECT 
         conname as constraint_name,
         pg_get_constraintdef(oid) as constraint_definition
@@ -183,8 +183,7 @@ async function diagnoseTemplate(templateId: string) {
   } catch (error) {
     console.error('❌ Diagnostic failed:', error)
   } finally {
-    await pool.end()
-  }
+    try { await db.end() } catch (e) {}}
 }
 
 // Get template ID from command line

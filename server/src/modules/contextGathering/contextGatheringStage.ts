@@ -22,7 +22,9 @@ import type {
   ContextData,
   ContextQualityAnalysis,
   ContextGap,
-  ContextSourcePriority
+  ContextSourcePriority,
+  SemanticSearchConfig,
+  RelevanceScoringConfig
 } from './types'
 
 export class ContextGatheringStage implements IContextGatheringStage {
@@ -40,7 +42,10 @@ export class ContextGatheringStage implements IContextGatheringStage {
 
   constructor() {
     // Initialize RAG retrieval service (CR-2025-001: RAG Integration)
-    this.contextRetrievalService = new ContextRetrievalService()
+    this.contextRetrievalService = new ContextRetrievalService(
+      this.getDefaultSemanticSearchConfig(),
+      this.getDefaultRelevanceScoringConfig()
+    )
     
     // Inject retrieval service into all analyzers for RAG-powered context gathering
     this.projectContextAnalyzer = new ProjectContextAnalyzer(this.contextRetrievalService)
@@ -55,6 +60,44 @@ export class ContextGatheringStage implements IContextGatheringStage {
     this.contextOptimizer = new ContextOptimizer()
     this.contextValidator = new ContextValidator()
     this.contextQualityAssessor = new ContextQualityAssessor()
+  }
+
+  private getDefaultSemanticSearchConfig(): SemanticSearchConfig {
+    return {
+      model: 'text-embedding-ada-002',
+      embeddingDimensions: 1536,
+      similarityThreshold: 0.3,
+      maxTokens: 8000,
+      temperature: 0,
+      topK: 50,
+      includeContext: true,
+      useCache: true,
+      cacheExpiry: 3600
+    }
+  }
+
+  private getDefaultRelevanceScoringConfig(): RelevanceScoringConfig {
+    return {
+      weights: {
+        semanticSimilarity: 0.6,
+        keywordMatch: 0.4,
+        freshness: 0.1,
+        authority: 0.2,
+        popularity: 0.1,
+        userPreference: 0.1,
+        contextRelevance: 0.1
+      },
+      normalization: {
+        minScore: 0,
+        maxScore: 1,
+        boostFactors: {}
+      },
+      thresholds: {
+        highRelevance: 0.8,
+        mediumRelevance: 0.5,
+        lowRelevance: 0.3
+      }
+    }
   }
 
   /**
@@ -91,7 +134,7 @@ export class ContextGatheringStage implements IContextGatheringStage {
 
       // Stage 4: External Context (10% weight - optional)
       logger.info('[STAGE-4] External Context (optional)')
-      const externalContext = await this.gatherExternalContext(request)
+      const externalContext = await this.gatherExternalContextStage(request)
       const stage4Time = Date.now() - startTime - stage1Time - stage2Time - stage3Time
 
       // Stage 5: Context Optimization & Merging
@@ -684,18 +727,14 @@ export class ContextGatheringStage implements IContextGatheringStage {
    * Stage 4: External Context (10% weight - optional)
    * Third-party integrations and external data sources
    */
-  private async gatherExternalContext(request: ContextGatheringRequest): Promise<any> {
+  private async gatherExternalContextStage(request: ContextGatheringRequest): Promise<any> {
     try {
       if (!request.gathering_config?.enable_external_source_integration) {
         logger.info('[STAGE-4] External context skipped (disabled)')
         return { method: 'external_apis', weight: 0.10, enabled: false }
       }
 
-      const externalContext = await this.externalContextAnalyzer.analyzeExternalContext(
-        request.template_id,
-        request.project_id,
-        request.user_id
-      )
+      const externalContext = await this.gatherExternalContext(request)
 
       logger.info('[STAGE-4] External context gathered')
 

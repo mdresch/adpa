@@ -4,7 +4,7 @@
  * This script executes the SQL migration for document regeneration feature
  */
 
-import { Pool } from 'pg'
+const db = require('../src/lib/db')
 import * as fs from 'fs'
 import * as path from 'path'
 import * as dotenv from 'dotenv'
@@ -177,18 +177,18 @@ async function runMigration() {
     console.log('🔄 Connecting to database...')
     
     // Test connection
-    await pool.query('SELECT NOW()')
+    await db.query('SELECT NOW()')
     console.log('✅ Connected to database')
 
     console.log('🔄 Running migration 100: Document Regeneration...')
     
     // Execute migration
-    await pool.query(migrationSQL)
+    await db.query(migrationSQL)
     
     console.log('✅ Migration 100 completed successfully!')
     
     // Verify tables were created
-    const tableCheck = await pool.query(`
+    const tableCheck = await db.query(`
       SELECT table_name 
       FROM information_schema.tables 
       WHERE table_schema = 'public' 
@@ -200,7 +200,7 @@ async function runMigration() {
     }
     
     // Verify function was created
-    const functionCheck = await pool.query(`
+    const functionCheck = await db.query(`
       SELECT routine_name 
       FROM information_schema.routines 
       WHERE routine_schema = 'public' 
@@ -217,8 +217,7 @@ async function runMigration() {
     console.error('❌ Migration failed:', error)
     process.exit(1)
   } finally {
-    await pool.end()
-  }
+    try { await db.end() } catch (e) {}}
 }
 
 // Run the migration

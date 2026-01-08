@@ -1,21 +1,18 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { Pool } from 'pg';
+const dbModule = require('../src/lib/db')
+const db = dbModule.default || dbModule
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-});
 
 async function checkBatchDetails() {
   try {
     const batchId = '13e79f1f-fb52-476b-9f88-1c31d2e540e3';
 
+    await db.initDb()
     // Get documents with their full metadata
-    const docs = await pool.query(`
+    const docs = await db.query(`
       SELECT 
         id,
         name,
@@ -31,7 +28,7 @@ async function checkBatchDetails() {
 
     if (docs.rows.length === 0) {
       console.log('No documents found');
-      await pool.end();
+      await db.end();
       return;
     }
 
@@ -47,7 +44,7 @@ async function checkBatchDetails() {
     console.log(`\nMetadata:`);
     console.log(JSON.stringify(doc.metadata, null, 2));
 
-    await pool.end();
+    await db.end();
   } catch (error) {
     console.error('Error:', error);
     process.exit(1);

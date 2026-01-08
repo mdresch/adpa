@@ -5,7 +5,7 @@
  * This test directly imports and tests the services
  */
 
-import { Pool } from 'pg';
+const db = require('../src/lib/db');
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 
@@ -82,7 +82,7 @@ async function testTemplateOptimizationDirect() {
     // Step 2: Get admin user
     console.log('👤 Step 2: Getting admin user...');
     
-    const adminResult = await pool.query(`
+    const adminResult = await db.query(`
       SELECT id, email, role
       FROM users
       WHERE role = 'admin'
@@ -117,7 +117,7 @@ async function testTemplateOptimizationDirect() {
     
     await new Promise(resolve => setTimeout(resolve, 500)); // Brief pause
 
-    const templateResult = await pool.query(`
+    const templateResult = await db.query(`
       SELECT id, name, prompt_version, updated_at
       FROM templates
       WHERE id = $1
@@ -145,7 +145,7 @@ async function testTemplateOptimizationDirect() {
     // Step 5: Verify suggestion status
     console.log('📊 Step 5: Verifying suggestion status...');
     
-    const updatedSuggestion = await pool.query(`
+    const updatedSuggestion = await db.query(`
       SELECT id, status, implemented_by, implemented_at
       FROM template_improvement_suggestions
       WHERE id = $1
@@ -164,7 +164,7 @@ async function testTemplateOptimizationDirect() {
     // Step 6: Check template content updated
     console.log('📝 Step 6: Checking template content...');
     
-    const contentCheck = await pool.query(`
+    const contentCheck = await db.query(`
       SELECT 
         content,
         system_prompt,
@@ -227,7 +227,7 @@ async function testTemplateOptimizationDirect() {
     }
     process.exit(1);
   } finally {
-    await pool.end();
+    try { await db.end() } catch (e) {}
   }
 }
 
@@ -239,7 +239,7 @@ async function showFeatureStatus() {
 
   try {
     // Check if tables exist
-    const tablesCheck = await pool.query(`
+    const tablesCheck = await db.query(`
       SELECT table_name
       FROM information_schema.tables
       WHERE table_schema = 'public'
@@ -257,7 +257,7 @@ async function showFeatureStatus() {
     });
 
     // Check total suggestions
-    const statsResult = await pool.query(`
+    const statsResult = await db.query(`
       SELECT 
         COUNT(*) as total,
         COUNT(CASE WHEN status = 'pending_review' THEN 1 END) as pending,
@@ -274,7 +274,7 @@ async function showFeatureStatus() {
     console.log(`   Rejected: ${stats.rejected}`);
 
     // Check quality audits
-    const auditStats = await pool.query(`
+    const auditStats = await db.query(`
       SELECT 
         COUNT(*) as total,
         ROUND(AVG(overall_score)) as avg_quality,

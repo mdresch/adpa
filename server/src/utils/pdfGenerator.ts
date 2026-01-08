@@ -37,7 +37,6 @@ export async function markdownToPdf(
     marked.setOptions({
       gfm: true,
       breaks: false,
-      headerIds: false,
       mangle: false
     })
 

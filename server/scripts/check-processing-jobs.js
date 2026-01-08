@@ -1,17 +1,14 @@
 #!/usr/bin/env node
 require('dotenv').config();
-const { Pool } = require('pg');
 const Bull = require('bull');
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
-});
+const dbModule = require('../src/lib/db')
+const db = dbModule.default || dbModule
 
 async function main() {
   try {
+    await db.initDb()
     // Check processing jobs
-    const result = await pool.query(`
+    const result = await db.query(`
       SELECT id, type, status, progress, created_at, started_at, error_message 
       FROM jobs 
       WHERE status = 'processing' 
@@ -23,7 +20,7 @@ async function main() {
     console.table(result.rows);
     
     // Check recent extraction jobs specifically
-    const extractionJobs = await pool.query(`
+    const extractionJobs = await db.query(`
       SELECT id, type, status, progress, created_at, started_at, error_message 
       FROM jobs 
       WHERE type LIKE '%extraction%' 
@@ -75,7 +72,7 @@ async function main() {
   } catch (error) {
     console.error('Error:', error);
   } finally {
-    await pool.end();
+    await db.end();
   }
 }
 

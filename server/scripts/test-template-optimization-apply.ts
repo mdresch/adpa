@@ -10,7 +10,7 @@
  * 5. Validates suggestion status updated to 'implemented'
  */
 
-import { Pool } from 'pg';
+const db = require('../src/lib/db');
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 import axios from 'axios';
@@ -86,7 +86,7 @@ async function testTemplateOptimizationApply() {
     // Step 2: Get admin user token
     console.log('👤 Step 2: Getting admin user token...');
     
-    const adminResult = await pool.query(`
+    const adminResult = await db.query(`
       SELECT id, email, role
       FROM users
       WHERE role = 'admin'
@@ -142,7 +142,7 @@ async function testTemplateOptimizationApply() {
     
     await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second for DB update
 
-    const templateResult = await pool.query(`
+    const templateResult = await db.query(`
       SELECT 
         id,
         name,
@@ -174,7 +174,7 @@ async function testTemplateOptimizationApply() {
     // Step 5: Verify suggestion status updated
     console.log('📊 Step 5: Verifying suggestion status...');
     
-    const updatedSuggestion = await pool.query(`
+    const updatedSuggestion = await db.query(`
       SELECT 
         id,
         status,
@@ -204,7 +204,7 @@ async function testTemplateOptimizationApply() {
     // Step 6: Check template version history
     console.log('📜 Step 6: Checking template version history...');
     
-    const versionHistory = await pool.query(`
+    const versionHistory = await db.query(`
       SELECT 
         version_number,
         change_type,
@@ -273,7 +273,7 @@ async function testTemplateOptimizationApply() {
     }
     process.exit(1);
   } finally {
-    await pool.end();
+    try { await db.end() } catch (e) {}
   }
 }
 

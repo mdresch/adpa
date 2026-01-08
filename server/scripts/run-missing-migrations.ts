@@ -8,7 +8,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { Pool } from 'pg';
+const db = require('../src/lib/db');
 import fs from 'fs';
 import path from 'path';
 
@@ -28,7 +28,7 @@ async function runMigrations() {
   try {
     // Test connection
     console.log('📡 Connecting to database...');
-    await pool.query('SELECT NOW()');
+    await db.query('SELECT NOW()');
     console.log('✅ Connected to database\n');
 
     // Migration 1: assessments table
@@ -37,7 +37,7 @@ async function runMigrations() {
       path.join(__dirname, '../migrations/316_create_assessments_table.sql'),
       'utf-8'
     );
-    await pool.query(assessmentsMigration);
+    await db.query(assessmentsMigration);
     console.log('✅ assessments table created\n');
 
     // Migration 2: missing columns
@@ -46,11 +46,11 @@ async function runMigrations() {
       path.join(__dirname, '../migrations/317_add_missing_columns.sql'),
       'utf-8'
     );
-    await pool.query(columnsMigration);
+    await db.query(columnsMigration);
     console.log('✅ Missing columns added\n');
 
     // Verify tables
-    const tables = await pool.query(`
+    const tables = await db.query(`
       SELECT table_name 
       FROM information_schema.tables 
       WHERE table_schema = 'public' 
@@ -65,7 +65,7 @@ async function runMigrations() {
     });
 
     // Verify columns
-    const columns = await pool.query(`
+    const columns = await db.query(`
       SELECT table_name, column_name 
       FROM information_schema.columns 
       WHERE table_name IN ('upload_batches', 'documents')
@@ -86,7 +86,7 @@ async function runMigrations() {
     console.error('\nFull error:', error);
     process.exit(1);
   } finally {
-    await pool.end();
+    try { await db.end() } catch (e) {}
     process.exit(0);
   }
 }

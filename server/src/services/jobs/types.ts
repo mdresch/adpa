@@ -6,8 +6,6 @@
  * ensuring type safety throughout the queue system.
  */
 
-import type Bull from 'bull'
-
 /**
  * Job Type Union
  * All valid job types in the system

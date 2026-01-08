@@ -1,3 +1,4 @@
+;(async function(){ try{ await (require('../lib/db')).initDb() } catch(e){} })();
 /**
  * Project Data Extraction Service
  * AI-powered extraction of structured entities from project documents
@@ -4132,6 +4133,38 @@ Output valid JSON object with "performance_actuals" array only.`
       return null
     }
 
+    // Handle year-only dates (e.g., "2024" -> "2024-01-01")
+    // Must check this BEFORE "Month N" pattern to avoid false positives
+    const yearOnlyMatch = trimmed.match(/^(\d{4})$/)
+    if (yearOnlyMatch) {
+      const year = parseInt(yearOnlyMatch[1], 10)
+      if (year >= 1900 && year <= 2100) {
+        const result = `${year}-01-01`
+        logger.info(`[EXTRACTION] Converted year-only date "${value}" to ${result}`)
+        return result
+      }
+      logger.warn(`[EXTRACTION] Invalid year "${value}", returning null`)
+      return null
+    }
+
+    // Handle "Month N" patterns (relative months from project start)
+    // Examples: "Month 1", "Month 3", "month 12"
+    const monthNumberMatch = trimmed.match(/^month\s+(\d+)$/i)
+    if (monthNumberMatch) {
+      const monthOffset = parseInt(monthNumberMatch[1], 10)
+      if (monthOffset >= 0 && monthOffset <= 120) {
+        // Use current date as reference, add months
+        const referenceDate = new Date()
+        referenceDate.setMonth(referenceDate.getMonth() + monthOffset)
+        const result = referenceDate.toISOString().split('T')[0]
+        logger.info(`[EXTRACTION] Converted relative date "${value}" (Month ${monthOffset}) to ${result}`)
+        return result
+      }
+      // Invalid month number, return null
+      logger.warn(`[EXTRACTION] Invalid month number in "${value}", returning null`)
+      return null
+    }
+
     // Extract YYYY-MM-DD pattern from strings with extra text
     // Examples: "2025-12-31 (initial version)" -> "2025-12-31"
     //           "Monthly (first due 2025-11-30)" -> "2025-11-30"
@@ -4143,8 +4176,8 @@ Output valid JSON object with "performance_actuals" array only.`
 
     // Handle relative week patterns FIRST (before quarter date conversion)
     // This prevents "Week 2" from being passed to convertQuarterDate which logs warnings
-    // Match patterns like "Week 2", "week 4", "Week2", etc.
-    const weekMatch = trimmed.match(/^week\s*(\d+)$/i)
+    // Match patterns like "Week 2", "week 4", "Week2", "Weeks 1-4" (ranges use first week)
+    const weekMatch = trimmed.match(/^weeks?\s*(\d+)(?:\s*-\s*\d+)?$/i)
     if (weekMatch) {
       const weekNumber = parseInt(weekMatch[1], 10)
       if (weekNumber >= 0 && weekNumber <= 100) {
@@ -4205,12 +4238,14 @@ Output valid JSON object with "performance_actuals" array only.`
     // Try to extract "Month YYYY" pattern (set to first day of month)
     // Examples: "Jan 2026" -> "2026-01-01"
     //           "November 2026" -> "2026-11-01"
-    const monthYearMatch = trimmed.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)\s+(\d{4})\b/i)
+    //           "October 2025" -> "2025-10-01"
+    const monthYearMatch = trimmed.match(/^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)\s+(\d{4})$/i)
     if (monthYearMatch) {
       const [, monthStr, yearStr] = monthYearMatch
       const month = monthMap[monthStr.toLowerCase()]
       if (month) {
         const result = `${yearStr}-${month}-01`
+        logger.info(`[EXTRACTION] Converted month-year date "${value}" to ${result}`)
         if (isValidDate(result)) {
           return result
         }
@@ -4229,18 +4264,6 @@ Output valid JSON object with "performance_actuals" array only.`
         if (isValidDate(result)) {
           return result
         }
-      }
-    }
-
-
-    // Reject strings that are just years (e.g., "2026", "2027") without month/day
-    // These cause PostgreSQL errors when inserted as dates
-    const yearOnlyMatch = trimmed.match(/^\d{4}$/)
-    if (yearOnlyMatch) {
-      const year = parseInt(yearOnlyMatch[0], 10)
-      if (year >= 1900 && year <= 2100) {
-        logger.debug(`[EXTRACTION] Rejecting year-only date "${value}", storing as null`)
-        return null
       }
     }
 
@@ -8921,6 +8944,7 @@ Output valid JSON object with "performance_actuals" array only.`
         case 'schedule_baselines':
         case 'schedule_activities':
         case 'critical_path_activities':
+        case 'critical_path':
         case 'schedule_variances':
         case 'schedule_forecasts':
         // Finance Domain

@@ -1,13 +1,11 @@
 import fs from 'fs'
 import path from 'path'
-import { fileURLToPath } from 'url'
 import { pool } from './connection'
 
 async function run() {
   try {
     console.log('Migration direct runner: resolving path...')
-    const __filename = fileURLToPath(import.meta.url)
-    const __dirname = path.dirname(__filename)
+    // CommonJS __dirname is available
     const migrationPath = path.join(__dirname, 'migrations', 'add_openai_enhanced_fields.sql')
     console.log('Migration direct runner: reading SQL from', migrationPath)
     const sql = fs.readFileSync(migrationPath, 'utf8')

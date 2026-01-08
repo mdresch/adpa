@@ -1,14 +1,7 @@
-const { Pool } = require('pg');
 require('dotenv').config();
-
 const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
-
-const pool = new Pool({ 
-  connectionString,
-  ssl: (connectionString?.includes('supabase.co') || connectionString?.includes('azure') || process.env.DB_SSL === 'true')
-    ? { rejectUnauthorized: false }
-    : false
-});
+const dbModule = require('../src/lib/db')
+const db = dbModule.default || dbModule
 
 // Copy of the parser from baselineService.ts
 function parseCurrencyToNumber(value) {
@@ -46,8 +39,9 @@ async function debugBudget() {
   try {
     console.log('🔍 Debugging budget calculation for EcoTrack...\n');
     
+    await db.initDb()
     // Get all resources
-    const allResources = await pool.query(`
+    const allResources = await db.query(`
       SELECT 
         id,
         name,
@@ -128,7 +122,7 @@ async function debugBudget() {
   } catch (error) {
     console.error('❌ Error:', error.message);
   } finally {
-    await pool.end();
+    await db.end();
   }
 }
 

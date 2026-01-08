@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+const db = require('../src/lib/db');
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 
@@ -12,7 +12,7 @@ const pool = new Pool({
 
 async function listTables() {
   try {
-    const result = await pool.query(`
+    const result = await db.query(`
       SELECT table_name
       FROM information_schema.tables
       WHERE table_schema = 'public'
@@ -42,7 +42,7 @@ async function listTables() {
       console.log('');
     }
     
-    await pool.end();
+    try { await db.end() } catch (e) {}
     process.exit(0);
   } catch (error: any) {
     console.error('❌ Error:', error.message);

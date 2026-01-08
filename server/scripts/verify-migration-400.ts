@@ -6,7 +6,7 @@
  * Usage: npx ts-node server/scripts/verify-migration-400.ts
  */
 
-import { Pool } from 'pg'
+const db = require('../src/lib/db')
 import * as path from 'path'
 import * as dotenv from 'dotenv'
 
@@ -27,7 +27,7 @@ async function verifyTables() {
 
   try {
     // Test connection
-    await pool.query('SELECT 1')
+    await db.query('SELECT 1')
     console.log('✅ Database connected\n')
 
     const tables = [
@@ -44,7 +44,7 @@ async function verifyTables() {
 
     for (const tableName of tables) {
       // Check table exists
-      const tableExists = await pool.query(
+      const tableExists = await db.query(
         `SELECT EXISTS (
           SELECT 1 FROM information_schema.tables 
           WHERE table_name = $1
@@ -58,7 +58,7 @@ async function verifyTables() {
       }
 
       // Get column count
-      const columnCount = await pool.query(
+      const columnCount = await db.query(
         `SELECT COUNT(*) as count 
          FROM information_schema.columns 
          WHERE table_name = $1`,
@@ -66,12 +66,12 @@ async function verifyTables() {
       )
 
       // Get row count
-      const rowCount = await pool.query(
+      const rowCount = await db.query(
         `SELECT COUNT(*) as count FROM ${tableName}`
       )
 
       // Get index count
-      const indexCount = await pool.query(
+      const indexCount = await db.query(
         `SELECT COUNT(*) as count 
          FROM pg_indexes 
          WHERE tablename = $1`,
@@ -85,7 +85,7 @@ async function verifyTables() {
       console.log(`   🔍 Indexes: ${indexCount.rows[0].count}`)
 
       // Show column names
-      const columns = await pool.query(
+      const columns = await db.query(
         `SELECT column_name, data_type, is_nullable
          FROM information_schema.columns
          WHERE table_name = $1
@@ -106,7 +106,7 @@ async function verifyTables() {
 
     // Check indexes
     console.log('🔍 Index Verification:\n')
-    const indexes = await pool.query(`
+    const indexes = await db.query(`
       SELECT 
         tablename,
         indexname,
@@ -150,8 +150,7 @@ async function verifyTables() {
     }
     process.exit(1)
   } finally {
-    await pool.end()
-  }
+    try { await db.end() } catch (e) {}}
 }
 
 verifyTables()

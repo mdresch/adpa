@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { Pool } from 'pg';
+const db = require('../src/lib/db');
 import fetch from 'node-fetch';
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -20,13 +20,13 @@ async function triggerDriftViaAPI() {
     console.log('=' .repeat(70));
 
     // Get admin token
-    const adminResult = await pool.query(`
+    const adminResult = await db.query(`
       SELECT id, email, password FROM users WHERE role = 'admin' LIMIT 1
     `);
 
     if (adminResult.rows.length === 0) {
       console.log('❌ No admin user found');
-      await pool.end();
+      try { await db.end() } catch (e) {}
       return;
     }
 
@@ -46,7 +46,7 @@ async function triggerDriftViaAPI() {
 
     if (!loginResponse.ok) {
       console.log('❌ Authentication failed. Using direct service call instead...');
-      await pool.end();
+      try { await db.end() } catch (e) {}
       return;
     }
 
@@ -55,7 +55,7 @@ async function triggerDriftViaAPI() {
     console.log('✅ Authenticated\n');
 
     // Get recent strategic documents
-    const docsResult = await pool.query(`
+    const docsResult = await db.query(`
       SELECT id, name, created_at
       FROM documents
       WHERE project_id = $1
@@ -129,7 +129,7 @@ async function triggerDriftViaAPI() {
     console.log('\n' + '=' .repeat(70));
     console.log('\n✨ DRIFT DETECTION COMPLETE!\n');
 
-    await pool.end();
+    try { await db.end() } catch (e) {}
   } catch (error) {
     console.error('Error:', error);
     process.exit(1);

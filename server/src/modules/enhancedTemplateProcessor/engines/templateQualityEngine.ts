@@ -16,18 +16,17 @@ export class TemplateQualityEngine {
         assessment_id: `quality_assessment_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         template_id: template.id,
         overall_score: 0.8,
-        quality_dimensions: {
-          structure_quality: 0.85,
-          content_quality: 0.75,
-          methodology_compliance: 0.9,
-          usability_quality: 0.8,
-          performance_quality: 0.7
-        },
+        structure_quality: 0.85,
+        content_quality: 0.75,
+        methodology_compliance: 0.9,
+        ai_enhancement_quality: 0.8,
+        performance_quality: 0.7,
         assessments: [
           {
             assessment_type: 'structure_assessment',
-            assessment_score: 0.85,
-            assessment_details: 'Template structure is well-organized and logical',
+            score: 0.85,
+            criteria: [],
+            findings: [],
             recommendations: [
               {
                 recommendation_id: `rec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -41,11 +40,9 @@ export class TemplateQualityEngine {
             ]
           }
         ],
-        assessment_timestamp: new Date(),
-        metadata: {
-          assessment_method: 'automated',
-          assessment_version: '1.0.0'
-        }
+        issues: [],
+        recommendations: [],
+        assessment_timestamp: new Date()
       }
 
       logger.info('Template quality assessment completed', {

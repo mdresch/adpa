@@ -425,3 +425,9 @@
 {"level":"info","message":"✅ Database connected successfully via DATABASE_URL","service":"adpa-backend","timestamp":"2025-12-22T20:16:57.135Z"}
 {"level":"info","message":"✅ Database connected successfully via DATABASE_URL","service":"adpa-backend","timestamp":"2025-12-22T20:17:12.254Z"}
 {"level":"info","message":"✅ Database connected successfully via DATABASE_URL","service":"adpa-backend","timestamp":"2025-12-22T20:17:22.266Z"}
+{"level":"info","message":"✅ Database connected successfully via DATABASE_URL","service":"adpa-backend","timestamp":"2026-01-07T13:04:40.681Z"}
+{"level":"info","message":"[DB-CONCURRENCY] Pool max (50) >= estimated queue concurrency (0).","service":"adpa-backend","timestamp":"2026-01-07T13:04:40.686Z"}
+{"level":"info","message":"✅ Database connected successfully via DATABASE_URL","service":"adpa-backend","timestamp":"2026-01-07T13:06:17.017Z"}
+{"level":"info","message":"[DB-CONCURRENCY] Pool max (50) >= estimated queue concurrency (0).","service":"adpa-backend","timestamp":"2026-01-07T13:06:17.022Z"}
+{"level":"info","message":"✅ Database connected successfully via DATABASE_URL","service":"adpa-backend","timestamp":"2026-01-07T13:07:27.010Z"}
+{"level":"info","message":"[DB-CONCURRENCY] Pool max (50) >= estimated queue concurrency (0).","service":"adpa-backend","timestamp":"2026-01-07T13:07:27.014Z"}

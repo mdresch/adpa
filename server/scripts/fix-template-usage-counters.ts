@@ -8,7 +8,7 @@
  *   npx tsx server/scripts/fix-template-usage-counters.ts [--dry-run] [--template-id=<uuid>]
  */
 
-import { Pool } from 'pg'
+const db = require('../src/lib/db')
 import dotenv from 'dotenv'
 import path from 'path'
 
@@ -73,7 +73,7 @@ async function fixTemplateCounters(dryRun: boolean = true, specificTemplateId?: 
       ORDER BY t.name
     `
 
-    const result = await pool.query(query, params)
+    const result = await db.query(query, params)
 
     if (result.rows.length === 0) {
       console.log('✅ All template counters are accurate! No fixes needed.')
@@ -117,7 +117,7 @@ WHERE id = '${row.id}';`)
       
       for (const row of result.rows) {
         try {
-          await pool.query(`
+          await db.query(`
             UPDATE templates
             SET 
               validation_count = $1,
@@ -150,8 +150,7 @@ WHERE id = '${row.id}';`)
     console.error('❌ Fix script failed:', error)
     throw error
   } finally {
-    await pool.end()
-  }
+    try { await db.end() } catch (e) {}}
 }
 
 // Parse command line arguments

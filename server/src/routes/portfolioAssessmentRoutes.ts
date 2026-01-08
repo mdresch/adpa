@@ -8,22 +8,16 @@
  */
 
 import { Router, Request, Response, NextFunction } from 'express';
-import { Pool } from 'pg';
 import { logger } from '../utils/logger';
 import { portfolioAssessmentService } from '../services/portfolioAssessmentService';
 import { authenticateToken as authenticate } from '../middleware/auth';
-import { buildSslConfig } from '../database/connection';
+import db from '../lib/db';
+const pool = db;
 
 const router = Router();
 
-// ============================================================================
-// SETUP
-// ============================================================================
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: buildSslConfig(process.env.DATABASE_URL),
-});
+// Database: use shared singleton
+// Ensure the DB is initialized by the application startup logic
 
 // ============================================================================
 // ASSESSMENT ENDPOINTS
@@ -223,7 +217,7 @@ router.get(
         ORDER BY industry_vertical
       `;
 
-      const result = await pool.query(query);
+      const result = await db.query(query);
 
       res.json({
         success: true,
@@ -277,7 +271,7 @@ router.get(
         LIMIT 1
       `;
 
-      const result = await pool.query(query, [industry, documentType || null]);
+      const result = await db.query(query, [industry, documentType || null]);
 
       if (result.rows.length === 0) {
         return res.status(404).json({
@@ -356,7 +350,7 @@ router.get(
         LIMIT $2
       `;
 
-      const result = await pool.query(query, [projectId, limit]);
+      const result = await db.query(query, [projectId, limit]);
 
       res.json({
         success: true,
@@ -393,7 +387,7 @@ async function verifyProjectAccess(user: any, projectId: string): Promise<boolea
 
     // Super admin can access any project - just verify project exists
     if (isSuperAdmin) {
-      const projectExists = await pool.query(
+      const projectExists = await db.query(
         'SELECT id FROM projects WHERE id = $1',
         [projectId]
       );
@@ -403,14 +397,14 @@ async function verifyProjectAccess(user: any, projectId: string): Promise<boolea
     // Admin can access projects from their company
     if (isAdmin) {
       if (userCompanyId) {
-        const projectCheck = await pool.query(
+        const projectCheck = await db.query(
           'SELECT id FROM projects WHERE id = $1 AND company_id = $2',
           [projectId, userCompanyId]
         );
         return projectCheck.rows.length > 0;
       } else {
         // Admin with no company_id - fall back to ownership check
-        const projectCheck = await pool.query(
+        const projectCheck = await db.query(
           'SELECT id FROM projects WHERE id = $1 AND (owner_id = $2 OR created_by = $2)',
           [projectId, userId]
         );
@@ -425,7 +419,7 @@ async function verifyProjectAccess(user: any, projectId: string): Promise<boolea
       WHERE id = $1
     `;
 
-    const result = await pool.query(query, [projectId]);
+    const result = await db.query(query, [projectId]);
     
     if (result.rows.length === 0) {
       return false; // Project doesn't exist

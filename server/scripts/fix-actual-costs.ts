@@ -2,7 +2,7 @@
  * Fix Actual Costs - Set actual_cost = sum of breakdown columns
  */
 
-import { Pool } from 'pg'
+const db = require('../src/lib/db')
 import * as dotenv from 'dotenv'
 import * as path from 'path'
 
@@ -22,7 +22,7 @@ async function main() {
   console.log('\n🔧 Fixing actual_cost for all projects...\n')
   
   try {
-    const result = await pool.query(`
+    const result = await db.query(`
       UPDATE projects
       SET actual_cost = (
         COALESCE(internal_labor_cost, 0) +
@@ -55,13 +55,11 @@ async function main() {
     
     console.log('✅ All projects fixed! Actual costs now match breakdown totals.\n')
     
-    await pool.end()
-    process.exit(0)
+    try { await db.end() } catch (e) {}process.exit(0)
     
   } catch (error) {
     console.error('❌ Error:', error)
-    await pool.end()
-    process.exit(1)
+    try { await db.end() } catch (e) {}process.exit(1)
   }
 }
 

@@ -1,19 +1,15 @@
-import { Pool } from 'pg';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
-
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
+const dbModule = require('../src/lib/db')
+const db = dbModule.default || dbModule
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false
-});
-
 async function checkLatestAudit() {
   try {
-    const result = await pool.query(`
+    await db.initDb()
+    const result = await db.query(`
       SELECT 
         id,
         overall_score,
@@ -54,7 +50,7 @@ async function checkLatestAudit() {
   } catch (error) {
     console.error('Error:', error);
   } finally {
-    await pool.end();
+    await db.end();
   }
 }
 

@@ -380,7 +380,7 @@ export async function getTaskById(taskId: string): Promise<ProjectTask | null> {
       assignedUserId: primaryAssignment?.userId ?? null,
       assignedUserName: primaryAssignment?.userName ?? null,
       status: task.status,
-      percentComplete: task.percent_complete ? Number(task.percent_complete) : 0,
+      percent_complete: task.percent_complete ? Number(task.percent_complete) : 0,
       priority: task.priority || undefined,
       phase: task.phase || undefined,
       category: task.category || undefined,

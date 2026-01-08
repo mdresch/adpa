@@ -1,3 +1,4 @@
+;(async function(){ try{ await (require('../lib/db')).initDb() } catch(e){} })();
 /**
  * Lessons Learned Service
  * 
@@ -128,7 +129,7 @@ export class LessonsLearnedService {
                 }
             }
 
-            const result = await pool.query(query, params)
+            const result = await db.query(query, params)
             return result.rows
         } catch (error) {
             logger.error('Failed to get lessons learned by project', {
@@ -144,7 +145,7 @@ export class LessonsLearnedService {
      */
     async getById(lessonId: string): Promise<LessonsLearned | null> {
         try {
-            const result = await pool.query('SELECT * FROM lessons_learned WHERE id = $1', [lessonId])
+            const result = await db.query('SELECT * FROM lessons_learned WHERE id = $1', [lessonId])
             return result.rows[0] || null
         } catch (error) {
             logger.error('Failed to get lesson learned by ID', {
@@ -160,7 +161,7 @@ export class LessonsLearnedService {
      */
     async create(input: CreateLessonsLearnedInput, userId: string): Promise<LessonsLearned> {
         try {
-            const result = await pool.query(
+            const result = await db.query(
                 `INSERT INTO lessons_learned (
                     project_id, title, description, category, situation, outcome, 
                     recommendations, positive_or_negative, impact, source_document_id, 
@@ -251,14 +252,14 @@ export class LessonsLearnedService {
 
             if (updates.length === 2) {
                 // Only updating timestamps, no need to execute
-                const result = await pool.query('SELECT * FROM lessons_learned WHERE id = $1', [lessonId])
+                const result = await db.query('SELECT * FROM lessons_learned WHERE id = $1', [lessonId])
                 return result.rows[0]
             }
 
             values.push(lessonId)
 
             const query = `UPDATE lessons_learned SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING *`
-            const result = await pool.query(query, values)
+            const result = await db.query(query, values)
 
             const lesson = result.rows[0]
 
@@ -294,7 +295,7 @@ export class LessonsLearnedService {
             // Get project ID before deletion for cache invalidation
             const lesson = await this.getById(lessonId)
 
-            await pool.query('DELETE FROM lessons_learned WHERE id = $1', [lessonId])
+            await db.query('DELETE FROM lessons_learned WHERE id = $1', [lessonId])
 
             if (lesson?.project_id) {
                 await extractionCacheService.invalidateProject(lesson.project_id)
@@ -320,7 +321,7 @@ export class LessonsLearnedService {
             const aiAnalysis = await this.generateLessonAnalysisInternal(lesson);
 
             // Update the lesson with AI analysis
-            await pool.query(
+            await db.query(
                 `UPDATE lessons_learned SET
                     ai_analysis = $1,
                     ai_confidence = $2,
@@ -627,7 +628,7 @@ Generate the analysis now:`;
             if (!lesson) throw new Error('Lesson not found')
 
             // Create knowledge base entry
-            const result = await pool.query(
+            const result = await db.query(
                 `INSERT INTO knowledge_base_entries (
                     project_id, entry_type, category, title, description, 
                     baseline_approach, improved_approach, value_metrics, 
@@ -653,7 +654,7 @@ Generate the analysis now:`;
             )
 
             // Link the knowledge base entry to the lesson
-            await pool.query(
+            await db.query(
                 'UPDATE lessons_learned SET metadata = jsonb_set(metadata, {knowledge_base_entry_id}, $1::text::jsonb) WHERE id = $2',
                 [result.rows[0].id, lessonId]
             )
@@ -676,7 +677,7 @@ Generate the analysis now:`;
             const lesson = await this.getById(lessonId)
             if (!lesson) return []
 
-            const result = await pool.query(
+            const result = await db.query(
                 `SELECT * FROM lessons_learned 
                 WHERE project_id != $1 
                 AND (category = $2 OR $3 && tags)
@@ -707,7 +708,7 @@ Generate the analysis now:`;
      * Get project ID from document ID
      */
     private async getProjectIdFromDocument(documentId: string): Promise<string> {
-        const result = await pool.query('SELECT project_id FROM documents WHERE id = $1', [documentId])
+        const result = await db.query('SELECT project_id FROM documents WHERE id = $1', [documentId])
         if (result.rows.length === 0) {
             throw new Error(`Document not found: ${documentId}`)
         }
@@ -725,7 +726,7 @@ Generate the analysis now:`;
         goals?: string[]
     }> {
         try {
-            const result = await pool.query('SELECT * FROM projects WHERE id = $1', [projectId])
+            const result = await db.query('SELECT * FROM projects WHERE id = $1', [projectId])
             if (result.rows.length === 0) return {}
 
             const project = result.rows[0]

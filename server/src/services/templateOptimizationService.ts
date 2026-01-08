@@ -150,13 +150,30 @@ export class TemplateOptimizationService {
     const preferredProvider = providerResult.rows[0]?.provider_type || 'openai'
     const defaultModel = providerResult.rows[0]?.default_model || 'gpt-4o'
 
+    // Build system prompt, appending domain-specific guidance for Communications templates
+    let systemPrompt = `You are an expert template optimization AI specializing in PMBOK, BABOK, and DMBOK documentation standards.
+Your role is to analyze template performance data and generate improved templates that produce higher-quality documents.
+Always respond with valid JSON only.`
+
+    try {
+      if (typeof currentTemplate.name === 'string' && /communications management plan/i.test(currentTemplate.name)) {
+        const fs = await import('fs')
+        const path = await import('path')
+        const extraPath = path.resolve(__dirname, '..', 'services', 'template_system_prompts', 'communications_system_prompt.md')
+        if (fs.existsSync(extraPath)) {
+          const extra = fs.readFileSync(extraPath, 'utf8')
+          systemPrompt += `\n\n# Additional System Prompt Guidance\n${extra}`
+        }
+      }
+    } catch (e) {
+      logger.warn('[TEMPLATE-OPT] Could not load communications system prompt enhancements', { error: (e as any).message })
+    }
+
     const result = await aiService.generateWithFallback({
       provider: preferredProvider,
       model: defaultModel,
       prompt: metaPrompt,
-      system_prompt: `You are an expert template optimization AI specializing in PMBOK, BABOK, and DMBOK documentation standards.
-Your role is to analyze template performance data and generate improved templates that produce higher-quality documents.
-Always respond with valid JSON only.`,
+      system_prompt: systemPrompt,
       temperature: 0.3, // Lower temperature for consistent, analytical responses
       max_tokens: 8000
     }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])

@@ -13,17 +13,12 @@ export class VariableResolutionEngine {
       
       // Stub implementation - would use the core variable resolution engine
       const variableResolutions: VariableResolution[] = variables.map(variable => ({
-        variable_id: `var_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         variable_name: variable.name || variable.variable_name || 'unknown',
-        variable_type: variable.type || variable.variable_type || 'string',
-        resolved_value: variable.default || null,
+        resolution_strategy: 'default_value',
+        resolved_value: variable.default ?? null,
         resolution_confidence: 0.7,
         resolution_source: 'default',
-        resolution_timestamp: new Date(),
-        metadata: {
-          resolution_method: 'default_value',
-          resolution_context: context
-        }
+        resolution_timestamp: new Date()
       }))
 
       logger.info('Template variables resolved successfully', {

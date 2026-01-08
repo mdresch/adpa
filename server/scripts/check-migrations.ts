@@ -3,26 +3,22 @@
  * View which migrations have been executed
  */
 
-import { Pool } from 'pg';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as dotenv from 'dotenv';
-
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false
-});
+const dbModule = require('../src/lib/db')
+const db = dbModule.default || dbModule
 
 async function checkMigrations() {
   console.log('📊 Migration Status Check\n');
   console.log('=' .repeat(70));
 
   try {
+    await db.initDb()
     // Check if schema_migrations table exists
-    const tableCheck = await pool.query(`
+    const tableCheck = await db.query(`
       SELECT EXISTS (
         SELECT FROM information_schema.tables 
         WHERE table_schema = 'public' 
@@ -37,7 +33,7 @@ async function checkMigrations() {
     }
 
     // Get executed migrations
-    const executedResult = await pool.query(`
+    const executedResult = await db.query(`
       SELECT migration_number, migration_name, executed_at
       FROM schema_migrations
       ORDER BY migration_number DESC
@@ -99,7 +95,7 @@ async function checkMigrations() {
     const tables = ['notification_logs', 'sla_violations'];
     
     for (const table of tables) {
-      const tableExists = await pool.query(`
+      const tableExists = await db.query(`
         SELECT EXISTS (
           SELECT FROM information_schema.tables 
           WHERE table_schema = 'public' 
@@ -119,7 +115,7 @@ async function checkMigrations() {
     console.error(error);
     process.exit(1);
   } finally {
-    await pool.end();
+    await db.end();
   }
 }
 

@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+const db = require('../src/lib/db');
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 
@@ -18,7 +18,7 @@ async function verifyAIAnalyticsIntegration() {
   try {
     // 1. Check recent quality audits with token/cost data
     console.log('1️⃣ Checking Quality Audits:');
-    const auditsResult = await pool.query(`
+    const auditsResult = await db.query(`
       SELECT 
         id,
         document_id,
@@ -50,7 +50,7 @@ async function verifyAIAnalyticsIntegration() {
 
     // 2. Check template improvement suggestions with token/cost data
     console.log('\n2️⃣ Checking Template Improvement Suggestions:');
-    const suggestionsResult = await pool.query(`
+    const suggestionsResult = await db.query(`
       SELECT 
         id,
         template_id,
@@ -85,7 +85,7 @@ async function verifyAIAnalyticsIntegration() {
 
     // 3. Check AI usage logs table
     console.log('\n3️⃣ Checking AI Usage Logs:');
-    const usageResult = await pool.query(`
+    const usageResult = await db.query(`
       SELECT 
         provider_type,
         request_type,
@@ -134,7 +134,7 @@ async function verifyAIAnalyticsIntegration() {
   } catch (error) {
     console.error('❌ Error:', error);
   } finally {
-    await pool.end();
+    try { await db.end() } catch (e) {}
   }
 }
 

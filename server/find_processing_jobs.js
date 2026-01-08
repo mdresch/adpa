@@ -1,11 +1,12 @@
 
-const { Pool } = require('pg');
 require('dotenv').config();
+const dbModule = require('./src/lib/db')
+const db = dbModule.default || dbModule
 
 async function findProcessingJobs() {
-    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     try {
-        const res = await pool.query("SELECT id, type, status, progress, created_at FROM jobs WHERE status = 'processing'");
+        await db.initDb()
+        const res = await db.query("SELECT id, type, status, progress, created_at FROM jobs WHERE status = 'processing'");
         console.log(`Found ${res.rows.length} processing jobs.`);
         res.rows.forEach(r => {
             console.log(`- ID: ${r.id}, Status: ${r.status}, Progress: ${r.progress}%, Type: ${r.type}`);
@@ -13,7 +14,7 @@ async function findProcessingJobs() {
     } catch (err) {
         console.error(err);
     } finally {
-        await pool.end();
+        await db.end();
     }
 }
 

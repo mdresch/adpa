@@ -1,11 +1,12 @@
 
-const { Pool } = require('pg');
 require('dotenv').config();
+const dbModule = require('./src/lib/db')
+const db = dbModule.default || dbModule
 
 async function findAnyEntityJobs() {
-    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     try {
-        const res = await pool.query(
+        await db.initDb()
+        const res = await db.query(
             "SELECT id, type, project_id, status, created_at FROM jobs WHERE type LIKE 'extract-entity-%' ORDER BY created_at DESC LIMIT 50"
         );
 
@@ -17,7 +18,7 @@ async function findAnyEntityJobs() {
     } catch (err) {
         console.error(err);
     } finally {
-        await pool.end();
+        await db.end();
     }
 }
 

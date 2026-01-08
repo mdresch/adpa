@@ -1,14 +1,15 @@
 
-const { Pool } = require('pg');
 require('dotenv').config();
+const dbModule = require('./src/lib/db')
+const db = dbModule.default || dbModule
 
 async function findProjectJobs() {
-    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     try {
         const projectId = '511ecdde-f6aa-43d9-833c-1c94e8a51fcd';
         console.log(`Searching for all jobs for project: ${projectId}`);
+        await db.initDb()
 
-        const res = await pool.query(
+        const res = await db.query(
             "SELECT id, type, status, progress, created_at, started_at, worker_id FROM jobs WHERE project_id = $1 ORDER BY created_at DESC",
             [projectId]
         );
@@ -33,7 +34,7 @@ async function findProjectJobs() {
         }
 
         // Check if any of these have parentJobId in data
-        const res2 = await pool.query(
+        const res2 = await db.query(
             "SELECT id, type, data FROM jobs WHERE project_id = $1 AND (data->>'parentJobId' IS NOT NULL OR data->>'parent_job_id' IS NOT NULL)",
             [projectId]
         );
@@ -42,7 +43,7 @@ async function findProjectJobs() {
     } catch (err) {
         console.error(err);
     } finally {
-        await pool.end();
+        await db.end();
     }
 }
 

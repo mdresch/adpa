@@ -2,20 +2,19 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { Pool } from 'pg';
+const dbModule = require('../src/lib/db')
+const db = dbModule.default || dbModule
 
 async function checkSchema() {
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
   
-  const pool = new Pool({
-    connectionString: process.env.DATABASE_URL
-  });
+  await db.initDb()
 
   try {
     console.log('📋 Documents table schema:');
     console.log('═'.repeat(80));
     
-    const columns = await pool.query(`
+    const columns = await db.query(`
       SELECT column_name, data_type, is_nullable
       FROM information_schema.columns
       WHERE table_name = 'documents'
@@ -33,7 +32,7 @@ async function checkSchema() {
     console.log('\n\n📄 Sample document (if any):');
     console.log('═'.repeat(80));
     
-    const sample = await pool.query(`
+    const sample = await db.query(`
       SELECT * FROM documents LIMIT 1
     `);
 
@@ -43,7 +42,7 @@ async function checkSchema() {
       console.log('Column names:', Object.keys(sample.rows[0]).join(', '));
     }
 
-    await pool.end();
+    await db.end();
     process.exit(0);
   } catch (err: any) {
     console.error('❌ Error:', err.message);

@@ -1,5 +1,7 @@
-const { Pool } = require('pg');
+const db = require('../src/lib/db');
 require('dotenv').config();
+
+(async function(){ try{ await db.initDb() } catch(e){} })();
 
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
@@ -12,7 +14,7 @@ async function diagnose() {
     try {
         //  1. Check stuck extraction jobs
         console.log('[1] Stuck extraction jobs (project-data-extraction queue):');
-        const stuck = await pool.query(`
+        const stuck = await db.query(`
       SELECT id, status, progress, created_at, processing_started_at,
              EXTRACT(EPOCH FROM (NOW() - created_at)) as age_seconds
       FROM jobs 
@@ -40,7 +42,7 @@ async function diagnose() {
             console.log(`[2] Looking for jobs related to parent ${parentId}:`);
 
             // Check if there's a parent_job_id column
-            const columns = await pool.query(`
+            const columns = await db.query(`
         SELECT column_name 
         FROM information_schema.columns 
         WHERE table_name = 'jobs'
@@ -50,7 +52,7 @@ async function diagnose() {
             console.log(`   parent_job_id column exists: ${hasParentJobId}\n`);
 
             if (hasParentJobId) {
-                const children = await pool.query(`
+                const children = await db.query(`
           SELECT id, queue_name, status, progress
           FROM jobs 
           WHERE parent_job_id = $1
@@ -67,7 +69,7 @@ async function diagnose() {
 
         // 3. Worker status
         console.log('[3] Worker Heartbeats:');
-        const workers = await pool.query(`
+        const workers = await db.query(`
       SELECT worker_id, worker_process_id, cpu_usage_percent, memory_usage_mb, last_heartbeat,
              EXTRACT(EPOCH FROM (NOW() - last_heartbeat)) as stale_seconds
       FROM worker_heartbeats 
@@ -86,7 +88,7 @@ async function diagnose() {
     } catch (error) {
         console.error('❌ Diagnosis failed:', error.message);
     } finally {
-        await pool.end();
+        try { await db.end() } catch (e) {}
     }
 }
 

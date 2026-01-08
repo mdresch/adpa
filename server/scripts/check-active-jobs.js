@@ -1,20 +1,14 @@
-const { Pool } = require('pg');
 require('dotenv').config();
-
+const dbModule = require('../src/lib/db')
+const db = dbModule.default || dbModule
 const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
-
-const pool = new Pool({ 
-  connectionString,
-  ssl: (connectionString?.includes('supabase.co') || connectionString?.includes('azure') || process.env.DB_SSL === 'true')
-    ? { rejectUnauthorized: false }
-    : false
-});
 
 async function checkActiveJobs() {
   try {
     console.log('🔍 Checking for active jobs...\n');
     
-    const result = await pool.query(`
+    await db.initDb()
+    const result = await db.query(`
       SELECT 
         id,
         type,
@@ -71,7 +65,7 @@ async function checkActiveJobs() {
   } catch (error) {
     console.error('❌ Error:', error.message);
   } finally {
-    await pool.end();
+    await db.end();
   }
 }
 

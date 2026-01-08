@@ -1,19 +1,16 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { Pool } from 'pg';
+const dbModule = require('../src/lib/db')
+const db = dbModule.default || dbModule
 
 // Force SSL config for Supabase
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-});
-
 async function checkUsers() {
   try {
-    const users = await pool.query(`
+    await db.initDb()
+    const users = await db.query(`
       SELECT id, email, name, role, created_at
       FROM users 
       ORDER BY 
@@ -36,7 +33,7 @@ async function checkUsers() {
       console.log('');
     });
 
-    await pool.end();
+    await db.end();
   } catch (error) {
     console.error('Error:', error);
     process.exit(1);

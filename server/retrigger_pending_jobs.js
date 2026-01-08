@@ -1,18 +1,18 @@
 const { addJob, initializeQueues } = require('./src/services/queueService');
 const dotenv = require('dotenv');
 const path = require('path');
-const { Pool } = require('pg');
+const dbModule = require('./src/lib/db')
+const db = dbModule.default || dbModule
 
 dotenv.config({ path: path.join(__dirname, '.env') });
-
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 async function retrigger() {
     try {
         const jobId = '21ec6ed0-ce05-4fca-8d38-c002153687c0';
         console.log(`Retriggering job ${jobId}...`);
 
-        const res = await pool.query("SELECT type, data FROM jobs WHERE id = $1", [jobId]);
+        await db.initDb()
+        const res = await db.query("SELECT type, data FROM jobs WHERE id = $1", [jobId]);
         if (res.rows.length === 0) {
             console.error('Job not found in DB.');
             process.exit(1);
@@ -21,7 +21,7 @@ async function retrigger() {
         const { type, data } = res.rows[0];
 
         // Delete the old failed job to avoid conflicts with QueueService.addJob
-        await pool.query("DELETE FROM jobs WHERE id = $1", [jobId]);
+        await db.query("DELETE FROM jobs WHERE id = $1", [jobId]);
         console.log('Deleted old failed job record.');
 
         // Wait for queues to be ready
@@ -35,7 +35,7 @@ async function retrigger() {
         const newJobId = await addJob('extract-project-data', data);
 
         console.log(`Successfully re-triggered job. New Job ID: ${newJobId}`);
-        await pool.end();
+        await db.end();
         process.exit(0);
     } catch (err) {
         console.error('Retrigger error:', err);

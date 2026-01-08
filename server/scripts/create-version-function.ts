@@ -4,7 +4,7 @@
  * Date: 2025-11-03
  */
 
-import { Pool } from 'pg'
+const db = require('../src/lib/db')
 import * as dotenv from 'dotenv'
 import path from 'path'
 
@@ -122,12 +122,12 @@ async function runMigration() {
     console.log('✅ Connected successfully!')
 
     console.log('🔄 Creating calculate_next_document_version function...')
-    await pool.query(migrationSQL)
+    await db.query(migrationSQL)
     console.log('✅ Function created successfully!')
 
     // Test the function
     console.log('🧪 Testing the function...')
-    const testResult = await pool.query(`
+    const testResult = await db.query(`
       SELECT 
         calculate_next_document_version(
           (SELECT id FROM documents WHERE version IS NOT NULL LIMIT 1),
@@ -155,8 +155,7 @@ async function runMigration() {
     console.error('Stack trace:', error.stack)
     process.exit(1)
   } finally {
-    await pool.end()
-    console.log('')
+    try { await db.end() } catch (e) {}console.log('')
     console.log('🔌 Database connection closed')
   }
 }

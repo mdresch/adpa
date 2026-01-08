@@ -1,11 +1,12 @@
 
-const { Pool } = require('pg');
 require('dotenv').config();
+const dbModule = require('./src/lib/db')
+const db = dbModule.default || dbModule
 
 async function checkNotifications() {
-    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     try {
-        const res = await pool.query("SELECT * FROM notifications WHERE status = 'unread' LIMIT 50");
+        await db.initDb()
+        const res = await db.query("SELECT * FROM notifications WHERE status = 'unread' LIMIT 50");
         console.log(`Found ${res.rows.length} unread notifications.`);
         res.rows.forEach(r => {
             console.log(`- ID: ${r.id}, Type: ${r.type}, Message: ${r.message}`);
@@ -13,7 +14,7 @@ async function checkNotifications() {
     } catch (err) {
         console.error(err);
     } finally {
-        await pool.end();
+        await db.end();
     }
 }
 

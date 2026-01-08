@@ -1,21 +1,14 @@
-import { Pool } from 'pg'
 import * as dotenv from 'dotenv'
 import * as path from 'path'
+const dbModule = require('../../src/lib/db')
+const db = dbModule.default || dbModule
 
 dotenv.config({ path: path.join(__dirname, '../.env') })
-
 const dbUrl = new URL(process.env.DATABASE_URL!)
-const pool = new Pool({
-  host: dbUrl.hostname,
-  port: parseInt(dbUrl.port) || 5432,
-  database: dbUrl.pathname.slice(1).split('?')[0],
-  user: dbUrl.username,
-  password: dbUrl.password,
-  ssl: { rejectUnauthorized: false }
-})
 
 async function main() {
-  const result = await pool.query(`
+  await db.initDb()
+  const result = await db.query(`
     SELECT 
       p.name,
       p.budget,
@@ -67,7 +60,7 @@ async function main() {
     console.log('')
   }
   
-  await pool.end()
+  await db.end()
 }
 
 main()

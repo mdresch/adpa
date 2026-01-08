@@ -1,26 +1,22 @@
-import { Pool } from 'pg';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
-
 dotenv.config({ path: path.join(__dirname, '../.env') });
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false
-});
+const dbModule = require('../src/lib/db')
+const db = dbModule.default || dbModule
 
 async function checkAnalytics() {
   try {
+    await db.initDb()
     // Check total AI usage in last 24 hours
-    const totalResult = await pool.query(`
+    const totalResult = await db.query(`
       SELECT COUNT(*) as count
       FROM ai_provider_usage
       WHERE created_at > NOW() - INTERVAL '24 hours'
     `);
     
     // Check if we have request_type column
-    const columnsResult = await pool.query(`
+    const columnsResult = await db.query(`
       SELECT column_name
       FROM information_schema.columns
       WHERE table_name = 'ai_provider_usage'
@@ -32,7 +28,7 @@ async function checkAnalytics() {
     console.log(`Has request_type column: ${columnsResult.rows.length > 0 ? 'YES ✅' : 'NO ❌'}`);
     
     // Get recent quality audit AI calls
-    const auditsResult = await pool.query(`
+    const auditsResult = await db.query(`
       SELECT 
         qa.id,
         qa.document_id,
@@ -56,7 +52,7 @@ async function checkAnalytics() {
     }
     
     // Check template improvement suggestions
-    const suggestionsResult = await pool.query(`
+    const suggestionsResult = await db.query(`
       SELECT 
         tis.id,
         tis.analyzer_ai_provider,
@@ -102,7 +98,7 @@ async function checkAnalytics() {
       console.log('⚠️  No quality audits or template improvements found in last 24 hours');
     }
     
-    await pool.end();
+    await db.end();
     process.exit(0);
   } catch (error: any) {
     console.error('❌ Error:', error.message);

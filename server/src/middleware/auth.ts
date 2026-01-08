@@ -42,13 +42,30 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
     return res.status(401).json({ error: "Invalid token format" })
   }
 
+  // Verify JWT first and handle token-specific errors separately
+  let decoded: any
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key") as any
+    decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key") as any
+  } catch (error: any) {
+    if (error && error.name === "TokenExpiredError") {
+      logger.warn("Token expired:", { expiredAt: error.expiredAt })
+      return res.status(401).json({ error: "Token expired", expiredAt: error.expiredAt })
+    }
 
-    // Get user from database
+    logger.error("Token verification failed:", error)
+    return res.status(401).json({ error: "Invalid token" })
+  }
+
+  // Now perform database lookup in its own error scope so DB failures don't surface as token errors
+  try {
     const result = await pool.query("SELECT id, email, role, permissions, is_active FROM users WHERE id = $1", [
       decoded.userId,
     ])
+
+    if (!result || !result.rows) {
+      logger.error('Database lookup returned invalid result during authentication', { userId: decoded.userId, result })
+      return res.status(503).json({ error: 'Service unavailable' })
+    }
 
     if (result.rows.length === 0) {
       return res.status(401).json({ error: "User not found" })
@@ -67,13 +84,17 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
       permissions: user.permissions,
     }
 
-    // Update last login
-    await pool.query("UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1", [user.id])
+    // Update last login (best-effort; log but don't fail auth if update errors)
+    try {
+      await pool.query("UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1", [user.id])
+    } catch (updateErr) {
+      logger.warn('Failed to update last_login for user during authentication', { userId: user.id, error: updateErr })
+    }
 
     next()
-  } catch (error) {
-    logger.error("Token verification failed:", error)
-    return res.status(403).json({ error: "Invalid token" })
+  } catch (dbError) {
+    logger.error('Database error during authentication:', dbError)
+    return res.status(503).json({ error: 'Service unavailable' })
   }
 }
 

@@ -1,23 +1,19 @@
-import { Pool } from 'pg'
 import dotenv from 'dotenv'
 import path from 'path'
-
 dotenv.config({ path: path.join(__dirname, '../.env') })
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || process.env.POSTGRES_URL,
-  ssl: { rejectUnauthorized: false }
-})
+const dbModule = require('../src/lib/db')
+const db = dbModule.default || dbModule
 
 async function checkDocumentCounts() {
   const projectId = 'd5396430-afde-466d-8240-9ff98e4cb419'
   
   try {
+    await db.initDb()
     console.log('Checking document counts for project:', projectId)
     console.log('─'.repeat(80))
     
     // Total documents (including deleted)
-    const totalResult = await pool.query(`
+    const totalResult = await db.query(`
       SELECT COUNT(*) as count
       FROM documents
       WHERE project_id = $1
@@ -26,7 +22,7 @@ async function checkDocumentCounts() {
     console.log('\n📊 Total Documents (including deleted):', totalResult.rows[0].count)
     
     // Active documents (excluding deleted)
-    const activeResult = await pool.query(`
+    const activeResult = await db.query(`
       SELECT COUNT(*) as count
       FROM documents
       WHERE project_id = $1 AND deleted_at IS NULL
@@ -35,7 +31,7 @@ async function checkDocumentCounts() {
     console.log('📊 Active Documents (deleted_at IS NULL):', activeResult.rows[0].count)
     
     // Deleted documents
-    const deletedResult = await pool.query(`
+    const deletedResult = await db.query(`
       SELECT COUNT(*) as count
       FROM documents
       WHERE project_id = $1 AND deleted_at IS NOT NULL
@@ -44,7 +40,7 @@ async function checkDocumentCounts() {
     console.log('📊 Deleted Documents (soft-deleted):', deletedResult.rows[0].count)
     
     // List all documents
-    const docsResult = await pool.query(`
+    const docsResult = await db.query(`
       SELECT 
         d.id,
         d.name,
@@ -74,7 +70,7 @@ async function checkDocumentCounts() {
     })
     
     // Count by status (active only)
-    const statusResult = await pool.query(`
+    const statusResult = await db.query(`
       SELECT 
         status,
         COUNT(*) as count
@@ -93,7 +89,7 @@ async function checkDocumentCounts() {
   } catch (error) {
     console.error('Error:', error)
   } finally {
-    await pool.end()
+    await db.end()
   }
 }
 

@@ -18,7 +18,7 @@
     "test:db-unit": "jest __tests__/lib/db.test.ts",
     "test:db-integration": "jest __tests__/integration/db-integration.test.ts",
     "test:queue-service": "jest server/src/__tests__/services/jobs/queue/QueueService.test.ts",
-    "test:queue-adapters": "jest server/src/__tests__/services/jobs/queue/BullQueueAdapter.test.ts",
+    "test:queue-adapters": "jest server/src/__tests__/services/jobs/queue/RabbitQueueAdapter.test.ts",
     "test:queue-integration": "jest server/src/__tests__/services/jobs/queue/integration.test.ts",
     "test:queue-performance": "jest server/src/__tests__/services/jobs/queue/performance.benchmark.ts",
     "test:queue-load": "jest server/src/__tests__/services/jobs/queue/load-test.ts",
@@ -38,7 +38,8 @@
     "migrate:051": "node server/scripts/migrate-051.js",
     "migrate:401": "node server/scripts/migrate-401.js",
     "migrate:350": "tsx server/scripts/migrate-350-pmbok8-domain-alignment.ts",
-    "migrate:361": "tsx server/scripts/run-migration-361.ts"
+    "migrate:361": "tsx server/scripts/run-migration-361.ts",
+    "migrate:660": "tsx server/scripts/run-migration-660.ts"
   },
   "dependencies": {
     "@adobe/pdfservices-node-sdk": "4.0.1",
@@ -83,7 +84,6 @@
     "@vercel/postgres": "^0.10.0",
     "@vercel/speed-insights": "^1.3.1",
     "bcryptjs": "latest",
-    "bull": "latest",
     "chalk": "^4.1.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -105,6 +105,7 @@
     "http": "latest",
     "input-otp": "latest",
     "inquirer": "^9.2.0",
+    "ioredis": "^5.9.0",
     "joi": "latest",
     "jsonwebtoken": "latest",
     "jspdf": "^3.0.3",

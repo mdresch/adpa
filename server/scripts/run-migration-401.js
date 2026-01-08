@@ -1,4 +1,4 @@
-const { Pool } = require('pg');
+const db = require('../src/lib/db');
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
@@ -86,7 +86,7 @@ async function runMigration() {
     throw error;
   } finally {
     client.release();
-    await pool.end();
+    try { await db.end() } catch (e) {}
   }
 }
 

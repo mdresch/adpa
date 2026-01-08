@@ -3,6 +3,9 @@
  * Defines TypeScript interfaces for comprehensive context gathering
  */
 
+// Re-export retrieval configs used by context gathering consumers
+export type { SemanticSearchConfig, RelevanceScoringConfig } from '../contextRetrieval/types'
+
 // Placeholder types for detailed data structures
 // These should be properly defined based on actual data models
 export type UserProfileData = Record<string, any>
@@ -23,6 +26,15 @@ export type UserToolPreferenceData = Record<string, any>
 export type UserWorkflowPreferenceData = Record<string, any>
 export type UserSecurityPreferenceData = Record<string, any>
 export type UserPrivacyPreferenceData = Record<string, any>
+export type UserLocalePreferenceData = Record<string, any>
+export type UserNotificationPreferenceData = Record<string, any>
+export type UserAccessibilityPreferenceData = Record<string, any>
+export type UserDeviceProfileData = Record<string, any>
+export type UserSecurityPostureData = Record<string, any>
+export type UserTimePreferenceData = Record<string, any>
+export type UserProjectAffiliationData = Record<string, any>
+export type UserSuccessData = Record<string, any>
+export type UserGapData = Record<string, any>
 export type DocumentHistoryData = Record<string, any>
 export type UsagePatternData = Record<string, any>
 export type QualityTrendData = Record<string, any>
@@ -87,12 +99,29 @@ export type IndustryStandardData = Record<string, any>
 export type RegulatoryRequirementData = Record<string, any>
 export type CompetitorAnalysisData = Record<string, any>
 export type TechnologyTrendData = Record<string, any>
-export type BestPracticeData = Record<string, any>
+export type DataRelationshipData = Record<string, any>
+export type ContextHierarchyData = Record<string, any>
+export type ContextDependencyData = Record<string, any>
 export type CaseStudyData = Record<string, any>
 export type ResearchData = Record<string, any>
 export type TemplateVariableData = Record<string, any>
 export type TemplateStructureData = Record<string, any>
 export type TemplateMetadataData = Record<string, any>
+export type PerformanceForecastData = Record<string, any>
+export type TemplateCollaborationData = Record<string, any>
+export type TemplateVersionHistoryData = Record<string, any>
+export type TemplateApprovalHistoryData = Record<string, any>
+export type IntegratedSourceData = Record<string, any>
+export type CrossReferenceData = Record<string, any>
+export type TemplateImprovementData = Record<string, any>
+export type TemplateDependencyData = Record<string, any>
+export type TemplateCustomizationData = Record<string, any>
+export type TemplateValidationRuleData = Record<string, any>
+export type TemplateAccessControlData = Record<string, any>
+export type TemplateUsageStatsData = Record<string, any>
+export type TemplateQualityMetricsData = Record<string, any>
+export type TemplatePerformanceMetricsData = Record<string, any>
+export type TemplateFeedbackData = Record<string, any>
 
 export interface IContextGatheringStage {
   // Main execution method
@@ -229,6 +258,45 @@ export interface ProjectContextData {
   lessons_learned: LessonLearnedData[]
   best_practices: BestPracticeData[]
   performance_metrics: ProjectPerformanceMetrics
+  baseline_snapshots?: BaselineSnapshotData[]
+  baseline_drift_findings?: BaselineDriftFindingData[]
+  drift_root_causes?: DriftRootCauseData[]
+  metadata: Record<string, any>
+}
+
+export interface BaselineSnapshotData {
+  baseline_id: string
+  baseline_type: string
+  created_at: Date
+  created_by: string
+  scope_snapshot: Record<string, any>
+  schedule_snapshot: Record<string, any>
+  cost_snapshot: Record<string, any>
+  metadata: Record<string, any>
+}
+
+export interface BaselineDriftFindingData {
+  drift_id: string
+  category: string
+  severity: string
+  status: string
+  detected_at: Date
+  resolved_at?: Date
+  impact_area: string
+  variance_value: number | null
+  variance_units: string
+  description: string
+  metadata: Record<string, any>
+}
+
+export interface DriftRootCauseData {
+  root_cause_id: string
+  cause_category: string
+  cause_detail: string
+  recurring: boolean
+  proposed_actions: string[]
+  owner: string
+  last_updated: Date
   metadata: Record<string, any>
 }
 
@@ -240,6 +308,15 @@ export interface UserProfileContextData {
   user_writing_style: UserWritingStyleData
   user_domain_knowledge: UserDomainKnowledgeData[]
   user_collaboration_preferences: UserCollaborationPreferenceData[]
+  user_locale_preferences: UserLocalePreferenceData
+  user_notification_preferences: UserNotificationPreferenceData
+  user_accessibility_preferences: UserAccessibilityPreferenceData
+  user_device_profile: UserDeviceProfileData
+  user_security_posture: UserSecurityPostureData
+  user_time_preferences: UserTimePreferenceData
+  user_project_affiliations: UserProjectAffiliationData[]
+  user_recent_successes: UserSuccessData[]
+  user_known_gaps: UserGapData[]
   user_performance_history: UserPerformanceHistoryData
   user_learning_preferences: UserLearningPreferenceData
   user_access_patterns: UserAccessPatternData[]

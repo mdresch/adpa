@@ -1,18 +1,15 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { Pool } from 'pg';
+const dbModule = require('../src/lib/db')
+const db = dbModule.default || dbModule
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-});
-
 async function checkDocuments() {
   try {
-    const docs = await pool.query(`
+    await db.initDb()
+    const docs = await db.query(`
       SELECT 
         id, 
         name,
@@ -41,7 +38,7 @@ async function checkDocuments() {
       console.log('');
     });
 
-    await pool.end();
+    await db.end();
   } catch (error) {
     console.error('Error:', error);
     process.exit(1);

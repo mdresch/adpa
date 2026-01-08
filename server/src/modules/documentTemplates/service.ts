@@ -71,7 +71,7 @@ export class DocumentTemplateService {
 
     // Count total matching templates
     let countQuery = "SELECT COUNT(*) FROM templates t WHERE (t.is_public = true OR t.created_by = $1) AND t.deleted_at IS NULL"
-    const countParams = [user.id]
+    const countParams: Array<string | boolean> = [user.id]
     let countParamCount = 1
 
     if (framework) {

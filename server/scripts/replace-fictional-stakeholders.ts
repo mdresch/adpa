@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { Pool } from 'pg';
+const db = require('../src/lib/db');
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
@@ -27,7 +27,7 @@ async function replaceFictionalStakeholders() {
     console.log('\n🔍 Finding documents in ADPA Unicorn COAS project...\n');
 
     // Get all documents in the project
-    const docs = await pool.query(`
+    const docs = await db.query(`
       SELECT id, name, content, LENGTH(content) as content_length
       FROM documents
       WHERE project_id = $1
@@ -60,7 +60,7 @@ async function replaceFictionalStakeholders() {
 
       if (docReplacements > 0) {
         // Update the document
-        await pool.query(
+        await db.query(
           'UPDATE documents SET content = $1, updated_at = NOW() WHERE id = $2',
           [updatedContent, doc.id]
         );
@@ -76,7 +76,7 @@ async function replaceFictionalStakeholders() {
     console.log(`   Total replacements: ${totalReplacements}`);
     console.log(`\n✅ All fictional stakeholder names replaced with "Vacancy"`);
 
-    await pool.end();
+    try { await db.end() } catch (e) {}
   } catch (error) {
     console.error('Error:', error);
     process.exit(1);

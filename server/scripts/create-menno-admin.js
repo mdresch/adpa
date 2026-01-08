@@ -10,8 +10,10 @@
  */
 
 require('dotenv').config({ path: 'server/.env' });
+
+(async function(){ try{ await db.initDb() } catch(e){} })();
 const bcrypt = require('bcryptjs');
-const { Pool } = require('pg');
+const db = require('../src/lib/db');
 
 // Use the same connection config as the main server
 const databaseUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL;
@@ -59,7 +61,7 @@ async function createMennoAdmin() {
     const role = 'admin';
 
     // Check if user exists
-    const existing = await pool.query('SELECT id, email FROM users WHERE email = $1', [email]);
+    const existing = await db.query('SELECT id, email FROM users WHERE email = $1', [email]);
     
     if (existing.rows.length > 0) {
       console.log('⚠️  User already exists. Updating to admin with full permissions...\n');
@@ -67,7 +69,7 @@ async function createMennoAdmin() {
       // Update existing user to admin with full permissions
       const passwordHash = await bcrypt.hash(password, 12);
       
-      await pool.query(`
+      await db.query(`
         UPDATE users 
         SET 
           password_hash = $1,
@@ -133,7 +135,7 @@ async function createMennoAdmin() {
       const passwordHash = await bcrypt.hash(password, 12);
       
       // Create new user
-      const result = await pool.query(`
+      const result = await db.query(`
         INSERT INTO users (
           email, password_hash, name, role, permissions, is_active
         ) VALUES ($1, $2, $3, $4, $5::jsonb, $6)
@@ -206,7 +208,7 @@ async function createMennoAdmin() {
     console.error(error);
     process.exit(1);
   } finally {
-    await pool.end();
+    try { await db.end() } catch (e) {}
   }
 }
 

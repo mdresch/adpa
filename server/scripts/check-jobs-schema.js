@@ -1,18 +1,13 @@
-const { Pool } = require('pg');
 require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
+const dbModule = require('../src/lib/db')
+const db = dbModule.default || dbModule
 
 async function checkSchema() {
-  const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: process.env.DB_SSL === 'true' || process.env.DATABASE_URL?.includes('supabase')
-      ? { rejectUnauthorized: true }
-      : false
-  });
-
   try {
+    await db.initDb()
     console.log('🔍 Checking jobs table schema...\n');
     
-    const result = await pool.query(`
+    const result = await db.query(`
       SELECT column_name, data_type, is_nullable, column_default
       FROM information_schema.columns
       WHERE table_name = 'jobs'
@@ -25,7 +20,7 @@ async function checkSchema() {
   } catch (error) {
     console.error('Error:', error);
   } finally {
-    await pool.end();
+    await db.end();
   }
 }
 

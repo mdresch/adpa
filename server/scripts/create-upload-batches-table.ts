@@ -9,7 +9,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { Pool } from 'pg';
+const db = require('../src/lib/db');
 import fs from 'fs';
 import path from 'path';
 
@@ -36,7 +36,7 @@ async function createUploadBatchesTable() {
   try {
     // Test connection
     console.log('📡 Connecting to database...');
-    await pool.query('SELECT NOW()');
+    await db.query('SELECT NOW()');
     console.log('✅ Connected to database\n');
 
     // Read the migration file
@@ -47,12 +47,12 @@ async function createUploadBatchesTable() {
     console.log('─'.repeat(60));
 
     // Execute the migration
-    await pool.query(sql);
+    await db.query(sql);
 
     console.log('✅ upload_batches table created successfully!\n');
 
     // Verify table exists
-    const result = await pool.query(`
+    const result = await db.query(`
       SELECT table_name, column_name, data_type 
       FROM information_schema.columns 
       WHERE table_name = 'upload_batches'
@@ -76,7 +76,7 @@ async function createUploadBatchesTable() {
       process.exit(1);
     }
   } finally {
-    await pool.end();
+    try { await db.end() } catch (e) {}
     process.exit(0);
   }
 }

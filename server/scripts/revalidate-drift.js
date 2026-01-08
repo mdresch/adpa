@@ -1,5 +1,7 @@
-const { Pool } = require('pg');
+const db = require('../src/lib/db');
 require('dotenv').config();
+
+(async function(){ try{ await db.initDb() } catch(e){} })();
 
 const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
 
@@ -15,7 +17,7 @@ async function revalidateDrift() {
     console.log('🔍 Finding Communications Management Plan document...');
     
     // Find the document
-    const docResult = await pool.query(`
+    const docResult = await db.query(`
       SELECT d.id, d.name, d.project_id, d.content
       FROM documents d
       WHERE d.name LIKE '%Communications Management Plan%'
@@ -36,7 +38,7 @@ async function revalidateDrift() {
     console.log(`   Content length: ${doc.content?.length || 0} chars`);
     
     // Find active baseline
-    const baselineResult = await pool.query(`
+    const baselineResult = await db.query(`
       SELECT id, version, status
       FROM project_baselines
       WHERE project_id = $1
@@ -73,7 +75,7 @@ async function revalidateDrift() {
       console.log('   ✅ No drift detected - document aligns with baseline!');
       
       // Mark old drifts as resolved
-      const resolveResult = await pool.query(`
+      const resolveResult = await db.query(`
         UPDATE baseline_drift_detection 
         SET status = 'resolved',
             resolution_notes = 'Drift resolved via manual re-validation script',
@@ -95,7 +97,7 @@ async function revalidateDrift() {
     console.error('❌ Error:', error.message);
     console.error(error.stack);
   } finally {
-    await pool.end();
+    try { await db.end() } catch (e) {}
   }
 }
 

@@ -7,7 +7,7 @@
  */
 
 import { QueueService } from './QueueService'
-import { BullQueueAdapter } from './BullQueueAdapter'
+import type { IQueue } from './IQueue'
 import type { QueueServiceDependencies } from './QueueDependencies'
 import {
   PoolDatabaseAdapter,
@@ -15,7 +15,6 @@ import {
   RedisCacheAdapter,
   WinstonLoggerAdapter,
 } from './QueueDependencies'
-import type Bull from 'bull'
 import type { Pool } from 'pg'
 import type { Server as SocketIOServer } from 'socket.io'
 import type { Logger } from 'winston'
@@ -31,7 +30,7 @@ const { logger } = require('../../../utils/logger')
  * (Bull queues, PostgreSQL pool, Socket.IO, etc.) with their adapters.
  */
 export function createQueueService(
-  queues: Map<QueueName, Bull.Queue>,
+  queues: Map<QueueName, IQueue>,
   pool: Pool,
   io: SocketIOServer,
   cache: any,
@@ -88,9 +87,8 @@ export function createQueueService(
   const queueService = new QueueService(dependencies)
 
   // Register all queues with adapters
-  for (const [queueName, bullQueue] of queues) {
-    const adapter = new BullQueueAdapter(bullQueue)
-    queueService.registerQueue(queueName, adapter)
+  for (const [queueName, queue] of queues) {
+    queueService.registerQueue(queueName, queue)
   }
 
   return queueService
@@ -121,7 +119,9 @@ export function createMockQueueService(
       del: async () => { },
       exists: async () => false,
     },
-    aiService: mockDependencies.aiService || {},
+    aiService: mockDependencies.aiService || {
+      generateText: async () => ({ content: '' })
+    },
     contextAwareAIService: mockDependencies.contextAwareAIService,
     logger: mockDependencies.logger || {
       info: () => { },

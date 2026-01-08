@@ -19,14 +19,15 @@
 import dotenv from 'dotenv'
 dotenv.config({ path: '.env.local' })
 
-import { Pool } from 'pg'
+import * as path from 'path'
+import * as dotenv from 'dotenv'
+dotenv.config({ path: '.env.local' })
+const dbModule = require('../src/lib/db')
+const db = dbModule.default || dbModule
 import bcrypt from 'bcryptjs'
 import { v4 as uuidv4 } from 'uuid'
 
-const pool = new Pool({
-  connectionString: process.env.POSTGRES_URL,
-  ssl: process.env.DB_SSL !== 'false' ? { rejectUnauthorized: false } : undefined
-})
+// using centralized DB wrapper
 
 async function createAdminUser() {
   const email = process.env.ADMIN_EMAIL || 'admin@adpa.local'
@@ -41,16 +42,15 @@ async function createAdminUser() {
   console.log('')
 
   try {
-    // Connect to database
-    await pool.connect()
-    console.log('✅ Database connected')
+    await db.initDb()
+    console.log('✅ Database initialized')
 
     // Hash password
     console.log('🔐 Hashing password...')
     const passwordHash = await bcrypt.hash(password, 10)
 
     // Check if user already exists
-    const existingUser = await pool.query(
+    const existingUser = await db.query(
       'SELECT id, email, role FROM users WHERE email = $1',
       [email]
     )
@@ -59,7 +59,7 @@ async function createAdminUser() {
       console.log('⚠️  User already exists, updating...')
       
       // Update existing user to admin
-      await pool.query(
+      await db.query(
         `UPDATE users 
          SET password_hash = $1, role = 'admin', is_active = true, name = $2
          WHERE email = $3`,
@@ -74,7 +74,7 @@ async function createAdminUser() {
       
       // Create new admin user
       const userId = uuidv4()
-      await pool.query(
+      await db.query(
         `INSERT INTO users (id, email, password_hash, name, role, is_active, created_at)
          VALUES ($1, $2, $3, $4, 'admin', true, CURRENT_TIMESTAMP)`,
         [userId, email, passwordHash, name]
@@ -101,7 +101,7 @@ async function createAdminUser() {
     console.error('❌ Error creating admin user:', error)
     process.exit(1)
   } finally {
-    await pool.end()
+    await db.end()
   }
 }
 

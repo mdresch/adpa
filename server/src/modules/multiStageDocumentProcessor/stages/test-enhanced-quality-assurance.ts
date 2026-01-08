@@ -45,50 +45,98 @@ async function testEnhancedQualityAssurance() {
       }
     },
     context: {
-      context_data: {
-        template_context: {
-          framework: 'BABOK'
-        },
-        project_context: {
-          stakeholders: [
-            {
-              stakeholder_id: 'stakeholder_001',
-              name: 'Business Analyst',
-              role: 'Primary Analyst'
-            }
-          ],
+      project_context: {
+        project_data: {
+          template_context: {
+            framework: 'BABOK'
+          },
           compliance_requirements: ['GDPR', 'SOX'],
           security_level: 'high',
           accessibility_level: 'AA',
           data_classification: 'confidential',
           target_audience: ['business_analysts', 'project_managers']
         },
-        user_context: {
+        stakeholders: [
+          {
+            stakeholder_id: 'stakeholder_001',
+            name: 'Business Analyst',
+            role: 'Primary Analyst',
+            email: 'stakeholder@example.com',
+            influence: 'medium',
+            interest: 'high',
+            requirements: []
+          }
+        ],
+        requirements: [],
+        constraints: [],
+        risks: []
+      },
+      user_context: {
+        user_profile: {
+          user_id: 'user_001',
+          name: 'QA Tester',
+          email: 'tester@example.com',
+          role: 'analyst',
+          department: 'QA',
+          expertise_areas: ['quality_assurance'],
+          experience_level: 'mid'
+        },
+        preferences: {
           language: 'en',
-          region: 'US'
+          timezone: 'UTC',
+          date_format: 'YYYY-MM-DD',
+          number_format: '#,###.##',
+          currency: 'USD',
+          units: 'metric'
+        },
+        expertise: {
+          domain_expertise: ['quality_assurance'],
+          technical_skills: [],
+          certifications: [],
+          experience_years: 5,
+          proficiency_level: {}
+        },
+        writing_style: {
+          tone: 'professional',
+          voice: 'third_person',
+          complexity: 'moderate',
+          length_preference: 'detailed'
         }
       },
-      quality_config: {
-        quality_gates: [
+      historical_context: {
+        similar_documents: [],
+        best_practices: [],
+        patterns: [],
+        trends: []
+      },
+      external_context: {
+        external_data: {},
+        api_responses: {},
+        integrations: []
+      },
+      stakeholder_context: {
+        stakeholders: [
           {
-            gate_id: 'content_quality_gate',
-            gate_name: 'Content Quality Gate',
-            threshold: 0.8,
-            criteria: [
-              {
-                criterion_id: 'readability',
-                criterion_name: 'Readability Score',
-                weight: 0.5
-              },
-              {
-                criterion_id: 'completeness',
-                criterion_name: 'Content Completeness',
-                weight: 0.5
-              }
-            ],
-            action_on_failure: 'warn'
+            stakeholder_id: 'stakeholder_001',
+            name: 'Business Analyst',
+            role: 'Primary Analyst',
+            interest_level: 'high',
+            influence_level: 'medium'
           }
-        ]
+        ],
+        total_stakeholders: 1
+      }
+    },
+    config: {
+      stage_id: 'quality_assurance_test',
+      stage_type: 'quality_assurance',
+      enabled: true,
+      timeout: 30000,
+      retry_attempts: 0,
+      quality_threshold: 0.8,
+      config: {
+        accessibility_level: 'AA',
+        data_classification: 'confidential'
       }
     },
     metadata: {

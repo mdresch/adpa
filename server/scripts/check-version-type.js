@@ -1,5 +1,7 @@
-const { Pool } = require('pg');
+const db = require('../src/lib/db');
 require('dotenv').config();
+
+(async function(){ try{ await db.initDb() } catch(e){} })();
 
 const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
 
@@ -11,7 +13,7 @@ const pool = new Pool({
 async function checkVersionType() {
   try {
     // Check column type
-    const typeResult = await pool.query(`
+    const typeResult = await db.query(`
       SELECT column_name, data_type, numeric_precision, numeric_scale 
       FROM information_schema.columns 
       WHERE table_name = 'documents' AND column_name = 'version'
@@ -21,7 +23,7 @@ async function checkVersionType() {
     console.log(JSON.stringify(typeResult.rows, null, 2));
     
     // Check some actual document versions
-    const docsResult = await pool.query(`
+    const docsResult = await db.query(`
       SELECT id, name, version 
       FROM documents 
       ORDER BY updated_at DESC 
@@ -34,7 +36,7 @@ async function checkVersionType() {
   } catch (error) {
     console.error('Error:', error.message);
   } finally {
-    await pool.end();
+    try { await db.end() } catch (e) {}
   }
 }
 

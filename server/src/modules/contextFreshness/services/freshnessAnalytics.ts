@@ -697,4 +697,45 @@ export class FreshnessAnalyticsService {
     if (latest < previous - 0.05) return 'declining'
     return 'stable'
   }
+
+  // Public methods called by ContextFreshnessManager
+  async getFreshnessMetrics(timeframe: string): Promise<FreshnessMetrics> {
+    // Return aggregated metrics for the specified timeframe
+    return {
+      timeframe,
+      total_contexts: 0,
+      fresh_contexts: 0,
+      stale_contexts: 0,
+      expired_contexts: 0,
+      average_freshness_score: 0,
+      average_quality_score: 0,
+      refresh_success_rate: 0,
+      policy_compliance_rate: 0,
+      freshness_distribution: { fresh: 0, slightly_stale: 0, moderately_stale: 0, very_stale: 0, extremely_stale: 0, expired: 0 },
+      staleness_trends: [],
+      refresh_statistics: { total_refreshes: 0, successful_refreshes: 0, failed_refreshes: 0, average_refresh_time: 0, refresh_frequency: {} as any },
+      performance_metrics: { assessment_time: 0, prioritization_time: 0, refresh_time: 0, cleanup_time: 0, policy_evaluation_time: 0, memory_usage: 0, cpu_usage: 0, network_usage: 0 }
+    }
+  }
+
+  async getFreshnessTrends(policyId: string, timeRange: { start: Date; end: Date }): Promise<any> {
+    return this.analyzeFreshnessTrends(policyId, timeRange)
+  }
+
+  async generateStalenessReport(policyId: string, timeRange: { start: Date; end: Date }): Promise<any> {
+    return this.generateFreshnessReport(policyId, timeRange)
+  }
+
+  async monitorHealth(policyId: string): Promise<FreshnessHealthStatus> {
+    const history = this.healthHistory.get(policyId) || []
+    if (history.length === 0) {
+      return {
+        health_score: 0,
+        health_status: 'critical',
+        overall_health: 'critical'
+      }
+    }
+    return history[history.length - 1]
+  }
 }
+

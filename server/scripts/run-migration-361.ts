@@ -6,7 +6,7 @@
  * and associated database objects. It supports both direct execution and dry-run mode.
  */
 
-import { Pool } from 'pg';
+const db = require('../src/lib/db');
 import * as fs from 'fs';
 import * as path from 'path';
 import * as url from 'url';
@@ -117,7 +117,7 @@ ${migrationSql}`);
     logger.error(`❌ Migration 361 failed:`, error instanceof Error ? error.message : String(error));
     process.exit(1);
   } finally {
-    await pool.end();
+    try { await db.end() } catch (e) {}
   }
 }
 

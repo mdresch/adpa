@@ -1,17 +1,13 @@
-import { Pool } from 'pg';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
-
 dotenv.config({ path: path.join(__dirname, '../.env') });
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false
-});
+const dbModule = require('../src/lib/db')
+const db = dbModule.default || dbModule
 
 async function checkSuggestions() {
   try {
-    const result = await pool.query(`
+    await db.initDb()
+    const result = await db.query(`
       SELECT id, status, priority, current_avg_quality, expected_quality_gain, created_at
       FROM template_improvement_suggestions
       WHERE template_id = '6c7ec59f-084b-4c55-8629-3e889ece985d'
@@ -33,7 +29,7 @@ async function checkSuggestions() {
 
     // Check what the API would return
     console.log('\n🔍 Simulating API filter (status=all):\n');
-    const apiResult = await pool.query(`
+    const apiResult = await db.query(`
       SELECT 
         tis.*,
         t.name as template_name
@@ -55,7 +51,7 @@ async function checkSuggestions() {
       console.log(`[${i+1}] ${row.priority.toUpperCase()} priority - Status: ${row.status} - Gain: +${row.expected_quality_gain}%`);
     });
 
-    await pool.end();
+    await db.end();
     process.exit(0);
   } catch (error: any) {
     console.error('Error:', error.message);

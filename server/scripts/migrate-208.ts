@@ -19,7 +19,7 @@
 import dotenv from 'dotenv'
 import path from 'path'
 import fs from 'fs'
-import { Pool } from 'pg'
+const db = require('../src/lib/db')
 import { logger } from '../src/utils/logger'
 
 // Load environment variables
@@ -205,7 +205,7 @@ async function runMigration(pool: Pool, migrationPath: string): Promise<void> {
         const preview = statement.replace(/\s+/g, ' ').substring(0, 80)
         console.log(`  Preview: ${preview}...`)
 
-        await pool.query(statement)
+        await db.query(statement)
         
         executedCount++
         console.log(`  ✅ Statement executed successfully`)
@@ -251,7 +251,7 @@ async function verifyMigration(pool: Pool): Promise<void> {
     console.log(`\n🔍 Verifying migration...`)
 
     // Check if project_tasks table exists
-    const projectTasksCheck = await pool.query(`
+    const projectTasksCheck = await db.query(`
       SELECT EXISTS (
         SELECT 1 FROM information_schema.tables 
         WHERE table_schema = 'public' AND table_name = 'project_tasks'
@@ -264,7 +264,7 @@ async function verifyMigration(pool: Pool): Promise<void> {
     console.log(`   ✅ project_tasks table exists`)
 
     // Check if task_assignments table exists
-    const taskAssignmentsCheck = await pool.query(`
+    const taskAssignmentsCheck = await db.query(`
       SELECT EXISTS (
         SELECT 1 FROM information_schema.tables 
         WHERE table_schema = 'public' AND table_name = 'task_assignments'
@@ -277,7 +277,7 @@ async function verifyMigration(pool: Pool): Promise<void> {
     console.log(`   ✅ task_assignments table exists`)
 
     // Check if task_summary view exists
-    const taskSummaryCheck = await pool.query(`
+    const taskSummaryCheck = await db.query(`
       SELECT EXISTS (
         SELECT 1 FROM information_schema.views 
         WHERE table_schema = 'public' AND table_name = 'task_summary'
@@ -290,8 +290,8 @@ async function verifyMigration(pool: Pool): Promise<void> {
     console.log(`   ✅ task_summary view exists`)
 
     // Get row counts
-    const projectTasksCount = await pool.query('SELECT COUNT(*) as count FROM project_tasks')
-    const taskAssignmentsCount = await pool.query('SELECT COUNT(*) as count FROM task_assignments')
+    const projectTasksCount = await db.query('SELECT COUNT(*) as count FROM project_tasks')
+    const taskAssignmentsCount = await db.query('SELECT COUNT(*) as count FROM task_assignments')
 
     console.log(`\n📊 Migration Statistics:`)
     console.log(`   project_tasks: ${projectTasksCount.rows[0].count} rows`)
@@ -351,8 +351,7 @@ async function main() {
     process.exit(1)
   } finally {
     if (pool) {
-      await pool.end()
-      console.log(`\n🔌 Database connection closed`)
+      try { await db.end() } catch (e) {}console.log(`\n🔌 Database connection closed`)
     }
   }
 }

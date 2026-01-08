@@ -362,6 +362,7 @@ export class ContextInjectionStage {
         return {
           ...context,
           project_context: {
+            project_data: context.project_context?.project_data || {},
             ...(context.project_context || {}),
             project_id: project.id,
             project_name: project.name,
@@ -1673,20 +1674,20 @@ Return the engagement-optimized content that maximizes stakeholder interest and 
     
     try {
       // Extract stakeholders from various context sources
-      const projectStakeholders = context.project_context?.stakeholders || []
-      const organizationStakeholders = context.organization_context?.key_personnel || []
-      const documentStakeholders = context.document_context?.target_audience || []
+      const projectStakeholders = (context as any).project_context?.stakeholders || []
+      const organizationStakeholders = (context as any).organization_context?.key_personnel || []
+      const documentStakeholders = (context as any).document_context?.target_audience || []
       
       // Process project stakeholders
-      for (const stakeholder of projectStakeholders) {
+      for (const stakeholder of projectStakeholders as any[]) {
         stakeholders.push({
-          stakeholder_id: stakeholder.id || `proj_${Date.now()}_${Math.random()}`,
+          stakeholder_id: stakeholder.id || stakeholder.stakeholder_id || `proj_${Date.now()}_${Math.random()}`,
           stakeholder_type: 'project',
           name: stakeholder.name,
           role: stakeholder.role,
           department: stakeholder.department,
-          influence_level: stakeholder.influence_level || 'medium',
-          interest_level: stakeholder.interest_level || 'medium',
+          influence_level: stakeholder.influence_level || stakeholder.influence || 'medium',
+          interest_level: stakeholder.interest_level || stakeholder.interest || 'medium',
           information_needs: stakeholder.information_needs || [],
           communication_preferences: stakeholder.communication_preferences || [],
           expertise_areas: stakeholder.expertise_areas || [],
@@ -1697,7 +1698,7 @@ Return the engagement-optimized content that maximizes stakeholder interest and 
       }
       
       // Process organization stakeholders
-      for (const stakeholder of organizationStakeholders) {
+      for (const stakeholder of organizationStakeholders as any[]) {
         stakeholders.push({
           stakeholder_id: stakeholder.id || `org_${Date.now()}_${Math.random()}`,
           stakeholder_type: 'organization',
@@ -1717,19 +1718,20 @@ Return the engagement-optimized content that maximizes stakeholder interest and 
       
       // Process document-specific stakeholders
       for (const audience of documentStakeholders) {
+        const docAudience: any = audience
         stakeholders.push({
           stakeholder_id: `doc_${Date.now()}_${Math.random()}`,
           stakeholder_type: 'document',
-          name: audience.name || audience.role,
-          role: audience.role,
-          department: audience.department || 'Unknown',
-          influence_level: audience.priority === 'primary' ? 'high' : 'medium',
+          name: docAudience.name || docAudience.role,
+          role: docAudience.role,
+          department: docAudience.department || 'Unknown',
+          influence_level: docAudience.priority === 'primary' ? 'high' : 'medium',
           interest_level: 'high',
           information_needs: [],
-          communication_preferences: audience.preferences || [],
-          expertise_areas: audience.expertise_areas || [],
-          decision_authority: audience.decision_authority || 'none',
-          preferences: audience.preferences || {},
+          communication_preferences: docAudience.preferences || [],
+          expertise_areas: docAudience.expertise_areas || [],
+          decision_authority: docAudience.decision_authority || 'none',
+          preferences: docAudience.preferences || {},
           context: 'Document audience'
         })
       }
@@ -1768,8 +1770,9 @@ Return the engagement-optimized content that maximizes stakeholder interest and 
       let enhancedContent = document.content.raw_content
       
       // Apply personalization modifications
-      if (personalizationResult.modifications && personalizationResult.modifications.length > 0) {
-        for (const modification of personalizationResult.modifications) {
+      const personalizationModifications = (personalizationResult as any)?.modifications || []
+      if (personalizationModifications.length > 0) {
+        for (const modification of personalizationModifications) {
           if (modification.modified_content && modification.confidence_score > 0.7) {
             enhancedContent = modification.modified_content
           }

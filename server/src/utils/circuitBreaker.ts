@@ -1,3 +1,57 @@
+type BreakerState = 'closed' | 'open' | 'half-open'
+
+export class CircuitBreaker {
+  private failureCount = 0
+  private successCount = 0
+  private state: BreakerState = 'closed'
+  private openedAt: number | null = null
+  private readonly failureThreshold: number
+  private readonly resetTimeoutMs: number
+
+  constructor(failureThreshold = 5, resetTimeoutMs = 30000) {
+    this.failureThreshold = failureThreshold
+    this.resetTimeoutMs = resetTimeoutMs
+  }
+
+  recordSuccess() {
+    this.successCount++
+    this.failureCount = 0
+    if (this.state === 'half-open') {
+      this.state = 'closed'
+      this.openedAt = null
+    }
+  }
+
+  recordFailure() {
+    this.failureCount++
+    if (this.failureCount >= this.failureThreshold && this.state === 'closed') {
+      this.state = 'open'
+      this.openedAt = Date.now()
+    }
+  }
+
+  isOpen(): boolean {
+    if (this.state === 'open' && this.openedAt) {
+      if (Date.now() - this.openedAt > this.resetTimeoutMs) {
+        // move to half-open to allow a trial
+        this.state = 'half-open'
+        this.openedAt = null
+        this.failureCount = 0
+        return false
+      }
+      return true
+    }
+    return false
+  }
+
+  getState(): BreakerState {
+    // Trigger evaluation of open -> half-open transition
+    this.isOpen()
+    return this.state
+  }
+}
+
+export default CircuitBreaker
 // Circuit breaker for provider API calls
 
 export enum CircuitState {

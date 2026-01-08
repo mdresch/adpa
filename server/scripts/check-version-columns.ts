@@ -2,7 +2,7 @@
  * Check documents table schema for version columns
  */
 
-import { Pool } from 'pg'
+const db = require('../src/lib/db')
 import * as dotenv from 'dotenv'
 import path from 'path'
 
@@ -19,7 +19,7 @@ async function checkSchema() {
   try {
     console.log('🔍 Checking documents table schema...\n')
     
-    const result = await pool.query(`
+    const result = await db.query(`
       SELECT column_name, data_type, character_maximum_length
       FROM information_schema.columns
       WHERE table_name = 'documents'
@@ -36,8 +36,7 @@ async function checkSchema() {
   } catch (error: any) {
     console.error('❌ Error:', error.message)
   } finally {
-    await pool.end()
-  }
+    try { await db.end() } catch (e) {}}
 }
 
 checkSchema()

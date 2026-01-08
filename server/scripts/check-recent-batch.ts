@@ -1,19 +1,15 @@
 import dotenv from 'dotenv';
 dotenv.config();
-
-import { Pool } from 'pg';
+const dbModule = require('../src/lib/db')
+const db = dbModule.default || dbModule
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-});
-
 async function checkRecentBatch() {
   try {
+    await db.initDb()
     // Get most recent batch
-    const batch = await pool.query(`
+    const batch = await db.query(`
       SELECT id, total_files, successful_files, failed_files, status, created_at
       FROM upload_batches
       ORDER BY created_at DESC
@@ -22,7 +18,7 @@ async function checkRecentBatch() {
 
     if (batch.rows.length === 0) {
       console.log('No batches found');
-      await pool.end();
+      await db.end();
       return;
     }
 
@@ -36,7 +32,7 @@ async function checkRecentBatch() {
     console.log('');
 
     // Get documents from this batch
-    const docs = await pool.query(`
+    const docs = await db.query(`
       SELECT 
         id,
         name,
@@ -67,7 +63,7 @@ async function checkRecentBatch() {
       console.log('');
     });
 
-    await pool.end();
+    await db.end();
   } catch (error) {
     console.error('Error:', error);
     process.exit(1);

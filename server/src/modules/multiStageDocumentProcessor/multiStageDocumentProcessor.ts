@@ -27,6 +27,7 @@ import type {
   ValidationResult,
   ProcessingMetrics,
   StageMetrics,
+  StageType,
   ProcessingHistory,
   ProcessingHistoryFilters
 } from './types'
@@ -230,10 +231,9 @@ export class MultiStageDocumentProcessor implements IMultiStageDocumentProcessor
   }
 
   async executeStage(stageId: string, input: StageInput): Promise<StageOutput> {
+    const startTime = Date.now()
     try {
       logger.info('Executing stage', { stageId, stageType: input.stage_type })
-
-      const startTime = Date.now()
 
       // Execute stage based on type
       let output: StageOutput
@@ -263,7 +263,7 @@ export class MultiStageDocumentProcessor implements IMultiStageDocumentProcessor
       const executionTime = Date.now() - startTime
 
       // Record stage metrics
-      await this.metricsCollector.recordStageMetrics(stageId, input.stage_type, executionTime, output.quality_score)
+      await this.metricsCollector.recordStageMetrics(stageId, input.stage_type, executionTime, output.quality_score, true)
 
       logger.info('Stage executed successfully', {
         stageId,
@@ -280,6 +280,16 @@ export class MultiStageDocumentProcessor implements IMultiStageDocumentProcessor
         stageType: input.stage_type,
         error: error.message
       })
+      const executionTime = Date.now() - startTime
+      try {
+        await this.metricsCollector.recordStageMetrics(stageId, input.stage_type, executionTime, 0, false)
+      } catch (metricsError) {
+        logger.warn('Failed to record failed stage metrics', {
+          stageId,
+          stageType: input.stage_type,
+          error: (metricsError as Error).message
+        })
+      }
       throw error
     }
   }
@@ -627,7 +637,7 @@ export class MultiStageDocumentProcessor implements IMultiStageDocumentProcessor
       successful_requests: 1,
       failed_requests: 0,
       average_processing_time: processingTime,
-      stage_metrics: {},
+      stage_metrics: this.buildEmptyStageMetrics(),
       quality_metrics: {
         average_quality_score: stageResults.reduce((sum, stage) => sum + stage.output.quality_score, 0) / stageResults.length,
         quality_distribution: {},
@@ -651,6 +661,31 @@ export class MultiStageDocumentProcessor implements IMultiStageDocumentProcessor
         }
       }
     }
+  }
+
+  private buildEmptyStageMetrics(): Record<StageType, StageMetrics> {
+    const stageTypes: StageType[] = [
+      'context_gathering',
+      'template_processing',
+      'ai_generation',
+      'context_injection',
+      'quality_assurance',
+      'output_formatting'
+    ]
+
+    return stageTypes.reduce((acc, stageType) => {
+      acc[stageType] = {
+        stage_id: stageType,
+        stage_type: stageType,
+        total_executions: 0,
+        successful_executions: 0,
+        failed_executions: 0,
+        average_execution_time: 0,
+        quality_scores: [],
+        error_rates: []
+      }
+      return acc
+    }, {} as Record<StageType, StageMetrics>)
   }
 
   private async processDocumentInBackground(request: DocumentProcessingRequest, jobId: string): Promise<void> {

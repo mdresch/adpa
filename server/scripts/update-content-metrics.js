@@ -7,8 +7,10 @@
  * Usage: node scripts/update-content-metrics.js
  */
 
-const { Pool } = require('pg');
+const db = require('../src/lib/db');
 require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
+
+(async function(){ try{ await db.initDb() } catch(e){} })();
 
 async function updateContentMetrics() {
   const pool = new Pool({
@@ -22,7 +24,7 @@ async function updateContentMetrics() {
     console.log('🔍 Fetching documents with missing content metrics...');
     
     // Get documents that don't have sentence_count or paragraph_count
-    const result = await pool.query(`
+    const result = await db.query(`
       SELECT id, name, content
       FROM documents
       WHERE (sentence_count IS NULL OR sentence_count = 0 
@@ -52,7 +54,7 @@ async function updateContentMetrics() {
         const paragraphCount = (content.match(/\n\n/g) || []).length + 1;
         
         // Update document
-        await pool.query(
+        await db.query(
           `UPDATE documents 
            SET sentence_count = $1, paragraph_count = $2 
            WHERE id = $3`,
@@ -79,7 +81,7 @@ async function updateContentMetrics() {
     console.error('❌ Fatal error:', error);
     process.exit(1);
   } finally {
-    await pool.end();
+    try { await db.end() } catch (e) {}
   }
 }
 

@@ -561,12 +561,16 @@ router.post(
       const jobId = jobResult.rows[0].id
 
       // Enqueue baseline extraction
-      await baselineQueue.add('baseline-extract', {
-        jobId,
-        userId,
-        project_id: projectId,
-        project_name: projectName
-      })
+      await baselineQueue.add(
+        'baseline-extract',
+        {
+          jobId,
+          userId,
+          project_id: projectId,
+          project_name: projectName
+        },
+        { jobId }
+      )
 
       res.json({
         success: true,

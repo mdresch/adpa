@@ -2,8 +2,8 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { Pool } from 'pg';
-
+const dbModule = require('../src/lib/db')
+const db = dbModule.default || dbModule
 async function checkStatus() {
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
   
@@ -16,7 +16,8 @@ async function checkStatus() {
     console.log('📦 Recent Upload Batches:');
     console.log('═'.repeat(80));
     
-    const batches = await pool.query(`
+    await db.initDb()
+    const batches = await db.query(`
       SELECT 
         id, 
         project_id, 
@@ -49,7 +50,7 @@ async function checkStatus() {
     console.log('\n\n📊 Recent Assessments:');
     console.log('═'.repeat(80));
     
-    const assessments = await pool.query(`
+    const assessments = await db.query(`
       SELECT 
         id, 
         batch_id, 
@@ -79,7 +80,7 @@ async function checkStatus() {
     console.log('\n\n📄 Recent Documents:');
     console.log('═'.repeat(80));
     
-    const docs = await pool.query(`
+    const docs = await db.query(`
       SELECT 
         id, 
         name, 
@@ -104,7 +105,7 @@ async function checkStatus() {
       });
     }
 
-    await pool.end();
+    await db.end();
     console.log('\n✅ Status check complete!\n');
     process.exit(0);
   } catch (err: any) {

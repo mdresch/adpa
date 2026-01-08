@@ -1,4 +1,4 @@
-import { Pool } from 'pg'
+const db = require('../src/lib/db')
 import * as dotenv from 'dotenv'
 
 dotenv.config()
@@ -13,7 +13,7 @@ async function cleanupOrphanedRegenerations() {
     console.log('\n🧹 Cleaning up orphaned regenerated documents...\n')
 
     // Find all regenerated documents (parent_document_id IS NOT NULL)
-    const orphanedDocs = await pool.query(
+    const orphanedDocs = await db.query(
       `SELECT id, name, semantic_version, parent_document_id, created_at, project_id
        FROM documents
        WHERE parent_document_id IS NOT NULL
@@ -42,7 +42,7 @@ async function cleanupOrphanedRegenerations() {
     console.log('🗑️  Deleting orphaned regenerations (cascading from leaves to roots)...\n')
 
     // Use recursive CTE to delete in the right order (children first)
-    const deleteResult = await pool.query(
+    const deleteResult = await db.query(
       `WITH RECURSIVE doc_tree AS (
         -- Find leaf nodes (documents with no children)
         SELECT d.id, d.name, d.parent_document_id, 0 as depth
@@ -78,8 +78,7 @@ async function cleanupOrphanedRegenerations() {
   } catch (error: any) {
     console.error('❌ Error:', error.message)
   } finally {
-    await pool.end()
-  }
+    try { await db.end() } catch (e) {}}
 }
 
 cleanupOrphanedRegenerations()
