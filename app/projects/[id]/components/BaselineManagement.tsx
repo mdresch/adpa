@@ -59,11 +59,32 @@ interface Baseline {
   id: string
   project_id: string
   version: number
-  scope_baseline?: string | { key_deliverables?: any[] }  // JSONB - can be string or parsed object
-  technical_baseline?: string | { technology_stack?: any[] }  // JSONB - can be string or parsed object
-  timeline_baseline?: string | { project_duration?: string; key_milestones?: any[] }  // JSONB - can be string or parsed object
-  cost_baseline?: string | { total_budget?: number | string; cost_categories?: any[] }  // JSONB - can be string or parsed object
-  success_criteria?: string | { kpis?: any[] }  // JSONB - can be string or parsed object
+  scope_baseline?: string | {           // JSONB - can be string or parsed object
+    key_deliverables?: any[];
+    deliverables?: any[];
+    constraints?: any[];
+    requirements?: any[];
+  }
+  technical_baseline?: string | {       // JSONB - can be string or parsed object
+    technology_stack?: any[];
+  }
+  timeline_baseline?: string | {        // JSONB - can be string or parsed object
+    project_duration?: string;
+    key_milestones?: any[];
+    phases?: any[];
+    activities?: any[];
+  }
+  cost_baseline?: string | {            // JSONB - can be string or parsed object
+    total_budget?: number | string;
+    cost_categories?: any[];
+  }
+  success_criteria?: string | {         // JSONB - can be string or parsed object
+    kpis?: any[];
+  }
+  resource_baseline?: string | {        // JSONB - resource allocation data
+    stakeholders?: any[];
+    team_members?: any[];
+  }
   extracted_from_documents?: string[]
   status: 'pending' | 'approved' | 'declined' | 'active'
   created_by: string
@@ -482,7 +503,7 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
 
               {/* Baseline Components */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                {baseline.scope_baseline && (
+                {baseline.scope_baseline && typeof baseline.scope_baseline === 'object' && (
                   <Card>
                     <CardHeader className="pb-3">
                       <CardTitle className="text-sm flex items-center gap-2">
@@ -505,7 +526,7 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
                   </Card>
                 )}
 
-                {baseline.technical_baseline && (
+                {baseline.technical_baseline && typeof baseline.technical_baseline === 'object' && (
                   <Card>
                     <CardHeader className="pb-3">
                       <CardTitle className="text-sm flex items-center gap-2">
@@ -528,7 +549,7 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
                   </Card>
                 )}
 
-                {baseline.timeline_baseline && (
+                {baseline.timeline_baseline && typeof baseline.timeline_baseline === 'object' && (
                   <Card>
                     <CardHeader className="pb-3">
                       <CardTitle className="text-sm flex items-center gap-2">
@@ -547,7 +568,7 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
                   </Card>
                 )}
 
-                {baseline.cost_baseline && (
+                {baseline.cost_baseline && typeof baseline.cost_baseline === 'object' && (
                   <Card>
                     <CardHeader className="pb-3">
                       <CardTitle className="text-sm flex items-center gap-2">
@@ -570,7 +591,7 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
                   </Card>
                 )}
 
-                {baseline.success_criteria && (
+                {baseline.success_criteria && typeof baseline.success_criteria === 'object' && (
                   <Card>
                     <CardHeader className="pb-3">
                       <CardTitle className="text-sm flex items-center gap-2">
@@ -1177,16 +1198,16 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
                       <div className="flex items-center justify-between mb-2">
                         <Target className="h-5 w-5 text-blue-600" />
                         <span className="text-2xl font-bold text-blue-900">
-                          {(viewingBaseline.scope_baseline?.deliverables?.length || 0) + 
-                           (viewingBaseline.scope_baseline?.constraints?.length || 0) + 
-                           (viewingBaseline.scope_baseline?.requirements?.length || 0)}
+                          {(typeof viewingBaseline.scope_baseline === 'object' ? viewingBaseline.scope_baseline?.deliverables?.length || 0 : 0) + 
+                           (typeof viewingBaseline.scope_baseline === 'object' ? viewingBaseline.scope_baseline?.constraints?.length || 0 : 0) + 
+                           (typeof viewingBaseline.scope_baseline === 'object' ? viewingBaseline.scope_baseline?.requirements?.length || 0 : 0)}
                         </span>
                       </div>
                       <p className="text-xs font-medium text-blue-900 mb-1">Scope Items</p>
                       <div className="text-xs text-blue-700 space-y-0.5">
-                        <p>{viewingBaseline.scope_baseline?.deliverables?.length || 0} Deliverables</p>
-                        <p>{viewingBaseline.scope_baseline?.constraints?.length || 0} Constraints</p>
-                        <p>{viewingBaseline.scope_baseline?.requirements?.length || 0} Requirements</p>
+                        <p>{typeof viewingBaseline.scope_baseline === 'object' ? viewingBaseline.scope_baseline?.deliverables?.length || 0 : 0} Deliverables</p>
+                        <p>{typeof viewingBaseline.scope_baseline === 'object' ? viewingBaseline.scope_baseline?.constraints?.length || 0 : 0} Constraints</p>
+                        <p>{typeof viewingBaseline.scope_baseline === 'object' ? viewingBaseline.scope_baseline?.requirements?.length || 0 : 0} Requirements</p>
                       </div>
                     </CardContent>
                   </Card>
@@ -1197,17 +1218,17 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
                       <div className="flex items-center justify-between mb-2">
                         <Clock className="h-5 w-5 text-purple-600" />
                         <span className="text-2xl font-bold text-purple-900">
-                          {(viewingBaseline.timeline_baseline?.phases?.length || 0) + 
-                           (viewingBaseline.timeline_baseline?.key_milestones?.length || 0) + 
-                           (viewingBaseline.timeline_baseline?.activities?.length || 0)}
+                          {(typeof viewingBaseline.timeline_baseline === 'object' ? viewingBaseline.timeline_baseline?.phases?.length || 0 : 0) + 
+                           (typeof viewingBaseline.timeline_baseline === 'object' ? viewingBaseline.timeline_baseline?.key_milestones?.length || 0 : 0) + 
+                           (typeof viewingBaseline.timeline_baseline === 'object' ? viewingBaseline.timeline_baseline?.activities?.length || 0 : 0)}
                         </span>
                       </div>
                       <p className="text-xs font-medium text-purple-900 mb-1">Timeline Items</p>
                       <div className="text-xs text-purple-700 space-y-0.5">
-                        <p>{viewingBaseline.timeline_baseline?.phases?.length || 0} Phases</p>
-                        <p>{viewingBaseline.timeline_baseline?.key_milestones?.length || 0} Milestones</p>
-                        <p>{viewingBaseline.timeline_baseline?.activities?.length || 0} Activities</p>
-                        <p className="text-[10px] mt-1 font-medium">{viewingBaseline.timeline_baseline?.project_duration || 'Duration TBD'}</p>
+                        <p>{typeof viewingBaseline.timeline_baseline === 'object' ? viewingBaseline.timeline_baseline?.phases?.length || 0 : 0} Phases</p>
+                        <p>{typeof viewingBaseline.timeline_baseline === 'object' ? viewingBaseline.timeline_baseline?.key_milestones?.length || 0 : 0} Milestones</p>
+                        <p>{typeof viewingBaseline.timeline_baseline === 'object' ? viewingBaseline.timeline_baseline?.activities?.length || 0 : 0} Activities</p>
+                        <p className="text-[10px] mt-1 font-medium">{typeof viewingBaseline.timeline_baseline === 'object' ? viewingBaseline.timeline_baseline?.project_duration || 'Duration TBD' : 'Duration TBD'}</p>
                       </div>
                     </CardContent>
                   </Card>
@@ -1218,8 +1239,8 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
                       <div className="flex items-center justify-between mb-2">
                         <Users className="h-5 w-5 text-green-600" />
                         <span className="text-2xl font-bold text-green-900">
-                          {(viewingBaseline.resource_baseline?.stakeholders?.length || 0) + 
-                           (viewingBaseline.resource_baseline?.team_members?.length || 0)}
+                          {(typeof viewingBaseline.resource_baseline === 'object' ? viewingBaseline.resource_baseline?.stakeholders?.length || 0 : 0) + 
+                           (typeof viewingBaseline.resource_baseline === 'object' ? viewingBaseline.resource_baseline?.team_members?.length || 0 : 0)}
                         </span>
                       </div>
                       <p className="text-xs font-medium text-green-900 mb-1">Resources</p>

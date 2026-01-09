@@ -3510,14 +3510,14 @@ export default function AssessmentResultsPage() {
                   <CardContent>
                     <div className="space-y-4">
                       {assessment.ai_recommendations.quick_wins.map((rec) => {
-                        const categoryColors = {
-                          structure: maturityTheme.colors.primary,
+                        const categoryColors: Record<string, { bg: string; border: string; text: string; accent: string }> = {
+                          structure: maturityTheme.colors.info,
                           completeness: maturityTheme.colors.warning,
                           compliance: maturityTheme.colors.info,
                           quality: maturityTheme.colors.success,
                           consistency: maturityTheme.colors.error,
                         };
-                        const categoryColor = categoryColors[rec.category] || maturityTheme.colors.primary;
+                        const categoryColor = categoryColors[rec.category] || maturityTheme.colors.info;
                         
                         return (
                           <div
