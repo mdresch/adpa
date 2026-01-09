@@ -25,6 +25,7 @@ export interface AIProvider {
   name: string
   type: string
   enabled: boolean
+  description?: string      // Provider description
   models?: string[]
 }
 
@@ -52,9 +53,12 @@ export interface ProcessingStep {
 
 export interface WorkflowConfig {
   compressionLevel: number
+  compressionMethod?: 'lossless' | 'lossy' | 'adaptive' | 'intelligent'  // Compression algorithm
   priorityStrategy: string
   maxDocuments: number
   includeStakeholders: boolean
+  includeMetadata?: boolean        // Include document metadata in processing
+  includeRelationships?: boolean   // Include relationship data
   contextOptimization: {
     enabled: boolean
     redundancyRemoval: boolean

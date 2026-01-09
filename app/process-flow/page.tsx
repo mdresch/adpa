@@ -164,15 +164,7 @@ export default function ProcessFlowWorkflow() {
   const [processingStatus, setProcessingStatus] = useState<'idle' | 'processing' | 'completed' | 'error'>('idle')
   const [contextWindow, setContextWindow] = useState<number[]>([2000000]) // 2M tokens
   const [currentTokenCount, setCurrentTokenCount] = useState(0)
-  const [processingSteps, setProcessingSteps] = useState<Array<{
-    id: string
-    name: string
-    status: string
-    progress: number
-    result?: any
-    details?: string
-    contextAdded?: string
-  }>>([])
+  const [processingSteps, setProcessingSteps] = useState<ProcessingStep[]>([])
   const [finalContext, setFinalContext] = useState<string>('')
   const [showContextPreview, setShowContextPreview] = useState(false)
   const [stepDetails, setStepDetails] = useState<{[key: string]: string}>({})

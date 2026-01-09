@@ -157,7 +157,18 @@ export default function ProgramDetailPage() {
   const [archiving, setArchiving] = useState(false);
   const [showArchiveDialog, setShowArchiveDialog] = useState(false);
   const [archiveCheck, setArchiveCheck] = useState<{ canArchive: boolean; reason?: string; unarchivedCount?: number } | null>(null);
-  const [assignedProjects, setAssignedProjects] = useState<Array<{ id: string; name: string; status: string }>>([]);
+  const [assignedProjects, setAssignedProjects] = useState<Array<{ 
+    id: string; 
+    name: string; 
+    status: string;
+    description?: string;
+    budget?: number;
+    start_date?: string;
+    end_date?: string;
+    owner_name?: string;
+    document_count?: number;
+    document_quality_score?: number;
+  }>>([]);
   const [projectsLoading, setProjectsLoading] = useState(false);
 
   useEffect(() => {

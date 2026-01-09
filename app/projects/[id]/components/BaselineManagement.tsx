@@ -72,6 +72,15 @@ interface Baseline {
   created_at: string
   updated_at: string
   metadata?: Record<string, unknown>
+  extraction_confidence?: number   // AI extraction confidence score (0-1)
+  completeness_score?: number      // Baseline completeness score (0-1)
+  key_deliverables?: Array<{       // Structured deliverables data
+    id?: string;
+    name?: string;
+    description?: string;
+    due_date?: string;
+    status?: string;
+  }> | string                       // Can be array or JSON string
 }
 
 interface DriftDetection {
