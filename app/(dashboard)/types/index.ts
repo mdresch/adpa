@@ -79,9 +79,12 @@ export interface AIProvider {
 
 export interface Job {
   id: string
-  status: 'queued' | 'processing' | 'completed' | 'failed'
+  status: 'queued' | 'processing' | 'completed' | 'failed' | 'running' | 'pending'
   type: string
   created_at: string
+  error_message?: string  // Error message when job fails
+  error?: string | any    // Alternative error property
+  startTime?: string      // When job started processing
   [key: string]: any
 }
 

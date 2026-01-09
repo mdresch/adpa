@@ -359,7 +359,13 @@ export default function DemoDocumentViewer() {
                           <div className="prose prose-lg max-w-none">
                             <ReactMarkdown
                               components={{
-                                code({ node, inline, className, children, ...props }) {
+                                code({ node, inline, className, children, ...props }: {
+                                  node?: any;
+                                  inline?: boolean;
+                                  className?: string;
+                                  children?: React.ReactNode;
+                                  [key: string]: any;
+                                }) {
                                   const match = /language-(\w+)/.exec(className || '');
                                   return !inline && match ? (
                                     <SyntaxHighlighter
@@ -378,7 +384,7 @@ export default function DemoDocumentViewer() {
                                     </code>
                                   );
                                 },
-                                table({ children }) {
+                                table({ children }: { children?: React.ReactNode }) {
                                   return (
                                     <div className="overflow-x-auto">
                                       <table className="min-w-full border-collapse border border-gray-300">
@@ -387,14 +393,14 @@ export default function DemoDocumentViewer() {
                                     </div>
                                   );
                                 },
-                                th({ children }) {
+                                th({ children }: { children?: React.ReactNode }) {
                                   return (
                                     <th className="border border-gray-300 px-4 py-2 bg-gray-50 font-semibold">
                                       {children}
                                     </th>
                                   );
                                 },
-                                td({ children }) {
+                                td({ children }: { children?: React.ReactNode }) {
                                   return (
                                     <td className="border border-gray-300 px-4 py-2">
                                       {children}

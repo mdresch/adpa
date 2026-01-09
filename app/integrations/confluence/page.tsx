@@ -87,6 +87,8 @@ export default function ConfluenceIntegrationPage() {
     }
     status: string
     is_active?: boolean
+    last_sync?: string       // Last synchronization timestamp
+    sync_status?: string     // Current sync status
   } | null>(null)
   const [spaces, setSpaces] = useState<ConfluenceSpace[]>([])
   const [searchResults, setSearchResults] = useState<ConfluencePage[]>([])
@@ -146,13 +148,10 @@ export default function ConfluenceIntegrationPage() {
       setLoading(true)
       // Get Confluence integration
       console.log("=== FETCH INTEGRATION DEBUG ===")
-      const response = await apiClient.getIntegrations()
-      console.log("Raw API response:", response)
-
-      const integrations = response.integrations || response // Handle both formats
+      const integrations = await apiClient.getIntegrations() // Returns array directly
       console.log("Integrations array:", integrations)
 
-      const confluenceIntegration = integrations.find(i => i.type === "confluence")
+      const confluenceIntegration = integrations.find((i: any) => i.type === "confluence")
       console.log("Found Confluence integration:", confluenceIntegration)
 
       if (confluenceIntegration) {
@@ -259,11 +258,10 @@ export default function ConfluenceIntegrationPage() {
 
       // Get the current integration ID dynamically
       console.log("Fetching latest integrations to get correct ID...")
-      const response = await apiClient.getIntegrations()
-      const integrations = response.integrations || response
+      const integrations = await apiClient.getIntegrations() // Returns array directly
       console.log("Found integrations:", integrations)
 
-      const currentIntegration = integrations.find(i => i.type === "confluence")
+      const currentIntegration = integrations.find((i: any) => i.type === "confluence")
       console.log("Current Confluence integration:", currentIntegration)
 
       if (currentIntegration) {
