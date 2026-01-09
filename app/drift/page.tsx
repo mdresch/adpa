@@ -12,7 +12,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { apiClient } from '@/lib/api'
-import { Loader2, RefreshCw, AlertTriangle, CheckCircle2, XCircle, TrendingUp, Search } from 'lucide-react'
+import { Loader2, RefreshCw, TriangleAlert, CheckCircle2, XCircle, TrendingUp, Search } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
 
 interface Project {
@@ -553,4 +553,5 @@ export default function DriftPage() {
     </div>
   )
 }
+
 

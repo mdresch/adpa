@@ -32,7 +32,7 @@ import {
   Wrench,
   RefreshCw,
   TrendingUp,
-  AlertTriangle,
+  TriangleAlert,
   FileText,
   ChevronDown,
   ChevronUp,
@@ -351,7 +351,7 @@ export default function TemplateImprovementsPage() {
       {/* Empty State */}
       {!loading && suggestions.length === 0 && (
         <Alert>
-          <AlertTriangle className="h-4 w-4" />
+          <TriangleAlert className="h-4 w-4" />
           <AlertDescription>
             No template improvement suggestions found. Run analysis to generate suggestions.
           </AlertDescription>
@@ -483,7 +483,7 @@ function ImprovementSuggestionCard({
         {/* Common Issues */}
         <div className="mb-4">
           <h4 className="font-semibold mb-2 flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-orange-600" />
+            <TriangleAlert className="h-4 w-4 text-orange-600" />
             Common Issues Found:
           </h4>
           <ul className="list-disc list-inside space-y-1">
@@ -651,4 +651,5 @@ function QualityDimensionBadge({
     </div>
   )
 }
+
 

@@ -42,7 +42,7 @@ import {
   ArrowDown,
   Save,
   X,
-  AlertTriangle
+  TriangleAlert
 } from 'lucide-react'
 
 interface Criterion {
@@ -248,7 +248,7 @@ export default function PrioritizationCriteriaPage() {
               <Card className="border-yellow-500/20 bg-yellow-500/5">
                 <CardContent className="pt-6">
                   <div className="flex items-center space-x-2">
-                    <AlertTriangle className="h-5 w-5 text-yellow-600" />
+                    <TriangleAlert className="h-5 w-5 text-yellow-600" />
                     <div>
                       <p className="font-medium text-yellow-900">
                         Total weight is {totalWeight}% (should be 100%)
@@ -505,4 +505,5 @@ export default function PrioritizationCriteriaPage() {
     </div>
   )
 }
+
 

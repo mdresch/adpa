@@ -35,7 +35,7 @@ import {
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { useAuth } from "@/contexts/AuthContext"
-import { Plus, Search, Edit, Trash2, AlertTriangle } from "lucide-react"
+import { Plus, Search, Edit, Trash2, TriangleAlert } from "lucide-react"
 import { toast } from "sonner"
 import { apiClient } from "@/lib/api"
 
@@ -544,7 +544,7 @@ export default function PortfoliosPage() {
                           <TableCell>
                             {portfolio.risk_count && portfolio.risk_count > 0 ? (
                               <Badge variant="outline" className="gap-1">
-                                <AlertTriangle className="h-3 w-3" />
+                                <TriangleAlert className="h-3 w-3" />
                                 {portfolio.risk_count}
                               </Badge>
                             ) : (
@@ -600,3 +600,4 @@ export default function PortfoliosPage() {
     </div>
   )
 }
+

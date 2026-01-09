@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { motion } from "framer-motion"
 import {
-  AlertTriangle,
+  TriangleAlert,
   TrendingUp,
   DollarSign,
   Clock,
@@ -165,7 +165,7 @@ export function ExecutiveDriftAlertsWidget() {
       case 'critical':
         return <XCircle className="h-5 w-5 text-red-500" />
       case 'high':
-        return <AlertTriangle className="h-5 w-5 text-orange-500" />
+        return <TriangleAlert className="h-5 w-5 text-orange-500" />
       case 'medium':
         return <AlertCircle className="h-5 w-5 text-yellow-500" />
       case 'low':
@@ -180,7 +180,7 @@ export function ExecutiveDriftAlertsWidget() {
       <Card className="border-0 shadow-lg">
         <CardHeader>
           <CardTitle className="flex items-center space-x-2">
-            <AlertTriangle className="h-5 w-5" />
+            <TriangleAlert className="h-5 w-5" />
             <span>Executive Dashboard</span>
           </CardTitle>
           <CardDescription>Loading drift alerts and opportunities...</CardDescription>
@@ -209,7 +209,7 @@ export function ExecutiveDriftAlertsWidget() {
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium flex items-center justify-between">
                   <span className="flex items-center space-x-2">
-                    <AlertTriangle className={`h-4 w-4 ${summary.drift_statistics.critical_drift > 0 ? 'text-red-500' : 'text-slate-500'}`} />
+                    <TriangleAlert className={`h-4 w-4 ${summary.drift_statistics.critical_drift > 0 ? 'text-red-500' : 'text-slate-500'}`} />
                     <span>Drift Alerts</span>
                   </span>
                   {summary.drift_statistics.critical_drift > 0 && (
@@ -330,7 +330,7 @@ export function ExecutiveDriftAlertsWidget() {
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="flex items-center space-x-2">
-                    <AlertTriangle className="h-5 w-5 text-red-500" />
+                    <TriangleAlert className="h-5 w-5 text-red-500" />
                     <span>Critical Drift Alerts</span>
                   </CardTitle>
                   <CardDescription>Issues requiring immediate attention</CardDescription>
@@ -561,3 +561,4 @@ export function ExecutiveDriftAlertsWidget() {
     </div>
   )
 }
+

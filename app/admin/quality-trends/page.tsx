@@ -20,7 +20,7 @@ import {
   Minus,
   BarChart3, 
   FileText, 
-  AlertTriangle, 
+  TriangleAlert, 
   CheckCircle,
   Download,
   Filter,
@@ -360,7 +360,7 @@ export default function QualityTrendsPage() {
                             <p className="text-3xl font-bold mt-1 text-orange-600">{Number(summaryStats.templates_with_issues || 0)}</p>
                           </div>
                           <div className="bg-orange-100 dark:bg-orange-900 p-3 rounded-full">
-                            <AlertTriangle className="h-6 w-6 text-orange-600" />
+                            <TriangleAlert className="h-6 w-6 text-orange-600" />
                           </div>
                         </div>
                         <p className="text-sm text-muted-foreground mt-2">
@@ -532,4 +532,5 @@ export default function QualityTrendsPage() {
     </PageTransition>
   )
 }
+
 

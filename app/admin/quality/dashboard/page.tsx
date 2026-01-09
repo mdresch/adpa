@@ -27,7 +27,7 @@ import {
 import {
   Sparkles,
   TrendingUp,
-  AlertTriangle,
+  TriangleAlert,
   CheckCircle,
   Award,
   Activity,
@@ -133,7 +133,7 @@ export default function QualityDashboardPage() {
       <div className="container mx-auto py-8 px-4">
         <Card>
           <CardContent className="py-12 text-center">
-            <AlertTriangle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+            <TriangleAlert className="h-12 w-12 text-gray-400 mx-auto mb-4" />
             <p className="text-gray-600">No quality audit data available yet.</p>
             <p className="text-sm text-gray-500 mt-2">
               Generate some documents to see quality metrics!
@@ -202,7 +202,7 @@ export default function QualityDashboardPage() {
         />
         
         <SummaryCard
-          icon={<AlertTriangle className="h-6 w-6 text-yellow-600" />}
+          icon={<TriangleAlert className="h-6 w-6 text-yellow-600" />}
           title="Need Review"
           value={stats.grade_c_count + stats.grade_d_count + stats.grade_f_count}
           subtitle="Grades C, D, F"
@@ -426,4 +426,5 @@ function getSeverityBadgeClass(severity: string): string {
   const safeSeverity: SeverityLevel = ['critical', 'major', 'minor'].includes(severity) ? (severity as SeverityLevel) : 'minor'
   return classes[safeSeverity]
 }
+
 

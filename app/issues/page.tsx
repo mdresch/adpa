@@ -21,7 +21,7 @@ import { getApiUrl } from "@/lib/api-url"
 import { toast } from "sonner"
 import {
   AlertCircle,
-  AlertTriangle,
+  TriangleAlert,
   CheckCircle2,
   Clock,
   XCircle,
@@ -553,7 +553,7 @@ export default function IssuesPage() {
                               <p className="text-sm font-medium text-muted-foreground">Open Issues</p>
                               <p className="text-2xl font-bold">{stats.open_issues}</p>
                             </div>
-                            <AlertTriangle className="h-8 w-8 text-orange-500" />
+                            <TriangleAlert className="h-8 w-8 text-orange-500" />
                           </div>
                         </CardContent>
                       </Card>
@@ -942,4 +942,5 @@ export default function IssuesPage() {
     </PageTransition>
   )
 }
+
 
