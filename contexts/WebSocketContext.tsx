@@ -178,13 +178,13 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         console.log("WebSocket disconnected")
       })
 
-      socketInstance.on("connect_error", (error) => {
+      socketInstance.on("connect_error", (error: Error) => {
         console.error("WebSocket connection error:", error)
         setIsConnected(false)
       })
 
       // Global event handlers
-      socketInstance.on("notification", (data) => {
+      socketInstance.on("notification", (data: { message: string; description?: string }) => {
         toast.info(data.message, {
           description: data.description,
         })
@@ -193,7 +193,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       // Track recent status updates to prevent spam
       const recentStatusUpdates = new Map<string, number>()
       
-      socketInstance.on("job:status", (data) => {
+      socketInstance.on("job:status", (data: { userId: string; jobId: string; status: string; progress: number }) => {
         if (data.userId === user.id) {
           // Only show status toast for significant milestones (0%, 25%, 50%, 75%, 100%)
           // or if it's been more than 10 seconds since last status update for this job
@@ -218,7 +218,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       // Track recent job notifications to prevent duplicate toasts
       const recentJobNotifications = new Set<string>()
       
-      socketInstance.on("job:completed", (data) => {
+      socketInstance.on("job:completed", (data: { userId: string; jobId: string }) => {
         if (data.userId === user.id) {
           // Deduplicate: only show toast if we haven't shown it recently for this job
           const notificationKey = `job-completed-${data.jobId}`
@@ -233,7 +233,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         }
       })
 
-      socketInstance.on("job:failed", (data) => {
+      socketInstance.on("job:failed", (data: { userId: string; jobId: string; error?: string }) => {
         if (data.userId === user.id) {
           // Deduplicate: only show toast if we haven't shown it recently for this job
           const notificationKey = `job-failed-${data.jobId}`
@@ -248,20 +248,20 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         }
       })
 
-      socketInstance.on("document:updated", (data) => {
+      socketInstance.on("document:updated", (data: { documentName: string; updatedBy: string }) => {
         toast.info("Document updated", {
           description: `${data.documentName} was updated by ${data.updatedBy}`,
         })
       })
 
-      socketInstance.on("project:updated", (data) => {
+      socketInstance.on("project:updated", (data: { projectName: string }) => {
         toast.info("Project updated", {
           description: `${data.projectName} was updated`,
         })
       })
 
       // Drift detection notifications
-      socketInstance.on("drift:detected", (data) => {
+      socketInstance.on("drift:detected", (data: { severity: string; documentTitle?: string; driftCount: number }) => {
         const severityLabels = {
           critical: "🔴 Critical",
           high: "🟠 High",
@@ -303,7 +303,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         }
       })
 
-      socketInstance.on("security:alert", (data) => {
+      socketInstance.on("security:alert", (data: { message: string }) => {
         toast.warning("Security Alert", {
           description: data.message,
         })

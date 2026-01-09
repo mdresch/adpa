@@ -1,8 +1,8 @@
 import * as React from 'react'
 import * as LucideIcons from 'lucide-react'
 
-// Temporary: permissive SvgProps until React SVG types are available in this TS config
-type SvgProps = any
+// Proper SVG props type
+type SvgProps = React.SVGProps<SVGSVGElement>
 
 export const Search = (props: SvgProps) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" {...props}>
