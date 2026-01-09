@@ -74,6 +74,7 @@ type Job = {
   worker?: string
   logs: string[]
   error?: string
+  error_message?: string // Alternative error field from different API endpoints
   projectName?: string
   documentName?: string
   metadata?: any

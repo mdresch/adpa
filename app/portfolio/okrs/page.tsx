@@ -163,7 +163,7 @@ export default function OKRDashboardPage() {
     }
 
     try {
-      const response = await apiClient.delete(`/okrs/${okrId}`)
+      const response = await apiClient.delete<{ success: boolean }>(`/okrs/${okrId}`)
       if (response && response.success) {
         toast.success('OKR deleted successfully')
         void fetchOKRs()

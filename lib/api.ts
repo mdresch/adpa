@@ -26,6 +26,7 @@ export interface User {
   created_at: string
   updated_at: string
   metadata?: Record<string, any> | string // JSONB column, can be object or JSON string
+  company_id?: string // Optional company association for multi-tenancy
 }
 
 export interface Project {

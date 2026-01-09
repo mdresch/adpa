@@ -59,11 +59,11 @@ interface Baseline {
   id: string
   project_id: string
   version: number
-  scope_baseline?: string
-  technical_baseline?: string
-  timeline_baseline?: string
-  cost_baseline?: string
-  success_criteria?: string
+  scope_baseline?: string | { key_deliverables?: any[] }  // JSONB - can be string or parsed object
+  technical_baseline?: string | { technology_stack?: any[] }  // JSONB - can be string or parsed object
+  timeline_baseline?: string | { project_duration?: string; key_milestones?: any[] }  // JSONB - can be string or parsed object
+  cost_baseline?: string | { total_budget?: number | string; cost_categories?: any[] }  // JSONB - can be string or parsed object
+  success_criteria?: string | { kpis?: any[] }  // JSONB - can be string or parsed object
   extracted_from_documents?: string[]
   status: 'pending' | 'approved' | 'declined' | 'active'
   created_by: string
@@ -74,6 +74,8 @@ interface Baseline {
   metadata?: Record<string, unknown>
   extraction_confidence?: number   // AI extraction confidence score (0-1)
   completeness_score?: number      // Baseline completeness score (0-1)
+  consistency_score?: number       // Consistency score for baseline components (0-1)
+  ai_processing_metadata?: any     // Metadata about AI processing
   key_deliverables?: Array<{       // Structured deliverables data
     id?: string;
     name?: string;
