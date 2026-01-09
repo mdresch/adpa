@@ -309,7 +309,7 @@ export default function TemplateImprovementsPage() {
       <div className="flex gap-4 mb-6">
         <Select 
           value={filters.status} 
-          onValueChange={(v) => { setFilters({ ...filters, status: v }) }}
+          onValueChange={(v: string) => { setFilters({ ...filters, status: v }) }}
         >
           <SelectTrigger className="w-48">
             <SelectValue />
@@ -325,7 +325,7 @@ export default function TemplateImprovementsPage() {
 
         <Select 
           value={filters.priority} 
-          onValueChange={(v) => { setFilters({ ...filters, priority: v }) }}
+          onValueChange={(v: string) => { setFilters({ ...filters, priority: v }) }}
         >
           <SelectTrigger className="w-48">
             <SelectValue />
@@ -389,7 +389,7 @@ export default function TemplateImprovementsPage() {
           
           <Textarea
             value={rejectionReason}
-            onChange={(e) => { setRejectionReason(e.target.value) }}
+            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => { setRejectionReason(e.target.value) }}
             placeholder="Enter rejection reason (minimum 10 characters)..."
             className="min-h-[100px]"
           />

@@ -455,7 +455,7 @@ export function ScoringInterface({
                           <Textarea
                             id={`justification-${criterion.id}`}
                             value={scores[criterion.id]?.justification || ''}
-                            onChange={(e) => handleJustificationChange(criterion.id, e.target.value)}
+                            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => handleJustificationChange(criterion.id, e.target.value)}
                             placeholder="Explain your scoring rationale..."
                             className="mt-1"
                             rows={2}

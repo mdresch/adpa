@@ -243,7 +243,7 @@ export default function CompaniesPage() {
                     <Input
                       placeholder="Search companies..."
                       value={searchTerm}
-                      onChange={(e) => {
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                         setSearchTerm(e.target.value)
                         setPagination(prev => ({ ...prev, page: 1 }))
                       }}
@@ -254,7 +254,7 @@ export default function CompaniesPage() {
                     <Label>Active Only</Label>
                     <Switch
                       checked={isActiveFilter === true}
-                      onCheckedChange={(checked) => {
+                      onCheckedChange={(checked: boolean) => {
                         setIsActiveFilter(checked ? true : undefined)
                         setPagination(prev => ({ ...prev, page: 1 }))
                       }}
@@ -415,7 +415,7 @@ export default function CompaniesPage() {
               <Input
                 id="create-name"
                 value={createFormData.name}
-                onChange={(e) => setCreateFormData({ ...createFormData, name: e.target.value })}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCreateFormData({ ...createFormData, name: e.target.value })}
                 placeholder="Enter company name"
                 className="mt-2"
               />
@@ -425,7 +425,7 @@ export default function CompaniesPage() {
               <Input
                 id="create-domain"
                 value={createFormData.domain}
-                onChange={(e) => setCreateFormData({ ...createFormData, domain: e.target.value })}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCreateFormData({ ...createFormData, domain: e.target.value })}
                 placeholder="example.com"
                 className="mt-2"
               />
@@ -460,7 +460,7 @@ export default function CompaniesPage() {
               <Input
                 id="edit-name"
                 value={editFormData.name}
-                onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditFormData({ ...editFormData, name: e.target.value })}
                 placeholder="Enter company name"
                 className="mt-2"
               />
@@ -470,7 +470,7 @@ export default function CompaniesPage() {
               <Input
                 id="edit-domain"
                 value={editFormData.domain}
-                onChange={(e) => setEditFormData({ ...editFormData, domain: e.target.value })}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditFormData({ ...editFormData, domain: e.target.value })}
                 placeholder="example.com"
                 className="mt-2"
               />
@@ -479,7 +479,7 @@ export default function CompaniesPage() {
               <Switch
                 id="edit-active"
                 checked={editFormData.is_active}
-                onCheckedChange={(checked) => setEditFormData({ ...editFormData, is_active: checked })}
+                onCheckedChange={(checked: boolean) => setEditFormData({ ...editFormData, is_active: checked })}
               />
               <Label htmlFor="edit-active">Active Company</Label>
             </div>

@@ -566,7 +566,7 @@ export function TeamAgreementsTab({ projectId }: TeamAgreementsTabProps) {
       {/* Create/Edit Dialog */}
       <TeamAgreementDialog
         open={dialogOpen}
-        onOpenChange={(open) => {
+        onOpenChange={(open: boolean) => {
           setDialogOpen(open)
           if (!open) {
             setEditingAgreement(null)
@@ -585,7 +585,7 @@ export function TeamAgreementsTab({ projectId }: TeamAgreementsTabProps) {
       {selectedAgreementForAdherence && (
         <AdherenceDialog
           open={adherenceDialogOpen}
-          onOpenChange={(open) => {
+          onOpenChange={(open: boolean) => {
             setAdherenceDialogOpen(open)
             if (!open) {
               setSelectedAgreementForAdherence(null)

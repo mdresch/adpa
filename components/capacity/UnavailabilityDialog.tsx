@@ -198,7 +198,7 @@ export function UnavailabilityDialog({
               <Label>Resource</Label>
               <Select 
                 value={formData.userId} 
-                onValueChange={(value) => setFormData(prev => ({ ...prev, userId: value }))}
+                onValueChange={(value: string) => setFormData(prev => ({ ...prev, userId: value }))}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select a user" />
@@ -219,7 +219,7 @@ export function UnavailabilityDialog({
             <Label>Type of Leave</Label>
             <Select 
               value={formData.unavailabilityType} 
-              onValueChange={(value) => setFormData(prev => ({ ...prev, unavailabilityType: value }))}
+              onValueChange={(value: string) => setFormData(prev => ({ ...prev, unavailabilityType: value }))}
             >
               <SelectTrigger>
                 <SelectValue />
@@ -247,7 +247,7 @@ export function UnavailabilityDialog({
               <Input
                 type="date"
                 value={formData.startDate}
-                onChange={(e) => setFormData(prev => ({ ...prev, startDate: e.target.value }))}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData(prev => ({ ...prev, startDate: e.target.value }))}
               />
             </div>
             <div className="space-y-2">
@@ -256,7 +256,7 @@ export function UnavailabilityDialog({
                 type="date"
                 value={formData.endDate}
                 min={formData.startDate}
-                onChange={(e) => setFormData(prev => ({ ...prev, endDate: e.target.value }))}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData(prev => ({ ...prev, endDate: e.target.value }))}
               />
             </div>
           </div>
@@ -271,7 +271,7 @@ export function UnavailabilityDialog({
             </div>
             <Switch
               checked={formData.isFullDay}
-              onCheckedChange={(checked) => setFormData(prev => ({ ...prev, isFullDay: checked }))}
+              onCheckedChange={(checked: boolean) => setFormData(prev => ({ ...prev, isFullDay: checked }))}
             />
           </div>
 
@@ -283,7 +283,7 @@ export function UnavailabilityDialog({
                 <Input
                   type="time"
                   value={formData.startTime}
-                  onChange={(e) => setFormData(prev => ({ ...prev, startTime: e.target.value }))}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData(prev => ({ ...prev, startTime: e.target.value }))}
                 />
               </div>
               <div className="space-y-2">
@@ -291,7 +291,7 @@ export function UnavailabilityDialog({
                 <Input
                   type="time"
                   value={formData.endTime}
-                  onChange={(e) => setFormData(prev => ({ ...prev, endTime: e.target.value }))}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData(prev => ({ ...prev, endTime: e.target.value }))}
                 />
               </div>
             </div>
@@ -302,7 +302,7 @@ export function UnavailabilityDialog({
             <Label>Notes (optional)</Label>
             <Textarea
               value={formData.description}
-              onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setFormData(prev => ({ ...prev, description: e.target.value }))}
               placeholder="Add any relevant details..."
               rows={3}
             />

@@ -515,7 +515,7 @@ export default function SecurityPage() {
                             <Input
                               placeholder="Search events..."
                               value={searchTerm}
-                              onChange={(e) => setSearchTerm(e.target.value)}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
                               className="pl-10 w-64"
                             />
                           </div>
@@ -610,7 +610,7 @@ export default function SecurityPage() {
                           </CardHeader>
                           <CardContent>
                             <div className="space-y-4">
-                              {complianceData.map((item) => (
+                              {complianceData.map((item: any) => (
                                 <div key={item.name} className="space-y-2">
                                   <div className="flex items-center justify-between">
                                     <span className="font-medium">{item.name}</span>

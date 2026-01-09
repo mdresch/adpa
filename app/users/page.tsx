@@ -855,7 +855,7 @@ export default function UsersAndRoles() {
                         </DialogDescription>
                       </DialogHeader>
                       <form
-                        onSubmit={(e) => {
+                        onSubmit={async (e: React.FormEvent) => {
                           e.preventDefault()
                           handleCreateUser()
                         }}
@@ -870,7 +870,7 @@ export default function UsersAndRoles() {
                                 id="user-name"
                                 placeholder="Enter full name"
                                 value={createFormData.name}
-                                onChange={(e) => setCreateFormData({ ...createFormData, name: e.target.value })}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCreateFormData({ ...createFormData, name: e.target.value })}
                                 required
                                 className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                               />
@@ -884,7 +884,7 @@ export default function UsersAndRoles() {
                                 type="email"
                                 placeholder="user@company.com"
                                 value={createFormData.email}
-                                onChange={(e) => setCreateFormData({ ...createFormData, email: e.target.value })}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCreateFormData({ ...createFormData, email: e.target.value })}
                                 required
                                 className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                               />
@@ -900,7 +900,7 @@ export default function UsersAndRoles() {
                                 type="password"
                                 placeholder="Min 8 characters"
                                 value={createFormData.password}
-                                onChange={(e) => setCreateFormData({ ...createFormData, password: e.target.value })}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCreateFormData({ ...createFormData, password: e.target.value })}
                                 required
                                 minLength={8}
                                 className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
@@ -915,7 +915,7 @@ export default function UsersAndRoles() {
                               </Label>
                               <Select
                                 value={ROLE_DISPLAY_NAMES[createFormData.role] || createFormData.role}
-                                onValueChange={(value) => {
+                                onValueChange={(value: string) => {
                                   const backendRole = DISPLAY_TO_ROLE[value] || value
                                   setCreateFormData({ ...createFormData, role: backendRole })
                                 }}
@@ -942,7 +942,7 @@ export default function UsersAndRoles() {
                                 id="user-department"
                                 placeholder="e.g., Engineering, Product"
                                 value={createFormData.department}
-                                onChange={(e) => setCreateFormData({ ...createFormData, department: e.target.value })}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCreateFormData({ ...createFormData, department: e.target.value })}
                                 className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                               />
                             </div>
@@ -954,7 +954,7 @@ export default function UsersAndRoles() {
                                 id="user-company"
                                 placeholder="Enter company name"
                                 value={createFormData.companyName}
-                                onChange={(e) => setCreateFormData({ ...createFormData, companyName: e.target.value })}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCreateFormData({ ...createFormData, companyName: e.target.value })}
                                 className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                               />
                             </div>
@@ -967,7 +967,7 @@ export default function UsersAndRoles() {
                               id="user-notes"
                               placeholder="Additional notes about the user"
                               value={createFormData.notes}
-                              onChange={(e) => setCreateFormData({ ...createFormData, notes: e.target.value })}
+                              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setCreateFormData({ ...createFormData, notes: e.target.value })}
                               className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                             />
                           </div>
@@ -975,7 +975,7 @@ export default function UsersAndRoles() {
                             <Switch
                               id="send-invite"
                               checked={createFormData.sendInvite}
-                              onCheckedChange={(checked) => setCreateFormData({ ...createFormData, sendInvite: checked })}
+                              onCheckedChange={(checked: boolean) => setCreateFormData({ ...createFormData, sendInvite: checked })}
                             />
                             <Label htmlFor="send-invite" className="text-sm">
                               Send invitation email to user
@@ -1089,7 +1089,7 @@ export default function UsersAndRoles() {
                         <Input
                           placeholder="Search users..."
                           value={searchTerm}
-                          onChange={(e) => setSearchTerm(e.target.value)}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
                           className="pl-10 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-all duration-200 focus:shadow-lg focus:shadow-blue-500/20"
                         />
                       </motion.div>
@@ -1100,7 +1100,7 @@ export default function UsersAndRoles() {
                         whileHover={{ scale: 1.02 }}
                         className="flex h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm px-3 py-2 text-sm focus:border-blue-500 transition-colors"
                         value={statusFilter}
-                        onChange={(e) => setStatusFilter(e.target.value)}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setStatusFilter(e.target.value)}
                       >
                         <option value="all">All Status</option>
                         <option value="active">Active</option>
@@ -1111,7 +1111,7 @@ export default function UsersAndRoles() {
                         whileHover={{ scale: 1.02 }}
                         className="flex h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm px-3 py-2 text-sm focus:border-blue-500 transition-colors"
                         value={roleFilter}
-                        onChange={(e) => setRoleFilter(e.target.value)}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRoleFilter(e.target.value)}
                       >
                         <option value="all">All Roles</option>
                         {availableRoles.map((role) => (
@@ -1435,7 +1435,7 @@ export default function UsersAndRoles() {
               <Input
                 id="edit-name"
                 value={editFormData.name}
-                onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditFormData({ ...editFormData, name: e.target.value })}
                 className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
               />
             </div>
@@ -1447,7 +1447,7 @@ export default function UsersAndRoles() {
                 id="edit-email"
                 type="email"
                 value={editFormData.email}
-                onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditFormData({ ...editFormData, email: e.target.value })}
                 className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
               />
             </div>
@@ -1460,7 +1460,7 @@ export default function UsersAndRoles() {
                 id="edit-company"
                 type="text"
                 value={editFormData.companyName}
-                onChange={(e) => setEditFormData({ ...editFormData, companyName: e.target.value })}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditFormData({ ...editFormData, companyName: e.target.value })}
                 placeholder="Enter company name"
                 className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
               />
@@ -1471,7 +1471,7 @@ export default function UsersAndRoles() {
               </Label>
                 <Select
                 value={ROLE_DISPLAY_NAMES[editFormData.role] || editFormData.role}
-                onValueChange={(value) => {
+                onValueChange={(value: string) => {
                   const backendRole = DISPLAY_TO_ROLE[value] || value
                   
                   // Warn if admin/super_admin is trying to change their own role
@@ -1508,7 +1508,7 @@ export default function UsersAndRoles() {
               <Switch
                 id="edit-active"
                 checked={editFormData.is_active}
-                onCheckedChange={(checked) => {
+                onCheckedChange={(checked: boolean) => {
                   // Prevent admins from deactivating themselves
                   if (editingUser && editingUser.id === user?.id && user.role === "admin" && !checked) {
                     toast.error("Cannot deactivate your own account. Please have another admin make this change.")

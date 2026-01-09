@@ -479,7 +479,7 @@ export function ProgramRisksTab({ programId }: ProgramRisksTabProps) {
                     <Input
                       id="title"
                       value={formData.title}
-                      onChange={(e) => { setFormData({ ...formData, title: e.target.value }); }}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setFormData({ ...formData, title: e.target.value }); }}
                       placeholder="Enter risk title"
                     />
                   </div>
@@ -488,7 +488,7 @@ export function ProgramRisksTab({ programId }: ProgramRisksTabProps) {
                     <Textarea
                       id="description"
                       value={formData.description}
-                      onChange={(e) => { setFormData({ ...formData, description: e.target.value }); }}
+                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => { setFormData({ ...formData, description: e.target.value }); }}
                       placeholder="Describe the risk in detail"
                       rows={3}
                     />
@@ -499,7 +499,7 @@ export function ProgramRisksTab({ programId }: ProgramRisksTabProps) {
                       <Input
                         id="category"
                         value={formData.category}
-                        onChange={(e) => { setFormData({ ...formData, category: e.target.value }); }}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setFormData({ ...formData, category: e.target.value }); }}
                         placeholder="e.g., Technical, Resource"
                       />
                     </div>
@@ -508,7 +508,7 @@ export function ProgramRisksTab({ programId }: ProgramRisksTabProps) {
                       <Input
                         id="owner"
                         value={formData.owner}
-                        onChange={(e) => { setFormData({ ...formData, owner: e.target.value }); }}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setFormData({ ...formData, owner: e.target.value }); }}
                         placeholder="Enter owner name"
                       />
                     </div>
@@ -523,7 +523,7 @@ export function ProgramRisksTab({ programId }: ProgramRisksTabProps) {
                         max="100"
                         step="5"
                         value={formData.probability}
-                        onChange={(e) => {
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                           setFormData({ ...formData, probability: parseInt(e.target.value) });
                         }}
                       />
@@ -537,7 +537,7 @@ export function ProgramRisksTab({ programId }: ProgramRisksTabProps) {
                         max="5"
                         step="1"
                         value={formData.impact}
-                        onChange={(e) => { setFormData({ ...formData, impact: parseInt(e.target.value) }); }}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setFormData({ ...formData, impact: parseInt(e.target.value) }); }}
                       />
                     </div>
                   </div>
@@ -568,7 +568,7 @@ export function ProgramRisksTab({ programId }: ProgramRisksTabProps) {
                     <Textarea
                       id="mitigation"
                       value={formData.mitigation}
-                      onChange={(e) => { setFormData({ ...formData, mitigation: e.target.value }); }}
+                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => { setFormData({ ...formData, mitigation: e.target.value }); }}
                       placeholder="Describe mitigation actions"
                       rows={3}
                     />
@@ -609,7 +609,7 @@ export function ProgramRisksTab({ programId }: ProgramRisksTabProps) {
         <CardContent>
           {/* Filters */}
           <div className="flex gap-4 mb-4">
-            <Select value={filterSeverity} onValueChange={(value) => { setFilterSeverity(value); }}>
+            <Select value={filterSeverity} onValueChange={(value: string) => { setFilterSeverity(value); }}>
               <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Filter by severity" />
               </SelectTrigger>
@@ -621,7 +621,7 @@ export function ProgramRisksTab({ programId }: ProgramRisksTabProps) {
                 <SelectItem value="low">Low</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={filterStatus} onValueChange={(value) => { setFilterStatus(value); }}>
+            <Select value={filterStatus} onValueChange={(value: string) => { setFilterStatus(value); }}>
               <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Filter by status" />
               </SelectTrigger>

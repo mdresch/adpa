@@ -115,7 +115,7 @@ export default function LessonsTab({ projectId }: LessonsTabProps) {
       </div>
 
       <div className="grid grid-cols-1 gap-3">
-        {items.map((entry) => (
+        {items.map((entry: any) => (
           <Card key={entry.knowledge_entry_id || entry.id} className="border">
             <CardHeader>
               <CardTitle>{entry.title}</CardTitle>

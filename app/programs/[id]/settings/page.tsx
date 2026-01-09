@@ -238,7 +238,7 @@ export default function ProgramSettingsPage() {
                     <Input
                       id="name"
                       value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, name: e.target.value })}
                       placeholder="Enter program name"
                       required
                     />
@@ -250,7 +250,7 @@ export default function ProgramSettingsPage() {
                     <Textarea
                       id="description"
                       value={formData.description}
-                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setFormData({ ...formData, description: e.target.value })}
                       placeholder="Enter program description"
                       rows={4}
                     />
@@ -303,7 +303,7 @@ export default function ProgramSettingsPage() {
                         id="budget"
                         type="number"
                         value={formData.budget}
-                        onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, budget: e.target.value })}
                         placeholder="0.00"
                         step="0.01"
                       />
@@ -312,7 +312,7 @@ export default function ProgramSettingsPage() {
                     {/* Currency */}
                     <div className="space-y-2">
                       <Label htmlFor="currency">Currency</Label>
-                      <Select value={formData.currency_code} onValueChange={(value) => setFormData({ ...formData, currency_code: value })}>
+                      <Select value={formData.currency_code} onValueChange={(value: string) => setFormData({ ...formData, currency_code: value })}>
                         <SelectTrigger id="currency">
                           <SelectValue />
                         </SelectTrigger>
@@ -354,7 +354,7 @@ export default function ProgramSettingsPage() {
                         id="start_date"
                         type="date"
                         value={formData.start_date}
-                        onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, start_date: e.target.value })}
                       />
                     </div>
 
@@ -365,7 +365,7 @@ export default function ProgramSettingsPage() {
                         id="end_date"
                         type="date"
                         value={formData.end_date}
-                        onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, end_date: e.target.value })}
                         min={formData.start_date}
                       />
                     </div>

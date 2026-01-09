@@ -3177,7 +3177,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                                       <div className="flex gap-2">
                                         <select
                                           value={selectedUserId}
-                                          onChange={(e) => setSelectedUserId(e.target.value)}
+                                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSelectedUserId(e.target.value)}
                                           className="flex-1 h-8 rounded-md border border-amber-300 bg-white px-2 text-xs"
                                         >
                                           <option value="">Select a user account...</option>

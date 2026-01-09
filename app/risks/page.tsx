@@ -512,7 +512,7 @@ export default function RisksPage() {
                   </CardHeader>
                   <CardContent>
                     <div className="flex flex-wrap gap-4">
-                      <Select value={riskLevelFilter || "all"} onValueChange={(v) => setRiskLevelFilter(v === "all" ? "" : v)}>
+                      <Select value={riskLevelFilter || "all"} onValueChange={(v: string) => setRiskLevelFilter(v === "all" ? "" : v)}>
                         <SelectTrigger className="w-[180px]">
                           <SelectValue placeholder="Risk Level" />
                         </SelectTrigger>
@@ -524,7 +524,7 @@ export default function RisksPage() {
                           <SelectItem value="systemic">Systemic</SelectItem>
                         </SelectContent>
                       </Select>
-                      <Select value={statusFilter || "all"} onValueChange={(v) => setStatusFilter(v === "all" ? "" : v)}>
+                      <Select value={statusFilter || "all"} onValueChange={(v: string) => setStatusFilter(v === "all" ? "" : v)}>
                         <SelectTrigger className="w-[180px]">
                           <SelectValue placeholder="Status" />
                         </SelectTrigger>
@@ -544,7 +544,7 @@ export default function RisksPage() {
                             type="checkbox"
                             id="overdue-only"
                             checked={overdueOnly}
-                            onChange={(e) => setOverdueOnly(e.target.checked)}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOverdueOnly(e.target.checked)}
                             className="rounded"
                           />
                           <Label htmlFor="overdue-only">Overdue Only</Label>
@@ -555,7 +555,7 @@ export default function RisksPage() {
                 </Card>
 
                 {/* Tabs */}
-                <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
+                <Tabs value={activeTab} onValueChange={(v: string) => setActiveTab(v as any)}>
                   <TabsList>
                     <TabsTrigger value="registry">Risk Registry</TabsTrigger>
                     <TabsTrigger value="mitigation">Mitigation Report</TabsTrigger>

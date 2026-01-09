@@ -233,7 +233,7 @@ function TailoringDecisionForm({
           id="area"
           type="text"
           value={formData.area || ''}
-          onChange={(e) => updateField('area', e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateField('area', e.target.value)}
           className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
           placeholder="e.g., Change Control Process"
         />
@@ -246,7 +246,7 @@ function TailoringDecisionForm({
         <Textarea
           id="standard_process"
           value={formData.standard_process || ''}
-          onChange={(e) => updateField('standard_process', e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => updateField('standard_process', e.target.value)}
           placeholder="Describe the standard organizational process..."
           className="min-h-[80px]"
         />
@@ -259,7 +259,7 @@ function TailoringDecisionForm({
         <Textarea
           id="tailored_process"
           value={formData.tailored_process || ''}
-          onChange={(e) => updateField('tailored_process', e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => updateField('tailored_process', e.target.value)}
           placeholder="Describe how the process was adapted for this project..."
           className="min-h-[80px]"
         />
@@ -272,7 +272,7 @@ function TailoringDecisionForm({
         <Textarea
           id="justification"
           value={formData.justification || ''}
-          onChange={(e) => updateField('justification', e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => updateField('justification', e.target.value)}
           placeholder="Explain why this tailoring was necessary..."
           className="min-h-[100px]"
         />

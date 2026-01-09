@@ -222,7 +222,7 @@ export function TaskDetailsModal({
         {loading ? (
           <div className="space-y-4 mt-4">
             <div className="space-y-2">
-              {[1, 2, 3, 4, 5].map((i) => (
+              {[1, 2, 3, 4, 5].map((i: any) => (
                 <Skeleton key={i} className="h-12 w-full" />
               ))}
             </div>

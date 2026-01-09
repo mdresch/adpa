@@ -416,7 +416,7 @@ export function AIMitigationSuggestionsDialog({
                     
                     <div className="flex gap-2">
                       <Button
-                        onClick={(e) => {
+                        onClick={async (e: React.MouseEvent) => {
                           e.stopPropagation()
                           handleUseSuggestion(suggestion)
                         }}
@@ -427,7 +427,7 @@ export function AIMitigationSuggestionsDialog({
                         Edit & Create
                       </Button>
                       <Button
-                        onClick={(e) => {
+                        onClick={async (e: React.MouseEvent) => {
                           e.stopPropagation()
                           handleToggleSuggestion(index)
                         }}
@@ -472,7 +472,7 @@ export function AIMitigationSuggestionsDialog({
       {selectedSuggestion && (
         <MitigationPlanDialog
           open={isCreateDialogOpen}
-          onOpenChange={(open) => {
+          onOpenChange={(open: boolean) => {
             setIsCreateDialogOpen(open)
             if (!open) {
               setSelectedSuggestion(null)

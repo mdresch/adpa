@@ -620,7 +620,7 @@ export default function SearchPage() {
                         <Input
                           placeholder="Search projects, documents, templates, and users..."
                           value={query}
-                          onChange={(e) => {
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                             setQuery(e.target.value)
                             setShowHistory(false)
                             fetchSuggestions(e.target.value)
@@ -782,7 +782,7 @@ export default function SearchPage() {
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    onClick={(e) => {
+                                    onClick={(e: React.MouseEvent) => {
                                       e.stopPropagation()
                                       clearHistory()
                                     }}
@@ -1097,7 +1097,7 @@ export default function SearchPage() {
                     <div className="space-y-4">
                       {loading ? (
                         <div className="space-y-4">
-                          {[1, 2, 3].map((i) => (
+                          {[1, 2, 3].map((i: any) => (
                             <Card key={i} className="animate-pulse">
                               <CardContent className="p-6">
                                         <div className="space-y-3">
@@ -1186,7 +1186,7 @@ export default function SearchPage() {
                                       <Button 
                                         variant="ghost" 
                                         size="sm"
-                                        onClick={(e) => {
+                                        onClick={(e: React.MouseEvent) => {
                                           e.stopPropagation()
                                           trackResultClick(result, idx + 1, 'view')
                                           handleResultClick(result, idx + 1)
@@ -1199,7 +1199,7 @@ export default function SearchPage() {
                                         <Button 
                                           variant="ghost" 
                                           size="sm"
-                                          onClick={(e) => {
+                                          onClick={(e: React.MouseEvent) => {
                                             e.stopPropagation()
                                             trackResultClick(result, idx + 1, 'download')
                                             // Download document
@@ -1215,7 +1215,7 @@ export default function SearchPage() {
                                       <Button 
                                         variant="ghost" 
                                         size="sm"
-                                        onClick={(e) => {
+                                        onClick={(e: React.MouseEvent) => {
                                           e.stopPropagation()
                                           trackResultClick(result, idx + 1, 'share')
                                           // Copy link to clipboard

@@ -273,7 +273,7 @@ export default function PortfoliosPage() {
                   Manage your organizational portfolios and track monthly risk reviews
                 </p>
               </div>
-              <Dialog open={isCreateDialogOpen || !!editingPortfolio} onOpenChange={(open) => {
+              <Dialog open={isCreateDialogOpen || !!editingPortfolio} onOpenChange={(open: boolean) => {
                 if (!open) {
                   setIsCreateDialogOpen(false)
                   setEditingPortfolio(null)
@@ -300,7 +300,7 @@ export default function PortfoliosPage() {
                       <Input
                         id="portfolio_name"
                         value={formData.portfolio_name}
-                        onChange={(e) => setFormData({ ...formData, portfolio_name: e.target.value })}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, portfolio_name: e.target.value })}
                         placeholder="Enter portfolio name"
                       />
                     </div>
@@ -310,7 +310,7 @@ export default function PortfoliosPage() {
                       <Textarea
                         id="description"
                         value={formData.description}
-                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                        onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setFormData({ ...formData, description: e.target.value })}
                         placeholder="Enter portfolio description"
                         rows={3}
                       />
@@ -340,7 +340,7 @@ export default function PortfoliosPage() {
                         <Label htmlFor="budget_currency">Currency</Label>
                         <Select
                           value={formData.budget_currency}
-                          onValueChange={(value) => setFormData({ ...formData, budget_currency: value })}
+                          onValueChange={(value: string) => setFormData({ ...formData, budget_currency: value })}
                         >
                           <SelectTrigger>
                             <SelectValue />
@@ -360,7 +360,7 @@ export default function PortfoliosPage() {
                         id="budget"
                         type="number"
                         value={formData.budget}
-                        onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, budget: e.target.value })}
                         placeholder="Enter budget amount"
                       />
                     </div>
@@ -372,7 +372,7 @@ export default function PortfoliosPage() {
                           id="start_date"
                           type="date"
                           value={formData.start_date}
-                          onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, start_date: e.target.value })}
                         />
                       </div>
 
@@ -382,7 +382,7 @@ export default function PortfoliosPage() {
                           id="end_date"
                           type="date"
                           value={formData.end_date}
-                          onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, end_date: e.target.value })}
                         />
                       </div>
                     </div>
@@ -397,7 +397,7 @@ export default function PortfoliosPage() {
                             id="last_risk_review_at"
                             type="date"
                             value={formData.last_risk_review_at}
-                            onChange={(e) => setFormData({ ...formData, last_risk_review_at: e.target.value })}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, last_risk_review_at: e.target.value })}
                           />
                         </div>
 
@@ -407,7 +407,7 @@ export default function PortfoliosPage() {
                             id="next_risk_review_due"
                             type="date"
                             value={formData.next_risk_review_due}
-                            onChange={(e) => setFormData({ ...formData, next_risk_review_due: e.target.value })}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, next_risk_review_due: e.target.value })}
                           />
                         </div>
                       </div>
@@ -417,7 +417,7 @@ export default function PortfoliosPage() {
                         <Textarea
                           id="risk_review_notes"
                           value={formData.risk_review_notes}
-                          onChange={(e) => setFormData({ ...formData, risk_review_notes: e.target.value })}
+                          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setFormData({ ...formData, risk_review_notes: e.target.value })}
                           placeholder="Enter notes from the last risk review"
                           rows={3}
                         />
@@ -456,7 +456,7 @@ export default function PortfoliosPage() {
                     <Input
                       placeholder="Search portfolios..."
                       value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
                       className="pl-10"
                     />
                   </div>

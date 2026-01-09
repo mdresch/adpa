@@ -294,7 +294,7 @@ export function ReviewMeetingDialog({
                 <>
                   <Select
                     value={selectedReviewType}
-                    onValueChange={(value) => {
+                    onValueChange={(value: string) => {
                       setSelectedReviewType(value);
                       // Update duration when review type changes
                       const selectedSchedule = schedules.find(s => s.review_type === value);
@@ -350,7 +350,7 @@ export function ReviewMeetingDialog({
                 id="scheduled_date"
                 type="date"
                 value={formData.scheduled_date}
-                onChange={(e) => setFormData({ ...formData, scheduled_date: e.target.value })}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, scheduled_date: e.target.value })}
                 required
               />
             </div>
@@ -361,7 +361,7 @@ export function ReviewMeetingDialog({
                 id="actual_date"
                 type="date"
                 value={formData.actual_date || ''}
-                onChange={(e) => setFormData({ ...formData, actual_date: e.target.value || undefined })}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, actual_date: e.target.value || undefined })}
               />
               <p className="text-xs text-muted-foreground">
                 Leave empty if meeting hasn't occurred yet
@@ -374,7 +374,7 @@ export function ReviewMeetingDialog({
                 id="start_time"
                 type="time"
                 value={formData.start_time}
-                onChange={(e) => setFormData({ ...formData, start_time: e.target.value })}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, start_time: e.target.value })}
               />
             </div>
 
@@ -384,7 +384,7 @@ export function ReviewMeetingDialog({
                 id="end_time"
                 type="time"
                 value={formData.end_time || ''}
-                onChange={(e) => setFormData({ ...formData, end_time: e.target.value || undefined })}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, end_time: e.target.value || undefined })}
               />
             </div>
 
@@ -395,7 +395,7 @@ export function ReviewMeetingDialog({
                 type="number"
                 min="15"
                 value={formData.duration_minutes}
-                onChange={(e) => setFormData({ ...formData, duration_minutes: parseInt(e.target.value) || 60 })}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, duration_minutes: parseInt(e.target.value) || 60 })}
               />
             </div>
 
@@ -403,7 +403,7 @@ export function ReviewMeetingDialog({
               <Label htmlFor="status">Status</Label>
               <Select
                 value={formData.status}
-                onValueChange={(value) => setFormData({ ...formData, status: value as ReviewMeeting['status'] })}
+                onValueChange={(value: string) => setFormData({ ...formData, status: value as ReviewMeeting['status'] })}
               >
                 <SelectTrigger id="status">
                   <SelectValue />
@@ -424,7 +424,7 @@ export function ReviewMeetingDialog({
             <Textarea
               id="notes"
               value={formData.notes}
-              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setFormData({ ...formData, notes: e.target.value })}
               rows={4}
               placeholder="Meeting notes, outcomes, key discussion points..."
             />

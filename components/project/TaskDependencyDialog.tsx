@@ -165,7 +165,7 @@ export function TaskDependencyDialog({
               id="lagDays"
               type="number"
               value={lagDays}
-              onChange={(e) => setLagDays(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setLagDays(e.target.value)}
               placeholder="0"
               disabled={submitting}
             />

@@ -149,7 +149,7 @@ export function AdherenceDialog({
               <Textarea
                 id="notes"
                 value={notes}
-                onChange={(e) => setNotes(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNotes(e.target.value)}
                 placeholder="Add context about the adherence score..."
                 rows={3}
               />
@@ -169,7 +169,7 @@ export function AdherenceDialog({
               {!historyError && history.length > 0 && (
                 <ScrollArea className="max-h-52 border rounded-md">
                   <div className="divide-y">
-                    {history.map((entry) => (
+                    {history.map((entry: any) => (
                       <div key={entry.id} className="px-3 py-2 text-sm space-y-1">
                         <div className="flex items-center justify-between">
                           <p className="font-medium">

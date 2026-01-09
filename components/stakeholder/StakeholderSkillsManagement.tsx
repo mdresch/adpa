@@ -379,7 +379,7 @@ export function StakeholderSkillsManagement({
                 type="number"
                 min="0"
                 value={formData.yearsOfExperience}
-                onChange={(e) =>
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                   setFormData({
                     ...formData,
                     yearsOfExperience: parseInt(e.target.value) || 0,

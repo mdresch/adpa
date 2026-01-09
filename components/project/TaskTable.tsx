@@ -296,25 +296,25 @@ export function TaskTable({
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onViewTask(task.id); }}>
+                    <DropdownMenuItem onClick={async (e: React.MouseEvent) => { e.stopPropagation(); onViewTask(task.id); }}>
                       <Eye className="mr-2 h-4 w-4" />
                       View Details
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEditTask(task.id); }}>
+                    <DropdownMenuItem onClick={async (e: React.MouseEvent) => { e.stopPropagation(); onEditTask(task.id); }}>
                       <Edit className="mr-2 h-4 w-4" />
                       Edit Task
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onAssignTask(task.id); }}>
+                    <DropdownMenuItem onClick={async (e: React.MouseEvent) => { e.stopPropagation(); onAssignTask(task.id); }}>
                       <UserPlus className="mr-2 h-4 w-4" />
                       Assign Resource
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onLogHours(task.id); }}>
+                    <DropdownMenuItem onClick={async (e: React.MouseEvent) => { e.stopPropagation(); onLogHours(task.id); }}>
                       <Clock className="mr-2 h-4 w-4" />
                       Log Hours
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem 
-                      onClick={(e) => { e.stopPropagation(); onDeleteTask(task.id); }}
+                      onClick={async (e: React.MouseEvent) => { e.stopPropagation(); onDeleteTask(task.id); }}
                       className="text-destructive"
                     >
                       <Trash className="mr-2 h-4 w-4" />

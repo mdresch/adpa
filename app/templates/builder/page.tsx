@@ -705,7 +705,7 @@ export default function TemplateBuilderPage() {
                                   <Input
                                     placeholder="Section title"
                                     value={section.title}
-                                    onChange={(e) => updateSection(section.id, { title: e.target.value })}
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateSection(section.id, { title: e.target.value })}
                                     className="flex-1 mr-4"
                                   />
                                   <div className="flex items-center space-x-2">
@@ -738,7 +738,7 @@ export default function TemplateBuilderPage() {
                                 <Textarea
                                   placeholder="Section content (use [Extract from context] style instructions for AI)"
                                   value={section.content}
-                                  onChange={(e) => updateSection(section.id, { content: e.target.value })}
+                                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => updateSection(section.id, { content: e.target.value })}
                                   rows={8}
                                   className="font-mono text-sm"
                                 />
@@ -819,7 +819,7 @@ CRITICAL RULES:
 
 OUTPUT FOCUS: Real data from THIS specific project only.`}
                               value={systemPrompt}
-                              onChange={(e) => setSystemPrompt(e.target.value)}
+                              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setSystemPrompt(e.target.value)}
                               rows={15}
                               className="font-mono text-sm"
                             />
@@ -904,7 +904,7 @@ OUTPUT FOCUS: Real data from THIS specific project only.`}
                                 id="name"
                                 placeholder="Enter template name"
                                 value={templateName}
-                                onChange={(e) => setTemplateName(e.target.value)}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTemplateName(e.target.value)}
                               />
                             </div>
 
@@ -914,7 +914,7 @@ OUTPUT FOCUS: Real data from THIS specific project only.`}
                                 id="description"
                                 placeholder="Describe the template purpose"
                                 value={templateDescription}
-                                onChange={(e) => setTemplateDescription(e.target.value)}
+                                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setTemplateDescription(e.target.value)}
                                 rows={3}
                               />
                             </div>
@@ -980,7 +980,7 @@ OUTPUT FOCUS: Real data from THIS specific project only.`}
                                     <Input
                                       placeholder="Variable name"
                                       value={variable.name}
-                                      onChange={(e) => updateVariable(variable.id, { name: e.target.value })}
+                                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateVariable(variable.id, { name: e.target.value })}
                                       className="flex-1 mr-2"
                                     />
                                     <Button
@@ -995,7 +995,7 @@ OUTPUT FOCUS: Real data from THIS specific project only.`}
                                   <Input
                                     placeholder="Display label"
                                     value={variable.label}
-                                    onChange={(e) => updateVariable(variable.id, { label: e.target.value })}
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateVariable(variable.id, { label: e.target.value })}
                                   />
                                   
                                   <Select

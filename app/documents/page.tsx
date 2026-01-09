@@ -202,7 +202,7 @@ export default function DocumentLibraryPage() {
                                                 <Input
                                                     placeholder="Search documents..."
                                                     className="pl-9"
-                                                    onChange={(e) => handleSearch(e.target.value)}
+                                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleSearch(e.target.value)}
                                                 />
                                             </div>
 
@@ -296,7 +296,7 @@ export default function DocumentLibraryPage() {
                                                                 {doc.updated_at ? format(new Date(doc.updated_at), "MMM d, yyyy") : "-"}
                                                             </TableCell>
                                                             <TableCell className="text-right">
-                                                                <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                                                                <div className="flex justify-end gap-2" onClick={async (e: React.MouseEvent) => e.stopPropagation()}>
                                                                     <DropdownMenu>
                                                                         <DropdownMenuTrigger asChild>
                                                                             <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -313,7 +313,7 @@ export default function DocumentLibraryPage() {
                                                                             <DropdownMenuItem onClick={() => handleExportPdf(doc.id, doc.name)}>
                                                                                 <Download className="mr-2 h-4 w-4" /> Export PDF
                                                                             </DropdownMenuItem>
-                                                                            <DropdownMenuItem className="text-red-600" onClick={(e) => handleDelete(doc.id, e as any)}>
+                                                                            <DropdownMenuItem className="text-red-600" onClick={async (e: React.MouseEvent) => handleDelete(doc.id, e as any)}>
                                                                                 <Trash2 className="mr-2 h-4 w-4" /> Delete
                                                                             </DropdownMenuItem>
                                                                         </DropdownMenuContent>

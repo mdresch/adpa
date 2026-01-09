@@ -422,7 +422,7 @@ export default function IssuesPage() {
                           <Label>Title *</Label>
                           <Input
                             value={formData.title}
-                            onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, title: e.target.value })}
                             placeholder="Brief summary of the issue"
                           />
                         </div>
@@ -430,7 +430,7 @@ export default function IssuesPage() {
                           <Label>Description *</Label>
                           <Textarea
                             value={formData.description}
-                            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setFormData({ ...formData, description: e.target.value })}
                             placeholder="Full description of the problem"
                             rows={4}
                           />
@@ -440,7 +440,7 @@ export default function IssuesPage() {
                             <Label>Category *</Label>
                             <Select
                               value={formData.category}
-                              onValueChange={(value) => setFormData({ ...formData, category: value as Issue['category'] })}
+                              onValueChange={(value: string) => setFormData({ ...formData, category: value as Issue['category'] })}
                             >
                               <SelectTrigger>
                                 <SelectValue />
@@ -462,7 +462,7 @@ export default function IssuesPage() {
                             <Label>Priority *</Label>
                             <Select
                               value={formData.priority}
-                              onValueChange={(value) => setFormData({ ...formData, priority: value as Issue['priority'] })}
+                              onValueChange={(value: string) => setFormData({ ...formData, priority: value as Issue['priority'] })}
                             >
                               <SelectTrigger>
                                 <SelectValue />
@@ -480,7 +480,7 @@ export default function IssuesPage() {
                           <Label>Impact</Label>
                           <Textarea
                             value={formData.impact}
-                            onChange={(e) => setFormData({ ...formData, impact: e.target.value })}
+                            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setFormData({ ...formData, impact: e.target.value })}
                             placeholder="Describe how this affects the project"
                             rows={2}
                           />
@@ -490,7 +490,7 @@ export default function IssuesPage() {
                           <Input
                             type="date"
                             value={formData.target_resolution_date}
-                            onChange={(e) => setFormData({ ...formData, target_resolution_date: e.target.value })}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, target_resolution_date: e.target.value })}
                           />
                         </div>
                         <div className="flex justify-end gap-2">
@@ -654,13 +654,13 @@ export default function IssuesPage() {
                         <Input
                           placeholder="Search issues..."
                           value={searchQuery}
-                          onChange={(e) => setSearchQuery(e.target.value)}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
                           className="w-full"
                         />
                       </div>
                       <Select
                         value={statusFilter.length === 0 ? 'all' : statusFilter[0]}
-                        onValueChange={(value) => setStatusFilter(value === 'all' ? [] : [value])}
+                        onValueChange={(value: string) => setStatusFilter(value === 'all' ? [] : [value])}
                       >
                         <SelectTrigger className="w-[180px]">
                           <SelectValue placeholder="Status" />
@@ -677,7 +677,7 @@ export default function IssuesPage() {
                       </Select>
                       <Select
                         value={priorityFilter.length === 0 ? 'all' : priorityFilter[0]}
-                        onValueChange={(value) => setPriorityFilter(value === 'all' ? [] : [value])}
+                        onValueChange={(value: string) => setPriorityFilter(value === 'all' ? [] : [value])}
                       >
                         <SelectTrigger className="w-[180px]">
                           <SelectValue placeholder="Priority" />
@@ -794,7 +794,7 @@ export default function IssuesPage() {
                           <Label>Status</Label>
                           <Select
                             value={selectedIssue.status}
-                            onValueChange={(value) => {
+                            onValueChange={(value: string) => {
                               handleUpdateIssue(selectedIssue.id, { status: value as Issue['status'] })
                             }}
                           >
@@ -815,7 +815,7 @@ export default function IssuesPage() {
                           <Label>Resolution</Label>
                           <Textarea
                             value={selectedIssue.resolution || ''}
-                            onChange={(e) => {
+                            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
                               setSelectedIssue({ ...selectedIssue, resolution: e.target.value })
                             }}
                             placeholder="How was this issue resolved?"
@@ -826,7 +826,7 @@ export default function IssuesPage() {
                           <Label>Root Cause</Label>
                           <Textarea
                             value={selectedIssue.root_cause || ''}
-                            onChange={(e) => {
+                            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
                               setSelectedIssue({ ...selectedIssue, root_cause: e.target.value })
                             }}
                             placeholder="Root cause analysis"
@@ -837,7 +837,7 @@ export default function IssuesPage() {
                           <Label>Workaround</Label>
                           <Textarea
                             value={selectedIssue.workaround || ''}
-                            onChange={(e) => {
+                            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
                               setSelectedIssue({ ...selectedIssue, workaround: e.target.value })
                             }}
                             placeholder="Temporary workaround (if applicable)"

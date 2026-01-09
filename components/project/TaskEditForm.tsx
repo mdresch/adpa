@@ -114,7 +114,7 @@ export function TaskEditForm({ task, onSave }: TaskEditFormProps) {
         <Input
           id="taskName"
           value={formData.taskName}
-          onChange={(e) => handleChange('taskName', e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleChange('taskName', e.target.value)}
           required
         />
       </div>
@@ -125,7 +125,7 @@ export function TaskEditForm({ task, onSave }: TaskEditFormProps) {
         <Textarea
           id="description"
           value={formData.description}
-          onChange={(e) => handleChange('description', e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => handleChange('description', e.target.value)}
           rows={4}
           placeholder="Enter task description..."
         />
@@ -139,7 +139,7 @@ export function TaskEditForm({ task, onSave }: TaskEditFormProps) {
             id="startDate"
             type="date"
             value={formData.startDate}
-            onChange={(e) => handleChange('startDate', e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleChange('startDate', e.target.value)}
           />
         </div>
         <div className="space-y-2">
@@ -148,7 +148,7 @@ export function TaskEditForm({ task, onSave }: TaskEditFormProps) {
             id="endDate"
             type="date"
             value={formData.endDate}
-            onChange={(e) => handleChange('endDate', e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleChange('endDate', e.target.value)}
           />
         </div>
       </div>
@@ -163,7 +163,7 @@ export function TaskEditForm({ task, onSave }: TaskEditFormProps) {
             step="0.5"
             min="0"
             value={formData.estimatedHours}
-            onChange={(e) => handleChange('estimatedHours', e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleChange('estimatedHours', e.target.value)}
             placeholder="0"
           />
         </div>
@@ -175,7 +175,7 @@ export function TaskEditForm({ task, onSave }: TaskEditFormProps) {
             min="0"
             max="100"
             value={formData.percentComplete}
-            onChange={(e) => handleChange('percentComplete', e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleChange('percentComplete', e.target.value)}
           />
         </div>
       </div>
@@ -184,7 +184,7 @@ export function TaskEditForm({ task, onSave }: TaskEditFormProps) {
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor="status">Status</Label>
-          <Select value={formData.status} onValueChange={(value) => handleChange('status', value)}>
+          <Select value={formData.status} onValueChange={(value: string) => handleChange('status', value)}>
             <SelectTrigger id="status">
               <SelectValue />
             </SelectTrigger>
@@ -202,7 +202,7 @@ export function TaskEditForm({ task, onSave }: TaskEditFormProps) {
         </div>
         <div className="space-y-2">
           <Label htmlFor="priority">Priority</Label>
-          <Select value={formData.priority} onValueChange={(value) => handleChange('priority', value)}>
+          <Select value={formData.priority} onValueChange={(value: string) => handleChange('priority', value)}>
             <SelectTrigger id="priority">
               <SelectValue />
             </SelectTrigger>
@@ -219,7 +219,7 @@ export function TaskEditForm({ task, onSave }: TaskEditFormProps) {
           <Input
             id="phase"
             value={formData.phase}
-            onChange={(e) => handleChange('phase', e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleChange('phase', e.target.value)}
             placeholder="e.g., Design, Development, Testing"
           />
         </div>
@@ -228,7 +228,7 @@ export function TaskEditForm({ task, onSave }: TaskEditFormProps) {
           <Input
             id="category"
             value={formData.category}
-            onChange={(e) => handleChange('category', e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleChange('category', e.target.value)}
             placeholder="e.g., Technical, Management"
           />
         </div>
@@ -239,7 +239,7 @@ export function TaskEditForm({ task, onSave }: TaskEditFormProps) {
         <Label htmlFor="requiredRoleId">Required Role</Label>
         <Select 
           value={formData.requiredRoleId || '__none__'} 
-          onValueChange={(value) => handleChange('requiredRoleId', value)}
+          onValueChange={(value: string) => handleChange('requiredRoleId', value)}
           disabled={loadingRoles}
         >
           <SelectTrigger id="requiredRoleId">

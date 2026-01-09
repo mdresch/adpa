@@ -159,7 +159,7 @@ export function DriftResolutionDialog({
                 {onStrategyChange && (
                   <div className="space-y-3 pt-4 border-t">
                     <Label className="text-sm font-semibold">AI Resolution Strategy:</Label>
-                    <RadioGroup value={selectedStrategy} onValueChange={(value) => onStrategyChange(value as any)}>
+                    <RadioGroup value={selectedStrategy} onValueChange={(value: string) => onStrategyChange(value as any)}>
                       <div className="flex items-start space-x-2 p-3 border rounded-md hover:bg-muted/50 cursor-pointer">
                         <RadioGroupItem value="conservative" id="conservative" />
                         <Label htmlFor="conservative" className="flex-1 cursor-pointer">

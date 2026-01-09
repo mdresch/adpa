@@ -542,7 +542,7 @@ export default function AssessmentsListPage() {
       {/* Processing Dialog */}
       <Dialog 
         open={!!selectedProcessingAssessment} 
-        onOpenChange={(open) => {
+        onOpenChange={(open: boolean) => {
           if (!open) setSelectedProcessingAssessment(null);
         }}
       >
@@ -872,7 +872,7 @@ export default function AssessmentsListPage() {
                   <Input
                     type="date"
                     value={filterDateFrom}
-                    onChange={(e) => setFilterDateFrom(e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFilterDateFrom(e.target.value)}
                     style={{
                       color: maturityTheme.colors.text.primary,
                       backgroundColor: maturityTheme.colors.background.tertiary,
@@ -885,7 +885,7 @@ export default function AssessmentsListPage() {
                   <Input
                     type="date"
                     value={filterDateTo}
-                    onChange={(e) => setFilterDateTo(e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFilterDateTo(e.target.value)}
                     style={{
                       color: maturityTheme.colors.text.primary,
                       backgroundColor: maturityTheme.colors.background.tertiary,
@@ -901,7 +901,7 @@ export default function AssessmentsListPage() {
                     max="5"
                     placeholder="1"
                     value={filterMaturityMin}
-                    onChange={(e) => setFilterMaturityMin(e.target.value === '' ? '' : Number(e.target.value))}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFilterMaturityMin(e.target.value === '' ? '' : Number(e.target.value))}
                     style={{
                       color: maturityTheme.colors.text.primary,
                       backgroundColor: maturityTheme.colors.background.tertiary,
@@ -917,7 +917,7 @@ export default function AssessmentsListPage() {
                     max="5"
                     placeholder="5"
                     value={filterMaturityMax}
-                    onChange={(e) => setFilterMaturityMax(e.target.value === '' ? '' : Number(e.target.value))}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFilterMaturityMax(e.target.value === '' ? '' : Number(e.target.value))}
                     style={{
                       color: maturityTheme.colors.text.primary,
                       backgroundColor: maturityTheme.colors.background.tertiary,
@@ -932,7 +932,7 @@ export default function AssessmentsListPage() {
                     min="0"
                     placeholder="0"
                     value={filterDocCountMin}
-                    onChange={(e) => setFilterDocCountMin(e.target.value === '' ? '' : Number(e.target.value))}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFilterDocCountMin(e.target.value === '' ? '' : Number(e.target.value))}
                     style={{
                       color: maturityTheme.colors.text.primary,
                       backgroundColor: maturityTheme.colors.background.tertiary,
@@ -947,7 +947,7 @@ export default function AssessmentsListPage() {
                     min="0"
                     placeholder="∞"
                     value={filterDocCountMax}
-                    onChange={(e) => setFilterDocCountMax(e.target.value === '' ? '' : Number(e.target.value))}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFilterDocCountMax(e.target.value === '' ? '' : Number(e.target.value))}
                     style={{
                       color: maturityTheme.colors.text.primary,
                       backgroundColor: maturityTheme.colors.background.tertiary,
@@ -1337,7 +1337,7 @@ export default function AssessmentsListPage() {
                     }}
                   >
                     <TableCell 
-                      onClick={(e) => e.stopPropagation()}
+                      onClick={async (e: React.MouseEvent) => e.stopPropagation()}
                       style={{ width: '50px' }}
                     >
                       <input

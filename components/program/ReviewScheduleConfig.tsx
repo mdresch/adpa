@@ -102,7 +102,7 @@ export function ReviewScheduleConfig({ programId, schedule, onUpdate }: ReviewSc
             <Label htmlFor="review_type">Review Type</Label>
             <Select
               value={formData.review_type}
-              onValueChange={(value) => setFormData({ ...formData, review_type: value as ReviewSchedule['review_type'] })}
+              onValueChange={(value: string) => setFormData({ ...formData, review_type: value as ReviewSchedule['review_type'] })}
             >
               <SelectTrigger id="review_type">
                 <SelectValue />
@@ -120,7 +120,7 @@ export function ReviewScheduleConfig({ programId, schedule, onUpdate }: ReviewSc
             <Label htmlFor="frequency">Frequency *</Label>
             <Select
               value={formData.frequency}
-              onValueChange={(value) => setFormData({ ...formData, frequency: value as ReviewSchedule['frequency'] })}
+              onValueChange={(value: string) => setFormData({ ...formData, frequency: value as ReviewSchedule['frequency'] })}
             >
               <SelectTrigger id="frequency">
                 <SelectValue />
@@ -145,7 +145,7 @@ export function ReviewScheduleConfig({ programId, schedule, onUpdate }: ReviewSc
               min="1"
               max="31"
               value={formData.day_of_month || ''}
-              onChange={(e) => setFormData({ 
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ 
                 ...formData, 
                 day_of_month: e.target.value ? parseInt(e.target.value) : undefined,
                 day_of_week: undefined // Clear day_of_week if day_of_month is set
@@ -161,7 +161,7 @@ export function ReviewScheduleConfig({ programId, schedule, onUpdate }: ReviewSc
             <Label htmlFor="day_of_week">Day of Week</Label>
             <Select
               value={formData.day_of_week || ''}
-              onValueChange={(value) => setFormData({ 
+              onValueChange={(value: string) => setFormData({ 
                 ...formData, 
                 day_of_week: value,
                 day_of_month: undefined // Clear day_of_month if day_of_week is set
@@ -192,7 +192,7 @@ export function ReviewScheduleConfig({ programId, schedule, onUpdate }: ReviewSc
               type="number"
               min="15"
               value={formData.duration_minutes}
-              onChange={(e) => setFormData({ ...formData, duration_minutes: parseInt(e.target.value) || 60 })}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, duration_minutes: parseInt(e.target.value) || 60 })}
             />
           </div>
 
@@ -201,7 +201,7 @@ export function ReviewScheduleConfig({ programId, schedule, onUpdate }: ReviewSc
             <Input
               id="reminder_days"
               value={formData.reminder_days_before.join(', ')}
-              onChange={(e) => handleReminderDaysChange(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleReminderDaysChange(e.target.value)}
               placeholder="e.g., 7, 1 (7 days and 1 day before)"
             />
             <p className="text-xs text-muted-foreground">
@@ -221,7 +221,7 @@ export function ReviewScheduleConfig({ programId, schedule, onUpdate }: ReviewSc
             <Switch
               id="auto_generate_agenda"
               checked={formData.auto_generate_agenda}
-              onCheckedChange={(checked) => setFormData({ ...formData, auto_generate_agenda: checked })}
+              onCheckedChange={(checked: boolean) => setFormData({ ...formData, auto_generate_agenda: checked })}
             />
           </div>
 
@@ -235,7 +235,7 @@ export function ReviewScheduleConfig({ programId, schedule, onUpdate }: ReviewSc
             <Switch
               id="send_reminders"
               checked={formData.send_reminders}
-              onCheckedChange={(checked) => setFormData({ ...formData, send_reminders: checked })}
+              onCheckedChange={(checked: boolean) => setFormData({ ...formData, send_reminders: checked })}
             />
           </div>
 
@@ -249,7 +249,7 @@ export function ReviewScheduleConfig({ programId, schedule, onUpdate }: ReviewSc
             <Switch
               id="is_active"
               checked={formData.is_active}
-              onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
+              onCheckedChange={(checked: boolean) => setFormData({ ...formData, is_active: checked })}
             />
           </div>
         </div>

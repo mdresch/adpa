@@ -241,7 +241,7 @@ export const SignatureFieldPlacer = ({
                         type="button"
                         variant="ghost"
                         size="sm"
-                        onClick={(e) => handleDeleteField(field.id, e)}
+                        onClick={async (e: React.MouseEvent) => handleDeleteField(field.id, e)}
                         className="h-6 w-6 p-0"
                       >
                         <X className="h-3 w-3" />
@@ -325,7 +325,7 @@ export const SignatureFieldPlacer = ({
                 height: `${field.height}px`,
                 pointerEvents: 'auto',
               }}
-              onClick={(e) => {
+              onClick={async (e: React.MouseEvent) => {
                 e.stopPropagation();
                 e.preventDefault();
                 if (!field.value) {
@@ -365,7 +365,7 @@ export const SignatureFieldPlacer = ({
                   variant="destructive"
                   size="sm"
                   className="absolute -right-2 -top-2 h-5 w-5 rounded-full p-0"
-                  onClick={(e) => handleDeleteField(field.id, e)}
+                  onClick={async (e: React.MouseEvent) => handleDeleteField(field.id, e)}
                 >
                   <X className="h-3 w-3" />
                 </Button>

@@ -75,7 +75,7 @@ export function GenerateDocumentDialog({
                 id="doc-name"
                 placeholder="Enter document name"
                 value={form.name}
-                onChange={(e) => onFormChange({ ...form, name: e.target.value })}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => onFormChange({ ...form, name: e.target.value })}
                 className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                 required
               />
@@ -91,7 +91,7 @@ export function GenerateDocumentDialog({
                 title="Select a template"
                 className="flex h-10 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-background px-3 py-2 text-sm mt-2 focus:border-blue-500 transition-colors"
                 value={form.template_id}
-                onChange={(e) => onFormChange({ ...form, template_id: e.target.value })}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => onFormChange({ ...form, template_id: e.target.value })}
               >
                 <option value="">Select a template</option>
                 {templates.map((template) => (
@@ -190,7 +190,7 @@ export function GenerateDocumentDialog({
                 id="generation-prompt"
                 placeholder="Describe what you want the document to contain..."
                 value={form.prompt}
-                onChange={(e) => onFormChange({ ...form, prompt: e.target.value })}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => onFormChange({ ...form, prompt: e.target.value })}
                 className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                 rows={4}
                 required

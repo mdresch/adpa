@@ -679,7 +679,7 @@ export default function DocumentUploadPage() {
       {/* Registration Dialog - shown when not authenticated */}
       <RegistrationDialog
         open={showRegistrationDialog && !isAuthenticated}
-        onOpenChange={(open) => {
+        onOpenChange={(open: boolean) => {
           setShowRegistrationDialog(open);
           // If dialog is closed and user is still not authenticated, redirect to login
           if (!open && !isAuthenticated) {
@@ -1220,7 +1220,7 @@ export default function DocumentUploadPage() {
       )}
 
       {/* File Preview Dialog */}
-      <Dialog open={!!previewFile} onOpenChange={(open) => {
+      <Dialog open={!!previewFile} onOpenChange={(open: boolean) => {
         if (!open) {
           setPreviewFile(null);
           if (previewUrl) {

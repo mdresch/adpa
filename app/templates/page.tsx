@@ -452,7 +452,7 @@ export default function Templates() {
                 <Button variant="outline" onClick={() => loadTemplates({ showLoading: true })}>
                   Refresh
                 </Button>
-                <Dialog open={isDialogOpen} onOpenChange={(open) => { setIsDialogOpen(Boolean(open)); if (!open) { setEditingTemplate(null); } }}>
+                <Dialog open={isDialogOpen} onOpenChange={(open: boolean) => { setIsDialogOpen(Boolean(open)); if (!open) { setEditingTemplate(null); } }}>
                   <Button onClick={openCreateDialog}>
                     <Plus className="h-4 w-4 mr-2" />
                     Create Template
@@ -471,7 +471,7 @@ export default function Templates() {
                               placeholder="Enter template name"
                               className="mt-1"
                               value={formName}
-                              onChange={(e) => {
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                                 setFormName(e.target.value)
                                 if (formErrors.name) setFormErrors((s) => ({ ...s, name: undefined }))
                               }}
@@ -486,7 +486,7 @@ export default function Templates() {
                               title="Framework"
                               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
                               value={formFramework}
-                              onChange={(e) => {
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                                 setFormFramework(e.target.value)
                                 if (formErrors.framework) setFormErrors((s) => ({ ...s, framework: undefined }))
                               }}
@@ -507,11 +507,11 @@ export default function Templates() {
                         <div className="grid grid-cols-2 gap-4">
                           <div>
                             <label className="text-sm font-medium">Category</label>
-                            <Input placeholder="e.g., Requirements, Planning" className="mt-1" value={formCategory} onChange={(e) => setFormCategory(e.target.value)} />
+                            <Input placeholder="e.g., Requirements, Planning" className="mt-1" value={formCategory} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormCategory(e.target.value)} />
                           </div>
                           <div>
                             <label className="text-sm font-medium">Version</label>
-                            <Input placeholder="1.0" value={formVersion} onChange={(e) => setFormVersion(e.target.value)} className="mt-1" />
+                            <Input placeholder="1.0" value={formVersion} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormVersion(e.target.value)} className="mt-1" />
                           </div>
                         </div>
                         <div>
@@ -520,7 +520,7 @@ export default function Templates() {
                             className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
                             placeholder="Describe the purpose and usage of this template"
                             value={formDescription}
-                            onChange={(e) => setFormDescription(e.target.value)}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormDescription(e.target.value)}
                           />
                         </div>
                         <div>
@@ -555,7 +555,7 @@ export default function Templates() {
                             className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1 font-mono text-sm"
                             placeholder="Define the AI assistant's role and behavior for this template (optional)"
                             value={formSystemPrompt}
-                            onChange={(e) => setFormSystemPrompt(e.target.value)}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormSystemPrompt(e.target.value)}
                           />
                           <div className="flex items-center justify-between mt-1">
                             <p className="text-xs text-muted-foreground">
@@ -606,7 +606,7 @@ export default function Templates() {
                                     <Input
                                       placeholder="e.g., Executive Summary"
                                       value={paragraph.section_name}
-                                      onChange={(e) => {
+                                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                                         const updated = [...formTemplateParagraphs]
                                         updated[index].section_name = e.target.value
                                         setFormTemplateParagraphs(updated)
@@ -618,7 +618,7 @@ export default function Templates() {
                                     <label className="text-xs font-medium">Type</label>
                                     <select
                                       value={paragraph.section_type}
-                                      onChange={(e) => {
+                                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                                         const updated = [...formTemplateParagraphs]
                                         updated[index].section_type = e.target.value as any
                                         setFormTemplateParagraphs(updated)
@@ -640,7 +640,7 @@ export default function Templates() {
                                   <Input
                                     placeholder="Describe what this section should contain"
                                     value={paragraph.description}
-                                    onChange={(e) => {
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                                       const updated = [...formTemplateParagraphs]
                                       updated[index].description = e.target.value
                                       setFormTemplateParagraphs(updated)
@@ -653,7 +653,7 @@ export default function Templates() {
                                   <Input
                                     placeholder="Specific instructions for AI on how to generate this section"
                                     value={paragraph.prompt_guidance || ""}
-                                    onChange={(e) => {
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                                       const updated = [...formTemplateParagraphs]
                                       updated[index].prompt_guidance = e.target.value
                                       setFormTemplateParagraphs(updated)
@@ -666,7 +666,7 @@ export default function Templates() {
                                     <input
                                       type="checkbox"
                                       checked={paragraph.required}
-                                      onChange={(e) => {
+                                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                                         const updated = [...formTemplateParagraphs]
                                         updated[index].required = e.target.checked
                                         setFormTemplateParagraphs(updated)
@@ -710,7 +710,7 @@ export default function Templates() {
                   </DialogContent>
                 </Dialog>
                 {/* Confirm Delete Dialog */}
-                <Dialog open={isConfirmDeleteOpen} onOpenChange={(open) => { if (!open) { setIsConfirmDeleteOpen(false); setConfirmDeleteTemplate(null) } }}>
+                <Dialog open={isConfirmDeleteOpen} onOpenChange={(open: boolean) => { if (!open) { setIsConfirmDeleteOpen(false); setConfirmDeleteTemplate(null) } }}>
                   <DialogContent className="sm:max-w-[420px]">
                     <DialogHeader>
                       <DialogTitle>Delete Template</DialogTitle>
@@ -728,7 +728,7 @@ export default function Templates() {
                   </DialogContent>
                 </Dialog>
                 {/* Hard Delete Dialog for Archive */}
-                <Dialog open={isConfirmHardDeleteOpen} onOpenChange={(open) => { if (!open) { setIsConfirmHardDeleteOpen(false); setConfirmHardDeleteTemplate(null) } }}>
+                <Dialog open={isConfirmHardDeleteOpen} onOpenChange={(open: boolean) => { if (!open) { setIsConfirmHardDeleteOpen(false); setConfirmHardDeleteTemplate(null) } }}>
                   <DialogContent className="sm:max-w-[420px]">
                     <DialogHeader>
                       <DialogTitle>Permanently Delete Template</DialogTitle>
@@ -756,7 +756,7 @@ export default function Templates() {
                 <Input
                   placeholder="Search templates..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
                   className="pl-10"
                 />
               </div>
@@ -766,7 +766,7 @@ export default function Templates() {
                   title="Framework"
                   className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
                   value={selectedFramework}
-                  onChange={(e) => setSelectedFramework(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSelectedFramework(e.target.value)}
                 >
                   <option value="all">All Frameworks</option>
                   <option value="BABOK v3">BABOK v3</option>
@@ -815,7 +815,7 @@ export default function Templates() {
                         </div>
                         <CardTitle 
                           className="text-lg hover:text-primary transition-colors cursor-pointer"
-                          onClick={(e) => {
+                          onClick={(e: React.MouseEvent) => {
                             e.stopPropagation()
                             router.push(`/templates/${template.id}`)
                           }}
@@ -885,7 +885,7 @@ export default function Templates() {
                             <Button 
                               size="sm" 
                               className="flex-1" 
-                              onClick={(e) => {
+                              onClick={(e: React.MouseEvent) => {
                                 e.stopPropagation()
                                 router.push(`/templates/${template.id}`)
                               }}
@@ -893,10 +893,10 @@ export default function Templates() {
                               <Eye className="h-4 w-4 mr-1" />
                               View
                             </Button>
-                            <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); openEditDialog(template) }}>
+                            <Button variant="outline" size="sm" onClick={(e: React.MouseEvent) => { e.stopPropagation(); openEditDialog(template) }}>
                               <Edit className="h-4 w-4" />
                             </Button>
-                            <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); handleClone(template) }} disabled={cloningIds.includes(String(template.id))}>
+                            <Button variant="outline" size="sm" onClick={(e: React.MouseEvent) => { e.stopPropagation(); handleClone(template) }} disabled={cloningIds.includes(String(template.id))}>
                               <Copy className="h-4 w-4" />
                             </Button>
                           </div>
@@ -1008,7 +1008,7 @@ export default function Templates() {
                 {loadingArchive ? (
                   // show skeleton placeholders while loading
                   <div className="space-y-3">
-                    {[...Array(Math.min(3, archiveLimit || 3)).keys()].map((i) => (
+                    {[...Array(Math.min(3, archiveLimit || 3)).keys()].map((i: any) => (
                       <Card key={`skeleton-${i}`} className="animate-pulse">
                         <CardContent className="p-4">
                           <div className="flex items-center justify-between">
@@ -1069,7 +1069,7 @@ export default function Templates() {
                         <select
                           aria-label="Items per page"
                           value={archiveLimit}
-                          onChange={(e) => {
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                             const v = Number(e.target.value) || 10
                             setArchiveLimit(v)
                             setArchivePage(1)
@@ -1092,7 +1092,7 @@ export default function Templates() {
                         min={1}
                         max={archivePagination.pages}
                         value={archivePage}
-                        onChange={(e) => setArchivePage(Number(e.target.value || 1))}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setArchivePage(Number(e.target.value || 1))}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
                             let p = Number(archivePage) || 1

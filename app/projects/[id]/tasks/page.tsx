@@ -103,7 +103,7 @@ export default function TasksPage() {
       <div className="space-y-6 p-6">
         {/* Metrics Skeleton */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {[1, 2, 3, 4].map((i) => (
+          {[1, 2, 3, 4].map((i: any) => (
             <Card key={i}>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <Skeleton className="h-4 w-24" />
@@ -125,7 +125,7 @@ export default function TasksPage() {
           <CardContent>
             <div className="space-y-4">
               <Skeleton className="h-10 w-full" />
-              {[1, 2, 3, 4, 5].map((i) => (
+              {[1, 2, 3, 4, 5].map((i: any) => (
                 <Skeleton key={i} className="h-16 w-full" />
               ))}
             </div>
@@ -167,7 +167,7 @@ export default function TasksPage() {
             </CardTitle>
             <div className="flex items-center gap-2">
               {/* View Mode Switcher */}
-              <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'table' | 'card' | 'kanban' | 'gantt')}>
+              <Tabs value={viewMode} onValueChange={(v: string) => setViewMode(v as 'table' | 'card' | 'kanban' | 'gantt')}>
                 <TabsList className="h-9">
                   <TabsTrigger value="table" className="flex items-center gap-2">
                     <Table2 className="h-4 w-4" />
@@ -224,7 +224,7 @@ export default function TasksPage() {
             {viewMode === 'card' && (
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">Sort by:</span>
-                <Tabs value={sortBy} onValueChange={(v) => setSortBy(v as 'assignedTo' | 'role' | 'none')}>
+                <Tabs value={sortBy} onValueChange={(v: string) => setSortBy(v as 'assignedTo' | 'role' | 'none')}>
                   <TabsList className="h-8">
                     <TabsTrigger value="none" className="text-xs">Default</TabsTrigger>
                     <TabsTrigger value="assignedTo" className="text-xs">Assigned To</TabsTrigger>
@@ -303,7 +303,7 @@ export default function TasksPage() {
       <TaskDetailsModal
         taskId={selectedTaskId}
         open={modalOpen}
-        onOpenChange={(open) => {
+        onOpenChange={(open: boolean) => {
           setModalOpen(open)
           if (!open) setSelectedTaskId(null)
         }}
@@ -314,7 +314,7 @@ export default function TasksPage() {
       {selectedTaskForAssignment && (
         <ResourceAssignmentDialog
           open={assignmentDialogOpen}
-          onOpenChange={(open) => {
+          onOpenChange={(open: boolean) => {
             setAssignmentDialogOpen(open)
             if (!open) {
               setSelectedTaskForAssignment(null)

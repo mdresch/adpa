@@ -1900,7 +1900,7 @@ export default function ProcessFlowWorkflow() {
                           <input 
                             type="checkbox" 
                             checked={workflowConfig.includeMetadata}
-                            onChange={(e) => setWorkflowConfig(prev => ({ ...prev, includeMetadata: e.target.checked }))}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setWorkflowConfig(prev => ({ ...prev, includeMetadata: e.target.checked }))}
                             className="rounded" 
                           />
                           <span className="text-sm">Include document metadata</span>
@@ -1909,7 +1909,7 @@ export default function ProcessFlowWorkflow() {
                           <input 
                             type="checkbox" 
                             checked={workflowConfig.includeRelationships}
-                            onChange={(e) => setWorkflowConfig(prev => ({ ...prev, includeRelationships: e.target.checked }))}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setWorkflowConfig(prev => ({ ...prev, includeRelationships: e.target.checked }))}
                             className="rounded" 
                           />
                           <span className="text-sm">Include relationships</span>
@@ -1918,7 +1918,7 @@ export default function ProcessFlowWorkflow() {
                           <input 
                             type="checkbox" 
                             checked={workflowConfig.includeStakeholders}
-                            onChange={(e) => setWorkflowConfig(prev => ({ ...prev, includeStakeholders: e.target.checked }))}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setWorkflowConfig(prev => ({ ...prev, includeStakeholders: e.target.checked }))}
                             className="rounded" 
                           />
                           <span className="text-sm">Include project stakeholders</span>

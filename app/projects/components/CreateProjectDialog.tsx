@@ -51,7 +51,7 @@ export function CreateProjectDialog({
                   id="project-name"
                   placeholder="Enter project name"
                   value={newProject.name}
-                  onChange={(e) => onProjectChange({ ...newProject, name: e.target.value })}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => onProjectChange({ ...newProject, name: e.target.value })}
                   className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                   required
                 />
@@ -65,7 +65,7 @@ export function CreateProjectDialog({
                   title="Priority"
                   className="flex h-10 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-background px-3 py-2 text-sm mt-2 focus:border-blue-500 transition-colors"
                   value={newProject.priority}
-                  onChange={(e) => onProjectChange({ ...newProject, priority: e.target.value })}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => onProjectChange({ ...newProject, priority: e.target.value })}
                 >
                   <option value="low">Low</option>
                   <option value="medium">Medium</option>
@@ -85,7 +85,7 @@ export function CreateProjectDialog({
                   title="Framework"
                   className="flex h-10 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-background px-3 py-2 text-sm mt-2 focus:border-blue-500 transition-colors"
                   value={newProject.framework}
-                  onChange={(e) => onProjectChange({ ...newProject, framework: e.target.value })}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => onProjectChange({ ...newProject, framework: e.target.value })}
                   required
                 >
                   <option value="">Select framework</option>
@@ -102,7 +102,7 @@ export function CreateProjectDialog({
                   id="manager"
                   placeholder="Enter manager name"
                   value={newProject.manager}
-                  onChange={(e) => onProjectChange({ ...newProject, manager: e.target.value })}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => onProjectChange({ ...newProject, manager: e.target.value })}
                   className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                 />
               </div>
@@ -117,7 +117,7 @@ export function CreateProjectDialog({
                 id="description"
                 placeholder="Describe the project objectives and scope"
                 value={newProject.description}
-                onChange={(e) => onProjectChange({ ...newProject, description: e.target.value })}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => onProjectChange({ ...newProject, description: e.target.value })}
                 className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
               />
             </div>
@@ -132,7 +132,7 @@ export function CreateProjectDialog({
                   id="start-date"
                   type="date"
                   value={newProject.start_date}
-                  onChange={(e) => onProjectChange({ ...newProject, start_date: e.target.value })}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => onProjectChange({ ...newProject, start_date: e.target.value })}
                   className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                 />
               </div>
@@ -144,7 +144,7 @@ export function CreateProjectDialog({
                   id="end-date"
                   type="date"
                   value={newProject.end_date}
-                  onChange={(e) => onProjectChange({ ...newProject, end_date: e.target.value })}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => onProjectChange({ ...newProject, end_date: e.target.value })}
                   className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                 />
               </div>
@@ -156,7 +156,7 @@ export function CreateProjectDialog({
                   id="budget"
                   placeholder="$0"
                   value={newProject.budget}
-                  onChange={(e) => onProjectChange({ ...newProject, budget: e.target.value })}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => onProjectChange({ ...newProject, budget: e.target.value })}
                   className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                 />
               </div>

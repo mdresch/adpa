@@ -334,7 +334,7 @@ export function PrioritizationMatrix({
                   <Textarea
                     id={`justification-${criterion.id}`}
                     value={scores[criterion.id]?.justification || ''}
-                    onChange={(e) => handleJustificationChange(criterion.id, e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => handleJustificationChange(criterion.id, e.target.value)}
                     placeholder="Explain why you assigned this score..."
                     className="mt-1"
                     rows={2}

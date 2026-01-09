@@ -378,7 +378,7 @@ export function ProjectIssuesTab({ projectId }: ProjectIssuesTabProps) {
                 <Label>Title *</Label>
                 <Input
                   value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, title: e.target.value })}
                   placeholder="Brief summary of the issue"
                 />
               </div>
@@ -386,7 +386,7 @@ export function ProjectIssuesTab({ projectId }: ProjectIssuesTabProps) {
                 <Label>Description *</Label>
                 <Textarea
                   value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setFormData({ ...formData, description: e.target.value })}
                   placeholder="Full description of the problem"
                   rows={4}
                 />
@@ -396,7 +396,7 @@ export function ProjectIssuesTab({ projectId }: ProjectIssuesTabProps) {
                   <Label>Category *</Label>
                   <Select
                     value={formData.category}
-                    onValueChange={(value) => setFormData({ ...formData, category: value as Issue['category'] })}
+                    onValueChange={(value: string) => setFormData({ ...formData, category: value as Issue['category'] })}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -418,7 +418,7 @@ export function ProjectIssuesTab({ projectId }: ProjectIssuesTabProps) {
                   <Label>Priority *</Label>
                   <Select
                     value={formData.priority}
-                    onValueChange={(value) => setFormData({ ...formData, priority: value as Issue['priority'] })}
+                    onValueChange={(value: string) => setFormData({ ...formData, priority: value as Issue['priority'] })}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -436,7 +436,7 @@ export function ProjectIssuesTab({ projectId }: ProjectIssuesTabProps) {
                 <Label>Impact</Label>
                 <Textarea
                   value={formData.impact}
-                  onChange={(e) => setFormData({ ...formData, impact: e.target.value })}
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setFormData({ ...formData, impact: e.target.value })}
                   placeholder="Describe the impact of this issue"
                   rows={2}
                 />
@@ -446,7 +446,7 @@ export function ProjectIssuesTab({ projectId }: ProjectIssuesTabProps) {
                 <Input
                   type="date"
                   value={formData.target_resolution_date}
-                  onChange={(e) => setFormData({ ...formData, target_resolution_date: e.target.value })}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, target_resolution_date: e.target.value })}
                 />
               </div>
             </div>
@@ -584,14 +584,14 @@ export function ProjectIssuesTab({ projectId }: ProjectIssuesTabProps) {
                 <Input
                   placeholder="Search issues..."
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
                   className="pl-10"
                 />
               </div>
             </div>
             <Select
               value={statusFilter.length === 0 ? 'all' : statusFilter[0]}
-              onValueChange={(value) => setStatusFilter(value === 'all' ? [] : [value])}
+              onValueChange={(value: string) => setStatusFilter(value === 'all' ? [] : [value])}
             >
               <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Status" />
@@ -608,7 +608,7 @@ export function ProjectIssuesTab({ projectId }: ProjectIssuesTabProps) {
             </Select>
             <Select
               value={priorityFilter.length === 0 ? 'all' : priorityFilter[0]}
-              onValueChange={(value) => setPriorityFilter(value === 'all' ? [] : [value])}
+              onValueChange={(value: string) => setPriorityFilter(value === 'all' ? [] : [value])}
             >
               <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Priority" />
@@ -764,14 +764,14 @@ export function ProjectIssuesTab({ projectId }: ProjectIssuesTabProps) {
               <Label>Title *</Label>
               <Input
                 value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, title: e.target.value })}
               />
             </div>
             <div>
               <Label>Description *</Label>
               <Textarea
                 value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setFormData({ ...formData, description: e.target.value })}
                 rows={4}
               />
             </div>
@@ -780,7 +780,7 @@ export function ProjectIssuesTab({ projectId }: ProjectIssuesTabProps) {
                 <Label>Category</Label>
                 <Select
                   value={formData.category}
-                  onValueChange={(value) => setFormData({ ...formData, category: value as Issue['category'] })}
+                  onValueChange={(value: string) => setFormData({ ...formData, category: value as Issue['category'] })}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -802,7 +802,7 @@ export function ProjectIssuesTab({ projectId }: ProjectIssuesTabProps) {
                 <Label>Priority</Label>
                 <Select
                   value={formData.priority}
-                  onValueChange={(value) => setFormData({ ...formData, priority: value as Issue['priority'] })}
+                  onValueChange={(value: string) => setFormData({ ...formData, priority: value as Issue['priority'] })}
                 >
                   <SelectTrigger>
                     <SelectValue />

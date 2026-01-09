@@ -1503,7 +1503,7 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                                     <Badge
                                       variant={document.has_critical_drift ? "destructive" : document.has_high_drift ? "default" : "secondary"}
                                       className="cursor-pointer hover:opacity-80 transition-opacity"
-                                      onClick={(e) => {
+                                      onClick={(e: React.MouseEvent) => {
                                         e.stopPropagation()
                                         router.push(`/projects/${projectId}/drift`)
                                       }}

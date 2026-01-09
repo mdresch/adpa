@@ -51,7 +51,7 @@ export function UploadDocumentDialog({
                 id="upload-doc-name"
                 placeholder="Enter document name"
                 value={form.name}
-                onChange={(e) => onFormChange({ ...form, name: e.target.value })}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => onFormChange({ ...form, name: e.target.value })}
                 className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                 required
               />
@@ -67,7 +67,7 @@ export function UploadDocumentDialog({
                 title="Select a template for metadata tagging"
                 className="flex h-10 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-background px-3 py-2 text-sm mt-2 focus:border-blue-500 transition-colors"
                 value={form.template_id}
-                onChange={(e) => onFormChange({ ...form, template_id: e.target.value })}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => onFormChange({ ...form, template_id: e.target.value })}
                 required
               >
                 <option value="">Select a template (required)</option>
@@ -91,7 +91,7 @@ export function UploadDocumentDialog({
                 id="file-upload"
                 type="file"
                 accept=".pdf,.doc,.docx,.txt,.md"
-                onChange={(e) => {
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                   const file = e.target.files?.[0] || null
                   onFormChange({ ...form, file })
                 }}

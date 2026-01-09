@@ -409,7 +409,7 @@ export default function DemoDocumentViewer() {
                         ) : (
                           <textarea
                             value={editedContent}
-                            onChange={(e) => setEditedContent(e.target.value)}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditedContent(e.target.value)}
                             className="w-full h-96 p-4 border rounded-lg font-mono text-sm"
                             placeholder="Edit document content..."
                           />

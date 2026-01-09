@@ -162,7 +162,7 @@ export const MaturityJourneyIntro: React.FC<MaturityJourneyIntroProps> = ({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      onClick={(e) => {
+      onClick={async (e: React.MouseEvent) => {
         // Close on backdrop click
         if (e.target === e.currentTarget) {
           onSkip?.();
@@ -180,7 +180,7 @@ export const MaturityJourneyIntro: React.FC<MaturityJourneyIntroProps> = ({
           // Prevent layout shifts
           boxSizing: 'border-box',
         }}
-        onClick={(e) => e.stopPropagation()}
+        onClick={async (e: React.MouseEvent) => e.stopPropagation()}
       >
         {/* Close Button */}
         {onSkip && (

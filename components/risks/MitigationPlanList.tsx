@@ -151,7 +151,7 @@ export function MitigationPlanList({
         <CardContent>
           {/* Filters */}
           <div className="flex flex-wrap gap-4 mb-4">
-            <Select value={filters.status} onValueChange={(value) => setFilters({ ...filters, status: value })}>
+            <Select value={filters.status} onValueChange={(value: string) => setFilters({ ...filters, status: value })}>
               <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Filter by status" />
               </SelectTrigger>
@@ -165,7 +165,7 @@ export function MitigationPlanList({
               </SelectContent>
             </Select>
             
-            <Select value={filters.priority} onValueChange={(value) => setFilters({ ...filters, priority: value })}>
+            <Select value={filters.priority} onValueChange={(value: string) => setFilters({ ...filters, priority: value })}>
               <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Filter by priority" />
               </SelectTrigger>
@@ -178,7 +178,7 @@ export function MitigationPlanList({
               </SelectContent>
             </Select>
             
-            <Select value={filters.action_type} onValueChange={(value) => setFilters({ ...filters, action_type: value })}>
+            <Select value={filters.action_type} onValueChange={(value: string) => setFilters({ ...filters, action_type: value })}>
               <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Filter by type" />
               </SelectTrigger>

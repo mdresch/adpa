@@ -95,7 +95,7 @@ export function DevelopmentApproachForm({
         <Textarea
           id="justification"
           value={formData.justification || ''}
-          onChange={(e) => updateField('justification', e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => updateField('justification', e.target.value)}
           placeholder="Explain why this approach was selected for this project..."
           className="min-h-[120px]"
           required
@@ -217,7 +217,7 @@ export function DevelopmentApproachForm({
           <Checkbox
             id="regulatory_constraints"
             checked={formData.regulatory_constraints || false}
-            onCheckedChange={(checked) => updateField('regulatory_constraints', checked as boolean)}
+            onCheckedChange={(checked: boolean) => updateField('regulatory_constraints', checked as boolean)}
           />
           <Label htmlFor="regulatory_constraints" className="font-normal cursor-pointer">
             Regulatory constraints apply (compliance requirements)
@@ -238,7 +238,7 @@ export function DevelopmentApproachForm({
                 type="number"
                 min="1"
                 value={formData.iteration_length || ''}
-                onChange={(e) => updateField('iteration_length', e.target.value ? parseInt(e.target.value) : null)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateField('iteration_length', e.target.value ? parseInt(e.target.value) : null)}
                 placeholder="e.g., 2"
               />
               <Select
@@ -282,7 +282,7 @@ export function DevelopmentApproachForm({
           <Input
             id="life_cycle_phases"
             value={formData.life_cycle_phases?.join(', ') || ''}
-            onChange={(e) => {
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
               const phases = e.target.value
                 .split(',')
                 .map(p => p.trim())
@@ -299,7 +299,7 @@ export function DevelopmentApproachForm({
           <Input
             id="review_gates"
             value={formData.review_gates?.join(', ') || ''}
-            onChange={(e) => {
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
               const gates = e.target.value
                 .split(',')
                 .map(g => g.trim())

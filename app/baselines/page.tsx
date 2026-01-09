@@ -292,7 +292,7 @@ export default function BaselinesPage() {
                   <Input
                     id="baselineName"
                     value={newBaseline.baselineName}
-                    onChange={(e) => setNewBaseline({ ...newBaseline, baselineName: e.target.value })}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewBaseline({ ...newBaseline, baselineName: e.target.value })}
                     placeholder="e.g., Project Kickoff Baseline"
                   />
                 </div>

@@ -170,7 +170,7 @@ export default function ProjectSettingsPage() {
       <Card className="p-6 space-y-4">
         <div className="grid gap-2">
           <Label htmlFor="space">Confluence Space Key</Label>
-          <Input aria-invalid={!!errors.confluence_space_key} aria-describedby="space-error" id="space" value={state.confluence_space_key} onChange={(e)=> { setState(s=>({...s, confluence_space_key: e.target.value.toUpperCase()})); setErrors(prev=>({...prev, confluence_space_key: undefined})) }} placeholder="AD" />
+          <Input aria-invalid={!!errors.confluence_space_key} aria-describedby="space-error" id="space" value={state.confluence_space_key} onChange={(e: React.ChangeEvent<HTMLInputElement>)=> { setState(s=>({...s, confluence_space_key: e.target.value.toUpperCase()})); setErrors(prev=>({...prev, confluence_space_key: undefined})) }} placeholder="AD" />
           {errors.confluence_space_key && <p id="space-error" className="text-red-600 text-sm">{errors.confluence_space_key}</p>}
           {confluenceSpaceName && (
             <p className="text-xs text-muted-foreground">Space Name: {confluenceSpaceName}</p>
@@ -191,17 +191,17 @@ export default function ProjectSettingsPage() {
         </div>
         <div className="grid gap-2">
           <Label htmlFor="parent">Confluence Parent Page ID (optional)</Label>
-          <Input aria-invalid={!!errors.confluence_parent_page_id} aria-describedby="parent-error" id="parent" value={state.confluence_parent_page_id} onChange={(e)=> { setState(s=>({...s, confluence_parent_page_id: e.target.value.replace(/[^0-9]/g, '')})); setErrors(prev=>({...prev, confluence_parent_page_id: undefined})) }} placeholder="329253087" />
+          <Input aria-invalid={!!errors.confluence_parent_page_id} aria-describedby="parent-error" id="parent" value={state.confluence_parent_page_id} onChange={(e: React.ChangeEvent<HTMLInputElement>)=> { setState(s=>({...s, confluence_parent_page_id: e.target.value.replace(/[^0-9]/g, '')})); setErrors(prev=>({...prev, confluence_parent_page_id: undefined})) }} placeholder="329253087" />
           {errors.confluence_parent_page_id && <p id="parent-error" className="text-red-600 text-sm">{errors.confluence_parent_page_id}</p>}
         </div>
         <div className="grid gap-2">
           <Label htmlFor="jiraKey">Jira Project Key (optional)</Label>
-          <Input aria-invalid={!!errors.jira_project_key} aria-describedby="jiraKey-error" id="jiraKey" value={state.jira_project_key} onChange={(e)=> { setState(s=>({...s, jira_project_key: e.target.value.toUpperCase()})); setErrors(prev=>({...prev, jira_project_key: undefined})) }} placeholder="WA" />
+          <Input aria-invalid={!!errors.jira_project_key} aria-describedby="jiraKey-error" id="jiraKey" value={state.jira_project_key} onChange={(e: React.ChangeEvent<HTMLInputElement>)=> { setState(s=>({...s, jira_project_key: e.target.value.toUpperCase()})); setErrors(prev=>({...prev, jira_project_key: undefined})) }} placeholder="WA" />
           {errors.jira_project_key && <p id="jiraKey-error" className="text-red-600 text-sm">{errors.jira_project_key}</p>}
         </div>
         <div className="grid gap-2">
           <Label htmlFor="issueType">Jira Default Issue Type (optional)</Label>
-          <Input id="issueType" value={state.jira_issue_type_default} onChange={(e)=> { setState(s=>({...s, jira_issue_type_default: e.target.value})); setErrors(prev=>({...prev, jira_issue_type_default: undefined})) }} placeholder="Task" />
+          <Input id="issueType" value={state.jira_issue_type_default} onChange={(e: React.ChangeEvent<HTMLInputElement>)=> { setState(s=>({...s, jira_issue_type_default: e.target.value})); setErrors(prev=>({...prev, jira_issue_type_default: undefined})) }} placeholder="Task" />
         </div>
 
         <div className="flex gap-3 pt-2">

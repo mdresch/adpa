@@ -265,7 +265,7 @@ export default function PMBOK6Page() {
                       <Input
                         placeholder="Search processes..."
                         value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
                         className="pl-8"
                       />
                     </div>
@@ -277,7 +277,7 @@ export default function PMBOK6Page() {
                     <label className="text-sm font-medium mb-2 block">Process Group</label>
                     <select
                       value={selectedProcessGroup || ""}
-                      onChange={(e) => setSelectedProcessGroup(e.target.value || null)}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSelectedProcessGroup(e.target.value || null)}
                       className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     >
                       <option value="">All Process Groups</option>
@@ -293,7 +293,7 @@ export default function PMBOK6Page() {
                     <label className="text-sm font-medium mb-2 block">Knowledge Area</label>
                     <select
                       value={selectedKnowledgeArea || ""}
-                      onChange={(e) => setSelectedKnowledgeArea(e.target.value || null)}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSelectedKnowledgeArea(e.target.value || null)}
                       className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     >
                       <option value="">All Knowledge Areas</option>

@@ -1035,7 +1035,7 @@ ${doc.content}
                                   <input
                                     type="checkbox"
                                     checked={autoSaveEnabled}
-                                    onChange={(e) => setAutoSaveEnabled(e.target.checked)}
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAutoSaveEnabled(e.target.checked)}
                                     className="rounded"
                                   />
                                   <span>Auto-save</span>
@@ -1054,7 +1054,7 @@ ${doc.content}
                           {isEditing ? (
                             <textarea
                               value={editedContent}
-                              onChange={(e) => setEditedContent(e.target.value)}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditedContent(e.target.value)}
                               className="w-full h-96 p-4 border rounded-md font-mono text-sm"
                               placeholder="Edit document content..."
                             />
@@ -1133,7 +1133,7 @@ ${doc.content}
                           </CardHeader>
                           <CardContent>
                             <div className="space-y-2">
-                              {tableOfContents.map((item) => (
+                              {tableOfContents.map((item: any) => (
                                 <div
                                   key={item.id}
                                   className={`cursor-pointer hover:text-primary transition-colors ${item.level === 1 ? 'font-medium text-sm' :

@@ -825,7 +825,7 @@ export default function AIProviderDetails() {
                                 <Button 
                                   size="sm"
                                   variant="destructive"
-                                  onClick={async (e) => {
+                                  onClick={async (e: React.MouseEvent) => {
                                     e.stopPropagation()
                                     if (confirm(`Are you sure you want to remove "${modelId}" from available models?`)) {
                                       try {
@@ -2064,7 +2064,7 @@ export default function AIProviderDetails() {
                                         checked={isSelected}
                                         onChange={() => toggleModelSelection(modelId)}
                                         className="rounded"
-                                        onClick={(e) => e.stopPropagation()}
+                                        onClick={async (e: React.MouseEvent) => e.stopPropagation()}
                                       />
                                       <code className="text-sm font-mono font-semibold">
                                         {model.name || modelId}
@@ -2101,7 +2101,7 @@ export default function AIProviderDetails() {
                                   <Button
                                     size="sm"
                                     variant={isDefault ? "default" : "outline"}
-                                    onClick={(e) => {
+                                    onClick={(e: React.MouseEvent) => {
                                       e.stopPropagation()
                                       setSelectedDefaultModel(modelId)
                                       if (!isSelected) {
@@ -2324,7 +2324,7 @@ export default function AIProviderDetails() {
       </Dialog>
 
       {/* Delete Model Dialog */}
-      <Dialog open={deleteModelDialogOpen !== null} onOpenChange={(open) => !open && setDeleteModelDialogOpen(null)}>
+      <Dialog open={deleteModelDialogOpen !== null} onOpenChange={(open: boolean) => !open && setDeleteModelDialogOpen(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete Model</DialogTitle>

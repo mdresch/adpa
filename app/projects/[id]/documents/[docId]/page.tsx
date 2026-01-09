@@ -1163,13 +1163,13 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                               <Input
                                 id="doc-name"
                                 value={metadataForm.name}
-                                onChange={(e) => setMetadataForm({...metadataForm, name: e.target.value})}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMetadataForm({...metadataForm, name: e.target.value})}
                                 placeholder="Enter document name"
                               />
                             </div>
                             <div>
                               <Label htmlFor="doc-status">Status</Label>
-                              <Select value={metadataForm.status} onValueChange={(value) => setMetadataForm({...metadataForm, status: value})}>
+                              <Select value={metadataForm.status} onValueChange={(value: string) => setMetadataForm({...metadataForm, status: value})}>
                                 <SelectTrigger>
                                   <SelectValue placeholder="Select status" />
                                 </SelectTrigger>
@@ -1183,7 +1183,7 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                             </div>
                             <div>
                               <Label htmlFor="doc-template">Template</Label>
-                              <Select value={metadataForm.template_id} onValueChange={(value) => setMetadataForm({...metadataForm, template_id: value})}>
+                              <Select value={metadataForm.template_id} onValueChange={(value: string) => setMetadataForm({...metadataForm, template_id: value})}>
                                 <SelectTrigger>
                                   <SelectValue placeholder="Select template" />
                                 </SelectTrigger>
@@ -1198,7 +1198,7 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                             </div>
                             <div>
                               <Label htmlFor="doc-category">Category</Label>
-                              <Select value={metadataForm.category} onValueChange={(value) => setMetadataForm({...metadataForm, category: value})}>
+                              <Select value={metadataForm.category} onValueChange={(value: string) => setMetadataForm({...metadataForm, category: value})}>
                                 <SelectTrigger>
                                   <SelectValue placeholder="Select category" />
                                 </SelectTrigger>
@@ -1228,7 +1228,7 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                             </div>
                             <div>
                               <Label htmlFor="doc-priority">Priority</Label>
-                              <Select value={metadataForm.priority} onValueChange={(value) => setMetadataForm({...metadataForm, priority: value})}>
+                              <Select value={metadataForm.priority} onValueChange={(value: string) => setMetadataForm({...metadataForm, priority: value})}>
                                 <SelectTrigger>
                                   <SelectValue placeholder="Select priority" />
                                 </SelectTrigger>
@@ -1247,7 +1247,7 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                               <Input
                                 id="doc-author"
                                 value={metadataForm.author}
-                                onChange={(e) => setMetadataForm({...metadataForm, author: e.target.value})}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMetadataForm({...metadataForm, author: e.target.value})}
                                 placeholder="Enter author"
                               />
                             </div>
@@ -1256,7 +1256,7 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                               <Input
                                 id="doc-reviewer"
                                 value={metadataForm.reviewer}
-                                onChange={(e) => setMetadataForm({...metadataForm, reviewer: e.target.value})}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMetadataForm({...metadataForm, reviewer: e.target.value})}
                                 placeholder="Enter reviewer"
                               />
                             </div>
@@ -1266,7 +1266,7 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                                 id="doc-due-date"
                                 type="date"
                                 value={metadataForm.due_date}
-                                onChange={(e) => setMetadataForm({...metadataForm, due_date: e.target.value})}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMetadataForm({...metadataForm, due_date: e.target.value})}
                               />
                             </div>
                             <div>
@@ -1274,7 +1274,7 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                               <Input
                                 id="doc-tags"
                                 value={metadataForm.tags.join(", ")}
-                                onChange={(e) => setMetadataForm({...metadataForm, tags: e.target.value.split(", ").filter(tag => tag.trim())})}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMetadataForm({...metadataForm, tags: e.target.value.split(", ").filter(tag => tag.trim())})}
                                 placeholder="Enter tags separated by commas"
                               />
                             </div>
@@ -1283,7 +1283,7 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                               <Textarea
                                 id="doc-description"
                                 value={metadataForm.description}
-                                onChange={(e) => setMetadataForm({...metadataForm, description: e.target.value})}
+                                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setMetadataForm({...metadataForm, description: e.target.value})}
                                 placeholder="Enter document description"
                                 rows={3}
                               />
@@ -1295,7 +1295,7 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                           <Textarea
                             id="doc-notes"
                             value={metadataForm.notes}
-                            onChange={(e) => setMetadataForm({...metadataForm, notes: e.target.value})}
+                            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setMetadataForm({...metadataForm, notes: e.target.value})}
                             placeholder="Enter additional notes"
                             rows={4}
                           />
@@ -2607,7 +2607,7 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                     <div className="space-y-4">
                       <div>
                         <Label htmlFor="feedback-category">Category</Label>
-                        <Select value={feedbackForm.category} onValueChange={(value) => setFeedbackForm({...feedbackForm, category: value})}>
+                        <Select value={feedbackForm.category} onValueChange={(value: string) => setFeedbackForm({...feedbackForm, category: value})}>
                           <SelectTrigger>
                             <SelectValue placeholder="Select category" />
                           </SelectTrigger>
@@ -2643,7 +2643,7 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                         <Textarea
                           id="feedback-comment"
                           value={feedbackForm.comment}
-                          onChange={(e) => setFeedbackForm({...feedbackForm, comment: e.target.value})}
+                          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setFeedbackForm({...feedbackForm, comment: e.target.value})}
                           placeholder="Enter your feedback..."
                           rows={4}
                         />

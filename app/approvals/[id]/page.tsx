@@ -493,7 +493,7 @@ export default function ApprovalDetailPage() {
                 id="approve-notes"
                 placeholder="Add any comments or conditions..."
                 value={decisionNotes}
-                onChange={(e) => setDecisionNotes(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDecisionNotes(e.target.value)}
                 rows={4}
               />
             </div>
@@ -549,7 +549,7 @@ export default function ApprovalDetailPage() {
                 id="reject-notes"
                 placeholder="Explain why you are rejecting this request..."
                 value={decisionNotes}
-                onChange={(e) => setDecisionNotes(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDecisionNotes(e.target.value)}
                 rows={4}
                 required
               />

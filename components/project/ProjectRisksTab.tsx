@@ -474,7 +474,7 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
                 <Input
                   placeholder="Search risks..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
                   className="pl-10"
                 />
               </div>
@@ -720,7 +720,7 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
               <Input
                 id="title"
                 value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, title: e.target.value })}
                 placeholder="Risk title"
               />
             </div>
@@ -730,7 +730,7 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
               <Textarea
                 id="description"
                 value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setFormData({ ...formData, description: e.target.value })}
                 placeholder="Detailed description of the risk"
                 rows={3}
               />
@@ -742,7 +742,7 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
                 <Input
                   id="category"
                   value={formData.category}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, category: e.target.value })}
                   placeholder="e.g., technical, schedule, budget"
                 />
               </div>
@@ -752,7 +752,7 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
                 <Input
                   id="owner"
                   value={formData.owner}
-                  onChange={(e) => setFormData({ ...formData, owner: e.target.value })}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, owner: e.target.value })}
                   placeholder="Risk owner"
                 />
               </div>
@@ -847,7 +847,7 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
               <Textarea
                 id="mitigation_strategy"
                 value={formData.mitigation_strategy}
-                onChange={(e) => setFormData({ ...formData, mitigation_strategy: e.target.value })}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setFormData({ ...formData, mitigation_strategy: e.target.value })}
                 placeholder="How to prevent or reduce this risk"
                 rows={3}
               />
@@ -858,7 +858,7 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
               <Textarea
                 id="contingency_plan"
                 value={formData.contingency_plan}
-                onChange={(e) => setFormData({ ...formData, contingency_plan: e.target.value })}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setFormData({ ...formData, contingency_plan: e.target.value })}
                 placeholder="What to do if the risk occurs"
                 rows={3}
               />
@@ -869,7 +869,7 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
                 type="checkbox"
                 id="is_curated"
                 checked={formData.is_curated}
-                onChange={(e) => setFormData({ ...formData, is_curated: e.target.checked })}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, is_curated: e.target.checked })}
                 className="rounded"
               />
               <Label htmlFor="is_curated" className="cursor-pointer">

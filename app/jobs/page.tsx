@@ -688,7 +688,7 @@ export default function JobMonitorPage() {
                           <Input
                             placeholder="Search jobs..."
                             value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
                             className="pl-10 w-64"
                           />
                         </div>

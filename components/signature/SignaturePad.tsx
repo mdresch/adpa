@@ -102,7 +102,7 @@ export const SignaturePad = ({
 
   return (
     <div className={cn('flex h-full w-full flex-col', className)}>
-      <Tabs value={tab} onValueChange={(value) => setTab(value as typeof tab)} className="flex-1">
+      <Tabs value={tab} onValueChange={(value: string) => setTab(value as typeof tab)} className="flex-1">
         <TabsList className="grid w-full grid-cols-3">
           {drawSignatureEnabled && (
             <TabsTrigger value="draw" className="flex items-center gap-2">

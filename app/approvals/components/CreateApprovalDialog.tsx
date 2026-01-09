@@ -140,7 +140,7 @@ export function CreateApprovalDialog({ open, onOpenChange, onSuccess, projectId 
               <Label htmlFor="request_type">Request Type *</Label>
               <Select
                 value={formData.request_type}
-                onValueChange={(value) => setFormData(prev => ({ ...prev, request_type: value }))}
+                onValueChange={(value: string) => setFormData(prev => ({ ...prev, request_type: value }))}
                 required
               >
                 <SelectTrigger id="request_type">
@@ -161,7 +161,7 @@ export function CreateApprovalDialog({ open, onOpenChange, onSuccess, projectId 
                 <Label htmlFor="project_id">Project *</Label>
                 <Select
                   value={formData.project_id}
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, project_id: value }))}
+                  onValueChange={(value: string) => setFormData(prev => ({ ...prev, project_id: value }))}
                   required
                 >
                   <SelectTrigger id="project_id">
@@ -184,7 +184,7 @@ export function CreateApprovalDialog({ open, onOpenChange, onSuccess, projectId 
             <Input
               id="title"
               value={formData.title}
-              onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData(prev => ({ ...prev, title: e.target.value }))}
               placeholder="Brief title for the approval request"
               required
             />
@@ -195,7 +195,7 @@ export function CreateApprovalDialog({ open, onOpenChange, onSuccess, projectId 
             <Textarea
               id="description"
               value={formData.description}
-              onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setFormData(prev => ({ ...prev, description: e.target.value }))}
               placeholder="Detailed description of what requires approval"
               rows={4}
               required
@@ -207,7 +207,7 @@ export function CreateApprovalDialog({ open, onOpenChange, onSuccess, projectId 
               <Label htmlFor="priority">Priority</Label>
               <Select
                 value={formData.priority}
-                onValueChange={(value) => setFormData(prev => ({ ...prev, priority: value }))}
+                onValueChange={(value: string) => setFormData(prev => ({ ...prev, priority: value }))}
               >
                 <SelectTrigger id="priority">
                   <SelectValue />
@@ -226,7 +226,7 @@ export function CreateApprovalDialog({ open, onOpenChange, onSuccess, projectId 
               <Label htmlFor="severity">Severity</Label>
               <Select
                 value={formData.severity}
-                onValueChange={(value) => setFormData(prev => ({ ...prev, severity: value }))}
+                onValueChange={(value: string) => setFormData(prev => ({ ...prev, severity: value }))}
               >
                 <SelectTrigger id="severity">
                   <SelectValue />
@@ -247,7 +247,7 @@ export function CreateApprovalDialog({ open, onOpenChange, onSuccess, projectId 
             <Textarea
               id="impact_summary"
               value={formData.impact_summary}
-              onChange={(e) => setFormData(prev => ({ ...prev, impact_summary: e.target.value }))}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setFormData(prev => ({ ...prev, impact_summary: e.target.value }))}
               placeholder="Describe the impact of this change (budget, timeline, scope, etc.)"
               rows={3}
             />

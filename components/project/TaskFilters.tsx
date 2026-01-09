@@ -32,7 +32,7 @@ export function TaskFilters({ filters, onFiltersChange, roleOptions, assigneeOpt
             id="search"
             placeholder="Search by task name, number, or WBS code..."
             value={filters.search}
-            onChange={(e) => handleFilterChange('search', e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFilterChange('search', e.target.value)}
             className="pl-9"
           />
         </div>
@@ -41,7 +41,7 @@ export function TaskFilters({ filters, onFiltersChange, roleOptions, assigneeOpt
       {/* Status Filter */}
       <div className="w-full md:w-48">
         <Label htmlFor="status" className="sr-only">Status</Label>
-        <Select value={filters.status} onValueChange={(value) => handleFilterChange('status', value)}>
+        <Select value={filters.status} onValueChange={(value: string) => handleFilterChange('status', value)}>
           <SelectTrigger id="status">
             <SelectValue placeholder="All Statuses" />
           </SelectTrigger>
@@ -59,7 +59,7 @@ export function TaskFilters({ filters, onFiltersChange, roleOptions, assigneeOpt
       {/* Role Filter */}
       <div className="w-full md:w-48">
         <Label htmlFor="role" className="sr-only">Role</Label>
-        <Select value={filters.role} onValueChange={(value) => handleFilterChange('role', value)}>
+        <Select value={filters.role} onValueChange={(value: string) => handleFilterChange('role', value)}>
           <SelectTrigger id="role">
             <SelectValue placeholder="All Roles" />
           </SelectTrigger>
@@ -77,7 +77,7 @@ export function TaskFilters({ filters, onFiltersChange, roleOptions, assigneeOpt
       {/* Assigned To Filter */}
       <div className="w-full md:w-48">
         <Label htmlFor="assignedTo" className="sr-only">Assigned To</Label>
-        <Select value={filters.assignedTo} onValueChange={(value) => handleFilterChange('assignedTo', value)}>
+        <Select value={filters.assignedTo} onValueChange={(value: string) => handleFilterChange('assignedTo', value)}>
           <SelectTrigger id="assignedTo">
             <SelectValue placeholder="All Assignees" />
           </SelectTrigger>

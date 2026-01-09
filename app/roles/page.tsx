@@ -711,7 +711,7 @@ export default function RolesPage() {
                       type="checkbox"
                       id="isRequired"
                       checked={assignFormData.isRequired}
-                      onChange={(e) =>
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                         setAssignFormData({ ...assignFormData, isRequired: e.target.checked })
                       }
                       className="h-4 w-4 rounded border-gray-300"
@@ -794,7 +794,7 @@ export default function RolesPage() {
                       type="checkbox"
                       id="isRequiredComp"
                       checked={assignFormData.isRequired}
-                      onChange={(e) =>
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                         setAssignFormData({ ...assignFormData, isRequired: e.target.checked })
                       }
                       className="h-4 w-4 rounded border-gray-300"

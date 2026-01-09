@@ -362,7 +362,7 @@ export default function PrioritizationCriteriaPage() {
                     <Input
                       id="name"
                       value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, name: e.target.value })}
                       placeholder="e.g., Strategic Alignment"
                     />
                   </div>
@@ -377,7 +377,7 @@ export default function PrioritizationCriteriaPage() {
                         max="100"
                         step="0.1"
                         value={formData.weight}
-                        onChange={(e) =>
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                           setFormData({ ...formData, weight: parseFloat(e.target.value) || 0 })
                         }
                       />
@@ -388,7 +388,7 @@ export default function PrioritizationCriteriaPage() {
                         id="sort_order"
                         type="number"
                         value={formData.sort_order}
-                        onChange={(e) =>
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                           setFormData({ ...formData, sort_order: parseInt(e.target.value) || 0 })
                         }
                       />
@@ -400,7 +400,7 @@ export default function PrioritizationCriteriaPage() {
                     <Textarea
                       id="description"
                       value={formData.description}
-                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setFormData({ ...formData, description: e.target.value })}
                       placeholder="Describe what this criterion measures..."
                       rows={3}
                     />
@@ -414,7 +414,7 @@ export default function PrioritizationCriteriaPage() {
                         type="number"
                         min="1"
                         value={formData.scale_min}
-                        onChange={(e) =>
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                           setFormData({ ...formData, scale_min: parseInt(e.target.value) || 1 })
                         }
                       />
@@ -426,7 +426,7 @@ export default function PrioritizationCriteriaPage() {
                         type="number"
                         min={formData.scale_min}
                         value={formData.scale_max}
-                        onChange={(e) =>
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                           setFormData({ ...formData, scale_max: parseInt(e.target.value) || 5 })
                         }
                       />
@@ -437,7 +437,7 @@ export default function PrioritizationCriteriaPage() {
                     <Switch
                       id="is_inverted"
                       checked={formData.is_inverted}
-                      onCheckedChange={(checked) =>
+                      onCheckedChange={(checked: boolean) =>
                         setFormData({ ...formData, is_inverted: checked })
                       }
                     />
@@ -451,7 +451,7 @@ export default function PrioritizationCriteriaPage() {
                       <Switch
                         id="is_active"
                         checked={formData.is_active}
-                        onCheckedChange={(checked) =>
+                        onCheckedChange={(checked: boolean) =>
                           setFormData({ ...formData, is_active: checked })
                         }
                       />

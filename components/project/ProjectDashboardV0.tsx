@@ -629,7 +629,7 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
                   <Input
                     placeholder="Search documents..."
                     value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
                     className="pl-10"
                   />
                 </div>

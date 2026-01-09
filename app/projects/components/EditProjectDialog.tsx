@@ -66,7 +66,7 @@ export function EditProjectDialog({
                   id="edit-project-name"
                   placeholder="Enter project name"
                   value={project?.name || ""}
-                  onChange={(e) => onProjectChange(project ? { ...project, name: e.target.value } : null)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => onProjectChange(project ? { ...project, name: e.target.value } : null)}
                   className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                   required
                 />
@@ -80,7 +80,7 @@ export function EditProjectDialog({
                   title="Priority"
                   className="flex h-10 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-background px-3 py-2 text-sm mt-2 focus:border-blue-500 transition-colors"
                   value={project?.priority || "medium"}
-                  onChange={(e) => onProjectChange(project ? { ...project, priority: e.target.value } : null)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => onProjectChange(project ? { ...project, priority: e.target.value } : null)}
                 >
                   <option value="low">Low</option>
                   <option value="medium">Medium</option>
@@ -100,7 +100,7 @@ export function EditProjectDialog({
                   title="Framework"
                   className="flex h-10 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-background px-3 py-2 text-sm mt-2 focus:border-blue-500 transition-colors"
                   value={project?.framework || ""}
-                  onChange={(e) => onProjectChange(project ? { ...project, framework: e.target.value } : null)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => onProjectChange(project ? { ...project, framework: e.target.value } : null)}
                   required
                 >
                   <option value="">Select framework</option>
@@ -118,7 +118,7 @@ export function EditProjectDialog({
                   title="Project Status"
                   className="flex h-10 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-background px-3 py-2 text-sm mt-2 focus:border-blue-500 transition-colors"
                   value={project?.status || ""}
-                  onChange={(e) => onProjectChange(project ? { ...project, status: e.target.value } : null)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => onProjectChange(project ? { ...project, status: e.target.value } : null)}
                 >
                   <option value="active">Active</option>
                   <option value="planning">Planning</option>
@@ -138,7 +138,7 @@ export function EditProjectDialog({
                 id="edit-description"
                 placeholder="Describe the project objectives and scope"
                 value={project?.description || ""}
-                onChange={(e) => onProjectChange(project ? { ...project, description: e.target.value } : null)}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => onProjectChange(project ? { ...project, description: e.target.value } : null)}
                 className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
               />
             </div>
@@ -153,7 +153,7 @@ export function EditProjectDialog({
                   id="edit-start-date"
                   type="date"
                   value={project?.start_date || ""}
-                  onChange={(e) => onProjectChange(project ? { ...project, start_date: e.target.value } : null)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => onProjectChange(project ? { ...project, start_date: e.target.value } : null)}
                   className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                 />
               </div>
@@ -165,7 +165,7 @@ export function EditProjectDialog({
                   id="edit-end-date"
                   type="date"
                   value={project?.end_date || ""}
-                  onChange={(e) => onProjectChange(project ? { ...project, end_date: e.target.value } : null)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => onProjectChange(project ? { ...project, end_date: e.target.value } : null)}
                   className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                 />
               </div>
@@ -177,7 +177,7 @@ export function EditProjectDialog({
                   id="edit-budget"
                   placeholder="$0"
                   value={project?.budget?.toString() || ""}
-                  onChange={(e) => onProjectChange(project ? { ...project, budget: Number(e.target.value) } : null)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => onProjectChange(project ? { ...project, budget: Number(e.target.value) } : null)}
                   className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                 />
               </div>

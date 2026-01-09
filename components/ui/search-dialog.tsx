@@ -135,7 +135,7 @@ export function SearchDialog<T extends SearchableItem>({
   // Filter items based on search query
   const filteredItems = useMemo(() => {
     if (!searchQuery.trim()) return items
-    return items.filter((item) => filterFn(item, searchQuery))
+    return items.filter((item: any) => filterFn(item, searchQuery))
   }, [items, searchQuery, filterFn])
 
   // Reset focused index when filtered items change
@@ -224,7 +224,7 @@ export function SearchDialog<T extends SearchableItem>({
             <Input
               placeholder={placeholder || labels.placeholder}
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
               onKeyDown={handleKeyDown}
               className="pl-9"
               autoFocus

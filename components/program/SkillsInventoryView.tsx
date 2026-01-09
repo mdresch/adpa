@@ -352,7 +352,7 @@ export function SkillsInventoryView({ programId }: SkillsInventoryViewProps) {
               <Input
                 id="userId"
                 value={formData.userId}
-                onChange={(e) => setFormData({ ...formData, userId: e.target.value })}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, userId: e.target.value })}
                 placeholder="user-uuid"
               />
             </div>
@@ -363,7 +363,7 @@ export function SkillsInventoryView({ programId }: SkillsInventoryViewProps) {
                 <Input
                   id="skillName"
                   value={formData.skillName}
-                  onChange={(e) => setFormData({ ...formData, skillName: e.target.value })}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, skillName: e.target.value })}
                   placeholder="JavaScript"
                 />
               </div>
@@ -371,7 +371,7 @@ export function SkillsInventoryView({ programId }: SkillsInventoryViewProps) {
                 <Label htmlFor="skillCategory">Category *</Label>
                 <Select
                   value={formData.skillCategory}
-                  onValueChange={(value) => setFormData({ ...formData, skillCategory: value })}
+                  onValueChange={(value: string) => setFormData({ ...formData, skillCategory: value })}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -394,7 +394,7 @@ export function SkillsInventoryView({ programId }: SkillsInventoryViewProps) {
                 <Label htmlFor="proficiencyLevel">Proficiency Level *</Label>
                 <Select
                   value={formData.proficiencyLevel}
-                  onValueChange={(value) => setFormData({ ...formData, proficiencyLevel: value })}
+                  onValueChange={(value: string) => setFormData({ ...formData, proficiencyLevel: value })}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -414,7 +414,7 @@ export function SkillsInventoryView({ programId }: SkillsInventoryViewProps) {
                   type="number"
                   min="0"
                   value={formData.yearsExperience}
-                  onChange={(e) => setFormData({ ...formData, yearsExperience: e.target.value })}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, yearsExperience: e.target.value })}
                 />
               </div>
             </div>
@@ -427,7 +427,7 @@ export function SkillsInventoryView({ programId }: SkillsInventoryViewProps) {
                 min="1"
                 max="100"
                 value={formData.proficiencyScore}
-                onChange={(e) => setFormData({ ...formData, proficiencyScore: e.target.value })}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, proficiencyScore: e.target.value })}
               />
             </div>
 
@@ -436,7 +436,7 @@ export function SkillsInventoryView({ programId }: SkillsInventoryViewProps) {
               <Input
                 id="certificationName"
                 value={formData.certificationName}
-                onChange={(e) => setFormData({ ...formData, certificationName: e.target.value })}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, certificationName: e.target.value })}
                 placeholder="AWS Certified Solutions Architect"
               />
             </div>

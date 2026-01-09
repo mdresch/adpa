@@ -625,7 +625,7 @@ export default function AIAnalyticsPage() {
                                 <BarChart data={modelStats}>
                                   <CartesianGrid strokeDasharray="3 3" />
                                   <XAxis dataKey="model_name" angle={-45} textAnchor="end" height={100} />
-                                  <YAxis tickFormatter={(value) => formatNumber(value)} />
+                                  <YAxis tickFormatter={(value: number) => formatNumber(value)} />
                                   <Tooltip formatter={(value: any) => formatNumber(value)} />
                                   <Bar dataKey="total_tokens" fill="#10B981" name="Tokens" />
                                 </BarChart>

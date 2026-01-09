@@ -234,7 +234,7 @@ const CustomTaskListTable: React.FC<{
                 justifyContent: 'center',
                 cursor: hasChildren ? 'pointer' : 'default',
               }}
-              onClick={(e) => {
+              onClick={async (e: React.MouseEvent) => {
                 if (hasChildren) {
                   e.stopPropagation()
                   onExpanderClick(task)
@@ -801,7 +801,7 @@ export function TaskGanttViewNew({ tasks, onViewTask, projectId }: TaskGanttView
           <span className="text-sm text-muted-foreground">View:</span>
           <Select
             value={viewMode.toString()}
-            onValueChange={(v) => setViewMode(Number(v) as ViewMode)}
+            onValueChange={(v: string) => setViewMode(Number(v) as ViewMode)}
           >
             <SelectTrigger className="w-[140px]">
               <SelectValue />

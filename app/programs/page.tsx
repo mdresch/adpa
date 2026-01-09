@@ -348,7 +348,7 @@ export default function ProgramsPage() {
                       <Input
                         id="name"
                         value={createForm.name}
-                        onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCreateForm({ ...createForm, name: e.target.value })}
                         placeholder="Enter program name"
                       />
                     </div>
@@ -357,7 +357,7 @@ export default function ProgramsPage() {
                       <Textarea
                         id="description"
                         value={createForm.description}
-                        onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
+                        onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setCreateForm({ ...createForm, description: e.target.value })}
                         placeholder="Enter program description"
                         rows={4}
                       />
@@ -368,7 +368,7 @@ export default function ProgramsPage() {
                         <select
                           id="status"
                           value={createForm.status}
-                          onChange={(e) => setCreateForm({ ...createForm, status: e.target.value as 'green' | 'amber' | 'red' })}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCreateForm({ ...createForm, status: e.target.value as 'green' | 'amber' | 'red' })}
                           className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           <option value="green">🟢 Green</option>
@@ -382,7 +382,7 @@ export default function ProgramsPage() {
                           id="budget"
                           type="number"
                           value={createForm.budget}
-                          onChange={(e) => setCreateForm({ ...createForm, budget: e.target.value })}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCreateForm({ ...createForm, budget: e.target.value })}
                           placeholder="Enter budget amount"
                         />
                       </div>
@@ -394,7 +394,7 @@ export default function ProgramsPage() {
                           id="start_date"
                           type="date"
                           value={createForm.start_date}
-                          onChange={(e) => setCreateForm({ ...createForm, start_date: e.target.value })}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCreateForm({ ...createForm, start_date: e.target.value })}
                         />
                       </div>
                       <div>
@@ -403,7 +403,7 @@ export default function ProgramsPage() {
                           id="end_date"
                           type="date"
                           value={createForm.end_date}
-                          onChange={(e) => setCreateForm({ ...createForm, end_date: e.target.value })}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCreateForm({ ...createForm, end_date: e.target.value })}
                         />
                       </div>
                     </div>
@@ -437,14 +437,14 @@ export default function ProgramsPage() {
                     <Input
                       placeholder="Search programs by name or description..."
                       value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
                       className="pl-12 h-12 text-base border-2 focus:border-blue-500 transition-colors"
                     />
                   </div>
                   <div className="flex gap-3">
                     <select
                       value={filterStatus}
-                      onChange={(e) => setFilterStatus(e.target.value)}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFilterStatus(e.target.value)}
                       className="flex h-12 w-full lg:w-[200px] rounded-md border-2 border-input bg-background px-4 py-2 text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 cursor-pointer hover:bg-accent transition-colors"
                     >
                       <option value="all">All Status</option>
@@ -454,7 +454,7 @@ export default function ProgramsPage() {
                     </select>
                     <select
                       value={sortBy}
-                      onChange={(e) => setSortBy(e.target.value)}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSortBy(e.target.value)}
                       className="flex h-12 w-full lg:w-[200px] rounded-md border-2 border-input bg-background px-4 py-2 text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 cursor-pointer hover:bg-accent transition-colors"
                     >
                       <option value="updated">Recently Updated</option>
@@ -525,7 +525,7 @@ export default function ProgramsPage() {
                             checked={isSelected}
                             onChange={() => { handleSelectProgram(program.id); }}
                             className="w-5 h-5 rounded border-2 border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-sm"
-                            onClick={(e) => { e.stopPropagation(); }}
+                            onClick={(e: React.MouseEvent) => { e.stopPropagation(); }}
                           />
                         </div>
                         

@@ -1748,7 +1748,7 @@ export default function AssessmentResultsPage() {
                 <div className="flex flex-wrap gap-2">
                   <select
                     value={documentSort}
-                    onChange={(e) => setDocumentSort(e.target.value as 'type' | 'score' | 'count')}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDocumentSort(e.target.value as 'type' | 'score' | 'count')}
                     className="text-sm rounded-md px-3 py-2 border bg-transparent"
                     style={{
                       borderColor: maturityTheme.colors.border.default,
@@ -1761,7 +1761,7 @@ export default function AssessmentResultsPage() {
                   </select>
                   <select
                     value={documentSortOrder}
-                    onChange={(e) => setDocumentSortOrder(e.target.value as 'asc' | 'desc')}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDocumentSortOrder(e.target.value as 'asc' | 'desc')}
                     className="text-sm rounded-md px-3 py-2 border bg-transparent"
                     style={{
                       borderColor: maturityTheme.colors.border.default,
@@ -1891,7 +1891,7 @@ export default function AssessmentResultsPage() {
                 <div className="flex flex-wrap gap-2">
                   <select
                     value={gapFilter.priority || 'all'}
-                    onChange={(e) => setGapFilter({ ...gapFilter, priority: e.target.value === 'all' ? undefined : e.target.value })}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGapFilter({ ...gapFilter, priority: e.target.value === 'all' ? undefined : e.target.value })}
                     className="text-sm rounded-md px-3 py-2 border bg-transparent"
                     style={{
                       borderColor: maturityTheme.colors.border.default,
@@ -1906,7 +1906,7 @@ export default function AssessmentResultsPage() {
                   </select>
                   <select
                     value={gapSort}
-                    onChange={(e) => setGapSort(e.target.value as 'priority' | 'impact' | 'effort')}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGapSort(e.target.value as 'priority' | 'impact' | 'effort')}
                     className="text-sm rounded-md px-3 py-2 border bg-transparent"
                     style={{
                       borderColor: maturityTheme.colors.border.default,
@@ -2127,7 +2127,7 @@ export default function AssessmentResultsPage() {
                   </span>
                   <select
                     value={selectedBenchmarkIndustry}
-                    onChange={(e) => setSelectedBenchmarkIndustry(e.target.value as IndustryKey)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSelectedBenchmarkIndustry(e.target.value as IndustryKey)}
                     className="text-sm rounded-md px-3 py-2 border bg-transparent"
                     style={{
                       borderColor: maturityTheme.colors.border.default,

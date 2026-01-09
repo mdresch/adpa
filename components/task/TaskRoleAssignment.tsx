@@ -452,7 +452,7 @@ export function TaskRoleAssignment({
               <Label htmlFor="role">Role *</Label>
               <Select
                 value={formData.roleId}
-                onValueChange={(value) => setFormData({ ...formData, roleId: value })}
+                onValueChange={(value: string) => setFormData({ ...formData, roleId: value })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select a role" />
@@ -471,7 +471,7 @@ export function TaskRoleAssignment({
               <Label htmlFor="roleType">Role Type</Label>
               <Select
                 value={formData.roleType}
-                onValueChange={(value) => setFormData({ ...formData, roleType: value })}
+                onValueChange={(value: string) => setFormData({ ...formData, roleType: value })}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -492,7 +492,7 @@ export function TaskRoleAssignment({
                 type="number"
                 min="1"
                 value={formData.requiredCount}
-                onChange={(e) =>
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                   setFormData({
                     ...formData,
                     requiredCount: parseInt(e.target.value) || 1,
@@ -505,7 +505,7 @@ export function TaskRoleAssignment({
                 type="checkbox"
                 id="isPrimary"
                 checked={formData.isPrimary}
-                onChange={(e) =>
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                   setFormData({ ...formData, isPrimary: e.target.checked })
                 }
                 className="h-4 w-4 rounded border-gray-300"

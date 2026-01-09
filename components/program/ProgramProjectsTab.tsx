@@ -861,7 +861,7 @@ export function ProgramProjectsTab({ programId }: ProgramProjectsTabProps) {
                     id="create-project-name"
                     placeholder="Enter project name"
                     value={newProject.name}
-                    onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewProject({ ...newProject, name: e.target.value })}
                     className="mt-2"
                     required
                   />
@@ -874,7 +874,7 @@ export function ProgramProjectsTab({ programId }: ProgramProjectsTabProps) {
                     id="create-priority"
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
                     value={newProject.priority}
-                    onChange={(e) => setNewProject({ ...newProject, priority: e.target.value })}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewProject({ ...newProject, priority: e.target.value })}
                   >
                     <option value="low">Low</option>
                     <option value="medium">Medium</option>
@@ -892,7 +892,7 @@ export function ProgramProjectsTab({ programId }: ProgramProjectsTabProps) {
                   id="create-framework"
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
                   value={newProject.framework}
-                  onChange={(e) => setNewProject({ ...newProject, framework: e.target.value })}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewProject({ ...newProject, framework: e.target.value })}
                   required
                 >
                   <option value="">Select framework</option>
@@ -912,7 +912,7 @@ export function ProgramProjectsTab({ programId }: ProgramProjectsTabProps) {
                   placeholder="Describe the project objectives and scope"
                   className="mt-2"
                   value={newProject.description}
-                  onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNewProject({ ...newProject, description: e.target.value })}
                   rows={3}
                 />
               </div>
@@ -928,7 +928,7 @@ export function ProgramProjectsTab({ programId }: ProgramProjectsTabProps) {
                     type="date"
                     className="mt-2"
                     value={newProject.start_date}
-                    onChange={(e) => setNewProject({ ...newProject, start_date: e.target.value })}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewProject({ ...newProject, start_date: e.target.value })}
                   />
                 </div>
                 <div>
@@ -940,7 +940,7 @@ export function ProgramProjectsTab({ programId }: ProgramProjectsTabProps) {
                     type="date"
                     className="mt-2"
                     value={newProject.end_date}
-                    onChange={(e) => setNewProject({ ...newProject, end_date: e.target.value })}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewProject({ ...newProject, end_date: e.target.value })}
                   />
                 </div>
                 <div>
@@ -953,7 +953,7 @@ export function ProgramProjectsTab({ programId }: ProgramProjectsTabProps) {
                     placeholder="0"
                     className="mt-2"
                     value={newProject.budget}
-                    onChange={(e) => setNewProject({ ...newProject, budget: e.target.value })}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewProject({ ...newProject, budget: e.target.value })}
                   />
                 </div>
               </div>

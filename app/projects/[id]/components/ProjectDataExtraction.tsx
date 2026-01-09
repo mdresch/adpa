@@ -2883,7 +2883,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                       type="text"
                       placeholder="Search documents..."
                       value={documentSearchTerm}
-                      onChange={(e) => setDocumentSearchTerm(e.target.value)}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDocumentSearchTerm(e.target.value)}
                       className="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                     {documentSearchTerm && (
@@ -2910,7 +2910,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                           id="select-all"
                           checked={getFilteredDocuments().length > 0 && 
                                    getFilteredDocuments().every(d => selectedDocuments.includes(d.id))}
-                          onCheckedChange={(checked) => {
+                          onCheckedChange={(checked: boolean) => {
                             if (checked) {
                               // Add all filtered documents to selection
                               const filteredIds = getFilteredDocuments().map(d => d.id)
@@ -2943,7 +2943,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                             <Checkbox
                               id={doc.id}
                               checked={selectedDocuments.includes(doc.id)}
-                              onCheckedChange={(checked) => {
+                              onCheckedChange={(checked: boolean) => {
                                 setSelectedDocuments(
                                   checked
                                     ? [...selectedDocuments, doc.id]

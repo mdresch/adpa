@@ -319,7 +319,7 @@ export function ComplianceSecurityTab({ projectId }: ComplianceSecurityTabProps)
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4">
-          {filteredData.map((item) => (
+          {filteredData.map((item: any) => (
             <Card key={item.id}>
               <CardHeader>
                 <div className="flex items-start justify-between">
@@ -369,7 +369,7 @@ export function ComplianceSecurityTab({ projectId }: ComplianceSecurityTabProps)
         </TabsContent>
 
         <TabsContent value="security" className="space-y-4">
-          {filteredData.filter(d => d.category === 'security' || selectedCategory !== 'all').map((item) => (
+          {filteredData.filter(d => d.category === 'security' || selectedCategory !== 'all').map((item: any) => (
             <Card key={item.id}>
               <CardHeader>
                 <CardTitle>{item.title}</CardTitle>
@@ -469,7 +469,7 @@ export function ComplianceSecurityTab({ projectId }: ComplianceSecurityTabProps)
         </TabsContent>
 
         <TabsContent value="legal" className="space-y-4">
-          {filteredData.filter(d => d.category === 'legal' || selectedCategory !== 'all').map((item) => (
+          {filteredData.filter(d => d.category === 'legal' || selectedCategory !== 'all').map((item: any) => (
             <Card key={item.id}>
               <CardHeader>
                 <CardTitle>{item.title}</CardTitle>

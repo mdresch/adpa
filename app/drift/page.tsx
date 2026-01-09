@@ -534,7 +534,7 @@ export default function DriftPage() {
               <Textarea
                 id="resolutionNotes"
                 value={resolutionNotes}
-                onChange={(e) => setResolutionNotes(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setResolutionNotes(e.target.value)}
                 placeholder="Add notes about the resolution..."
                 rows={4}
               />

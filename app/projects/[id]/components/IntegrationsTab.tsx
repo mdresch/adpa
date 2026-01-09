@@ -210,7 +210,7 @@ export function IntegrationsTab({ projectId }: IntegrationsTabProps) {
             <Switch
               id="confluence-enabled"
               checked={safeLocalSettings.confluence?.enabled ?? false}
-              onCheckedChange={(checked) => updateConfluence({ enabled: checked })}
+              onCheckedChange={(checked: boolean) => updateConfluence({ enabled: checked })}
             />
           </div>
 
@@ -224,7 +224,7 @@ export function IntegrationsTab({ projectId }: IntegrationsTabProps) {
                     id="confluence-space-key"
                     placeholder="e.g., ADPA"
                     value={safeLocalSettings.confluence?.spaceKey || ""}
-                    onChange={(e) => updateConfluence({ spaceKey: e.target.value || null })}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateConfluence({ spaceKey: e.target.value || null })}
                   />
                   <p className="text-sm text-muted-foreground">
                     Override the default Confluence space for this project
@@ -237,7 +237,7 @@ export function IntegrationsTab({ projectId }: IntegrationsTabProps) {
                     id="confluence-parent-page"
                     placeholder="e.g., 123456789"
                     value={safeLocalSettings.confluence?.parentPageId || ""}
-                    onChange={(e) => updateConfluence({ parentPageId: e.target.value || null })}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateConfluence({ parentPageId: e.target.value || null })}
                   />
                   <p className="text-sm text-muted-foreground">
                     Create documents under a specific parent page
@@ -254,7 +254,7 @@ export function IntegrationsTab({ projectId }: IntegrationsTabProps) {
                   <Switch
                     id="confluence-auto-publish"
                     checked={safeLocalSettings.confluence?.autoPublish ?? false}
-                    onCheckedChange={(checked) => updateConfluence({ autoPublish: checked })}
+                    onCheckedChange={(checked: boolean) => updateConfluence({ autoPublish: checked })}
                   />
                 </div>
               </div>
@@ -290,7 +290,7 @@ export function IntegrationsTab({ projectId }: IntegrationsTabProps) {
             <Switch
               id="jira-enabled"
               checked={safeLocalSettings.jira?.enabled ?? false}
-              onCheckedChange={(checked) => updateJira({ enabled: checked })}
+              onCheckedChange={(checked: boolean) => updateJira({ enabled: checked })}
             />
           </div>
 
@@ -304,7 +304,7 @@ export function IntegrationsTab({ projectId }: IntegrationsTabProps) {
                     id="jira-project-key"
                     placeholder="e.g., PROJ"
                     value={safeLocalSettings.jira?.projectKey || ""}
-                    onChange={(e) => updateJira({ projectKey: e.target.value || null })}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateJira({ projectKey: e.target.value || null })}
                   />
                   <p className="text-sm text-muted-foreground">
                     Override the default Jira project key for this project
@@ -317,7 +317,7 @@ export function IntegrationsTab({ projectId }: IntegrationsTabProps) {
                     id="jira-issue-type"
                     placeholder="e.g., Task, Story, Bug"
                     value={safeLocalSettings.jira?.issueType || ""}
-                    onChange={(e) => updateJira({ issueType: e.target.value || null })}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateJira({ issueType: e.target.value || null })}
                   />
                 </div>
 
@@ -327,7 +327,7 @@ export function IntegrationsTab({ projectId }: IntegrationsTabProps) {
                     id="jira-priority"
                     placeholder="e.g., High, Medium, Low"
                     value={safeLocalSettings.jira?.priority || ""}
-                    onChange={(e) => updateJira({ priority: e.target.value || null })}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateJira({ priority: e.target.value || null })}
                   />
                 </div>
 
@@ -341,7 +341,7 @@ export function IntegrationsTab({ projectId }: IntegrationsTabProps) {
                   <Switch
                     id="jira-auto-create"
                     checked={safeLocalSettings.jira?.autoCreate ?? false}
-                    onCheckedChange={(checked) => updateJira({ autoCreate: checked })}
+                    onCheckedChange={(checked: boolean) => updateJira({ autoCreate: checked })}
                   />
                 </div>
               </div>

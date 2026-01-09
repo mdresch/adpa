@@ -29,7 +29,7 @@ export function LoadingSpinner({ size = "md", className }: LoadingSpinnerProps) 
 export function LoadingDots({ className }: { className?: string }) {
   return (
     <div className={cn("flex items-center space-x-1", className)}>
-      {[0, 1, 2].map((i) => (
+      {[0, 1, 2].map((i: any) => (
         <div
           key={i}
           className="h-2 w-2 bg-blue-600 dark:bg-blue-400 rounded-full animate-pulse"

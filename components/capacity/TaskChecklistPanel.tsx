@@ -248,7 +248,7 @@ export function TaskChecklistPanel({ taskId, taskName, users = [], onUpdate }: T
           </p>
         ) : (
           <div className="space-y-2">
-            {items.sort((a, b) => a.sequenceOrder - b.sequenceOrder).map((item) => (
+            {items.sort((a, b) => a.sequenceOrder - b.sequenceOrder).map((item: any) => (
               <div 
                 key={item.id}
                 className={`flex items-start gap-3 p-3 rounded-lg border ${
@@ -326,7 +326,7 @@ export function TaskChecklistPanel({ taskId, taskName, users = [], onUpdate }: T
                         <DropdownMenuItem>
                           <Select
                             value={item.assignedUserId || 'unassigned'}
-                            onValueChange={(value) => handleUpdateItem(item.id, { 
+                            onValueChange={(value: string) => handleUpdateItem(item.id, { 
                               assignedUserId: value === 'unassigned' ? undefined : value 
                             })}
                           >
@@ -403,7 +403,7 @@ export function TaskChecklistPanel({ taskId, taskName, users = [], onUpdate }: T
                           <label className="text-xs text-muted-foreground">Priority</label>
                           <Select
                             defaultValue={item.priority}
-                            onValueChange={(value) => handleUpdateItem(item.id, { 
+                            onValueChange={(value: string) => handleUpdateItem(item.id, { 
                               priority: value as ChecklistItem['priority'] 
                             })}
                           >
@@ -452,7 +452,7 @@ export function TaskChecklistPanel({ taskId, taskName, users = [], onUpdate }: T
           <Input
             placeholder="Add a checklist item..."
             value={newItemName}
-            onChange={(e) => setNewItemName(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewItemName(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 handleAddItem()

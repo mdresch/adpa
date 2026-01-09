@@ -125,7 +125,7 @@ export function Sidebar() {
       <ScrollArea className="flex-1 px-3 py-6 custom-scrollbar">
         <nav className="space-y-2">
           {navigation
-            .filter((item) => {
+            .filter((item: any) => {
               // Hide admin-only items for non-admin/super-admin users
               // Super admin has all admin privileges
               const isAdminOrSuperAdmin = user?.role === "admin" || user?.role === "super_admin"

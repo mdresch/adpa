@@ -172,7 +172,7 @@ export function KeyResultDialog({ open, onOpenChange, okrId, keyResult, onSaved 
             <Input
               id="key_result_title"
               value={formData.key_result_title}
-              onChange={(e) => setFormData({ ...formData, key_result_title: e.target.value })}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, key_result_title: e.target.value })}
               placeholder="e.g., Achieve 10,000 enterprise customers"
               required
             />
@@ -183,7 +183,7 @@ export function KeyResultDialog({ open, onOpenChange, okrId, keyResult, onSaved 
             <Textarea
               id="key_result_description"
               value={formData.key_result_description}
-              onChange={(e) => setFormData({ ...formData, key_result_description: e.target.value })}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setFormData({ ...formData, key_result_description: e.target.value })}
               placeholder="Describe what success looks like..."
               rows={2}
             />
@@ -195,7 +195,7 @@ export function KeyResultDialog({ open, onOpenChange, okrId, keyResult, onSaved 
               <Input
                 id="metric_name"
                 value={formData.metric_name}
-                onChange={(e) => setFormData({ ...formData, metric_name: e.target.value })}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, metric_name: e.target.value })}
                 placeholder="e.g., Enterprise Customers"
               />
             </div>
@@ -204,7 +204,7 @@ export function KeyResultDialog({ open, onOpenChange, okrId, keyResult, onSaved 
               <Label htmlFor="metric_unit">Metric Unit</Label>
               <Select
                 value={formData.metric_unit}
-                onValueChange={(value) => setFormData({ ...formData, metric_unit: value })}
+                onValueChange={(value: string) => setFormData({ ...formData, metric_unit: value })}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -229,7 +229,7 @@ export function KeyResultDialog({ open, onOpenChange, okrId, keyResult, onSaved 
                 type="number"
                 step="any"
                 value={formData.baseline_value}
-                onChange={(e) => setFormData({ ...formData, baseline_value: e.target.value })}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, baseline_value: e.target.value })}
                 placeholder="Starting point"
               />
             </div>
@@ -241,7 +241,7 @@ export function KeyResultDialog({ open, onOpenChange, okrId, keyResult, onSaved 
                 type="number"
                 step="any"
                 value={formData.target_value}
-                onChange={(e) => setFormData({ ...formData, target_value: e.target.value })}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, target_value: e.target.value })}
                 placeholder="Goal to achieve"
                 required
               />
@@ -256,7 +256,7 @@ export function KeyResultDialog({ open, onOpenChange, okrId, keyResult, onSaved 
                 type="number"
                 step="any"
                 value={formData.current_value}
-                onChange={(e) => setFormData({ ...formData, current_value: e.target.value })}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, current_value: e.target.value })}
                 placeholder="Current progress"
               />
             </div>
@@ -268,7 +268,7 @@ export function KeyResultDialog({ open, onOpenChange, okrId, keyResult, onSaved 
                 type="number"
                 step="any"
                 value={formData.stretch_target}
-                onChange={(e) => setFormData({ ...formData, stretch_target: e.target.value })}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, stretch_target: e.target.value })}
                 placeholder="Aspirational goal"
               />
             </div>
@@ -299,7 +299,7 @@ export function KeyResultDialog({ open, onOpenChange, okrId, keyResult, onSaved 
                 id="next_measurement_date"
                 type="date"
                 value={formData.next_measurement_date}
-                onChange={(e) => setFormData({ ...formData, next_measurement_date: e.target.value })}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, next_measurement_date: e.target.value })}
               />
             </div>
           </div>

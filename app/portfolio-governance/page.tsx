@@ -447,7 +447,7 @@ export default function PortfolioGovernancePage() {
                           id="escalation-triggers"
                           placeholder='{"budget_variance": "10%", "schedule_variance": "15 days"}'
                           value={JSON.stringify(governance.escalation_triggers || {}, null, 2)}
-                          onChange={(e) => {
+                          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
                             try {
                               const triggers = JSON.parse(e.target.value)
                               setGovernance(prev => prev ? { ...prev, escalation_triggers: triggers } : prev)
@@ -471,7 +471,7 @@ export default function PortfolioGovernancePage() {
                       <Textarea
                         placeholder='{"scope_change": {"approver": "Portfolio Manager", "limit": "$50000"}, "risk_acceptance": {"approver": "Executive Sponsor", "limit": "High"}}'
                         value={JSON.stringify(governance.approval_authority_matrix || {}, null, 2)}
-                        onChange={(e) => {
+                        onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
                           try {
                             const matrix = JSON.parse(e.target.value)
                             setGovernance(prev => prev ? { ...prev, approval_authority_matrix: matrix } : prev)
@@ -497,7 +497,7 @@ export default function PortfolioGovernancePage() {
                       <Textarea
                         placeholder='{"innovation": "Drive cutting-edge solutions", "customer_focus": "Put customer needs first"}'
                         value={JSON.stringify(governance.core_values || {}, null, 2)}
-                        onChange={(e) => {
+                        onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
                           try {
                             const values = JSON.parse(e.target.value)
                             setGovernance(prev => prev ? { ...prev, core_values: values } : prev)
@@ -520,7 +520,7 @@ export default function PortfolioGovernancePage() {
                       <Textarea
                         placeholder='{"revenue_growth": "Increase revenue by 25% YoY", "market_expansion": "Enter 3 new markets"}'
                         value={JSON.stringify(governance.strategic_objectives || {}, null, 2)}
-                        onChange={(e) => {
+                        onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
                           try {
                             const objectives = JSON.parse(e.target.value)
                             setGovernance(prev => prev ? { ...prev, strategic_objectives: objectives } : prev)
@@ -568,7 +568,7 @@ export default function PortfolioGovernancePage() {
                     <CardContent>
                       <Select
                         value={governance.methodology_standard || 'PMBOK 6'}
-                        onValueChange={(value) =>
+                        onValueChange={(value: string) =>
                           setGovernance(prev => prev ? { ...prev, methodology_standard: value } : prev)
                         }
                       >
@@ -621,7 +621,7 @@ export default function PortfolioGovernancePage() {
                       <Textarea
                         placeholder='{"schedule_adherence": 95, "budget_variance": 5, "quality_score": 90}'
                         value={JSON.stringify(governance.kpi_targets || {}, null, 2)}
-                        onChange={(e) => {
+                        onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
                           try {
                             const targets = JSON.parse(e.target.value)
                             setGovernance(prev => prev ? { ...prev, kpi_targets: targets } : prev)
@@ -644,7 +644,7 @@ export default function PortfolioGovernancePage() {
                       <Textarea
                         placeholder='{"project_manager": ["PMBOK", "Risk Management"], "stakeholder": ["Portfolio Overview", "Benefits Tracking"]}'
                         value={JSON.stringify(governance.training_requirements || {}, null, 2)}
-                        onChange={(e) => {
+                        onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
                           try {
                             const training = JSON.parse(e.target.value)
                             setGovernance(prev => prev ? { ...prev, training_requirements: training } : prev)

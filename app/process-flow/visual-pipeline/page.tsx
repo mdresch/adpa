@@ -579,7 +579,7 @@ export default function VisualPipelinePage() {
               <label className="text-sm font-medium mb-2 block">Template</label>
               <select
                 value={selectedTemplate}
-                onChange={(e) => setSelectedTemplate(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSelectedTemplate(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 disabled={isStarting}
               >
@@ -656,7 +656,7 @@ export default function VisualPipelinePage() {
               <label className="text-sm font-medium mb-2 block">Project</label>
               <select
                 value={selectedProject}
-                onChange={(e) => setSelectedProject(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSelectedProject(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 disabled={isStarting}
               >
@@ -740,7 +740,7 @@ export default function VisualPipelinePage() {
                   <input
                     type="checkbox"
                     checked={processingConfig.enableQualityGates}
-                    onChange={(e) => setProcessingConfig(prev => ({ ...prev, enableQualityGates: e.target.checked }))}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setProcessingConfig(prev => ({ ...prev, enableQualityGates: e.target.checked }))}
                     className="rounded"
                   />
                   <span className="text-sm">Enable Quality Gates</span>
@@ -749,7 +749,7 @@ export default function VisualPipelinePage() {
                   <input
                     type="checkbox"
                     checked={processingConfig.enableRefinement}
-                    onChange={(e) => setProcessingConfig(prev => ({ ...prev, enableRefinement: e.target.checked }))}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setProcessingConfig(prev => ({ ...prev, enableRefinement: e.target.checked }))}
                     className="rounded"
                   />
                   <span className="text-sm">Enable Refinement</span>
@@ -760,7 +760,7 @@ export default function VisualPipelinePage() {
                   <input
                     type="checkbox"
                     checked={processingConfig.enablePersonalization}
-                    onChange={(e) => setProcessingConfig(prev => ({ ...prev, enablePersonalization: e.target.checked }))}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setProcessingConfig(prev => ({ ...prev, enablePersonalization: e.target.checked }))}
                     className="rounded"
                   />
                   <span className="text-sm">Enable Personalization</span>
@@ -769,7 +769,7 @@ export default function VisualPipelinePage() {
                   <input
                     type="checkbox"
                     checked={processingConfig.enableParallelProcessing}
-                    onChange={(e) => setProcessingConfig(prev => ({ ...prev, enableParallelProcessing: e.target.checked }))}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setProcessingConfig(prev => ({ ...prev, enableParallelProcessing: e.target.checked }))}
                     className="rounded"
                   />
                   <span className="text-sm">Enable Parallel Processing</span>
@@ -781,7 +781,7 @@ export default function VisualPipelinePage() {
                   <input
                     type="number"
                     value={processingConfig.maxProcessingTime}
-                    onChange={(e) => setProcessingConfig(prev => ({ ...prev, maxProcessingTime: parseInt(e.target.value) }))}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setProcessingConfig(prev => ({ ...prev, maxProcessingTime: parseInt(e.target.value) }))}
                     className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-md"
                     min="60000"
                     max="600000"
@@ -792,7 +792,7 @@ export default function VisualPipelinePage() {
                   <input
                     type="number"
                     value={processingConfig.retryAttempts}
-                    onChange={(e) => setProcessingConfig(prev => ({ ...prev, retryAttempts: parseInt(e.target.value) }))}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setProcessingConfig(prev => ({ ...prev, retryAttempts: parseInt(e.target.value) }))}
                     className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-md"
                     min="1"
                     max="5"

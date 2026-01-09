@@ -193,7 +193,7 @@ export function TeamAgreementDialog({
             <Input
               id="title"
               value={formData.title}
-              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, title: e.target.value })}
               placeholder="e.g., Core Working Hours"
               required
               maxLength={200}
@@ -205,7 +205,7 @@ export function TeamAgreementDialog({
             <Textarea
               id="description"
               value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setFormData({ ...formData, description: e.target.value })}
               placeholder="Describe the agreement in detail..."
               required
               rows={4}
@@ -217,7 +217,7 @@ export function TeamAgreementDialog({
               <Label htmlFor="category">Category *</Label>
               <Select
                 value={formData.category}
-                onValueChange={(value) => setFormData({ ...formData, category: value as TeamAgreement['category'] })}
+                onValueChange={(value: string) => setFormData({ ...formData, category: value as TeamAgreement['category'] })}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -242,7 +242,7 @@ export function TeamAgreementDialog({
               <Label htmlFor="status">Status *</Label>
               <Select
                 value={formData.status}
-                onValueChange={(value) => setFormData({ ...formData, status: value as TeamAgreement['status'] })}
+                onValueChange={(value: string) => setFormData({ ...formData, status: value as TeamAgreement['status'] })}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -265,7 +265,7 @@ export function TeamAgreementDialog({
                 id="effective_date"
                 type="date"
                 value={formData.effective_date}
-                onChange={(e) => setFormData({ ...formData, effective_date: e.target.value })}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, effective_date: e.target.value })}
                 required
               />
             </div>
@@ -274,7 +274,7 @@ export function TeamAgreementDialog({
               <Label htmlFor="review_frequency">Review Frequency</Label>
               <Select
                 value={formData.review_frequency || ''}
-                onValueChange={(value) => setFormData({ ...formData, review_frequency: (value || '') as TeamAgreement['review_frequency'] | '' })}
+                onValueChange={(value: string) => setFormData({ ...formData, review_frequency: (value || '') as TeamAgreement['review_frequency'] | '' })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select frequency" />
@@ -298,7 +298,7 @@ export function TeamAgreementDialog({
                 id="next_review_date"
                 type="date"
                 value={formData.next_review_date}
-                onChange={(e) => setFormData({ ...formData, next_review_date: e.target.value })}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, next_review_date: e.target.value })}
               />
             </div>
           )}
@@ -364,7 +364,7 @@ export function TeamAgreementDialog({
             <Label htmlFor="facilitated_by">Facilitated By</Label>
             <Select
               value={formData.facilitated_by}
-              onValueChange={(value) => setFormData({ ...formData, facilitated_by: value })}
+              onValueChange={(value: string) => setFormData({ ...formData, facilitated_by: value })}
               disabled={teamMembersLoading || teamMembers.length === 0}
             >
               <SelectTrigger>
@@ -391,7 +391,7 @@ export function TeamAgreementDialog({
             <Textarea
               id="notes"
               value={formData.notes}
-              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setFormData({ ...formData, notes: e.target.value })}
               placeholder="Additional notes or context..."
               rows={3}
             />

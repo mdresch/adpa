@@ -367,7 +367,7 @@ export function NotificationCenter() {
                               {notification.actionUrl && (
                                 <Link 
                                   href={notification.actionUrl}
-                                  onClick={(e) => {
+                                  onClick={async (e: React.MouseEvent) => {
                                     markAsRead(notification.id)
                                     setOpen(false)
                                   }}
@@ -382,7 +382,7 @@ export function NotificationCenter() {
                                 size="sm"
                                 variant="ghost"
                                 className="h-7 w-7 p-0"
-                                onClick={(e) => {
+                                onClick={async (e: React.MouseEvent) => {
                                   e.stopPropagation()
                                   deleteNotification(notification.id)
                                 }}

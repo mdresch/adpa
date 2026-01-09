@@ -159,7 +159,7 @@ export function RankingsTable({
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={(e) => {
+                          onClick={async (e: React.MouseEvent) => {
                             e.stopPropagation()
                             onProjectClick?.(ranking.project_id)
                           }}
@@ -171,7 +171,7 @@ export function RankingsTable({
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={(e) => e.stopPropagation()}
+                            onClick={async (e: React.MouseEvent) => e.stopPropagation()}
                           >
                             <ExternalLink className="h-4 w-4" />
                           </Button>

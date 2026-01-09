@@ -659,7 +659,7 @@ export function TaskGanttView({ tasks, onViewTask }: TaskGanttViewProps) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-sm text-muted-foreground">View:</span>
-          <Select value={viewMode} onValueChange={(v) => setViewMode(v as typeof viewMode)}>
+          <Select value={viewMode} onValueChange={(v: string) => setViewMode(v as typeof viewMode)}>
             <SelectTrigger className="w-[140px]">
               <SelectValue />
             </SelectTrigger>

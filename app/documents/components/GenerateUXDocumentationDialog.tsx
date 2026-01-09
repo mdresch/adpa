@@ -152,7 +152,7 @@ export function GenerateUXDocumentationDialog({
               </Label>
               <Select
                 value={formData.document_type}
-                onValueChange={(value) =>
+                onValueChange={(value: string) =>
                   setFormData({ ...formData, document_type: value })
                 }
               >
@@ -186,7 +186,7 @@ export function GenerateUXDocumentationDialog({
               </Label>
               <Select
                 value={formData.target_audience}
-                onValueChange={(value) =>
+                onValueChange={(value: string) =>
                   setFormData({ ...formData, target_audience: value })
                 }
               >
@@ -210,7 +210,7 @@ export function GenerateUXDocumentationDialog({
               </Label>
               <Select
                 value={formData.output_format}
-                onValueChange={(value) =>
+                onValueChange={(value: string) =>
                   setFormData({ ...formData, output_format: value })
                 }
               >
@@ -232,7 +232,7 @@ export function GenerateUXDocumentationDialog({
               </Label>
               <Select
                 value={formData.tone}
-                onValueChange={(value) => setFormData({ ...formData, tone: value })}
+                onValueChange={(value: string) => setFormData({ ...formData, tone: value })}
               >
                 <SelectTrigger id="tone" className="mt-2">
                   <SelectValue placeholder="Select tone" />
@@ -253,7 +253,7 @@ export function GenerateUXDocumentationDialog({
                   type="checkbox"
                   id="include-examples"
                   checked={formData.include_examples}
-                  onChange={(e) =>
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                     setFormData({ ...formData, include_examples: e.target.checked })
                   }
                   className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
@@ -271,7 +271,7 @@ export function GenerateUXDocumentationDialog({
                     type="checkbox"
                     id="save-as-document"
                     checked={formData.save_as_document}
-                    onChange={(e) =>
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                       setFormData({ ...formData, save_as_document: e.target.checked })
                     }
                     className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"

@@ -417,7 +417,7 @@ export function ProgramReportsTab({ programId }: ProgramReportsTabProps) {
                     <Input
                       id="title"
                       value={formData.title}
-                      onChange={(e) => { setFormData({ ...formData, title: e.target.value }); }}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setFormData({ ...formData, title: e.target.value }); }}
                       placeholder="Enter report title"
                     />
                   </div>
@@ -471,7 +471,7 @@ export function ProgramReportsTab({ programId }: ProgramReportsTabProps) {
                             type="checkbox"
                             id={key}
                             checked={value}
-                            onChange={(e) => {
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                               setFormData({
                                 ...formData,
                                 includeSections: {

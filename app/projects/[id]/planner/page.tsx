@@ -32,7 +32,7 @@ export default function PlannerPage() {
       <TaskDetailsModal
         taskId={selectedTaskId}
         open={modalOpen}
-        onOpenChange={(open) => {
+        onOpenChange={(open: boolean) => {
           console.log('TaskDetailsModal onOpenChange:', open, 'selectedTaskId:', selectedTaskId);
           setModalOpen(open);
           if (!open) setSelectedTaskId(null);

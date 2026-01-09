@@ -614,7 +614,7 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
                   name="creationMethod"
                   value="entities"
                   checked={creationMethod === 'entities'}
-                  onChange={(e) => e.target.checked && setCreationMethod('entities')}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => e.target.checked && setCreationMethod('entities')}
                   disabled={entityCount === 0}
                   className="mt-1"
                 />
@@ -662,7 +662,7 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
                   name="creationMethod"
                   value="documents"
                   checked={creationMethod === 'documents'}
-                  onChange={(e) => e.target.checked && setCreationMethod('documents')}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => e.target.checked && setCreationMethod('documents')}
                   className="mt-1"
                 />
                 <div className="flex-1">
@@ -695,7 +695,7 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
                       <input
                         type="checkbox"
                         checked={selectedDocuments.includes(doc.id)}
-                        onChange={(e) => {
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                           if (e.target.checked) {
                             setSelectedDocuments([...selectedDocuments, doc.id])
                           } else {
