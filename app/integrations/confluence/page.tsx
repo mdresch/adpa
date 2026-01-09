@@ -178,10 +178,13 @@ export default function ConfluenceIntegrationPage() {
 
   const fetchSpaces = async (integrationId: string) => {
     try {
-      const response = await apiClient.request(`/integrations/confluence/${integrationId}/spaces`)
+      const response = await apiClient.request(`/integrations/confluence/${integrationId}/spaces`) as {
+        success?: boolean;
+        spaces?: any[];
+      }
 
       if (response.success) {
-        setSpaces(response.spaces)
+        setSpaces(response.spaces || [])
       }
     } catch (error) {
       console.error("Failed to fetch spaces:", error)
@@ -191,8 +194,10 @@ export default function ConfluenceIntegrationPage() {
 
   const fetchDocuments = async () => {
     try {
-      const response = await apiClient.request("/documents")
-      const docs = response.documents || response || []
+      const response = await apiClient.request("/documents") as {
+        documents?: any[];
+      } | any[]
+      const docs = (response as any).documents || response || []
       setDocuments(docs)
     } catch (error) {
       console.error("Failed to fetch documents:", error)
@@ -218,7 +223,10 @@ export default function ConfluenceIntegrationPage() {
             api_token: config.apiToken,
           }
         }),
-      })
+      }) as {
+        success?: boolean;
+        error?: string;
+      }
 
       if (response.success) {
         toast.success("Connection successful!")
@@ -226,8 +234,9 @@ export default function ConfluenceIntegrationPage() {
         toast.error(response.error || "Connection failed")
       }
     } catch (error) {
+      const err = error as Error
       console.error("Connection test failed:", error)
-      toast.error(error.message || "Connection test failed")
+      toast.error(err.message || "Connection test failed")
     } finally {
       setTesting(false)
     }
@@ -295,17 +304,22 @@ export default function ConfluenceIntegrationPage() {
 
       const response = await apiClient.request(`/integrations/confluence/${integration.id}/sync`, {
         method: "POST",
-      })
+      }) as {
+        success?: boolean;
+        syncedDocuments?: number;
+        error?: string;
+      }
 
       if (response.success) {
-        toast.success(`Successfully synced ${response.syncedDocuments} documents`)
+        toast.success(`Successfully synced ${response.syncedDocuments || 0} documents`)
         await fetchIntegration()
       } else {
         toast.error(response.error || "Sync failed")
       }
     } catch (error) {
+      const err = error as Error
       console.error("Sync failed:", error)
-      toast.error(error.message || "Sync failed")
+      toast.error(err.message || "Sync failed")
     } finally {
       setSyncing(false)
     }

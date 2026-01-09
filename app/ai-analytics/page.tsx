@@ -823,7 +823,9 @@ export default function AIAnalyticsPage() {
                               <div className="text-right">
                                 <p className="text-sm text-muted-foreground">Per Request</p>
                                 <p className="text-xl font-semibold">
-                                  {aiSummary?.totalRequests ? formatNumber(Math.round(aiSummary.totalTokens / aiSummary.totalRequests)) : '0'}
+                                  {aiSummary?.totalRequests && typeof aiSummary.totalTokens === 'number' 
+                                    ? formatNumber(Math.round((aiSummary.totalTokens as number) / aiSummary.totalRequests)) 
+                                    : '0'}
                                 </p>
                               </div>
                             </div>
@@ -1046,11 +1048,11 @@ export default function AIAnalyticsPage() {
                                 <h4 className="font-medium mb-3">Peak Usage Hours</h4>
                                 <div className="space-y-2">
                                   {[...hourlyUsage]
-                                    .sort((a, b) => b.usage_count - a.usage_count)
+                                    .sort((a, b) => Number(b.usage_count) - Number(a.usage_count))
                                     .slice(0, 3)
                                     .map((hourData, index) => {
-                                      const maxUsage = hourlyUsage.reduce((max, h) => Math.max(max, h.usage_count), 0)
-                                      const percentage = (hourData.usage_count / maxUsage) * 100
+                                      const maxUsage = hourlyUsage.reduce((max, h) => Math.max(max, Number(h.usage_count) || 0), 0)
+                                      const percentage = (Number(hourData.usage_count) / maxUsage) * 100
                                       const hour = parseInt(hourData.hour)
                                       const timeLabel = hour === 0 ? '12 AM' : hour < 12 ? `${hour} AM` : hour === 12 ? '12 PM' : `${hour - 12} PM`
                                       return (

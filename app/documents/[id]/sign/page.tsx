@@ -186,18 +186,21 @@ export default function DocumentSigningPage() {
           const saveResponse = await apiClient.request(`/signatures/documents/${documentId}/fields`, {
             method: 'POST',
             body: JSON.stringify({ fields }),
-          });
+          }) as {
+            data?: any[];
+            success?: boolean;
+          } | any[];
           
           console.log('Save fields response:', saveResponse);
           
           // Handle different response formats
           let savedFields: any[] = [];
-          if (saveResponse.data && Array.isArray(saveResponse.data)) {
-            savedFields = saveResponse.data;
+          if ((saveResponse as any).data && Array.isArray((saveResponse as any).data)) {
+            savedFields = (saveResponse as any).data;
           } else if (Array.isArray(saveResponse)) {
             savedFields = saveResponse;
-          } else if (saveResponse.success && saveResponse.data && Array.isArray(saveResponse.data)) {
-            savedFields = saveResponse.data;
+          } else if ((saveResponse as any).success && (saveResponse as any).data && Array.isArray((saveResponse as any).data)) {
+            savedFields = (saveResponse as any).data;
           }
           
           if (savedFields.length === 0) {

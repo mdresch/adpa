@@ -43,7 +43,7 @@ const config = {
     'lcov',
     'html'
   ],
-  setupFilesAfterEnv: [],
+  setupFilesAfterEnv: ['<rootDir>/__tests__/setup.ts'],
   testTimeout: 30000,
   verbose: true,
 };

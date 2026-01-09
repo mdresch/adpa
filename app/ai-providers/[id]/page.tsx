@@ -404,7 +404,11 @@ export default function AIProviderDetails() {
     setDiscovering(true)
     setDiscoveredModels([])
     try {
-      const response = await apiClient.request(`/ai/providers/${providerId}/discover-models`)
+      const response = await apiClient.request(`/ai/providers/${providerId}/discover-models`) as {
+        discovered_models?: any[];
+        current_default?: string;
+        provider?: { name?: string };
+      }
       setDiscoveredModels(response.discovered_models || [])
       
       // Pre-select all discovered models

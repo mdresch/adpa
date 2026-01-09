@@ -133,10 +133,10 @@ export function ExecutiveDriftAlertsWidget() {
         apiClient.get('/executive-dashboard/positive-drift')
       ])
 
-      setSummary(summaryData)
-      setDriftAlerts(alertsData.alerts || [])
-      setBudgetAlerts(budgetData.budget_alerts || [])
-      setOpportunities(opportunitiesData.opportunities || [])
+      setSummary(summaryData as any)
+      setDriftAlerts((alertsData as any)?.alerts || [])
+      setBudgetAlerts((budgetData as any)?.budget_alerts || [])
+      setOpportunities((opportunitiesData as any)?.opportunities || [])
     } catch (error) {
       console.error('Failed to fetch executive dashboard data:', error)
       toast.error('Failed to load executive dashboard')
