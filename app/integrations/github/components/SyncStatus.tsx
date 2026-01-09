@@ -2,11 +2,11 @@
 
 import { useState, useEffect } from "react"
 import { 
-  Sync, 
+  RefreshCw as Sync, 
   CheckCircle, 
   XCircle, 
   Clock, 
-  AlertTriangle,
+  TriangleAlert,
   RefreshCw,
   Calendar,
   FileText,
@@ -206,7 +206,7 @@ export function SyncStatus({
                 </div>
                 <div className="space-y-1">
                   <div className="flex items-center gap-2 text-sm">
-                    <AlertTriangle className="h-4 w-4 text-red-500" />
+                    <TriangleAlert className="h-4 w-4 text-red-500" />
                     <span>Errors</span>
                   </div>
                   <p className="text-2xl font-bold text-red-600">

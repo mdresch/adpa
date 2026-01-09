@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { AlertTriangle, FileText, Plus, Eye } from 'lucide-react'
+import { TriangleAlert, FileText, Plus, Eye } from 'lucide-react'
 
 interface ExistingDocument {
   id: string
@@ -51,7 +51,7 @@ export function TemplateConflictDialog({
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-yellow-500" />
+            <TriangleAlert className="h-5 w-5 text-yellow-500" />
             Template Already Used
           </DialogTitle>
           <DialogDescription>
