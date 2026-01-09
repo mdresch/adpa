@@ -101,11 +101,15 @@ export function TemplateRecommendations({ templateId }: { templateId: string }) 
             hasOptimization: !!opt,
             status: data.suggestion?.status,
             usingDiffFields: !!(opt?.suggested_system_prompt_for_diff || opt?.suggested_content_for_diff),
-            currentSystemPrompt: opt?.current_system_prompt?.substring(0, 50),
-            suggestedSystemPrompt: (opt?.suggested_system_prompt_for_diff || opt?.suggested_system_prompt)?.substring(0, 50),
+            isRegularSuggestion: opt?.is_regular_suggestion,
+            currentSystemPromptLength: opt?.current_system_prompt?.length,
+            currentSystemPromptPreview: opt?.current_system_prompt?.substring(0, 100),
+            suggestedSystemPromptLength: (opt?.suggested_system_prompt_for_diff || opt?.suggested_system_prompt)?.length,
+            suggestedSystemPromptPreview: (opt?.suggested_system_prompt_for_diff || opt?.suggested_system_prompt)?.substring(0, 100),
             currentContentLength: opt?.current_content?.length,
             suggestedContentLength: (opt?.suggested_content_for_diff || opt?.suggested_content)?.length,
-            areDifferent: opt?.current_system_prompt !== (opt?.suggested_system_prompt_for_diff || opt?.suggested_system_prompt)
+            systemPromptsAreDifferent: opt?.current_system_prompt !== (opt?.suggested_system_prompt_for_diff || opt?.suggested_system_prompt),
+            contentsAreDifferent: opt?.current_content !== (opt?.suggested_content_for_diff || opt?.suggested_content)
           })
         }
         
@@ -611,21 +615,30 @@ export function TemplateRecommendations({ templateId }: { templateId: string }) 
                       {(() => {
                         // Use diff-specific fields if available (for implemented suggestions showing original vs current)
                         // Otherwise use the regular fields (for pending suggestions showing current vs suggested)
-                        let currentPrompt = selectedOptimization.optimization.current_system_prompt || 'No system prompt'
+                        let currentPrompt = selectedOptimization.optimization.current_system_prompt || ''
                         let suggestedPrompt = selectedOptimization.optimization.suggested_system_prompt_for_diff 
                           || selectedOptimization.optimization.suggested_system_prompt
-                          || currentPrompt
+                          || ''
                         
-                        // If suggested is missing, use current (but warn)
-                        if (!suggestedPrompt || suggestedPrompt === currentPrompt) {
-                          suggestedPrompt = currentPrompt
-                        }
+                        // Ensure both are strings and trim
+                        currentPrompt = String(currentPrompt || '').trim()
+                        suggestedPrompt = String(suggestedPrompt || '').trim()
                         
-                        // Ensure both are strings
-                        currentPrompt = String(currentPrompt)
-                        suggestedPrompt = String(suggestedPrompt)
+                        // Default to "No system prompt" if empty
+                        if (!currentPrompt) currentPrompt = 'No system prompt defined'
+                        if (!suggestedPrompt) suggestedPrompt = currentPrompt
                         
                         const isIdentical = currentPrompt === suggestedPrompt
+                        
+                        if (process.env.NODE_ENV === 'development') {
+                          console.log('[TemplateOptimization] System Prompt Comparison:', {
+                            currentLength: currentPrompt.length,
+                            suggestedLength: suggestedPrompt.length,
+                            isIdentical,
+                            currentPreview: currentPrompt.substring(0, 100),
+                            suggestedPreview: suggestedPrompt.substring(0, 100)
+                          })
+                        }
                         
                         return (
                           <>
@@ -633,7 +646,7 @@ export function TemplateRecommendations({ templateId }: { templateId: string }) 
                               <Alert className="mb-2">
                                 <AlertTriangle className="h-4 w-4" />
                                 <AlertDescription>
-                                  System prompts are identical. The optimization may have already been applied, or no changes were generated.
+                                  System prompts are identical. The optimization may have already been applied, or no system prompt changes were proposed.
                                 </AlertDescription>
                               </Alert>
                             )}
@@ -668,10 +681,10 @@ export function TemplateRecommendations({ templateId }: { templateId: string }) 
                       {(() => {
                         // Use diff-specific fields if available (for implemented suggestions showing original vs current)
                         // Otherwise use the regular fields (for pending suggestions showing current vs suggested)
-                        let currentContent = selectedOptimization.optimization.current_content || 'No content'
+                        let currentContent = selectedOptimization.optimization.current_content || ''
                         let suggestedContent = selectedOptimization.optimization.suggested_content_for_diff
                           || selectedOptimization.optimization.suggested_content
-                          || currentContent
+                          || ''
                         
                         // If content is an object, try to extract the markdown/text
                         if (typeof currentContent === 'object' && currentContent !== null) {
@@ -681,16 +694,25 @@ export function TemplateRecommendations({ templateId }: { templateId: string }) 
                           suggestedContent = suggestedContent.content || suggestedContent.markdown || JSON.stringify(suggestedContent, null, 2)
                         }
                         
-                        // If suggested is missing, use current (but warn)
-                        if (!suggestedContent || suggestedContent === currentContent) {
-                          suggestedContent = currentContent
-                        }
+                        // Ensure both are strings and trim
+                        currentContent = String(currentContent || '').trim()
+                        suggestedContent = String(suggestedContent || '').trim()
                         
-                        // Ensure both are strings
-                        currentContent = String(currentContent || 'No content')
-                        suggestedContent = String(suggestedContent || currentContent)
+                        // Default to \"No content\" if empty
+                        if (!currentContent) currentContent = 'No template content defined'
+                        if (!suggestedContent) suggestedContent = currentContent
                         
                         const isIdentical = currentContent === suggestedContent
+                        
+                        if (process.env.NODE_ENV === 'development') {
+                          console.log('[TemplateOptimization] Template Content Comparison:', {
+                            currentLength: currentContent.length,
+                            suggestedLength: suggestedContent.length,
+                            isIdentical,
+                            currentPreview: currentContent.substring(0, 200),
+                            suggestedPreview: suggestedContent.substring(0, 200)
+                          })
+                        }
                         
                         return (
                           <>
@@ -698,7 +720,7 @@ export function TemplateRecommendations({ templateId }: { templateId: string }) 
                               <Alert className="mb-2">
                                 <AlertTriangle className="h-4 w-4" />
                                 <AlertDescription>
-                                  Template content is identical. The optimization may have already been applied, or no changes were generated.
+                                  Template content is identical. The optimization may have already been applied, or no content changes were proposed.
                                 </AlertDescription>
                               </Alert>
                             )}

@@ -445,6 +445,21 @@ export interface DomainExtractionAnalyticsResponse {
   }>
 }
 
+// Extended RequestInit with custom options
+interface ExtendedRequestOptions extends RequestInit {
+  suppressNotFoundError?: boolean
+}
+
+// Extended Error type for API errors
+interface ApiError extends Error {
+  response?: {
+    data: unknown
+    status: number
+  }
+  status?: number
+  data?: unknown
+}
+
 class ApiClient {
   private baseURL: string
   private token: string | null = null
@@ -503,7 +518,7 @@ class ApiClient {
 
   public async request<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: ExtendedRequestOptions = {}
   ): Promise<T> {
     // FIX: Handle trailing/leading slashes to prevent double slashes
     const baseURL = this.baseURL.endsWith('/') ? this.baseURL.slice(0, -1) : this.baseURL
@@ -525,10 +540,10 @@ class ApiClient {
         ...options,
         headers,
         // include credentials so cookie-based sessions work from the browser
-        credentials: (options as any).credentials || "include",
+        credentials: options.credentials || "include",
       })
 
-      let data: any
+      let data: unknown
       try {
         data = await response.json()
       } catch (jsonError) {
@@ -550,7 +565,8 @@ class ApiClient {
       if (!response.ok) {
         // Create an error object that includes the response data for better error handling
         // Extract message from various possible locations in the response
-        let errorMessage = data?.message || data?.error || `HTTP error! status: ${response.status}`
+        const responseData = data as Record<string, unknown>
+        let errorMessage = responseData?.message || responseData?.error || `HTTP error! status: ${response.status}`
 
         // Ensure errorMessage is a string
         if (typeof errorMessage !== 'string') {
@@ -561,25 +577,26 @@ class ApiClient {
           }
         }
 
-        const error = new Error(errorMessage)
-          ; (error as any).response = { data, status: response.status }
-          ; (error as any).status = response.status
-          ; (error as any).data = data // Also attach data directly for easier access
+        const error = new Error(errorMessage) as ApiError
+        error.response = { data, status: response.status }
+        error.status = response.status
+        error.data = data // Also attach data directly for easier access
         throw error
       }
 
-      return data
-    } catch (error: any) {
+      return data as T
+    } catch (error) {
+      const apiError = error as ApiError
       // Don't log expected errors if suppressNotFoundError is set
       // Suppresses: 404 (not found), 401/403 (auth errors - user not logged in)
-      const shouldSuppressLog = (options as any).suppressNotFoundError &&
-        (error?.status === 404 || error?.status === 401 || error?.status === 403)
+      const shouldSuppressLog = options.suppressNotFoundError &&
+        (apiError?.status === 404 || apiError?.status === 401 || apiError?.status === 403)
 
       if (!shouldSuppressLog) {
         // Log error with better formatting
-        const errorDetails = error?.response?.data || error?.data || error?.message || error
+        const errorDetails = apiError?.response?.data || apiError?.data || apiError?.message || error
         console.error(`API request failed: ${endpoint}`, {
-          status: error?.status || error?.response?.status,
+          status: apiError?.status || apiError?.response?.status,
           message: typeof errorDetails === 'string' ? errorDetails : JSON.stringify(errorDetails),
           error
         })
@@ -589,11 +606,11 @@ class ApiClient {
   }
 
   // HTTP method shortcuts
-  async get<T = any>(endpoint: string, options?: RequestInit): Promise<T> {
+  async get<T>(endpoint: string, options?: ExtendedRequestOptions): Promise<T> {
     return this.request<T>(endpoint, { ...options, method: 'GET' })
   }
 
-  async post<T = any>(endpoint: string, body?: any, options?: RequestInit): Promise<T> {
+  async post<T>(endpoint: string, body?: unknown, options?: ExtendedRequestOptions): Promise<T> {
     return this.request<T>(endpoint, {
       ...options,
       method: 'POST',
@@ -601,7 +618,7 @@ class ApiClient {
     })
   }
 
-  async put<T = any>(endpoint: string, body?: any, options?: RequestInit): Promise<T> {
+  async put<T>(endpoint: string, body?: unknown, options?: ExtendedRequestOptions): Promise<T> {
     return this.request<T>(endpoint, {
       ...options,
       method: 'PUT',
@@ -609,11 +626,11 @@ class ApiClient {
     })
   }
 
-  async delete<T = any>(endpoint: string, options?: RequestInit): Promise<T> {
+  async delete<T>(endpoint: string, options?: ExtendedRequestOptions): Promise<T> {
     return this.request<T>(endpoint, { ...options, method: 'DELETE' })
   }
 
-  async patch<T = any>(endpoint: string, body?: any, options?: RequestInit): Promise<T> {
+  async patch<T>(endpoint: string, body?: unknown, options?: ExtendedRequestOptions): Promise<T> {
     return this.request<T>(endpoint, {
       ...options,
       method: 'PATCH',

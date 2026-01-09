@@ -18,18 +18,56 @@ interface SideBySideDiffProps {
 }
 
 export function SideBySideDiff({ oldContent, newContent, filename = 'document.md' }: SideBySideDiffProps) {
+  // Validate inputs
+  const validatedOldContent = useMemo(() => {
+    if (!oldContent || typeof oldContent !== 'string') {
+      console.warn('[SideBySideDiff] Invalid oldContent:', typeof oldContent)
+      return ''
+    }
+    return oldContent
+  }, [oldContent])
+
+  const validatedNewContent = useMemo(() => {
+    if (!newContent || typeof newContent !== 'string') {
+      console.warn('[SideBySideDiff] Invalid newContent:', typeof newContent)
+      return ''
+    }
+    return newContent
+  }, [newContent])
+
   const diffText = useMemo(() => {
+    // Check if contents are identical
+    if (validatedOldContent === validatedNewContent) {
+      console.log('[SideBySideDiff] Content is identical, no changes to display')
+      return ''
+    }
+
     // Create unified diff format
-    const oldLines = oldContent.split('\n')
-    const newLines = newContent.split('\n')
+    const oldLines = validatedOldContent.split('\n')
+    const newLines = validatedNewContent.split('\n')
     
     // Use unidiff to create a proper diff with expanded context for better clarity
-    return formatLines(diffLines(oldLines, newLines), {
+    const formatted = formatLines(diffLines(oldLines, newLines), {
       context: 5  // Increased from 3 to 5 for more context around changes
     })
-  }, [oldContent, newContent])
+
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[SideBySideDiff] Generated diff:', {
+        oldLinesCount: oldLines.length,
+        newLinesCount: newLines.length,
+        diffLength: formatted.length,
+        hasChanges: formatted.length > 0
+      })
+    }
+
+    return formatted
+  }, [validatedOldContent, validatedNewContent])
 
   const files = useMemo(() => {
+    if (!diffText) {
+      return []
+    }
+
     try {
       // Parse the diff text into structured format
       const diffHeader = [
@@ -37,9 +75,18 @@ export function SideBySideDiff({ oldContent, newContent, filename = 'document.md
         `+++ ${filename}`,
         diffText
       ].join('\n')
-      return parseDiff(diffHeader)
+      const parsed = parseDiff(diffHeader)
+      
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[SideBySideDiff] Parsed diff files:', {
+          fileCount: parsed.length,
+          hunksCount: parsed[0]?.hunks?.length || 0
+        })
+      }
+
+      return parsed
     } catch (error) {
-      console.error('Error parsing diff:', error)
+      console.error('[SideBySideDiff] Error parsing diff:', error)
       return []
     }
   }, [diffText, filename])
@@ -96,11 +143,34 @@ export function SideBySideDiff({ oldContent, newContent, filename = 'document.md
     )
   }
 
-  if (files.length === 0) {
+  // Check if content is identical
+  const isIdentical = validatedOldContent === validatedNewContent
+  const hasNoChanges = files.length === 0
+
+  if (isIdentical) {
     return (
       <div className="p-8 text-center text-muted-foreground">
-        <p>Unable to generate diff preview</p>
-        <p className="text-xs mt-2">The content may be too similar or malformed</p>
+        <p className="font-medium">✓ Content is Identical</p>
+        <p className="text-xs mt-2">The original and proposed content are exactly the same.</p>
+        <p className="text-xs mt-1">No changes to display.</p>
+      </div>
+    )
+  }
+
+  if (hasNoChanges) {
+    return (
+      <div className="p-8 text-center text-muted-foreground">
+        <p className="font-medium">Unable to generate diff preview</p>
+        <p className="text-xs mt-2">The diff library could not detect meaningful changes.</p>
+        <details className="mt-4 text-left max-w-md mx-auto">
+          <summary className="cursor-pointer text-xs font-medium">Debug Information</summary>
+          <div className="mt-2 p-3 bg-gray-100 dark:bg-gray-800 rounded text-xs">
+            <p>Old content length: {validatedOldContent.length} chars</p>
+            <p>New content length: {validatedNewContent.length} chars</p>
+            <p>Old lines: {validatedOldContent.split('\n').length}</p>
+            <p>New lines: {validatedNewContent.split('\n').length}</p>
+          </div>
+        </details>
       </div>
     )
   }

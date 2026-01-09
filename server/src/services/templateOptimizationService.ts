@@ -768,6 +768,22 @@ Make the system prompt crystal-clear and the template structure easy for AI to f
     const originalSystemPrompt = metadata.original_system_prompt || sug.current_system_prompt || ''
     const originalContent = metadata.original_content || currentContent || ''
 
+    // Log for debugging
+    if (process.env.NODE_ENV === 'development') {
+      logger.info('[TEMPLATE-OPT] Processing AI optimization', {
+        suggestionId,
+        status: sug.status,
+        hasOriginalSystemPrompt: !!metadata.original_system_prompt,
+        hasOriginalContent: !!metadata.original_content,
+        originalSystemPromptLength: originalSystemPrompt.length,
+        originalContentLength: originalContent.length,
+        currentSystemPromptLength: (sug.current_system_prompt || '').length,
+        currentContentLength: (currentContent || '').length,
+        suggestedSystemPromptLength: (improvement.system_prompt || '').length,
+        suggestedContentLength: (suggestedContent || '').length
+      })
+    }
+
     // Use original content for "current" side of diff (what it was before optimization)
     // Use suggested content for "new" side (what it should become)
     // If status is "implemented", current template IS the optimized version, so we show original vs current
@@ -776,6 +792,23 @@ Make the system prompt crystal-clear and the template structure easy for AI to f
     const diffCurrentContent = isImplemented ? originalContent : currentContent || ''
     const diffNewSystemPrompt = isImplemented ? sug.current_system_prompt || '' : (improvement.system_prompt || sug.current_system_prompt || '')
     const diffNewContent = isImplemented ? currentContent || '' : (suggestedContent || currentContent || '')
+
+    // Validate that we have meaningful differences (for pending suggestions)
+    if (!isImplemented) {
+      const hasSystemPromptDiff = diffCurrentSystemPrompt !== diffNewSystemPrompt
+      const hasContentDiff = diffCurrentContent !== diffNewContent
+      
+      if (!hasSystemPromptDiff && !hasContentDiff) {
+        logger.warn('[TEMPLATE-OPT] No meaningful differences detected in optimization', {
+          suggestionId,
+          status: sug.status,
+          currentSystemPromptLength: diffCurrentSystemPrompt.length,
+          suggestedSystemPromptLength: diffNewSystemPrompt.length,
+          currentContentLength: diffCurrentContent.length,
+          suggestedContentLength: diffNewContent.length
+        })
+      }
+    }
 
     return {
       ...sug,
