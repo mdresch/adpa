@@ -169,7 +169,7 @@ export function TasksAndResourceTab() {
           <Input
             placeholder="Search tasks, projects, or resources..."
             value={searchQuery}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
+            onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-9"
           />
         </div>

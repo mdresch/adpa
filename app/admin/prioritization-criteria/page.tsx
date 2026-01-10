@@ -362,7 +362,7 @@ export default function PrioritizationCriteriaPage() {
                     <Input
                       id="name"
                       value={formData.name}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, name: e.target.value })}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       placeholder="e.g., Strategic Alignment"
                     />
                   </div>
@@ -377,7 +377,7 @@ export default function PrioritizationCriteriaPage() {
                         max="100"
                         step="0.1"
                         value={formData.weight}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        onChange={(e) =>
                           setFormData({ ...formData, weight: parseFloat(e.target.value) || 0 })
                         }
                       />
@@ -388,7 +388,7 @@ export default function PrioritizationCriteriaPage() {
                         id="sort_order"
                         type="number"
                         value={formData.sort_order}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        onChange={(e) =>
                           setFormData({ ...formData, sort_order: parseInt(e.target.value) || 0 })
                         }
                       />
@@ -414,7 +414,7 @@ export default function PrioritizationCriteriaPage() {
                         type="number"
                         min="1"
                         value={formData.scale_min}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        onChange={(e) =>
                           setFormData({ ...formData, scale_min: parseInt(e.target.value) || 1 })
                         }
                       />
@@ -426,7 +426,7 @@ export default function PrioritizationCriteriaPage() {
                         type="number"
                         min={formData.scale_min}
                         value={formData.scale_max}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        onChange={(e) =>
                           setFormData({ ...formData, scale_max: parseInt(e.target.value) || 5 })
                         }
                       />

@@ -1591,7 +1591,7 @@ The ADPA system represents a significant advancement in document processing auto
                         ) : (
                           <textarea
                             value={editedContent}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditedContent(e.target.value)}
+                            onChange={(e) => setEditedContent(e.target.value)}
                             className="w-full min-h-[600px] max-h-[800px] p-6 border-2 rounded-lg font-mono text-sm resize-y focus:ring-2 focus:ring-primary focus:border-primary transition-all"
                             placeholder="Edit document content in Markdown format..."
                             style={{ height: 'calc(100vh - 400px)' }}
@@ -2473,7 +2473,7 @@ The ADPA system represents a significant advancement in document processing auto
                             <div className="space-y-2">
                               <textarea
                                 value={newComment}
-                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewComment(e.target.value)}
+                                onChange={(e) => setNewComment(e.target.value)}
                                 placeholder="Add a comment..."
                                 className="w-full p-2 border rounded-lg text-sm"
                                 rows={3}

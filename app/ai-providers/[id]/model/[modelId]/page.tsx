@@ -740,7 +740,7 @@ export default function ModelDetails() {
                           <Input
                             id="name"
                             value={formState.name}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState(prev => ({ ...prev, name: e.target.value }))}
+                            onChange={(e) => setFormState(prev => ({ ...prev, name: e.target.value }))}
                             placeholder="Model name"
                           />
                         </div>
@@ -751,7 +751,7 @@ export default function ModelDetails() {
                             id="contextWindow"
                             type="number"
                             value={formState.contextWindow}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState(prev => ({ ...prev, contextWindow: parseInt(e.target.value) || 0 }))}
+                            onChange={(e) => setFormState(prev => ({ ...prev, contextWindow: parseInt(e.target.value) || 0 }))}
                             placeholder="128000"
                           />
                           <p className="text-xs text-muted-foreground mt-1">
@@ -765,7 +765,7 @@ export default function ModelDetails() {
                             id="maxTokens"
                             type="number"
                             value={formState.maxTokens}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState(prev => ({ ...prev, maxTokens: parseInt(e.target.value) || 0 }))}
+                            onChange={(e) => setFormState(prev => ({ ...prev, maxTokens: parseInt(e.target.value) || 0 }))}
                             placeholder="4096"
                           />
                           <p className="text-xs text-muted-foreground mt-1">
@@ -784,7 +784,7 @@ export default function ModelDetails() {
                             min="0"
                             max="2"
                             value={formState.temperature}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState(prev => ({ ...prev, temperature: parseFloat(e.target.value) || 0 }))}
+                            onChange={(e) => setFormState(prev => ({ ...prev, temperature: parseFloat(e.target.value) || 0 }))}
                             placeholder="0.7"
                           />
                           <p className="text-xs text-muted-foreground mt-1">
@@ -801,7 +801,7 @@ export default function ModelDetails() {
                             min="0"
                             max="1"
                             value={formState.topP}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState(prev => ({ ...prev, topP: parseFloat(e.target.value) || 0 }))}
+                            onChange={(e) => setFormState(prev => ({ ...prev, topP: parseFloat(e.target.value) || 0 }))}
                             placeholder="1.0"
                           />
                           <p className="text-xs text-muted-foreground mt-1">
@@ -818,7 +818,7 @@ export default function ModelDetails() {
                             min="-2"
                             max="2"
                             value={formState.frequencyPenalty}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState(prev => ({ ...prev, frequencyPenalty: parseFloat(e.target.value) || 0 }))}
+                            onChange={(e) => setFormState(prev => ({ ...prev, frequencyPenalty: parseFloat(e.target.value) || 0 }))}
                             placeholder="0.0"
                           />
                           <p className="text-xs text-muted-foreground mt-1">
@@ -835,7 +835,7 @@ export default function ModelDetails() {
                             min="-2"
                             max="2"
                             value={formState.presencePenalty}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState(prev => ({ ...prev, presencePenalty: parseFloat(e.target.value) || 0 }))}
+                            onChange={(e) => setFormState(prev => ({ ...prev, presencePenalty: parseFloat(e.target.value) || 0 }))}
                             placeholder="0.0"
                           />
                           <p className="text-xs text-muted-foreground mt-1">

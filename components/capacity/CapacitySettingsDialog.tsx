@@ -393,7 +393,7 @@ export function CapacitySettingsDialog({
                 <Label>Department</Label>
                 <Input
                   value={settings.department || ''}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSettings(prev => ({ ...prev, department: e.target.value }))}
+                  onChange={(e) => setSettings(prev => ({ ...prev, department: e.target.value }))}
                   placeholder="e.g., Engineering"
                 />
               </div>
@@ -413,7 +413,7 @@ export function CapacitySettingsDialog({
                     min={0}
                     max={168}
                     value={settings.contractedHoursPerWeek || 40}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSettings(prev => ({ 
+                    onChange={(e) => setSettings(prev => ({ 
                       ...prev, 
                       contractedHoursPerWeek: Number(e.target.value),
                       contractedHoursPerDay: Number(e.target.value) / (prev.contractedDaysPerWeek || 5)
@@ -427,7 +427,7 @@ export function CapacitySettingsDialog({
                     min={1}
                     max={7}
                     value={settings.contractedDaysPerWeek || 5}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                    onChange={(e) => {
                       const daysValue = Number(e.target.value)
                       if (daysValue > 0) {
                         setSettings(prev => ({ 
@@ -457,7 +457,7 @@ export function CapacitySettingsDialog({
                   <Input
                     type="time"
                     value={settings.workStartTime || '09:00'}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSettings(prev => ({ ...prev, workStartTime: e.target.value }))}
+                    onChange={(e) => setSettings(prev => ({ ...prev, workStartTime: e.target.value }))}
                   />
                 </div>
                 <div className="space-y-2">
@@ -465,7 +465,7 @@ export function CapacitySettingsDialog({
                   <Input
                     type="time"
                     value={settings.workEndTime || '17:00'}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSettings(prev => ({ ...prev, workEndTime: e.target.value }))}
+                    onChange={(e) => setSettings(prev => ({ ...prev, workEndTime: e.target.value }))}
                   />
                 </div>
                 <div className="space-y-2">
@@ -552,7 +552,7 @@ export function CapacitySettingsDialog({
                     min={0}
                     max={365}
                     value={settings.annualLeaveDays || 25}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSettings(prev => ({ ...prev, annualLeaveDays: Number(e.target.value) }))}
+                    onChange={(e) => setSettings(prev => ({ ...prev, annualLeaveDays: Number(e.target.value) }))}
                   />
                 </div>
                 <div className="space-y-2">
@@ -590,7 +590,7 @@ export function CapacitySettingsDialog({
                   <Input
                     type="date"
                     value={settings.effectiveFrom || new Date().toISOString().split('T')[0]}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSettings(prev => ({ ...prev, effectiveFrom: e.target.value }))}
+                    onChange={(e) => setSettings(prev => ({ ...prev, effectiveFrom: e.target.value }))}
                   />
                 </div>
                 <div className="space-y-2">
@@ -598,7 +598,7 @@ export function CapacitySettingsDialog({
                   <Input
                     type="date"
                     value={settings.effectiveUntil || ''}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSettings(prev => ({ ...prev, effectiveUntil: e.target.value || undefined }))}
+                    onChange={(e) => setSettings(prev => ({ ...prev, effectiveUntil: e.target.value || undefined }))}
                   />
                 </div>
               </div>
@@ -606,7 +606,7 @@ export function CapacitySettingsDialog({
                 <Label>Cost Center (optional)</Label>
                 <Input
                   value={settings.costCenter || ''}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSettings(prev => ({ ...prev, costCenter: e.target.value }))}
+                  onChange={(e) => setSettings(prev => ({ ...prev, costCenter: e.target.value }))}
                   placeholder="e.g., CC-12345"
                 />
               </div>

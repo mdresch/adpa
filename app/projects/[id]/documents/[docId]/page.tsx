@@ -1163,7 +1163,7 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                               <Input
                                 id="doc-name"
                                 value={metadataForm.name}
-                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMetadataForm({...metadataForm, name: e.target.value})}
+                                onChange={(e) => setMetadataForm({...metadataForm, name: e.target.value})}
                                 placeholder="Enter document name"
                               />
                             </div>
@@ -1247,7 +1247,7 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                               <Input
                                 id="doc-author"
                                 value={metadataForm.author}
-                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMetadataForm({...metadataForm, author: e.target.value})}
+                                onChange={(e) => setMetadataForm({...metadataForm, author: e.target.value})}
                                 placeholder="Enter author"
                               />
                             </div>
@@ -1256,7 +1256,7 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                               <Input
                                 id="doc-reviewer"
                                 value={metadataForm.reviewer}
-                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMetadataForm({...metadataForm, reviewer: e.target.value})}
+                                onChange={(e) => setMetadataForm({...metadataForm, reviewer: e.target.value})}
                                 placeholder="Enter reviewer"
                               />
                             </div>
@@ -1266,7 +1266,7 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                                 id="doc-due-date"
                                 type="date"
                                 value={metadataForm.due_date}
-                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMetadataForm({...metadataForm, due_date: e.target.value})}
+                                onChange={(e) => setMetadataForm({...metadataForm, due_date: e.target.value})}
                               />
                             </div>
                             <div>
@@ -1274,7 +1274,7 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                               <Input
                                 id="doc-tags"
                                 value={metadataForm.tags.join(", ")}
-                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMetadataForm({...metadataForm, tags: e.target.value.split(", ").filter(tag => tag.trim())})}
+                                onChange={(e) => setMetadataForm({...metadataForm, tags: e.target.value.split(", ").filter(tag => tag.trim())})}
                                 placeholder="Enter tags separated by commas"
                               />
                             </div>

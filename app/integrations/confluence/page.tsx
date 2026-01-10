@@ -635,7 +635,7 @@ export default function ConfluenceIntegrationPage() {
                               id="baseUrl"
                               placeholder="https://your-domain.atlassian.net"
                               value={config.baseUrl}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfig({ ...config, baseUrl: e.target.value })}
+                              onChange={(e) => setConfig({ ...config, baseUrl: e.target.value })}
                             />
                           </div>
                           <div className="space-y-2">
@@ -644,7 +644,7 @@ export default function ConfluenceIntegrationPage() {
                               id="username"
                               placeholder="your-email@company.com"
                               value={config.username}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfig({ ...config, username: e.target.value })}
+                              onChange={(e) => setConfig({ ...config, username: e.target.value })}
                             />
                           </div>
                         </div>
@@ -656,7 +656,7 @@ export default function ConfluenceIntegrationPage() {
                             type="password"
                             placeholder="Your Confluence API token"
                             value={config.apiToken}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfig({ ...config, apiToken: e.target.value })}
+                            onChange={(e) => setConfig({ ...config, apiToken: e.target.value })}
                           />
                         </div>
 
@@ -666,7 +666,7 @@ export default function ConfluenceIntegrationPage() {
                             id="targetSpace"
                             placeholder="SPACE"
                             value={config.targetSpaceKey}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfig({ ...config, targetSpaceKey: e.target.value })}
+                            onChange={(e) => setConfig({ ...config, targetSpaceKey: e.target.value })}
                           />
                         </div>
 
@@ -776,7 +776,7 @@ export default function ConfluenceIntegrationPage() {
                           <Input
                             placeholder="Search Confluence content..."
                             value={searchQuery}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
+                            onChange={(e) => setSearchQuery(e.target.value)}
                             onKeyPress={(e) => e.key === "Enter" && searchContent()}
                           />
                           <Select value={selectedSpace} onValueChange={setSelectedSpace}>

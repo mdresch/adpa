@@ -253,7 +253,7 @@ export function GenerateUXDocumentationDialog({
                   type="checkbox"
                   id="include-examples"
                   checked={formData.include_examples}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  onChange={(e) =>
                     setFormData({ ...formData, include_examples: e.target.checked })
                   }
                   className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
@@ -271,7 +271,7 @@ export function GenerateUXDocumentationDialog({
                     type="checkbox"
                     id="save-as-document"
                     checked={formData.save_as_document}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                    onChange={(e) =>
                       setFormData({ ...formData, save_as_document: e.target.checked })
                     }
                     className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"

@@ -247,7 +247,7 @@ export function UnavailabilityDialog({
               <Input
                 type="date"
                 value={formData.startDate}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData(prev => ({ ...prev, startDate: e.target.value }))}
+                onChange={(e) => setFormData(prev => ({ ...prev, startDate: e.target.value }))}
               />
             </div>
             <div className="space-y-2">
@@ -256,7 +256,7 @@ export function UnavailabilityDialog({
                 type="date"
                 value={formData.endDate}
                 min={formData.startDate}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData(prev => ({ ...prev, endDate: e.target.value }))}
+                onChange={(e) => setFormData(prev => ({ ...prev, endDate: e.target.value }))}
               />
             </div>
           </div>
@@ -283,7 +283,7 @@ export function UnavailabilityDialog({
                 <Input
                   type="time"
                   value={formData.startTime}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData(prev => ({ ...prev, startTime: e.target.value }))}
+                  onChange={(e) => setFormData(prev => ({ ...prev, startTime: e.target.value }))}
                 />
               </div>
               <div className="space-y-2">
@@ -291,7 +291,7 @@ export function UnavailabilityDialog({
                 <Input
                   type="time"
                   value={formData.endTime}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData(prev => ({ ...prev, endTime: e.target.value }))}
+                  onChange={(e) => setFormData(prev => ({ ...prev, endTime: e.target.value }))}
                 />
               </div>
             </div>

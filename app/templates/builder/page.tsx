@@ -705,7 +705,7 @@ export default function TemplateBuilderPage() {
                                   <Input
                                     placeholder="Section title"
                                     value={section.title}
-                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateSection(section.id, { title: e.target.value })}
+                                    onChange={(e) => updateSection(section.id, { title: e.target.value })}
                                     className="flex-1 mr-4"
                                   />
                                   <div className="flex items-center space-x-2">
@@ -904,7 +904,7 @@ OUTPUT FOCUS: Real data from THIS specific project only.`}
                                 id="name"
                                 placeholder="Enter template name"
                                 value={templateName}
-                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTemplateName(e.target.value)}
+                                onChange={(e) => setTemplateName(e.target.value)}
                               />
                             </div>
 
@@ -980,7 +980,7 @@ OUTPUT FOCUS: Real data from THIS specific project only.`}
                                     <Input
                                       placeholder="Variable name"
                                       value={variable.name}
-                                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateVariable(variable.id, { name: e.target.value })}
+                                      onChange={(e) => updateVariable(variable.id, { name: e.target.value })}
                                       className="flex-1 mr-2"
                                     />
                                     <Button
@@ -995,7 +995,7 @@ OUTPUT FOCUS: Real data from THIS specific project only.`}
                                   <Input
                                     placeholder="Display label"
                                     value={variable.label}
-                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateVariable(variable.id, { label: e.target.value })}
+                                    onChange={(e) => updateVariable(variable.id, { label: e.target.value })}
                                   />
                                   
                                   <Select

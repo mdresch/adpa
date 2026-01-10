@@ -224,7 +224,7 @@ export function SearchDialog<T extends SearchableItem>({
             <Input
               placeholder={placeholder || labels.placeholder}
               value={searchQuery}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
+              onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={handleKeyDown}
               className="pl-9"
               autoFocus

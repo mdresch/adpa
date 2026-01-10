@@ -620,7 +620,7 @@ export default function SearchPage() {
                         <Input
                           placeholder="Search projects, documents, templates, and users..."
                           value={query}
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                          onChange={(e) => {
                             setQuery(e.target.value)
                             setShowHistory(false)
                             fetchSuggestions(e.target.value)

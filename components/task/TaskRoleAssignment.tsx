@@ -492,7 +492,7 @@ export function TaskRoleAssignment({
                 type="number"
                 min="1"
                 value={formData.requiredCount}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                onChange={(e) =>
                   setFormData({
                     ...formData,
                     requiredCount: parseInt(e.target.value) || 1,
@@ -505,7 +505,7 @@ export function TaskRoleAssignment({
                 type="checkbox"
                 id="isPrimary"
                 checked={formData.isPrimary}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                onChange={(e) =>
                   setFormData({ ...formData, isPrimary: e.target.checked })
                 }
                 className="h-4 w-4 rounded border-gray-300"

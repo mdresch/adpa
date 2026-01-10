@@ -316,7 +316,7 @@ export default function DeletedDocumentsPage({ params }: { params: { id: string 
                   <Input
                     placeholder="Search deleted documents..."
                     value={searchTerm}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
+                    onChange={(e) => setSearchTerm(e.target.value)}
                     className="pl-10"
                   />
                 </div>

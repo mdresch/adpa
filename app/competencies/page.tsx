@@ -257,7 +257,7 @@ export default function CompetenciesPage() {
                       <Input
                         placeholder="Search competencies..."
                         value={searchTerm}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
+                        onChange={(e) => setSearchTerm(e.target.value)}
                         className="pl-9"
                       />
                     </div>
@@ -371,7 +371,7 @@ export default function CompetenciesPage() {
                       <Input
                         id="competencyName"
                         value={formData.competencyName}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        onChange={(e) =>
                           setFormData({ ...formData, competencyName: e.target.value })
                         }
                         placeholder="e.g., Project Management, Leadership"
@@ -384,7 +384,7 @@ export default function CompetenciesPage() {
                         <Input
                           id="category"
                           value={formData.category}
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                          onChange={(e) =>
                             setFormData({ ...formData, category: e.target.value })
                           }
                           placeholder="e.g., PMBOK Performance Domain, Management, Technical"
@@ -420,7 +420,7 @@ export default function CompetenciesPage() {
                       <Input
                         id="description"
                         value={formData.description}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        onChange={(e) =>
                           setFormData({ ...formData, description: e.target.value })
                         }
                         placeholder="Brief description of the competency"

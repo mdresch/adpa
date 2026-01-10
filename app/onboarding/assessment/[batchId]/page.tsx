@@ -1748,7 +1748,7 @@ export default function AssessmentResultsPage() {
                 <div className="flex flex-wrap gap-2">
                   <select
                     value={documentSort}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDocumentSort(e.target.value as 'type' | 'score' | 'count')}
+                    onChange={(e) => setDocumentSort(e.target.value as 'type' | 'score' | 'count')}
                     className="text-sm rounded-md px-3 py-2 border bg-transparent"
                     style={{
                       borderColor: maturityTheme.colors.border.default,
@@ -1761,7 +1761,7 @@ export default function AssessmentResultsPage() {
                   </select>
                   <select
                     value={documentSortOrder}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDocumentSortOrder(e.target.value as 'asc' | 'desc')}
+                    onChange={(e) => setDocumentSortOrder(e.target.value as 'asc' | 'desc')}
                     className="text-sm rounded-md px-3 py-2 border bg-transparent"
                     style={{
                       borderColor: maturityTheme.colors.border.default,
@@ -1891,7 +1891,7 @@ export default function AssessmentResultsPage() {
                 <div className="flex flex-wrap gap-2">
                   <select
                     value={gapFilter.priority || 'all'}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGapFilter({ ...gapFilter, priority: e.target.value === 'all' ? undefined : e.target.value })}
+                    onChange={(e) => setGapFilter({ ...gapFilter, priority: e.target.value === 'all' ? undefined : e.target.value })}
                     className="text-sm rounded-md px-3 py-2 border bg-transparent"
                     style={{
                       borderColor: maturityTheme.colors.border.default,
@@ -1906,7 +1906,7 @@ export default function AssessmentResultsPage() {
                   </select>
                   <select
                     value={gapSort}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGapSort(e.target.value as 'priority' | 'impact' | 'effort')}
+                    onChange={(e) => setGapSort(e.target.value as 'priority' | 'impact' | 'effort')}
                     className="text-sm rounded-md px-3 py-2 border bg-transparent"
                     style={{
                       borderColor: maturityTheme.colors.border.default,
@@ -2127,7 +2127,7 @@ export default function AssessmentResultsPage() {
                   </span>
                   <select
                     value={selectedBenchmarkIndustry}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSelectedBenchmarkIndustry(e.target.value as IndustryKey)}
+                    onChange={(e) => setSelectedBenchmarkIndustry(e.target.value as IndustryKey)}
                     className="text-sm rounded-md px-3 py-2 border bg-transparent"
                     style={{
                       borderColor: maturityTheme.colors.border.default,
@@ -4437,7 +4437,7 @@ export default function AssessmentResultsPage() {
                 type="file"
                 multiple
                 accept=".pdf,.doc,.docx,.txt,.md,.markdown"
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSelectedFiles(e.target.files)}
+                onChange={(e) => setSelectedFiles(e.target.files)}
                 className="cursor-pointer"
                 style={{
                   color: maturityTheme.colors.text.primary,

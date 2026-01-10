@@ -338,7 +338,7 @@ export default function DocumentUploadPage() {
     handleFilesSelected(droppedFiles);
   }, [handleFilesSelected]);
 
-  const handleFileInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileInputChange = useCallback((e) => {
     if (e.target.files) {
       handleFilesSelected(Array.from(e.target.files));
     }
@@ -802,7 +802,7 @@ export default function DocumentUploadPage() {
                 id="assessmentName"
                 placeholder="e.g., ABC Corp PMO Assessment"
                 value={assessmentName}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAssessmentName(e.target.value)}
+                onChange={(e) => setAssessmentName(e.target.value)}
                 className="font-medium [&::placeholder]:!text-[#8896b8] [&::placeholder]:opacity-70"
                 style={{
                   color: maturityTheme.colors.text.primary,
@@ -827,7 +827,7 @@ export default function DocumentUploadPage() {
                 id="clientName"
                 placeholder="e.g., John Smith or ABC Corp"
                 value={clientName}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setClientName(e.target.value)}
+                onChange={(e) => setClientName(e.target.value)}
                 className="[&::placeholder]:!text-[#8896b8] [&::placeholder]:opacity-70"
                 style={{
                   color: maturityTheme.colors.text.primary,
@@ -845,7 +845,7 @@ export default function DocumentUploadPage() {
                 id="organization"
                 placeholder="e.g., ABC Corporation"
                 value={organizationName}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOrganizationName(e.target.value)}
+                onChange={(e) => setOrganizationName(e.target.value)}
                 className="[&::placeholder]:!text-[#8896b8] [&::placeholder]:opacity-70"
                 style={{
                   color: maturityTheme.colors.text.primary,
@@ -862,7 +862,7 @@ export default function DocumentUploadPage() {
                 type="email"
                 placeholder="e.g., contact@example.com"
                 value={contactEmail}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setContactEmail(e.target.value)}
+                onChange={(e) => setContactEmail(e.target.value)}
                 className="[&::placeholder]:!text-[#8896b8] [&::placeholder]:opacity-70"
                 style={{
                   color: maturityTheme.colors.text.primary,

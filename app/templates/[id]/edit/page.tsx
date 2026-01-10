@@ -351,7 +351,7 @@ export default function TemplateEditPage() {
                           <Input
                             id="name"
                             value={name}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
+                            onChange={(e) => setName(e.target.value)}
                             placeholder="e.g., Project Charter - PMBOK 7"
                           />
                         </div>
@@ -420,7 +420,7 @@ export default function TemplateEditPage() {
                                   min="0"
                                   max="100"
                                   value={qualityThreshold}
-                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQualityThreshold(Number(e.target.value))}
+                                  onChange={(e) => setQualityThreshold(Number(e.target.value))}
                                   className="w-24"
                                 />
                                 <span className="text-sm text-muted-foreground">%</span>
@@ -439,7 +439,7 @@ export default function TemplateEditPage() {
                                   type="number"
                                   min="1"
                                   value={promptVersion}
-                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPromptVersion(Number(e.target.value))}
+                                  onChange={(e) => setPromptVersion(Number(e.target.value))}
                                   className="w-24"
                                 />
                                 <Button
@@ -706,7 +706,7 @@ CHARTER STRUCTURE:
                                     <Label>Variable Name</Label>
                                     <Input
                                       value={variable.name}
-                                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateVariable(index, 'name', e.target.value)}
+                                      onChange={(e) => updateVariable(index, 'name', e.target.value)}
                                       placeholder="e.g., projectName"
                                     />
                                   </div>
@@ -734,7 +734,7 @@ CHARTER STRUCTURE:
                                   <Label>Description</Label>
                                   <Input
                                     value={variable.description}
-                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateVariable(index, 'description', e.target.value)}
+                                    onChange={(e) => updateVariable(index, 'description', e.target.value)}
                                     placeholder="What is this variable for?"
                                   />
                                 </div>
@@ -743,7 +743,7 @@ CHARTER STRUCTURE:
                                   <Label>Default Value (Optional)</Label>
                                   <Input
                                     value={variable.default_value || ""}
-                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateVariable(index, 'default_value', e.target.value)}
+                                    onChange={(e) => updateVariable(index, 'default_value', e.target.value)}
                                     placeholder="Default value if not provided"
                                   />
                                 </div>

@@ -1035,7 +1035,7 @@ ${doc.content}
                                   <input
                                     type="checkbox"
                                     checked={autoSaveEnabled}
-                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAutoSaveEnabled(e.target.checked)}
+                                    onChange={(e) => setAutoSaveEnabled(e.target.checked)}
                                     className="rounded"
                                   />
                                   <span>Auto-save</span>
@@ -1054,7 +1054,7 @@ ${doc.content}
                           {isEditing ? (
                             <textarea
                               value={editedContent}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditedContent(e.target.value)}
+                              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setEditedContent(e.target.value)}
                               className="w-full h-96 p-4 border rounded-md font-mono text-sm"
                               placeholder="Edit document content..."
                             />

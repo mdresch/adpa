@@ -525,7 +525,7 @@ export default function GitHubIntegrationPage() {
                                 id="owner"
                                 placeholder="username or organization"
                                 value={config.owner}
-                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfig({ ...config, owner: e.target.value })}
+                                onChange={(e) => setConfig({ ...config, owner: e.target.value })}
                               />
                             </div>
                             <div>
@@ -534,7 +534,7 @@ export default function GitHubIntegrationPage() {
                                 id="repo"
                                 placeholder="repository-name"
                                 value={config.repo}
-                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfig({ ...config, repo: e.target.value })}
+                                onChange={(e) => setConfig({ ...config, repo: e.target.value })}
                               />
                             </div>
                           </div>
@@ -546,7 +546,7 @@ export default function GitHubIntegrationPage() {
                               type="password"
                               placeholder="GitHub Personal Access Token"
                               value={config.apiToken}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfig({ ...config, apiToken: e.target.value })}
+                              onChange={(e) => setConfig({ ...config, apiToken: e.target.value })}
                             />
                             <p className="text-xs text-muted-foreground mt-1">
                               Token needs repo access permissions
@@ -560,7 +560,7 @@ export default function GitHubIntegrationPage() {
                                 id="default-branch"
                                 placeholder="main"
                                 value={config.defaultBranch}
-                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfig({ ...config, defaultBranch: e.target.value })}
+                                onChange={(e) => setConfig({ ...config, defaultBranch: e.target.value })}
                               />
                             </div>
                             <div>
@@ -569,7 +569,7 @@ export default function GitHubIntegrationPage() {
                                 id="template-path"
                                 placeholder="templates"
                                 value={config.templatePath}
-                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfig({ ...config, templatePath: e.target.value })}
+                                onChange={(e) => setConfig({ ...config, templatePath: e.target.value })}
                               />
                             </div>
                           </div>

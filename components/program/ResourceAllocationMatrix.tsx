@@ -317,19 +317,19 @@ export function ResourceAllocationMatrix({ programId }: ResourceAllocationMatrix
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="resourceId">Resource ID *</Label>
-                    <Input
-                      id="resourceId"
-                      value={formData.resourceId}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, resourceId: e.target.value })}
-                      placeholder="user-uuid or resource-id"
-                    />
+                      <Input
+                        id="resourceId"
+                        value={formData.resourceId}
+                        onChange={(e) => setFormData({ ...formData, resourceId: e.target.value })}
+                        placeholder="user-uuid or resource-id"
+                      />
                   </div>
                   <div>
                     <Label htmlFor="resourceName">Resource Name *</Label>
                     <Input
                       id="resourceName"
                       value={formData.resourceName}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, resourceName: e.target.value })}
+                        onChange={(e) => setFormData({ ...formData, resourceName: e.target.value })}
                       placeholder="John Doe"
                     />
                   </div>
@@ -359,7 +359,7 @@ export function ResourceAllocationMatrix({ programId }: ResourceAllocationMatrix
                     <Input
                       id="projectId"
                       value={formData.projectId}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, projectId: e.target.value })}
+                      onChange={(e) => setFormData({ ...formData, projectId: e.target.value })}
                       placeholder="project-uuid"
                     />
                   </div>
@@ -372,7 +372,7 @@ export function ResourceAllocationMatrix({ programId }: ResourceAllocationMatrix
                       id="allocatedAmount"
                       type="number"
                       value={formData.allocatedAmount}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, allocatedAmount: e.target.value })}
+                      onChange={(e) => setFormData({ ...formData, allocatedAmount: e.target.value })}
                       placeholder="1.0"
                     />
                   </div>
@@ -384,7 +384,7 @@ export function ResourceAllocationMatrix({ programId }: ResourceAllocationMatrix
                       min="0"
                       max="100"
                       value={formData.allocationPercentage}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, allocationPercentage: e.target.value })}
+                      onChange={(e) => setFormData({ ...formData, allocationPercentage: e.target.value })}
                       placeholder="50"
                     />
                   </div>
@@ -397,7 +397,7 @@ export function ResourceAllocationMatrix({ programId }: ResourceAllocationMatrix
                       id="allocationStart"
                       type="date"
                       value={formData.allocationStart}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, allocationStart: e.target.value })}
+                      onChange={(e) => setFormData({ ...formData, allocationStart: e.target.value })}
                     />
                   </div>
                   <div>
@@ -406,7 +406,7 @@ export function ResourceAllocationMatrix({ programId }: ResourceAllocationMatrix
                       id="allocationEnd"
                       type="date"
                       value={formData.allocationEnd}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, allocationEnd: e.target.value })}
+                      onChange={(e) => setFormData({ ...formData, allocationEnd: e.target.value })}
                     />
                   </div>
                 </div>

@@ -761,7 +761,7 @@ export default function AssessmentsListPage() {
                 <Input
                   placeholder="Search client, project, organization..."
                   value={searchTerm}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
+                  onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10 [&::placeholder]:!text-[#8896b8] [&::placeholder]:opacity-70"
                   style={{
                     color: maturityTheme.colors.text.primary,
@@ -872,7 +872,7 @@ export default function AssessmentsListPage() {
                   <Input
                     type="date"
                     value={filterDateFrom}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFilterDateFrom(e.target.value)}
+                    onChange={(e) => setFilterDateFrom(e.target.value)}
                     style={{
                       color: maturityTheme.colors.text.primary,
                       backgroundColor: maturityTheme.colors.background.tertiary,
@@ -885,7 +885,7 @@ export default function AssessmentsListPage() {
                   <Input
                     type="date"
                     value={filterDateTo}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFilterDateTo(e.target.value)}
+                    onChange={(e) => setFilterDateTo(e.target.value)}
                     style={{
                       color: maturityTheme.colors.text.primary,
                       backgroundColor: maturityTheme.colors.background.tertiary,
@@ -901,7 +901,7 @@ export default function AssessmentsListPage() {
                     max="5"
                     placeholder="1"
                     value={filterMaturityMin}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFilterMaturityMin(e.target.value === '' ? '' : Number(e.target.value))}
+                    onChange={(e) => setFilterMaturityMin(e.target.value === '' ? '' : Number(e.target.value))}
                     style={{
                       color: maturityTheme.colors.text.primary,
                       backgroundColor: maturityTheme.colors.background.tertiary,
@@ -917,7 +917,7 @@ export default function AssessmentsListPage() {
                     max="5"
                     placeholder="5"
                     value={filterMaturityMax}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFilterMaturityMax(e.target.value === '' ? '' : Number(e.target.value))}
+                    onChange={(e) => setFilterMaturityMax(e.target.value === '' ? '' : Number(e.target.value))}
                     style={{
                       color: maturityTheme.colors.text.primary,
                       backgroundColor: maturityTheme.colors.background.tertiary,
@@ -932,7 +932,7 @@ export default function AssessmentsListPage() {
                     min="0"
                     placeholder="0"
                     value={filterDocCountMin}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFilterDocCountMin(e.target.value === '' ? '' : Number(e.target.value))}
+                    onChange={(e) => setFilterDocCountMin(e.target.value === '' ? '' : Number(e.target.value))}
                     style={{
                       color: maturityTheme.colors.text.primary,
                       backgroundColor: maturityTheme.colors.background.tertiary,
@@ -947,7 +947,7 @@ export default function AssessmentsListPage() {
                     min="0"
                     placeholder="∞"
                     value={filterDocCountMax}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFilterDocCountMax(e.target.value === '' ? '' : Number(e.target.value))}
+                    onChange={(e) => setFilterDocCountMax(e.target.value === '' ? '' : Number(e.target.value))}
                     style={{
                       color: maturityTheme.colors.text.primary,
                       backgroundColor: maturityTheme.colors.background.tertiary,

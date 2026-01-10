@@ -474,7 +474,7 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
                 <Input
                   placeholder="Search risks..."
                   value={searchTerm}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
+                  onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10"
                 />
               </div>
@@ -720,7 +720,7 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
               <Input
                 id="title"
                 value={formData.title}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, title: e.target.value })}
+                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                 placeholder="Risk title"
               />
             </div>
@@ -742,7 +742,7 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
                 <Input
                   id="category"
                   value={formData.category}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, category: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                   placeholder="e.g., technical, schedule, budget"
                 />
               </div>
@@ -752,7 +752,7 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
                 <Input
                   id="owner"
                   value={formData.owner}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, owner: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, owner: e.target.value })}
                   placeholder="Risk owner"
                 />
               </div>
@@ -869,7 +869,7 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
                 type="checkbox"
                 id="is_curated"
                 checked={formData.is_curated}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, is_curated: e.target.checked })}
+                onChange={(e) => setFormData({ ...formData, is_curated: e.target.checked })}
                 className="rounded"
               />
               <Label htmlFor="is_curated" className="cursor-pointer">

@@ -1208,7 +1208,7 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                       <Input
                         placeholder="Search documents..."
                         value={searchTerm}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
+                        onChange={(e) => setSearchTerm(e.target.value)}
                         className="pl-10"
                       />
                     </div>
@@ -1674,7 +1674,7 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                               id="upload-doc-name"
                               placeholder="Enter document name"
                               value={uploadForm.name}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUploadForm({ ...uploadForm, name: e.target.value })}
+                              onChange={(e) => setUploadForm({ ...uploadForm, name: e.target.value })}
                               className="mt-2"
                               required
                             />
@@ -1790,7 +1790,7 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                               id="file-upload"
                               type="file"
                               accept=".pdf,.doc,.docx,.txt,.md"
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                              onChange={(e) => {
                                 const file = e.target.files?.[0] || null
                                 setUploadForm({ ...uploadForm, file })
                               }}
@@ -1841,7 +1841,7 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                               id="generate-doc-name"
                               placeholder="Enter document name"
                               value={generateForm.name}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGenerateForm({ ...generateForm, name: e.target.value })}
+                              onChange={(e) => setGenerateForm({ ...generateForm, name: e.target.value })}
                               className="mt-2"
                               required
                             />
@@ -1984,7 +1984,7 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                               step={0.01}
                               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
                               value={generateForm.temperature}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGenerateForm({ ...generateForm, temperature: parseFloat(e.target.value) })}
+                              onChange={(e) => setGenerateForm({ ...generateForm, temperature: parseFloat(e.target.value) })}
                             />
                             <p className="text-xs text-muted-foreground">Lower = more focused, Higher = more creative</p>
                           </div>
@@ -1998,7 +1998,7 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                               step={100}
                               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
                               value={generateForm.max_tokens}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGenerateForm({ ...generateForm, max_tokens: parseInt(e.target.value) })}
+                              onChange={(e) => setGenerateForm({ ...generateForm, max_tokens: parseInt(e.target.value) })}
                             />
                             <p className="text-xs text-muted-foreground">Maximum number of tokens the model can generate</p>
                           </div>

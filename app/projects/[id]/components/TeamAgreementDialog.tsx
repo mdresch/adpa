@@ -193,7 +193,7 @@ export function TeamAgreementDialog({
             <Input
               id="title"
               value={formData.title}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, title: e.target.value })}
+              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
               placeholder="e.g., Core Working Hours"
               required
               maxLength={200}
@@ -265,7 +265,7 @@ export function TeamAgreementDialog({
                 id="effective_date"
                 type="date"
                 value={formData.effective_date}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, effective_date: e.target.value })}
+                onChange={(e) => setFormData({ ...formData, effective_date: e.target.value })}
                 required
               />
             </div>
@@ -298,7 +298,7 @@ export function TeamAgreementDialog({
                 id="next_review_date"
                 type="date"
                 value={formData.next_review_date}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, next_review_date: e.target.value })}
+                onChange={(e) => setFormData({ ...formData, next_review_date: e.target.value })}
               />
             </div>
           )}

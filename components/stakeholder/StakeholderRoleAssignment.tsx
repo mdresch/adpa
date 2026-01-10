@@ -526,7 +526,7 @@ export function StakeholderRoleAssignment({
                 min="0"
                 max="100"
                 value={formData.allocationPercentage}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                onChange={(e) =>
                   setFormData({
                     ...formData,
                     allocationPercentage: parseInt(e.target.value) || 0,
@@ -541,7 +541,7 @@ export function StakeholderRoleAssignment({
                   id="startDate"
                   type="date"
                   value={formData.startDate}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, startDate: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
                 />
               </div>
               <div className="space-y-2">
@@ -550,7 +550,7 @@ export function StakeholderRoleAssignment({
                   id="endDate"
                   type="date"
                   value={formData.endDate}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, endDate: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
                 />
               </div>
             </div>
@@ -559,7 +559,7 @@ export function StakeholderRoleAssignment({
               <Input
                 id="notes"
                 value={formData.notes}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, notes: e.target.value })}
+                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                 placeholder="Optional notes about this assignment"
               />
             </div>

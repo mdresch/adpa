@@ -393,7 +393,7 @@ export default function ProjectFinancialsTab({ projectId }: ProjectFinancialsTab
                     min="0"
                     step="1000"
                     value={formData.internalLaborCost}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateCostField('internalLaborCost', e.target.value)}
+                    onChange={(e) => updateCostField('internalLaborCost', e.target.value)}
                     placeholder="0"
                   />
                   <div className="flex items-center text-sm text-gray-600 min-w-[120px]">
@@ -418,7 +418,7 @@ export default function ProjectFinancialsTab({ projectId }: ProjectFinancialsTab
                     min="0"
                     step="1000"
                     value={formData.externalLaborCost}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateCostField('externalLaborCost', e.target.value)}
+                    onChange={(e) => updateCostField('externalLaborCost', e.target.value)}
                     placeholder="0"
                   />
                   <div className="flex items-center text-sm text-gray-600 min-w-[120px]">
@@ -443,7 +443,7 @@ export default function ProjectFinancialsTab({ projectId }: ProjectFinancialsTab
                     min="0"
                     step="100"
                     value={formData.cloudInfrastructureCost}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateCostField('cloudInfrastructureCost', e.target.value)}
+                    onChange={(e) => updateCostField('cloudInfrastructureCost', e.target.value)}
                     placeholder="0"
                   />
                   <div className="flex items-center text-sm text-gray-600 min-w-[120px]">
@@ -468,7 +468,7 @@ export default function ProjectFinancialsTab({ projectId }: ProjectFinancialsTab
                     min="0"
                     step="100"
                     value={formData.aiServicesCost}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateCostField('aiServicesCost', e.target.value)}
+                    onChange={(e) => updateCostField('aiServicesCost', e.target.value)}
                     placeholder="0"
                   />
                   <div className="flex items-center text-sm text-gray-600 min-w-[120px]">
@@ -493,7 +493,7 @@ export default function ProjectFinancialsTab({ projectId }: ProjectFinancialsTab
                     min="0"
                     step="100"
                     value={formData.softwareToolsCost}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateCostField('softwareToolsCost', e.target.value)}
+                    onChange={(e) => updateCostField('softwareToolsCost', e.target.value)}
                     placeholder="0"
                   />
                   <div className="flex items-center text-sm text-gray-600 min-w-[120px]">
@@ -518,7 +518,7 @@ export default function ProjectFinancialsTab({ projectId }: ProjectFinancialsTab
                     min="0"
                     step="100"
                     value={formData.equipmentCost}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateCostField('equipmentCost', e.target.value)}
+                    onChange={(e) => updateCostField('equipmentCost', e.target.value)}
                     placeholder="0"
                   />
                   <div className="flex items-center text-sm text-gray-600 min-w-[120px]">
@@ -543,7 +543,7 @@ export default function ProjectFinancialsTab({ projectId }: ProjectFinancialsTab
                     min="0"
                     step="50"
                     value={formData.materialsCost}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateCostField('materialsCost', e.target.value)}
+                    onChange={(e) => updateCostField('materialsCost', e.target.value)}
                     placeholder="0"
                   />
                   <div className="flex items-center text-sm text-gray-600 min-w-[120px]">
@@ -568,7 +568,7 @@ export default function ProjectFinancialsTab({ projectId }: ProjectFinancialsTab
                     min="0"
                     step="50"
                     value={formData.overheadCost}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateCostField('overheadCost', e.target.value)}
+                    onChange={(e) => updateCostField('overheadCost', e.target.value)}
                     placeholder="0"
                   />
                   <div className="flex items-center text-sm text-gray-600 min-w-[120px]">
@@ -699,7 +699,7 @@ export default function ProjectFinancialsTab({ projectId }: ProjectFinancialsTab
                     min="0"
                     step="1000"
                     value={formData.forecastCost}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateCostField('forecastCost', e.target.value)}
+                    onChange={(e) => updateCostField('forecastCost', e.target.value)}
                     placeholder={financials.budget.toString()}
                   />
                   <div className="flex items-center text-sm text-gray-600 min-w-[120px]">

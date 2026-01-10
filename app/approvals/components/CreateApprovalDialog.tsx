@@ -184,7 +184,7 @@ export function CreateApprovalDialog({ open, onOpenChange, onSuccess, projectId 
             <Input
               id="title"
               value={formData.title}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData(prev => ({ ...prev, title: e.target.value }))}
+              onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
               placeholder="Brief title for the approval request"
               required
             />

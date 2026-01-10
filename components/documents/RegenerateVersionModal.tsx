@@ -374,7 +374,7 @@ export function RegenerateVersionModal({
               step={100}
               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               value={maxTokens}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMaxTokens(parseInt(e.target.value) || 4000)}
+              onChange={(e) => setMaxTokens(parseInt(e.target.value) || 4000)}
             />
             <p className="text-xs text-muted-foreground">Maximum number of tokens the model can generate</p>
           </div>

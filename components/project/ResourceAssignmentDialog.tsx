@@ -267,7 +267,7 @@ export function ResourceAssignmentDialog({
                 step="0.1"
                 min="0.1"
                 value={plannedHours}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPlannedHours(e.target.value)}
+                onChange={(e) => setPlannedHours(e.target.value)}
                 placeholder="e.g., 40"
                 required
               />
@@ -282,7 +282,7 @@ export function ResourceAssignmentDialog({
                 min="0"
                 max="100"
                 value={allocationPercentage}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAllocationPercentage(e.target.value)}
+                onChange={(e) => setAllocationPercentage(e.target.value)}
                 placeholder="100"
                 required
               />
@@ -296,7 +296,7 @@ export function ResourceAssignmentDialog({
                 id="startDate"
                 type="date"
                 value={scheduledStartDate}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setScheduledStartDate(e.target.value)}
+                onChange={(e) => setScheduledStartDate(e.target.value)}
               />
             </div>
 
@@ -306,7 +306,7 @@ export function ResourceAssignmentDialog({
                 id="endDate"
                 type="date"
                 value={scheduledEndDate}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setScheduledEndDate(e.target.value)}
+                onChange={(e) => setScheduledEndDate(e.target.value)}
               />
             </div>
           </div>

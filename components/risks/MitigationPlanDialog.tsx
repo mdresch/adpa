@@ -364,7 +364,7 @@ export function MitigationPlanDialog({
                         max="100"
                         step="5"
                         {...field}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => field.onChange(parseInt(e.target.value))}
+                        onChange={(e) => field.onChange(parseInt(e.target.value))}
                       />
                       <Progress value={field.value} className="h-2" />
                     </div>
@@ -569,7 +569,7 @@ export function MitigationPlanDialog({
                       max="100"
                       placeholder="0-100"
                       {...field}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => field.onChange(e.target.value ? parseInt(e.target.value) : null)}
+                      onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : null)}
                       value={field.value ?? ''}
                     />
                   </FormControl>

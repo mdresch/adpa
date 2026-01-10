@@ -127,7 +127,7 @@ export function CapacityPlanningDashboard({ programId }: CapacityPlanningDashboa
           <Input
             type="date"
             value={forecastDate}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForecastDate(e.target.value)}
+            onChange={(e) => setForecastDate(e.target.value)}
             className="w-40"
           />
           <Button onClick={handleCalculateForecast} disabled={calculating}>

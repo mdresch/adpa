@@ -705,7 +705,7 @@ export default function AIProviders() {
                           Name
                         </Label>
                         <div className="col-span-3">
-                          <Input id="name" value={formState.name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState((s) => ({ ...s, name: e.target.value }))} placeholder="Provider name" />
+                          <Input id="name" value={formState.name} onChange={(e) => setFormState((s) => ({ ...s, name: e.target.value }))} placeholder="Provider name" />
                           {formErrors.name && <div className="text-xs text-red-600 mt-1">{formErrors.name}</div>}
                         </div>
                       </div>
@@ -718,7 +718,7 @@ export default function AIProviders() {
                             id="api-key" 
                             type="password" 
                             value={formState.apiKey} 
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState((s) => ({ ...s, apiKey: e.target.value }))} 
+                            onChange={(e) => setFormState((s) => ({ ...s, apiKey: e.target.value }))} 
                             placeholder={formState.type === "ollama" ? "Not required for local Ollama" : "Enter API key (will be encrypted and stored securely)"}
                             disabled={formState.type === "ollama"}
                           />
@@ -744,7 +744,7 @@ export default function AIProviders() {
                               <Input 
                                 id="endpoint" 
                                 value={formState.endpoint} 
-                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState((s) => ({ ...s, endpoint: e.target.value }))} 
+                                onChange={(e) => setFormState((s) => ({ ...s, endpoint: e.target.value }))} 
                                 placeholder="https://your-resource.region.cognitiveservices.azure.com" 
                               />
                               {formErrors.endpoint && <div className="text-xs text-red-600 mt-1">{formErrors.endpoint}</div>}
@@ -758,7 +758,7 @@ export default function AIProviders() {
                               <Input 
                                 id="resource-name" 
                                 value={formState.resourceName} 
-                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState((s) => ({ ...s, resourceName: e.target.value }))} 
+                                onChange={(e) => setFormState((s) => ({ ...s, resourceName: e.target.value }))} 
                                 placeholder="your-ai-resource" 
                               />
                               {formErrors.resourceName && <div className="text-xs text-red-600 mt-1">{formErrors.resourceName}</div>}
@@ -772,7 +772,7 @@ export default function AIProviders() {
                               <Input 
                                 id="deployment-name" 
                                 value={formState.deploymentName} 
-                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState((s) => ({ ...s, deploymentName: e.target.value }))} 
+                                onChange={(e) => setFormState((s) => ({ ...s, deploymentName: e.target.value }))} 
                                 placeholder="gpt-4o-mini" 
                               />
                               {formErrors.deploymentName && <div className="text-xs text-red-600 mt-1">{formErrors.deploymentName}</div>}
@@ -820,7 +820,7 @@ export default function AIProviders() {
                                   <Input 
                                     id="tenant-id" 
                                     value={formState.tenantId} 
-                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState((s) => ({ ...s, tenantId: e.target.value }))} 
+                                    onChange={(e) => setFormState((s) => ({ ...s, tenantId: e.target.value }))} 
                                     placeholder="your-tenant-id" 
                                   />
                                   {formErrors.tenantId && <div className="text-xs text-red-600 mt-1">{formErrors.tenantId}</div>}
@@ -834,7 +834,7 @@ export default function AIProviders() {
                                   <Input 
                                     id="client-id" 
                                     value={formState.clientId} 
-                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState((s) => ({ ...s, clientId: e.target.value }))} 
+                                    onChange={(e) => setFormState((s) => ({ ...s, clientId: e.target.value }))} 
                                     placeholder="your-client-id" 
                                   />
                                   {formErrors.clientId && <div className="text-xs text-red-600 mt-1">{formErrors.clientId}</div>}
@@ -849,7 +849,7 @@ export default function AIProviders() {
                                     id="client-secret" 
                                     type="password" 
                                     value={formState.clientSecret} 
-                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState((s) => ({ ...s, clientSecret: e.target.value }))} 
+                                    onChange={(e) => setFormState((s) => ({ ...s, clientSecret: e.target.value }))} 
                                     placeholder="your-client-secret" 
                                   />
                                   {formErrors.clientSecret && <div className="text-xs text-red-600 mt-1">{formErrors.clientSecret}</div>}

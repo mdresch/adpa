@@ -248,7 +248,7 @@ export default function SettingsPage() {
                           type="password"
                           placeholder="Enter your Vercel AI Gateway API key"
                           value={gatewayApiKey}
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGatewayApiKey(e.target.value)}
+                          onChange={(e) => setGatewayApiKey(e.target.value)}
                           className="font-mono"
                         />
                         <p className="text-xs text-muted-foreground">
@@ -269,7 +269,7 @@ export default function SettingsPage() {
                           type="checkbox"
                           id="gateway-enabled"
                           checked={gatewayEnabled}
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGatewayEnabled(e.target.checked)}
+                          onChange={(e) => setGatewayEnabled(e.target.checked)}
                           className="rounded border-gray-300"
                         />
                         <Label htmlFor="gateway-enabled" className="cursor-pointer">
@@ -470,7 +470,7 @@ export default function SettingsPage() {
                         id="current-password"
                         type="password"
                         value={passwordForm.currentPassword}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPasswordForm({...passwordForm, currentPassword: e.target.value})}
+                        onChange={(e) => setPasswordForm({...passwordForm, currentPassword: e.target.value})}
                         placeholder="Enter your current password"
                         required
                       />
@@ -482,7 +482,7 @@ export default function SettingsPage() {
                         id="new-password"
                         type="password"
                         value={passwordForm.newPassword}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPasswordForm({...passwordForm, newPassword: e.target.value})}
+                        onChange={(e) => setPasswordForm({...passwordForm, newPassword: e.target.value})}
                         placeholder="Enter your new password (min 8 characters)"
                         required
                         minLength={8}
@@ -495,7 +495,7 @@ export default function SettingsPage() {
                         id="confirm-password"
                         type="password"
                         value={passwordForm.confirmPassword}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPasswordForm({...passwordForm, confirmPassword: e.target.value})}
+                        onChange={(e) => setPasswordForm({...passwordForm, confirmPassword: e.target.value})}
                         placeholder="Confirm your new password"
                         required
                         minLength={8}

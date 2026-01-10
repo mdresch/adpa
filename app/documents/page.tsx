@@ -202,7 +202,7 @@ export default function DocumentLibraryPage() {
                                                 <Input
                                                     placeholder="Search documents..."
                                                     className="pl-9"
-                                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleSearch(e.target.value)}
+                                                    onChange={(e) => handleSearch(e.target.value)}
                                                 />
                                             </div>
 

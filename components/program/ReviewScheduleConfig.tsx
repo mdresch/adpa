@@ -145,7 +145,7 @@ export function ReviewScheduleConfig({ programId, schedule, onUpdate }: ReviewSc
               min="1"
               max="31"
               value={formData.day_of_month || ''}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ 
+              onChange={(e) => setFormData({ 
                 ...formData, 
                 day_of_month: e.target.value ? parseInt(e.target.value) : undefined,
                 day_of_week: undefined // Clear day_of_week if day_of_month is set
@@ -192,7 +192,7 @@ export function ReviewScheduleConfig({ programId, schedule, onUpdate }: ReviewSc
               type="number"
               min="15"
               value={formData.duration_minutes}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, duration_minutes: parseInt(e.target.value) || 60 })}
+              onChange={(e) => setFormData({ ...formData, duration_minutes: parseInt(e.target.value) || 60 })}
             />
           </div>
 
@@ -201,7 +201,7 @@ export function ReviewScheduleConfig({ programId, schedule, onUpdate }: ReviewSc
             <Input
               id="reminder_days"
               value={formData.reminder_days_before.join(', ')}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleReminderDaysChange(e.target.value)}
+              onChange={(e) => handleReminderDaysChange(e.target.value)}
               placeholder="e.g., 7, 1 (7 days and 1 day before)"
             />
             <p className="text-xs text-muted-foreground">

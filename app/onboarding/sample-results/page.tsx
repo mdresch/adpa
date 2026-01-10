@@ -348,7 +348,7 @@ export default function SampleResultsPage() {
                 <Label style={{ color: maturityTheme.colors.text.primary }}>Select Industry</Label>
                 <select
                   value={selectedIndustry}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSelectedIndustry(e.target.value as IndustryKey | 'default')}
+                  onChange={(e) => setSelectedIndustry(e.target.value as IndustryKey | 'default')}
                   className="text-sm rounded-md px-3 py-2 border bg-transparent"
                   style={{
                     borderColor: maturityTheme.colors.border.default,

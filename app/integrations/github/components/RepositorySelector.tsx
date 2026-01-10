@@ -110,7 +110,7 @@ export function RepositorySelector({ apiToken, onSelect, selectedRepo }: Reposit
         <Input
           placeholder="Search repositories..."
           value={searchQuery}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
+          onChange={(e) => setSearchQuery(e.target.value)}
           className="flex-1"
         />
         <Button type="submit" disabled={loading || !apiToken}>

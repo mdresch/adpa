@@ -494,7 +494,7 @@ export function PairwiseComparisonMatrix({
                     min="1"
                     max="5"
                     value={confidence}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfidence(Number(e.target.value))}
+                    onChange={(e) => setConfidence(Number(e.target.value))}
                     className="flex-1"
                   />
                   <span className="text-sm font-medium w-12 text-center">{confidence}/5</span>
@@ -509,7 +509,7 @@ export function PairwiseComparisonMatrix({
                 <label className="text-sm font-medium">Notes (Optional)</label>
                 <textarea
                   value={notes}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNotes(e.target.value)}
+                  onChange={(e) => setNotes(e.target.value)}
                   placeholder="Add any notes about this comparison..."
                   className="w-full min-h-[80px] p-2 border rounded-md resize-none"
                   rows={3}

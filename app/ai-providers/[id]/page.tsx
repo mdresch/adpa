@@ -935,7 +935,7 @@ export default function AIProviderDetails() {
                               id="api-endpoint"
                               placeholder="https://api.openai.com/v1"
                               value={configForm.endpoint}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfigForm(prev => ({ ...prev, endpoint: e.target.value }))}
+                              onChange={(e) => setConfigForm(prev => ({ ...prev, endpoint: e.target.value }))}
                               className="mt-1"
                             />
                             <p className="text-xs text-muted-foreground mt-1">
@@ -951,7 +951,7 @@ export default function AIProviderDetails() {
                                 type="password"
                                 placeholder="Enter your API key"
                                 value={configForm.apiKey}
-                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfigForm(prev => ({ ...prev, apiKey: e.target.value }))}
+                                onChange={(e) => setConfigForm(prev => ({ ...prev, apiKey: e.target.value }))}
                                 className="mt-1"
                               />
                               <p className="text-xs text-muted-foreground mt-1">
@@ -992,7 +992,7 @@ export default function AIProviderDetails() {
                                   id="api-version"
                                   placeholder="2024-04-01-preview"
                                   value={configForm.apiVersion}
-                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfigForm(prev => ({ ...prev, apiVersion: e.target.value }))}
+                                  onChange={(e) => setConfigForm(prev => ({ ...prev, apiVersion: e.target.value }))}
                                   className="mt-1"
                                 />
                                 <p className="text-xs text-muted-foreground mt-1">
@@ -1005,7 +1005,7 @@ export default function AIProviderDetails() {
                                   id="deployment"
                                   placeholder="gpt-5-mini"
                                   value={configForm.deployment}
-                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfigForm(prev => ({ ...prev, deployment: e.target.value }))}
+                                  onChange={(e) => setConfigForm(prev => ({ ...prev, deployment: e.target.value }))}
                                   className="mt-1"
                                 />
                                 <p className="text-xs text-muted-foreground mt-1">
@@ -1019,7 +1019,7 @@ export default function AIProviderDetails() {
                                 id="model-name"
                                 placeholder="gpt-5-mini"
                                 value={configForm.modelName}
-                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfigForm(prev => ({ ...prev, modelName: e.target.value }))}
+                                onChange={(e) => setConfigForm(prev => ({ ...prev, modelName: e.target.value }))}
                                 className="mt-1"
                               />
                               <p className="text-xs text-muted-foreground mt-1">
@@ -1038,7 +1038,7 @@ export default function AIProviderDetails() {
                                   id="tenant-id"
                                   placeholder="12345678-1234-1234-1234-123456789012"
                                   value={configForm.tenantId}
-                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfigForm(prev => ({ ...prev, tenantId: e.target.value }))}
+                                  onChange={(e) => setConfigForm(prev => ({ ...prev, tenantId: e.target.value }))}
                                   className="mt-1"
                                 />
                                 <p className="text-xs text-muted-foreground mt-1">
@@ -1051,7 +1051,7 @@ export default function AIProviderDetails() {
                                   id="client-id"
                                   placeholder="87654321-4321-4321-4321-210987654321"
                                   value={configForm.clientId}
-                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfigForm(prev => ({ ...prev, clientId: e.target.value }))}
+                                  onChange={(e) => setConfigForm(prev => ({ ...prev, clientId: e.target.value }))}
                                   className="mt-1"
                                 />
                                 <p className="text-xs text-muted-foreground mt-1">
@@ -1066,7 +1066,7 @@ export default function AIProviderDetails() {
                                 type="password"
                                 placeholder="Enter your client secret"
                                 value={configForm.clientSecret}
-                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfigForm(prev => ({ ...prev, clientSecret: e.target.value }))}
+                                onChange={(e) => setConfigForm(prev => ({ ...prev, clientSecret: e.target.value }))}
                                 className="mt-1"
                               />
                               <p className="text-xs text-muted-foreground mt-1">
@@ -1085,7 +1085,7 @@ export default function AIProviderDetails() {
                                   id="resource-name"
                                   placeholder="cognisync-knowledgehub-resource"
                                   value={configForm.resourceName}
-                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfigForm(prev => ({ ...prev, resourceName: e.target.value }))}
+                                  onChange={(e) => setConfigForm(prev => ({ ...prev, resourceName: e.target.value }))}
                                   className="mt-1"
                                 />
                                 <p className="text-xs text-muted-foreground mt-1">
@@ -1098,7 +1098,7 @@ export default function AIProviderDetails() {
                                   id="region"
                                   placeholder="eastus"
                                   value={configForm.region}
-                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfigForm(prev => ({ ...prev, region: e.target.value }))}
+                                  onChange={(e) => setConfigForm(prev => ({ ...prev, region: e.target.value }))}
                                   className="mt-1"
                                 />
                                 <p className="text-xs text-muted-foreground mt-1">
@@ -1122,7 +1122,7 @@ export default function AIProviderDetails() {
                               min="1"
                               max="10"
                               value={configForm.priority}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfigForm(prev => ({ ...prev, priority: parseInt(e.target.value) || 1 }))}
+                              onChange={(e) => setConfigForm(prev => ({ ...prev, priority: parseInt(e.target.value) || 1 }))}
                               className="mt-1"
                             />
                             <p className="text-xs text-muted-foreground mt-1">
@@ -1137,7 +1137,7 @@ export default function AIProviderDetails() {
                               min="10"
                               max="300"
                               value={configForm.timeout}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfigForm(prev => ({ ...prev, timeout: parseInt(e.target.value) || 30 }))}
+                              onChange={(e) => setConfigForm(prev => ({ ...prev, timeout: parseInt(e.target.value) || 30 }))}
                               className="mt-1"
                             />
                             <p className="text-xs text-muted-foreground mt-1">
@@ -2198,7 +2198,7 @@ export default function AIProviderDetails() {
                   id="modelId"
                   placeholder="gpt-4"
                   value={newModelForm.modelId}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewModelForm(prev => ({ ...prev, modelId: e.target.value }))}
+                  onChange={(e) => setNewModelForm(prev => ({ ...prev, modelId: e.target.value }))}
                 />
                 <p className="text-xs text-muted-foreground">
                   Unique identifier for the model (e.g., gpt-4, claude-3-sonnet)
@@ -2210,7 +2210,7 @@ export default function AIProviderDetails() {
                   id="modelName"
                   placeholder="GPT-4"
                   value={newModelForm.modelName}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewModelForm(prev => ({ ...prev, modelName: e.target.value }))}
+                  onChange={(e) => setNewModelForm(prev => ({ ...prev, modelName: e.target.value }))}
                 />
                 <p className="text-xs text-muted-foreground">
                   Display name for the model
@@ -2228,7 +2228,7 @@ export default function AIProviderDetails() {
                   min="1000"
                   max="10000000"
                   value={newModelForm.contextWindow}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewModelForm(prev => ({ ...prev, contextWindow: parseInt(e.target.value) || 128000 }))}
+                  onChange={(e) => setNewModelForm(prev => ({ ...prev, contextWindow: parseInt(e.target.value) || 128000 }))}
                 />
                 <p className="text-xs text-muted-foreground">
                   Maximum context tokens (default: 128,000)
@@ -2242,7 +2242,7 @@ export default function AIProviderDetails() {
                   min="1"
                   max="100000"
                   value={newModelForm.maxTokens}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewModelForm(prev => ({ ...prev, maxTokens: parseInt(e.target.value) || 4096 }))}
+                  onChange={(e) => setNewModelForm(prev => ({ ...prev, maxTokens: parseInt(e.target.value) || 4096 }))}
                 />
                 <p className="text-xs text-muted-foreground">
                   Maximum response tokens (default: 4,096)
@@ -2261,7 +2261,7 @@ export default function AIProviderDetails() {
                   max="2"
                   step="0.1"
                   value={newModelForm.temperature}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewModelForm(prev => ({ ...prev, temperature: parseFloat(e.target.value) || 0.7 }))}
+                  onChange={(e) => setNewModelForm(prev => ({ ...prev, temperature: parseFloat(e.target.value) || 0.7 }))}
                 />
                 <p className="text-xs text-muted-foreground">
                   Creativity (0-2, default: 0.7)
@@ -2276,7 +2276,7 @@ export default function AIProviderDetails() {
                   max="1"
                   step="0.1"
                   value={newModelForm.topP}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewModelForm(prev => ({ ...prev, topP: parseFloat(e.target.value) || 1.0 }))}
+                  onChange={(e) => setNewModelForm(prev => ({ ...prev, topP: parseFloat(e.target.value) || 1.0 }))}
                 />
                 <p className="text-xs text-muted-foreground">
                   Nucleus sampling (0-1, default: 1.0)
@@ -2291,7 +2291,7 @@ export default function AIProviderDetails() {
                   max="2"
                   step="0.1"
                   value={newModelForm.frequencyPenalty}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewModelForm(prev => ({ ...prev, frequencyPenalty: parseFloat(e.target.value) || 0.0 }))}
+                  onChange={(e) => setNewModelForm(prev => ({ ...prev, frequencyPenalty: parseFloat(e.target.value) || 0.0 }))}
                 />
                 <p className="text-xs text-muted-foreground">
                   Reduce repetition (-2 to 2, default: 0.0)

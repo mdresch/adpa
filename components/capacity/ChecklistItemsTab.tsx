@@ -193,7 +193,7 @@ export function ChecklistItemsTab() {
           <Input
             placeholder="Search checklist items, tasks, or resources..."
             value={searchQuery}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
+            onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-9"
           />
         </div>

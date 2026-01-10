@@ -515,7 +515,7 @@ export default function SecurityPage() {
                             <Input
                               placeholder="Search events..."
                               value={searchTerm}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
+                              onChange={(e) => setSearchTerm(e.target.value)}
                               className="pl-10 w-64"
                             />
                           </div>

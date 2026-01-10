@@ -224,7 +224,7 @@ export function IntegrationsTab({ projectId }: IntegrationsTabProps) {
                     id="confluence-space-key"
                     placeholder="e.g., ADPA"
                     value={safeLocalSettings.confluence?.spaceKey || ""}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateConfluence({ spaceKey: e.target.value || null })}
+                    onChange={(e) => updateConfluence({ spaceKey: e.target.value || null })}
                   />
                   <p className="text-sm text-muted-foreground">
                     Override the default Confluence space for this project
@@ -237,7 +237,7 @@ export function IntegrationsTab({ projectId }: IntegrationsTabProps) {
                     id="confluence-parent-page"
                     placeholder="e.g., 123456789"
                     value={safeLocalSettings.confluence?.parentPageId || ""}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateConfluence({ parentPageId: e.target.value || null })}
+                    onChange={(e) => updateConfluence({ parentPageId: e.target.value || null })}
                   />
                   <p className="text-sm text-muted-foreground">
                     Create documents under a specific parent page
@@ -304,7 +304,7 @@ export function IntegrationsTab({ projectId }: IntegrationsTabProps) {
                     id="jira-project-key"
                     placeholder="e.g., PROJ"
                     value={safeLocalSettings.jira?.projectKey || ""}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateJira({ projectKey: e.target.value || null })}
+                    onChange={(e) => updateJira({ projectKey: e.target.value || null })}
                   />
                   <p className="text-sm text-muted-foreground">
                     Override the default Jira project key for this project
@@ -317,7 +317,7 @@ export function IntegrationsTab({ projectId }: IntegrationsTabProps) {
                     id="jira-issue-type"
                     placeholder="e.g., Task, Story, Bug"
                     value={safeLocalSettings.jira?.issueType || ""}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateJira({ issueType: e.target.value || null })}
+                    onChange={(e) => updateJira({ issueType: e.target.value || null })}
                   />
                 </div>
 
@@ -327,7 +327,7 @@ export function IntegrationsTab({ projectId }: IntegrationsTabProps) {
                     id="jira-priority"
                     placeholder="e.g., High, Medium, Low"
                     value={safeLocalSettings.jira?.priority || ""}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateJira({ priority: e.target.value || null })}
+                    onChange={(e) => updateJira({ priority: e.target.value || null })}
                   />
                 </div>
 

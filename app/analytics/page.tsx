@@ -971,7 +971,11 @@ export default function AnalyticsPage() {
                                           cx="50%"
                                           cy="50%"
                                           labelLine={false}
-                                          label={({ name, value, percent }) => `${name}: ${value} (${(percent * 100).toFixed(0)}%)`}
+                                          label={(entry: { name: string; value?: number; percent?: number }) => {
+                                            const value = entry.value ?? 0
+                                            const percent = (entry.percent ?? 0) * 100
+                                            return `${entry.name}: ${value} (${percent.toFixed(0)}%)`
+                                          }}
                                           outerRadius={80}
                                           fill="#8884d8"
                                           dataKey="value"

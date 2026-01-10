@@ -62,7 +62,7 @@ export function RegistrationDialog({ open, onOpenChange, onSuccess }: Registrati
 
   const passwordStrength = getPasswordStrength(formData.password)
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e) => {
     const { name, value } = e.target
     setFormData(prev => ({ ...prev, [name]: value }))
     setError("")

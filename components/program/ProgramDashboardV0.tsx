@@ -364,7 +364,7 @@ export default function ProgramDashboardV0({ programId }: ProgramDashboardV0Prop
                   <Input
                     placeholder="Search projects..."
                     value={searchQuery}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
+                    onChange={(e) => setSearchQuery(e.target.value)}
                     className="pl-10"
                   />
                 </div>

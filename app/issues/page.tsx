@@ -422,7 +422,7 @@ export default function IssuesPage() {
                           <Label>Title *</Label>
                           <Input
                             value={formData.title}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, title: e.target.value })}
+                            onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                             placeholder="Brief summary of the issue"
                           />
                         </div>
@@ -490,7 +490,7 @@ export default function IssuesPage() {
                           <Input
                             type="date"
                             value={formData.target_resolution_date}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, target_resolution_date: e.target.value })}
+                            onChange={(e) => setFormData({ ...formData, target_resolution_date: e.target.value })}
                           />
                         </div>
                         <div className="flex justify-end gap-2">
@@ -654,7 +654,7 @@ export default function IssuesPage() {
                         <Input
                           placeholder="Search issues..."
                           value={searchQuery}
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
+                          onChange={(e) => setSearchQuery(e.target.value)}
                           className="w-full"
                         />
                       </div>

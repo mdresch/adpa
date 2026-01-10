@@ -471,7 +471,7 @@ export default function Templates() {
                               placeholder="Enter template name"
                               className="mt-1"
                               value={formName}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                              onChange={(e) => {
                                 setFormName(e.target.value)
                                 if (formErrors.name) setFormErrors((s) => ({ ...s, name: undefined }))
                               }}
@@ -486,7 +486,7 @@ export default function Templates() {
                               title="Framework"
                               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
                               value={formFramework}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                              onChange={(e) => {
                                 setFormFramework(e.target.value)
                                 if (formErrors.framework) setFormErrors((s) => ({ ...s, framework: undefined }))
                               }}
@@ -507,11 +507,11 @@ export default function Templates() {
                         <div className="grid grid-cols-2 gap-4">
                           <div>
                             <label className="text-sm font-medium">Category</label>
-                            <Input placeholder="e.g., Requirements, Planning" className="mt-1" value={formCategory} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormCategory(e.target.value)} />
+                            <Input placeholder="e.g., Requirements, Planning" className="mt-1" value={formCategory} onChange={(e) => setFormCategory(e.target.value)} />
                           </div>
                           <div>
                             <label className="text-sm font-medium">Version</label>
-                            <Input placeholder="1.0" value={formVersion} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormVersion(e.target.value)} className="mt-1" />
+                            <Input placeholder="1.0" value={formVersion} onChange={(e) => setFormVersion(e.target.value)} className="mt-1" />
                           </div>
                         </div>
                         <div>
@@ -520,7 +520,7 @@ export default function Templates() {
                             className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
                             placeholder="Describe the purpose and usage of this template"
                             value={formDescription}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormDescription(e.target.value)}
+                            onChange={(e) => setFormDescription(e.target.value)}
                           />
                         </div>
                         <div>
@@ -555,7 +555,7 @@ export default function Templates() {
                             className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1 font-mono text-sm"
                             placeholder="Define the AI assistant's role and behavior for this template (optional)"
                             value={formSystemPrompt}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormSystemPrompt(e.target.value)}
+                            onChange={(e) => setFormSystemPrompt(e.target.value)}
                           />
                           <div className="flex items-center justify-between mt-1">
                             <p className="text-xs text-muted-foreground">
@@ -606,7 +606,7 @@ export default function Templates() {
                                     <Input
                                       placeholder="e.g., Executive Summary"
                                       value={paragraph.section_name}
-                                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                                      onChange={(e) => {
                                         const updated = [...formTemplateParagraphs]
                                         updated[index].section_name = e.target.value
                                         setFormTemplateParagraphs(updated)
@@ -618,7 +618,7 @@ export default function Templates() {
                                     <label className="text-xs font-medium">Type</label>
                                     <select
                                       value={paragraph.section_type}
-                                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                                      onChange={(e) => {
                                         const updated = [...formTemplateParagraphs]
                                         updated[index].section_type = e.target.value as any
                                         setFormTemplateParagraphs(updated)
@@ -640,7 +640,7 @@ export default function Templates() {
                                   <Input
                                     placeholder="Describe what this section should contain"
                                     value={paragraph.description}
-                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                                    onChange={(e) => {
                                       const updated = [...formTemplateParagraphs]
                                       updated[index].description = e.target.value
                                       setFormTemplateParagraphs(updated)
@@ -653,7 +653,7 @@ export default function Templates() {
                                   <Input
                                     placeholder="Specific instructions for AI on how to generate this section"
                                     value={paragraph.prompt_guidance || ""}
-                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                                    onChange={(e) => {
                                       const updated = [...formTemplateParagraphs]
                                       updated[index].prompt_guidance = e.target.value
                                       setFormTemplateParagraphs(updated)
@@ -666,7 +666,7 @@ export default function Templates() {
                                     <input
                                       type="checkbox"
                                       checked={paragraph.required}
-                                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                                      onChange={(e) => {
                                         const updated = [...formTemplateParagraphs]
                                         updated[index].required = e.target.checked
                                         setFormTemplateParagraphs(updated)
@@ -756,7 +756,7 @@ export default function Templates() {
                 <Input
                   placeholder="Search templates..."
                   value={searchTerm}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
+                  onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10"
                 />
               </div>
@@ -766,7 +766,7 @@ export default function Templates() {
                   title="Framework"
                   className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
                   value={selectedFramework}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSelectedFramework(e.target.value)}
+                  onChange={(e) => setSelectedFramework(e.target.value)}
                 >
                   <option value="all">All Frameworks</option>
                   <option value="BABOK v3">BABOK v3</option>
@@ -1069,7 +1069,7 @@ export default function Templates() {
                         <select
                           aria-label="Items per page"
                           value={archiveLimit}
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                          onChange={(e) => {
                             const v = Number(e.target.value) || 10
                             setArchiveLimit(v)
                             setArchivePage(1)
@@ -1092,7 +1092,7 @@ export default function Templates() {
                         min={1}
                         max={archivePagination.pages}
                         value={archivePage}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setArchivePage(Number(e.target.value || 1))}
+                        onChange={(e) => setArchivePage(Number(e.target.value || 1))}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
                             let p = Number(archivePage) || 1

@@ -92,7 +92,7 @@ export function ProjectsHeader({
             <Input
               placeholder="Search projects..."
               value={searchTerm}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => onSearchChange(e.target.value)}
+              onChange={(e) => onSearchChange(e.target.value)}
               className="pl-10 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-all duration-200 focus:shadow-lg focus:shadow-blue-500/20"
             />
           </motion.div>
@@ -105,7 +105,7 @@ export function ProjectsHeader({
             whileHover={{ scale: 1.02 }}
             className="flex h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm px-3 py-2 text-sm focus:border-blue-500 transition-colors"
             value={statusFilter}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => onStatusFilterChange(e.target.value)}
+            onChange={(e) => onStatusFilterChange(e.target.value)}
           >
             <option value="all">All Status</option>
             <option value="active">Active</option>

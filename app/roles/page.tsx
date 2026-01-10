@@ -422,7 +422,7 @@ export default function RolesPage() {
                       <Input
                         placeholder="Search roles..."
                         value={searchTerm}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
+                        onChange={(e) => setSearchTerm(e.target.value)}
                         className="pl-9"
                       />
                     </div>
@@ -711,7 +711,7 @@ export default function RolesPage() {
                       type="checkbox"
                       id="isRequired"
                       checked={assignFormData.isRequired}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                      onChange={(e) =>
                         setAssignFormData({ ...assignFormData, isRequired: e.target.checked })
                       }
                       className="h-4 w-4 rounded border-gray-300"
@@ -794,7 +794,7 @@ export default function RolesPage() {
                       type="checkbox"
                       id="isRequiredComp"
                       checked={assignFormData.isRequired}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                      onChange={(e) =>
                         setAssignFormData({ ...assignFormData, isRequired: e.target.checked })
                       }
                       className="h-4 w-4 rounded border-gray-300"

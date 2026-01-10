@@ -245,7 +245,7 @@ export default function SkillsPage() {
                       <Input
                         placeholder="Search skills..."
                         value={searchTerm}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
+                        onChange={(e) => setSearchTerm(e.target.value)}
                         className="pl-9"
                       />
                     </div>
@@ -357,7 +357,7 @@ export default function SkillsPage() {
                       <Input
                         id="name"
                         value={formData.name}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        onChange={(e) =>
                           setFormData({ ...formData, name: e.target.value })
                         }
                         placeholder="e.g., TypeScript, Project Management"
@@ -389,7 +389,7 @@ export default function SkillsPage() {
                       <Input
                         id="description"
                         value={formData.description}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        onChange={(e) =>
                           setFormData({ ...formData, description: e.target.value })
                         }
                         placeholder="Brief description of the skill"

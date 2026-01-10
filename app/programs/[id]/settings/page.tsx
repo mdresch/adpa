@@ -238,7 +238,7 @@ export default function ProgramSettingsPage() {
                     <Input
                       id="name"
                       value={formData.name}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, name: e.target.value })}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       placeholder="Enter program name"
                       required
                     />
@@ -303,7 +303,7 @@ export default function ProgramSettingsPage() {
                         id="budget"
                         type="number"
                         value={formData.budget}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, budget: e.target.value })}
+                        onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
                         placeholder="0.00"
                         step="0.01"
                       />
@@ -354,7 +354,7 @@ export default function ProgramSettingsPage() {
                         id="start_date"
                         type="date"
                         value={formData.start_date}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, start_date: e.target.value })}
+                        onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
                       />
                     </div>
 
@@ -365,7 +365,7 @@ export default function ProgramSettingsPage() {
                         id="end_date"
                         type="date"
                         value={formData.end_date}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, end_date: e.target.value })}
+                        onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
                         min={formData.start_date}
                       />
                     </div>

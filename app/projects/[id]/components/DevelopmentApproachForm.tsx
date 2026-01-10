@@ -238,7 +238,7 @@ export function DevelopmentApproachForm({
                 type="number"
                 min="1"
                 value={formData.iteration_length || ''}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateField('iteration_length', e.target.value ? parseInt(e.target.value) : null)}
+                onChange={(e) => updateField('iteration_length', e.target.value ? parseInt(e.target.value) : null)}
                 placeholder="e.g., 2"
               />
               <Select
@@ -282,7 +282,7 @@ export function DevelopmentApproachForm({
           <Input
             id="life_cycle_phases"
             value={formData.life_cycle_phases?.join(', ') || ''}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+            onChange={(e) => {
               const phases = e.target.value
                 .split(',')
                 .map(p => p.trim())
@@ -299,7 +299,7 @@ export function DevelopmentApproachForm({
           <Input
             id="review_gates"
             value={formData.review_gates?.join(', ') || ''}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+            onChange={(e) => {
               const gates = e.target.value
                 .split(',')
                 .map(g => g.trim())

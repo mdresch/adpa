@@ -114,7 +114,7 @@ export function TaskEditForm({ task, onSave }: TaskEditFormProps) {
         <Input
           id="taskName"
           value={formData.taskName}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleChange('taskName', e.target.value)}
+          onChange={(e) => handleChange('taskName', e.target.value)}
           required
         />
       </div>
@@ -139,7 +139,7 @@ export function TaskEditForm({ task, onSave }: TaskEditFormProps) {
             id="startDate"
             type="date"
             value={formData.startDate}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleChange('startDate', e.target.value)}
+            onChange={(e) => handleChange('startDate', e.target.value)}
           />
         </div>
         <div className="space-y-2">
@@ -148,7 +148,7 @@ export function TaskEditForm({ task, onSave }: TaskEditFormProps) {
             id="endDate"
             type="date"
             value={formData.endDate}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleChange('endDate', e.target.value)}
+            onChange={(e) => handleChange('endDate', e.target.value)}
           />
         </div>
       </div>
@@ -163,7 +163,7 @@ export function TaskEditForm({ task, onSave }: TaskEditFormProps) {
             step="0.5"
             min="0"
             value={formData.estimatedHours}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleChange('estimatedHours', e.target.value)}
+            onChange={(e) => handleChange('estimatedHours', e.target.value)}
             placeholder="0"
           />
         </div>
@@ -175,7 +175,7 @@ export function TaskEditForm({ task, onSave }: TaskEditFormProps) {
             min="0"
             max="100"
             value={formData.percentComplete}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleChange('percentComplete', e.target.value)}
+            onChange={(e) => handleChange('percentComplete', e.target.value)}
           />
         </div>
       </div>
@@ -219,7 +219,7 @@ export function TaskEditForm({ task, onSave }: TaskEditFormProps) {
           <Input
             id="phase"
             value={formData.phase}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleChange('phase', e.target.value)}
+            onChange={(e) => handleChange('phase', e.target.value)}
             placeholder="e.g., Design, Development, Testing"
           />
         </div>
@@ -228,7 +228,7 @@ export function TaskEditForm({ task, onSave }: TaskEditFormProps) {
           <Input
             id="category"
             value={formData.category}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleChange('category', e.target.value)}
+            onChange={(e) => handleChange('category', e.target.value)}
             placeholder="e.g., Technical, Management"
           />
         </div>

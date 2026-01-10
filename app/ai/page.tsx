@@ -667,7 +667,7 @@ Please create a document that considers the project context above and ensures co
                                       id={variable.name}
                                       placeholder={variable.description}
                                       value={variables[variable.name] || ""}
-                                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setVariables(prev => ({
+                                      onChange={(e) => setVariables(prev => ({
                                         ...prev,
                                         [variable.name]: e.target.value
                                       }))}

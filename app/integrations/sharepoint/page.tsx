@@ -554,7 +554,7 @@ export default function SharePointIntegrationPage() {
                               id="tenantId"
                               placeholder="e.g. 12345678-1234-1234-1234-123456789012"
                               value={config.tenantId}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfig({ ...config, tenantId: e.target.value })}
+                              onChange={(e) => setConfig({ ...config, tenantId: e.target.value })}
                             />
                           </div>
                           <div className="space-y-2">
@@ -563,7 +563,7 @@ export default function SharePointIntegrationPage() {
                               id="clientId"
                               placeholder="e.g. 12345678-1234-1234-1234-123456789012"
                               value={config.clientId}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfig({ ...config, clientId: e.target.value })}
+                              onChange={(e) => setConfig({ ...config, clientId: e.target.value })}
                             />
                           </div>
                         </div>
@@ -575,7 +575,7 @@ export default function SharePointIntegrationPage() {
                             type="password"
                             placeholder="Your SharePoint app client secret"
                             value={config.clientSecret}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfig({ ...config, clientSecret: e.target.value })}
+                            onChange={(e) => setConfig({ ...config, clientSecret: e.target.value })}
                           />
                         </div>
 
@@ -585,7 +585,7 @@ export default function SharePointIntegrationPage() {
                             id="defaultSiteId"
                             placeholder="Default SharePoint site ID"
                             value={config.defaultSiteId}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfig({ ...config, defaultSiteId: e.target.value })}
+                            onChange={(e) => setConfig({ ...config, defaultSiteId: e.target.value })}
                           />
                         </div>
 
@@ -631,7 +631,7 @@ export default function SharePointIntegrationPage() {
                             max="1440"
                             placeholder="60"
                             value={config.syncInterval}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfig({ ...config, syncInterval: parseInt(e.target.value) || 60 })}
+                            onChange={(e) => setConfig({ ...config, syncInterval: parseInt(e.target.value) || 60 })}
                           />
                         </div>
 
@@ -783,7 +783,7 @@ export default function SharePointIntegrationPage() {
                           <Input
                             placeholder="Search SharePoint content..."
                             value={searchQuery}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
+                            onChange={(e) => setSearchQuery(e.target.value)}
                             onKeyPress={(e) => e.key === "Enter" && searchContent()}
                           />
                           <Select value={selectedSite} onValueChange={setSelectedSite}>

@@ -1,5 +1,5 @@
 import * as React from "react"
-import { ChevronLeft, ChevronRight, MoreHorizontal } from "lucide-react"
+import { ChevronLeft, ChevronRight, MoreHorizontal } from "./icons-shim"
 
 import { cn } from "@/lib/utils"
 import { ButtonProps, buttonVariants } from "@/components/ui/button"
@@ -14,24 +14,30 @@ const Pagination = ({ className, ...props }: React.ComponentProps<"nav">) => (
 )
 Pagination.displayName = "Pagination"
 
-const PaginationContent = React.forwardRef<
-  HTMLUListElement,
-  React.ComponentProps<"ul">
->(({ className, ...props }, ref) => (
-  <ul
-    ref={ref}
-    className={cn("flex flex-row items-center gap-1", className)}
-    {...props}
-  />
-))
+const PaginationContent = React.forwardRef(function PaginationContent(
+  props: React.ComponentProps<"ul">,
+  ref: React.ForwardedRef<HTMLUListElement>
+) {
+  const { className, ...rest } = props
+
+  return (
+    <ul
+      ref={ref}
+      className={cn("flex flex-row items-center gap-1", className)}
+      {...rest}
+    />
+  )
+})
 PaginationContent.displayName = "PaginationContent"
 
-const PaginationItem = React.forwardRef<
-  HTMLLIElement,
-  React.ComponentProps<"li">
->(({ className, ...props }, ref) => (
-  <li ref={ref} className={cn("", className)} {...props} />
-))
+const PaginationItem = React.forwardRef(function PaginationItem(
+  props: React.ComponentProps<"li">,
+  ref: React.ForwardedRef<HTMLLIElement>
+) {
+  const { className, ...rest } = props
+
+  return <li ref={ref} className={cn("", className)} {...rest} />
+})
 PaginationItem.displayName = "PaginationItem"
 
 type PaginationLinkProps = {

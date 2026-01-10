@@ -2666,7 +2666,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                             placeholder="Enter document name"
                             className="mt-1"
                             value={documentName}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDocumentName(e.target.value)}
+                            onChange={(e) => setDocumentName(e.target.value)}
                             required
                           />
                         </div>
@@ -2677,7 +2677,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                             placeholder="Brief description of the document"
                             className="mt-1"
                             value={documentDescription}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDocumentDescription(e.target.value)}
+                            onChange={(e) => setDocumentDescription(e.target.value)}
                           />
                         </div>
                         <div>
@@ -2728,7 +2728,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                             max="1"
                             step="0.1"
                             value={aiTemperature}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAiTemperature(parseFloat(e.target.value))}
+                            onChange={(e) => setAiTemperature(parseFloat(e.target.value))}
                             className="w-full mt-1"
                           />
                           <p className="text-xs text-muted-foreground mt-1">
@@ -2787,7 +2787,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                               placeholder="Enter project name"
                               className="mt-2"
                               value={editForm.name}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditForm(prev => ({ ...prev, name: e.target.value }))}
+                              onChange={(e) => setEditForm(prev => ({ ...prev, name: e.target.value }))}
                               required
                             />
                           </div>
@@ -2873,7 +2873,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                               type="date"
                               className="mt-2"
                               value={editForm.start_date}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditForm(prev => ({ ...prev, start_date: e.target.value }))}
+                              onChange={(e) => setEditForm(prev => ({ ...prev, start_date: e.target.value }))}
                             />
                           </div>
                           <div>
@@ -2885,7 +2885,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                               type="date"
                               className="mt-2"
                               value={editForm.end_date}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditForm(prev => ({ ...prev, end_date: e.target.value }))}
+                              onChange={(e) => setEditForm(prev => ({ ...prev, end_date: e.target.value }))}
                             />
                           </div>
                           <div>
@@ -2898,7 +2898,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                               placeholder="0"
                               className="mt-2"
                               value={editForm.budget}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditForm(prev => ({ ...prev, budget: e.target.value }))}
+                              onChange={(e) => setEditForm(prev => ({ ...prev, budget: e.target.value }))}
                             />
                           </div>
                         </div>
@@ -2913,7 +2913,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                             placeholder="Enter project manager name"
                             className="mt-2"
                             value={editForm.manager}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditForm(prev => ({ ...prev, manager: e.target.value }))}
+                            onChange={(e) => setEditForm(prev => ({ ...prev, manager: e.target.value }))}
                           />
                         </div>
 
@@ -3052,7 +3052,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                               placeholder="Enter role/title (e.g., Project Manager, Business Analyst)"
                               className="mt-2"
                               value={stakeholderForm.role}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setStakeholderForm(prev => ({ ...prev, role: e.target.value }))}
+                              onChange={(e) => setStakeholderForm(prev => ({ ...prev, role: e.target.value }))}
                               required
                             />
                           </div>
@@ -3065,7 +3065,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                               placeholder="Enter stakeholder name (leave blank if to be recruited)"
                               className="mt-2"
                               value={stakeholderForm.name ?? ""}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setStakeholderForm(prev => ({ ...prev, name: e.target.value }))}
+                              onChange={(e) => setStakeholderForm(prev => ({ ...prev, name: e.target.value }))}
                             />
                           </div>
                         </div>
@@ -3080,7 +3080,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                               placeholder="Enter department"
                               className="mt-2"
                               value={stakeholderForm.department ?? ""}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setStakeholderForm(prev => ({ ...prev, department: e.target.value }))}
+                              onChange={(e) => setStakeholderForm(prev => ({ ...prev, department: e.target.value }))}
                             />
                           </div>
                           <div>
@@ -3093,7 +3093,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                               placeholder="Enter email address"
                               className="mt-2"
                               value={stakeholderForm.email}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setStakeholderForm(prev => ({ ...prev, email: e.target.value }))}
+                              onChange={(e) => setStakeholderForm(prev => ({ ...prev, email: e.target.value }))}
                               required
                             />
                           </div>
@@ -3109,7 +3109,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                               placeholder="Enter phone number"
                               className="mt-2"
                               value={stakeholderForm.phone ?? ""}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setStakeholderForm(prev => ({ ...prev, phone: e.target.value }))}
+                              onChange={(e) => setStakeholderForm(prev => ({ ...prev, phone: e.target.value }))}
                             />
                           </div>
                           <div>
@@ -3144,7 +3144,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                                 type="checkbox"
                                 id="is-team-member"
                                 checked={stakeholderForm.is_team_member}
-                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setStakeholderForm(prev => ({ ...prev, is_team_member: e.target.checked }))}
+                                onChange={(e) => setStakeholderForm(prev => ({ ...prev, is_team_member: e.target.checked }))}
                                 className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
                               />
                               <Label htmlFor="is-team-member" className="text-sm font-medium cursor-pointer">
@@ -3177,7 +3177,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                                       <div className="flex gap-2">
                                         <select
                                           value={selectedUserId}
-                                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSelectedUserId(e.target.value)}
+                                          onChange={(e) => setSelectedUserId(e.target.value)}
                                           className="flex-1 h-8 rounded-md border border-amber-300 bg-white px-2 text-xs"
                                         >
                                           <option value="">Select a user account...</option>
@@ -3365,7 +3365,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                             id="upload-doc-name"
                             placeholder="Enter document name"
                             value={uploadForm.name}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUploadForm({ ...uploadForm, name: e.target.value })}
+                            onChange={(e) => setUploadForm({ ...uploadForm, name: e.target.value })}
                             className="mt-2"
                             required
                           />
@@ -3409,7 +3409,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                             id="file-upload"
                             type="file"
                             accept=".pdf,.doc,.docx,.txt,.md"
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                            onChange={(e) => {
                               const file = e.target.files?.[0] || null
                               setUploadForm({ ...uploadForm, file })
                             }}

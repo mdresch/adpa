@@ -32,7 +32,7 @@ export function TaskFilters({ filters, onFiltersChange, roleOptions, assigneeOpt
             id="search"
             placeholder="Search by task name, number, or WBS code..."
             value={filters.search}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFilterChange('search', e.target.value)}
+            onChange={(e) => handleFilterChange('search', e.target.value)}
             className="pl-9"
           />
         </div>

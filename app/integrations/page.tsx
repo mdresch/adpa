@@ -1279,7 +1279,7 @@ export default function Integrations() {
                           className="col-span-3 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                           aria-label="Integration Type"
                           value={newIntegration.type}
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleNewIntegrationChange("type", e.target.value)}
+                          onChange={(e) => handleNewIntegrationChange("type", e.target.value)}
                           required
                         >
                           <option value="">Select integration type</option>
@@ -1301,7 +1301,7 @@ export default function Integrations() {
                           placeholder="Integration name" 
                           className="col-span-3"
                           value={newIntegration.name}
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleNewIntegrationChange("name", e.target.value)}
+                          onChange={(e) => handleNewIntegrationChange("name", e.target.value)}
                           required
                         />
                       </div>
@@ -1317,7 +1317,7 @@ export default function Integrations() {
                             placeholder="https://your-domain.atlassian.net" 
                             className="col-span-3"
                             value={newIntegration.baseUrl}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleNewIntegrationChange("baseUrl", e.target.value)}
+                            onChange={(e) => handleNewIntegrationChange("baseUrl", e.target.value)}
                             required={newIntegration.type === "jira" || newIntegration.type === "confluence"}
                           />
                         </div>
@@ -1336,7 +1336,7 @@ export default function Integrations() {
                               placeholder="your-email@company.com" 
                               className="col-span-3"
                               value={newIntegration.email}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleNewIntegrationChange("email", e.target.value)}
+                              onChange={(e) => handleNewIntegrationChange("email", e.target.value)}
                               required
                             />
                           </div>
@@ -1350,7 +1350,7 @@ export default function Integrations() {
                               placeholder="Your Jira API token" 
                               className="col-span-3"
                               value={newIntegration.apiToken}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleNewIntegrationChange("apiToken", e.target.value)}
+                              onChange={(e) => handleNewIntegrationChange("apiToken", e.target.value)}
                               required
                             />
                           </div>
@@ -1363,7 +1363,7 @@ export default function Integrations() {
                               placeholder="PROJ" 
                               className="col-span-3"
                               value={newIntegration.defaultProjectKey}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleNewIntegrationChange("defaultProjectKey", e.target.value)}
+                              onChange={(e) => handleNewIntegrationChange("defaultProjectKey", e.target.value)}
                             />
                           </div>
                           <div className="grid grid-cols-4 items-center gap-4">
@@ -1420,7 +1420,7 @@ export default function Integrations() {
                               placeholder="your-email@company.com" 
                               className="col-span-3"
                               value={newIntegration.username}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleNewIntegrationChange("username", e.target.value)}
+                              onChange={(e) => handleNewIntegrationChange("username", e.target.value)}
                               required
                             />
                           </div>
@@ -1434,7 +1434,7 @@ export default function Integrations() {
                               placeholder="Your Confluence API token" 
                               className="col-span-3"
                               value={newIntegration.apiTokenConfluence}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleNewIntegrationChange("apiTokenConfluence", e.target.value)}
+                              onChange={(e) => handleNewIntegrationChange("apiTokenConfluence", e.target.value)}
                               required
                             />
                           </div>
@@ -1447,7 +1447,7 @@ export default function Integrations() {
                               placeholder="DOCS" 
                               className="col-span-3"
                               value={newIntegration.defaultSpace}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleNewIntegrationChange("defaultSpace", e.target.value)}
+                              onChange={(e) => handleNewIntegrationChange("defaultSpace", e.target.value)}
                             />
                           </div>
                         </>
@@ -1465,7 +1465,7 @@ export default function Integrations() {
                               placeholder="your-tenant-id" 
                               className="col-span-3"
                               value={newIntegration.tenantId}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleNewIntegrationChange("tenantId", e.target.value)}
+                              onChange={(e) => handleNewIntegrationChange("tenantId", e.target.value)}
                               required
                             />
                           </div>
@@ -1478,7 +1478,7 @@ export default function Integrations() {
                               placeholder="Your Azure AD Client ID" 
                               className="col-span-3"
                               value={newIntegration.clientId}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleNewIntegrationChange("clientId", e.target.value)}
+                              onChange={(e) => handleNewIntegrationChange("clientId", e.target.value)}
                               required
                             />
                           </div>
@@ -1492,7 +1492,7 @@ export default function Integrations() {
                               placeholder="Your Azure AD Client Secret" 
                               className="col-span-3"
                               value={newIntegration.clientSecret}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleNewIntegrationChange("clientSecret", e.target.value)}
+                              onChange={(e) => handleNewIntegrationChange("clientSecret", e.target.value)}
                               required
                             />
                           </div>
@@ -1511,7 +1511,7 @@ export default function Integrations() {
                             placeholder="secret_..." 
                             className="col-span-3"
                             value={newIntegration.integrationToken}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleNewIntegrationChange("integrationToken", e.target.value)}
+                            onChange={(e) => handleNewIntegrationChange("integrationToken", e.target.value)}
                             required
                           />
                         </div>
@@ -1717,7 +1717,7 @@ export default function Integrations() {
                             id="confluence-url"
                             placeholder="https://your-domain.atlassian.net"
                             value={confluenceConfig.baseUrl}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleConfluenceConfigChange('baseUrl', e.target.value)}
+                            onChange={(e) => handleConfluenceConfigChange('baseUrl', e.target.value)}
                           />
                         </div>
                         <div className="space-y-2">
@@ -1726,7 +1726,7 @@ export default function Integrations() {
                             id="confluence-space"
                             placeholder="DOCS"
                             value={confluenceConfig.defaultSpace}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleConfluenceConfigChange('defaultSpace', e.target.value)}
+                            onChange={(e) => handleConfluenceConfigChange('defaultSpace', e.target.value)}
                           />
                         </div>
                       </div>
@@ -1743,7 +1743,7 @@ export default function Integrations() {
                             placeholder="your-email@company.com"
                             type="email"
                             value={confluenceConfig.username}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleConfluenceConfigChange('username', e.target.value)}
+                            onChange={(e) => handleConfluenceConfigChange('username', e.target.value)}
                           />
                         </div>
                         <div className="space-y-2">
@@ -1753,7 +1753,7 @@ export default function Integrations() {
                             type="password"
                             placeholder="Your Confluence API token"
                             value={confluenceConfig.apiToken}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleConfluenceConfigChange('apiToken', e.target.value)}
+                            onChange={(e) => handleConfluenceConfigChange('apiToken', e.target.value)}
                           />
                         </div>
                       </div>
@@ -1775,7 +1775,7 @@ export default function Integrations() {
                             id="oauth-client-id"
                             placeholder="OAuth2 Client ID"
                             value={confluenceConfig.oauthClientId}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleConfluenceConfigChange('oauthClientId', e.target.value)}
+                            onChange={(e) => handleConfluenceConfigChange('oauthClientId', e.target.value)}
                           />
                         </div>
                         <div className="space-y-2">
@@ -1785,7 +1785,7 @@ export default function Integrations() {
                             type="password"
                             placeholder="OAuth2 Client Secret"
                             value={confluenceConfig.oauthClientSecret}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleConfluenceConfigChange('oauthClientSecret', e.target.value)}
+                            onChange={(e) => handleConfluenceConfigChange('oauthClientSecret', e.target.value)}
                           />
                         </div>
                       </div>
@@ -1912,7 +1912,7 @@ export default function Integrations() {
                                 id="jira-url"
                                 placeholder="https://your-domain.atlassian.net"
                                 value={jiraConfig.baseUrl}
-                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleJiraConfigChange('baseUrl', e.target.value)}
+                                onChange={(e) => handleJiraConfigChange('baseUrl', e.target.value)}
                               />
                             </div>
                             <div className="space-y-2">
@@ -1921,7 +1921,7 @@ export default function Integrations() {
                                 id="jira-project-key"
                                 placeholder="PROJ"
                                 value={jiraConfig.defaultProjectKey}
-                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleJiraConfigChange('defaultProjectKey', e.target.value)}
+                                onChange={(e) => handleJiraConfigChange('defaultProjectKey', e.target.value)}
                               />
                             </div>
                           </div>
@@ -1938,7 +1938,7 @@ export default function Integrations() {
                                 placeholder="your-email@company.com"
                                 type="email"
                                 value={jiraConfig.email}
-                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleJiraConfigChange('email', e.target.value)}
+                                onChange={(e) => handleJiraConfigChange('email', e.target.value)}
                               />
                             </div>
                             <div className="space-y-2">
@@ -1948,7 +1948,7 @@ export default function Integrations() {
                                 type="password"
                                 placeholder="Your Jira API token"
                                 value={jiraConfig.apiToken}
-                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleJiraConfigChange('apiToken', e.target.value)}
+                                onChange={(e) => handleJiraConfigChange('apiToken', e.target.value)}
                               />
                             </div>
                           </div>
@@ -2099,7 +2099,7 @@ export default function Integrations() {
                                 id="sharepoint-tenant-id"
                                 placeholder="e.g. 12345678-1234-1234-1234-123456789012"
                                 value={sharepointConfig.tenantId}
-                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleSharepointConfigChange('tenantId', e.target.value)}
+                                onChange={(e) => handleSharepointConfigChange('tenantId', e.target.value)}
                               />
                             </div>
                             <div className="space-y-2">
@@ -2108,7 +2108,7 @@ export default function Integrations() {
                                 id="sharepoint-client-id"
                                 placeholder="e.g. 12345678-1234-1234-1234-123456789012"
                                 value={sharepointConfig.clientId}
-                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleSharepointConfigChange('clientId', e.target.value)}
+                                onChange={(e) => handleSharepointConfigChange('clientId', e.target.value)}
                               />
                             </div>
                           </div>
@@ -2119,7 +2119,7 @@ export default function Integrations() {
                               type="password"
                               placeholder="Your SharePoint app client secret"
                               value={sharepointConfig.clientSecret}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleSharepointConfigChange('clientSecret', e.target.value)}
+                              onChange={(e) => handleSharepointConfigChange('clientSecret', e.target.value)}
                             />
                           </div>
                           <div className="text-xs text-muted-foreground">
@@ -2139,7 +2139,7 @@ export default function Integrations() {
                               id="sharepoint-default-site"
                               placeholder="Default SharePoint site ID for operations"
                               value={sharepointConfig.defaultSiteId}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleSharepointConfigChange('defaultSiteId', e.target.value)}
+                              onChange={(e) => handleSharepointConfigChange('defaultSiteId', e.target.value)}
                             />
                           </div>
                         </div>
@@ -2184,7 +2184,7 @@ export default function Integrations() {
                                 max="1440"
                                 placeholder="60"
                                 value={sharepointConfig.syncInterval}
-                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleSharepointConfigChange('syncInterval', parseInt(e.target.value) || 60)}
+                                onChange={(e) => handleSharepointConfigChange('syncInterval', parseInt(e.target.value) || 60)}
                               />
                             </div>
                           )}
@@ -2353,7 +2353,7 @@ export default function Integrations() {
                               type="password"
                               placeholder="Your Notion Internal Integration Token"
                               value={notionConfig.integrationToken}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleNotionConfigChange('integrationToken', e.target.value)}
+                              onChange={(e) => handleNotionConfigChange('integrationToken', e.target.value)}
                               autoComplete="off"
                               data-lpignore="true"
                               data-form-type="other"
@@ -2382,7 +2382,7 @@ export default function Integrations() {
                               id="notion-database"
                               placeholder="Database ID to sync documents to"
                               value={notionConfig.defaultDatabaseId}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleNotionConfigChange('defaultDatabaseId', e.target.value)}
+                              onChange={(e) => handleNotionConfigChange('defaultDatabaseId', e.target.value)}
                             />
                           </div>
                           <div className="text-xs text-muted-foreground">
@@ -2430,7 +2430,7 @@ export default function Integrations() {
                                 max="1440"
                                 placeholder="60"
                                 value={notionConfig.syncInterval}
-                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleNotionConfigChange('syncInterval', parseInt(e.target.value) || 60)}
+                                onChange={(e) => handleNotionConfigChange('syncInterval', parseInt(e.target.value) || 60)}
                               />
                             </div>
                           )}

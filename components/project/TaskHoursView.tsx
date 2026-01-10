@@ -120,7 +120,7 @@ export function TaskHoursView({ task, onUpdate }: TaskHoursViewProps) {
                 step="0.25"
                 min="0.25"
                 value={formData.hours}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData(prev => ({ ...prev, hours: e.target.value }))}
+                onChange={(e) => setFormData(prev => ({ ...prev, hours: e.target.value }))}
                 placeholder="8.0"
                 required
               />
@@ -131,7 +131,7 @@ export function TaskHoursView({ task, onUpdate }: TaskHoursViewProps) {
                 id="date"
                 type="date"
                 value={formData.date}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData(prev => ({ ...prev, date: e.target.value }))}
+                onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
                 required
               />
             </div>

@@ -452,7 +452,7 @@ export function TaskChecklistPanel({ taskId, taskName, users = [], onUpdate }: T
           <Input
             placeholder="Add a checklist item..."
             value={newItemName}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewItemName(e.target.value)}
+            onChange={(e) => setNewItemName(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 handleAddItem()

@@ -479,7 +479,7 @@ export function ProgramRisksTab({ programId }: ProgramRisksTabProps) {
                     <Input
                       id="title"
                       value={formData.title}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setFormData({ ...formData, title: e.target.value }); }}
+                      onChange={(e) => { setFormData({ ...formData, title: e.target.value }); }}
                       placeholder="Enter risk title"
                     />
                   </div>
@@ -499,7 +499,7 @@ export function ProgramRisksTab({ programId }: ProgramRisksTabProps) {
                       <Input
                         id="category"
                         value={formData.category}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setFormData({ ...formData, category: e.target.value }); }}
+                        onChange={(e) => { setFormData({ ...formData, category: e.target.value }); }}
                         placeholder="e.g., Technical, Resource"
                       />
                     </div>
@@ -508,7 +508,7 @@ export function ProgramRisksTab({ programId }: ProgramRisksTabProps) {
                       <Input
                         id="owner"
                         value={formData.owner}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setFormData({ ...formData, owner: e.target.value }); }}
+                        onChange={(e) => { setFormData({ ...formData, owner: e.target.value }); }}
                         placeholder="Enter owner name"
                       />
                     </div>
@@ -523,7 +523,7 @@ export function ProgramRisksTab({ programId }: ProgramRisksTabProps) {
                         max="100"
                         step="5"
                         value={formData.probability}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                        onChange={(e) => {
                           setFormData({ ...formData, probability: parseInt(e.target.value) });
                         }}
                       />
@@ -537,7 +537,7 @@ export function ProgramRisksTab({ programId }: ProgramRisksTabProps) {
                         max="5"
                         step="1"
                         value={formData.impact}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setFormData({ ...formData, impact: parseInt(e.target.value) }); }}
+                        onChange={(e) => { setFormData({ ...formData, impact: parseInt(e.target.value) }); }}
                       />
                     </div>
                   </div>

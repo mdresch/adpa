@@ -379,7 +379,7 @@ export function StakeholderSkillsManagement({
                 type="number"
                 min="0"
                 value={formData.yearsOfExperience}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                onChange={(e) =>
                   setFormData({
                     ...formData,
                     yearsOfExperience: parseInt(e.target.value) || 0,
@@ -392,7 +392,7 @@ export function StakeholderSkillsManagement({
                 type="checkbox"
                 id="verified"
                 checked={formData.verified}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                onChange={(e) =>
                   setFormData({ ...formData, verified: e.target.checked })
                 }
                 className="h-4 w-4 rounded border-gray-300"
@@ -406,7 +406,7 @@ export function StakeholderSkillsManagement({
               <Input
                 id="notes"
                 value={formData.notes}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, notes: e.target.value })}
+                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                 placeholder="Optional notes about this skill"
               />
             </div>

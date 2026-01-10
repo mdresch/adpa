@@ -185,7 +185,7 @@ export function OKRDialog({ open, onOpenChange, okr, onSaved }: OKRDialogProps) 
             <Input
               id="objective_title"
               value={formData.objective_title}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, objective_title: e.target.value })}
+              onChange={(e) => setFormData({ ...formData, objective_title: e.target.value })}
               placeholder="e.g., Become the leader in AI-powered document management"
               required
             />
@@ -245,7 +245,7 @@ export function OKRDialog({ open, onOpenChange, okr, onSaved }: OKRDialogProps) 
               <Input
                 id="okr_period"
                 value={formData.okr_period}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, okr_period: e.target.value })}
+                onChange={(e) => setFormData({ ...formData, okr_period: e.target.value })}
                 placeholder="e.g., Q1-2026, Annual-2026"
               />
             </div>
@@ -276,7 +276,7 @@ export function OKRDialog({ open, onOpenChange, okr, onSaved }: OKRDialogProps) 
                 id="period_start"
                 type="date"
                 value={formData.period_start}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, period_start: e.target.value })}
+                onChange={(e) => setFormData({ ...formData, period_start: e.target.value })}
               />
             </div>
 
@@ -286,7 +286,7 @@ export function OKRDialog({ open, onOpenChange, okr, onSaved }: OKRDialogProps) 
                 id="period_end"
                 type="date"
                 value={formData.period_end}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, period_end: e.target.value })}
+                onChange={(e) => setFormData({ ...formData, period_end: e.target.value })}
               />
             </div>
           </div>
@@ -297,7 +297,7 @@ export function OKRDialog({ open, onOpenChange, okr, onSaved }: OKRDialogProps) 
               <Input
                 id="owner_name"
                 value={formData.owner_name}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, owner_name: e.target.value })}
+                onChange={(e) => setFormData({ ...formData, owner_name: e.target.value })}
                 placeholder="e.g., John Doe"
               />
             </div>
@@ -307,7 +307,7 @@ export function OKRDialog({ open, onOpenChange, okr, onSaved }: OKRDialogProps) 
               <Input
                 id="owner_role"
                 value={formData.owner_role}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, owner_role: e.target.value })}
+                onChange={(e) => setFormData({ ...formData, owner_role: e.target.value })}
                 placeholder="e.g., CEO"
               />
             </div>
@@ -321,7 +321,7 @@ export function OKRDialog({ open, onOpenChange, okr, onSaved }: OKRDialogProps) 
               min="0"
               max="100"
               value={formData.confidence_level}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, confidence_level: e.target.value })}
+              onChange={(e) => setFormData({ ...formData, confidence_level: e.target.value })}
               placeholder="e.g., 65"
             />
           </div>

@@ -350,7 +350,7 @@ export function ReviewMeetingDialog({
                 id="scheduled_date"
                 type="date"
                 value={formData.scheduled_date}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, scheduled_date: e.target.value })}
+                onChange={(e) => setFormData({ ...formData, scheduled_date: e.target.value })}
                 required
               />
             </div>
@@ -361,7 +361,7 @@ export function ReviewMeetingDialog({
                 id="actual_date"
                 type="date"
                 value={formData.actual_date || ''}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, actual_date: e.target.value || undefined })}
+                onChange={(e) => setFormData({ ...formData, actual_date: e.target.value || undefined })}
               />
               <p className="text-xs text-muted-foreground">
                 Leave empty if meeting hasn't occurred yet
@@ -374,7 +374,7 @@ export function ReviewMeetingDialog({
                 id="start_time"
                 type="time"
                 value={formData.start_time}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, start_time: e.target.value })}
+                onChange={(e) => setFormData({ ...formData, start_time: e.target.value })}
               />
             </div>
 
@@ -384,7 +384,7 @@ export function ReviewMeetingDialog({
                 id="end_time"
                 type="time"
                 value={formData.end_time || ''}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, end_time: e.target.value || undefined })}
+                onChange={(e) => setFormData({ ...formData, end_time: e.target.value || undefined })}
               />
             </div>
 
@@ -395,7 +395,7 @@ export function ReviewMeetingDialog({
                 type="number"
                 min="15"
                 value={formData.duration_minutes}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, duration_minutes: parseInt(e.target.value) || 60 })}
+                onChange={(e) => setFormData({ ...formData, duration_minutes: parseInt(e.target.value) || 60 })}
               />
             </div>
 

@@ -424,7 +424,7 @@ export default function EntitiesPage() {
               <Input
                 placeholder="Search entities..."
                 value={searchTerm}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
+                onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-8"
               />
             </div>

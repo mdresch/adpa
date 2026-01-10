@@ -237,7 +237,7 @@ export default function NewDocumentPage() {
                       id="name"
                       placeholder="e.g., Project Charter, Requirements Document"
                       value={formData.name}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                      onChange={(e) =>
                         setFormData({ ...formData, name: e.target.value })
                       }
                       required
@@ -360,7 +360,7 @@ export default function NewDocumentPage() {
                       step={0.01}
                       className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                       value={formData.temperature}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, temperature: parseFloat(e.target.value) })}
+                      onChange={(e) => setFormData({ ...formData, temperature: parseFloat(e.target.value) })}
                     />
                     <p className="text-xs text-muted-foreground">Lower = more focused, Higher = more creative</p>
                   </div>
@@ -376,7 +376,7 @@ export default function NewDocumentPage() {
                       step={100}
                       className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                       value={formData.max_tokens}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, max_tokens: parseInt(e.target.value) })}
+                      onChange={(e) => setFormData({ ...formData, max_tokens: parseInt(e.target.value) })}
                     />
                     <p className="text-xs text-muted-foreground">Maximum number of tokens the model can generate</p>
                   </div>

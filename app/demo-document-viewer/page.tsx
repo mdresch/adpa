@@ -238,7 +238,8 @@ export default function DemoDocumentViewer() {
     })
 
     const buffer = await Packer.toBuffer(doc)
-    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" })
+    // Convert Node Buffer to Uint8Array for browser Blob compatibility
+    const blob = new Blob([new Uint8Array(buffer)], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" })
     saveAs(blob, `${mockDocument.title}.docx`)
     toast.success("Document exported to Word")
   }
@@ -412,10 +413,10 @@ export default function DemoDocumentViewer() {
                               {mockDocument.content}
                             </ReactMarkdown>
                           </div>
-                        ) : (
+                          ) : (
                           <textarea
                             value={editedContent}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditedContent(e.target.value)}
+                            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setEditedContent(e.target.value)}
                             className="w-full h-96 p-4 border rounded-lg font-mono text-sm"
                             placeholder="Edit document content..."
                           />

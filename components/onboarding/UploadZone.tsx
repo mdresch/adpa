@@ -54,7 +54,7 @@ export const UploadZone: React.FC<UploadZoneProps> = ({
     onFilesSelected(files);
   }, [disabled, onFilesSelected]);
 
-  const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileInput = useCallback((e) => {
     if (e.target.files) {
       const files = Array.from(e.target.files);
       onFilesSelected(files);

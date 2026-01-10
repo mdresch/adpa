@@ -122,7 +122,7 @@ function ROICalculator() {
               min="1"
               max="1000"
               value={numDocuments}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNumDocuments(Math.max(1, Math.min(1000, parseInt(e.target.value) || 1)))}
+              onChange={(e) => setNumDocuments(Math.max(1, Math.min(1000, parseInt(e.target.value) || 1)))}
               style={{
                 color: maturityTheme.colors.text.primary,
                 backgroundColor: maturityTheme.colors.background.tertiary,
@@ -150,7 +150,7 @@ function ROICalculator() {
               min="25"
               max="500"
               value={hourlyRate}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setHourlyRate(Math.max(25, Math.min(500, parseInt(e.target.value) || 75)))}
+              onChange={(e) => setHourlyRate(Math.max(25, Math.min(500, parseInt(e.target.value) || 75)))}
               style={{
                 color: maturityTheme.colors.text.primary,
                 backgroundColor: maturityTheme.colors.background.tertiary,
@@ -178,7 +178,7 @@ function ROICalculator() {
               min="30"
               max="90"
               value={timeSavings}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTimeSavings(Math.max(30, Math.min(90, parseInt(e.target.value) || 70)))}
+              onChange={(e) => setTimeSavings(Math.max(30, Math.min(90, parseInt(e.target.value) || 70)))}
               style={{
                 color: maturityTheme.colors.text.primary,
                 backgroundColor: maturityTheme.colors.background.tertiary,
@@ -197,7 +197,7 @@ function ROICalculator() {
             min="1"
             max="20"
             value={manualDocHours}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setManualDocHours(Math.max(1, Math.min(20, parseInt(e.target.value) || 8)))}
+            onChange={(e) => setManualDocHours(Math.max(1, Math.min(20, parseInt(e.target.value) || 8)))}
             style={{
               color: maturityTheme.colors.text.primary,
               backgroundColor: maturityTheme.colors.background.tertiary,
@@ -216,7 +216,7 @@ function ROICalculator() {
             max="10"
             step="0.5"
             value={manualReviewHours}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setManualReviewHours(Math.max(0.5, Math.min(10, parseFloat(e.target.value) || 2)))}
+            onChange={(e) => setManualReviewHours(Math.max(0.5, Math.min(10, parseFloat(e.target.value) || 2)))}
             style={{
               color: maturityTheme.colors.text.primary,
               backgroundColor: maturityTheme.colors.background.tertiary,
@@ -235,7 +235,7 @@ function ROICalculator() {
             max="50000"
             step="1000"
             value={licenseCost}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setLicenseCost(Math.max(1000, Math.min(50000, parseInt(e.target.value) || 10000)))}
+            onChange={(e) => setLicenseCost(Math.max(1000, Math.min(50000, parseInt(e.target.value) || 10000)))}
             style={{
               color: maturityTheme.colors.text.primary,
               backgroundColor: maturityTheme.colors.background.tertiary,

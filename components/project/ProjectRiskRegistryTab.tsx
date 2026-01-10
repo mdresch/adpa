@@ -583,7 +583,7 @@ export function ProjectRiskRegistryTab({ projectId }: ProjectRiskRegistryTabProp
                       type="checkbox"
                       id="overdue-only"
                       checked={overdueOnly}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOverdueOnly(e.target.checked)}
+                      onChange={(e) => setOverdueOnly(e.target.checked)}
                       className="rounded"
                     />
                     <Label htmlFor="overdue-only" className="cursor-pointer">Overdue Only</Label>

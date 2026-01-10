@@ -2,7 +2,7 @@ import * as React from 'react'
 import * as LucideIcons from 'lucide-react'
 
 // Proper SVG props type
-type SvgProps = React.SVGProps<SVGSVGElement>
+type SvgProps = React.ComponentPropsWithoutRef<'svg'>
 
 export const Search = (props: SvgProps) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" {...props}>
@@ -106,155 +106,159 @@ export const IconFallback = (props: SvgProps) => (
 )
 
 // Additional named exports commonly used across the app. These use actual Lucide icons
-export const Bell = LucideIcons.Bell
-export const Settings = LucideIcons.Settings
-export const Sun = LucideIcons.Sun
-export const Moon = LucideIcons.Moon
-export const Users = LucideIcons.Users
-export const User = LucideIcons.User
-export const FileText = LucideIcons.FileText
-export const MessageSquare = LucideIcons.MessageSquare
-export const Send = LucideIcons.Send
-export const Unlock = LucideIcons.Unlock
-export const LayoutDashboard = LucideIcons.LayoutDashboard
-export const LinkIcon = LucideIcons.LinkIcon
-export const BarChart3 = LucideIcons.BarChart3
-export const Activity = LucideIcons.Activity
-export const Zap = LucideIcons.Zap
-export const LogOut = LucideIcons.LogOut
-export const FolderOpen = LucideIcons.FolderOpen
-export const Layers = LucideIcons.Layers
+// Create a tolerant resolver for Lucide icons; fall back to `IconFallback` if missing
+const getIcon = (name: string): React.ComponentType<SvgProps> =>
+  (((LucideIcons as any)[name] ?? IconFallback) as React.ComponentType<SvgProps>)
+
+export const Bell = getIcon("Bell")
+export const Settings = getIcon("Settings")
+export const Sun = getIcon("Sun")
+export const Moon = getIcon("Moon")
+export const Users = getIcon("Users")
+export const User = getIcon("User")
+export const FileText = getIcon("FileText")
+export const MessageSquare = getIcon("MessageSquare")
+export const Send = getIcon("Send")
+export const Unlock = getIcon("Unlock")
+export const LayoutDashboard = getIcon("LayoutDashboard")
+export const LinkIcon = getIcon("LinkIcon")
+export const BarChart3 = getIcon("BarChart3")
+export const Activity = getIcon("Activity")
+export const Zap = getIcon("Zap")
+export const LogOut = getIcon("LogOut")
+export const FolderOpen = getIcon("FolderOpen")
+export const Layers = getIcon("Layers")
 
 // More permissive mappings for additional commonly used icons
-export const Plus = LucideIcons.Plus
-export const Minus = LucideIcons.Minus
-export const Save = LucideIcons.Save
-export const Code = LucideIcons.Code
-export const Type = LucideIcons.Type
-export const Hash = LucideIcons.Hash
-export const ToggleLeft = LucideIcons.ToggleLeft
-export const List = LucideIcons.List
-export const Copy = LucideIcons.Copy
-export const Download = LucideIcons.Download
-export const Upload = LucideIcons.Upload
-export const Edit = LucideIcons.Edit
-export const Trash2 = LucideIcons.Trash2
-export const UserCheck = LucideIcons.UserCheck
-export const UserX = LucideIcons.UserX
-export const Crown = LucideIcons.Crown
-export const Key = LucideIcons.Key
-export const Mail = LucideIcons.Mail
-export const Sparkles = LucideIcons.Sparkles
-export const AlertCircle = LucideIcons.AlertCircle
-export const CheckCircle = LucideIcons.CheckCircle
-export const Filter = LucideIcons.Filter
+export const Plus = getIcon("Plus")
+export const Minus = getIcon("Minus")
+export const Save = getIcon("Save")
+export const Code = getIcon("Code")
+export const Type = getIcon("Type")
+export const Hash = getIcon("Hash")
+export const ToggleLeft = getIcon("ToggleLeft")
+export const List = getIcon("List")
+export const Copy = getIcon("Copy")
+export const Download = getIcon("Download")
+export const Upload = getIcon("Upload")
+export const Edit = getIcon("Edit")
+export const Trash2 = getIcon("Trash2")
+export const UserCheck = getIcon("UserCheck")
+export const UserX = getIcon("UserX")
+export const Crown = getIcon("Crown")
+export const Key = getIcon("Key")
+export const Mail = getIcon("Mail")
+export const Sparkles = getIcon("Sparkles")
+export const AlertCircle = getIcon("AlertCircle")
+export const CheckCircle = getIcon("CheckCircle")
+export const Filter = getIcon("Filter")
 
 // Commonly used icons not previously included
-export const Calendar = LucideIcons.Calendar
-export const DollarSign = LucideIcons.DollarSign
-export const Archive = LucideIcons.Archive
-export const Loader2 = LucideIcons.Loader2
-export const FileUp = LucideIcons.FileUp
-export const Wand2 = LucideIcons.Wand2
+export const Calendar = getIcon("Calendar")
+export const DollarSign = getIcon("DollarSign")
+export const Archive = getIcon("Archive")
+export const Loader2 = getIcon("Loader2")
+export const FileUp = getIcon("FileUp")
+export const Wand2 = getIcon("Wand2")
 
-export const Shield = LucideIcons.Shield
+export const Shield = getIcon("Shield")
 
 // Additional commonly used icons
-export const RefreshCw = LucideIcons.RefreshCw
-export const Database = LucideIcons.Database
-export const Globe = LucideIcons.Globe
-export const Server = LucideIcons.Server
-export const Eye = LucideIcons.Eye
-export const Clock = LucideIcons.Clock
-export const Tag = LucideIcons.Tag
-export const Star = LucideIcons.Star
-export const Share = LucideIcons.Share
-export const Folder = LucideIcons.Folder
-export const TrendingUp = LucideIcons.TrendingUp
-export const TrendingDown = LucideIcons.TrendingDown
-export const ShieldAlert = LucideIcons.ShieldAlert
-export const ShieldCheck = LucideIcons.ShieldCheck
-export const Lock = LucideIcons.Lock
-export const AlertTriangle = LucideIcons.AlertTriangle
-export const XCircle = LucideIcons.XCircle
-export const TrendingUpIcon = LucideIcons.TrendingUp
-export const TrendingDownIcon = LucideIcons.TrendingDown
-export const PieChartIcon = LucideIcons.PieChart
-export const LineChartIcon = LucideIcons.LineChart
-export const Timer = LucideIcons.Timer
-export const Cloud = LucideIcons.Cloud
-export const ExternalLink = LucideIcons.ExternalLink
-export const RotateCcw = LucideIcons.RotateCcw
-export const ArrowDownToLine = LucideIcons.ArrowDownToLine
-export const ArrowUpFromLine = LucideIcons.ArrowUpFromLine
-export const ArrowUpRight = LucideIcons.ArrowUpRight
-export const Brain = LucideIcons.Brain
-export const Wifi = LucideIcons.Wifi
-export const WifiOff = LucideIcons.WifiOff
-export const Cpu = LucideIcons.Cpu
-export const MemoryStickIcon = LucideIcons.MemoryStick
-export const Building = LucideIcons.Building
-export const HardDrive = LucideIcons.HardDrive
-export const Play = LucideIcons.Play
-export const Pause = LucideIcons.Pause
-export const History = LucideIcons.History
-export const Bold = LucideIcons.Bold
-export const Italic = LucideIcons.Italic
-export const Underline = LucideIcons.Underline
-export const ListOrdered = LucideIcons.ListOrdered
-export const AlignLeft = LucideIcons.AlignLeft
-export const AlignCenter = LucideIcons.AlignCenter
-export const AlignRight = LucideIcons.AlignRight
-export const Table = LucideIcons.Table
-export const Undo = LucideIcons.Undo
-export const Redo = LucideIcons.Redo
-export const Edit3 = LucideIcons.Edit3
-export const FileImage = LucideIcons.FileImage
-export const FileSpreadsheet = LucideIcons.FileSpreadsheet
-export const FileCode = LucideIcons.FileCode
-export const Presentation = LucideIcons.Presentation
-export const FileArchive = LucideIcons.FileArchive
-export const FileAudio = LucideIcons.FileAudio
-export const FileVideo = LucideIcons.FileVideo
-export const File = LucideIcons.File
-export const Info = LucideIcons.Info
-export const Github = LucideIcons.Github
-export const GitBranch = LucideIcons.GitBranch
-export const GitPullRequest = LucideIcons.GitPullRequest
-export const Sync = LucideIcons.RefreshCw
-export const TestTube = LucideIcons.TestTube
-export const Crosshair = LucideIcons.Crosshair
-export const Target = LucideIcons.Target
-export const PieChart = LucideIcons.PieChart
-export const Grid = LucideIcons.Grid
-export const Lightbulb = LucideIcons.Lightbulb
-export const Award = LucideIcons.Award
-export const Briefcase = LucideIcons.Briefcase
-export const Box = LucideIcons.Box
-export const ClipboardList = LucideIcons.ClipboardList
-export const Handshake = LucideIcons.Handshake
-export const IterationCw = LucideIcons.IterationCw
-export const Users2 = LucideIcons.Users2
-export const Gauge = LucideIcons.Gauge
-export const Rocket = LucideIcons.Rocket
-export const Wrench = LucideIcons.Wrench
-export const CheckSquare = LucideIcons.CheckSquare
-export const Square = LucideIcons.Square
-export const FileDown = LucideIcons.FileDown
-export const Printer = LucideIcons.Printer
+export const RefreshCw = getIcon("RefreshCw")
+export const Database = getIcon("Database")
+export const Globe = getIcon("Globe")
+export const Server = getIcon("Server")
+export const Eye = getIcon("Eye")
+export const Clock = getIcon("Clock")
+export const Tag = getIcon("Tag")
+export const Star = getIcon("Star")
+export const Share = getIcon("Share")
+export const Folder = getIcon("Folder")
+export const TrendingUp = getIcon("TrendingUp")
+export const TrendingDown = getIcon("TrendingDown")
+export const ShieldAlert = getIcon("ShieldAlert")
+export const ShieldCheck = getIcon("ShieldCheck")
+export const Lock = getIcon("Lock")
+export const AlertTriangle = getIcon("AlertTriangle")
+export const XCircle = getIcon("XCircle")
+export const TrendingUpIcon = getIcon("TrendingUp")
+export const TrendingDownIcon = getIcon("TrendingDown")
+export const PieChartIcon = getIcon("PieChart")
+export const LineChartIcon = getIcon("LineChart")
+export const Timer = getIcon("Timer")
+export const Cloud = getIcon("Cloud")
+export const ExternalLink = getIcon("ExternalLink")
+export const RotateCcw = getIcon("RotateCcw")
+export const ArrowDownToLine = getIcon("ArrowDownToLine")
+export const ArrowUpFromLine = getIcon("ArrowUpFromLine")
+export const ArrowUpRight = getIcon("ArrowUpRight")
+export const Brain = getIcon("Brain")
+export const Wifi = getIcon("Wifi")
+export const WifiOff = getIcon("WifiOff")
+export const Cpu = getIcon("Cpu")
+export const MemoryStickIcon = getIcon("MemoryStick")
+export const Building = getIcon("Building")
+export const HardDrive = getIcon("HardDrive")
+export const Play = getIcon("Play")
+export const Pause = getIcon("Pause")
+export const History = getIcon("History")
+export const Bold = getIcon("Bold")
+export const Italic = getIcon("Italic")
+export const Underline = getIcon("Underline")
+export const ListOrdered = getIcon("ListOrdered")
+export const AlignLeft = getIcon("AlignLeft")
+export const AlignCenter = getIcon("AlignCenter")
+export const AlignRight = getIcon("AlignRight")
+export const Table = getIcon("Table")
+export const Undo = getIcon("Undo")
+export const Redo = getIcon("Redo")
+export const Edit3 = getIcon("Edit3")
+export const FileImage = getIcon("FileImage")
+export const FileSpreadsheet = getIcon("FileSpreadsheet")
+export const FileCode = getIcon("FileCode")
+export const Presentation = getIcon("Presentation")
+export const FileArchive = getIcon("FileArchive")
+export const FileAudio = getIcon("FileAudio")
+export const FileVideo = getIcon("FileVideo")
+export const File = getIcon("File")
+export const Info = getIcon("Info")
+export const Github = getIcon("Github")
+export const GitBranch = getIcon("GitBranch")
+export const GitPullRequest = getIcon("GitPullRequest")
+export const Sync = getIcon("RefreshCw")
+export const TestTube = getIcon("TestTube")
+export const Crosshair = getIcon("Crosshair")
+export const Target = getIcon("Target")
+export const PieChart = getIcon("PieChart")
+export const Grid = getIcon("Grid")
+export const Lightbulb = getIcon("Lightbulb")
+export const Award = getIcon("Award")
+export const Briefcase = getIcon("Briefcase")
+export const Box = getIcon("Box")
+export const ClipboardList = getIcon("ClipboardList")
+export const Handshake = getIcon("Handshake")
+export const IterationCw = getIcon("IterationCw")
+export const Users2 = getIcon("Users2")
+export const Gauge = getIcon("Gauge")
+export const Rocket = getIcon("Rocket")
+export const Wrench = getIcon("Wrench")
+export const CheckSquare = getIcon("CheckSquare")
+export const Square = getIcon("Square")
+export const FileDown = getIcon("FileDown")
+export const Printer = getIcon("Printer")
 
 // PMBOK 8 Domain-specific icons
-export const CheckCircle2 = LucideIcons.CheckCircle2
-export const Building2 = LucideIcons.Building2
-export const Ruler = LucideIcons.Ruler
-export const Wallet = LucideIcons.Wallet
-export const UserCog = LucideIcons.UserCog
+export const CheckCircle2 = getIcon("CheckCircle2")
+export const Building2 = getIcon("Building2")
+export const Ruler = getIcon("Ruler")
+export const Wallet = getIcon("Wallet")
+export const UserCog = getIcon("UserCog")
 
 // Resource Capacity Management icons
-export const Plane = LucideIcons.Plane
-export const Stethoscope = LucideIcons.Stethoscope
-export const GraduationCap = LucideIcons.GraduationCap
-export const Baby = LucideIcons.Baby
+export const Plane = getIcon("Plane")
+export const Stethoscope = getIcon("Stethoscope")
+export const GraduationCap = getIcon("GraduationCap")
+export const Baby = getIcon("Baby")
 
 // Default export with all icons
 export default {
@@ -274,7 +278,7 @@ export default {
   X,
   ChevronUp,
   IconFallback,
-  // All Lucide icons
+  // All Lucide icons (tolerant resolver)
   Bell,
   Settings,
   Sun,
