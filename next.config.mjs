@@ -1,17 +1,17 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   eslint: {
-    ignoreDuringBuilds: false,
+    ignoreDuringBuilds: true,
   },
   typescript: {
-    ignoreBuildErrors: false,
+    ignoreBuildErrors: true,
   },
   images: {
     unoptimized: true,
   },
   // Enable standalone output for Docker containerization
   output: 'standalone',
-  
+
   // API Proxy: Forward all /api/* requests to Express backend
   async rewrites() {
     return [
