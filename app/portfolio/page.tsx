@@ -19,8 +19,6 @@ import {
   Pie,
   Cell,
   ResponsiveContainer,
-  AreaChart,
-  Area,
   CartesianGrid,
   XAxis,
   YAxis,
@@ -30,6 +28,9 @@ import {
   Scatter,
   ZAxis,
 } from "recharts"
+import dynamic from 'next/dynamic'
+
+const CombinedAreaLineChart = dynamic(() => import('@/components/charts/RechartsWrappers').then(m => m.CombinedAreaLineChart), { ssr: false })
 
 interface PortfolioMetrics {
   totalValue: number
@@ -674,44 +675,15 @@ export default function PortfolioDashboard() {
                   <CardDescription>Baseline vs actual spending over time</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <AreaChart data={investmentTimeline}>
-                      <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                      <XAxis dataKey="quarter" className="stroke-muted-foreground" fontSize={12} />
-                      <YAxis
-                        className="stroke-muted-foreground"
-                        fontSize={12}
-                        tickFormatter={(value) => `$${value / 1000000}M`}
-                      />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "hsl(var(--card))",
-                          border: "1px solid hsl(var(--border))",
-                          borderRadius: "8px",
-                        }}
-                        formatter={(value: number) => `$${(value / 1000000).toFixed(1)}M`}
-                      />
-                      <Legend />
-                      <Area
-                        type="monotone"
-                        dataKey="baseline"
-                        stackId="1"
-                        stroke="#94a3b8"
-                        fill="#94a3b8"
-                        fillOpacity={0.3}
-                        name="Baseline"
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="actual"
-                        stackId="2"
-                        stroke="#3b82f6"
-                        fill="#3b82f6"
-                        fillOpacity={0.6}
-                        name="Actual"
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
+                  <CombinedAreaLineChart
+                    data={investmentTimeline}
+                    xKey="quarter"
+                    areas={[
+                      { key: 'baseline', stroke: '#94a3b8', fill: '#94a3b8', fillOpacity: 0.3, name: 'Baseline' },
+                      { key: 'actual', stroke: '#3b82f6', fill: '#3b82f6', fillOpacity: 0.6, name: 'Actual' },
+                    ]}
+                    lines={[]}
+                  />
                 </CardContent>
               </Card>
             </div>

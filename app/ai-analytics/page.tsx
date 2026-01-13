@@ -28,7 +28,21 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts'
+import dynamic from 'next/dynamic'
+
+const UsageLineChart = dynamic(() => import('@/components/charts/RechartsWrappers').then(m => m.UsageLineChart), {
+  ssr: false,
+  loading: () => (
+    <div className="h-96 flex items-center justify-center">
+      <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4" />
+      <p className="text-muted-foreground">Loading chart...</p>
+    </div>
+  )
+})
+
+const ProviderBarChart = dynamic(() => import('@/components/charts/RechartsWrappers').then(m => m.ProviderBarChart), { ssr: false })
+const ProviderPieChart = dynamic(() => import('@/components/charts/RechartsWrappers').then(m => m.ProviderPieChart), { ssr: false })
+const ModelBarChart = dynamic(() => import('@/components/charts/RechartsWrappers').then(m => m.ModelBarChart), { ssr: false })
 
 interface ModelUsageData {
   date: string
@@ -402,27 +416,7 @@ export default function AIAnalyticsPage() {
                       </CardHeader>
                       <CardContent>
                         {modelUsageData.length > 0 && providerStats.length > 0 ? (
-                          <div className="h-96">
-                            <ResponsiveContainer width="100%" height="100%">
-                              <LineChart data={modelUsageData}>
-                                <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis dataKey="date" />
-                                <YAxis />
-                                <Tooltip />
-                                <Legend />
-                                {providerStats.map((provider, index) => (
-                                  <Line
-                                    key={provider.provider_name}
-                                    type="monotone"
-                                    dataKey={provider.provider_name}
-                                    stroke={getProviderColor(provider.provider_type)}
-                                    strokeWidth={2}
-                                    dot={{ r: 4 }}
-                                  />
-                                ))}
-                              </LineChart>
-                            </ResponsiveContainer>
-                          </div>
+                          <UsageLineChart data={modelUsageData} providerStats={providerStats} getProviderColor={getProviderColor} />
                         ) : (
                           <div className="h-96 flex items-center justify-center">
                             <div className="text-center">
@@ -450,17 +444,7 @@ export default function AIAnalyticsPage() {
                         </CardHeader>
                         <CardContent>
                           {providerStats.length > 0 ? (
-                            <div className="h-80">
-                              <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={providerStats}>
-                                  <CartesianGrid strokeDasharray="3 3" />
-                                  <XAxis dataKey="provider_name" />
-                                  <YAxis />
-                                  <Tooltip />
-                                  <Bar dataKey="usage_count" fill="#3B82F6" />
-                                </BarChart>
-                              </ResponsiveContainer>
-                            </div>
+                            <ProviderBarChart data={providerStats} />
                           ) : (
                             <div className="h-80 flex items-center justify-center">
                               <div className="text-center">
@@ -481,30 +465,7 @@ export default function AIAnalyticsPage() {
                         </CardHeader>
                         <CardContent>
                           {providerStats.length > 0 ? (
-                            <div className="h-80">
-                              <ResponsiveContainer width="100%" height="100%">
-                                <PieChart>
-                                  <Pie
-                                    data={providerStats.map(p => ({
-                                      ...p,
-                                      total_tokens: parseInt(p.total_tokens) || 0
-                                    }))}
-                                    cx="50%"
-                                    cy="50%"
-                                    labelLine={true}
-                                    label={(entry) => `${entry.provider_name} (${formatNumber(entry.total_tokens)})`}
-                                    outerRadius={100}
-                                    fill="#8884d8"
-                                    dataKey="total_tokens"
-                                  >
-                                    {providerStats.map((provider, index) => (
-                                      <Cell key={`cell-${index}`} fill={getProviderColor(provider.provider_type)} />
-                                    ))}
-                                  </Pie>
-                                  <Tooltip formatter={(value: any) => formatNumber(value)} />
-                                </PieChart>
-                              </ResponsiveContainer>
-                            </div>
+                            <ProviderPieChart data={providerStats} getProviderColor={getProviderColor} formatNumber={formatNumber} />
                           ) : (
                             <div className="h-80 flex items-center justify-center">
                               <div className="text-center">
@@ -589,17 +550,7 @@ export default function AIAnalyticsPage() {
                         </CardHeader>
                         <CardContent>
                           {modelStats.length > 0 ? (
-                            <div className="h-80">
-                              <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={modelStats}>
-                                  <CartesianGrid strokeDasharray="3 3" />
-                                  <XAxis dataKey="model_name" angle={-45} textAnchor="end" height={100} />
-                                  <YAxis />
-                                  <Tooltip />
-                                  <Bar dataKey="usage_count" fill="#3B82F6" name="Requests" />
-                                </BarChart>
-                              </ResponsiveContainer>
-                            </div>
+                            <ModelBarChart data={modelStats} dataKey="usage_count" xKey="model_name" />
                           ) : (
                             <div className="h-80 flex items-center justify-center">
                               <div className="text-center">
@@ -620,17 +571,7 @@ export default function AIAnalyticsPage() {
                         </CardHeader>
                         <CardContent>
                           {modelStats.length > 0 ? (
-                            <div className="h-80">
-                              <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={modelStats}>
-                                  <CartesianGrid strokeDasharray="3 3" />
-                                  <XAxis dataKey="model_name" angle={-45} textAnchor="end" height={100} />
-                                  <YAxis tickFormatter={(value: number) => formatNumber(value)} />
-                                  <Tooltip formatter={(value: any) => formatNumber(value)} />
-                                  <Bar dataKey="total_tokens" fill="#10B981" name="Tokens" />
-                                </BarChart>
-                              </ResponsiveContainer>
-                            </div>
+                            <ModelBarChart data={modelStats} dataKey="total_tokens" xKey="model_name" tickFormatter={(v: any) => formatNumber(v)} />
                           ) : (
                             <div className="h-80 flex items-center justify-center">
                               <div className="text-center">

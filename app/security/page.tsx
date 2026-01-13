@@ -23,21 +23,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import {
-  AreaChart,
-  Area,
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from "recharts"
+import dynamic from 'next/dynamic'
+
+const AreaChartWrapper = dynamic(() => import('@/components/charts/RechartsWrappers').then(m => m.AreaChartWrapper), { ssr: false })
+const MultiBarChart = dynamic(() => import('@/components/charts/RechartsWrappers').then(m => m.MultiBarChart), { ssr: false })
+const GenericPieChart = dynamic(() => import('@/components/charts/RechartsWrappers').then(m => m.GenericPieChart), { ssr: false })
 import {
   Shield,
   ShieldAlert,
@@ -393,39 +383,14 @@ export default function SecurityPage() {
                             <CardDescription>Security threats over the past week</CardDescription>
                           </CardHeader>
                           <CardContent>
-                            <ResponsiveContainer width="100%" height={300}>
-                              <AreaChart data={threatTrends}>
-                                <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis dataKey="date" />
-                                <YAxis />
-                                <Tooltip />
-                                <Legend />
-                                <Area
-                                  type="monotone"
-                                  dataKey="threats"
-                                  stackId="1"
-                                  stroke="#ef4444"
-                                  fill="#ef4444"
-                                  fillOpacity={0.6}
-                                />
-                                <Area
-                                  type="monotone"
-                                  dataKey="blocked"
-                                  stackId="2"
-                                  stroke="#f59e0b"
-                                  fill="#f59e0b"
-                                  fillOpacity={0.6}
-                                />
-                                <Area
-                                  type="monotone"
-                                  dataKey="resolved"
-                                  stackId="3"
-                                  stroke="#10b981"
-                                  fill="#10b981"
-                                  fillOpacity={0.6}
-                                />
-                              </AreaChart>
-                            </ResponsiveContainer>
+                            <AreaChartWrapper
+                              data={threatTrends}
+                              dataKey={[
+                                { key: 'threats', stroke: '#ef4444', fill: '#ef4444', fillOpacity: 0.6 },
+                                { key: 'blocked', stroke: '#f59e0b', fill: '#f59e0b', fillOpacity: 0.6 },
+                                { key: 'resolved', stroke: '#10b981', fill: '#10b981', fillOpacity: 0.6 },
+                              ]}
+                            />
                           </CardContent>
                         </Card>
 
@@ -439,17 +404,7 @@ export default function SecurityPage() {
                             <CardDescription>Login activity throughout the day</CardDescription>
                           </CardHeader>
                           <CardContent>
-                            <ResponsiveContainer width="100%" height={300}>
-                              <BarChart data={accessPatterns}>
-                                <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis dataKey="hour" />
-                                <YAxis />
-                                <Tooltip />
-                                <Legend />
-                                <Bar dataKey="logins" fill="#3b82f6" />
-                                <Bar dataKey="failed" fill="#ef4444" />
-                              </BarChart>
-                            </ResponsiveContainer>
+                            <MultiBarChart data={accessPatterns} bars={[{ key: 'logins', fill: '#3b82f6' }, { key: 'failed', fill: '#ef4444' }]} />
                           </CardContent>
                         </Card>
                       </div>

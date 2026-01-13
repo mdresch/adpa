@@ -21,7 +21,11 @@ import {
   Gauge,
   Award
 } from "lucide-react"
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts'
+import dynamic from 'next/dynamic'
+
+const GenericPieChart = dynamic(() => import('@/components/charts/RechartsWrappers').then(m => m.GenericPieChart), { ssr: false })
+const MultiBarChart = dynamic(() => import('@/components/charts/RechartsWrappers').then(m => m.MultiBarChart), { ssr: false })
+const SimpleLineChart = dynamic(() => import('@/components/charts/RechartsWrappers').then(m => m.SimpleLineChart), { ssr: false })
 import { Project, apiClient } from "@/lib/api"
 import { getApiUrl } from "@/lib/api-url"
 
@@ -483,26 +487,17 @@ export function OverviewTab({
             <CardDescription>Breakdown of document statuses</CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={[
-                    { name: 'Draft', value: documentStats.counts.draft, fill: '#f97316' },
-                    { name: 'Review', value: documentStats.counts.review, fill: '#a855f7' },
-                    { name: 'Published', value: documentStats.counts.published, fill: '#10b981' },
-                    { name: 'Archived', value: documentStats.counts.archived, fill: '#6b7280' },
-                  ]}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={(entry: { name: string; value: number }) => entry.value > 0 ? `${entry.name}: ${entry.value}` : ''}
-                  outerRadius={80}
-                  dataKey="value"
-                >
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
+            <GenericPieChart
+              data={[
+                { name: 'Draft', value: documentStats.counts.draft, color: '#f97316' },
+                { name: 'Review', value: documentStats.counts.review, color: '#a855f7' },
+                { name: 'Published', value: documentStats.counts.published, color: '#10b981' },
+                { name: 'Archived', value: documentStats.counts.archived, color: '#6b7280' },
+              ]}
+              dataKey="value"
+              colorKey="color"
+              labelFormatter={(e: any) => (e.value > 0 ? `${e.name}: ${e.value}` : '')}
+            />
           </CardContent>
         </Card>
 

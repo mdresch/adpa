@@ -356,10 +356,10 @@ export function TemplateRecommendations({ templateId }: { templateId: string }) 
                       
                       {improvement.changes_summary.key_improvements && (
                         <div className="space-y-2">
-                          {improvement.changes_summary.key_improvements.map((imp: string, idx: number) => (
+                          {improvement.changes_summary.key_improvements.map((imp: any, idx: number) => (
                             <div key={idx} className="flex items-start gap-2 text-sm">
                               <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
-                              <span>{imp}</span>
+                              <span>{typeof imp === 'string' ? imp : JSON.stringify(imp)}</span>
                             </div>
                           ))}
                         </div>
@@ -473,10 +473,10 @@ export function TemplateRecommendations({ templateId }: { templateId: string }) 
                       {suggestion.common_issues.slice(0, 5).map((issue: any, idx: number) => (
                         <div key={idx} className="flex items-start gap-2 p-2 bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 rounded">
                           <Badge variant="outline" className="text-xs">
-                            {issue.dimension || 'General'}
+                            {typeof issue === 'string' ? 'General' : (issue.dimension || 'General')}
                           </Badge>
-                          <p className="text-xs flex-1">{issue.description || issue}</p>
-                          {issue.count && (
+                          <p className="text-xs flex-1">{typeof issue === 'string' ? issue : (issue.description || JSON.stringify(issue))}</p>
+                          {issue && typeof issue === 'object' && issue.count && (
                             <Badge variant="secondary" className="text-xs">
                               {issue.count}x
                             </Badge>

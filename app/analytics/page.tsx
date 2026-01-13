@@ -31,6 +31,15 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts"
+import dynamic from 'next/dynamic'
+
+const SimpleLineChart = dynamic(() => import('@/components/charts/RechartsWrappers').then(m => m.SimpleLineChart), { ssr: false, loading: () => <div className="h-80 flex items-center justify-center text-muted-foreground">Loading chart...</div> })
+const GenericBarChart = dynamic(() => import('@/components/charts/RechartsWrappers').then(m => m.GenericBarChart), { ssr: false })
+const AreaChartWrapper = dynamic(() => import('@/components/charts/RechartsWrappers').then(m => m.AreaChartWrapper), { ssr: false })
+const ProviderPieChart = dynamic(() => import('@/components/charts/RechartsWrappers').then(m => m.ProviderPieChart), { ssr: false })
+const GenericPieChart = dynamic(() => import('@/components/charts/RechartsWrappers').then(m => m.GenericPieChart), { ssr: false })
+const MultiBarChart = dynamic(() => import('@/components/charts/RechartsWrappers').then(m => m.MultiBarChart), { ssr: false })
+const CombinedAreaLineChart = dynamic(() => import('@/components/charts/RechartsWrappers').then(m => m.CombinedAreaLineChart), { ssr: false })
 import {
   TrendingUp,
   TrendingDown,
@@ -392,31 +401,13 @@ export default function AnalyticsPage() {
                                 <CardDescription>Monthly user engagement and document creation</CardDescription>
                               </CardHeader>
                               <CardContent>
-                                <ResponsiveContainer width="100%" height={300}>
-                                  <AreaChart data={userActivityData}>
-                                    <CartesianGrid strokeDasharray="3 3" />
-                                    <XAxis dataKey="name" />
-                                    <YAxis />
-                                    <Tooltip />
-                                    <Legend />
-                                    <Area
-                                      type="monotone"
-                                      dataKey="users"
-                                      stackId="1"
-                                      stroke="#3b82f6"
-                                      fill="#3b82f6"
-                                      fillOpacity={0.6}
-                                    />
-                                    <Area
-                                      type="monotone"
-                                      dataKey="sessions"
-                                      stackId="2"
-                                      stroke="#8b5cf6"
-                                      fill="#8b5cf6"
-                                      fillOpacity={0.6}
-                                    />
-                                  </AreaChart>
-                                </ResponsiveContainer>
+                                <AreaChartWrapper
+                                  data={userActivityData}
+                                  dataKey={[
+                                    { key: 'users', stroke: '#3b82f6', fill: '#3b82f6', fillOpacity: 0.6 },
+                                    { key: 'sessions', stroke: '#8b5cf6', fill: '#8b5cf6', fillOpacity: 0.6 },
+                                  ]}
+                                />
                               </CardContent>
                             </Card>
                           </AnimatedGridItem>
@@ -431,25 +422,12 @@ export default function AnalyticsPage() {
                                 <CardDescription>Distribution of document types generated</CardDescription>
                               </CardHeader>
                               <CardContent>
-                                <ResponsiveContainer width="100%" height={300}>
-                                  <PieChart>
-                                    <Pie
-                                      data={documentTypeData}
-                                      cx="50%"
-                                      cy="50%"
-                                      labelLine={false}
-                                      label={({ name, percent }: { name: string; percent: number }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                                      outerRadius={80}
-                                      fill="#8884d8"
-                                      dataKey="value"
-                                    >
-                                      {documentTypeData.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={entry.color} />
-                                      ))}
-                                    </Pie>
-                                    <Tooltip />
-                                  </PieChart>
-                                </ResponsiveContainer>
+                                <GenericPieChart
+                                  data={documentTypeData}
+                                  dataKey="value"
+                                  colorKey="color"
+                                  labelFormatter={(e: any) => `${e.name} ${(e.percent * 100).toFixed(0)}%`}
+                                />
                               </CardContent>
                             </Card>
                           </AnimatedGridItem>
@@ -465,19 +443,15 @@ export default function AnalyticsPage() {
                               <CardDescription>Real-time system resource utilization</CardDescription>
                             </CardHeader>
                             <CardContent>
-                              <ResponsiveContainer width="100%" height={300}>
-                                <LineChart data={systemPerformanceData}>
-                                  <CartesianGrid strokeDasharray="3 3" />
-                                  <XAxis dataKey="name" />
-                                  <YAxis />
-                                  <Tooltip />
-                                  <Legend />
-                                  <Line type="monotone" dataKey="cpu" stroke="#ef4444" strokeWidth={2} />
-                                  <Line type="monotone" dataKey="memory" stroke="#3b82f6" strokeWidth={2} />
-                                  <Line type="monotone" dataKey="disk" stroke="#10b981" strokeWidth={2} />
-                                  <Line type="monotone" dataKey="network" stroke="#f59e0b" strokeWidth={2} />
-                                </LineChart>
-                              </ResponsiveContainer>
+                              <SimpleLineChart
+                                data={systemPerformanceData}
+                                lines={[
+                                  { key: 'cpu', color: '#ef4444' },
+                                  { key: 'memory', color: '#3b82f6' },
+                                  { key: 'disk', color: '#10b981' },
+                                  { key: 'network', color: '#f59e0b' },
+                                ]}
+                              />
                             </CardContent>
                           </Card>
                         </AnimatedGridItem>
@@ -493,17 +467,10 @@ export default function AnalyticsPage() {
                                   <CardDescription>Monthly active users and new registrations</CardDescription>
                                 </CardHeader>
                                 <CardContent>
-                                  <ResponsiveContainer width="100%" height={300}>
-                                    <BarChart data={userActivityData}>
-                                      <CartesianGrid strokeDasharray="3 3" />
-                                      <XAxis dataKey="name" />
-                                      <YAxis />
-                                      <Tooltip />
-                                      <Legend />
-                                      <Bar dataKey="users" fill="#3b82f6" />
-                                      <Bar dataKey="sessions" fill="#8b5cf6" />
-                                    </BarChart>
-                                  </ResponsiveContainer>
+                                  <MultiBarChart
+                                    data={userActivityData}
+                                    bars={[{ key: 'users', fill: '#3b82f6' }, { key: 'sessions', fill: '#8b5cf6' }]}
+                                  />
                                 </CardContent>
                               </Card>
                             </AnimatedGridItem>
@@ -593,21 +560,12 @@ export default function AnalyticsPage() {
                                 <CardDescription>Monthly document creation statistics</CardDescription>
                               </CardHeader>
                               <CardContent>
-                                <ResponsiveContainer width="100%" height={300}>
-                                  <AreaChart data={userActivityData}>
-                                    <CartesianGrid strokeDasharray="3 3" />
-                                    <XAxis dataKey="name" />
-                                    <YAxis />
-                                    <Tooltip />
-                                    <Area
-                                      type="monotone"
-                                      dataKey="documents"
-                                      stroke="#10b981"
-                                      fill="#10b981"
-                                      fillOpacity={0.6}
-                                    />
-                                  </AreaChart>
-                                </ResponsiveContainer>
+                                <CombinedAreaLineChart
+                                  data={userActivityData}
+                                  xKey="name"
+                                  areas={[{ key: 'documents', stroke: '#10b981', fill: '#10b981', fillOpacity: 0.6 }]}
+                                  lines={[]}
+                                />
                               </CardContent>
                             </Card>
                           </AnimatedGridItem>
@@ -647,31 +605,15 @@ export default function AnalyticsPage() {
                               <CardDescription>Real-time monitoring of system performance metrics</CardDescription>
                             </CardHeader>
                             <CardContent>
-                              <ResponsiveContainer width="100%" height={400}>
-                                <LineChart data={analyticsData?.system_performance || systemPerformanceData}>
-                                  <CartesianGrid strokeDasharray="3 3" />
-                                  <XAxis dataKey="name" />
-                                  <YAxis />
-                                  <Tooltip />
-                                  <Legend />
-                                  <Line type="monotone" dataKey="cpu" stroke="#ef4444" strokeWidth={3} name="CPU %" />
-                                  <Line
-                                    type="monotone"
-                                    dataKey="memory"
-                                    stroke="#3b82f6"
-                                    strokeWidth={3}
-                                    name="Memory %"
-                                  />
-                                  <Line type="monotone" dataKey="disk" stroke="#10b981" strokeWidth={3} name="Disk %" />
-                                  <Line
-                                    type="monotone"
-                                    dataKey="network"
-                                    stroke="#f59e0b"
-                                    strokeWidth={3}
-                                    name="Network %"
-                                  />
-                                </LineChart>
-                              </ResponsiveContainer>
+                              <SimpleLineChart
+                                data={analyticsData?.system_performance || systemPerformanceData}
+                                lines={[
+                                  { key: 'cpu', color: '#ef4444' },
+                                  { key: 'memory', color: '#3b82f6' },
+                                  { key: 'disk', color: '#10b981' },
+                                  { key: 'network', color: '#f59e0b' },
+                                ]}
+                              />
                             </CardContent>
                           </Card>
                         </AnimatedGridItem>
@@ -752,18 +694,14 @@ export default function AnalyticsPage() {
                                 <CardDescription>Weekly AI service utilization</CardDescription>
                               </CardHeader>
                               <CardContent>
-                                <ResponsiveContainer width="100%" height={300}>
-                                  <BarChart data={aiUsageData}>
-                                    <CartesianGrid strokeDasharray="3 3" />
-                                    <XAxis dataKey="name" />
-                                    <YAxis />
-                                    <Tooltip />
-                                    <Legend />
-                                    <Bar dataKey="analysis" fill="#3b82f6" name="Analysis" />
-                                    <Bar dataKey="generation" fill="#8b5cf6" name="Generation" />
-                                    <Bar dataKey="processing" fill="#10b981" name="Processing" />
-                                  </BarChart>
-                                </ResponsiveContainer>
+                                <MultiBarChart
+                                  data={aiUsageData}
+                                  bars={[
+                                    { key: 'analysis', fill: '#3b82f6' },
+                                    { key: 'generation', fill: '#8b5cf6' },
+                                    { key: 'processing', fill: '#10b981' },
+                                  ]}
+                                />
                               </CardContent>
                             </Card>
                           </AnimatedGridItem>
@@ -775,25 +713,12 @@ export default function AnalyticsPage() {
                                 <CardDescription>Current project distribution</CardDescription>
                               </CardHeader>
                               <CardContent>
-                                <ResponsiveContainer width="100%" height={300}>
-                                  <PieChart>
-                                    <Pie
-                                      data={projectStatusData}
-                                      cx="50%"
-                                      cy="50%"
-                                      labelLine={false}
-                                      label={({ name, percent }: { name: string; percent: number }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                                      outerRadius={80}
-                                      fill="#8884d8"
-                                      dataKey="value"
-                                    >
-                                      {projectStatusData.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={entry.color} />
-                                      ))}
-                                    </Pie>
-                                    <Tooltip />
-                                  </PieChart>
-                                </ResponsiveContainer>
+                                <GenericPieChart
+                                  data={projectStatusData}
+                                  dataKey="value"
+                                  colorKey="color"
+                                  labelFormatter={(e: any) => `${e.name} ${(e.percent * 100).toFixed(0)}%`}
+                                />
                               </CardContent>
                             </Card>
                           </AnimatedGridItem>
@@ -961,43 +886,16 @@ export default function AnalyticsPage() {
                                 </CardHeader>
                                 <CardContent>
                                   {searchAnalytics.modeUsage && searchAnalytics.modeUsage.length > 0 ? (
-                                    <ResponsiveContainer width="100%" height={300}>
-                                      <PieChart>
-                                        <Pie
-                                          data={searchAnalytics.modeUsage.map((m: any) => ({
-                                            name: m.search_mode,
-                                            value: Number(m.usage_count) || 0
-                                          }))}
-                                          cx="50%"
-                                          cy="50%"
-                                          labelLine={false}
-                                          label={(entry: { name: string; value?: number; percent?: number }) => {
-                                            const value = entry.value ?? 0
-                                            const percent = (entry.percent ?? 0) * 100
-                                            return `${entry.name}: ${value} (${percent.toFixed(0)}%)`
-                                          }}
-                                          outerRadius={80}
-                                          fill="#8884d8"
-                                          dataKey="value"
-                                        >
-                                          {searchAnalytics.modeUsage.map((_: any, index: number) => (
-                                            <Cell key={`cell-${index}`} fill={['#3b82f6', '#8b5cf6', '#06b6d4'][index % 3]} />
-                                          ))}
-                                        </Pie>
-                                        <Tooltip
-                                          formatter={(value: any, name: any) => [
-                                            `${value} searches`,
-                                            name
-                                          ]}
-                                        />
-                                        <Legend
-                                          formatter={(value: any) => {
-                                            const item = searchAnalytics.modeUsage.find((m: any) => m.search_mode === value)
-                                            return item ? `${value}: ${Number(item.usage_count) || 0} searches` : value
-                                          }}
-                                        />
-                                      </PieChart>
-                                    </ResponsiveContainer>
+                                    <GenericPieChart
+                                      data={searchAnalytics.modeUsage.map((m: any, i: number) => ({
+                                        name: m.search_mode,
+                                        value: Number(m.usage_count) || 0,
+                                        color: ['#3b82f6', '#8b5cf6', '#06b6d4'][i % 3]
+                                      }))}
+                                      dataKey="value"
+                                      colorKey="color"
+                                      labelFormatter={(e: any) => `${e.name}: ${e.value} (${((e.percent ?? 0) * 100).toFixed(0)}%)`}
+                                    />
                                   ) : (
                                     <p className="text-muted-foreground text-center py-8">No mode usage data</p>
                                   )}
@@ -1011,16 +909,7 @@ export default function AnalyticsPage() {
                                 </CardHeader>
                                 <CardContent>
                                   {searchAnalytics.successRate && searchAnalytics.successRate.length > 0 ? (
-                                    <ResponsiveContainer width="100%" height={300}>
-                                      <LineChart data={searchAnalytics.successRate}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="date" />
-                                        <YAxis />
-                                        <Tooltip />
-                                        <Legend />
-                                        <Line type="monotone" dataKey="success_rate" stroke="#10b981" name="Success Rate %" />
-                                      </LineChart>
-                                    </ResponsiveContainer>
+                                    <SimpleLineChart data={searchAnalytics.successRate} lines={[{ key: 'success_rate', color: '#10b981' }]} xKey="date" />
                                   ) : (
                                     <p className="text-muted-foreground text-center py-8">No success rate data</p>
                                   )}

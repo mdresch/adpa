@@ -64,6 +64,9 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
+import dynamic from 'next/dynamic';
+
+const CombinedAreaLineChart = dynamic(() => import('@/components/charts/RechartsWrappers').then(m => m.CombinedAreaLineChart), { ssr: false });
 import {
   Dialog,
   DialogContent,
@@ -1700,68 +1703,31 @@ export default function AssessmentsListPage() {
                 <h3 className="text-lg font-semibold mb-4" style={{ color: maturityTheme.colors.text.primary }}>
                   Gap Analysis Trends
                 </h3>
-                <ResponsiveContainer width="100%" height={300}>
-                  <AreaChart
-                    data={(() => {
-                      const sortedAssessments = [...assessments]
-                        .filter(a => a.gapsCount != null && !isNaN(a.gapsCount))
-                        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+                <CombinedAreaLineChart
+                  data={(() => {
+                    const sortedAssessments = [...assessments]
+                      .filter(a => a.gapsCount != null && !isNaN(a.gapsCount))
+                      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+                    
+                    return sortedAssessments.map((assessment, index) => {
+                      const date = new Date(assessment.createdAt);
+                      const dateLabel = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
                       
-                      return sortedAssessments.map((assessment, index) => {
-                        const date = new Date(assessment.createdAt);
-                        const dateLabel = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                        
-                        // Calculate average gaps up to this point
-                        const assessmentsUpToNow = sortedAssessments.slice(0, index + 1);
-                        const avgGaps = assessmentsUpToNow.reduce((sum, a) => sum + (a.gapsCount || 0), 0) / assessmentsUpToNow.length;
-                        
-                        return {
-                          date: dateLabel,
-                          gaps: assessment.gapsCount || 0,
-                          avgGaps: Math.round(avgGaps * 10) / 10,
-                        };
-                      });
-                    })()}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke={maturityTheme.colors.border.default} />
-                    <XAxis
-                      dataKey="date"
-                      stroke={maturityTheme.colors.text.secondary}
-                      style={{ fontSize: '12px' }}
-                      angle={-45}
-                      textAnchor="end"
-                      height={80}
-                    />
-                    <YAxis
-                      stroke={maturityTheme.colors.text.secondary}
-                      style={{ fontSize: '12px' }}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: maturityTheme.colors.background.elevated,
-                        borderColor: maturityTheme.colors.border.default,
-                        color: maturityTheme.colors.text.primary,
-                      }}
-                    />
-                    <Legend />
-                    <Area
-                      type="monotone"
-                      dataKey="gaps"
-                      stroke={maturityTheme.colors.warning.text}
-                      fill={maturityTheme.colors.warning.bg}
-                      name="Gaps Identified"
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="avgGaps"
-                      stroke={maturityTheme.colors.primary[400]}
-                      strokeWidth={2}
-                      strokeDasharray="5 5"
-                      name="Average Gaps"
-                      dot={false}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
+                      // Calculate average gaps up to this point
+                      const assessmentsUpToNow = sortedAssessments.slice(0, index + 1);
+                      const avgGaps = assessmentsUpToNow.reduce((sum, a) => sum + (a.gapsCount || 0), 0) / assessmentsUpToNow.length;
+                      
+                      return {
+                        date: dateLabel,
+                        gaps: assessment.gapsCount || 0,
+                        avgGaps: Math.round(avgGaps * 10) / 10,
+                      };
+                    });
+                  })()}
+                  xKey="date"
+                  areas={[{ key: 'gaps', stroke: maturityTheme.colors.warning.text, fill: maturityTheme.colors.warning.bg, name: 'Gaps Identified' }]}
+                  lines={[{ key: 'avgGaps', stroke: maturityTheme.colors.primary[400], strokeWidth: 2, strokeDasharray: '5 5', name: 'Average Gaps', dot: false }]}
+                />
               </div>
 
               {/* Quality vs Maturity Correlation */}

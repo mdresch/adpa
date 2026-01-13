@@ -4177,7 +4177,7 @@ Output valid JSON object with "performance_actuals" array only.`
     // Handle relative week patterns FIRST (before quarter date conversion)
     // This prevents "Week 2" from being passed to convertQuarterDate which logs warnings
     // Match patterns like "Week 2", "week 4", "Week2", "Weeks 1-4" (ranges use first week)
-    const weekMatch = trimmed.match(/^weeks?\s*(\d+)(?:\s*-\s*\d+)?$/i)
+    const weekMatch = trimmed.match(/\bweeks?\s*(\d+)(?:\s*-\s*\d+)?\b/i)
     if (weekMatch) {
       const weekNumber = parseInt(weekMatch[1], 10)
       if (weekNumber >= 0 && weekNumber <= 100) {
@@ -4188,6 +4188,19 @@ Output valid JSON object with "performance_actuals" array only.`
         logger.info(`[EXTRACTION] Converted relative date "${value}" (Week ${weekNumber}) to ${result}`)
         return result
       }
+    }
+
+    // Check for bare year-month (YYYY-MM) and convert to first day of month
+    const bareYearMonth = trimmed.match(/^(\d{4})-(\d{2})$/)
+    if (bareYearMonth) {
+      const [, y, mo] = bareYearMonth
+      const monthNum = parseInt(mo, 10)
+      if (monthNum >= 1 && monthNum <= 12) {
+        const ymResult = `${y}-${mo}-01`
+        logger.info(`[EXTRACTION] Converted bare year-month "${value}" to ${ymResult}`)
+        if (isValidDate(ymResult)) return ymResult
+      }
+      // fall through to other handlers if conversion failed
     }
 
     // Check if it's already a valid YYYY-MM-DD date BEFORE trying quarter conversion
