@@ -54,6 +54,7 @@ import {
   TrendingUp,
   TrendingDown,
   Minus,
+  PieChart,
 } from "lucide-react"
 
 // Mock data for security metrics
@@ -314,13 +315,12 @@ export default function SecurityPage() {
                               <Minus className="h-4 w-4 text-gray-500" />
                             )}
                             <span
-                              className={`text-sm font-medium ${
-                                metric.trend === "up"
+                              className={`text-sm font-medium ${metric.trend === "up"
                                   ? "text-green-600"
                                   : metric.trend === "down"
                                     ? "text-red-600"
                                     : "text-gray-600"
-                              }`}
+                                }`}
                             >
                               {metric.change}
                             </span>
@@ -427,13 +427,12 @@ export default function SecurityPage() {
                               >
                                 <div className="flex items-center space-x-4">
                                   <div
-                                    className={`p-2 rounded-lg ${
-                                      event.severity === "high"
+                                    className={`p-2 rounded-lg ${event.severity === "high"
                                         ? "bg-red-100 dark:bg-red-900/20"
                                         : event.severity === "medium"
                                           ? "bg-orange-100 dark:bg-orange-900/20"
                                           : "bg-green-100 dark:bg-green-900/20"
-                                    }`}
+                                      }`}
                                   >
                                     {event.severity === "high" ? (
                                       <ShieldAlert className="h-4 w-4 text-red-600" />
@@ -591,25 +590,14 @@ export default function SecurityPage() {
                             <CardDescription>Compliance scores by framework</CardDescription>
                           </CardHeader>
                           <CardContent>
-                            <ResponsiveContainer width="100%" height={300}>
-                              <PieChart>
-                                <Pie
-                                  data={complianceData}
-                                  cx="50%"
-                                  cy="50%"
-                                  labelLine={false}
-                                  label={({ name, score }) => `${name}: ${score}%`}
-                                  outerRadius={80}
-                                  fill="#8884d8"
-                                  dataKey="score"
-                                >
-                                  {complianceData.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                  ))}
-                                </Pie>
-                                <Tooltip />
-                              </PieChart>
-                            </ResponsiveContainer>
+                            <GenericPieChart
+                              data={complianceData.map((item, index) => ({
+                                ...item,
+                                color: COLORS[index % COLORS.length],
+                              }))}
+                              dataKey="score"
+                              labelFormatter={({ name, score }: any) => `${name}: ${score}%`}
+                            />
                           </CardContent>
                         </Card>
                       </div>
