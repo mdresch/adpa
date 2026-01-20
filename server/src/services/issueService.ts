@@ -7,6 +7,7 @@
 
 import { pool } from '../database/connection'
 import { logger } from '../utils/logger'
+import { getMitigationPlans } from './mitigationPlanService'
 
 export interface Issue {
   id: string
@@ -89,6 +90,39 @@ export interface IssueFilters {
 }
 
 /**
+ * Input for escalating a risk to an issue with proper translation
+ * TASK: Risk-to-Issue Escalation with Root Cause Analysis
+ */
+export interface RiskToIssueEscalationInput {
+  // Required context for escalation
+  trigger_reason: 'threshold_breach' | 'manual_escalation' | 'probability_increase' | 'impact_increase' | 'external_event' | 'timeline_breach'
+  trigger_description: string
+
+  // Root cause analysis fields
+  root_cause_hypothesis?: string
+  contributing_factors?: string[]
+  evidence_collected?: string[]
+
+  // Impact assessment when risk materializes
+  actual_impact?: string
+  affected_areas?: string[]
+  affected_stakeholders?: string[]
+
+  // Priority override (otherwise derived from risk impact)
+  priority?: 'critical' | 'high' | 'medium' | 'low'
+
+  // Immediate actions already taken or workarounds applied
+  immediate_actions_taken?: string
+  workaround_applied?: string
+
+  // Suggested mitigation strategy based on RCA
+  recommended_mitigation?: string
+
+  // Timeline for resolution
+  target_resolution_date?: string
+}
+
+/**
  * Get all issues with optional filters
  */
 export async function getIssues(
@@ -108,58 +142,58 @@ export async function getIssues(
       LEFT JOIN users u3 ON i.escalated_to = u3.id
       WHERE 1=1
     `
-    
+
     const params: any[] = []
     let paramCount = 0
-    
+
     if (filters.project_id) {
       paramCount++
       query += ` AND i.project_id = $${paramCount}`
       params.push(filters.project_id)
     }
-    
+
     if (filters.status && filters.status.length > 0) {
       paramCount++
       query += ` AND i.status = ANY($${paramCount})`
       params.push(filters.status)
     }
-    
+
     if (filters.priority && filters.priority.length > 0) {
       paramCount++
       query += ` AND i.priority = ANY($${paramCount})`
       params.push(filters.priority)
     }
-    
+
     if (filters.category && filters.category.length > 0) {
       paramCount++
       query += ` AND i.category = ANY($${paramCount})`
       params.push(filters.category)
     }
-    
+
     if (filters.assigned_to) {
       paramCount++
       query += ` AND i.assigned_to = $${paramCount}`
       params.push(filters.assigned_to)
     }
-    
+
     if (filters.raised_by) {
       paramCount++
       query += ` AND i.raised_by = $${paramCount}`
       params.push(filters.raised_by)
     }
-    
+
     if (filters.related_risk_id) {
       paramCount++
       query += ` AND i.related_risk_id = $${paramCount}`
       params.push(filters.related_risk_id)
     }
-    
+
     if (filters.search) {
       paramCount++
       query += ` AND (i.title ILIKE $${paramCount} OR i.description ILIKE $${paramCount})`
       params.push(`%${filters.search}%`)
     }
-    
+
     query += ` ORDER BY 
       CASE i.priority 
         WHEN 'critical' THEN 1
@@ -169,9 +203,9 @@ export async function getIssues(
       END,
       i.date_raised DESC
     `
-    
+
     const result = await pool.query(query, params)
-    
+
     return result.rows.map(row => ({
       ...row,
       affected_areas: Array.isArray(row.affected_areas) ? row.affected_areas : [],
@@ -201,11 +235,11 @@ export async function getIssueById(id: string): Promise<Issue | null> {
       WHERE i.id = $1`,
       [id]
     )
-    
+
     if (result.rows.length === 0) {
       return null
     }
-    
+
     const row = result.rows[0]
     return {
       ...row,
@@ -253,7 +287,7 @@ export async function createIssue(
         userId
       ]
     )
-    
+
     const row = result.rows[0]
     return {
       ...row,
@@ -278,103 +312,103 @@ export async function updateIssue(
     const updates: string[] = []
     const params: any[] = []
     let paramCount = 0
-    
+
     if (input.title !== undefined) {
       paramCount++
       updates.push(`title = $${paramCount}`)
       params.push(input.title)
     }
-    
+
     if (input.description !== undefined) {
       paramCount++
       updates.push(`description = $${paramCount}`)
       params.push(input.description)
     }
-    
+
     if (input.category !== undefined) {
       paramCount++
       updates.push(`category = $${paramCount}`)
       params.push(input.category)
     }
-    
+
     if (input.priority !== undefined) {
       paramCount++
       updates.push(`priority = $${paramCount}`)
       params.push(input.priority)
     }
-    
+
     if (input.impact !== undefined) {
       paramCount++
       updates.push(`impact = $${paramCount}`)
       params.push(input.impact)
     }
-    
+
     if (input.affected_areas !== undefined) {
       paramCount++
       updates.push(`affected_areas = $${paramCount}`)
       params.push(JSON.stringify(input.affected_areas))
     }
-    
+
     if (input.assigned_to !== undefined) {
       paramCount++
       updates.push(`assigned_to = $${paramCount}`)
       params.push(input.assigned_to || null)
     }
-    
+
     if (input.escalated_to !== undefined) {
       paramCount++
       updates.push(`escalated_to = $${paramCount}`)
       params.push(input.escalated_to || null)
     }
-    
+
     if (input.status !== undefined) {
       paramCount++
       updates.push(`status = $${paramCount}`)
       params.push(input.status)
     }
-    
+
     if (input.resolution !== undefined) {
       paramCount++
       updates.push(`resolution = $${paramCount}`)
       params.push(input.resolution)
     }
-    
+
     if (input.workaround !== undefined) {
       paramCount++
       updates.push(`workaround = $${paramCount}`)
       params.push(input.workaround)
     }
-    
+
     if (input.root_cause !== undefined) {
       paramCount++
       updates.push(`root_cause = $${paramCount}`)
       params.push(input.root_cause)
     }
-    
+
     if (input.target_resolution_date !== undefined) {
       paramCount++
       updates.push(`target_resolution_date = $${paramCount}`)
       params.push(input.target_resolution_date || null)
     }
-    
+
     if (input.related_risk_id !== undefined) {
       paramCount++
       updates.push(`related_risk_id = $${paramCount}`)
       params.push(input.related_risk_id || null)
     }
-    
+
     if (input.notes !== undefined) {
       paramCount++
       updates.push(`notes = $${paramCount}`)
       params.push(input.notes)
     }
-    
+
     if (input.tags !== undefined) {
       paramCount++
       updates.push(`tags = $${paramCount}`)
       params.push(input.tags)
     }
-    
+
     if (updates.length === 0) {
       // No updates, return existing issue
       const existing = await getIssueById(id)
@@ -383,22 +417,22 @@ export async function updateIssue(
       }
       return existing
     }
-    
+
     paramCount++
     updates.push(`updated_at = CURRENT_TIMESTAMP`)
-    
+
     paramCount++
     params.push(id)
-    
+
     const result = await pool.query(
       `UPDATE issues SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING *`,
       params
     )
-    
-    if (result.rows.length === 0) {
-      throw new Error('Issue not found')
+
+    if (!result || !Array.isArray(result.rows) || result.rows.length === 0) {
+      throw new Error('Issue not found or database query failed')
     }
-    
+
     const row = result.rows[0]
     return {
       ...row,
@@ -439,7 +473,7 @@ export async function getIssueStatusHistory(issueId: string): Promise<any[]> {
       ORDER BY h.changed_at DESC`,
       [issueId]
     )
-    
+
     return result.rows
   } catch (error: any) {
     logger.error('[ISSUE-SERVICE] Failed to get issue status history:', error)
@@ -470,7 +504,7 @@ export async function getIssueStats(projectId: string): Promise<any> {
       WHERE project_id = $1`,
       [projectId]
     )
-    
+
     return result.rows[0] || {}
   } catch (error: any) {
     logger.error('[ISSUE-SERVICE] Failed to get issue stats:', error)
@@ -479,8 +513,9 @@ export async function getIssueStats(projectId: string): Promise<any> {
 }
 
 /**
- * Materialize a risk into an issue
+ * Materialize a risk into an issue (legacy compatibility)
  * When a risk matures/escalates into an actual problem, convert it to an issue
+ * @deprecated Use escalateRiskToIssue for new implementations with RCA support
  */
 export async function materializeRiskIntoIssue(
   riskId: string,
@@ -491,14 +526,257 @@ export async function materializeRiskIntoIssue(
     priority?: 'critical' | 'high' | 'medium' | 'low'
   }
 ): Promise<Issue> {
+  // Delegate to the enhanced function with minimal escalation input
+  return escalateRiskToIssue(riskId, userId, {
+    trigger_reason: 'manual_escalation',
+    trigger_description: 'Risk manually escalated to issue',
+    actual_impact: additionalData?.impact,
+    affected_areas: additionalData?.affected_areas,
+    priority: additionalData?.priority
+  })
+}
+
+/**
+ * Risk-to-Issue Terminology Translation Map
+ * Converts risk-oriented language to issue-oriented language
+ */
+const RISK_TO_ISSUE_WORDING: Record<string, { issuePrefix: string; verbTransform: string; actionContext: string }> = {
+  // Risk categories and their issue equivalents
+  'probability': { issuePrefix: 'Occurrence', verbTransform: 'has occurred', actionContext: 'requires immediate attention' },
+  'likelihood': { issuePrefix: 'Event', verbTransform: 'has materialized', actionContext: 'needs resolution' },
+  'potential': { issuePrefix: 'Confirmed', verbTransform: 'is now', actionContext: 'demands action' },
+  'may': { issuePrefix: 'Has', verbTransform: 'confirmed to', actionContext: 'requires response' },
+  'could': { issuePrefix: 'Does', verbTransform: 'is now', actionContext: 'needs handling' },
+  'might': { issuePrefix: 'Currently', verbTransform: 'is affecting', actionContext: 'requires resolution' }
+}
+
+/**
+ * Transform risk description to issue description with proper terminology
+ */
+function transformRiskToIssueWording(riskDescription: string): string {
+  let issueDescription = riskDescription
+
+  // Transform probability/likelihood language to certainty language
+  const transformations: Array<{ pattern: RegExp; replacement: string }> = [
+    { pattern: /\b(may|might|could)\s+(cause|result|lead)/gi, replacement: 'is causing' },
+    { pattern: /\b(may|might|could)\s+(affect|impact)/gi, replacement: 'is affecting' },
+    { pattern: /\b(potential|possible)\s+(risk|threat|issue)/gi, replacement: 'confirmed issue' },
+    { pattern: /\b(risk\s+of|threat\s+of)/gi, replacement: 'confirmed occurrence of' },
+    { pattern: /\b(likelihood|probability)\s+(is|of)/gi, replacement: 'has occurred with' },
+    { pattern: /\bif\s+(this|the)\s+risk\b/gi, replacement: 'now that this issue' },
+    { pattern: /\b(risk\s+event)/gi, replacement: 'issue' },
+    { pattern: /\b(mitigation\s+strategy)/gi, replacement: 'resolution approach' },
+    { pattern: /\b(contingency\s+plan)/gi, replacement: 'corrective action plan' },
+    { pattern: /\b(risk\s+owner)/gi, replacement: 'issue assignee' },
+    { pattern: /\b(monitor\s+for)/gi, replacement: 'actively manage' },
+    { pattern: /\b(watch\s+for\s+signs)/gi, replacement: 'assess current state of' }
+  ]
+
+  for (const { pattern, replacement } of transformations) {
+    issueDescription = issueDescription.replace(pattern, replacement)
+  }
+
+  return issueDescription
+}
+
+/**
+ * Generate issue title from risk title with proper action-oriented wording
+ */
+function generateIssueTitle(riskTitle: string, triggerReason: RiskToIssueEscalationInput['trigger_reason']): string {
+  // Remove risk-oriented prefixes if present
+  let cleanTitle = riskTitle
+    .replace(/^(Risk:|Potential:|Possible:|Threat:)\s*/i, '')
+    .trim()
+
+  // Add issue-oriented prefix based on trigger reason
+  const triggerPrefixes: Record<RiskToIssueEscalationInput['trigger_reason'], string> = {
+    'threshold_breach': '[ACTIVE]',
+    'manual_escalation': '[ESCALATED]',
+    'probability_increase': '[CONFIRMED]',
+    'impact_increase': '[HIGH IMPACT]',
+    'external_event': '[EXTERNAL]',
+    'timeline_breach': '[URGENT]'
+  }
+
+  return `${triggerPrefixes[triggerReason]} ${cleanTitle}`
+}
+
+/**
+ * Generate structured issue description from risk with RCA context and mitigation plans
+ */
+function generateIssueDescription(
+  risk: {
+    description?: string
+    mitigation_strategy?: string
+    contingency_plan?: string
+    probability?: string
+    impact?: string
+    source_document_id?: string
+    source_document_name?: string
+  },
+  escalationInput: RiskToIssueEscalationInput,
+  mitigationPlans?: Array<{
+    id: string
+    title: string
+    description?: string
+    action_type: string
+    status: string
+    priority: string
+    expected_effectiveness?: number
+    cost_estimate?: string
+    completion_percentage: number
+    progress_notes?: string[]
+    completion_notes?: string
+    metadata?: Record<string, any>
+  }>
+): string {
+  const sections: string[] = []
+
+  // Section 1: Issue Summary (transformed from risk)
+  sections.push('## Issue Summary')
+  sections.push(transformRiskToIssueWording(risk.description || 'No description provided'))
+  sections.push('')
+
+  // Section 2: Trigger and Context
+  sections.push('## Escalation Context')
+  sections.push(`**Trigger Reason:** ${escalationInput.trigger_reason.replace(/_/g, ' ').toUpperCase()}`)
+  sections.push(`**Trigger Description:** ${escalationInput.trigger_description}`)
+  if (risk.probability && risk.impact) {
+    sections.push(`**Original Risk Profile:** Probability: ${risk.probability}, Impact: ${risk.impact}`)
+  }
+  sections.push('')
+
+  // Section 3: Root Cause Analysis (if provided)
+  if (escalationInput.root_cause_hypothesis || escalationInput.contributing_factors?.length) {
+    sections.push('## Root Cause Analysis')
+    if (escalationInput.root_cause_hypothesis) {
+      sections.push(`**Hypothesis:** ${escalationInput.root_cause_hypothesis}`)
+    }
+    if (escalationInput.contributing_factors?.length) {
+      sections.push('**Contributing Factors:**')
+      for (const factor of escalationInput.contributing_factors) {
+        sections.push(`- ${factor}`)
+      }
+    }
+    if (escalationInput.evidence_collected?.length) {
+      sections.push('**Evidence Collected:**')
+      for (const evidence of escalationInput.evidence_collected) {
+        sections.push(`- ${evidence}`)
+      }
+    }
+    sections.push('')
+  }
+
+  // Section 4: Recommended Resolution (from risk mitigation + RCA-based recommendation)
+  sections.push('## Resolution Approach')
+  if (escalationInput.recommended_mitigation) {
+    sections.push(`**RCA-Based Recommendation:** ${escalationInput.recommended_mitigation}`)
+  }
+  if (risk.mitigation_strategy) {
+    sections.push(`**Original Mitigation Strategy:** ${transformRiskToIssueWording(risk.mitigation_strategy)}`)
+  }
+  if (risk.contingency_plan) {
+    sections.push(`**Contingency Actions:** ${transformRiskToIssueWording(risk.contingency_plan)}`)
+  }
+  sections.push('')
+
+  // Section 5: Source Document Reference
+  if (risk.source_document_id || risk.source_document_name) {
+    sections.push('## Source Document Reference')
+    if (risk.source_document_name) {
+      sections.push(`**Document:** ${risk.source_document_name}`)
+    }
+    if (risk.source_document_id) {
+      sections.push(`**Document ID:** ${risk.source_document_id}`)
+    }
+    sections.push('')
+  }
+
+  // Section 6: Mitigation Plans (for playbook initiation)
+  if (mitigationPlans && mitigationPlans.length > 0) {
+    sections.push('## Related Mitigation Plans')
+    sections.push('The following mitigation plans were defined for this risk and may provide guidance for issue resolution:')
+    sections.push('')
+    
+    for (const plan of mitigationPlans) {
+      sections.push(`### ${plan.title}`)
+      sections.push(`**Action Type:** ${plan.action_type}`)
+      sections.push(`**Status:** ${plan.status}`)
+      sections.push(`**Priority:** ${plan.priority}`)
+      sections.push(`**Completion:** ${plan.completion_percentage}%`)
+      
+      if (plan.expected_effectiveness) {
+        sections.push(`**Expected Effectiveness:** ${plan.expected_effectiveness}%`)
+      }
+      if (plan.cost_estimate) {
+        sections.push(`**Cost Estimate:** ${plan.cost_estimate.charAt(0).toUpperCase() + plan.cost_estimate.slice(1)}`)
+      }
+      if (plan.description) {
+        sections.push(`**Description:** ${plan.description}`)
+      }
+      if (plan.progress_notes && plan.progress_notes.length > 0) {
+        sections.push('**Progress Notes:**')
+        plan.progress_notes.forEach((note, index) => {
+          sections.push(`${index + 1}. ${note}`)
+        })
+      }
+      if (plan.completion_notes) {
+        sections.push(`**Completion Notes:** ${plan.completion_notes}`)
+      }
+      if (plan.metadata && Object.keys(plan.metadata).length > 0) {
+        // Extract any structured data from metadata that might contain key steps, resources, etc.
+        if (plan.metadata.key_steps && Array.isArray(plan.metadata.key_steps)) {
+          sections.push('**Key Steps:**')
+          plan.metadata.key_steps.forEach((step: string, index: number) => {
+            sections.push(`${index + 1}. ${step}`)
+          })
+        }
+        if (plan.metadata.resource_requirements) {
+          sections.push(`**Resource Requirements:** ${plan.metadata.resource_requirements}`)
+        }
+        if (plan.metadata.success_criteria) {
+          sections.push(`**Success Criteria:** ${plan.metadata.success_criteria}`)
+        }
+      }
+      sections.push('')
+    }
+    
+    sections.push('**Note:** These mitigation plans may be used to initiate operational playbooks for issue resolution.')
+    sections.push('')
+  }
+
+  // Section 7: Immediate Actions (if any taken)
+  if (escalationInput.immediate_actions_taken || escalationInput.workaround_applied) {
+    sections.push('## Immediate Response')
+    if (escalationInput.immediate_actions_taken) {
+      sections.push(`**Actions Taken:** ${escalationInput.immediate_actions_taken}`)
+    }
+    if (escalationInput.workaround_applied) {
+      sections.push(`**Workaround Applied:** ${escalationInput.workaround_applied}`)
+    }
+    sections.push('')
+  }
+
+  return sections.join('\n')
+}
+
+/**
+ * Escalate a risk to an issue with full RCA support and proper terminology translation
+ * This is the recommended function for risk-to-issue escalation
+ */
+export async function escalateRiskToIssue(
+  riskId: string,
+  userId: string,
+  escalationInput: RiskToIssueEscalationInput
+): Promise<Issue> {
   try {
-    // Get the risk details
+    // Get the risk details with source document information
     const riskResult = await pool.query(
       `SELECT 
         r.id, r.project_id, r.title, r.description, r.category, 
         r.probability, r.impact, r.mitigation_strategy, r.contingency_plan,
-        r.owner, r.source_document_id,
-        d.name as source_document_name
+        r.owner, r.source_document_id, r.status,
+        d.name as source_document_name, d.id as source_document_id
       FROM risks r
       LEFT JOIN documents d ON r.source_document_id = d.id
       WHERE r.id = $1`,
@@ -510,13 +788,18 @@ export async function materializeRiskIntoIssue(
     }
 
     const risk = riskResult.rows[0]
-    
+
     // Validate required fields
     if (!risk.project_id) {
       throw new Error(`Risk ${riskId} has no project_id`)
     }
     if (!risk.title) {
       throw new Error(`Risk ${riskId} has no title`)
+    }
+
+    // Check if risk is already materialized
+    if (risk.status === 'materialized') {
+      logger.warn('[ISSUE-SERVICE] Risk already materialized', { riskId, existingStatus: risk.status })
     }
 
     // Map risk category to issue category
@@ -541,26 +824,120 @@ export async function materializeRiskIntoIssue(
       'very_low': 'low'
     }
 
-    // Determine priority from risk impact or use provided priority
-    const priority = additionalData?.priority || priorityMap[risk.impact] || 'medium'
+    // Determine priority from escalation input, risk impact, or trigger severity
+    let priority = escalationInput.priority || priorityMap[risk.impact] || 'medium'
 
-    // Create issue from risk
+    // Escalate priority for certain trigger reasons
+    if (escalationInput.trigger_reason === 'threshold_breach' && priority !== 'critical') {
+      priority = priority === 'low' ? 'medium' : priority === 'medium' ? 'high' : 'critical'
+    }
+    if (escalationInput.trigger_reason === 'timeline_breach' && priority === 'low') {
+      priority = 'medium'
+    }
+
+    // Fetch all mitigation plans for this risk
+    let mitigationPlans: any[] = []
+    try {
+      mitigationPlans = await getMitigationPlans({ risk_id: riskId }, userId)
+      logger.info('[ISSUE-SERVICE] Fetched mitigation plans for risk', { 
+        riskId, 
+        planCount: mitigationPlans.length 
+      })
+    } catch (error: any) {
+      logger.warn('[ISSUE-SERVICE] Failed to fetch mitigation plans', { 
+        riskId, 
+        error: error.message 
+      })
+      // Continue without mitigation plans if fetch fails
+    }
+
+    // Generate properly worded issue title and description
+    const issueTitle = generateIssueTitle(risk.title, escalationInput.trigger_reason)
+    const issueDescription = generateIssueDescription(risk, escalationInput, mitigationPlans)
+
+    // Combine affected areas from risk and escalation input
+    const affectedAreas = [
+      ...(escalationInput.affected_areas || []),
+      ...(escalationInput.affected_stakeholders || [])
+    ]
+
+    // Create issue from risk with enhanced content
     const issueInput: CreateIssueInput = {
       project_id: risk.project_id,
-      title: `Risk Materialized: ${risk.title || 'Untitled Risk'}`,
-      description: `This issue was created from a materialized risk.\n\n**Original Risk:**\n${risk.description || 'No description provided'}\n\n**Mitigation Strategy:**\n${risk.mitigation_strategy || 'None specified'}\n\n**Contingency Plan:**\n${risk.contingency_plan || 'None specified'}`,
+      title: issueTitle,
+      description: issueDescription,
       category: categoryMap[risk.category] || 'other',
       priority: priority,
-      impact: additionalData?.impact || `Risk with ${risk.impact || 'unknown'} impact has materialized`,
-      affected_areas: additionalData?.affected_areas || [],
+      impact: escalationInput.actual_impact || `Risk "${risk.title}" has materialized and requires immediate resolution`,
+      affected_areas: affectedAreas,
       related_risk_id: riskId,
-      source_document_id: risk.source_document_id || undefined
+      source_document_id: risk.source_document_id || undefined,
+      target_resolution_date: escalationInput.target_resolution_date
     }
 
     // Create the issue
     const issue = await createIssue(issueInput, userId)
 
-    // Update risk status to 'materialized' if column exists
+    // Update issue with root cause and workaround if provided
+    if (escalationInput.root_cause_hypothesis || escalationInput.workaround_applied) {
+      await updateIssue(issue.id, {
+        root_cause: escalationInput.root_cause_hypothesis,
+        workaround: escalationInput.workaround_applied
+      }, userId)
+    }
+
+    // Store mitigation plan references in issue notes for playbook initiation
+    if (mitigationPlans.length > 0) {
+      const mitigationPlanNotes = [
+        '=== MITIGATION PLANS FOR PLAYBOOK INITIATION ===',
+        `Risk ID: ${riskId}`,
+        `Total Mitigation Plans: ${mitigationPlans.length}`,
+        '',
+        'Mitigation Plans:',
+        ...mitigationPlans.map((plan, index) => {
+          const planDetails = [
+            `${index + 1}. ${plan.title} (ID: ${plan.id})`,
+            `   - Action Type: ${plan.action_type}`,
+            `   - Status: ${plan.status}`,
+            `   - Priority: ${plan.priority}`,
+            `   - Completion: ${plan.completion_percentage}%`,
+            plan.expected_effectiveness ? `   - Expected Effectiveness: ${plan.expected_effectiveness}%` : '',
+            plan.cost_estimate ? `   - Cost Estimate: ${plan.cost_estimate}` : '',
+            plan.status === 'in_progress' || plan.status === 'planned' 
+              ? '   - ⚠️ ACTIVE: May trigger playbook execution'
+              : ''
+          ].filter(Boolean).join('\n')
+          return planDetails
+        }),
+        '',
+        'Playbook Trigger Candidates:',
+        ...mitigationPlans
+          .filter(plan => 
+            (plan.status === 'in_progress' || plan.status === 'planned') &&
+            (plan.action_type === 'contingency' || plan.action_type === 'mitigation')
+          )
+          .map(plan => `- ${plan.title} (${plan.action_type}, ${plan.priority} priority)`)
+      ].join('\n')
+
+      // Append to existing notes or create new notes
+      const existingNotes = issue.notes || ''
+      const updatedNotes = existingNotes 
+        ? `${existingNotes}\n\n${mitigationPlanNotes}`
+        : mitigationPlanNotes
+
+      await updateIssue(issue.id, { notes: updatedNotes }, userId)
+      
+      logger.info('[ISSUE-SERVICE] Stored mitigation plan references in issue notes', {
+        issueId: issue.id,
+        planCount: mitigationPlans.length,
+        playbookCandidates: mitigationPlans.filter(p => 
+          (p.status === 'in_progress' || p.status === 'planned') &&
+          (p.action_type === 'contingency' || p.action_type === 'mitigation')
+        ).length
+      })
+    }
+
+    // Update risk status to 'materialized'
     try {
       await pool.query(
         `UPDATE risks 
@@ -569,20 +946,95 @@ export async function materializeRiskIntoIssue(
         [riskId]
       )
     } catch (err) {
-      // If status column doesn't support 'materialized', just log
       logger.warn('[ISSUE-SERVICE] Could not update risk status to materialized', { riskId, error: err })
     }
 
-    logger.info('[ISSUE-SERVICE] Materialized risk into issue', {
+    // Log the escalation event for audit trail
+    logger.info('[ISSUE-SERVICE] Escalated risk to issue with RCA and mitigation plans', {
       riskId,
       issueId: issue.id,
-      projectId: risk.project_id
+      projectId: risk.project_id,
+      triggerReason: escalationInput.trigger_reason,
+      hasRootCauseAnalysis: !!escalationInput.root_cause_hypothesis,
+      priority: priority,
+      mitigationPlanCount: mitigationPlans.length,
+      sourceDocumentId: risk.source_document_id,
+      sourceDocumentName: risk.source_document_name
     })
 
     return issue
   } catch (error: any) {
-    logger.error('[ISSUE-SERVICE] Failed to materialize risk into issue:', error)
+    logger.error('[ISSUE-SERVICE] Failed to escalate risk to issue:', error)
     throw error
   }
 }
 
+/**
+ * Suggest root cause analysis based on risk category and description
+ * Helper function for UI to provide RCA guidance
+ */
+export function suggestRootCauseAnalysis(
+  riskCategory: string,
+  riskDescription: string
+): { suggestedHypotheses: string[]; suggestedContributingFactors: string[]; analysisQuestions: string[] } {
+  const categoryAnalysis: Record<string, { hypotheses: string[]; factors: string[]; questions: string[] }> = {
+    'technical': {
+      hypotheses: [
+        'System architecture limitations',
+        'Technology stack incompatibility',
+        'Performance bottleneck under load',
+        'Integration failure between components'
+      ],
+      factors: ['Code complexity', 'Technical debt', 'Missing monitoring', 'Inadequate testing'],
+      questions: ['When did the issue first manifest?', 'What system changes preceded this?', 'Are there error logs available?']
+    },
+    'resource': {
+      hypotheses: [
+        'Insufficient resource allocation',
+        'Skills gap in team composition',
+        'Resource conflict with other projects',
+        'Unexpected resource unavailability'
+      ],
+      factors: ['Poor capacity planning', 'Competing priorities', 'Training gaps', 'Vendor dependency'],
+      questions: ['What resources are currently allocated?', 'Are there competing projects?', 'What skills are missing?']
+    },
+    'schedule': {
+      hypotheses: [
+        'Underestimated task complexity',
+        'Dependencies not properly identified',
+        'Scope creep without timeline adjustment',
+        'External delays cascading through schedule'
+      ],
+      factors: ['Optimistic estimates', 'Hidden dependencies', 'Change management gaps', 'Communication delays'],
+      questions: ['What was the original estimate basis?', 'Which dependencies were missed?', 'What scope changes occurred?']
+    },
+    'budget': {
+      hypotheses: [
+        'Underestimated costs',
+        'Unplanned expenses',
+        'Scope expansion without budget adjustment',
+        'Vendor price increases'
+      ],
+      factors: ['Poor estimation', 'Lack of contingency', 'Scope creep', 'Currency fluctuations'],
+      questions: ['What was the original budget basis?', 'What unexpected costs emerged?', 'Were contingencies used?']
+    },
+    'external': {
+      hypotheses: [
+        'Vendor/supplier failure',
+        'Regulatory change impact',
+        'Market condition shift',
+        'Third-party service outage'
+      ],
+      factors: ['Supplier dependency', 'Regulatory monitoring gap', 'Market volatility', 'Contract limitations'],
+      questions: ['Which external entity is involved?', 'Was this foreseeable?', 'What are contractual obligations?']
+    }
+  }
+
+  const analysis = categoryAnalysis[riskCategory] || categoryAnalysis['technical']
+
+  return {
+    suggestedHypotheses: analysis.hypotheses,
+    suggestedContributingFactors: analysis.factors,
+    analysisQuestions: analysis.questions
+  }
+}

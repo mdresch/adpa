@@ -10,7 +10,7 @@ import {
 } from 'recharts';
 import { Download, Loader2 } from 'lucide-react';
 import { toPng } from 'html-to-image';
-import { toast } from 'sonner';
+import { toast } from '@/lib/notify';
 import { ProgramMetrics, BudgetTimelineEntry, Risk, Milestone } from './types';
 
 interface MetricsDashboardProps {

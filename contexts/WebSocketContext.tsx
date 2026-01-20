@@ -4,7 +4,7 @@ import React, { createContext, useContext, useEffect, useState, ReactNode } from
 import { Socket } from "socket.io-client"
 import { apiClient } from "@/lib/api"
 import { useAuth } from "./AuthContext"
-import { toast } from "sonner"
+import { toast } from "@/lib/notify"
 
 const WS_JOINED_ROOMS_KEY = 'ws_joined_rooms'
 

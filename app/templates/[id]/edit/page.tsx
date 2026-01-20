@@ -38,7 +38,7 @@ import {
 } from "@/components/ui/icons-shim"
 import { useAuth } from "@/contexts/AuthContext"
 import { apiClient } from "@/lib/api"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 
 interface Template {
   id: string

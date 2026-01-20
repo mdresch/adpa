@@ -58,7 +58,7 @@ function attachTracing(queue: any, name: string) {
         },
       })
       _activeJobSpans.set(`${name}:${job?.id}`, span)
-    } catch (e) {}
+    } catch (e) { }
   })
   queue.on("completed", (job: any) => {
     const key = `${name}:${job?.id}`
@@ -66,7 +66,7 @@ function attachTracing(queue: any, name: string) {
     if (span) {
       try {
         span.setStatus({ code: SpanStatusCode.OK })
-      } catch (e) {}
+      } catch (e) { }
       span.end()
       _activeJobSpans.delete(key)
     }
@@ -78,7 +78,7 @@ function attachTracing(queue: any, name: string) {
       try {
         span.recordException(err)
         span.setStatus({ code: SpanStatusCode.ERROR, message: err?.message })
-      } catch (e) {}
+      } catch (e) { }
       span.end()
       _activeJobSpans.delete(key)
     }
@@ -462,60 +462,81 @@ extractionQueue.process("extract-project-data", QUEUE_PREFETCH, async (job) => {
   return await ExtractionOrchestrationService.processJob(job as any, { workerId: WORKER_ID, updateJobStatus }, deps)
 })
 
-// Child entity extractors - Register immediately using async IIFE
-;(async () => {
-  const { extractionRegistry } = await import("./extraction/ExtractionRegistry")
-  const { extractSingleEntityType, saveSingleEntityType } = await import("./extraction/ExtractionOrchestrator")
-  
-  const ENTITY_TYPES = [
-    'stakeholders', 'requirements', 'risks', 'milestones', 'constraints',
-    'success_criteria', 'best_practices', 'phases', 'resources',
-    'technologies', 'quality_standards', 'compliance_security', 'deliverables', 'scope_items', 'activities',
-    'team_agreements', 'development_approaches', 'project_iterations', 'work_items',
-    'capacity_plans', 'performance_measurements', 'earned_value_metrics', 'opportunities', 'risk_responses',
-    'performance_actuals', 'schedule_baselines', 'governance_decisions', 'approval_workflows', 'steering_committees', 'change_control_boards', 'policy_compliance',
-    'scope_baseline', 'wbs_nodes', 'scope_change_requests', 'requirements_traceability', 'scope_verification',
-    'schedule_baseline', 'schedule_activities', 'critical_path_activities', 'critical_path', 'schedule_variances', 'schedule_forecasts',
-    'budget_baselines', 'budget_baseline', 'cost_actuals', 'cost_estimates', 'funding_tranches', 'financial_variances', 'procurement_costs',
-    'resource_assignments', 'resource_pool', 'capacity_forecasts', 'utilization_records', 'resource_conflicts', 'onboarding_offboarding',
-    'risk_assessments', 'risk_response_plans', 'risk_triggers', 'risk_reviews', 'contingency_reserves', 'risk_metrics',
-    'engagement_actions', 'communication_logs', 'satisfaction_surveys', 'stakeholder_issues', 'relationship_health'
-  ] as const
+  // Child entity extractors - Register immediately using async IIFE
+  ; (async () => {
+    const { extractionRegistry } = await import("./extraction/ExtractionRegistry")
+    const { extractSingleEntityType, saveSingleEntityType } = await import("./extraction/ExtractionOrchestrator")
 
-  ENTITY_TYPES.forEach((entityType) => {
-    extractionQueue.process(`extract-entity-${entityType}`, QUEUE_PREFETCH, async (job) => {
-      const { parentJobId, projectId, userId, aiProvider, aiModel, documentIds } = job.data as any
-      try {
-        logger.info(`[EXTRACTION-CHILD] Extracting ${entityType} for job ${parentJobId}`)
-        let entities: any[] = []
-        if (extractionRegistry.hasEntity(entityType) && extractionRegistry.isEnabled(entityType)) {
-          entities = await extractSingleEntityType(projectId, userId, entityType, { aiProvider, aiModel, documentIds })
-          if (entities.length > 0) {
-            await saveSingleEntityType(projectId, userId, entityType, entities)
+    const ENTITY_TYPES = [
+      'stakeholders', 'requirements', 'risks', 'milestones', 'constraints',
+      'success_criteria', 'best_practices', 'phases', 'resources',
+      'technologies', 'quality_standards', 'compliance_security', 'deliverables', 'scope_items', 'activities',
+      'team_agreements', 'development_approaches', 'project_iterations', 'work_items',
+      'capacity_plans', 'performance_measurements', 'earned_value_metrics', 'opportunities', 'risk_responses',
+      'performance_actuals', 'schedule_baselines', 'governance_decisions', 'approval_workflows', 'steering_committees', 'change_control_boards', 'policy_compliance',
+      'scope_baseline', 'wbs_nodes', 'scope_change_requests', 'requirements_traceability', 'scope_verification',
+      'schedule_baseline', 'schedule_activities', 'critical_path_activities', 'critical_path', 'schedule_variances', 'schedule_forecasts',
+      'budget_baselines', 'budget_baseline', 'cost_actuals', 'cost_estimates', 'funding_tranches', 'financial_variances', 'procurement_costs',
+      'resource_assignments', 'resource_pool', 'capacity_forecasts', 'utilization_records', 'resource_conflicts', 'onboarding_offboarding',
+      'risk_assessments', 'risk_response_plans', 'risk_triggers', 'risk_reviews', 'contingency_reserves', 'risk_metrics',
+      'engagement_actions', 'communication_logs', 'satisfaction_surveys', 'stakeholder_issues', 'relationship_health'
+    ] as const
+
+    ENTITY_TYPES.forEach((entityType) => {
+      extractionQueue.process(`extract-entity-${entityType}`, QUEUE_PREFETCH, async (job) => {
+
+        const { parentJobId, projectId, userId, aiProvider, aiModel, documentIds } = job.data as any
+        const jobId = (job.data as any).jobId || job.id
+        try {
+          logger.info(`[EXTRACTION-CHILD] Extracting ${entityType} for job ${parentJobId} (child job: ${jobId})`)
+
+          // Update status to processing
+          await updateJobStatus(jobId, "processing", 10, WORKER_ID, "project-data-extraction")
+
+          let entities: any[] = []
+          if (extractionRegistry.hasEntity(entityType) && extractionRegistry.isEnabled(entityType)) {
+            entities = await extractSingleEntityType(projectId, userId, entityType, { aiProvider, aiModel, documentIds })
+            if (entities.length > 0) {
+              await saveSingleEntityType(projectId, userId, entityType, entities)
+            }
+          } else {
+            const { projectDataExtractionService } = await import("./projectDataExtractionService")
+            entities = await projectDataExtractionService.extractSingleEntityType(projectId, userId, entityType, { aiProvider, aiModel, documentIds })
+            await projectDataExtractionService.saveSingleEntityType(projectId, userId, entityType, entities)
           }
-        } else {
-          const { projectDataExtractionService } = await import("./projectDataExtractionService")
-          entities = await projectDataExtractionService.extractSingleEntityType(projectId, userId, entityType, { aiProvider, aiModel, documentIds })
-          await projectDataExtractionService.saveSingleEntityType(projectId, userId, entityType, entities)
+
+          // Update status to completed
+          await updateJobStatus(jobId, "completed", 100, WORKER_ID, "project-data-extraction")
+
+          return { entityType, count: entities.length }
+
+
+        } catch (error: any) {
+          logger.error(`[EXTRACTION-CHILD] Failed to extract ${entityType}: ${error.message}`, {
+            parentJobId,
+            entityType,
+            projectId,
+            error: error.message,
+            stack: error.stack,
+            provider: aiProvider,
+            model: aiModel,
+          })
+
+          try {
+            // Update status to failed
+            await updateJobStatus(jobId, "failed", 0, WORKER_ID, "project-data-extraction", error.message)
+          } catch (updateErr) {
+            logger.error(`[EXTRACTION-CHILD] Failed to update job status to failed: ${jobId}`, updateErr)
+          }
+
+          throw error
         }
-        return { entityType, count: entities.length }
-      } catch (error: any) {
-        logger.error(`[EXTRACTION-CHILD] Failed to extract ${entityType}: ${error.message}`, {
-          parentJobId,
-          entityType,
-          projectId,
-          error: error.message,
-          stack: error.stack,
-          provider: aiProvider,
-          model: aiModel,
-        })
-        throw error
-      }
+
+      })
     })
-  })
-  
-  logger.info(`[QUEUE] Registered ${ENTITY_TYPES.length} entity extraction processors on extractionQueue (Rabbit)`)
-})()
+
+    logger.info(`[QUEUE] Registered ${ENTITY_TYPES.length} entity extraction processors on extractionQueue (Rabbit)`)
+  })()
 
 // Export Redis client for legacy consumers
 export { redisClient }

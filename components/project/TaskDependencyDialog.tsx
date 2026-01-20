@@ -22,7 +22,7 @@ import { Input } from "@/components/ui/input"
 import { useApi } from "@/hooks/use-api"
 import { apiClient } from "@/lib/api"
 import { Task } from "@/hooks/use-tasks"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 import { Loader2 } from "lucide-react"
 
 interface TaskDependencyDialogProps {

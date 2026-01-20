@@ -36,7 +36,7 @@ import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { useAuth } from "@/contexts/AuthContext"
 import { Plus, Search, Edit, Trash2, TriangleAlert } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 import { apiClient } from "@/lib/api"
 
 interface Portfolio {

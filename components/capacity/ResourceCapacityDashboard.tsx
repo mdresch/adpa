@@ -13,7 +13,7 @@ import {
   TrendingUp, Settings, Calendar, RefreshCw, Search,
   BarChart3, Target, AlertCircle, Briefcase, ClipboardList
 } from '@/components/ui/icons-shim'
-import { toast } from 'sonner'
+import { toast } from '@/lib/notify'
 import { getApiUrl } from '@/lib/api-url'
 import { CapacitySettingsDialog } from './CapacitySettingsDialog'
 import { UnavailabilityDialog } from './UnavailabilityDialog'

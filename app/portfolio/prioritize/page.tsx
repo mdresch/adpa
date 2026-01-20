@@ -23,7 +23,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ScoringInterface } from '@/components/program/ScoringInterface'
 import { PairwiseComparisonMatrix } from '@/components/program/PairwiseComparisonMatrix'
 import { RankingsTable } from '@/components/program/RankingsTable'
-import { toast } from 'sonner'
+import { toast } from '@/lib/notify'
 import { apiClient } from '@/lib/api'
 import {
   BarChart3,

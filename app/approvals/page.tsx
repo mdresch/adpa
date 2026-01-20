@@ -20,7 +20,7 @@ import {
   Loader2,
 } from "@/components/ui/icons-shim"
 import { useAuth } from "@/contexts/AuthContext"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 import Link from "next/link"
 import { apiClient } from "@/lib/api"
 import { CreateApprovalDialog } from "./components/CreateApprovalDialog"

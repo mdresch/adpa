@@ -31,7 +31,7 @@ import { Label } from "@/components/ui/label"
 import { X, User } from "lucide-react"
 import { Plus, AlertTriangle } from "@/components/ui/icons-shim"
 import { apiClient, Stakeholder } from "@/lib/api"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 
 interface DocumentEntityEditorProps {
   projectId: string

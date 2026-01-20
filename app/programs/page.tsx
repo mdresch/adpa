@@ -11,7 +11,7 @@ import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { apiClient, Program } from "@/lib/api"
 import { useAuth } from "@/contexts/AuthContext"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 import {
   FolderOpen,
   Plus,

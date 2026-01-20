@@ -42,7 +42,7 @@ import {
   Info
 } from "lucide-react"
 import { apiClient, type PMBOK8DomainAnalytics, type ProjectExtractionResults } from "@/lib/api"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 import { Skeleton } from "@/components/ui/skeleton"
 
 interface PMBOK8DomainDashboardProps {

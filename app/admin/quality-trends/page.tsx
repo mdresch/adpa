@@ -3,27 +3,22 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Separator } from '@/components/ui/separator'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Sidebar } from '@/components/sidebar'
 import { Header } from '@/components/header'
 import { PageTransition } from '@/components/page-transition'
 import { AnimatedLayout, AnimatedCard } from '@/components/animated-layout'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { 
-  TrendingUp, 
-  TrendingDown, 
+import {
+  TrendingUp,
+  TrendingDown,
   Minus,
-  BarChart3, 
-  FileText, 
-  TriangleAlert, 
-  CheckCircle,
+  BarChart3,
+  FileText,
+  TriangleAlert,
   Download,
-  Filter,
   Calendar,
   Target,
   Award,
@@ -32,7 +27,7 @@ import {
   Loader2
 } from '@/components/ui/icons-shim'
 import { useAuth } from '@/contexts/AuthContext'
-import { toast } from 'sonner'
+import { toast } from '@/lib/notify'
 import { QualityTrendsChart } from '@/components/admin/QualityTrendsChart'
 import { motion } from 'framer-motion'
 
@@ -71,7 +66,7 @@ interface SummaryStats {
 export default function QualityTrendsPage() {
   const router = useRouter()
   const { user, loading: authLoading } = useAuth()
-  
+
   const [loading, setLoading] = useState(true)
   const [period, setPeriod] = useState('30days')
   const [summaryStats, setSummaryStats] = useState<SummaryStats | null>(null)
@@ -81,6 +76,45 @@ export default function QualityTrendsPage() {
   const [exportingCSV, setExportingCSV] = useState(false)
 
   useEffect(() => {
+    const fetchQualityTrends = async () => {
+      try {
+        setLoading(true)
+
+        const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+        const token = localStorage.getItem('auth_token')
+
+        const response = await fetch(
+          `${API_BASE_URL}/admin/quality-trends?period=${period}`,
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          }
+        )
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch quality trends')
+        }
+
+        const data = await response.json()
+
+        setSummaryStats(data.summary)
+        setTrendsData(data.by_time)
+        setTemplatePerformance(data.by_template)
+        setProviderPerformance(data.by_provider)
+
+      } catch (error: unknown) {
+        console.error('Failed to fetch quality trends:', error)
+        if (error instanceof Error) {
+          toast.error(error.message || 'Failed to load quality trends')
+        } else {
+          toast.error('Failed to load quality trends')
+        }
+      } finally {
+        setLoading(false)
+      }
+    }
+
     // Wait for auth to finish loading
     if (authLoading) {
       console.log('[Quality Trends] Auth still loading...')
@@ -97,7 +131,7 @@ export default function QualityTrendsPage() {
 
     // Check if user is admin (check role directly)
     console.log('[Quality Trends] User loaded:', user.email, 'Role:', user.role)
-    
+
     if (user.role !== 'admin') {
       console.log('[Quality Trends] User is not admin, redirecting to dashboard')
       router.push('/dashboard')
@@ -108,41 +142,6 @@ export default function QualityTrendsPage() {
     console.log('[Quality Trends] Admin verified, fetching data')
     fetchQualityTrends()
   }, [period, user, authLoading, router])
-
-  const fetchQualityTrends = async () => {
-    try {
-      setLoading(true)
-
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
-      const token = localStorage.getItem('auth_token')
-
-      const response = await fetch(
-        `${API_BASE_URL}/admin/quality-trends?period=${period}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        }
-      )
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch quality trends')
-      }
-
-      const data = await response.json()
-
-      setSummaryStats(data.summary)
-      setTrendsData(data.by_time)
-      setTemplatePerformance(data.by_template)
-      setProviderPerformance(data.by_provider)
-
-    } catch (error: any) {
-      console.error('Failed to fetch quality trends:', error)
-      toast.error(error.message || 'Failed to load quality trends')
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const exportToCSV = async () => {
     try {
@@ -176,9 +175,13 @@ export default function QualityTrendsPage() {
 
       toast.success('Quality trends exported to CSV')
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to export CSV:', error)
-      toast.error(error.message || 'Failed to export data')
+      if (error instanceof Error) {
+        toast.error(error.message || 'Failed to export data')
+      } else {
+        toast.error('Failed to export data')
+      }
     } finally {
       setExportingCSV(false)
     }
@@ -232,7 +235,7 @@ export default function QualityTrendsPage() {
           <main className="flex-1 overflow-y-auto p-6">
             <AnimatedLayout>
               <div className="max-w-7xl mx-auto space-y-6">
-                
+
                 {/* Header */}
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
@@ -258,7 +261,7 @@ export default function QualityTrendsPage() {
                         Monitor template quality performance and identify improvement opportunities
                       </p>
                     </div>
-                    
+
                     <div className="flex items-center gap-3">
                       {/* Period Selector */}
                       <Select value={period} onValueChange={setPeriod}>
@@ -275,8 +278,8 @@ export default function QualityTrendsPage() {
                       </Select>
 
                       {/* Export Button */}
-                      <Button 
-                        onClick={exportToCSV} 
+                      <Button
+                        onClick={exportToCSV}
                         disabled={exportingCSV}
                         variant="outline"
                       >
@@ -423,7 +426,7 @@ export default function QualityTrendsPage() {
                             className="grid grid-cols-5 gap-4 items-center p-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors"
                           >
                             <div>
-                              <Link 
+                              <Link
                                 href={`/templates/${template.template_id}`}
                                 className="font-medium text-sm text-primary hover:underline"
                               >
@@ -446,11 +449,10 @@ export default function QualityTrendsPage() {
                             <div className="text-center">
                               <div className="flex items-center justify-center gap-1">
                                 {getTrendIcon(template.trend)}
-                                <span className={`text-sm font-medium ${
-                                  template.trend === 'up' ? 'text-green-600' : 
-                                  template.trend === 'down' ? 'text-red-600' : 
-                                  'text-gray-600'
-                                }`}>
+                                <span className={`text-sm font-medium ${template.trend === 'up' ? 'text-green-600' :
+                                  template.trend === 'down' ? 'text-red-600' :
+                                    'text-gray-600'
+                                  }`}>
                                   {(template.trend_percentage || 0) > 0 ? '+' : ''}{template.trend_percentage || 0}%
                                 </span>
                               </div>
@@ -508,7 +510,7 @@ export default function QualityTrendsPage() {
                               <span className="font-medium">{Number(provider.document_count || 0)}</span>
                             </div>
                             <div className="text-center">
-                              <span className="font-medium">${parseFloat(provider.avg_cost || 0).toFixed(4)}</span>
+                              <span className="font-medium">${Number(provider.avg_cost || 0).toFixed(4)}</span>
                             </div>
                           </div>
                         ))}

@@ -34,7 +34,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext"
 import { useWebSocket } from "@/contexts/WebSocketContext"
 import { apiClient } from "@/lib/api"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 
 interface ConfluenceSpace {
   id: string

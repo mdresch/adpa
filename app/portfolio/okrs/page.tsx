@@ -22,7 +22,7 @@ import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Progress } from '@/components/ui/progress'
-import { toast } from 'sonner'
+import { toast } from '@/lib/notify'
 import { apiClient } from '@/lib/api'
 import {
   Target,

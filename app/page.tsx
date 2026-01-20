@@ -29,7 +29,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext"
 import { useWebSocket, useJobUpdates } from "@/contexts/WebSocketContext"
 import { apiClient } from "@/lib/api"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 import { ExecutiveDriftAlertsWidget } from "@/app/(dashboard)/components/ExecutiveDriftAlertsWidget"
 
 interface DashboardData {
@@ -164,14 +164,36 @@ export default function Dashboard() {
     { name: "GitHub", status: "connected", lastSync: "30 sec ago", color: "emerald" },
   ]
 
-  const activityData = dashboardData?.recent_activity?.slice(0, 4).map(activity => ({
-    action: activity.action.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-    details: `${activity.resource_type} ${activity.resource_id.slice(0, 8)}...`,
-    time: new Date(activity.created_at).toLocaleString(),
-    color: activity.action.includes('create') ? 'emerald' :
-      activity.action.includes('update') ? 'blue' :
-        activity.action.includes('delete') ? 'red' : 'purple',
-  })) || [
+  const activityData = dashboardData?.recent_activity?.slice(0, 4).map(activity => {
+    const action = activity.action.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
+
+    // Create more descriptive details using metadata if available
+    let details = `${activity.resource_type || 'Resource'} ${activity.resource_id?.slice(0, 8) || 'unknown'}...`;
+    const metadata = activity.new_values || {};
+
+    if (activity.action === 'use_template' && metadata.template_name) {
+      details = `Template: ${metadata.template_name}`;
+    } else if (activity.action === 'create_document') {
+      if (metadata.template_name) {
+        details = `New document from ${metadata.template_name}`;
+      } else {
+        details = `New document created`;
+      }
+    } else if (activity.action === 'ai_generate' && metadata.provider) {
+      details = `Generated using ${metadata.provider} (${metadata.model || 'unknown'})`;
+    } else if (metadata.name) {
+      details = `${activity.resource_type}: ${metadata.name}`;
+    }
+
+    return {
+      action,
+      details,
+      time: new Date(activity.created_at).toLocaleString(),
+      color: activity.action.includes('create') ? 'emerald' :
+        activity.action.includes('update') ? 'blue' :
+          activity.action.includes('delete') ? 'red' : 'purple',
+    };
+  }) || [
       {
         action: "Welcome to ADPA",
         details: "System initialized",

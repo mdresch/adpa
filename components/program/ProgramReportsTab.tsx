@@ -42,7 +42,7 @@ import {
   DollarSign,
   AlertCircle
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/notify';
 
 interface Report {
   id: string;

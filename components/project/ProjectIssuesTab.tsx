@@ -18,7 +18,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { apiClient } from "@/lib/api"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 import {
   AlertCircle,
   AlertTriangle,

@@ -27,7 +27,7 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { apiClient } from '@/lib/api'
-import { toast } from 'sonner'
+import { toast } from '@/lib/notify'
 
 interface OKR {
   id: string
@@ -157,6 +157,7 @@ export function OKRDialog({ open, onOpenChange, okr, onSaved }: OKRDialogProps) 
       }
 
       if (response && response.success) {
+        // Use compatibility wrapper: sends to notifications center and shows toast
         toast.success(okr ? 'OKR updated successfully' : 'OKR created successfully')
         onSaved()
       } else {
@@ -164,6 +165,7 @@ export function OKRDialog({ open, onOpenChange, okr, onSaved }: OKRDialogProps) 
       }
     } catch (error: any) {
       console.error('Failed to save OKR:', error)
+      // Use compatibility wrapper to send notification and toast
       toast.error(error.message || 'Failed to save OKR')
     } finally {
       setLoading(false)

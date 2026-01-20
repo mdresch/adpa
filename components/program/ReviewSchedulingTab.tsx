@@ -17,7 +17,7 @@ import {
   FileText,
   Loader2
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/notify';
 import { apiClient, ReviewSchedule, ReviewMeeting, ReviewCompliance } from '@/lib/api';
 import { ReviewScheduleConfig } from './ReviewScheduleConfig';
 import { ReviewCalendar } from './ReviewCalendar';

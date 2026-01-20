@@ -16,7 +16,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Loader2, Calendar, Clock, Plane, Stethoscope, GraduationCap, Users, Baby, User } from '@/components/ui/icons-shim'
-import { toast } from 'sonner'
+import { toast } from '@/lib/notify'
 import { getApiUrl } from '@/lib/api-url'
 
 interface UnavailabilityDialogProps {

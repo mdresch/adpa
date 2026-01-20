@@ -79,7 +79,7 @@ type Job = {
   documentName?: string
   metadata?: any
 }
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 
 const getStatusIcon = (status: string) => {
   switch (status) {

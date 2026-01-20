@@ -20,7 +20,7 @@ import {
   AlertTriangle, Shield, TrendingUp, CheckCircle2, Clock, RefreshCw,
   Download, BarChart3, PieChart as PieChartIcon, Calendar, DollarSign, FileText
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/notify';
 import { apiClient } from '@/lib/api';
 import { getApiUrl } from '@/lib/api-url';
 import {

@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Settings, Copy, Database, Lightbulb } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 import { Project } from "@/lib/api"
 
 interface ExtendedProject extends Project {

@@ -1,10 +1,10 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { AnimatedCard } from "@/components/animated-layout"
 import { motion } from "framer-motion"
-import { CheckCircle, AlertCircle, Activity } from "lucide-react"
+import { CheckCircle, AlertCircle, Activity } from "@/components/ui/icons-shim"
 import type { IntegrationData, ActivityItem } from "../types"
 
 interface IntegrationActivityGridProps {
@@ -131,14 +131,14 @@ export function IntegrationActivityGrid({ integrationData, activityData }: Integ
                     activity.color === "blue"
                       ? "w-3 h-3 bg-blue-500 rounded-full mt-2"
                       : activity.color === "emerald"
-                      ? "w-3 h-3 bg-emerald-500 rounded-full mt-2"
-                      : activity.color === "green"
-                      ? "w-3 h-3 bg-green-500 rounded-full mt-2"
-                      : activity.color === "yellow"
-                      ? "w-3 h-3 bg-yellow-500 rounded-full mt-2"
-                      : activity.color === "red"
-                      ? "w-3 h-3 bg-red-500 rounded-full mt-2"
-                      : "w-3 h-3 bg-gray-500 rounded-full mt-2"
+                        ? "w-3 h-3 bg-emerald-500 rounded-full mt-2"
+                        : activity.color === "green"
+                          ? "w-3 h-3 bg-green-500 rounded-full mt-2"
+                          : activity.color === "yellow"
+                            ? "w-3 h-3 bg-yellow-500 rounded-full mt-2"
+                            : activity.color === "red"
+                              ? "w-3 h-3 bg-red-500 rounded-full mt-2"
+                              : "w-3 h-3 bg-gray-500 rounded-full mt-2"
                   }
                 />
                 <div className="flex-1">

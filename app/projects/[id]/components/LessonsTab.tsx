@@ -4,7 +4,7 @@ import React, { useEffect, useState, useCallback } from 'react'
 import { apiClient } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { toast } from 'sonner'
+import { toast } from '@/lib/notify'
 
 interface LessonsTabProps {
   projectId: string

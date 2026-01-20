@@ -31,7 +31,8 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { getApiUrl } from "@/lib/api-url"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
+import { sendNotification } from '@/lib/notifications'
 import {
   Users,
   Award,
@@ -186,6 +187,7 @@ export function TaskRoleAssignment({
       }
     } catch (error) {
       console.error("Failed to fetch suggested stakeholders:", error)
+      sendNotification({ type: 'error', title: 'Suggestions Failed', message: 'Failed to fetch suggestions', announce: true })
       toast.error("Failed to fetch suggestions")
     } finally {
       setLoadingSuggestions(false)
@@ -215,6 +217,7 @@ export function TaskRoleAssignment({
       })
 
       if (response.ok) {
+        sendNotification({ type: 'success', title: 'Role Assigned', message: 'Role assigned to task successfully', announce: true })
         toast.success("Role assigned to task successfully")
         setAssignRoleDialogOpen(false)
         setFormData({
@@ -228,10 +231,12 @@ export function TaskRoleAssignment({
         onUpdate?.()
       } else {
         const error = await response.json()
+        sendNotification({ type: 'error', title: 'Assign Role Failed', message: error.error || 'Failed to assign role', announce: true })
         toast.error(error.error || "Failed to assign role")
       }
     } catch (error) {
       console.error("Failed to assign role:", error)
+      sendNotification({ type: 'error', title: 'Assign Role Failed', message: 'Failed to assign role', announce: true })
       toast.error("Failed to assign role")
     }
   }

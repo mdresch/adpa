@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Loader2, Plus, Award, Users, AlertCircle } from '@/components/ui/icons-shim'
-import { toast } from 'sonner'
+import { toast } from '@/lib/notify'
 import { getApiUrl } from '@/lib/api-url'
 
 interface Skill {

@@ -8,7 +8,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Loader2, Plus, Edit, Trash2, TrendingUp, Star, AlertCircle, BookOpen, ShieldAlert } from "lucide-react"
 import { User, Users, Clock, MessageSquare, AlertTriangle, CheckCircle, Code, Zap, MoreHorizontal } from "@/components/ui/icons-shim"
 import { apiClient } from "@/lib/api"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 import { TeamAgreementDialog } from "./TeamAgreementDialog"
 import { AdherenceDialog } from "./AdherenceDialog"
 import {

@@ -36,7 +36,7 @@ import {
   Clock,
   Layers
 } from "@/components/ui/icons-shim"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 import { apiClient } from "@/lib/api"
 
 interface Baseline {

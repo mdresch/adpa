@@ -35,7 +35,7 @@ import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { useAuth } from "@/contexts/AuthContext"
 import { Save, AlertTriangle, CheckCircle, Settings, Zap, Shield, TrendingUp, Users, FileText } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 import { apiClient } from "@/lib/api"
 
 interface PortfolioGovernance {

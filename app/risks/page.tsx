@@ -16,7 +16,7 @@ import { useAuth } from "@/contexts/AuthContext"
 import { useWebSocket } from "@/contexts/WebSocketContext"
 import { apiClient } from "@/lib/api"
 import { getApiUrl } from "@/lib/api-url"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 import {
   AlertTriangle,
   Shield,

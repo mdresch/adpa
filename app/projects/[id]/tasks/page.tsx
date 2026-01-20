@@ -17,7 +17,7 @@ import { ResourceAssignmentDialog } from "@/components/project/ResourceAssignmen
 import { useTasks, useTaskMutations } from "@/hooks/use-tasks"
 import { useTaskFilters } from "@/hooks/use-task-filters"
 import { Download, Plus, RefreshCw, AlertCircle, LayoutGrid, Table2, Columns, Calendar } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export default function TasksPage() {

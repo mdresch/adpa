@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Separator } from "@/components/ui/separator"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
+import { sendNotification } from '@/lib/notifications'
 import { apiClient } from "@/lib/api"
 import { Loader2, ExternalLink, CheckCircle2, XCircle } from "lucide-react"
 
@@ -86,6 +87,7 @@ export function IntegrationsTab({ projectId }: IntegrationsTabProps) {
       setLocalSettings(normalizedData)
     } catch (error: any) {
       console.error("Failed to fetch integration settings:", error)
+      sendNotification({ type: 'error', title: 'Integrations Load Failed', message: 'Failed to load integration settings', announce: true })
       toast.error("Failed to load integration settings")
       // Set defaults on error
       setSettings(defaultSettings)
@@ -102,6 +104,7 @@ export function IntegrationsTab({ projectId }: IntegrationsTabProps) {
       setSaving(true)
       await apiClient.put(`/projects/${projectId}/integrations`, localSettings)
       setSettings(localSettings)
+      sendNotification({ type: 'success', title: 'Integrations Saved', message: 'Integration settings saved successfully', announce: true })
       toast.success("Integration settings saved successfully")
     } catch (error: any) {
       console.error("Failed to save integration settings:", error)
@@ -123,6 +126,7 @@ export function IntegrationsTab({ projectId }: IntegrationsTabProps) {
         errorMessage = error.message
       }
       
+      sendNotification({ type: 'error', title: 'Integrations Save Failed', message: errorMessage, announce: true })
       toast.error(errorMessage)
     } finally {
       setSaving(false)

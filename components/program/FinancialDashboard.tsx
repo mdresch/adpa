@@ -41,7 +41,7 @@ import {
   Cell
 } from 'recharts'
 import { cn } from '@/lib/utils'
-import { toast } from 'sonner'
+import { toast } from '@/lib/notify'
 
 // ================================================================
 // TYPES & INTERFACES

@@ -32,7 +32,7 @@ import {
 } from '@/components/ui/table'
 import { Switch } from '@/components/ui/switch'
 import { Skeleton } from '@/components/ui/skeleton'
-import { toast } from 'sonner'
+import { toast } from '@/lib/notify'
 import { apiClient } from '@/lib/api'
 import {
   Plus,

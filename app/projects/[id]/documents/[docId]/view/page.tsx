@@ -42,7 +42,7 @@ import { Award } from "@/components/ui/icons-shim"
 import { useAuth } from "@/contexts/AuthContext"
 import { apiClient } from "@/lib/api"
 import { useWebSocket } from "@/contexts/WebSocketContext"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"

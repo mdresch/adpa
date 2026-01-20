@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Loader2, AlertCircle, ExternalLink } from "@/components/ui/icons-shim"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 import { apiClient } from "@/lib/api"
 import { useRouter } from "next/navigation"
 

@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Bell, Check, X, AlertCircle, Info, ExternalLink, Trash2 } from 'lucide-react'
 import { Button } from './ui/button'
 import { Badge } from './ui/badge'
@@ -13,7 +13,8 @@ import {
 import { ScrollArea } from './ui/scroll-area'
 import { apiClient } from '@/lib/api'
 import { useWebSocket } from '@/contexts/WebSocketContext'
-import { toast } from 'sonner'
+import { toast } from '@/lib/notify'
+import { onNotification, NotificationPayload } from '@/lib/notifications'
 import Link from 'next/link'
 
 interface Notification {
@@ -38,7 +39,9 @@ export function NotificationCenter() {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [open, setOpen] = useState(false)
+  const [pulse, setPulse] = useState(false)
   const socket = useWebSocket()
+  const liveRef = useRef<HTMLDivElement | null>(null)
 
   // Load notifications from localStorage
   useEffect(() => {
@@ -88,7 +91,8 @@ export function NotificationCenter() {
       const notificationKey = `job-completed-${data.jobId}`
       if (!recentJobNotifications.has(notificationKey)) {
         recentJobNotifications.add(notificationKey)
-        toast.success(data.message || 'Job completed!')
+        // Show ephemeral toast but don't re-dispatch into adapter (we already addNotification above)
+        toast.success(data.message || 'Job completed!', { suppressAdapter: true })
         // Remove from set after 5 seconds to allow re-notification if needed
         setTimeout(() => recentJobNotifications.delete(notificationKey), 5000)
       }
@@ -109,7 +113,7 @@ export function NotificationCenter() {
       const notificationKey = `job-failed-${data.jobId}`
       if (!recentJobNotifications.has(notificationKey)) {
         recentJobNotifications.add(notificationKey)
-        toast.error(data.error || 'Job failed')
+        toast.error(data.error || 'Job failed', { suppressAdapter: true })
         // Remove from set after 5 seconds to allow re-notification if needed
         setTimeout(() => recentJobNotifications.delete(notificationKey), 5000)
       }
@@ -169,7 +173,8 @@ export function NotificationCenter() {
         actionLabel: data.projectId ? 'View Baseline' : undefined
       })
       
-      toast.success('Baseline extraction complete!')
+      // Show toast but don't dispatch a second adapter notification (already added above)
+      toast.success('Baseline extraction complete!', { suppressAdapter: true })
     })
 
     // Baseline drift detected
@@ -194,6 +199,31 @@ export function NotificationCenter() {
       socket.off('baseline:drift')
     }
   }, [socket])
+
+  // Listen for external notifications dispatched via the notifications adapter
+  useEffect(() => {
+    const off = onNotification((payload: NotificationPayload) => {
+      addNotification({
+        type: payload.type,
+        title: payload.title,
+        message: payload.message,
+        actionUrl: payload.actionUrl,
+        actionLabel: payload.actionLabel,
+        metadata: payload.metadata,
+      })
+
+      // Announce for screen readers
+      if (payload.announce !== false && liveRef.current) {
+        liveRef.current.textContent = `${payload.title}: ${payload.message}`
+      }
+
+      // Pulse the bell for a short time to draw attention
+      setPulse(true)
+      window.setTimeout(() => setPulse(false), 3000)
+    })
+
+    return off
+  }, [])
 
   const addNotification = (notification: Omit<Notification, 'id' | 'timestamp' | 'read'>) => {
     const newNotification: Notification = {
@@ -275,6 +305,12 @@ export function NotificationCenter() {
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon" className="relative">
           <Bell className="h-5 w-5" />
+          {pulse && (
+            <span
+              aria-hidden
+              className="absolute -top-2 -right-2 h-3 w-3 rounded-full bg-blue-400/60 animate-ping"
+            />
+          )}
           {unreadCount > 0 && (
             <Badge 
               className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 bg-red-500 text-white text-xs"
@@ -284,6 +320,8 @@ export function NotificationCenter() {
           )}
         </Button>
       </DropdownMenuTrigger>
+      {/* Screen reader live region: updated when a notification arrives */}
+      <div ref={liveRef} aria-live="polite" className="sr-only" />
       <DropdownMenuContent align="end" className="w-96 p-0">
         <Card className="border-0 shadow-none">
           <CardHeader className="pb-3 border-b">

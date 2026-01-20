@@ -126,7 +126,7 @@ import {
 } from "@/components/ui/breadcrumb"
 import { useAuth } from "@/contexts/AuthContext"
 import { apiClient, Project, Template } from "@/lib/api"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 import { RegenerateVersionModal } from "@/components/documents/RegenerateVersionModal"
 import { RegenerationProgress } from "@/components/documents/RegenerationProgress"
 import { useDocumentRegeneration } from "@/hooks/use-document-regeneration"

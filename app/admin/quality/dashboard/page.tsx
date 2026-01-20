@@ -8,12 +8,9 @@
 import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Progress } from '@/components/ui/progress'
 import {
   BarChart,
   Bar,
-  LineChart,
-  Line,
   PieChart,
   Pie,
   Cell,
@@ -21,19 +18,15 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer
 } from 'recharts'
 import {
   Sparkles,
-  TrendingUp,
   TriangleAlert,
   CheckCircle,
   Award,
-  Activity,
-  DollarSign,
-  Zap
-} from 'lucide-react'
+  Activity
+} from '@/components/ui/icons-shim'
 import { useAuth } from '@/hooks/use-auth'
 
 interface QualityStats {
@@ -75,47 +68,48 @@ export default function QualityDashboardPage() {
   const [providerComparison, setProviderComparison] = useState<ProviderQuality[]>([])
   const [commonIssues, setCommonIssues] = useState<CommonIssue[]>([])
   const [loading, setLoading] = useState(true)
-  const { token } = useAuth()
+  const { user } = useAuth()
 
   useEffect(() => {
+    const loadDashboardData = async () => {
+      try {
+        setLoading(true)
+        const token = localStorage.getItem('auth_token')
+
+        const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+
+        const [statsRes, providersRes, issuesRes] = await Promise.all([
+          fetch(`${API_BASE_URL}/quality-audits/stats`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          }),
+          fetch(`${API_BASE_URL}/quality-audits/provider-comparison`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          }),
+          fetch(`${API_BASE_URL}/quality-audits/common-issues?limit=15`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          })
+        ])
+
+        const [statsData, providersData, issuesData] = await Promise.all([
+          statsRes.json(),
+          providersRes.json(),
+          issuesRes.json()
+        ])
+
+        if (statsData.success) setStats(statsData.stats)
+        if (providersData.success) setProviderComparison(providersData.providers)
+        if (issuesData.success) setCommonIssues(issuesData.issues)
+      } catch (error) {
+        console.error('Failed to load dashboard data:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
     loadDashboardData().catch((error) => {
       console.error('Failed to load dashboard data:', error)
     })
-  }, [token])
-
-  const loadDashboardData = async () => {
-    try {
-      setLoading(true)
-
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
-
-      const [statsRes, providersRes, issuesRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/quality-audits/stats`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        }),
-        fetch(`${API_BASE_URL}/quality-audits/provider-comparison`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        }),
-        fetch(`${API_BASE_URL}/quality-audits/common-issues?limit=15`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        })
-      ])
-
-      const [statsData, providersData, issuesData] = await Promise.all([
-        statsRes.json(),
-        providersRes.json(),
-        issuesRes.json()
-      ])
-
-      if (statsData.success) setStats(statsData.stats)
-      if (providersData.success) setProviderComparison(providersData.providers)
-      if (issuesData.success) setCommonIssues(issuesData.issues)
-    } catch (error) {
-      console.error('Failed to load dashboard data:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
+  }, [user])
 
   if (loading) {
     return (
@@ -184,7 +178,7 @@ export default function QualityDashboardPage() {
           subtitle="Last 30 days"
           color="blue"
         />
-        
+
         <SummaryCard
           icon={<Award className="h-6 w-6 text-green-600" />}
           title="Average Quality"
@@ -192,7 +186,7 @@ export default function QualityDashboardPage() {
           subtitle={`Grade ${calculateGrade(stats.average_score)}`}
           color="green"
         />
-        
+
         <SummaryCard
           icon={<CheckCircle className="h-6 w-6 text-emerald-600" />}
           title="Pass Rate"
@@ -200,7 +194,7 @@ export default function QualityDashboardPage() {
           subtitle="Grades A & B"
           color="emerald"
         />
-        
+
         <SummaryCard
           icon={<TriangleAlert className="h-6 w-6 text-yellow-600" />}
           title="Need Review"
@@ -226,7 +220,7 @@ export default function QualityDashboardPage() {
                   cx="50%"
                   cy="50%"
                   labelLine={false}
-                  label={(entry: any) => `${entry.name}: ${entry.value}`}
+                  label={(entry: { name: string; value: number }) => `${entry.name}: ${entry.value}`}
                   outerRadius={80}
                   fill="#8884d8"
                   dataKey="value"

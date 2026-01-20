@@ -14,7 +14,7 @@ import { Settings, Plus, TestTube, CheckCircle, AlertCircle, ExternalLink, Refre
 import Link from "next/link"
 import { useAuth } from "@/contexts/AuthContext"
 import { apiClient } from "@/lib/api"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 import { useEffect } from "react"
 import {
   Dialog,

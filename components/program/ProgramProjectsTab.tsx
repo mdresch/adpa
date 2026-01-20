@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/dialog'
 import { ProjectSearchDialog, SearchableItem } from '@/components/ui/search-dialog'
 import { Label } from '@/components/ui/label'
-import { toast } from 'sonner'
+import { toast } from '@/lib/notify'
 import { apiClient } from '@/lib/api'
 import { getApiUrl } from '@/lib/api-url'
 import { 

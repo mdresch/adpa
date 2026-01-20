@@ -15,7 +15,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
 import { Loader2, Clock, Target, Calendar, Building2 } from '@/components/ui/icons-shim'
-import { toast } from 'sonner'
+import { toast } from '@/lib/notify'
 import { getApiUrl } from '@/lib/api-url'
 
 interface CapacitySettings {

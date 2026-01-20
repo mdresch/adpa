@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2, Edit, Save, X, Plus, Trash2, Info } from "lucide-react"
 import { apiClient } from "@/lib/api"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 import { DevelopmentApproachForm } from "./DevelopmentApproachForm"
 import { TailoringDecisionsEditor } from "./TailoringDecisionsEditor"
 import {

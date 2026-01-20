@@ -118,6 +118,7 @@ import developmentApproachRoutes from "./routes/developmentApproachRoutes"
 import lessonsLearnedRoutes from "./routes/lessonsLearnedRoutes"
 import contextOrchestratorRoutes from "./routes/contextOrchestrator"
 import uxDocumentationRoutes from "./routes/uxDocumentationRoutes"
+import playbookRoutes from "./routes/playbookRoutes"
 
 const app = express()
 const server = createServer(app)
@@ -324,7 +325,8 @@ app.use("/api/portfolio-domains", require("./routes/portfolioDomains").default)
 app.use("/api/lessons", lessonsLearnedRoutes)
 app.use("/api/context-orchestrator", contextOrchestratorRoutes)
 app.use("/api/ux-documentation", uxDocumentationRoutes)
-console.log("✅ All API routes registered (including approvals, notifications, email notifications, knowledge base, assessment, executive dashboard, performance actuals, team agreements, OKRs, signatures, search, PMBOK 6, review scheduling, and UX documentation)")
+app.use("/api/playbooks", playbookRoutes)
+console.log("✅ All API routes registered (including approvals, notifications, email notifications, knowledge base, assessment, executive dashboard, performance actuals, team agreements, OKRs, signatures, search, PMBOK 6, review scheduling, UX documentation, and playbooks)")
 
 // WebSocket connection handling
 io.on("connection", (socket) => {
@@ -413,7 +415,7 @@ io.on("connection", (socket) => {
           }
 
           const hasAccess = isOwner || isCreator || isTeamMember || user.role === 'admin' || user.role === 'super_admin'
-          
+
           if (hasAccess) {
             socket.join(room)
             logger.info(`Client ${socket.id} (user: ${userId}) joined room ${room}`, {
@@ -553,9 +555,17 @@ async function startServer() {
     try {
       console.log("🔄 Job queues are initialized automatically...")
 
+
       // Start system resource monitoring
       SystemMonitoring.start()
-      console.log("✅ System resource monitoring started")
+
+      // Start worker heartbeat monitoring
+      const { WorkerMonitoring } = require('./utils/workerMonitoring')
+      const WORKER_ID = `worker-${process.pid}-${Date.now()}`
+      WorkerMonitoring.start(WORKER_ID, 'Backend Worker')
+
+      console.log("✅ System and worker resource monitoring started")
+
     } catch (queueError) {
       console.warn(
         "⚠️  Job queue initialization failed:",
@@ -626,10 +636,19 @@ async function startServer() {
 }
 
 
-// Only start server if this file is run directly
-// if (import.meta.url === `file://${process.argv[1]}`) {
-startServer()
-// }
+
+// Only start server if this file is the main entry point
+if (process.argv[1] && (process.argv[1].endsWith('server.ts') || process.argv[1].endsWith('server.js') || process.argv[1].includes('src/server.ts'))) {
+  startServer()
+}
+// For ts-node/tsx where process.argv[1] might be the script path
+else if (!process.argv[1] || process.argv[1].includes('server')) {
+  // Conservative fallback - if we're not sure, don't auto-start if imported
+  if (require.main === module) {
+    startServer()
+  }
+}
+
 
 export { app, io }
 

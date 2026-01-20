@@ -62,7 +62,7 @@ import {
 } from "@/components/ui/icons-shim"
 import { useAuth } from "@/contexts/AuthContext"
 import { getApiUrl } from "@/lib/api-url"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 
 interface EntityCounts {
   // Core entities (Legacy/PMBOK 7)

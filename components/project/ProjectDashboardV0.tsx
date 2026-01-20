@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { ArrowLeft, Search, FileText, Download, AlertTriangle, CheckCircle2, Clock, Target, Sparkles } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 import { PMBOK8DomainDashboard } from "./PMBOK8DomainDashboard"
 
 interface ProjectDashboardV0Props {

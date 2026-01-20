@@ -10,7 +10,7 @@ import {
   TrendingUp, AlertCircle, CheckCircle2, XCircle
 } from '@/components/ui/icons-shim'
 import { getApiUrl } from '@/lib/api-url'
-import { toast } from 'sonner'
+import { toast } from '@/lib/notify'
 
 interface TaskWithResource {
   taskId: string

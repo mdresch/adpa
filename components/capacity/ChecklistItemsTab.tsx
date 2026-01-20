@@ -11,7 +11,7 @@ import {
   AlertCircle, CheckCircle2, XCircle, AlertTriangle
 } from '@/components/ui/icons-shim'
 import { getApiUrl } from '@/lib/api-url'
-import { toast } from 'sonner'
+import { toast } from '@/lib/notify'
 
 interface ChecklistItemWithResource {
   itemId: string

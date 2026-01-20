@@ -32,11 +32,12 @@ import {
 } from '@/components/ui/table';
 import {
   AlertTriangle, Plus, Pencil, Trash2, Loader2, Filter, Search, 
-  FileText, CheckCircle, XCircle, Eye, EyeOff, RefreshCw, AlertCircle
+  FileText, CheckCircle, XCircle, Eye, EyeOff, RefreshCw, AlertCircle, Shield
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/notify';
 import { apiClient } from '@/lib/api';
 import { useRouter } from 'next/navigation';
+import { RiskMitigationPlansView } from '@/components/risks/RiskMitigationPlansView';
 
 // Helper function to safely extract error message
 const getErrorMessage = (error: any, defaultMessage: string): string => {
@@ -123,6 +124,8 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingRisk, setEditingRisk] = useState<ProjectRisk | null>(null);
   const [materializingRiskId, setMaterializingRiskId] = useState<string | null>(null);
+  const [escalationDialogOpen, setEscalationDialogOpen] = useState(false);
+  const [escalatingRisk, setEscalatingRisk] = useState<ProjectRisk | null>(null);
   
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -144,6 +147,28 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
     owner: '',
     risk_origin: 'project-extraction' as ProjectRisk['risk_origin'],
     is_curated: false,
+  });
+
+  // Escalation form state
+  const [escalationData, setEscalationData] = useState({
+    trigger_reason: 'manual_escalation' as 'threshold_breach' | 'manual_escalation' | 'probability_increase' | 'impact_increase' | 'external_event' | 'timeline_breach',
+    trigger_description: '',
+    root_cause_hypothesis: '',
+    contributing_factors: [] as string[],
+    evidence_collected: [] as string[],
+    actual_impact: '',
+    affected_areas: [] as string[],
+    affected_stakeholders: [] as string[],
+    priority: '' as 'critical' | 'high' | 'medium' | 'low' | '',
+    immediate_actions_taken: '',
+    workaround_applied: '',
+    recommended_mitigation: '',
+    target_resolution_date: '',
+    // Helper fields for array inputs
+    contributing_factor_input: '',
+    evidence_input: '',
+    affected_area_input: '',
+    stakeholder_input: '',
   });
 
   // Fetch risks for this project
@@ -365,20 +390,97 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
     }
   };
 
-  // Materialize risk into issue (when risk matures into actual problem)
-  const handleMaterializeRisk = async (risk: ProjectRisk) => {
-    if (!confirm(`Convert this risk into an issue?\n\n"${risk.title}"\n\nThis will create an issue and mark the risk as materialized.`)) {
+  // Open escalation dialog (when risk matures into actual problem)
+  const handleMaterializeRisk = (risk: ProjectRisk) => {
+    setEscalatingRisk(risk);
+    // Pre-populate escalation data with defaults based on risk
+    setEscalationData({
+      trigger_reason: 'manual_escalation',
+      trigger_description: `Risk "${risk.title}" has materialized and requires immediate attention.`,
+      root_cause_hypothesis: '',
+      contributing_factors: [],
+      evidence_collected: [],
+      actual_impact: `Risk with ${risk.impact} impact has materialized`,
+      affected_areas: [],
+      affected_stakeholders: [],
+      priority: risk.severity === 'critical' ? 'critical' : risk.severity === 'high' ? 'high' : 'medium',
+      immediate_actions_taken: '',
+      workaround_applied: '',
+      recommended_mitigation: '',
+      target_resolution_date: '',
+      contributing_factor_input: '',
+      evidence_input: '',
+      affected_area_input: '',
+      stakeholder_input: '',
+    });
+    setEscalationDialogOpen(true);
+  };
+
+  // Handle escalation form submission
+  const handleEscalateRisk = async () => {
+    if (!escalatingRisk) return;
+
+    // Validate required fields
+    if (!escalationData.trigger_description || escalationData.trigger_description.length < 10) {
+      toast.error('Trigger description must be at least 10 characters');
       return;
     }
 
-    setMaterializingRiskId(risk.id);
-    try {
-      const response = await apiClient.post(`/issues/materialize-risk/${risk.id}`, {
-        priority: risk.severity === 'critical' ? 'critical' : risk.severity === 'high' ? 'high' : 'medium',
-        impact: `Risk with ${risk.impact} impact has materialized`
-      });
+    if (escalationData.trigger_description.length > 1000) {
+      toast.error('Trigger description must be less than 1000 characters');
+      return;
+    }
 
-      toast.success('Risk successfully converted to issue');
+    setMaterializingRiskId(escalatingRisk.id);
+    try {
+      // Prepare escalation payload
+      const escalationPayload: any = {
+        trigger_reason: escalationData.trigger_reason,
+        trigger_description: escalationData.trigger_description,
+      };
+
+      // Add optional fields if provided
+      if (escalationData.root_cause_hypothesis) {
+        escalationPayload.root_cause_hypothesis = escalationData.root_cause_hypothesis;
+      }
+      if (escalationData.contributing_factors.length > 0) {
+        escalationPayload.contributing_factors = escalationData.contributing_factors;
+      }
+      if (escalationData.evidence_collected.length > 0) {
+        escalationPayload.evidence_collected = escalationData.evidence_collected;
+      }
+      if (escalationData.actual_impact) {
+        escalationPayload.actual_impact = escalationData.actual_impact;
+      }
+      if (escalationData.affected_areas.length > 0) {
+        escalationPayload.affected_areas = escalationData.affected_areas;
+      }
+      if (escalationData.affected_stakeholders.length > 0) {
+        escalationPayload.affected_stakeholders = escalationData.affected_stakeholders;
+      }
+      if (escalationData.priority) {
+        escalationPayload.priority = escalationData.priority;
+      }
+      if (escalationData.immediate_actions_taken) {
+        escalationPayload.immediate_actions_taken = escalationData.immediate_actions_taken;
+      }
+      if (escalationData.workaround_applied) {
+        escalationPayload.workaround_applied = escalationData.workaround_applied;
+      }
+      if (escalationData.recommended_mitigation) {
+        escalationPayload.recommended_mitigation = escalationData.recommended_mitigation;
+      }
+      if (escalationData.target_resolution_date) {
+        escalationPayload.target_resolution_date = escalationData.target_resolution_date;
+      }
+
+      const response = await apiClient.post(`/issues/escalate-risk/${escalatingRisk.id}`, escalationPayload);
+
+      toast.success('Risk successfully escalated to issue with full context');
+      
+      // Close dialog and reset form
+      setEscalationDialogOpen(false);
+      setEscalatingRisk(null);
       
       // Refresh risks to show updated status
       fetchRisks();
@@ -387,11 +489,80 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
       // You can uncomment this if you want to auto-navigate:
       // router.push(`/projects/${projectId}?tab=issues`);
     } catch (error: any) {
-      console.error('Failed to materialize risk:', error);
-      toast.error(getErrorMessage(error, 'Failed to convert risk to issue'));
+      console.error('Failed to escalate risk:', error);
+      toast.error(getErrorMessage(error, 'Failed to escalate risk to issue'));
     } finally {
       setMaterializingRiskId(null);
     }
+  };
+
+  // Helper functions to manage array fields
+  const addContributingFactor = () => {
+    if (escalationData.contributing_factor_input.trim()) {
+      setEscalationData({
+        ...escalationData,
+        contributing_factors: [...escalationData.contributing_factors, escalationData.contributing_factor_input.trim()],
+        contributing_factor_input: '',
+      });
+    }
+  };
+
+  const removeContributingFactor = (index: number) => {
+    setEscalationData({
+      ...escalationData,
+      contributing_factors: escalationData.contributing_factors.filter((_, i) => i !== index),
+    });
+  };
+
+  const addEvidence = () => {
+    if (escalationData.evidence_input.trim()) {
+      setEscalationData({
+        ...escalationData,
+        evidence_collected: [...escalationData.evidence_collected, escalationData.evidence_input.trim()],
+        evidence_input: '',
+      });
+    }
+  };
+
+  const removeEvidence = (index: number) => {
+    setEscalationData({
+      ...escalationData,
+      evidence_collected: escalationData.evidence_collected.filter((_, i) => i !== index),
+    });
+  };
+
+  const addAffectedArea = () => {
+    if (escalationData.affected_area_input.trim()) {
+      setEscalationData({
+        ...escalationData,
+        affected_areas: [...escalationData.affected_areas, escalationData.affected_area_input.trim()],
+        affected_area_input: '',
+      });
+    }
+  };
+
+  const removeAffectedArea = (index: number) => {
+    setEscalationData({
+      ...escalationData,
+      affected_areas: escalationData.affected_areas.filter((_, i) => i !== index),
+    });
+  };
+
+  const addStakeholder = () => {
+    if (escalationData.stakeholder_input.trim()) {
+      setEscalationData({
+        ...escalationData,
+        affected_stakeholders: [...escalationData.affected_stakeholders, escalationData.stakeholder_input.trim()],
+        stakeholder_input: '',
+      });
+    }
+  };
+
+  const removeStakeholder = (index: number) => {
+    setEscalationData({
+      ...escalationData,
+      affected_stakeholders: escalationData.affected_stakeholders.filter((_, i) => i !== index),
+    });
   };
 
   // Bulk curate selected risks
@@ -640,6 +811,23 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
                       </TableCell>
                       <TableCell>
                         <div className="flex gap-2">
+                          <RiskMitigationPlansView
+                            riskId={risk.id}
+                            riskTitle={risk.title}
+                            extractedFromDocumentId={risk.extracted_from_document_id || risk.source_document_id}
+                            projectId={projectId}
+                            projectName={undefined} // Not needed for project view
+                            riskDescription={risk.description}
+                            riskCategory={risk.category}
+                            riskProbability={probabilityMap[risk.probability]}
+                            riskImpact={impactMap[risk.impact]}
+                            riskSeverity={severity}
+                            trigger={
+                              <Button variant="ghost" size="sm" title="View Mitigation Plans">
+                                <Shield className="h-4 w-4" />
+                              </Button>
+                            }
+                          />
                           <Button
                             variant="ghost"
                             size="sm"
@@ -884,6 +1072,370 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
             </Button>
             <Button onClick={handleSaveRisk} disabled={!formData.title}>
               {editingRisk ? 'Update' : 'Create'} Risk
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Escalate Risk to Issue Dialog */}
+      <Dialog open={escalationDialogOpen} onOpenChange={setEscalationDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Escalate Risk to Issue</DialogTitle>
+            <DialogDescription>
+              Convert this risk into an issue with full context including mitigation plans and source document references.
+              {escalatingRisk && (
+                <div className="mt-2 p-3 bg-orange-50 dark:bg-orange-950 border border-orange-200 dark:border-orange-800 rounded-lg">
+                  <div className="font-medium text-orange-900 dark:text-orange-100">Risk: {escalatingRisk.title}</div>
+                  <div className="text-sm text-orange-700 dark:text-orange-300 mt-1">
+                    Severity: {severityConfig[escalatingRisk.severity]?.label || escalatingRisk.severity} | 
+                    Impact: {impactMap[escalatingRisk.impact]}/5 | 
+                    Probability: {probabilityMap[escalatingRisk.probability]}%
+                  </div>
+                </div>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-6">
+            {/* Required Fields */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-foreground">Required Information</h3>
+              
+              <div>
+                <Label htmlFor="trigger_reason">Trigger Reason *</Label>
+                <Select
+                  value={escalationData.trigger_reason}
+                  onValueChange={(value: any) => setEscalationData({ ...escalationData, trigger_reason: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="manual_escalation">Manual Escalation</SelectItem>
+                    <SelectItem value="threshold_breach">Threshold Breach</SelectItem>
+                    <SelectItem value="probability_increase">Probability Increase</SelectItem>
+                    <SelectItem value="impact_increase">Impact Increase</SelectItem>
+                    <SelectItem value="external_event">External Event</SelectItem>
+                    <SelectItem value="timeline_breach">Timeline Breach</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="trigger_description">Trigger Description *</Label>
+                <Textarea
+                  id="trigger_description"
+                  value={escalationData.trigger_description}
+                  onChange={(e) => setEscalationData({ ...escalationData, trigger_description: e.target.value })}
+                  placeholder="Describe why this risk is being escalated to an issue (minimum 10 characters)"
+                  rows={4}
+                  className={escalationData.trigger_description.length > 0 && escalationData.trigger_description.length < 10 ? 'border-yellow-500' : ''}
+                />
+                <div className="text-xs text-muted-foreground mt-1">
+                  {escalationData.trigger_description.length}/1000 characters
+                  {escalationData.trigger_description.length > 0 && escalationData.trigger_description.length < 10 && (
+                    <span className="text-yellow-600 ml-2">Minimum 10 characters required</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Root Cause Analysis */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-foreground">Root Cause Analysis (Optional)</h3>
+              
+              <div>
+                <Label htmlFor="root_cause_hypothesis">Root Cause Hypothesis</Label>
+                <Textarea
+                  id="root_cause_hypothesis"
+                  value={escalationData.root_cause_hypothesis}
+                  onChange={(e) => setEscalationData({ ...escalationData, root_cause_hypothesis: e.target.value })}
+                  placeholder="Initial hypothesis about the root cause of this issue"
+                  rows={3}
+                />
+              </div>
+
+              <div>
+                <Label>Contributing Factors</Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={escalationData.contributing_factor_input}
+                    onChange={(e) => setEscalationData({ ...escalationData, contributing_factor_input: e.target.value })}
+                    placeholder="Add contributing factor"
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addContributingFactor();
+                      }
+                    }}
+                  />
+                  <Button type="button" variant="outline" onClick={addContributingFactor}>
+                    Add
+                  </Button>
+                </div>
+                {escalationData.contributing_factors.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {escalationData.contributing_factors.map((factor, index) => (
+                      <div key={index} className="flex items-center gap-2 p-2 bg-muted rounded">
+                        <span className="flex-1 text-sm">{factor}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeContributingFactor(index)}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <Label>Evidence Collected</Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={escalationData.evidence_input}
+                    onChange={(e) => setEscalationData({ ...escalationData, evidence_input: e.target.value })}
+                    placeholder="Add evidence item"
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addEvidence();
+                      }
+                    }}
+                  />
+                  <Button type="button" variant="outline" onClick={addEvidence}>
+                    Add
+                  </Button>
+                </div>
+                {escalationData.evidence_collected.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {escalationData.evidence_collected.map((evidence, index) => (
+                      <div key={index} className="flex items-center gap-2 p-2 bg-muted rounded">
+                        <span className="flex-1 text-sm">{evidence}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeEvidence(index)}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Impact Assessment */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-foreground">Impact Assessment (Optional)</h3>
+              
+              <div>
+                <Label htmlFor="actual_impact">Actual Impact</Label>
+                <Textarea
+                  id="actual_impact"
+                  value={escalationData.actual_impact}
+                  onChange={(e) => setEscalationData({ ...escalationData, actual_impact: e.target.value })}
+                  placeholder="Describe the actual impact of this issue"
+                  rows={3}
+                />
+              </div>
+
+              <div>
+                <Label>Affected Areas</Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={escalationData.affected_area_input}
+                    onChange={(e) => setEscalationData({ ...escalationData, affected_area_input: e.target.value })}
+                    placeholder="Add affected area (e.g., Schedule, Budget, Quality)"
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addAffectedArea();
+                      }
+                    }}
+                  />
+                  <Button type="button" variant="outline" onClick={addAffectedArea}>
+                    Add
+                  </Button>
+                </div>
+                {escalationData.affected_areas.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {escalationData.affected_areas.map((area, index) => (
+                      <div key={index} className="flex items-center gap-2 p-2 bg-muted rounded">
+                        <span className="flex-1 text-sm">{area}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeAffectedArea(index)}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <Label>Affected Stakeholders</Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={escalationData.stakeholder_input}
+                    onChange={(e) => setEscalationData({ ...escalationData, stakeholder_input: e.target.value })}
+                    placeholder="Add stakeholder name or role"
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addStakeholder();
+                      }
+                    }}
+                  />
+                  <Button type="button" variant="outline" onClick={addStakeholder}>
+                    Add
+                  </Button>
+                </div>
+                {escalationData.affected_stakeholders.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {escalationData.affected_stakeholders.map((stakeholder, index) => (
+                      <div key={index} className="flex items-center gap-2 p-2 bg-muted rounded">
+                        <span className="flex-1 text-sm">{stakeholder}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeStakeholder(index)}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <Label htmlFor="priority">Priority Override</Label>
+                <Select
+                  value={escalationData.priority}
+                  onValueChange={(value: any) => setEscalationData({ ...escalationData, priority: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Use risk severity (default)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Use risk severity (default)</SelectItem>
+                    <SelectItem value="critical">Critical</SelectItem>
+                    <SelectItem value="high">High</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="low">Low</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Immediate Actions */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-foreground">Immediate Actions (Optional)</h3>
+              
+              <div>
+                <Label htmlFor="immediate_actions_taken">Immediate Actions Taken</Label>
+                <Textarea
+                  id="immediate_actions_taken"
+                  value={escalationData.immediate_actions_taken}
+                  onChange={(e) => setEscalationData({ ...escalationData, immediate_actions_taken: e.target.value })}
+                  placeholder="Describe any immediate actions that have been taken"
+                  rows={3}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="workaround_applied">Workaround Applied</Label>
+                <Textarea
+                  id="workaround_applied"
+                  value={escalationData.workaround_applied}
+                  onChange={(e) => setEscalationData({ ...escalationData, workaround_applied: e.target.value })}
+                  placeholder="Describe any temporary workarounds that have been applied"
+                  rows={3}
+                />
+              </div>
+            </div>
+
+            {/* Resolution Planning */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-foreground">Resolution Planning (Optional)</h3>
+              
+              <div>
+                <Label htmlFor="recommended_mitigation">Recommended Mitigation</Label>
+                <Textarea
+                  id="recommended_mitigation"
+                  value={escalationData.recommended_mitigation}
+                  onChange={(e) => setEscalationData({ ...escalationData, recommended_mitigation: e.target.value })}
+                  placeholder="Recommendations for resolving this issue"
+                  rows={3}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="target_resolution_date">Target Resolution Date</Label>
+                <Input
+                  id="target_resolution_date"
+                  type="date"
+                  value={escalationData.target_resolution_date}
+                  onChange={(e) => setEscalationData({ ...escalationData, target_resolution_date: e.target.value })}
+                />
+              </div>
+            </div>
+
+            {/* Info Box */}
+            <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5" />
+                <div className="text-sm text-blue-900 dark:text-blue-100">
+                  <div className="font-medium mb-1">Enhanced Escalation</div>
+                  <div className="text-blue-700 dark:text-blue-300">
+                    This escalation will include:
+                    <ul className="list-disc list-inside mt-1 space-y-0.5">
+                      <li>All risk information and context</li>
+                      <li>Source document reference</li>
+                      <li>All associated mitigation plans (for playbook initiation)</li>
+                      <li>Root cause analysis (if provided)</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setEscalationDialogOpen(false);
+              setEscalatingRisk(null);
+            }}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleEscalateRisk} 
+              disabled={
+                !escalationData.trigger_description || 
+                escalationData.trigger_description.length < 10 ||
+                materializingRiskId === escalatingRisk?.id
+              }
+            >
+              {materializingRiskId === escalatingRisk?.id ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Escalating...
+                </>
+              ) : (
+                'Escalate to Issue'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

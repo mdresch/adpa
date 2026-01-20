@@ -45,7 +45,7 @@ import {
 } from "@/components/ui/icons-shim"
 import { apiClient, Project, Template } from "@/lib/api"
 import { useAuth } from "@/contexts/AuthContext"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 import Link from "next/link"
 
 // Utility imports

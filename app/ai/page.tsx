@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -27,14 +27,13 @@ import {
   RefreshCw,
   AlertCircle,
   CheckCircle,
-  Clock,
   Zap,
   Plus,
 } from "@/components/ui/icons-shim"
 import { useAuth } from "@/contexts/AuthContext"
 import { useWebSocket, useJobUpdates } from "@/contexts/WebSocketContext"
 import { apiClient } from "@/lib/api"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 
 // Status configuration for template badges
 const statusConfig = {
@@ -61,13 +60,20 @@ interface AIProvider {
   is_active: boolean
 }
 
+interface Variable {
+  name: string
+  description?: string
+  required?: boolean
+  type?: string
+}
+
 interface Template {
   id: string
   name: string
   description?: string
   framework: string
   category?: string
-  variables: any[]
+  variables: Variable[]
   development_status?: 'draft' | 'testing' | 'compliance' | 'validated' | 'production' | 'deprecated' | 'archived'
   validation_count?: number
   success_count?: number
@@ -86,10 +92,10 @@ interface Project {
 
 export default function AIPage() {
   const router = useRouter()
-  const { user, hasPermission } = useAuth()
+  const { hasPermission } = useAuth()
   const { isConnected } = useWebSocket()
   const jobUpdates = useJobUpdates()
-  
+
   const [providers, setProviders] = useState<AIProvider[]>([])
   const [templates, setTemplates] = useState<Template[]>([])
   const [selectedProvider, setSelectedProvider] = useState<string>("")
@@ -102,12 +108,12 @@ export default function AIPage() {
   const [result, setResult] = useState<any>(null)
   const [currentJobId, setCurrentJobId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  
+
   // Project selection state
   const [saveMode, setSaveMode] = useState<'new-project' | 'existing-project'>('new-project')
   const [projects, setProjects] = useState<Project[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState<string>("")
-  const [projectContext, setProjectContext] = useState<any>(null)
+
 
   useEffect(() => {
     const fetchData = async () => {
@@ -117,12 +123,12 @@ export default function AIPage() {
           apiClient.getTemplates({ is_public: true, limit: 50 }),
           apiClient.getProjects({ limit: 100 })
         ])
-        
+
         setProviders(providersData)
         setTemplates(templatesData.templates)
         // Extract projects array from response
         setProjects(projectsResponse.projects || [])
-        
+
         // Set default provider
         const activeProvider = providersData.find(p => p.is_active)
         if (activeProvider) {
@@ -143,17 +149,17 @@ export default function AIPage() {
   useEffect(() => {
     if (currentJobId && jobUpdates[currentJobId]) {
       const jobUpdate = jobUpdates[currentJobId]
-      
+
       if (jobUpdate.status === "completed") {
         setIsGenerating(false)
         setResult(jobUpdate.result)
         setCurrentJobId(null)
-        
+
         // Check if document was saved to project
         const documentId = jobUpdate.result?.documentId
-        const projectId = jobUpdate.result?.projectId || 
-                         (saveMode === 'existing-project' ? selectedProjectId : null)
-        
+        const projectId = jobUpdate.result?.projectId ||
+          (saveMode === 'existing-project' ? selectedProjectId : null)
+
         if (documentId && projectId) {
           const projectName = projects.find(p => p.id === projectId)?.name || 'Project'
           toast.success("Document generated and saved!", {
@@ -181,7 +187,7 @@ export default function AIPage() {
         })
       }
     }
-  }, [currentJobId, jobUpdates, projects, saveMode, selectedProjectId])
+  }, [currentJobId, jobUpdates, projects, saveMode, selectedProjectId, router])
 
   const handleGenerate = async () => {
     if (!selectedProvider) {
@@ -208,8 +214,7 @@ export default function AIPage() {
       if (saveMode === 'existing-project' && selectedProjectId) {
         try {
           const context = await apiClient.request<any>(`/projects/${selectedProjectId}/context`)
-          setProjectContext(context)
-          
+
           // Enhance prompt with project context
           enhancedPrompt = `
 PROJECT CONTEXT:
@@ -247,16 +252,16 @@ Please create a document that considers the project context above and ensures co
       if (response.jobId) {
         setCurrentJobId(response.jobId)
         setIsGenerating(false) // Allow user to continue working
-        
-        const projectName = saveMode === 'existing-project' && selectedProjectId 
-          ? projects.find(p => p.id === selectedProjectId)?.name 
+
+        const projectName = saveMode === 'existing-project' && selectedProjectId
+          ? projects.find(p => p.id === selectedProjectId)?.name
           : 'new project'
-        
+
         toast.success("Document generation started", {
           description: `Generating in background. You can continue working and will be notified when complete. ${projectName !== 'new project' ? `Document will be saved to ${projectName}.` : ''}`,
           duration: 5000
         })
-        
+
         // Reset form to allow starting another generation
         setPrompt("")
         setResult(null)
@@ -280,10 +285,10 @@ Please create a document that considers the project context above and ensures co
       setVariables({})
       return
     }
-    
+
     setSelectedTemplate(templateId)
     const template = templates.find(t => t.id === templateId)
-    
+
     if (template) {
       // Initialize variables for template
       const newVariables: Record<string, string> = {}
@@ -399,7 +404,7 @@ Please create a document that considers the project context above and ensures co
                             <TabsTrigger value="basic">Basic</TabsTrigger>
                             <TabsTrigger value="advanced">Advanced</TabsTrigger>
                           </TabsList>
-                          
+
                           <TabsContent value="basic" className="space-y-4">
                             {/* Provider Selection */}
                             <div className="space-y-2">
@@ -450,7 +455,7 @@ Please create a document that considers the project context above and ensures co
                                 </SelectContent>
                               </Select>
                             </div>
-                            
+
                             {/* Template Status Information */}
                             {selectedTemplateData && (
                               <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
@@ -469,13 +474,13 @@ Please create a document that considers the project context above and ensures co
                                     </Badge>
                                   )}
                                 </div>
-                                
+
                                 {selectedTemplateData.validation_count !== undefined && selectedTemplateData.validation_count > 0 && (
                                   <div className="grid grid-cols-2 gap-3 text-sm">
                                     <div className="flex flex-col">
                                       <span className="text-muted-foreground text-xs">Success Rate</span>
                                       <span className="font-semibold">
-                                        {selectedTemplateData.success_rate !== undefined 
+                                        {selectedTemplateData.success_rate !== undefined
                                           ? `${Number(selectedTemplateData.success_rate).toFixed(1)}%`
                                           : selectedTemplateData.success_count && selectedTemplateData.validation_count
                                             ? `${Math.round((selectedTemplateData.success_count / selectedTemplateData.validation_count) * 100)}%`
@@ -488,7 +493,7 @@ Please create a document that considers the project context above and ensures co
                                     </div>
                                   </div>
                                 )}
-                                
+
                                 {/* Warning for non-production templates */}
                                 {selectedTemplateData.development_status && selectedTemplateData.development_status !== 'production' && (
                                   <div className="flex items-start gap-2 p-3 rounded-md bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800">
@@ -506,7 +511,7 @@ Please create a document that considers the project context above and ensures co
                                     </div>
                                   </div>
                                 )}
-                                
+
                                 {/* Success indicator for production templates */}
                                 {selectedTemplateData.development_status === 'production' && (
                                   <div className="flex items-start gap-2 p-3 rounded-md bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">
@@ -543,7 +548,7 @@ Please create a document that considers the project context above and ensures co
                                 <Plus className="h-4 w-4" />
                                 <Label className="text-base font-semibold">Save Generated Document To:</Label>
                               </div>
-                              
+
                               <div className="space-y-3">
                                 <div className="flex items-center space-x-2">
                                   <input
@@ -561,7 +566,7 @@ Please create a document that considers the project context above and ensures co
                                     Create New Project
                                   </Label>
                                 </div>
-                                
+
                                 <div className="flex items-center space-x-2">
                                   <input
                                     type="radio"
@@ -575,7 +580,7 @@ Please create a document that considers the project context above and ensures co
                                     Save to Existing Project
                                   </Label>
                                 </div>
-                                
+
                                 {/* Project Dropdown (shown when existing-project is selected) */}
                                 {saveMode === 'existing-project' && (
                                   <div className="ml-6 space-y-2">
@@ -602,7 +607,7 @@ Please create a document that considers the project context above and ensures co
                                         )}
                                       </SelectContent>
                                     </Select>
-                                    
+
                                     {selectedProjectId && (
                                       <div className="p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
                                         <p className="text-sm text-blue-900 dark:text-blue-100">
@@ -667,7 +672,7 @@ Please create a document that considers the project context above and ensures co
                                       id={variable.name}
                                       placeholder={variable.description}
                                       value={variables[variable.name] || ""}
-                                      onChange={(e) => setVariables(prev => ({
+                                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setVariables(prev => ({
                                         ...prev,
                                         [variable.name]: e.target.value
                                       }))}
@@ -744,8 +749,8 @@ Please create a document that considers the project context above and ensures co
                                 >
                                   <Copy className="h-4 w-4" />
                                 </Button>
-                                <Button 
-                                  variant="outline" 
+                                <Button
+                                  variant="outline"
                                   size="sm"
                                   onClick={() => {
                                     const content = result.content || result.text || JSON.stringify(result)
@@ -763,101 +768,101 @@ Please create a document that considers the project context above and ensures co
                                 </Button>
                               </div>
                             </div>
-                            
+
                             {/* Create Project Prompt for Business Case/Ideation templates */}
                             {selectedTemplateData && (
                               selectedTemplateData.name.toLowerCase().includes('business case') ||
                               selectedTemplateData.name.toLowerCase().includes('ideation') ||
                               selectedTemplateData.category?.toLowerCase().includes('business case')
                             ) && (
-                              <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                                <div className="flex items-start gap-3">
-                                  <div className="bg-blue-500 rounded-full p-2 mt-1">
-                                    <Sparkles className="h-4 w-4 text-white" />
-                                  </div>
-                                  <div className="flex-1">
-                                    <h4 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">
-                                      Ready to turn this into a project?
-                                    </h4>
-                                    <p className="text-sm text-blue-700 dark:text-blue-300 mb-3">
-                                      Start a formal project with this {selectedTemplateData.name.includes('Ideation') ? 'ideation' : 'business case'} as the foundation.
-                                    </p>
-                                    <div className="flex gap-2">
-                                      <Button
-                                        size="sm"
-                                        onClick={async () => {
-                                          if (saveMode === 'existing-project' && selectedProjectId) {
-                                            // Save to existing project
-                                            try {
-                                              const selectedProject = projects.find(p => p.id === selectedProjectId)
-                                              const templateName = selectedTemplateData?.name || 'AI Generated Document'
-                                              const documentTitle = `${templateName} - ${new Date().toLocaleDateString()}`
-                                              
-                                              await apiClient.request(`/projects/${selectedProjectId}/documents`, {
-                                                method: 'POST',
-                                                body: JSON.stringify({
-                                                  title: documentTitle,
-                                                  content: result.content || result.text,
-                                                  template_id: selectedTemplate || null,
-                                                  generation_metadata: {
-                                                    prompt: prompt,
-                                                    provider: selectedProvider,
-                                                    template: selectedTemplate,
-                                                    ...(result.metadata || {})
-                                                  }
+                                <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                                  <div className="flex items-start gap-3">
+                                    <div className="bg-blue-500 rounded-full p-2 mt-1">
+                                      <Sparkles className="h-4 w-4 text-white" />
+                                    </div>
+                                    <div className="flex-1">
+                                      <h4 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">
+                                        Ready to turn this into a project?
+                                      </h4>
+                                      <p className="text-sm text-blue-700 dark:text-blue-300 mb-3">
+                                        Start a formal project with this {selectedTemplateData.name.includes('Ideation') ? 'ideation' : 'business case'} as the foundation.
+                                      </p>
+                                      <div className="flex gap-2">
+                                        <Button
+                                          size="sm"
+                                          onClick={async () => {
+                                            if (saveMode === 'existing-project' && selectedProjectId) {
+                                              // Save to existing project
+                                              try {
+                                                const selectedProject = projects.find(p => p.id === selectedProjectId)
+                                                const templateName = selectedTemplateData?.name || 'AI Generated Document'
+                                                const documentTitle = `${templateName} - ${new Date().toLocaleDateString()}`
+
+                                                await apiClient.request(`/projects/${selectedProjectId}/documents`, {
+                                                  method: 'POST',
+                                                  body: JSON.stringify({
+                                                    title: documentTitle,
+                                                    content: result.content || result.text,
+                                                    template_id: selectedTemplate || null,
+                                                    generation_metadata: {
+                                                      prompt: prompt,
+                                                      provider: selectedProvider,
+                                                      template: selectedTemplate,
+                                                      ...(result.metadata || {})
+                                                    }
+                                                  })
                                                 })
-                                              })
-                                              
-                                              toast.success(`Document saved to project: ${selectedProject?.name}`)
-                                              window.location.href = `/projects/${selectedProjectId}?tab=documents`
-                                            } catch (error: any) {
-                                              console.error("Failed to save document:", error)
-                                              toast.error(error?.message || 'Failed to save document to project')
+
+                                                toast.success(`Document saved to project: ${selectedProject?.name}`)
+                                                window.location.href = `/projects/${selectedProjectId}?tab=documents`
+                                              } catch (error: any) {
+                                                console.error("Failed to save document:", error)
+                                                toast.error(error?.message || 'Failed to save document to project')
+                                              }
+                                            } else {
+                                              // Store the generated content in sessionStorage for the project creation page
+                                              sessionStorage.setItem('project-draft', JSON.stringify({
+                                                content: result.content || result.text,
+                                                templateId: selectedTemplate,
+                                                templateName: selectedTemplateData.name,
+                                                framework: selectedTemplateData.framework,
+                                                prompt: prompt,
+                                                metadata: result.metadata || {}
+                                              }))
+                                              // Set flag to auto-open create dialog
+                                              sessionStorage.setItem('auto-create-project', 'true')
+                                              // Redirect to projects page (which has the create dialog)
+                                              window.location.href = '/projects'
                                             }
-                                          } else {
-                                            // Store the generated content in sessionStorage for the project creation page
-                                            sessionStorage.setItem('project-draft', JSON.stringify({
+                                          }}
+                                          className="bg-blue-600 hover:bg-blue-700 text-white"
+                                        >
+                                          <Plus className="h-4 w-4 mr-2" />
+                                          {saveMode === 'existing-project' && selectedProjectId ? 'Save to Project' : 'Create Project'}
+                                        </Button>
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => {
+                                            // Store for process flow instead
+                                            sessionStorage.setItem('process-flow-draft', JSON.stringify({
                                               content: result.content || result.text,
                                               templateId: selectedTemplate,
                                               templateName: selectedTemplateData.name,
                                               framework: selectedTemplateData.framework,
-                                              prompt: prompt,
-                                              metadata: result.metadata || {}
+                                              prompt: prompt
                                             }))
-                                            // Set flag to auto-open create dialog
-                                            sessionStorage.setItem('auto-create-project', 'true')
-                                            // Redirect to projects page (which has the create dialog)
-                                            window.location.href = '/projects'
-                                          }
-                                        }}
-                                        className="bg-blue-600 hover:bg-blue-700 text-white"
-                                      >
-                                        <Plus className="h-4 w-4 mr-2" />
-                                        {saveMode === 'existing-project' && selectedProjectId ? 'Save to Project' : 'Create Project'}
-                                      </Button>
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => {
-                                          // Store for process flow instead
-                                          sessionStorage.setItem('process-flow-draft', JSON.stringify({
-                                            content: result.content || result.text,
-                                            templateId: selectedTemplate,
-                                            templateName: selectedTemplateData.name,
-                                            framework: selectedTemplateData.framework,
-                                            prompt: prompt
-                                          }))
-                                          window.location.href = '/process-flow'
-                                        }}
-                                      >
-                                        Use in Pipeline
-                                      </Button>
+                                            window.location.href = '/process-flow'
+                                          }}
+                                        >
+                                          Use in Pipeline
+                                        </Button>
+                                      </div>
                                     </div>
                                   </div>
                                 </div>
-                              </div>
-                            )}
-                            
+                              )}
+
                             <div className="bg-muted rounded-lg p-4 max-h-96 overflow-y-auto">
                               <pre className="whitespace-pre-wrap text-sm">
                                 {result.content || result.text || JSON.stringify(result, null, 2)}

@@ -18,7 +18,7 @@ import { MitigationPlanDialog } from './MitigationPlanDialog'
 import { MitigationPlanStats } from './MitigationPlanStats'
 import { AIMitigationSuggestionsDialog } from './AIMitigationSuggestionsDialog'
 import { apiClient } from '@/lib/api'
-import { toast } from 'sonner'
+import { toast } from '@/lib/notify'
 
 interface MitigationPlanListProps {
   riskId: string

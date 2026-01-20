@@ -22,7 +22,7 @@ import {
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { getApiUrl } from "@/lib/api-url"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 import { Award, Plus, Trash2, Edit, Loader2, CheckCircle2 } from "lucide-react"
 
 interface Skill {

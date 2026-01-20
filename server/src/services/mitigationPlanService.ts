@@ -16,6 +16,8 @@ export interface MitigationPlan {
   action_type: 'mitigation' | 'contingency' | 'avoidance' | 'transfer' | 'acceptance'
   owner_id?: string
   assigned_to?: string
+  owner_name?: string
+  assigned_to_name?: string
   status: 'planned' | 'in_progress' | 'completed' | 'cancelled' | 'on_hold'
   completion_percentage: number
   planned_start_date?: string
@@ -28,6 +30,7 @@ export interface MitigationPlan {
   completion_evidence?: Record<string, any>
   priority: 'critical' | 'high' | 'medium' | 'low'
   expected_effectiveness?: number
+  cost_estimate?: 'low' | 'medium' | 'high'
   metadata?: Record<string, any>
   created_at: string
   updated_at: string
@@ -43,11 +46,14 @@ export interface CreateMitigationPlanInput {
   action_type?: 'mitigation' | 'contingency' | 'avoidance' | 'transfer' | 'acceptance'
   owner_id?: string
   assigned_to?: string
+  owner_name?: string
+  assigned_to_name?: string
   planned_start_date?: string
   planned_completion_date?: string
   due_date?: string
   priority?: 'critical' | 'high' | 'medium' | 'low'
   expected_effectiveness?: number
+  cost_estimate?: 'low' | 'medium' | 'high'
   metadata?: Record<string, any>
 }
 
@@ -57,6 +63,8 @@ export interface UpdateMitigationPlanInput {
   action_type?: 'mitigation' | 'contingency' | 'avoidance' | 'transfer' | 'acceptance'
   owner_id?: string
   assigned_to?: string
+  owner_name?: string
+  assigned_to_name?: string
   status?: 'planned' | 'in_progress' | 'completed' | 'cancelled' | 'on_hold'
   completion_percentage?: number
   planned_start_date?: string
@@ -69,6 +77,7 @@ export interface UpdateMitigationPlanInput {
   completion_evidence?: Record<string, any>
   priority?: 'critical' | 'high' | 'medium' | 'low'
   expected_effectiveness?: number
+  cost_estimate?: 'low' | 'medium' | 'high'
   metadata?: Record<string, any>
 }
 
@@ -103,8 +112,8 @@ export async function getMitigationPlans(
     let query = `
       SELECT 
         mp.*,
-        u1.name as owner_name,
-        u2.name as assigned_to_name,
+        COALESCE(mp.owner_name, u1.name) as owner_name,
+        COALESCE(mp.assigned_to_name, u2.name) as assigned_to_name,
         u3.name as created_by_name,
         u4.name as completed_by_name
       FROM mitigation_plans mp
@@ -167,7 +176,12 @@ export async function getMitigationPlans(
     query += ` ORDER BY mp.priority DESC, mp.due_date ASC NULLS LAST, mp.created_at DESC`
     
     const result = await pool.query(query, params)
-    
+
+    if (!result || !Array.isArray(result.rows)) {
+      logger.warn('[MITIGATION-PLANS] Query returned no result or invalid shape', { query, params })
+      return []
+    }
+
     return result.rows.map(row => ({
       id: row.id,
       risk_id: row.risk_id,
@@ -176,6 +190,8 @@ export async function getMitigationPlans(
       action_type: row.action_type,
       owner_id: row.owner_id,
       assigned_to: row.assigned_to,
+      owner_name: row.owner_name,
+      assigned_to_name: row.assigned_to_name,
       status: row.status,
       completion_percentage: row.completion_percentage,
       planned_start_date: row.planned_start_date,
@@ -188,6 +204,7 @@ export async function getMitigationPlans(
       completion_evidence: row.completion_evidence || {},
       priority: row.priority,
       expected_effectiveness: row.expected_effectiveness,
+      cost_estimate: row.cost_estimate,
       metadata: row.metadata || {},
       created_at: row.created_at,
       updated_at: row.updated_at,
@@ -207,7 +224,18 @@ export async function getMitigationPlans(
 export async function getMitigationPlanById(planId: string): Promise<MitigationPlan | null> {
   try {
     const result = await pool.query(
-      `SELECT * FROM mitigation_plans WHERE id = $1`,
+      `SELECT 
+        mp.*,
+        COALESCE(mp.owner_name, u1.name) as owner_name,
+        COALESCE(mp.assigned_to_name, u2.name) as assigned_to_name,
+        u3.name as created_by_name,
+        u4.name as completed_by_name
+      FROM mitigation_plans mp
+      LEFT JOIN users u1 ON mp.owner_id = u1.id
+      LEFT JOIN users u2 ON mp.assigned_to = u2.id
+      LEFT JOIN users u3 ON mp.created_by = u3.id
+      LEFT JOIN users u4 ON mp.completed_by = u4.id
+      WHERE mp.id = $1`,
       [planId]
     )
     
@@ -224,6 +252,8 @@ export async function getMitigationPlanById(planId: string): Promise<MitigationP
       action_type: row.action_type,
       owner_id: row.owner_id,
       assigned_to: row.assigned_to,
+      owner_name: row.owner_name,
+      assigned_to_name: row.assigned_to_name,
       status: row.status,
       completion_percentage: row.completion_percentage,
       planned_start_date: row.planned_start_date,
@@ -236,6 +266,7 @@ export async function getMitigationPlanById(planId: string): Promise<MitigationP
       completion_evidence: row.completion_evidence || {},
       priority: row.priority,
       expected_effectiveness: row.expected_effectiveness,
+      cost_estimate: row.cost_estimate,
       metadata: row.metadata || {},
       created_at: row.created_at,
       updated_at: row.updated_at,
@@ -260,9 +291,10 @@ export async function createMitigationPlan(
     const result = await pool.query(
       `INSERT INTO mitigation_plans (
         risk_id, title, description, action_type, owner_id, assigned_to,
+        owner_name, assigned_to_name,
         planned_start_date, planned_completion_date, due_date, priority,
-        expected_effectiveness, metadata, created_by
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        expected_effectiveness, cost_estimate, metadata, created_by
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
       RETURNING *`,
       [
         input.risk_id,
@@ -271,11 +303,14 @@ export async function createMitigationPlan(
         input.action_type || 'mitigation',
         input.owner_id || null,
         input.assigned_to || null,
+        input.owner_name || null,
+        input.assigned_to_name || null,
         input.planned_start_date || null,
         input.planned_completion_date || null,
         input.due_date || null,
         input.priority || 'medium',
         input.expected_effectiveness || null,
+        input.cost_estimate || null,
         JSON.stringify(input.metadata || {}),
         userId
       ]
@@ -330,6 +365,18 @@ export async function updateMitigationPlan(
       paramCount++
       updates.push(`assigned_to = $${paramCount}`)
       params.push(input.assigned_to)
+    }
+    
+    if (input.owner_name !== undefined) {
+      paramCount++
+      updates.push(`owner_name = $${paramCount}`)
+      params.push(input.owner_name || null)
+    }
+    
+    if (input.assigned_to_name !== undefined) {
+      paramCount++
+      updates.push(`assigned_to_name = $${paramCount}`)
+      params.push(input.assigned_to_name || null)
     }
     
     // Get current plan to check status change
@@ -446,6 +493,12 @@ export async function updateMitigationPlan(
       paramCount++
       updates.push(`expected_effectiveness = $${paramCount}`)
       params.push(input.expected_effectiveness)
+    }
+    
+    if (input.cost_estimate !== undefined) {
+      paramCount++
+      updates.push(`cost_estimate = $${paramCount}`)
+      params.push(input.cost_estimate)
     }
     
     if (input.metadata !== undefined) {

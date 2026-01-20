@@ -33,7 +33,7 @@ import {
 import { Award, Target, ArrowUp, Brain, Archive, ClipboardCheck, Sparkles } from "lucide-react"
 import { useAuth } from "@/contexts/AuthContext"
 import { apiClient } from "@/lib/api"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 import { TemplateRecommendations } from "@/components/templates/TemplateRecommendations"
 
 interface Template {

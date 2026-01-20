@@ -14,7 +14,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Loader2, Sparkles, CheckCircle2, AlertCircle, Clock, Target, Users, CheckSquare, Square } from 'lucide-react'
 import { apiClient } from '@/lib/api'
-import { toast } from 'sonner'
+import { toast } from '@/lib/notify'
 import { MitigationPlanDialog } from './MitigationPlanDialog'
 import type { MitigationPlan } from './MitigationPlanCard'
 
@@ -24,6 +24,7 @@ interface MitigationSuggestion {
   action_type: 'mitigation' | 'contingency' | 'avoidance' | 'transfer' | 'acceptance'
   priority: 'critical' | 'high' | 'medium' | 'low'
   expected_effectiveness: number
+  cost_estimate?: 'low' | 'medium' | 'high'
   key_steps: string[]
   estimated_duration_days: number
   resource_requirements: string
@@ -213,6 +214,7 @@ export function AIMitigationSuggestionsDialog({
           completion_percentage: 0,
           priority: suggestion.priority,
           expected_effectiveness: suggestion.expected_effectiveness,
+          cost_estimate: suggestion.cost_estimate,
           planned_start_date: new Date().toISOString().split('T')[0],
           planned_completion_date: new Date(Date.now() + suggestion.estimated_duration_days * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
           due_date: new Date(Date.now() + suggestion.estimated_duration_days * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
@@ -384,6 +386,19 @@ export function AIMitigationSuggestionsDialog({
                           <p className="font-medium">{suggestion.expected_effectiveness}%</p>
                         </div>
                       </div>
+                      {suggestion.cost_estimate && (
+                        <div className="flex items-center gap-2">
+                          <Badge 
+                            className={
+                              suggestion.cost_estimate === 'low' ? 'bg-green-100 text-green-800' :
+                              suggestion.cost_estimate === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-orange-100 text-orange-800'
+                            }
+                          >
+                            {suggestion.cost_estimate.charAt(0).toUpperCase() + suggestion.cost_estimate.slice(1)} Cost
+                          </Badge>
+                        </div>
+                      )}
                       <div className="flex items-center gap-2">
                         <Clock className="h-4 w-4 text-muted-foreground" />
                         <div>
@@ -481,6 +496,16 @@ export function AIMitigationSuggestionsDialog({
           riskId={riskId}
           plan={undefined} // Pass undefined to create new plan, not update
           onSuccess={handlePlanCreated}
+          initialValues={{
+            title: selectedSuggestion.title,
+            description: `${selectedSuggestion.description}\n\nKey Steps:\n${selectedSuggestion.key_steps.map((step, i) => `${i + 1}. ${step}`).join('\n')}\n\nResource Requirements: ${selectedSuggestion.resource_requirements}\n\nSuccess Criteria: ${selectedSuggestion.success_criteria}`,
+            action_type: selectedSuggestion.action_type,
+            priority: selectedSuggestion.priority,
+            expected_effectiveness: selectedSuggestion.expected_effectiveness,
+            cost_estimate: selectedSuggestion.cost_estimate,
+            status: 'planned',
+            completion_percentage: 0,
+          }}
         />
       )}
     </>

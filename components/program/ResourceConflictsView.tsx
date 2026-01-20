@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Loader2, AlertTriangle, RefreshCw, CheckCircle } from '@/components/ui/icons-shim'
-import { toast } from 'sonner'
+import { toast } from '@/lib/notify'
 import { getApiUrl } from '@/lib/api-url'
 
 interface ResourceConflict {

@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { toast } from 'sonner';
+import { toast } from '@/lib/notify';
 import { apiClient, ReviewSchedule } from '@/lib/api';
 import { Loader2, Save, Calendar } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';

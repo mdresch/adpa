@@ -31,7 +31,7 @@ export function Pagination({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.6, duration: 0.4 }}
-      className="flex items-center justify-between"
+      className="relative z-[9999] flex items-center justify-between"
     >
       {/* Item count display */}
       <div className="text-sm text-slate-500 dark:text-slate-400">

@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { toast } from 'sonner';
+import { toast } from '@/lib/notify';
 import { getApiUrl } from '@/lib/api-url';
 import { useAuth } from '@/contexts/AuthContext';
 import { MaturityCard } from '@/components/onboarding/MaturityCard';

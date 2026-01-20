@@ -19,7 +19,7 @@ import { ReviewSchedulingTab } from '@/components/program/ReviewSchedulingTab';
 import { Loader2, Archive, ArchiveRestore, AlertTriangle } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { getApiUrl } from '@/lib/api-url';
-import { toast } from 'sonner';
+import { toast } from '@/lib/notify';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {

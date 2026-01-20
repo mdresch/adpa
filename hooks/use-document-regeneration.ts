@@ -6,7 +6,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { apiClient } from '@/lib/api'
 import { useWebSocket } from '@/contexts/WebSocketContext'
-import { toast } from 'sonner'
+import { toast } from '@/lib/notify'
 
 interface RegenerationProgress {
   jobId: string

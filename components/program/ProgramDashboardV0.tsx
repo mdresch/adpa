@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { ArrowLeft, Calendar, DollarSign, Search, FileText } from "lucide-react"
 import { Line, LineChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 
 interface ProgramDashboardV0Props {
   programId: string

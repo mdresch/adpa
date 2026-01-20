@@ -22,7 +22,7 @@ import {
   AlertCircle,
 } from "lucide-react"
 import { useAuth } from "@/contexts/AuthContext"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 
 export default function LoginPage() {
   const { login, register, isAuthenticated, loading } = useAuth()

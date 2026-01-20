@@ -38,7 +38,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Progress } from '@/components/ui/progress'
 import { cn } from '@/lib/utils'
 import { apiClient } from '@/lib/api'
-import { toast } from 'sonner'
+import { toast } from '@/lib/notify'
 import type { MitigationPlan } from './MitigationPlanCard'
 
 const mitigationPlanSchema = z.object({
@@ -47,6 +47,8 @@ const mitigationPlanSchema = z.object({
   action_type: z.enum(['mitigation', 'contingency', 'avoidance', 'transfer', 'acceptance']).default('mitigation'),
   owner_id: z.string().uuid().optional().nullable(),
   assigned_to: z.string().uuid().optional().nullable(),
+  owner_name: z.string().optional().nullable(),
+  assigned_to_name: z.string().optional().nullable(),
   status: z.enum(['planned', 'in_progress', 'completed', 'cancelled', 'on_hold']).default('planned'),
   completion_percentage: z.number().min(0).max(100).default(0),
   planned_start_date: z.string().optional().nullable(),
@@ -54,6 +56,7 @@ const mitigationPlanSchema = z.object({
   due_date: z.string().optional().nullable(),
   priority: z.enum(['critical', 'high', 'medium', 'low']).default('medium'),
   expected_effectiveness: z.number().min(0).max(100).optional().nullable(),
+  cost_estimate: z.enum(['low', 'medium', 'high']).optional().nullable(),
   completion_notes: z.string().optional(),
 })
 
@@ -77,7 +80,6 @@ export function MitigationPlanDialog({
   initialValues,
 }: MitigationPlanDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [users, setUsers] = useState<Array<{ id: string; name: string; email: string }>>([])
   
   const form = useForm<MitigationPlanFormData>({
     resolver: zodResolver(mitigationPlanSchema),
@@ -87,6 +89,8 @@ export function MitigationPlanDialog({
       action_type: initialValues?.action_type || plan?.action_type || 'mitigation',
       owner_id: initialValues?.owner_id || plan?.owner_id || null,
       assigned_to: initialValues?.assigned_to || plan?.assigned_to || null,
+      owner_name: initialValues?.owner_name || plan?.owner_name || null,
+      assigned_to_name: initialValues?.assigned_to_name || plan?.assigned_to_name || null,
       status: initialValues?.status || plan?.status || 'planned',
       completion_percentage: initialValues?.completion_percentage || plan?.completion_percentage || 0,
       planned_start_date: initialValues?.planned_start_date || plan?.planned_start_date || null,
@@ -94,6 +98,7 @@ export function MitigationPlanDialog({
       due_date: initialValues?.due_date || plan?.due_date || null,
       priority: initialValues?.priority || plan?.priority || 'medium',
       expected_effectiveness: initialValues?.expected_effectiveness || plan?.expected_effectiveness || null,
+      cost_estimate: initialValues?.cost_estimate || plan?.cost_estimate || null,
       completion_notes: initialValues?.completion_notes || plan?.completion_notes || '',
     },
   })
@@ -107,6 +112,8 @@ export function MitigationPlanDialog({
         action_type: initialValues.action_type || 'mitigation',
         owner_id: initialValues.owner_id || null,
         assigned_to: initialValues.assigned_to || null,
+        owner_name: initialValues.owner_name || null,
+        assigned_to_name: initialValues.assigned_to_name || null,
         status: initialValues.status || 'planned',
         completion_percentage: initialValues.completion_percentage || 0,
         planned_start_date: initialValues.planned_start_date || null,
@@ -114,25 +121,11 @@ export function MitigationPlanDialog({
         due_date: initialValues.due_date || null,
         priority: initialValues.priority || 'medium',
         expected_effectiveness: initialValues.expected_effectiveness || null,
+        cost_estimate: initialValues.cost_estimate || null,
         completion_notes: initialValues.completion_notes || '',
       })
     }
   }, [open, initialValues, form])
-  
-  // Load users for owner/assignee selection
-  useEffect(() => {
-    const loadUsers = async () => {
-      try {
-        const response = await apiClient.get('/users')
-        if (response.success && response.data) {
-          setUsers(response.data)
-        }
-      } catch (error) {
-        console.error('Failed to load users:', error)
-      }
-    }
-    loadUsers()
-  }, [])
   
   // Update form when plan changes
   useEffect(() => {
@@ -143,6 +136,8 @@ export function MitigationPlanDialog({
         action_type: plan.action_type,
         owner_id: plan.owner_id || null,
         assigned_to: plan.assigned_to || null,
+        owner_name: plan.owner_name || null,
+        assigned_to_name: plan.assigned_to_name || null,
         status: plan.status,
         completion_percentage: plan.completion_percentage,
         planned_start_date: plan.planned_start_date || null,
@@ -150,6 +145,7 @@ export function MitigationPlanDialog({
         due_date: plan.due_date || null,
         priority: plan.priority,
         expected_effectiveness: plan.expected_effectiveness || null,
+        cost_estimate: plan.cost_estimate || null,
         completion_notes: plan.completion_notes || '',
       })
     } else {
@@ -159,6 +155,8 @@ export function MitigationPlanDialog({
         action_type: 'mitigation',
         owner_id: null,
         assigned_to: null,
+        owner_name: null,
+        assigned_to_name: null,
         status: 'planned',
         completion_percentage: 0,
         planned_start_date: null,
@@ -166,6 +164,7 @@ export function MitigationPlanDialog({
         due_date: null,
         priority: 'medium',
         expected_effectiveness: null,
+        cost_estimate: null,
         completion_notes: '',
       })
     }
@@ -378,28 +377,18 @@ export function MitigationPlanDialog({
             <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
-                name="owner_id"
+                name="owner_name"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Owner</FormLabel>
-                    <Select
-                      onValueChange={(value: string) => field.onChange(value === 'none' ? null : value)}
-                      value={field.value || 'none'}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select owner" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="none">None</SelectItem>
-                        {users.map((user) => (
-                          <SelectItem key={user.id} value={user.id}>
-                            {user.name || user.email}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <Input
+                        placeholder="Enter owner name"
+                        {...field}
+                        value={field.value || ''}
+                        onChange={(e) => field.onChange(e.target.value || null)}
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -407,28 +396,18 @@ export function MitigationPlanDialog({
               
               <FormField
                 control={form.control}
-                name="assigned_to"
+                name="assigned_to_name"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Assigned To</FormLabel>
-                    <Select
-                      onValueChange={(value: string) => field.onChange(value === 'none' ? null : value)}
-                      value={field.value || 'none'}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select assignee" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="none">None</SelectItem>
-                        {users.map((user) => (
-                          <SelectItem key={user.id} value={user.id}>
-                            {user.name || user.email}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <Input
+                        placeholder="Enter assignee name"
+                        {...field}
+                        value={field.value || ''}
+                        onChange={(e) => field.onChange(e.target.value || null)}
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -555,28 +534,57 @@ export function MitigationPlanDialog({
               />
             </div>
             
-            {/* Expected Effectiveness */}
-            <FormField
-              control={form.control}
-              name="expected_effectiveness"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Expected Effectiveness (%)</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      min="0"
-                      max="100"
-                      placeholder="0-100"
-                      {...field}
-                      onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : null)}
-                      value={field.value ?? ''}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {/* Expected Effectiveness and Cost Estimate */}
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="expected_effectiveness"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Expected Effectiveness (%)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min="0"
+                        max="100"
+                        placeholder="0-100"
+                        {...field}
+                        onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : null)}
+                        value={field.value ?? ''}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={form.control}
+                name="cost_estimate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Cost Estimate</FormLabel>
+                    <Select
+                      onValueChange={(value: string) => field.onChange(value === 'none' ? null : value)}
+                      value={field.value || 'none'}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select cost estimate" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="none">None</SelectItem>
+                        <SelectItem value="low">Low</SelectItem>
+                        <SelectItem value="medium">Medium</SelectItem>
+                        <SelectItem value="high">High</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
             
             {/* Completion Notes (shown when status is completed) */}
             {status === 'completed' && (

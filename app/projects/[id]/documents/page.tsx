@@ -59,7 +59,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { useAuth } from "@/contexts/AuthContext"
 import { apiClient, Project, Template } from "@/lib/api"
 import { getApiUrl } from "@/lib/api-url"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 import { QualityAuditBadge } from "@/components/quality"
 
 // Status configuration for template badges

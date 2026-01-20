@@ -12,7 +12,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { toast } from 'sonner'
+import { toast } from '@/lib/notify'
 import { ArrowLeft, Save, Trash2, Loader2, AlertTriangle } from 'lucide-react'
 import { apiClient } from '@/lib/api'
 import {

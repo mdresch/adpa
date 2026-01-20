@@ -142,6 +142,14 @@ const SelectItem = React.forwardRef(function SelectItem(
   >,
   ref: React.ForwardedRef<React.ElementRef<typeof SelectPrimitive.Item>>
 ) {
+  // Defensive: skip rendering items that have an explicit empty-string value.
+  // Radix Select treats empty string as the 'clear' value; rendering an Item
+  // with value="" causes a runtime error. Return null to avoid crashing the UI.
+  const value = (props as any).value
+  if (typeof value === 'string' && value === '') {
+    return null
+  }
+
   return (
     <SelectPrimitive.Item
       ref={ref}

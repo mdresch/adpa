@@ -8,7 +8,7 @@
 
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -24,9 +24,9 @@ import {
   Sparkles,
   ArrowUpRight,
   ArrowDownRight,
-} from "lucide-react"
+} from "@/components/ui/icons-shim"
 import { apiClient } from "@/lib/api"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 import { useRouter } from "next/navigation"
 import { useWebSocket } from "@/contexts/WebSocketContext"
 
@@ -52,7 +52,7 @@ interface BudgetAlert {
   drift_description: string
   drift_impact: string
   budget: number
-  cost_baseline: any
+  cost_baseline: unknown
 }
 
 interface PositiveDriftOpportunity {
@@ -102,17 +102,38 @@ export function ExecutiveDriftAlertsWidget() {
   const [summary, setSummary] = useState<ExecutiveSummary | null>(null)
   const [loading, setLoading] = useState(true)
 
+  const fetchExecutiveDashboardData = useCallback(async () => {
+    try {
+      const [summaryData, alertsData, budgetData, opportunitiesData] = await Promise.all([
+        apiClient.get('/executive-dashboard/summary'),
+        apiClient.get('/executive-dashboard/drift-alerts?severity=critical&limit=5'),
+        apiClient.get('/executive-dashboard/budget-alerts'),
+        apiClient.get('/executive-dashboard/positive-drift')
+      ])
+
+      setSummary(summaryData as ExecutiveSummary)
+      setDriftAlerts((alertsData as { alerts: DriftAlert[] })?.alerts || [])
+      setBudgetAlerts((budgetData as { budget_alerts: BudgetAlert[] })?.budget_alerts || [])
+      setOpportunities((opportunitiesData as { opportunities: PositiveDriftOpportunity[] })?.opportunities || [])
+    } catch (error) {
+      console.error('Failed to fetch executive dashboard data:', error)
+      toast.error('Failed to load executive dashboard')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     fetchExecutiveDashboardData()
-    
+
     // Refresh every 2 minutes
     const interval = setInterval(fetchExecutiveDashboardData, 120000)
     return () => clearInterval(interval)
-  }, [])
+  }, [fetchExecutiveDashboardData])
 
   // Listen for real-time drift detection events
   useEffect(() => {
-    const handleDriftDetected = (data: any) => {
+    const handleDriftDetected = () => {
       // Refresh the dashboard data when new drift is detected
       fetchExecutiveDashboardData()
     }
@@ -122,28 +143,7 @@ export function ExecutiveDriftAlertsWidget() {
     return () => {
       off("drift:detected", handleDriftDetected)
     }
-  }, [on, off])
-
-  const fetchExecutiveDashboardData = async () => {
-    try {
-      const [summaryData, alertsData, budgetData, opportunitiesData] = await Promise.all([
-        apiClient.get('/executive-dashboard/summary'),
-        apiClient.get('/executive-dashboard/drift-alerts?severity=critical&limit=5'),
-        apiClient.get('/executive-dashboard/budget-alerts'),
-        apiClient.get('/executive-dashboard/positive-drift')
-      ])
-
-      setSummary(summaryData as any)
-      setDriftAlerts((alertsData as any)?.alerts || [])
-      setBudgetAlerts((budgetData as any)?.budget_alerts || [])
-      setOpportunities((opportunitiesData as any)?.opportunities || [])
-    } catch (error) {
-      console.error('Failed to fetch executive dashboard data:', error)
-      toast.error('Failed to load executive dashboard')
-    } finally {
-      setLoading(false)
-    }
-  }
+  }, [on, off, fetchExecutiveDashboardData])
 
   const getSeverityColor = (severity: string) => {
     switch (severity) {

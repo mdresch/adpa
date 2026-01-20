@@ -18,7 +18,7 @@ import {
   Info
 } from "lucide-react"
 import { apiClient } from "@/lib/api"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 
 interface ComplianceSecurity {
   id: string

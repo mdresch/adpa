@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 // @ts-expect-error - useParams is available in Next.js 14
 import { useParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { toast } from 'sonner';
+import { toast } from '@/lib/notify';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { MaturityCard } from '@/components/onboarding/MaturityCard';

@@ -46,7 +46,7 @@ import {
 } from "@/components/ui/icons-shim"
 import { apiClient } from "@/lib/api"
 import { useAuth } from "@/contexts/AuthContext"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 import { format } from "date-fns"
 import { debounce } from "lodash"
 

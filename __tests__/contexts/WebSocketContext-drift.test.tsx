@@ -4,10 +4,17 @@
 
 import { renderHook, waitFor } from '@testing-library/react'
 import { useDriftDetection, WebSocketContext } from '@/contexts/WebSocketContext'
-import { toast } from 'sonner'
+import { toast } from '@/lib/notify'
 
 // Mock the dependencies
-jest.mock('sonner')
+jest.mock('@/lib/notify', () => ({
+  toast: {
+    success: jest.fn(),
+    error: jest.fn(),
+    info: jest.fn(),
+    warning: jest.fn(),
+  },
+}))
 jest.mock('@/lib/api', () => ({
   apiClient: {
     connectWebSocket: jest.fn(() => ({

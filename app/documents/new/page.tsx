@@ -12,7 +12,7 @@ import { Header } from "@/components/header"
 import { ArrowLeft, FileText, Loader2 } from "@/components/ui/icons-shim"
 import { useAuth } from "@/contexts/AuthContext"
 import { apiClient, Template } from "@/lib/api"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 
 export default function NewDocumentPage() {
   const router = useRouter()

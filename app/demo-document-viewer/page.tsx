@@ -26,7 +26,7 @@ import {
   Settings,
   History,
 } from "@/components/ui/icons-shim"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 import ReactMarkdown from "react-markdown"
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
 import { vscDarkPlus } from "react-syntax-highlighter/dist/cjs/styles/prism"

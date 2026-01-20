@@ -41,7 +41,7 @@ import {
 } from "lucide-react"
 import { parseHours } from "@/lib/utils/taskUtils"
 import { cn } from "@/lib/utils"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 
 interface KanbanBoardViewProps {
   tasks: Task[]

@@ -33,7 +33,7 @@ import {
 import { KeyResultCard } from './KeyResultCard'
 import { KeyResultDialog } from './KeyResultDialog'
 import { apiClient } from '@/lib/api'
-import { toast } from 'sonner'
+import { toast } from '@/lib/notify'
 
 interface OKR {
   id: string

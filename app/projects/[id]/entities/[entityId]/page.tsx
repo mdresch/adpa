@@ -21,7 +21,7 @@ import {
 import { Loader2, ArrowLeft, CheckCircle2, XCircle, Database, FileText, Calendar, User, AlertTriangle } from "lucide-react"
 import { apiClient } from "@/lib/api"
 import { useAuth } from "@/contexts/AuthContext"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 
 interface ExtractedEntity {
   id: string

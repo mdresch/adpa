@@ -21,7 +21,7 @@ import {
 import { cn } from '@/lib/utils'
 import { format } from 'date-fns'
 import { MitigationPlanDialog } from './MitigationPlanDialog'
-import { toast } from 'sonner'
+import { toast } from '@/lib/notify'
 import { apiClient } from '@/lib/api'
 
 export interface MitigationPlan {
@@ -32,6 +32,8 @@ export interface MitigationPlan {
   action_type: 'mitigation' | 'contingency' | 'avoidance' | 'transfer' | 'acceptance'
   owner_id?: string
   assigned_to?: string
+  owner_name?: string
+  assigned_to_name?: string
   status: 'planned' | 'in_progress' | 'completed' | 'cancelled' | 'on_hold'
   completion_percentage: number
   planned_start_date?: string
@@ -43,6 +45,7 @@ export interface MitigationPlan {
   completion_notes?: string
   priority: 'critical' | 'high' | 'medium' | 'low'
   expected_effectiveness?: number
+  cost_estimate?: 'low' | 'medium' | 'high'
   created_at: string
   updated_at: string
   completed_at?: string
@@ -219,13 +222,29 @@ export function MitigationPlanCard({ plan, onUpdate, onDelete, showRiskInfo = fa
             )}
           </div>
           
-          {/* Expected Effectiveness */}
-          {plan.expected_effectiveness !== undefined && (
-            <div className="flex items-center gap-1 text-sm text-muted-foreground">
-              <Target className="h-3 w-3" />
-              <span>Expected Effectiveness: {plan.expected_effectiveness}%</span>
-            </div>
-          )}
+          {/* Expected Effectiveness and Cost Estimate */}
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            {plan.expected_effectiveness !== undefined && (
+              <div className="flex items-center gap-1 text-muted-foreground">
+                <Target className="h-3 w-3" />
+                <span>Effectiveness: {plan.expected_effectiveness}%</span>
+              </div>
+            )}
+            {plan.cost_estimate && (
+              <div className="flex items-center gap-1 text-muted-foreground">
+                <span className="font-medium">Cost:</span>
+                <Badge 
+                  className={cn(
+                    plan.cost_estimate === 'low' && 'bg-green-100 text-green-800',
+                    plan.cost_estimate === 'medium' && 'bg-yellow-100 text-yellow-800',
+                    plan.cost_estimate === 'high' && 'bg-orange-100 text-orange-800'
+                  )}
+                >
+                  {plan.cost_estimate.charAt(0).toUpperCase() + plan.cost_estimate.slice(1)}
+                </Badge>
+              </div>
+            )}
+          </div>
           
           {/* Progress Notes Count */}
           {plan.progress_notes && plan.progress_notes.length > 0 && (

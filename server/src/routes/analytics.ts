@@ -64,14 +64,24 @@ router.get("/dashboard",
         WHERE user_id = $1 AND action = 'ai_generate'
       `, [userId])
 
-      // Get recent activity
+      // Get recent activity from both audit_logs and user_activity_logs
       const recentActivity = await pool.query(`
         SELECT 
           action,
           resource_type,
           resource_id,
+          new_values,
           created_at
         FROM audit_logs
+        WHERE user_id = $1
+        UNION ALL
+        SELECT 
+          activity_type as action,
+          entity_type as resource_type,
+          entity_id as resource_id,
+          metadata as new_values,
+          created_at
+        FROM user_activity_logs
         WHERE user_id = $1
         ORDER BY created_at DESC
         LIMIT 10

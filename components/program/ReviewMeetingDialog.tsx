@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { toast } from 'sonner';
+import { toast } from '@/lib/notify';
 import { apiClient, ReviewMeeting, ReviewSchedule } from '@/lib/api';
 import { Loader2, Save, X, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';

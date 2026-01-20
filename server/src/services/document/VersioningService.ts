@@ -649,13 +649,42 @@ export class VersioningService {
                     semanticVersion: version.semantic_version
                 };
             } else {
+                // Calculate metrics
+                const wordCount = options.content.split(/\s+/).filter(Boolean).length;
+                const characterCount = options.content.length;
+
+                // Extract template metadata if available
+                const templateVersion = options.metadata?.version || options.metadata?.template_version || '1.0.0';
+                const templateAuthor = options.metadata?.created_by_email || options.metadata?.template_author || null;
+                const templateFramework = options.metadata?.framework || options.metadata?.template_framework || null;
+                const templateCategory = options.metadata?.category || options.metadata?.template_category || null;
+                const templateComplexity = options.metadata?.complexity || options.metadata?.template_complexity || 'medium';
+
                 // Create new document
                 const result = await pool.query(
                     `INSERT INTO documents (
-                        id, project_id, name, content, template_id, status, created_by, updated_by
-                    ) VALUES ($1, $2, $3, $4, $5, 'draft', $6, $6)
+                        id, project_id, name, content, template_id, status, created_by, updated_by,
+                        word_count, character_count, version, semantic_version,
+                        template_version, template_author, template_framework, template_category, 
+                        template_complexity, template_metadata
+                    ) VALUES ($1, $2, $3, $4, $5, 'draft', $6, $6, $7, $8, 1, '1.0.0', $9, $10, $11, $12, $13, $14)
                     RETURNING *`,
-                    [documentId, projectId, options.documentName, options.content, templateId, options.userId]
+                    [
+                        documentId,
+                        projectId,
+                        options.documentName,
+                        options.content,
+                        templateId,
+                        options.userId,
+                        wordCount,
+                        characterCount,
+                        templateVersion,
+                        templateAuthor,
+                        templateFramework,
+                        templateCategory,
+                        templateComplexity,
+                        options.metadata ? JSON.stringify(options.metadata) : null
+                    ]
                 );
 
                 // Initialize versioning

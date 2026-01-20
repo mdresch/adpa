@@ -32,7 +32,7 @@ import {
   AlertTriangle,
   Users
 } from "@/components/ui/icons-shim"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 import { apiClient } from "@/lib/api"
 
 interface Document {

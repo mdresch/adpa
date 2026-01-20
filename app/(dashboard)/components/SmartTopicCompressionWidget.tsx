@@ -1,9 +1,9 @@
 "use client"
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { AnimatedCard } from "@/components/animated-layout"
 import { motion } from "framer-motion"
-import { Brain } from "lucide-react"
+import { Brain } from "@/components/ui/icons-shim"
 
 interface KnowledgeArea {
   domain: string
@@ -64,12 +64,12 @@ export function SmartTopicCompressionWidget() {
       <CardContent>
         <div className="space-y-6">
           <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-            ADPA's intelligent compression engine analyzes documents across multiple knowledge domains, 
-            extracting key topics and building contextualized summaries primed with domain expertise. 
-            Each knowledge area maintains its own compression matrix, ensuring critical information is preserved 
+            ADPA&apos;s intelligent compression engine analyzes documents across multiple knowledge domains,
+            extracting key topics and building contextualized summaries primed with domain expertise.
+            Each knowledge area maintains its own compression matrix, ensuring critical information is preserved
             while achieving up to 80% token reduction.
           </p>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {knowledgeAreas.map((area, index) => (
               <motion.div
@@ -102,9 +102,9 @@ export function SmartTopicCompressionWidget() {
               Context Building Intelligence
             </h4>
             <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-              Our AI analyzes each document through domain-specific lenses, identifying key concepts, 
-              relationships, and dependencies. The system builds rich contextual summaries that maintain 
-              semantic accuracy while dramatically reducing token consumption. Each summary is tagged with 
+              Our AI analyzes each document through domain-specific lenses, identifying key concepts,
+              relationships, and dependencies. The system builds rich contextual summaries that maintain
+              semantic accuracy while dramatically reducing token consumption. Each summary is tagged with
               relevance scores, confidence metrics, and cross-domain linkages for optimal reuse.
             </p>
           </div>

@@ -36,7 +36,7 @@ import { useWebSocket } from "@/contexts/WebSocketContext"
 import { useRouter } from "next/navigation"
 import { apiClient } from "@/lib/api"
 import { getApiUrl } from "@/lib/api-url"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 import { debounce } from "lodash"
 import { SkeletonLine } from "@/components/ui/skeleton"
 

@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import { apiClient, User } from "@/lib/api"
-import { toast } from "sonner"
+import { toast } from "@/lib/notify"
 
 interface AuthContextType {
   user: User | null

@@ -6,7 +6,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useWebSocket } from '@/contexts/WebSocketContext'
 import { apiClient } from '@/lib/api'
-import { toast } from 'sonner'
+import { toast } from '@/lib/notify'
 
 interface DriftAlert {
   driftRecordId: string

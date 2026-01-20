@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Task } from "@/hooks/use-tasks"
 import { UserPlus, Trash2, Loader2, Clock, DollarSign } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 import { apiClient } from "@/lib/api"
 import { ResourceAssignmentDialog } from "./ResourceAssignmentDialog"
 

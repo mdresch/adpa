@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { FileText, Plus, Edit, Copy, Archive, Download, Upload, Search, Filter, Minus, Wand2, Brain, Sparkles, Eye } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 import { apiClient } from "@/lib/api"
 import {
   Dialog,

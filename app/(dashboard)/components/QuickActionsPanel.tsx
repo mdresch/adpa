@@ -1,10 +1,10 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { AnimatedCard } from "@/components/animated-layout"
 import { motion } from "framer-motion"
-import { TrendingUp } from "lucide-react"
+import { TrendingUp } from "@/components/ui/icons-shim"
 import type { QuickAction } from "../types"
 
 interface QuickActionsPanelProps {
@@ -45,7 +45,7 @@ export function QuickActionsPanel({ actions }: QuickActionsPanelProps) {
           }}
           className="grid grid-cols-2 md:grid-cols-4 gap-4"
         >
-          {actions.map((action, index) => {
+          {actions.map((action) => {
             const IconComponent = action.icon
 
             return (

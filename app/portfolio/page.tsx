@@ -12,7 +12,7 @@ import { Header } from "@/components/header"
 import { useAuth } from "@/contexts/AuthContext"
 import { ArrowUpRight, Search, Plus, FileText, BarChart3 } from "lucide-react"
 import { Target } from "@/components/ui/icons-shim"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 import { apiClient } from "@/lib/api"
 import {
   PieChart,

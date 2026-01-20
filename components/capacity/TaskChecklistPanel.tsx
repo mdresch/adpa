@@ -18,7 +18,7 @@ import {
   Loader2, Plus, MoreVertical, Trash2, Clock, User, 
   GripVertical, AlertCircle, CheckCircle2, Calendar
 } from '@/components/ui/icons-shim'
-import { toast } from 'sonner'
+import { toast } from '@/lib/notify'
 import { getApiUrl } from '@/lib/api-url'
 
 interface ChecklistItem {

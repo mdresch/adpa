@@ -32,7 +32,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { AlertTriangle, Plus, Pencil, Trash2, Loader2, TrendingUp, Shield, FileText, ExternalLink } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/notify';
 import { RiskMitigationPlansView } from '@/components/risks/RiskMitigationPlansView';
 import { useRouter } from 'next/navigation';
 

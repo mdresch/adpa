@@ -10,7 +10,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Progress } from "@/components/ui/progress"
 import { Eye, EyeOff, Building2, Mail, User, Lock, AlertCircle, Loader2, LogIn } from "lucide-react"
 import { useAuth } from "@/contexts/AuthContext"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 
 interface RegistrationDialogProps {
   open: boolean

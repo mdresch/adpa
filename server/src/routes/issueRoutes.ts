@@ -16,7 +16,10 @@ import {
   getIssueStatusHistory,
   getIssueStats,
   materializeRiskIntoIssue,
-  IssueFilters
+  escalateRiskToIssue,
+  suggestRootCauseAnalysis,
+  IssueFilters,
+  RiskToIssueEscalationInput
 } from '../services/issueService'
 import { logger, childLogger } from '../utils/logger'
 import { aiService } from '../services/aiService'
@@ -44,12 +47,12 @@ router.get(
         related_risk_id: req.query.related_risk_id as string,
         search: req.query.search as string
       }
-      
+
       const userId = (req as any).user!.id
       const issues = await getIssues(filters, userId)
-      
+
       log.info('[ISSUES] Retrieved issues', { count: issues.length })
-      
+
       res.json({
         success: true,
         data: issues,
@@ -80,11 +83,11 @@ router.get(
     const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { projectId } = req.params
-      
+
       const stats = await getIssueStats(projectId)
-      
+
       log.info('[ISSUES] Retrieved issue stats', { projectId })
-      
+
       res.json({
         success: true,
         data: stats
@@ -120,14 +123,14 @@ router.post(
     const { issue_id } = req.body
     try {
       const { issue_title, issue_description, issue_category, issue_priority, issue_impact } = req.body
-      
+
       // Fetch issue details if not provided
       let issueTitle = issue_title
       let issueDescription = issue_description
       let issueCategory = issue_category
       let issuePriority = issue_priority
       let issueImpact = issue_impact
-      
+
       if (!issueTitle || !issueDescription) {
         const issueResult = await pool.query(
           `SELECT title, description, category, priority, impact 
@@ -135,7 +138,7 @@ router.post(
            WHERE id = $1`,
           [issue_id]
         )
-        
+
         if (issueResult.rows.length > 0) {
           const issue = issueResult.rows[0]
           issueTitle = issueTitle || issue.title || 'Unknown Issue'
@@ -145,7 +148,7 @@ router.post(
           issueImpact = issueImpact || issue.impact || ''
         }
       }
-      
+
       // Build AI prompt for resolution suggestions
       const prompt = `You are a project management expert specializing in issue resolution. Analyze the following issue and generate 3-5 comprehensive resolution suggestions.
 
@@ -190,23 +193,23 @@ Guidelines:
 - Return ONLY valid JSON, no markdown or explanation`
 
       log.info('[ISSUES-SUGGEST-RESOLUTION] Generating AI suggestions', { issue_id })
-      
+
       // Use the built-in AI provider selection and fallback mechanism
       let aiResponse
       try {
         const availableProviders = await aiService.getAvailableProviders()
         const activeProviders = availableProviders.filter(p => p.is_active)
-        
+
         if (activeProviders.length === 0) {
           throw new Error('No active AI providers configured. Please configure at least one AI provider in Settings.')
         }
-        
+
         const preferredProvider = activeProviders[0].type
         log.info('[ISSUES-SUGGEST-RESOLUTION] Using AI provider system', {
           preferredProvider,
           totalActiveProviders: activeProviders.length
         })
-        
+
         aiResponse = await aiService.generateWithFallback({
           prompt,
           provider: preferredProvider,
@@ -214,8 +217,8 @@ Guidelines:
           max_tokens: 3000,
           userId: (req as any).user!.id
         })
-        
-        log.info('[ISSUES-SUGGEST-RESOLUTION] AI suggestions generated successfully', { 
+
+        log.info('[ISSUES-SUGGEST-RESOLUTION] AI suggestions generated successfully', {
           providerUsed: (aiResponse as any).providerUsed || 'unknown',
           contentLength: aiResponse.content?.length || 0
         })
@@ -226,13 +229,13 @@ Guidelines:
         })
         throw fallbackError
       }
-      
+
       // Parse AI response
       let suggestions: any[] = []
       try {
         const parsed = JSON.parse(aiResponse.content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim())
         suggestions = parsed.suggestions || []
-        
+
         // Validate and normalize suggestions
         suggestions = suggestions.map((suggestion: any, index: number) => ({
           title: suggestion.title || `Resolution ${index + 1}`,
@@ -250,9 +253,9 @@ Guidelines:
         log.error('[ISSUES-SUGGEST-RESOLUTION] Failed to parse AI response', { error: parseError.message, response: aiResponse.content.substring(0, 500) })
         throw new Error('Failed to parse AI suggestions. Please try again.')
       }
-      
+
       log.info('[ISSUES-SUGGEST-RESOLUTION] Generated suggestions', { count: suggestions.length })
-      
+
       res.json({
         success: true,
         data: {
@@ -267,10 +270,10 @@ Guidelines:
         stack: error.stack,
         issue_id
       })
-      
+
       let errorMessage = error.message || 'Failed to generate resolution suggestions'
       let statusCode = 500
-      
+
       if (error.message?.includes('No active providers') || error.message?.includes('All active providers')) {
         errorMessage = 'No AI providers are currently configured or active. Please configure at least one AI provider in Settings.'
         statusCode = 503
@@ -281,7 +284,7 @@ Guidelines:
         errorMessage = 'AI provider rate limit exceeded. Please try again in a few moments.'
         statusCode = 429
       }
-      
+
       if (!res.headersSent) {
         res.status(statusCode).json({
           success: false,
@@ -310,18 +313,18 @@ router.get(
     const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { id } = req.params
-      
+
       const issue = await getIssueById(id)
-      
+
       if (!issue) {
         return res.status(404).json({
           success: false,
           error: 'Issue not found'
         })
       }
-      
+
       log.info('[ISSUES] Retrieved issue', { id })
-      
+
       res.json({
         success: true,
         data: issue
@@ -351,11 +354,11 @@ router.get(
     const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { id } = req.params
-      
+
       const history = await getIssueStatusHistory(id)
-      
+
       log.info('[ISSUES] Retrieved issue status history', { id, count: history.length })
-      
+
       res.json({
         success: true,
         data: history
@@ -398,9 +401,9 @@ router.post(
     try {
       const userId = (req as any).user!.id
       const issue = await createIssue(req.body, userId)
-      
+
       log.info('[ISSUES] Created issue', { id: issue.id, project_id: issue.project_id })
-      
+
       res.status(201).json({
         success: true,
         data: issue
@@ -447,11 +450,11 @@ router.put(
     try {
       const { id } = req.params
       const userId = (req as any).user!.id
-      
+
       const issue = await updateIssue(id, req.body, userId)
-      
+
       log.info('[ISSUES] Updated issue', { id: issue.id })
-      
+
       res.json({
         success: true,
         data: issue
@@ -481,18 +484,18 @@ router.delete(
     const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { id } = req.params
-      
+
       const deleted = await deleteIssue(id)
-      
+
       if (!deleted) {
         return res.status(404).json({
           success: false,
           error: 'Issue not found'
         })
       }
-      
+
       log.info('[ISSUES] Deleted issue', { id })
-      
+
       res.json({
         success: true,
         message: 'Issue deleted successfully'
@@ -525,11 +528,11 @@ router.post(
     try {
       const { riskId } = req.params
       const userId = (req as any).user!.id
-      
+
       const issue = await materializeRiskIntoIssue(riskId, userId, req.body)
-      
+
       log.info('[ISSUES] Materialized risk into issue', { riskId, issueId: issue.id })
-      
+
       res.json({
         success: true,
         data: issue,
@@ -546,5 +549,138 @@ router.post(
   }
 )
 
-export default router
+/**
+ * POST /api/issues/escalate-risk/:riskId
+ * Escalate a risk to an issue with full RCA support and proper terminology translation
+ * This is the recommended endpoint for risk-to-issue escalation
+ */
+router.post(
+  '/escalate-risk/:riskId',
+  authenticateToken,
+  validate(Joi.object({
+    // Required escalation context
+    trigger_reason: Joi.string().valid(
+      'threshold_breach', 'manual_escalation', 'probability_increase',
+      'impact_increase', 'external_event', 'timeline_breach'
+    ).required(),
+    trigger_description: Joi.string().required().min(10).max(1000),
 
+    // Root cause analysis fields
+    root_cause_hypothesis: Joi.string().optional().allow('', null),
+    contributing_factors: Joi.array().items(Joi.string()).optional(),
+    evidence_collected: Joi.array().items(Joi.string()).optional(),
+
+    // Impact assessment
+    actual_impact: Joi.string().optional().allow('', null),
+    affected_areas: Joi.array().items(Joi.string()).optional(),
+    affected_stakeholders: Joi.array().items(Joi.string()).optional(),
+
+    // Priority override
+    priority: Joi.string().valid('critical', 'high', 'medium', 'low').optional(),
+
+    // Immediate actions
+    immediate_actions_taken: Joi.string().optional().allow('', null),
+    workaround_applied: Joi.string().optional().allow('', null),
+
+    // Resolution
+    recommended_mitigation: Joi.string().optional().allow('', null),
+    target_resolution_date: Joi.string().isoDate().optional().allow('', null)
+  })),
+  async (req: Request, res: Response) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { riskId } = req.params
+      const userId = (req as any).user!.id
+
+      const escalationInput: RiskToIssueEscalationInput = {
+        trigger_reason: req.body.trigger_reason,
+        trigger_description: req.body.trigger_description,
+        root_cause_hypothesis: req.body.root_cause_hypothesis,
+        contributing_factors: req.body.contributing_factors,
+        evidence_collected: req.body.evidence_collected,
+        actual_impact: req.body.actual_impact,
+        affected_areas: req.body.affected_areas,
+        affected_stakeholders: req.body.affected_stakeholders,
+        priority: req.body.priority,
+        immediate_actions_taken: req.body.immediate_actions_taken,
+        workaround_applied: req.body.workaround_applied,
+        recommended_mitigation: req.body.recommended_mitigation,
+        target_resolution_date: req.body.target_resolution_date
+      }
+
+      const issue = await escalateRiskToIssue(riskId, userId, escalationInput)
+
+      log.info('[ISSUES] Escalated risk to issue with RCA', {
+        riskId,
+        issueId: issue.id,
+        triggerReason: escalationInput.trigger_reason,
+        hasRCA: !!escalationInput.root_cause_hypothesis
+      })
+
+      res.status(201).json({
+        success: true,
+        data: issue,
+        message: 'Risk successfully escalated to issue with root cause analysis'
+      })
+    } catch (error: any) {
+      log.error('[ISSUES] Failed to escalate risk:', error)
+
+      if (error.message?.includes('not found')) {
+        return res.status(404).json({
+          success: false,
+          error: 'Risk not found',
+          message: error.message
+        })
+      }
+
+      res.status(500).json({
+        success: false,
+        error: 'Failed to escalate risk to issue',
+        message: error.message
+      })
+    }
+  }
+)
+
+/**
+ * POST /api/issues/suggest-rca
+ * Get root cause analysis suggestions based on risk category
+ */
+router.post(
+  '/suggest-rca',
+  authenticateToken,
+  validate(Joi.object({
+    risk_category: Joi.string().required(),
+    risk_description: Joi.string().optional().allow('', null)
+  })),
+  async (req: Request, res: Response) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { risk_category, risk_description } = req.body
+
+      const suggestions = suggestRootCauseAnalysis(
+        risk_category,
+        risk_description || ''
+      )
+
+      log.info('[ISSUES] Generated RCA suggestions', {
+        risk_category,
+        hypothesesCount: suggestions.suggestedHypotheses.length
+      })
+
+      res.json({
+        success: true,
+        data: suggestions
+      })
+    } catch (error: any) {
+      log.error('[ISSUES] Failed to generate RCA suggestions:', error)
+      res.status(500).json({
+        success: false,
+        error: 'Failed to generate root cause analysis suggestions',
+        message: error.message
+      })
+    }
+  }
+)
+
+export default router

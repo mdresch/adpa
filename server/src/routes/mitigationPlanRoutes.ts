@@ -5,7 +5,7 @@
 
 import { Router, Request, Response, NextFunction } from 'express'
 import { authenticateToken } from '../middleware/auth'
-import { validate } from '../middleware/validation'
+import { validate, validateParams } from '../middleware/validation'
 import Joi from 'joi'
 import {
   getMitigationPlans,
@@ -200,6 +200,7 @@ Generate mitigation plan suggestions in JSON format:
       "action_type": "mitigation|contingency|avoidance|transfer|acceptance",
       "priority": "critical|high|medium|low",
       "expected_effectiveness": 85,
+      "cost_estimate": "low|medium|high",
       "key_steps": [
         "Step 1 description",
         "Step 2 description",
@@ -212,6 +213,18 @@ Generate mitigation plan suggestions in JSON format:
   ]
 }
 
+REQUIRED FIELDS (must be included in every suggestion):
+- title: Short, actionable title
+- description: Detailed description (2-3 sentences)
+- action_type: One of "mitigation", "contingency", "avoidance", "transfer", or "acceptance"
+- priority: One of "critical", "high", "medium", or "low"
+- expected_effectiveness: Number between 0-100 (percentage)
+- cost_estimate: REQUIRED - Must be one of "low", "medium", or "high" based on implementation costs
+- key_steps: Array of step descriptions
+- estimated_duration_days: Number of days
+- resource_requirements: Description of needed resources
+- success_criteria: Measurable success criteria
+
 Guidelines:
 - Generate 3-5 diverse mitigation plan suggestions
 - Prioritize actionable, specific plans over generic advice
@@ -220,6 +233,11 @@ Guidelines:
 - Provide realistic timeframes and resource requirements
 - Include measurable success criteria
 - Expected effectiveness should be a percentage (0-100)
+- Cost estimate is REQUIRED and must be "low", "medium", or "high" based on implementation costs (resources, tools, time, external services):
+  - "low": Minimal costs (e.g., process changes, documentation, internal training, minor configuration adjustments)
+  - "medium": Moderate costs (e.g., new tools/licenses, additional staff, moderate consulting, training programs, software purchases)
+  - "high": Significant costs (e.g., major system implementations, extensive external services, large resource allocations, infrastructure changes, enterprise software)
+- Analyze each mitigation plan's resource requirements, tool needs, time investment, and external service dependencies to determine the appropriate cost estimate
 - Return ONLY valid JSON, no markdown or explanation`
 
       log.info('[MITIGATION-PLANS-SUGGEST] Generating AI suggestions', { risk_id })
@@ -292,6 +310,9 @@ Guidelines:
           action_type: suggestion.action_type || 'mitigation',
           priority: suggestion.priority || 'medium',
           expected_effectiveness: Math.min(100, Math.max(0, suggestion.expected_effectiveness || 75)),
+          cost_estimate: ['low', 'medium', 'high'].includes(suggestion.cost_estimate?.toLowerCase()) 
+            ? suggestion.cost_estimate.toLowerCase() as 'low' | 'medium' | 'high'
+            : undefined,
           key_steps: Array.isArray(suggestion.key_steps) ? suggestion.key_steps : [],
           estimated_duration_days: suggestion.estimated_duration_days || 30,
           resource_requirements: suggestion.resource_requirements || '',
@@ -357,7 +378,7 @@ Guidelines:
 router.get(
   '/risk/:riskId/completion',
   authenticateToken,
-  validate(Joi.object({
+  validateParams(Joi.object({
     riskId: Joi.string().uuid().required()
   })),
   async (req: Request, res: Response) => {
@@ -442,6 +463,8 @@ router.post(
     action_type: Joi.string().valid('mitigation', 'contingency', 'avoidance', 'transfer', 'acceptance').default('mitigation'),
     owner_id: Joi.string().uuid().optional().allow(null),
     assigned_to: Joi.string().uuid().optional().allow(null),
+    owner_name: Joi.string().optional().allow('', null).max(255),
+    assigned_to_name: Joi.string().optional().allow('', null).max(255),
     status: Joi.string().valid('planned', 'in_progress', 'completed', 'cancelled', 'on_hold').default('planned'),
     completion_percentage: Joi.number().min(0).max(100).default(0),
     planned_start_date: Joi.string().isoDate().optional().allow(null),
@@ -449,6 +472,7 @@ router.post(
     due_date: Joi.string().isoDate().optional().allow(null),
     priority: Joi.string().valid('critical', 'high', 'medium', 'low').default('medium'),
     expected_effectiveness: Joi.number().min(0).max(100).optional().allow(null),
+    cost_estimate: Joi.string().valid('low', 'medium', 'high').optional().allow(null),
     completion_notes: Joi.string().optional().allow('', null).max(5000)
   })),
   async (req: Request, res: Response) => {
@@ -488,6 +512,8 @@ router.put(
     action_type: Joi.string().valid('mitigation', 'contingency', 'avoidance', 'transfer', 'acceptance').optional(),
     owner_id: Joi.string().uuid().optional().allow(null),
     assigned_to: Joi.string().uuid().optional().allow(null),
+    owner_name: Joi.string().optional().allow('', null).max(255),
+    assigned_to_name: Joi.string().optional().allow('', null).max(255),
     status: Joi.string().valid('planned', 'in_progress', 'completed', 'cancelled', 'on_hold').optional(),
     completion_percentage: Joi.number().min(0).max(100).optional(),
     planned_start_date: Joi.string().isoDate().optional().allow(null),
@@ -497,6 +523,7 @@ router.put(
     due_date: Joi.string().isoDate().optional().allow(null),
     priority: Joi.string().valid('critical', 'high', 'medium', 'low').optional(),
     expected_effectiveness: Joi.number().min(0).max(100).optional().allow(null),
+    cost_estimate: Joi.string().valid('low', 'medium', 'high').optional().allow(null),
     progress_notes: Joi.array().items(Joi.string()).optional(),
     completion_notes: Joi.string().optional().allow('', null).max(5000),
     completion_evidence: Joi.object().optional()

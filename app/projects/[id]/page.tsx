@@ -33,7 +33,7 @@ import { TemplateConflictDialog } from "@/components/document/TemplateConflictDi
 import { apiClient, Project, Template } from "@/lib/api"
 import { useAuth } from "@/contexts/AuthContext"
 import { useWebSocket } from "@/contexts/WebSocketContext"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 import { useRouter } from "next/navigation"
 import {
   Breadcrumb,

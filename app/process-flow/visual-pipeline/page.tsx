@@ -46,7 +46,7 @@ import {
 } from 'lucide-react'
 import { usePipelineAPI } from './hooks/usePipelineAPI'
 import { useAuth } from '@/hooks/use-auth'
-import { toast } from 'sonner'
+import { toast } from '@/lib/notify'
 
 // Status configuration for template badges
 const statusConfig = {

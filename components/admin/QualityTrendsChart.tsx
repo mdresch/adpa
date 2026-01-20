@@ -22,8 +22,8 @@ export function QualityTrendsChart({ data }: QualityTrendsChartProps) {
   }))
 
   return (
-    <div className="w-full h-[400px]">
-      <ResponsiveContainer width="100%" height="100%">
+    <div className="w-full h-[400px]" style={{ minWidth: 0, minHeight: 400 }}>
+      <ResponsiveContainer width="100%" height={400}>
         <AreaChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
           <defs>
             <linearGradient id="colorQuality" x1="0" y1="0" x2="0" y2="1">
@@ -64,6 +64,7 @@ export function QualityTrendsChart({ data }: QualityTrendsChartProps) {
             }}
             labelStyle={{ fontWeight: 'bold', marginBottom: '8px' }}
           />
+          // @ts-ignore
           <Legend />
           <Area
             yAxisId="left"

@@ -20,7 +20,7 @@ import {
 } from "lucide-react"
 import { useAuth } from "@/contexts/AuthContext"
 import { getApiUrl } from "@/lib/api-url"
-import { toast } from "sonner"
+import { toast } from '@/lib/notify'
 import { ProcessDetailDialog } from "./components/ProcessDetailDialog"
 import { ProcessCard } from "./components/ProcessCard"
 
