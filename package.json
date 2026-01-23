@@ -90,7 +90,7 @@
     "cmdk": "latest",
     "cors": "latest",
     "date-fns": "^3.6.0",
-    "diff": "^8.0.2",
+    "diff": "^8.0.3",
     "docx": "^9.5.1",
     "dotenv": "^17.2.0",
     "embla-carousel-react": "latest",
