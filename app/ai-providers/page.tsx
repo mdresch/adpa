@@ -123,7 +123,7 @@ export default function AIProviders() {
   const [formState, setFormState] = useState<{
     id: string
     name: string
-    type: "openai" | "google" | "azure" | "mistral" | "groq" | "anthropic" | "deepseek" | "moonshot" | "xai" | "ollama" | "copilot"
+    type: "" | "openai" | "google" | "azure" | "mistral" | "groq" | "anthropic" | "deepseek" | "moonshot" | "xai" | "ollama" | "copilot"
     apiKey: string
     endpoint: string
     priority: number
@@ -141,7 +141,7 @@ export default function AIProviders() {
   }>({
     id: "",
     name: "",
-    type: "openai",
+    type: "",
     apiKey: "",
     endpoint: "",
     priority: 1,
@@ -167,7 +167,7 @@ export default function AIProviders() {
     setFormState({ 
       id: "", 
       name: "", 
-      type: "openai", 
+      type: "", 
       apiKey: "", 
       endpoint: "", 
       priority: 1, 
@@ -190,22 +190,27 @@ export default function AIProviders() {
       errs.name = "Name is required (min 2 characters)"
     }
 
-    // Map some UI types to server provider types when validating
+    // Map UI type directly to provider_type (including copilot)
     const uiType = state.type
-    const providerType = uiType === "copilot" ? "openai" : uiType
+    const providerType = uiType
 
-    if (!["openai", "google", "azure", "mistral", "groq", "anthropic", "deepseek", "moonshot", "xai", "ollama"].includes(providerType)) {
+    if (!providerType) {
+      errs.type = "Please select a provider. Priorities and failover are configured in Failover Settings."
+    } else if (!["openai", "google", "azure", "mistral", "groq", "anthropic", "deepseek", "moonshot", "xai", "ollama", "copilot"].includes(providerType)) {
       errs.type = "Unsupported provider type for creation."
     }
 
-    // Skip API key validation for Ollama providers (they don't need API keys)
-    if (uiType !== "ollama") {
+    // Skip API key validation until a provider is selected, and for Ollama (no key required)
+    if (uiType && uiType !== "ollama") {
       if (!state.apiKey || state.apiKey.trim().length < 16) {
         errs.apiKey = "API key looks too short. Paste the full key (min 16 chars)."
-      } else if (providerType === "openai" && !state.apiKey.startsWith("sk-")) {
-        // gentle hint, not a hard block
-        errs.apiKey = "OpenAI keys usually start with 'sk-'. Verify you pasted the right key."
       }
+      // No key-format checks. GitHub Copilot (ghp_/github_pat_), OpenAI (sk-), etc. are all accepted.
+    }
+
+    // Defensive: never show OpenAI-specific key message (provider-agnostic validation only)
+    if (errs.apiKey && (errs.apiKey.includes("OpenAI") || errs.apiKey.includes("sk-"))) {
+      delete errs.apiKey
     }
 
     // Azure AI Foundry specific validation
@@ -257,23 +262,30 @@ export default function AIProviders() {
 
   const handleAddProvider = (e: React.FormEvent) => {
     e.preventDefault()
-  if (!validateForm()) return
-  ;(async () => {
+    if (!validateForm()) return
+    // Bug 1 Fix: Ensure type is never empty string before submission
+    if (!formState.type || formState.type.trim() === "") {
+      setFormErrors(prev => ({ ...prev, type: "Please select a provider. Priorities and failover are configured in Failover Settings." }))
+      return
+    }
+    ;(async () => {
       setActionLoading((s) => ({ ...s, create: true }))
       setError(null)
       try {
         // Use apiClient for authenticated requests
+        // Bug 1 Fix: Type assertion ensures type is never empty string
+        const providerType = formState.type as Exclude<typeof formState.type, "">
         await apiClient.request('/context-ai/providers', {
           method: "POST",
           body: JSON.stringify({
             name: formState.name,
-            provider_type: formState.type,
+            provider_type: providerType,
             api_key: formState.apiKey,
             configuration: { 
               endpoint: formState.endpoint, 
               priority: formState.priority,
               // Azure AI Foundry specific configuration
-              ...(formState.type === "azure" && {
+              ...(providerType === "azure" && {
                 resourceName: formState.resourceName,
                 deploymentName: formState.deploymentName,
                 apiVersion: formState.apiVersion,
@@ -669,21 +681,32 @@ export default function AIProviders() {
                   <Plus className="h-4 w-4 mr-2" />
                   Add Provider
                 </Button>
-                <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+                <Dialog
+                  open={addDialogOpen}
+                  onOpenChange={(open: boolean) => {
+                    setAddDialogOpen(open)
+                    if (open) resetForm()
+                  }}
+                >
                   <DialogContent className="sm:max-w-[425px]">
-                  <form onSubmit={handleAddProvider}>
-                    <DialogHeader>
-                      <DialogTitle>Add AI Provider</DialogTitle>
-                      <DialogDescription>Configure a new AI provider for document generation.</DialogDescription>
-                    </DialogHeader>
-                    <div className="grid gap-4 py-4">
+                    <form onSubmit={handleAddProvider}>
+                      <DialogHeader>
+                        <DialogTitle>Add AI Provider</DialogTitle>
+                        <DialogDescription>
+                          Configure a new AI provider for document generation.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="grid gap-4 py-4">
                       <div className="grid grid-cols-4 items-center gap-4">
                         <Label htmlFor="provider-type" className="text-right">
                           Provider
                         </Label>
-                        <Select onValueChange={(val: string) => setFormState((s) => ({ ...s, type: val as typeof s.type }))}>
+                        <Select
+                          value={formState.type || undefined}
+                          onValueChange={(val: string) => setFormState((s) => ({ ...s, type: (val || "") as typeof s.type }))}
+                        >
                           <SelectTrigger className="col-span-3">
-                            <SelectValue placeholder="Select provider" />
+                            <SelectValue placeholder="Select provider (priorities in Failover Settings)" />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="openai">OpenAI</SelectItem>
@@ -705,7 +728,7 @@ export default function AIProviders() {
                           Name
                         </Label>
                         <div className="col-span-3">
-                          <Input id="name" value={formState.name} onChange={(e) => setFormState((s) => ({ ...s, name: e.target.value }))} placeholder="Provider name" />
+                          <Input id="name" value={formState.name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState((s) => ({ ...s, name: e.target.value }))} placeholder="Provider name" />
                           {formErrors.name && <div className="text-xs text-red-600 mt-1">{formErrors.name}</div>}
                         </div>
                       </div>
@@ -718,14 +741,24 @@ export default function AIProviders() {
                             id="api-key" 
                             type="password" 
                             value={formState.apiKey} 
-                            onChange={(e) => setFormState((s) => ({ ...s, apiKey: e.target.value }))} 
-                            placeholder={formState.type === "ollama" ? "Not required for local Ollama" : "Enter API key (will be encrypted and stored securely)"}
-                            disabled={formState.type === "ollama"}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState((s) => ({ ...s, apiKey: e.target.value }))} 
+                            placeholder={
+                              !formState.type
+                                ? "Select a provider first"
+                                : formState.type === "ollama"
+                                ? "Not required for local Ollama"
+                                : "Enter API key (will be encrypted and stored securely)"
+                            }
+                            disabled={!formState.type || formState.type === "ollama"}
                           />
                           <p className="text-xs text-muted-foreground mt-1">
-                            {formState.type === "ollama" ? 
-                              "🏠 Local Ollama doesn't require an API key - it runs locally on your machine." :
-                              "🔒 API key will be encrypted and stored securely. Only the application can access it."
+                            {!formState.type
+                              ? "Select a provider above. Priorities and failover are configured in Failover Settings."
+                              : formState.type === "ollama"
+                              ? "🏠 Local Ollama doesn't require an API key - it runs locally on your machine."
+                              : formState.type === "copilot"
+                              ? "🔒 GitHub tokens usually start with 'ghp_' or 'github_pat_'. API key will be encrypted and stored securely."
+                              : "🔒 API key will be encrypted and stored securely. Only the application can access it."
                             }
                           </p>
                           {formErrors.apiKey && <div className="text-xs text-red-600 mt-1">{formErrors.apiKey}</div>}
@@ -744,7 +777,7 @@ export default function AIProviders() {
                               <Input 
                                 id="endpoint" 
                                 value={formState.endpoint} 
-                                onChange={(e) => setFormState((s) => ({ ...s, endpoint: e.target.value }))} 
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState((s) => ({ ...s, endpoint: e.target.value }))} 
                                 placeholder="https://your-resource.region.cognitiveservices.azure.com" 
                               />
                               {formErrors.endpoint && <div className="text-xs text-red-600 mt-1">{formErrors.endpoint}</div>}
@@ -758,7 +791,7 @@ export default function AIProviders() {
                               <Input 
                                 id="resource-name" 
                                 value={formState.resourceName} 
-                                onChange={(e) => setFormState((s) => ({ ...s, resourceName: e.target.value }))} 
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState((s) => ({ ...s, resourceName: e.target.value }))} 
                                 placeholder="your-ai-resource" 
                               />
                               {formErrors.resourceName && <div className="text-xs text-red-600 mt-1">{formErrors.resourceName}</div>}
@@ -772,7 +805,7 @@ export default function AIProviders() {
                               <Input 
                                 id="deployment-name" 
                                 value={formState.deploymentName} 
-                                onChange={(e) => setFormState((s) => ({ ...s, deploymentName: e.target.value }))} 
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState((s) => ({ ...s, deploymentName: e.target.value }))} 
                                 placeholder="gpt-4o-mini" 
                               />
                               {formErrors.deploymentName && <div className="text-xs text-red-600 mt-1">{formErrors.deploymentName}</div>}
@@ -820,7 +853,7 @@ export default function AIProviders() {
                                   <Input 
                                     id="tenant-id" 
                                     value={formState.tenantId} 
-                                    onChange={(e) => setFormState((s) => ({ ...s, tenantId: e.target.value }))} 
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState((s) => ({ ...s, tenantId: e.target.value }))} 
                                     placeholder="your-tenant-id" 
                                   />
                                   {formErrors.tenantId && <div className="text-xs text-red-600 mt-1">{formErrors.tenantId}</div>}
@@ -834,7 +867,7 @@ export default function AIProviders() {
                                   <Input 
                                     id="client-id" 
                                     value={formState.clientId} 
-                                    onChange={(e) => setFormState((s) => ({ ...s, clientId: e.target.value }))} 
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState((s) => ({ ...s, clientId: e.target.value }))} 
                                     placeholder="your-client-id" 
                                   />
                                   {formErrors.clientId && <div className="text-xs text-red-600 mt-1">{formErrors.clientId}</div>}
@@ -849,7 +882,7 @@ export default function AIProviders() {
                                     id="client-secret" 
                                     type="password" 
                                     value={formState.clientSecret} 
-                                    onChange={(e) => setFormState((s) => ({ ...s, clientSecret: e.target.value }))} 
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState((s) => ({ ...s, clientSecret: e.target.value }))} 
                                     placeholder="your-client-secret" 
                                   />
                                   {formErrors.clientSecret && <div className="text-xs text-red-600 mt-1">{formErrors.clientSecret}</div>}

@@ -131,7 +131,7 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
     }
 
     // Validate provider type
-    const validTypes = ['openai', 'google', 'azure', 'anthropic', 'cohere', 'huggingface', 'deepseek', 'moonshot', 'xai', 'ollama', 'mistral', 'groq']
+    const validTypes = ['openai', 'google', 'azure', 'anthropic', 'cohere', 'huggingface', 'deepseek', 'moonshot', 'xai', 'ollama', 'mistral', 'groq', 'copilot']
     if (!validTypes.includes(provider_type)) {
       return res.status(400).json({
         error: `Invalid provider type. Must be one of: ${validTypes.join(', ')}`
@@ -342,6 +342,7 @@ function getDefaultModel(providerType: string): string {
     case 'xai': return 'grok-beta'
     case 'cohere': return 'command'
     case 'huggingface': return 'microsoft/DialoGPT-medium'
+    case 'copilot': return 'copilot-chat'
     default: return 'gpt-3.5-turbo'
   }
 }
@@ -364,6 +365,7 @@ function getDefaultEndpoint(providerType: string): string {
     case 'anthropic': return 'https://api.anthropic.com'
     case 'cohere': return 'https://api.cohere.ai'
     case 'huggingface': return 'https://api-inference.huggingface.co'
+    case 'copilot': return 'https://api.github.com'
     default: return 'https://api.openai.com/v1'
   }
 }

@@ -7,11 +7,9 @@
  * Implements Phase 3: Workflow Automation from DRIFT_TO_CHANGE_REQUEST_WORKFLOW.md
  */
 
-import { pool } from '../database/connection'
+import { pool, getDatabasePool } from '../database/connection'
 import { logger } from '../utils/logger'
 import { PoolClient } from 'pg'
-
-const db = pool
 
 export interface BaselineUpdateResult {
   updateId?: string
@@ -123,7 +121,7 @@ export async function getBaselineUpdateHistory(
   limit: number = 50
 ): Promise<any[]> {
   try {
-    const result = await db.query(
+    const result = await getDatabasePool().query(
       `SELECT 
         bcu.*,
         pb.version as current_baseline_version,
@@ -152,7 +150,7 @@ export async function getBaselineUpdateHistory(
  */
 export async function getBaselineUpdateDetails(updateId: string): Promise<any> {
   try {
-    const result = await db.query(
+    const result = await getDatabasePool().query(
       `SELECT 
         bcu.*,
         pb.id as baseline_id,
@@ -192,7 +190,7 @@ export async function previewBaselineChanges(
   changeRequestId: string
 ): Promise<any> {
   try {
-    const result = await db.query(
+    const result = await getDatabasePool().query(
       `SELECT extract_baseline_changes_from_cr($1) as baseline_changes`,
       [changeRequestId]
     )
@@ -239,7 +237,7 @@ export async function manuallyUpdateBaseline(
 ): Promise<BaselineUpdateResult> {
   try {
     // Verify CR is approved
-    const crResult = await db.query(
+    const crResult = await getDatabasePool().query(
       `SELECT status, type, project_id 
        FROM documents 
        WHERE id = $1`,
@@ -275,7 +273,7 @@ export async function hasBaselineBeenUpdated(
   changeRequestId: string
 ): Promise<boolean> {
   try {
-    const result = await db.query(
+    const result = await getDatabasePool().query(
       `SELECT COUNT(*) as count 
        FROM baseline_cr_updates 
        WHERE change_request_id = $1`,

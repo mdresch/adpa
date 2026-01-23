@@ -1577,6 +1577,8 @@ class AIService {
         return ["kimi-k2-turbo-preview", "moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"]
       case "xai":
         return ["grok-beta", "grok-vision-beta"]
+      case "copilot":
+        return ["copilot-chat"]
       default:
         return []
     }

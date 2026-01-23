@@ -727,8 +727,23 @@ async function performConnectivityTest(model: any, testId: string) {
     
     const provider = providerResult.rows[0]
     const config = provider.configuration || {}
-    
-    logger.info(`Provider found - name: ${provider.name}, type: ${provider.provider_type}`)
+    const providerType = provider.provider_type || provider.type
+
+    logger.info(`Provider found - name: ${provider.name}, type: ${providerType}`)
+
+    // GitHub Copilot uses token-based auth (ghp_/github_pat_); skip endpoint-based tests
+    const copilotEndpointTests = ['endpoint_validation', 'api_connection', 'authentication']
+    if (providerType === 'copilot' && copilotEndpointTests.includes(testId)) {
+      const responseTime = Date.now() - startTime
+      return {
+        success: true,
+        response: `✅ GitHub Copilot uses token-based authentication. ${testId === 'endpoint_validation' ? 'Endpoint' : testId === 'api_connection' ? 'API connection' : 'Authentication'} tests are not applicable.`,
+        tokensUsed: 0,
+        error: null,
+        responseTime,
+        timestamp: new Date().toISOString()
+      }
+    }
     
     switch (testId) {
       case 'api_connection':
@@ -1610,6 +1625,8 @@ function getDefaultEndpoint(providerType: string): string {
       return 'https://api.x.ai/v1'
     case 'ollama':
       return 'http://localhost:11434'
+    case 'copilot':
+      return 'https://api.github.com'
     default:
       return ''
   }
@@ -1641,6 +1658,8 @@ function getAuthTestEndpoint(providerType: string, baseEndpoint: string): string
       return `${cleanEndpoint}/models`
     case 'ollama':
       return `${cleanEndpoint}/api/tags`
+    case 'copilot':
+      return `${cleanEndpoint}`
     default:
       return cleanEndpoint
   }

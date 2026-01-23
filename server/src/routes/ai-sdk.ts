@@ -398,6 +398,7 @@ function getDefaultModel(providerType: string): string {
     case 'anthropic': return 'claude-3-sonnet'
     case 'cohere': return 'command'
     case 'huggingface': return 'microsoft/DialoGPT-medium'
+    case 'copilot': return 'copilot-chat'
     default: return 'gpt-3.5-turbo'
   }
 }
@@ -410,6 +411,7 @@ function getDefaultEndpoint(providerType: string): string {
     case 'anthropic': return 'https://api.anthropic.com'
     case 'cohere': return 'https://api.cohere.ai'
     case 'huggingface': return 'https://api-inference.huggingface.co'
+    case 'copilot': return 'https://api.github.com'
     default: return 'https://api.openai.com/v1'
   }
 }
