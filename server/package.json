@@ -82,7 +82,7 @@
     "jsonwebtoken": "^9.0.2",
     "mammoth": "^1.11.0",
     "marked": "^11.1.0",
-    "multer": "^1.4.5-lts.1",
+    "multer": "^2.0.2",
     "node-cron": "^4.2.1",
     "node-fetch": "^2.7.0",
     "node-schedule": "^2.1.1",
