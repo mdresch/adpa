@@ -42,6 +42,8 @@ export const regenerationQueue = createRabbitQueue("document-regeneration", 3, 3
 export const qualityAuditQueue = createRabbitQueue("quality-audit", 2, 3000)
 export const extractionQueue = createRabbitQueue("project-data-extraction", 2, 5000)
 export const confluenceQueue = createRabbitQueue("confluence-publishing", 3, 2000)
+export const digitalTwinEventQueue = createRabbitQueue("digital-twin-events", 3, 2000)
+export const digitalTwinTriggerQueue = createRabbitQueue("digital-twin-triggers", 3, 3000)
 
 // Trace attachment (lightweight)
 const tracer = trace.getTracer("adpa-queue-service")
@@ -96,6 +98,8 @@ const queues = [
   { name: "quality-audit", queue: qualityAuditQueue },
   { name: "project-data-extraction", queue: extractionQueue },
   { name: "confluence-publishing", queue: confluenceQueue },
+  { name: "digital-twin-events", queue: digitalTwinEventQueue },
+  { name: "digital-twin-triggers", queue: digitalTwinTriggerQueue },
 ]
 queues.forEach(({ name, queue }) => attachTracing(queue, name))
 
@@ -475,6 +479,7 @@ extractionQueue.process("extract-project-data", QUEUE_PREFETCH, async (job) => {
       'capacity_plans', 'performance_measurements', 'earned_value_metrics', 'opportunities', 'risk_responses',
       'performance_actuals', 'schedule_baselines', 'governance_decisions', 'approval_workflows', 'steering_committees', 'change_control_boards', 'policy_compliance',
       'scope_baseline', 'wbs_nodes', 'scope_change_requests', 'requirements_traceability', 'scope_verification',
+      'dt_assets',
       'schedule_baseline', 'schedule_activities', 'critical_path_activities', 'critical_path', 'schedule_variances', 'schedule_forecasts',
       'budget_baselines', 'budget_baseline', 'cost_actuals', 'cost_estimates', 'funding_tranches', 'financial_variances', 'procurement_costs',
       'resource_assignments', 'resource_pool', 'capacity_forecasts', 'utilization_records', 'resource_conflicts', 'onboarding_offboarding',
@@ -504,6 +509,9 @@ extractionQueue.process("extract-project-data", QUEUE_PREFETCH, async (job) => {
             entities = await projectDataExtractionService.extractSingleEntityType(projectId, userId, entityType, { aiProvider, aiModel, documentIds })
             await projectDataExtractionService.saveSingleEntityType(projectId, userId, entityType, entities)
           }
+
+          // DT assets: extracted as entities (extracted_dt_assets). Import into Digital Twin Assets Register
+          // is an explicit step (POST /api/digital-twin/assets/import), same as WBS import for tasks.
 
           // Update status to completed
           await updateJobStatus(jobId, "completed", 100, WORKER_ID, "project-data-extraction")
@@ -537,6 +545,40 @@ extractionQueue.process("extract-project-data", QUEUE_PREFETCH, async (job) => {
 
     logger.info(`[QUEUE] Registered ${ENTITY_TYPES.length} entity extraction processors on extractionQueue (Rabbit)`)
   })()
+
+// Digital Twin Event Processing
+import("./digitalTwinEventService").then(({ processEvent }) => {
+  digitalTwinEventQueue.process("process-event", QUEUE_PREFETCH, async (job) => {
+    const { eventId } = job.data as { eventId: string }
+    logger.info(`[WORKER] Digital Twin event worker ${WORKER_ID} processing event: ${eventId}`)
+    try {
+      await processEvent(eventId)
+      logger.info(`[WORKER] Digital Twin event processed successfully: ${eventId}`)
+      return { eventId, status: 'completed' }
+    } catch (error: any) {
+      logger.error(`[WORKER] Digital Twin event processing failed: ${eventId}`, { error: error.message })
+      throw error
+    }
+  })
+  logger.info(`[QUEUE] Registered process-event processor on digitalTwinEventQueue (Rabbit) with worker ID: ${WORKER_ID}`)
+})
+
+// Digital Twin Document Trigger Processing
+import("./digitalTwinTriggerService").then(({ processDocumentTrigger }) => {
+  digitalTwinTriggerQueue.process("process-trigger", QUEUE_PREFETCH, async (job) => {
+    const { triggerId } = job.data as { triggerId: string }
+    logger.info(`[WORKER] Digital Twin trigger worker ${WORKER_ID} processing trigger: ${triggerId}`)
+    try {
+      const document = await processDocumentTrigger(triggerId)
+      logger.info(`[WORKER] Digital Twin document trigger processed successfully: ${triggerId}`, { documentId: document?.id })
+      return { triggerId, documentId: document?.id, status: 'completed' }
+    } catch (error: any) {
+      logger.error(`[WORKER] Digital Twin trigger processing failed: ${triggerId}`, { error: error.message })
+      throw error
+    }
+  })
+  logger.info(`[QUEUE] Registered process-trigger processor on digitalTwinTriggerQueue (Rabbit) with worker ID: ${WORKER_ID}`)
+})
 
 // Export Redis client for legacy consumers
 export { redisClient }

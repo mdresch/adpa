@@ -1407,6 +1407,7 @@ class AIService {
       'deepseek': 'deepseek-chat',
       'moonshot': 'kimi-k2-0905-preview',
       'xai': 'grok-beta',
+      'copilot': 'copilot-chat',
     }
 
     // Define provider-specific model families
@@ -1420,6 +1421,7 @@ class AIService {
       'deepseek': ['deepseek-'],
       'moonshot': ['kimi-', 'moonshot-'],
       'xai': ['grok-'],
+      'copilot': ['copilot-'],
     }
 
     // Model mapping for deprecated/unavailable models (centralized validation)
@@ -1465,8 +1467,14 @@ class AIService {
     
     // If model is incompatible, use provider's default model
     if (!isCompatible && model) {
-      logger.warn(`⚠️ [AI-SERVICE] Model ${model} not compatible with ${providerType}, using default: ${defaultModels[providerType]}`)
-      modelId = defaultModels[providerType]
+      const fallback = defaultModels[providerType] || 'gpt-4o'
+      logger.warn(`⚠️ [AI-SERVICE] Model ${model} not compatible with ${providerType}, using default: ${fallback}`)
+      modelId = fallback
+    }
+
+    // Ensure modelId is never undefined (avoid e.g. copilot/undefined)
+    if (modelId == null || modelId === '') {
+      modelId = defaultModels[providerType] || 'gpt-4o'
     }
     
     // Handle deprecated Groq models
@@ -1481,9 +1489,9 @@ class AIService {
       logger.info(`Mapping deprecated Groq model ${modelId} -> ${groqModelMapping[modelId]}`)
       modelId = groqModelMapping[modelId]
     }
-    
-    // Format: 'provider/model'
-    return `${providerType}/${modelId}`
+
+    const safeModelId = modelId == null || modelId === '' ? (defaultModels[providerType] || 'gpt-4o') : modelId
+    return `${providerType}/${safeModelId}`
   }
 
   async getAvailableProviders(): Promise<Array<{ name: string; type: string; models: string[]; is_active: boolean; id: string; configuration: any; usage_stats?: any; default_model?: string; created_at?: string; updated_at?: string }>> {

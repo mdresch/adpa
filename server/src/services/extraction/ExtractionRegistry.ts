@@ -386,6 +386,13 @@ export async function initializeRegistry(): Promise<void> {
     save: saveScopeVerification
   })
 
+  // Register dt_assets module (Digital Twin - extract from L0 YAML, save to extracted_dt_assets)
+  const { extractDtAssets, saveDtAssets } = await import('./entities/dt_assets')
+  extractionRegistry.register('dt_assets', {
+    extract: extractDtAssets,
+    save: saveDtAssets
+  })
+
   // Register schedule_baseline module (Phase 2 - Schedule)
   const { extractScheduleBaseline, saveScheduleBaseline } = await import('./entities/schedule_baseline')
   extractionRegistry.register('schedule_baseline', {
@@ -653,6 +660,7 @@ export async function initializeRegistry(): Promise<void> {
   extractionRegistry.setFeatureFlagFromEnv('benefit_realization_plan')
   extractionRegistry.setFeatureFlagFromEnv('general_change_requests')
   extractionRegistry.setFeatureFlagFromEnv('project_team_evaluations')
+  extractionRegistry.setFeatureFlagFromEnv('dt_assets')
 
   logger.info('[EXTRACTION-REGISTRY] Registry initialized', {
     registeredEntities: extractionRegistry.getRegisteredEntities(),

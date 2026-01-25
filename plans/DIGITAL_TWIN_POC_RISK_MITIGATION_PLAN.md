@@ -1960,6 +1960,8 @@ CREATE TABLE digital_twin_asset_states_2026_02
 
 **Recommendation**: **Implement all Priority 1 mitigations** before starting development, and **implement Priority 2 mitigations** during development phases.
 
+**Cursor skill**: The [digital-twin-safe-implementation](../skills/digital-twin-safe-implementation.SKILL.md) skill encodes these mitigations as checklists and workflows for safer Digital Twin implementation.
+
 ---
 
 **Last Updated**: 2026-01-23  

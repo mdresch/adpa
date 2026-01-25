@@ -92,6 +92,7 @@ export function CreateProjectDialog({
                   <option value="BABOK v3">BABOK v3</option>
                   <option value="PMBOK 7">PMBOK 7</option>
                   <option value="DMBOK 2.0">DMBOK 2.0</option>
+                  <option value="Construction">Construction</option>
                 </select>
               </div>
               <div>

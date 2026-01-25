@@ -149,6 +149,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
   }, [projectId, documents])
   
   const fetchAllDocuments = async () => {
+    if (!projectId || projectId === 'undefined') return
     try {
       setLoadingAllDocuments(true)
       
@@ -349,6 +350,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
   }
 
   const fetchEntityCounts = async () => {
+    if (!projectId || projectId === 'undefined') return
     try {
       setLoading(true)
       const { getApiUrl } = await import('@/lib/api-url')
@@ -525,6 +527,10 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
   }
 
   const handleExtractData = async () => {
+    if (!projectId || projectId === 'undefined') {
+      toast.error('Invalid project')
+      return
+    }
     try {
       setIsExtracting(true)
       setExtractionProgress(0)
@@ -629,6 +635,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
   }
   
   const fetchEntityDetails = async (entityType: string) => {
+    if (!projectId || projectId === 'undefined') return
     try {
       setLoadingEntityDetails(true)
       setSelectedEntityType(entityType)
@@ -667,6 +674,10 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
   }
   
   const handleImportWBS = async () => {
+    if (!projectId || projectId === 'undefined') {
+      toast.error('Invalid project')
+      return
+    }
     try {
       setIsImportingWBS(true)
       

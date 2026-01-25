@@ -1577,6 +1577,61 @@ router.post("/project/:projectId",
         wordCount: wordCount
       })
 
+      // 🔍 Automatic Quality Audit: Trigger quality audit after document creation
+      // This runs asynchronously and doesn't block the response
+      if (contentString && contentString.trim().length > 0) {
+        setImmediate(() => {
+          (async () => {
+            try {
+              // Get project context for quality audit
+              const projectResult = await pool.query(
+                'SELECT * FROM projects WHERE id = $1',
+                [projectId]
+              )
+
+              if (projectResult.rows.length > 0) {
+                log.info('🔍 [AUTO-QUALITY-AUDIT] Triggering automatic quality audit after document creation', {
+                  documentId: id,
+                  documentName: name,
+                  projectId,
+                  contentLength: contentString.length
+                })
+
+                // Use queue service for async processing
+                const { getQueueService } = await import('../services/queueService')
+                const auditJobId = uuidv4()
+                
+                await getQueueService().addJob('quality-audit', {
+                  jobId: auditJobId,
+                  documentId: id,
+                  documentContent: contentString,
+                  documentType: name || 'Document',
+                  projectContext: projectResult.rows[0],
+                  userId: req.user?.id || 'system'
+                })
+
+                log.info('🔍 [AUTO-QUALITY-AUDIT] Quality audit job enqueued successfully', {
+                  documentId: id,
+                  auditJobId
+                })
+              } else {
+                log.warn('🔍 [AUTO-QUALITY-AUDIT] Skipping quality audit - project not found', {
+                  documentId: id,
+                  projectId
+                })
+              }
+            } catch (auditError: any) {
+              // Don't fail document creation if quality audit trigger fails
+              log.error('🔍 [AUTO-QUALITY-AUDIT] Failed to trigger automatic quality audit', {
+                documentId: id,
+                error: auditError.message,
+                stack: auditError.stack
+              })
+            }
+          })()
+        })
+      }
+
       // Track document creation
       if (req.user?.id) {
         trackActivity.createDocument(

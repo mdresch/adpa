@@ -44,6 +44,8 @@ const ENTITY_TYPES = [
   'governance_decisions', 'approval_workflows', 'steering_committees', 'change_control_boards', 'policy_compliance',
   // Scope Domain
   'scope_baseline', 'wbs_nodes', 'scope_change_requests', 'requirements_traceability', 'scope_verification',
+  // Digital Twin
+  'dt_assets',
   // Schedule Domain
   'schedule_baseline', 'schedule_activities', 'critical_path', 'schedule_variances', 'schedule_forecasts',
   // Finance Domain
@@ -98,6 +100,7 @@ const DOMAIN_ENTITY_MAP: Record<PmbokDomain, EntityType[]> = {
     'scope_change_requests',
     'requirements_traceability',
     'scope_verification',
+    'dt_assets',        // Digital Twin L0 asset register (extracted from documents)
     // ADDED: Core scope entities
     'scope_items',      // Direct scope definition
     'requirements',     // Scope requirements

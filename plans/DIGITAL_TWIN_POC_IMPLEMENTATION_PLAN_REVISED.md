@@ -21,6 +21,10 @@ This **REVISED** plan aligns with the approved design document (`DIGITAL_TWIN_PO
 - ✅ Hash-based state comparison
 - ✅ Multi-tenancy support (RLS policies)
 
+**Cursor skills**: Use [skills/digital-twin-implementation.SKILL.md](../skills/digital-twin-implementation.SKILL.md) for correct React/module/API usage, and [skills/digital-twin-safe-implementation.SKILL.md](../skills/digital-twin-safe-implementation.SKILL.md) for risk-aware implementation (migrations, events, triggers, RLS).
+
+**Readiness**: See [DIGITAL_TWIN_IMPLEMENTATION_READINESS_ASSESSMENT.md](./DIGITAL_TWIN_IMPLEMENTATION_READINESS_ASSESSMENT.md) for current implementation status and what to do first.
+
 ---
 
 ## 🏗️ Current ADPA Architecture (Relevant Components)
@@ -32,7 +36,7 @@ This **REVISED** plan aligns with the approved design document (`DIGITAL_TWIN_PO
 - ✅ **Change Management**: Approval workflows, impact analysis
 - ✅ **Real-time Updates**: WebSocket support for live updates (Socket.io)
 - ✅ **Multi-document Context**: Process multiple source documents
-- ✅ **Entity Extraction**: Extract requirements, risks, stakeholders, etc.
+- ✅ **Entity Extraction**: Extract requirements, risks, stakeholders, **dt_assets** (→ `extracted_dt_assets`), etc.
 - ✅ **Job Queue**: Bull queue for async processing
 - ✅ **Redis**: Pub/Sub for real-time event broadcasting
 
@@ -42,7 +46,7 @@ This **REVISED** plan aligns with the approved design document (`DIGITAL_TWIN_PO
 - `documents` table for project documentation
 - `baselines` table for approved states (project-level)
 - `change_requests` table for change management
-- `entities` table for extracted project data
+- `entities` table for extracted project data; `extracted_dt_assets` for DT assets (import → `digital_twin_assets` with source traceability)
 - `companies` table for multi-tenancy
 
 ---
@@ -376,6 +380,34 @@ CREATE POLICY digital_twin_assets_select_policy ON digital_twin_assets
 
 ---
 
+### 1.1.1 DT Assets: Extract-as-Entities and Import Flow (Same Pattern as Tasks)
+
+DT assets follow the **same flow as tasks**:
+
+1. **Extract as entities**  
+   Documents (e.g. L0 Layout & Asset Register) are scanned for `dt_assets` YAML blocks. Assets are extracted and stored in **`extracted_dt_assets`** (the entity store), with **`source_document_id`** for each asset.
+
+2. **Entities → Register**  
+   When entities exist in `extracted_dt_assets`, users run **Import** (by document or by project) to create rows in **`digital_twin_assets`** (the Digital Twin Assets Register). This mirrors **WBS import**: activities/deliverables/etc. → `project_tasks`.
+
+3. **Traceability**  
+   Each `digital_twin_assets` row stores:
+   - **`source_document_id`**: document the asset was extracted from (trace back to source).
+   - **`source_entity_id`**: `extracted_dt_assets.id` of the entity used to create the asset.
+
+**Comparison with tasks:**
+
+| | Tasks | DT assets |
+|---|---|---|
+| Entity store | activities, deliverables, phases, milestones, work_items, … | `extracted_dt_assets` |
+| Target register | `project_tasks` | `digital_twin_assets` |
+| Import | WBS import (document or project) | `POST /api/digital-twin/assets/import` (document or project) |
+| Traceability | `source_document_id`, `source_entity_id` on `project_tasks` | `source_document_id`, `source_entity_id` on `digital_twin_assets` |
+
+**Migration:** `665_extracted_dt_assets_and_source_traceability.sql` creates `extracted_dt_assets` and adds `source_document_id` / `source_entity_id` to `digital_twin_assets`. Extraction runs via the scope/entity pipeline (`dt_assets`); import is an **explicit step** (no auto-import after extraction).
+
+---
+
 ### 1.2 Backend Service Architecture (Event-Driven)
 
 **New Service Files:**
@@ -400,6 +432,9 @@ interface DigitalTwinAssetService {
   getStateHistory(assetId: string, limit?: number): Promise<DigitalTwinAssetState[]>
 }
 ```
+
+#### `server/src/services/dtAssetImportService.ts`
+Imports **entities** from `extracted_dt_assets` into `digital_twin_assets` (Digital Twin Assets Register). Mirrors WBS import (entities → `project_tasks`). Supports import by **document** or by **project**; sets `source_document_id` and `source_entity_id` on each created/updated asset for traceability. Used by `POST /api/digital-twin/assets/import`.
 
 #### `server/src/services/digitalTwinEventService.ts` ⭐ NEW
 Event processing service (event-driven architecture):
@@ -918,6 +953,35 @@ POST   /api/digital-twin/triggers/:id/process        // Process trigger manually
 
 ---
 
+## 🖼️ Visualization (iTwin Viewer) – Not in Current Plan
+
+**Status**: The **iTwin Viewer** (configurable iTwin.js viewer for viewing and interacting with **iModels** in the browser) is **not** implemented or specified in the current Digital Twin POC plan.
+
+### What We Have vs. iTwin Viewer / Visualization
+
+| Aspect | Current plan | iTwin Viewer (Bentley docs) |
+|--------|--------------|----------------------------|
+| **Frontend "viewer"** | `DigitalTwinStateViewer` – JSON viewer for `state_snapshot` (state history, changed fields, hash) | **iTwin Viewer** – 3D/iModel viewer: selection, measurement, clipping, navigation, tree view, property grid |
+| **iTwin integration** | **Backend only**: iTwin.js **Platform API** → connector fetches metadata, subscribes to changes, **emits events** to `digital_twin_events` | **Frontend**: Create React App + `@itwin/web-viewer` template, Bentley auth (`IMJS_AUTH_CLIENT_*`), `IMJS_ITWIN_ID` / `IMJS_IMODEL_ID` to **view a specific iModel** |
+| **Purpose** | Display ADPA state snapshots (our stored data) | Display and interact with **iModels** (Bentley 3D/BIM) |
+
+### Where It Could Fit
+
+- **Phase 3 (Connectors)** or a **new "Visualization" phase**: Add an **iTwin Viewer** surface *in addition to* the existing Digital Twin UI.
+- **Possible implementation**:
+  - New page or tab: e.g. `app/projects/[id]/digital-twins/imodel-viewer/page.tsx`, or embed a viewer in `DigitalTwinAssetCard` when `platform_type === 'iTwin'`.
+  - Use **iTwin Viewer** (e.g. [Create React App template](https://www.npmjs.com/package/@itwin/web-viewer) `npx create-react-app@latest your-app-name --template @itwin/web-viewer --scripts-version @bentley/react-scripts`).
+  - Bentley auth: `IMJS_AUTH_CLIENT_CLIENT_ID`, `IMJS_AUTH_CLIENT_SCOPES`, `IMJS_AUTH_CLIENT_REDIRECT_URI`; **Visualization API**; SPA, redirect e.g. `https://localhost:3000/signin-callback`.
+  - `IMJS_ITWIN_ID` / `IMJS_IMODEL_ID`: derive from our assets (e.g. `platform_instance_url` or new fields) when linking an ADPA asset to an iTwin/iModel.
+- **References**: [iTwin Viewer](https://www.itwinjs.org/learning/tutorials/), [iTwin Viewer Create React App Template](https://www.npmjs.com/package/@itwin/web-viewer), [iTwin.js extensions](https://www.itwinjs.org/learning/extensions/) for custom tools. [iTwinUI](https://itwinui.bentley.com/docs) – Bentley React UI library (`@itwin/itwinui-react`) for Viewer and Bentley-aligned UI.
+
+### Recommendation
+
+- **POC scope**: Current plan stays **backend + JSON state viewer** only. iTwin Viewer is **out of scope** unless explicitly added.
+- **If adding Visualization**: Introduce a **"Phase 3b: iTwin Viewer (optional)"** or **"Phase 4: Visualization"** with the above implementation outline, and align with `DIGITAL_TWIN_INTEGRATION_ROADMAP.md` (e.g. iTwin Partner Program, demo for Caroline Keane).
+
+---
+
 ## 🚀 Next Steps After POC
 
 ### If POC Successful:
@@ -941,6 +1005,8 @@ POST   /api/digital-twin/triggers/:id/process        // Process trigger manually
 - **Bentley iTwin Integration Roadmap**: `docs/roadmap/DIGITAL_TWIN_INTEGRATION_ROADMAP.md`
 - **Digital Twin Testing Strategy**: `docs/roadmap/DIGITAL_TWIN_AS_TEST_STRATEGY.md`
 - **iTwin.js Documentation**: https://www.itwinjs.org/
+- **iTwinUI** (Bentley React UI): https://itwinui.bentley.com/docs – `@itwin/itwinui-react`, ThemeProvider, components for Viewer and Bentley-aligned Digital Twin UI.
+- **iTwin Viewer / Creating an app to view an iModel**: Create React App template `@itwin/web-viewer`, Bentley auth (Visualization API, SPA), `IMJS_ITWIN_ID` / `IMJS_IMODEL_ID`. See developer.bentley.com, iTwin Viewer React docs.
 - **Azure Digital Twins Documentation**: https://learn.microsoft.com/en-us/azure/digital-twins/
 - **ADPA Project Management**: Existing project/task management system
 - **ADPA Baseline/Drift Detection**: Existing baseline management features (can be extended)

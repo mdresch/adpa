@@ -80,7 +80,7 @@ import {
   Shield,
   ExternalLink,
 } from "@/components/ui/icons-shim"
-import { Users2, Code } from "lucide-react"
+import { Users2, Code, Layers } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -2188,7 +2188,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
   // Listen for document events via WebSocket and refresh documents for this project
   const { on, off } = useWebSocket()
   useEffect(() => {
-    // Join the project room to receive events
+    if (!projectId || projectId === 'undefined') return
     const room = `project:${projectId}`
     joinRoom(room)
 
@@ -2438,6 +2438,26 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
     )
   }
 
+  if (!projectId || projectId === 'undefined') {
+    return (
+      <div className="flex h-screen bg-background">
+        <Sidebar />
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <Header />
+          <main className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <h2 className="text-xl font-semibold mb-2">Invalid Project</h2>
+              <p className="text-muted-foreground mb-4">No project ID provided.</p>
+              <Button asChild>
+                <Link href="/projects">Back to Projects</Link>
+              </Button>
+            </div>
+          </main>
+        </div>
+      </div>
+    )
+  }
+
   if (loading) {
     return (
       <div className="flex h-screen bg-background">
@@ -2532,6 +2552,12 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                   <Link href={`/projects/${projectId}/drift`}>
                     <AlertTriangle className="h-4 w-4 mr-2" />
                     Drift Management
+                  </Link>
+                </Button>
+                <Button variant="outline" asChild>
+                  <Link href={`/projects/${projectId}/digital-twins`}>
+                    <Layers className="h-4 w-4 mr-2" />
+                    Digital Twins
                   </Link>
                 </Button>
                 <Dialog open={createDialogOpen} onOpenChange={(open: boolean) => {
@@ -3495,6 +3521,10 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                   <Settings className="h-4 w-4 mr-2" />
                   Integrations
                 </TabsTrigger>
+                <TabsTrigger value="digital-twins">
+                  <Layers className="h-4 w-4 mr-2" />
+                  Digital Twins
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="documents" className="space-y-4">
@@ -3597,6 +3627,28 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
 
               <TabsContent value="integrations" className="space-y-4">
                 <IntegrationsTab projectId={projectId} />
+              </TabsContent>
+
+              <TabsContent value="digital-twins" className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Layers className="h-5 w-5" />
+                      Digital Twins
+                    </CardTitle>
+                    <CardDescription>
+                      Manage physical assets, events, state snapshots, and document triggers.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Button asChild>
+                      <Link href={`/projects/${projectId}/digital-twins`}>
+                        <Layers className="h-4 w-4 mr-2" />
+                        Manage Digital Twins
+                      </Link>
+                    </Button>
+                  </CardContent>
+                </Card>
               </TabsContent>
             </Tabs>
           </div>

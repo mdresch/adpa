@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -135,9 +135,19 @@ interface DocumentStats {
   }
 }
 
-export default function ProjectDocuments({ params }: { params: { id: string } }) {
+// Helper function to validate GUID
+const isValidGuid = (value: string | undefined | null): boolean => {
+  if (!value || typeof value !== 'string') return false
+  const guidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  return guidRegex.test(value)
+}
+
+export default function ProjectDocuments() {
   const router = useRouter()
-  const projectId = params.id
+  const params = useParams()
+  const rawProjectId = params?.id as string | undefined
+  // Validate that projectId is a valid GUID, not undefined or "undefined"
+  const projectId = rawProjectId && isValidGuid(rawProjectId) ? rawProjectId : undefined
   const { isAuthenticated } = useAuth()
 
   const [project, setProject] = useState<Project | null>(null)
@@ -236,6 +246,10 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
 
   // Fetch project data
   const fetchProject = async () => {
+    if (!projectId || !isValidGuid(projectId)) {
+      console.error("Project ID is missing or invalid:", projectId)
+      return
+    }
     try {
       const projectData = await apiClient.getProject(projectId)
       setProject(projectData)
@@ -247,6 +261,10 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
 
   // Enrich documents with drift data
   const enrichDocumentsWithDriftData = async (docs: Document[]) => {
+    if (!projectId || !isValidGuid(projectId)) {
+      // Skip drift enrichment if projectId is invalid
+      return
+    }
     try {
       // Fetch all drifts for the project
       const driftResponse = await apiClient.request<{ drifts: any[], total: number }>(
@@ -286,6 +304,10 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
 
   // Fetch documents
   const fetchDocuments = async () => {
+    if (!projectId || !isValidGuid(projectId)) {
+      console.error("Project ID is missing or invalid:", projectId)
+      return
+    }
     try {
       const params: Record<string, string> = {
         page: pagination.page.toString(),
@@ -578,6 +600,9 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
           isTextFile
         })
 
+        if (!projectId || !isValidGuid(projectId)) {
+          throw new Error("Invalid project ID")
+        }
         await apiClient.createDocument(projectId, documentData)
 
         toast.success("Document uploaded successfully!")
@@ -629,6 +654,9 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
     try {
       setGeneratingDocument(true)
 
+      if (!projectId || !isValidGuid(projectId)) {
+        throw new Error("Invalid project ID")
+      }
       const aiResponse = await apiClient.generateContent({
         prompt: generateForm.prompt,
         provider: generateForm.provider || "Groq AI",
@@ -686,6 +714,9 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
       // Legacy synchronous handling (fallback)
       const content = aiResponse.result?.content || aiResponse.result?.text || aiResponse.content || aiResponse.text || "# Document content not generated"
 
+      if (!projectId || !isValidGuid(projectId)) {
+        throw new Error("Invalid project ID")
+      }
       await apiClient.createDocument(projectId, {
         name: generateForm.name,
         content: content,
@@ -753,6 +784,12 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
 
   // Select all documents across ALL pages
   const selectAllDocuments = async () => {
+    if (!projectId || !isValidGuid(projectId)) {
+      console.error("Project ID is missing or invalid:", projectId)
+      toast.error("Cannot select documents: Invalid project ID")
+      return
+    }
+
     if (pagination.total <= displayDocuments.length) {
       // All documents are on current page, no need for API call
       setSelectedDocuments(new Set(displayDocuments.map(doc => doc.id)))
@@ -917,22 +954,34 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
 
   // Load data on component mount
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthenticated && projectId && isValidGuid(projectId)) {
       Promise.all([fetchProject(), fetchDocuments()]).then(() => {
         setLoading(false)
+      }).catch((error) => {
+        console.error("Failed to load data:", error)
+        setLoading(false)
       })
+    } else if (!isAuthenticated) {
+      setLoading(false)
+    } else if (!projectId || !isValidGuid(projectId)) {
+      // Project ID is invalid, stop loading
+      setLoading(false)
     }
   }, [isAuthenticated, projectId])
 
   // Fetch documents when pagination or filters change
   useEffect(() => {
-    if (isAuthenticated && projectId) {
+    if (isAuthenticated && projectId && isValidGuid(projectId)) {
       fetchDocuments()
     }
-  }, [pagination.page, searchTerm, statusFilter, templateFilter, gradeFilter, frameworkFilter])
+  }, [pagination.page, searchTerm, statusFilter, templateFilter, gradeFilter, frameworkFilter, projectId, isAuthenticated])
 
   // Fetch comprehensive stats (across all documents)
   const fetchStats = async () => {
+    if (!projectId || !isValidGuid(projectId)) {
+      console.error("Project ID is missing or invalid:", projectId)
+      return
+    }
     try {
       const { getApiUrl } = await import('@/lib/api-url')
       const response = await fetch(getApiUrl(`/documents/project/${projectId}/stats`), {
@@ -954,7 +1003,7 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
 
   // Fetch stats when component mounts or when documents are updated
   useEffect(() => {
-    if (projectId) {
+    if (projectId && isValidGuid(projectId)) {
       fetchStats()
     }
   }, [projectId])
@@ -972,6 +1021,35 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
         <div className="text-center">
           <h2 className="text-xl font-semibold mb-2">Authentication Required</h2>
           <p className="text-muted-foreground">Please log in to access documents.</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!projectId) {
+    return (
+      <div className="h-screen bg-background flex overflow-hidden">
+        <Sidebar />
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <Header />
+          <main className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+            <div className="max-w-7xl mx-auto">
+              <div className="flex items-center justify-center h-64">
+                <div className="text-center">
+                  <AlertCircle className="h-8 w-8 text-destructive mx-auto mb-4" />
+                  <h2 className="text-xl font-semibold mb-2">Project ID Missing</h2>
+                  <p className="text-muted-foreground">Unable to load document library. Please navigate from a project page.</p>
+                  <Button 
+                    variant="outline" 
+                    className="mt-4"
+                    onClick={() => router.push('/projects')}
+                  >
+                    Go to Projects
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </main>
         </div>
       </div>
     )

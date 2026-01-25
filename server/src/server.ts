@@ -120,6 +120,10 @@ import lessonsLearnedRoutes from "./routes/lessonsLearnedRoutes"
 import contextOrchestratorRoutes from "./routes/contextOrchestrator"
 import uxDocumentationRoutes from "./routes/uxDocumentationRoutes"
 import playbookRoutes from "./routes/playbookRoutes"
+import digitalTwinAssetsRoutes from "./routes/digital-twin-assets"
+import digitalTwinEventsRoutes from "./routes/digital-twin-events"
+import digitalTwinTriggersRoutes from "./routes/digital-twin-triggers"
+import digitalTwinIngestionRoutes from "./routes/digital-twin-ingestion"
 
 const app = express()
 const server = createServer(app)
@@ -292,6 +296,10 @@ app.use("/api/context-injection", contextInjectionRoutes)
 app.use("/api/pipeline", pipelineRoutes)
 app.use("/api/baselines", baselinesRoutes)
 app.use("/api/drift", driftRoutes)
+app.use("/api/digital-twin/assets", digitalTwinAssetsRoutes)
+app.use("/api/digital-twin/events", digitalTwinEventsRoutes)
+app.use("/api/digital-twin/triggers", digitalTwinTriggersRoutes)
+app.use("/api/digital-twin/ingestion", digitalTwinIngestionRoutes)
 app.use("/api/entities", entityBaselineRoutes)
 app.use("/api/emergency-meetings", emergencyMeetingsRoutes)
 app.use("/api/baseline-updates", baselineUpdatesRoutes)

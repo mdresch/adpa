@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
@@ -23,9 +23,22 @@ import {
 } from "lucide-react"
 import dynamic from 'next/dynamic'
 
-const GenericPieChart = dynamic(() => import('@/components/charts/RechartsWrappers').then(m => m.GenericPieChart), { ssr: false })
-const MultiBarChart = dynamic(() => import('@/components/charts/RechartsWrappers').then(m => m.MultiBarChart), { ssr: false })
-const SimpleLineChart = dynamic(() => import('@/components/charts/RechartsWrappers').then(m => m.SimpleLineChart), { ssr: false })
+function ChartPlaceholder() {
+  return <div className="h-80 min-h-[200px] w-full animate-pulse rounded bg-muted" aria-hidden="true" />
+}
+
+const GenericPieChart = dynamic(
+  () => import('@/components/charts/RechartsWrappers').then((m) => m.GenericPieChart),
+  { ssr: false, loading: ChartPlaceholder }
+)
+const MultiBarChart = dynamic(
+  () => import('@/components/charts/RechartsWrappers').then((m) => m.MultiBarChart),
+  { ssr: false, loading: ChartPlaceholder }
+)
+const SimpleLineChart = dynamic(
+  () => import('@/components/charts/RechartsWrappers').then((m) => m.SimpleLineChart),
+  { ssr: false, loading: ChartPlaceholder }
+)
 import { Project, apiClient } from "@/lib/api"
 import { getApiUrl } from "@/lib/api-url"
 
@@ -476,18 +489,19 @@ export function OverviewTab({
       </div>
 
       {/* Charts and Analytics */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Document Status Distribution */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <PieChartIcon className="h-5 w-5 text-primary" />
-              Document Status Distribution
-            </CardTitle>
-            <CardDescription>Breakdown of document statuses</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <GenericPieChart
+      <Suspense fallback={<ChartPlaceholder />}>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Document Status Distribution */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <PieChartIcon className="h-5 w-5 text-primary" />
+                Document Status Distribution
+              </CardTitle>
+              <CardDescription>Breakdown of document statuses</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <GenericPieChart
               data={[
                 { name: 'Draft', value: documentStats.counts.draft, color: '#f97316' },
                 { name: 'Review', value: documentStats.counts.review, color: '#a855f7' },
@@ -607,7 +621,8 @@ export function OverviewTab({
             </div>
           </CardContent>
         </Card>
-      </div>
+        </div>
+      </Suspense>
 
       {/* Project Details */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

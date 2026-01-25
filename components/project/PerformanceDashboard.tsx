@@ -72,10 +72,12 @@ export function PerformanceDashboard({ projectId }: PerformanceDashboardProps) {
   const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
+    if (!projectId || projectId === 'undefined') return
     void fetchData()
   }, [projectId])
 
   const fetchData = async () => {
+    if (!projectId || projectId === 'undefined') return
     try {
       setLoading(true)
       setError(null)

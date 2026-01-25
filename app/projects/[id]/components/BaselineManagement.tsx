@@ -216,7 +216,7 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
 
   // Check for extracted entities when dialog opens
   const checkForEntities = async () => {
-    if (!projectId) {
+    if (!projectId || projectId === 'undefined') {
       console.warn('No projectId available for entity check')
       return
     }

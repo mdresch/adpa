@@ -1200,11 +1200,16 @@ router.get("/:id/context", authenticateToken, async (req, res) => {
   }
 })
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 // Get project by ID
 router.get("/:id", authenticateToken, async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId })
   try {
     const { id } = req.params
+    if (!id || id === 'undefined' || !UUID_RE.test(id)) {
+      return res.status(400).json({ error: 'Invalid project ID' })
+    }
     const userId = req.user?.id
     const userRole = req.user?.role
     const isSuperAdmin = userRole === "super_admin"
@@ -1780,6 +1785,61 @@ router.post("/:projectId/documents", authenticateToken, async (req, res) => {
     }
 
     const document = result.rows[0]
+
+    // 🔍 Automatic Quality Audit: Trigger quality audit after document creation
+    // This runs asynchronously and doesn't block the response
+    if (content && typeof content === 'string' && content.trim().length > 0) {
+      setImmediate(() => {
+        (async () => {
+          try {
+            // Get project context for quality audit
+            const projectResult = await pool.query(
+              'SELECT * FROM projects WHERE id = $1',
+              [projectId]
+            )
+
+            if (projectResult.rows.length > 0) {
+              log.info('🔍 [AUTO-QUALITY-AUDIT] Triggering automatic quality audit after document creation', {
+                documentId,
+                documentName: title,
+                projectId,
+                contentLength: content.length
+              })
+
+              // Use queue service for async processing
+              const { getQueueService } = await import('../services/queueService')
+              const auditJobId = uuidv4()
+              
+              await getQueueService().addJob('quality-audit', {
+                jobId: auditJobId,
+                documentId,
+                documentContent: content,
+                documentType: title || 'Document',
+                projectContext: projectResult.rows[0],
+                userId: userId || 'system'
+              })
+
+              log.info('🔍 [AUTO-QUALITY-AUDIT] Quality audit job enqueued successfully', {
+                documentId,
+                auditJobId
+              })
+            } else {
+              log.warn('🔍 [AUTO-QUALITY-AUDIT] Skipping quality audit - project not found', {
+                documentId,
+                projectId
+              })
+            }
+          } catch (auditError: any) {
+            // Don't fail document creation if quality audit trigger fails
+            log.error('🔍 [AUTO-QUALITY-AUDIT] Failed to trigger automatic quality audit', {
+              documentId,
+              error: auditError.message,
+              stack: auditError.stack
+            })
+          }
+        })()
+      })
+    }
 
     // 🔗 Auto-integration: Check project settings and auto-publish to Confluence/Jira if enabled
     // This runs asynchronously and doesn't block the response

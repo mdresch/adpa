@@ -221,6 +221,118 @@ router.post("/generate",
         }
       }
 
+      // Fetch source documents if includeDocuments is true
+      let sourceDocuments: any[] = []
+      let contextStats: any = null
+      
+      if (includeDocuments) {
+        try {
+          // Get relevant documents from the project (exclude AI regenerations)
+          // Note: We can't exclude the current document yet since it doesn't exist, but that's fine
+          // as source documents should be existing documents used as context
+          const documentsResult = await pool.query(
+            `SELECT d.id, d.name, d.content, d.template_id, d.status, d.word_count, d.character_count,
+                    t.name as template_name
+             FROM documents d
+             LEFT JOIN templates t ON d.template_id = t.id
+             WHERE d.project_id = $1 
+               AND d.parent_document_id IS NULL
+             ORDER BY d.updated_at DESC
+             LIMIT 10`,
+            [projectId]
+          )
+          
+          const relevantDocs = documentsResult.rows || []
+          
+          // Build source documents metadata
+          sourceDocuments = relevantDocs.map((doc: any, index: number) => {
+            // Determine lifecycle phase for this document
+            const docNameLower = (doc.name || '').toLowerCase()
+            const templateNameLower = (doc.template_name || '').toLowerCase()
+            const lifecycleOrder: { [key: string]: number } = {
+              'ideation': 1, 'business case': 2, 'charter': 3, 'stakeholder': 4,
+              'scope': 5, 'requirement': 6, 'schedule': 7, 'cost': 8, 'budget': 8,
+              'resource': 9, 'quality': 10, 'risk': 11, 'communication': 12,
+              'procurement': 13, 'integration': 14, 'closeout': 15, 'lessons': 16
+            }
+            
+            let phase = 99
+            let phaseName = 'Other'
+            for (const [key, phaseNum] of Object.entries(lifecycleOrder)) {
+              if (docNameLower.includes(key) || templateNameLower.includes(key)) {
+                if (phaseNum < phase) {
+                  phase = phaseNum
+                  phaseName = key.charAt(0).toUpperCase() + key.slice(1)
+                }
+              }
+            }
+            
+            // Calculate reading metrics for this document
+            const charCount = doc.character_count || (typeof doc.content === 'string' ? doc.content.length : 0)
+            const wordCount = doc.word_count || Math.round(charCount / 5) // Estimate if not available
+            const readingTimeMinutes = Math.round((wordCount / 250) * 10) / 10 // 250 words/min
+            
+            return {
+              id: doc.id,
+              title: doc.name,
+              name: doc.name,
+              type: doc.template_name || 'Document',
+              template_id: doc.template_id,
+              status: doc.status,
+              lifecycle_phase: phase,
+              phase_name: phaseName,
+              priority_rank: index + 1,
+              character_count: charCount,
+              word_count: wordCount,
+              reading_time_minutes: readingTimeMinutes
+            }
+          })
+          
+          // Get total document count for context stats
+          const totalDocsResult = await pool.query(
+            `SELECT COUNT(*) as count FROM documents 
+             WHERE project_id = $1 AND parent_document_id IS NULL`,
+            [projectId]
+          )
+          const totalDocuments = parseInt(totalDocsResult.rows[0]?.count || '0', 10)
+          
+          // Get stakeholder count if includeStakeholders is true
+          let stakeholderCount = 0
+          if (includeStakeholders) {
+            const stakeholdersResult = await pool.query(
+              `SELECT COUNT(*) as count FROM stakeholders WHERE project_id = $1`,
+              [projectId]
+            )
+            stakeholderCount = parseInt(stakeholdersResult.rows[0]?.count || '0', 10)
+          }
+          
+          // Estimate context tokens from prompt length (rough estimate)
+          const estimatedContextTokens = Math.round((userPrompt.length + (result.content?.length || 0)) / 4)
+          
+          contextStats = {
+            total_documents: totalDocuments,
+            documents_used: relevantDocs.length,
+            documents_available: totalDocuments,
+            stakeholders_included: stakeholderCount,
+            stakeholders_available: stakeholderCount,
+            estimated_context_tokens: estimatedContextTokens
+          }
+          
+          log.info('[DOC-GEN] Source documents fetched', {
+            projectId,
+            sourceDocumentsCount: sourceDocuments.length,
+            totalDocuments,
+            stakeholderCount
+          })
+        } catch (error) {
+          log.warn('[DOC-GEN] Failed to fetch source documents', {
+            projectId,
+            error: error instanceof Error ? error.message : String(error)
+          })
+          // Continue without source documents - non-blocking
+        }
+      }
+
       // Calculate quality and compliance metrics
       const { analyzeDocumentQuality, calculateDocumentMetadata } = await import('../utils/documentMetadata')
       const tempMetadata = {
@@ -231,9 +343,9 @@ router.post("/generate",
         templateId: templateId || undefined,
         framework
       } as any
-      const qualityMetrics = analyzeDocumentQuality(result.content, tempMetadata, 0)
+      const qualityMetrics = analyzeDocumentQuality(result.content, tempMetadata, sourceDocuments.length)
 
-      // Build generation metadata with compliance metrics
+      // Build generation metadata with compliance metrics and source documents
       const generationMetadata = {
         aiProcessing: {
           provider: result.metadata.provider,
@@ -271,7 +383,9 @@ router.post("/generate",
           bestPractices: qualityMetrics.complianceMetrics.bestPractices,
           templateAdherence: qualityMetrics.complianceMetrics.templateAdherence,
           overallComplianceRating: qualityMetrics.complianceMetrics.overallComplianceRating
-        }
+        },
+        ...(sourceDocuments.length > 0 && { source_documents: sourceDocuments }),
+        ...(contextStats && { context_stats: contextStats })
       }
 
       // Create document in database
@@ -302,6 +416,60 @@ router.post("/generate",
       )
 
       log.info(`Document generated successfully: ${documentId}`)
+
+      // 🔍 Automatic Quality Audit: Trigger quality audit after document generation
+      // This runs asynchronously and doesn't block the response
+      setImmediate(() => {
+        (async () => {
+          try {
+            // Get project context for quality audit
+            const projectResult = await pool.query(
+              'SELECT * FROM projects WHERE id = $1',
+              [projectId]
+            )
+
+            if (projectResult.rows.length > 0 && result.content && result.content.trim().length > 0) {
+              log.info('🔍 [AUTO-QUALITY-AUDIT] Triggering automatic quality audit after document generation', {
+                documentId,
+                documentName: name,
+                projectId,
+                contentLength: result.content.length
+              })
+
+              // Use queue service for async processing
+              const { getQueueService } = await import('../services/queueService')
+              const auditJobId = uuidv4()
+              
+              await getQueueService().addJob('quality-audit', {
+                jobId: auditJobId,
+                documentId,
+                documentContent: result.content,
+                documentType: name || 'Document',
+                projectContext: projectResult.rows[0],
+                userId: req.user?.id || 'system'
+              })
+
+              log.info('🔍 [AUTO-QUALITY-AUDIT] Quality audit job enqueued successfully', {
+                documentId,
+                auditJobId
+              })
+            } else {
+              log.warn('🔍 [AUTO-QUALITY-AUDIT] Skipping quality audit - no project or content', {
+                documentId,
+                hasProject: projectResult.rows.length > 0,
+                hasContent: !!(result.content && result.content.trim().length > 0)
+              })
+            }
+          } catch (auditError: any) {
+            // Don't fail document generation if quality audit trigger fails
+            log.error('🔍 [AUTO-QUALITY-AUDIT] Failed to trigger automatic quality audit', {
+              documentId,
+              error: auditError.message,
+              stack: auditError.stack
+            })
+          }
+        })()
+      })
 
       // 🔗 Auto-integration: Check project settings and auto-publish to Confluence/Jira if enabled
       // This runs asynchronously and doesn't block the response

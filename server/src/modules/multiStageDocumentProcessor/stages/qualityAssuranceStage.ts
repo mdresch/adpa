@@ -19,6 +19,7 @@ interface ValidationContext {
   target_audience: string[]
   language: string
   region: string
+  eu_ai_act_applicable?: boolean // Explicit flag for EU AI Act compliance
 }
 
 interface ComplianceRule {
@@ -140,8 +141,20 @@ export class QualityAssuranceStage {
       const performanceValidation = await this.performPerformanceValidation(contextualized_document, validationContext)
       const complianceValidation = await this.performEnhancedComplianceValidation(contextualized_document, validationContext)
 
-      // Apply quality gates
+      // Apply quality gates (includes EU AI Act compliance gate for EU users)
       const qualityGateResults = await this.applyQualityGates(qualityReport, input.context)
+      
+      // Check if any quality gate failed and should block document
+      const blockingGates = qualityGateResults.filter((gate: any) => 
+        !gate.passed && gate.action_on_failure === 'stop'
+      )
+      
+      if (blockingGates.length > 0) {
+        logger.warn('[QUALITY-ASSURANCE] Quality gates failed - document blocked', {
+          failedGates: blockingGates.map((g: any) => g.gate_name),
+          documentId: contextualized_document.document_id
+        })
+      }
 
       // Generate comprehensive quality recommendations
       const qualityRecommendations = await this.generateEnhancedQualityRecommendations(
@@ -253,6 +266,12 @@ export class QualityAssuranceStage {
     const templateContext = context.context_data?.template_context
     const projectContext = context.context_data?.project_context
     const userContext = context.context_data?.user_context
+    const region = userContext?.region || projectContext?.region || 'US'
+
+    // Check if EU AI Act is applicable
+    const euAiActApplicable = this.isEURegion(region) || 
+                               projectContext?.eu_ai_act_compliance === true ||
+                               userContext?.eu_ai_act_compliance === true
 
     return {
       framework: templateContext?.framework || 'generic',
@@ -262,7 +281,8 @@ export class QualityAssuranceStage {
       data_classification: projectContext?.data_classification || 'internal',
       target_audience: projectContext?.target_audience || ['general'],
       language: userContext?.language || 'en',
-      region: userContext?.region || 'US'
+      region: region,
+      eu_ai_act_applicable: euAiActApplicable
     }
   }
 
@@ -1180,18 +1200,89 @@ export class QualityAssuranceStage {
     const qualityGates = context.quality_config?.quality_gates || []
     const gateResults: any[] = []
 
+    // Add default EU AI Act compliance gate if EU region detected
+    const validationContext = this.buildValidationContext(context)
+    if (this.isEURegion(validationContext.region)) {
+      const euAiActGate = this.createEUAIActComplianceGate()
+      qualityGates.push(euAiActGate)
+    }
+
     for (const gate of qualityGates) {
-      const gateResult = await this.evaluateQualityGate(gate, qualityReport)
+      const gateResult = await this.evaluateQualityGate(gate, qualityReport, context)
       gateResults.push(gateResult)
     }
 
     return gateResults
   }
 
-  private async evaluateQualityGate(gate: any, qualityReport: any): Promise<any> {
+  /**
+   * Creates EU AI Act compliance quality gate
+   * This gate ensures documents meet EU AI Act requirements before passing
+   */
+  private createEUAIActComplianceGate(): any {
+    return {
+      gate_id: 'EU_AI_ACT_COMPLIANCE_GATE',
+      gate_name: 'EU AI Act Compliance Gate',
+      stage_id: 'quality_assurance',
+      criteria: [
+        {
+          criterion_id: 'EU_AI_ACT_TRANSPARENCY',
+          criterion_name: 'AI-Generated Content Transparency',
+          metric: 'ai_content_labeling',
+          threshold: 80, // Must score 80%+ on transparency
+          weight: 0.30 // 30% weight in gate score
+        },
+        {
+          criterion_id: 'EU_AI_ACT_HUMAN_OVERSIGHT',
+          criterion_name: 'Human Oversight',
+          metric: 'human_oversight',
+          threshold: 80, // Must score 80%+ on human oversight
+          weight: 0.30 // 30% weight in gate score
+        },
+        {
+          criterion_id: 'EU_AI_ACT_ACCURACY',
+          criterion_name: 'AI Accuracy and Robustness',
+          metric: 'ai_accuracy',
+          threshold: 70, // Must score 70%+ on accuracy
+          weight: 0.25 // 25% weight in gate score
+        },
+        {
+          criterion_id: 'EU_AI_ACT_DATA_GOVERNANCE',
+          criterion_name: 'Data Governance',
+          metric: 'data_governance',
+          threshold: 60, // Recommended but not mandatory
+          weight: 0.10 // 10% weight in gate score
+        },
+        {
+          criterion_id: 'EU_AI_ACT_RECORD_KEEPING',
+          criterion_name: 'Record Keeping',
+          metric: 'record_keeping',
+          threshold: 70, // Must score 70%+ on record keeping
+          weight: 0.05 // 5% weight in gate score
+        }
+      ],
+      threshold: 75, // Overall gate must pass at 75%+
+      action_on_failure: 'stop' // Block document if EU AI Act compliance fails
+    }
+  }
+
+  private async evaluateQualityGate(gate: any, qualityReport: any, context?: any): Promise<any> {
     // Evaluate individual quality gate
-    const gateScore = this.calculateGateScore(gate, qualityReport)
+    const gateScore = this.calculateGateScore(gate, qualityReport, context)
     const passed = gateScore >= gate.threshold
+
+    // Calculate individual criterion scores
+    const criteriaResults = gate.criteria.map((criterion: any) => {
+      const criterionScore = this.calculateCriterionScore(criterion, qualityReport, context)
+      return {
+        criterion_id: criterion.criterion_id,
+        criterion_name: criterion.criterion_name,
+        score: criterionScore,
+        threshold: criterion.threshold,
+        passed: criterionScore >= criterion.threshold,
+        weight: criterion.weight
+      }
+    })
 
     return {
       gate_id: gate.gate_id,
@@ -1199,23 +1290,19 @@ export class QualityAssuranceStage {
       passed: passed,
       score: gateScore,
       threshold: gate.threshold,
-      criteria_results: gate.criteria.map((criterion: any) => ({
-        criterion_id: criterion.criterion_id,
-        criterion_name: criterion.criterion_name,
-        score: 0.8, // Would be calculated
-        passed: true // Would be calculated
-      })),
-      action_taken: passed ? 'continue' : gate.action_on_failure
+      criteria_results: criteriaResults,
+      action_taken: passed ? 'continue' : gate.action_on_failure,
+      blocking: !passed && gate.action_on_failure === 'stop'
     }
   }
 
-  private calculateGateScore(gate: any, qualityReport: any): number {
+  private calculateGateScore(gate: any, qualityReport: any, context?: any): number {
     // Calculate quality gate score
     let totalScore = 0
     let totalWeight = 0
 
     for (const criterion of gate.criteria) {
-      const criterionScore = this.calculateCriterionScore(criterion, qualityReport)
+      const criterionScore = this.calculateCriterionScore(criterion, qualityReport, context)
       totalScore += criterionScore * criterion.weight
       totalWeight += criterion.weight
     }
@@ -1223,10 +1310,190 @@ export class QualityAssuranceStage {
     return totalWeight > 0 ? totalScore / totalWeight : 0
   }
 
-  private calculateCriterionScore(criterion: any, qualityReport: any): number {
-    // Calculate individual criterion score
-    // This would implement actual criterion evaluation
-    return 0.8
+  private calculateCriterionScore(criterion: any, qualityReport: any, context?: any): number {
+    // Calculate individual criterion score based on metric type
+    switch (criterion.metric) {
+      // EU AI Act compliance metrics
+      case 'ai_content_labeling':
+        return this.calculateAIContentLabelingScore(qualityReport, context)
+      case 'human_oversight':
+        return this.calculateHumanOversightScore(qualityReport, context)
+      case 'ai_accuracy':
+        return this.calculateAIAccuracyScore(qualityReport, context)
+      case 'data_governance':
+        return this.calculateDataGovernanceScore(qualityReport, context)
+      case 'record_keeping':
+        return this.calculateRecordKeepingScore(qualityReport, context)
+      
+      // Standard quality metrics
+      case 'overall_quality':
+        return (qualityReport.overall_score || 0) * 100
+      case 'completeness':
+        return this.getDimensionScore(qualityReport, 'completeness') * 100
+      case 'consistency':
+        return this.getDimensionScore(qualityReport, 'consistency') * 100
+      case 'professional_quality':
+        return this.getDimensionScore(qualityReport, 'professionalQuality') * 100
+      case 'standards_compliance':
+        return this.getDimensionScore(qualityReport, 'standardsCompliance') * 100
+      default:
+        return 0.8 * 100 // Default 80% if metric not found
+    }
+  }
+
+  /**
+   * Calculate AI Content Labeling Score (0-100)
+   * Based on EU AI Act transparency requirements
+   */
+  private calculateAIContentLabelingScore(qualityReport: any, context?: any): number {
+    const complianceValidation = qualityReport.enhanced_validations?.compliance || {}
+    const complianceResults = complianceValidation.compliance_results || []
+    
+    // Find AI labeling rule result
+    const labelingRule = complianceResults.find((r: any) => 
+      r.rule_id === 'EU_AI_ACT_TRANSPARENCY_001'
+    )
+    
+    if (labelingRule) {
+      return labelingRule.passed ? 100 : 0
+    }
+    
+    // Fallback: Check metadata
+    const metadata = context?.document_metadata || {}
+    const hasAIMetadata = 
+      metadata.generation_metadata?.provider !== undefined ||
+      metadata.generation_metadata?.ai_generated === true
+    
+    return hasAIMetadata ? 80 : 0 // Partial score if metadata exists but no explicit labeling
+  }
+
+  /**
+   * Calculate Human Oversight Score (0-100)
+   * Based on EU AI Act human oversight requirements
+   */
+  private calculateHumanOversightScore(qualityReport: any, context?: any): number {
+    const complianceValidation = qualityReport.enhanced_validations?.compliance || {}
+    const complianceResults = complianceValidation.compliance_results || []
+    
+    // Find human oversight rule result
+    const oversightRule = complianceResults.find((r: any) => 
+      r.rule_id === 'EU_AI_ACT_HUMAN_OVERSIGHT_001'
+    )
+    
+    if (oversightRule) {
+      return oversightRule.passed ? 100 : 0
+    }
+    
+    // Fallback: Check if document is editable and reviewable
+    const metadata = context?.document_metadata || {}
+    const isEditable = metadata.editable !== false
+    const hasReview = metadata.review_status !== undefined
+    
+    if (isEditable && hasReview) return 100
+    if (isEditable || hasReview) return 50
+    return 0
+  }
+
+  /**
+   * Calculate AI Accuracy Score (0-100)
+   * Based on EU AI Act accuracy requirements
+   */
+  private calculateAIAccuracyScore(qualityReport: any, context?: any): number {
+    const complianceValidation = qualityReport.enhanced_validations?.compliance || {}
+    const complianceResults = complianceValidation.compliance_results || []
+    
+    // Find accuracy rule result
+    const accuracyRule = complianceResults.find((r: any) => 
+      r.rule_id === 'EU_AI_ACT_ACCURACY_001'
+    )
+    
+    if (accuracyRule) {
+      return accuracyRule.passed ? 100 : 0
+    }
+    
+    // Fallback: Use quality report accuracy dimension
+    const accuracyScore = this.getDimensionScore(qualityReport, 'accuracy')
+    return accuracyScore * 100
+  }
+
+  /**
+   * Calculate Data Governance Score (0-100)
+   * Based on EU AI Act data governance requirements
+   */
+  private calculateDataGovernanceScore(qualityReport: any, context?: any): number {
+    const complianceValidation = qualityReport.enhanced_validations?.compliance || {}
+    const complianceResults = complianceValidation.compliance_results || []
+    
+    // Find data governance rule result
+    const dataGovRule = complianceResults.find((r: any) => 
+      r.rule_id === 'EU_AI_ACT_DATA_GOVERNANCE_001'
+    )
+    
+    if (dataGovRule) {
+      return dataGovRule.passed ? 100 : 50 // Partial score if not fully compliant
+    }
+    
+    // Fallback: Check if provider info is documented
+    const metadata = context?.document_metadata || {}
+    const hasProviderInfo = 
+      metadata.generation_metadata?.provider !== undefined &&
+      metadata.generation_metadata?.model !== undefined
+    
+    return hasProviderInfo ? 80 : 0
+  }
+
+  /**
+   * Calculate Record Keeping Score (0-100)
+   * Based on EU AI Act record keeping requirements
+   */
+  private calculateRecordKeepingScore(qualityReport: any, context?: any): number {
+    const complianceValidation = qualityReport.enhanced_validations?.compliance || {}
+    const complianceResults = complianceValidation.compliance_results || []
+    
+    // Find record keeping rule result
+    const recordRule = complianceResults.find((r: any) => 
+      r.rule_id === 'EU_AI_ACT_RECORD_KEEPING_001'
+    )
+    
+    if (recordRule) {
+      return recordRule.passed ? 100 : 0
+    }
+    
+    // Fallback: Check if generation metadata is logged
+    const metadata = context?.document_metadata || {}
+    const hasTimestamp = metadata.generation_metadata?.generated_at !== undefined
+    const hasProviderModel = 
+      metadata.generation_metadata?.provider !== undefined &&
+      metadata.generation_metadata?.model !== undefined
+    
+    if (hasTimestamp && hasProviderModel) return 100
+    if (hasTimestamp || hasProviderModel) return 50
+    return 0
+  }
+
+  /**
+   * Helper to get dimension score from quality report
+   */
+  private getDimensionScore(qualityReport: any, dimension: string): number {
+    const assessments = qualityReport.assessments || []
+    const qualityMetrics = qualityReport.quality_metrics || {}
+    
+    // Try to get from quality metrics first
+    if (qualityMetrics[dimension] !== undefined) {
+      return qualityMetrics[dimension] / 100 // Convert 0-100 to 0-1
+    }
+    
+    // Try to get from assessments
+    const assessment = assessments.find((a: any) => 
+      a.assessment_type === dimension || 
+      a.metric_type === dimension
+    )
+    
+    if (assessment && assessment.score !== undefined) {
+      return assessment.score
+    }
+    
+    return 0.7 // Default 70% if not found
   }
 
   private async generateQualityRecommendations(qualityReport: any, qualityGateResults: any[]): Promise<any[]> {
@@ -1382,14 +1649,24 @@ export class QualityAssuranceStage {
 
     // Add compliance recommendations
     if (complianceValidation.score < 0.8) {
+      const euAiActViolations = complianceValidation.violations?.filter((v: any) => 
+        v.rule_id?.startsWith('EU_AI_ACT')
+      ) || []
+      
+      const priority = euAiActViolations.length > 0 ? 'critical' : 'high'
+      const title = euAiActViolations.length > 0 
+        ? 'EU AI Act Compliance Violations' 
+        : 'Improve Framework Compliance'
+      
       recommendations.push({
         type: 'enhanced_compliance',
-        priority: 'high',
-        title: 'Improve Framework Compliance',
-        description: `Enhanced compliance score is ${complianceValidation.score}`,
+        priority: priority,
+        title: title,
+        description: `Enhanced compliance score is ${complianceValidation.score}. ${euAiActViolations.length > 0 ? `EU AI Act violations detected: ${euAiActViolations.length}` : ''}`,
         implementation: complianceValidation.recommendations.join(', '),
         expected_impact: 0.3,
-        timeframe: 'short_term'
+        timeframe: 'immediate',
+        blocking: euAiActViolations.length > 0 // EU AI Act violations block document
       })
     }
 
@@ -1839,6 +2116,60 @@ export class QualityAssuranceStage {
 
   // Enhanced compliance validation helper methods
   private getEnhancedComplianceRules(framework: string): ComplianceRule[] {
+    // EU AI Act compliance rules (apply to all documents for EU users)
+    const euAiActRules: ComplianceRule[] = [
+      {
+        rule_id: 'EU_AI_ACT_TRANSPARENCY_001',
+        rule_name: 'AI-Generated Content Transparency',
+        framework: 'EU_AI_ACT',
+        category: 'transparency',
+        mandatory: true,
+        description: 'AI-generated content must be clearly labeled (EU AI Act Article 50)',
+        validation_function: 'validateAIGeneratedContentLabeling',
+        severity: 'critical'
+      },
+      {
+        rule_id: 'EU_AI_ACT_HUMAN_OVERSIGHT_001',
+        rule_name: 'Human Oversight Requirement',
+        framework: 'EU_AI_ACT',
+        category: 'human_oversight',
+        mandatory: true,
+        description: 'AI outputs must be reviewable by humans (EU AI Act Article 14)',
+        validation_function: 'validateHumanOversight',
+        severity: 'critical'
+      },
+      {
+        rule_id: 'EU_AI_ACT_ACCURACY_001',
+        rule_name: 'AI System Accuracy and Robustness',
+        framework: 'EU_AI_ACT',
+        category: 'accuracy',
+        mandatory: true,
+        description: 'AI system must be reliable and accurate (EU AI Act Article 15)',
+        validation_function: 'validateAIAccuracy',
+        severity: 'high'
+      },
+      {
+        rule_id: 'EU_AI_ACT_DATA_GOVERNANCE_001',
+        rule_name: 'Data Governance and Quality',
+        framework: 'EU_AI_ACT',
+        category: 'data_governance',
+        mandatory: false, // Not mandatory for minimal-risk systems, but recommended
+        description: 'Data processing must be documented (EU AI Act Article 10)',
+        validation_function: 'validateDataGovernance',
+        severity: 'medium'
+      },
+      {
+        rule_id: 'EU_AI_ACT_RECORD_KEEPING_001',
+        rule_name: 'Record Keeping Requirements',
+        framework: 'EU_AI_ACT',
+        category: 'record_keeping',
+        mandatory: false, // Recommended for audit trail
+        description: 'AI system usage must be logged (EU AI Act Article 12)',
+        validation_function: 'validateRecordKeeping',
+        severity: 'medium'
+      }
+    ]
+
     const baseRules: ComplianceRule[] = [
       {
         rule_id: 'DOC_STRUCTURE_001',
@@ -1859,7 +2190,9 @@ export class QualityAssuranceStage {
         description: 'Content must meet quality standards',
         validation_function: 'validateContentQuality',
         severity: 'medium'
-      }
+      },
+      // Add EU AI Act rules to all documents (check if EU user/region)
+      ...euAiActRules
     ]
 
     switch (framework) {
@@ -1987,6 +2320,52 @@ export class QualityAssuranceStage {
         description = passed ? 'Data quality standards documented' : 'Data quality standards missing'
         remediation = passed ? '' : 'Define and document data quality standards'
         break
+      // EU AI Act compliance validations
+      case 'validateAIGeneratedContentLabeling':
+        passed = this.validateAIGeneratedContentLabeling(contextualizedDocument, validationContext)
+        description = passed 
+          ? 'AI-generated content is properly labeled' 
+          : 'AI-generated content labeling missing (EU AI Act requirement)'
+        remediation = passed 
+          ? '' 
+          : 'Add explicit "AI-Generated" label/badge to document. Include metadata indicating AI generation in document records.'
+        break
+      case 'validateHumanOversight':
+        passed = this.validateHumanOversight(contextualizedDocument, validationContext)
+        description = passed 
+          ? 'Human oversight mechanisms in place' 
+          : 'Human oversight requirements not met (EU AI Act requirement)'
+        remediation = passed 
+          ? '' 
+          : 'Ensure document is reviewable and editable by users. Document must not make automated decisions affecting individuals.'
+        break
+      case 'validateAIAccuracy':
+        passed = this.validateAIAccuracy(contextualizedDocument, validationContext)
+        description = passed 
+          ? 'AI system accuracy and robustness verified' 
+          : 'AI accuracy validation needed (EU AI Act requirement)'
+        remediation = passed 
+          ? '' 
+          : 'Verify AI-generated content accuracy. Implement error handling and validation mechanisms.'
+        break
+      case 'validateDataGovernance':
+        passed = this.validateEUAIActDataGovernance(contextualizedDocument, validationContext)
+        description = passed 
+          ? 'Data governance documented' 
+          : 'Data governance documentation missing (EU AI Act recommendation)'
+        remediation = passed 
+          ? '' 
+          : 'Document what data is sent to AI providers. Ensure data processing is transparent and documented.'
+        break
+      case 'validateRecordKeeping':
+        passed = this.validateRecordKeeping(contextualizedDocument, validationContext)
+        description = passed 
+          ? 'Record keeping requirements met' 
+          : 'AI usage logging incomplete (EU AI Act recommendation)'
+        remediation = passed 
+          ? '' 
+          : 'Ensure AI system usage is logged with provider/model information. Maintain audit trail for compliance.'
+        break
       default:
         passed = true
         description = 'Rule validation not implemented'
@@ -2041,11 +2420,192 @@ export class QualityAssuranceStage {
     return content.includes('data') && content.includes('quality')
   }
 
+  // EU AI Act Compliance Validation Methods
+
+  /**
+   * Validates AI-Generated Content Labeling (EU AI Act Article 50)
+   * Requirement: Users must be informed when content is AI-generated
+   */
+  private validateAIGeneratedContentLabeling(
+    contextualizedDocument: any, 
+    validationContext: ValidationContext
+  ): boolean {
+    // Check if document metadata indicates AI generation
+    const metadata = contextualizedDocument.metadata || {}
+    const generationMetadata = metadata.generation_metadata || {}
+    
+    // Check 1: Metadata indicates AI generation
+    const hasAIGenerationMetadata = 
+      generationMetadata.provider !== undefined ||
+      generationMetadata.model !== undefined ||
+      generationMetadata.ai_generated === true
+    
+    // Check 2: Document content includes AI generation indicator
+    const content = JSON.stringify(contextualizedDocument).toLowerCase()
+    const hasAILabel = 
+      content.includes('ai-generated') ||
+      content.includes('generated by ai') ||
+      content.includes('artificial intelligence')
+    
+    // Check 3: For EU users/regions, labeling is mandatory
+    const isEURegion = this.isEURegion(validationContext.region)
+    
+    if (isEURegion) {
+      // For EU: Must have both metadata AND content labeling
+      return hasAIGenerationMetadata && hasAILabel
+    } else {
+      // For non-EU: Metadata is sufficient
+      return hasAIGenerationMetadata
+    }
+  }
+
+  /**
+   * Validates Human Oversight (EU AI Act Article 14)
+   * Requirement: AI outputs must be reviewable and users must have control
+   */
+  private validateHumanOversight(
+    contextualizedDocument: any,
+    validationContext: ValidationContext
+  ): boolean {
+    // Check 1: Document is editable (not read-only)
+    const isEditable = contextualizedDocument.editable !== false
+    
+    // Check 2: Document has review/approval workflow
+    const metadata = contextualizedDocument.metadata || {}
+    const hasReviewWorkflow = 
+      metadata.review_status !== undefined ||
+      metadata.approval_required === true ||
+      metadata.user_reviewed === true
+    
+    // Check 3: No fully automated decision-making affecting individuals
+    const content = JSON.stringify(contextualizedDocument).toLowerCase()
+    const hasAutomatedDecisions = 
+      content.includes('automated decision') &&
+      (content.includes('individual') || content.includes('person'))
+    
+    // Human oversight passes if:
+    // - Document is editable AND
+    // - Has review workflow AND
+    // - No automated decisions affecting individuals
+    return isEditable && hasReviewWorkflow && !hasAutomatedDecisions
+  }
+
+  /**
+   * Validates AI Accuracy and Robustness (EU AI Act Article 15)
+   * Requirement: AI systems must be reliable, accurate, and robust
+   */
+  private validateAIAccuracy(
+    contextualizedDocument: any,
+    validationContext: ValidationContext
+  ): boolean {
+    const metadata = contextualizedDocument.metadata || {}
+    const qualityMetrics = metadata.quality_metrics || {}
+    
+    // Check 1: Quality score indicates accuracy
+    const hasQualityScore = qualityMetrics.overallQuality !== undefined
+    const qualityScore = qualityMetrics.overallQuality || 0
+    const meetsQualityThreshold = qualityScore >= 70 // Minimum acceptable quality
+    
+    // Check 2: Accuracy dimension score
+    const accuracyScore = qualityMetrics.accuracy || 0
+    const meetsAccuracyThreshold = accuracyScore >= 70
+    
+    // Check 3: Document has validation/error handling indicators
+    const content = JSON.stringify(contextualizedDocument).toLowerCase()
+    const hasValidation = 
+      content.includes('validation') ||
+      content.includes('verified') ||
+      content.includes('reviewed')
+    
+    // Accuracy passes if quality and accuracy scores meet thresholds
+    return hasQualityScore && meetsQualityThreshold && meetsAccuracyThreshold
+  }
+
+  /**
+   * Validates EU AI Act Data Governance (EU AI Act Article 10)
+   * Requirement: Document data sources and processing
+   */
+  private validateEUAIActDataGovernance(
+    contextualizedDocument: any,
+    validationContext: ValidationContext
+  ): boolean {
+    const metadata = contextualizedDocument.metadata || {}
+    const generationMetadata = metadata.generation_metadata || {}
+    
+    // Check 1: AI provider information documented
+    const hasProviderInfo = 
+      generationMetadata.provider !== undefined &&
+      generationMetadata.model !== undefined
+    
+    // Check 2: Data sources documented (if applicable)
+    const hasSourceInfo = 
+      generationMetadata.source_documents !== undefined ||
+      generationMetadata.context_stats !== undefined
+    
+    // Check 3: Processing information available
+    const hasProcessingInfo = 
+      generationMetadata.processing_time !== undefined ||
+      generationMetadata.tokens_used !== undefined
+    
+    // Data governance passes if provider info is documented
+    // Source and processing info are recommended but not mandatory
+    return hasProviderInfo
+  }
+
+  /**
+   * Validates Record Keeping (EU AI Act Article 12)
+   * Requirement: Maintain records of AI system usage
+   */
+  private validateRecordKeeping(
+    contextualizedDocument: any,
+    validationContext: ValidationContext
+  ): boolean {
+    const metadata = contextualizedDocument.metadata || {}
+    const generationMetadata = metadata.generation_metadata || {}
+    
+    // Check 1: Generation timestamp recorded
+    const hasTimestamp = 
+      generationMetadata.generated_at !== undefined ||
+      metadata.created_at !== undefined
+    
+    // Check 2: Provider/model information logged
+    const hasProviderModel = 
+      generationMetadata.provider !== undefined &&
+      generationMetadata.model !== undefined
+    
+    // Check 3: Usage metrics recorded
+    const hasUsageMetrics = 
+      generationMetadata.tokens_used !== undefined ||
+      generationMetadata.cost !== undefined
+    
+    // Record keeping passes if timestamp and provider/model are logged
+    return hasTimestamp && hasProviderModel
+  }
+
+  /**
+   * Checks if user/region is in EU
+   */
+  private isEURegion(region?: string): boolean {
+    if (!region) return false
+    
+    const euRegions = [
+      'eu', 'europe', 'european union',
+      'at', 'be', 'bg', 'hr', 'cy', 'cz', 'dk', 'ee', 'fi', 'fr',
+      'de', 'gr', 'hu', 'ie', 'it', 'lv', 'lt', 'lu', 'mt', 'nl',
+      'pl', 'pt', 'ro', 'sk', 'si', 'es', 'se'
+    ]
+    
+    return euRegions.some(euRegion => 
+      region.toLowerCase().includes(euRegion.toLowerCase())
+    )
+  }
+
   private generateEnhancedComplianceRecommendations(violations: any[], validationContext: ValidationContext): string[] {
     const recommendations: string[] = []
 
     const criticalViolations = violations.filter(v => v.severity === 'critical')
     const highViolations = violations.filter(v => v.severity === 'high')
+    const euAiActViolations = violations.filter(v => v.rule_id?.startsWith('EU_AI_ACT'))
 
     if (criticalViolations.length > 0) {
       recommendations.push('Address all critical compliance violations immediately')
@@ -2055,6 +2615,56 @@ export class QualityAssuranceStage {
     if (highViolations.length > 0) {
       recommendations.push('Address high-priority compliance violations')
       recommendations.push('Implement compliance monitoring and validation processes')
+    }
+
+    // EU AI Act specific recommendations
+    if (validationContext.eu_ai_act_applicable && euAiActViolations.length > 0) {
+      const transparencyViolation = euAiActViolations.find(v => 
+        v.rule_id === 'EU_AI_ACT_TRANSPARENCY_001'
+      )
+      if (transparencyViolation) {
+        recommendations.push('EU AI Act: Add explicit "AI-Generated" badge/label to document')
+        recommendations.push('EU AI Act: Include AI generation metadata in document records')
+        recommendations.push('EU AI Act: Add export metadata (PDF/DOCX) indicating AI generation')
+      }
+
+      const oversightViolation = euAiActViolations.find(v => 
+        v.rule_id === 'EU_AI_ACT_HUMAN_OVERSIGHT_001'
+      )
+      if (oversightViolation) {
+        recommendations.push('EU AI Act: Ensure document is editable and reviewable by users')
+        recommendations.push('EU AI Act: Implement review/approval workflow before finalization')
+        recommendations.push('EU AI Act: Remove any automated decision-making affecting individuals')
+      }
+
+      const accuracyViolation = euAiActViolations.find(v => 
+        v.rule_id === 'EU_AI_ACT_ACCURACY_001'
+      )
+      if (accuracyViolation) {
+        recommendations.push('EU AI Act: Verify AI-generated content accuracy')
+        recommendations.push('EU AI Act: Implement error handling and validation mechanisms')
+        recommendations.push('EU AI Act: Ensure quality score meets minimum threshold (70%+)')
+      }
+
+      const dataGovViolation = euAiActViolations.find(v => 
+        v.rule_id === 'EU_AI_ACT_DATA_GOVERNANCE_001'
+      )
+      if (dataGovViolation) {
+        recommendations.push('EU AI Act: Document what data is sent to AI providers')
+        recommendations.push('EU AI Act: Ensure data processing is transparent and documented')
+      }
+
+      const recordViolation = euAiActViolations.find(v => 
+        v.rule_id === 'EU_AI_ACT_RECORD_KEEPING_001'
+      )
+      if (recordViolation) {
+        recommendations.push('EU AI Act: Ensure AI system usage is logged with provider/model information')
+        recommendations.push('EU AI Act: Maintain audit trail for compliance verification')
+      }
+    }
+
+    if (validationContext.eu_ai_act_applicable && euAiActViolations.length === 0) {
+      recommendations.push('EU AI Act: All compliance requirements met ✅')
     }
 
     if (violations.length > 0) {
