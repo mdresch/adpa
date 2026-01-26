@@ -1,4 +1,5 @@
 ;(async function(){ try{ await (require('../../lib/db')).initDb() } catch(e){} })();
+const db = require('../../lib/db')
 /**
  * Extraction Orchestrator
  * 

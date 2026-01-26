@@ -12,7 +12,22 @@ import { logger } from '@/utils/logger'
 import { convertQuarterDate, isValidDate, addDays, getCurrentDate } from '@/utils/dateUtils'
 import { aiService } from './aiService'
 import { aiCacheService } from './aiCacheService'
+import { ExtractionContext } from './extraction/base/ExtractionContext'
+import type { ExtractionDocument, ExtractionResult as ModuleExtractionResult } from './extraction/base/ExtractionResult'
+import type { PersistenceResult } from './extraction/base/Persistence'
 import type { PoolClient } from 'pg'
+
+type ModuleExtractor = (
+  context: ExtractionContext,
+  options?: { temperature?: number; maxTokens?: number }
+) => Promise<ModuleExtractionResult<unknown>>
+
+type ModuleSaver = (
+  client: PoolClient,
+  projectId: string,
+  userId: string,
+  entities: unknown[]
+) => Promise<PersistenceResult>
 
 interface ExtractionResult {
   stakeholders: Stakeholder[]
@@ -459,6 +474,11 @@ interface RiskResponseRecord {
 }
 
 export class ProjectDataExtractionService {
+  private entityModuleCache = new Map<
+    string,
+    { normalizedType: string; extractor?: ModuleExtractor; saver?: ModuleSaver }
+  >()
+
   /**
    * Validate AI response and throw error if empty/invalid
    * This ensures empty responses trigger retries and provider fallback
@@ -3825,18 +3845,23 @@ Output valid JSON object with "performance_actuals" array only.`
       change_control_boards: 'governance',
       policy_compliance: 'governance',
       // Scope Domain
+      scope_baseline: 'scope',
       scope_baselines: 'scope',
       wbs_nodes: 'scope',
       scope_change_requests: 'scope',
       requirements_traceability: 'scope',
       scope_verification: 'scope',
+      dt_assets: 'scope',
       // Schedule Domain
+      schedule_baseline: 'schedule',
       schedule_baselines: 'schedule',
       schedule_activities: 'schedule',
       critical_path_activities: 'schedule',
+      critical_path: 'schedule',
       schedule_variances: 'schedule',
       schedule_forecasts: 'schedule',
       // Finance Domain
+      budget_baseline: 'finance',
       budget_baselines: 'finance',
       cost_actuals: 'finance',
       cost_estimates: 'finance',
@@ -3865,6 +3890,76 @@ Output valid JSON object with "performance_actuals" array only.`
       relationship_health: 'stakeholders_ops'
     }
     return domainMap[entityType] || 'unknown'
+  }
+
+  private normalizeEntityTypeAlias(entityType: string): { normalizedType: string; aliasApplied: boolean } {
+    const aliasMap: Record<string, string> = {
+      scope_baselines: 'scope_baseline',
+      schedule_baselines: 'schedule_baseline',
+      budget_baselines: 'budget_baseline',
+      critical_path_activities: 'critical_path'
+    }
+
+    const normalizedType = aliasMap[entityType] ?? entityType
+    return {
+      normalizedType,
+      aliasApplied: normalizedType !== entityType
+    }
+  }
+
+  private toPascalCase(value: string): string {
+    return value
+      .split('_')
+      .map(part => (part ? `${part[0].toUpperCase()}${part.slice(1)}` : ''))
+      .join('')
+  }
+
+  private async resolveEntityModule(
+    entityType: string
+  ): Promise<{ normalizedType: string; extractor?: ModuleExtractor; saver?: ModuleSaver; aliasApplied: boolean } | null> {
+    const { normalizedType, aliasApplied } = this.normalizeEntityTypeAlias(entityType)
+
+    if (this.entityModuleCache.has(normalizedType)) {
+      const cached = this.entityModuleCache.get(normalizedType)
+      if (!cached || (!cached.extractor && !cached.saver)) {
+        return null
+      }
+      return { ...cached, aliasApplied }
+    }
+
+    try {
+      const module = await import(`./extraction/entities/${normalizedType}`)
+      const suffix = this.toPascalCase(normalizedType)
+      const extractor = module[`extract${suffix}`] as ModuleExtractor | undefined
+      const saver = module[`save${suffix}`] as ModuleSaver | undefined
+
+      if (!extractor && !saver) {
+        logger.warn('[EXTRACTION] Entity module loaded but no extractor/saver found', {
+          entityType,
+          normalizedType
+        })
+        this.entityModuleCache.set(normalizedType, { normalizedType })
+        return null
+      }
+
+      const resolved = { normalizedType, extractor, saver }
+      this.entityModuleCache.set(normalizedType, resolved)
+      return { ...resolved, aliasApplied }
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error)
+      const isModuleMissing =
+        message.includes('Cannot find module') || message.includes('Cannot find package')
+
+      if (!isModuleMissing) {
+        logger.warn('[EXTRACTION] Failed to load entity module', {
+          entityType,
+          normalizedType,
+          error: message
+        })
+      }
+      this.entityModuleCache.set(normalizedType, { normalizedType })
+      return null
+    }
   }
 
   /**
@@ -8734,7 +8829,7 @@ Output valid JSON object with "performance_actuals" array only.`
         break
       // ===========================================================================
       // PMBOK 8 Knowledge Area Domain entity types (Tier 2)
-      // These are placeholders - full extraction methods to be implemented
+      // These use the extraction modules when available
       // ===========================================================================
       // Governance Domain
       case 'governance_decisions':
@@ -8745,24 +8840,22 @@ Output valid JSON object with "performance_actuals" array only.`
       // Scope Domain  
       case 'scope_baseline':
       case 'scope_baselines':
-      case 'scope_baseline': // Singular form
       case 'wbs_nodes':
       case 'scope_change_requests':
       case 'requirements_traceability':
       case 'scope_verification':
+      case 'dt_assets':
       // Schedule Domain
       case 'schedule_baseline':
       case 'schedule_baselines':
-      case 'schedule_baseline': // Singular form
       case 'schedule_activities':
       case 'critical_path_activities':
-      case 'critical_path': // Singular form
+      case 'critical_path':
       case 'schedule_variances':
       case 'schedule_forecasts':
       // Finance Domain
       case 'budget_baseline':
       case 'budget_baselines':
-      case 'budget_baseline': // Singular form
       case 'cost_actuals':
       case 'cost_estimates':
       case 'funding_tranches':
@@ -8787,15 +8880,38 @@ Output valid JSON object with "performance_actuals" array only.`
       case 'communication_logs':
       case 'satisfaction_surveys':
       case 'stakeholder_issues':
-      case 'relationship_health':
-        // Log warning for Knowledge Area Domain entities (not yet implemented)
-        logger.warn(`[EXTRACTION-${entityType.toUpperCase()}] Knowledge Area Domain entity type not yet implemented, returning empty array`, {
-          entityType,
-          projectId,
-          domain: this.getKnowledgeDomainForEntityType(entityType)
-        })
+      case 'relationship_health': {
+        const resolved = await this.resolveEntityModule(entityType)
+        if (resolved?.extractor) {
+          if (resolved.aliasApplied) {
+            logger.debug('[EXTRACTION] Normalized entity type alias', {
+              entityType,
+              normalizedType: resolved.normalizedType
+            })
+          }
+
+          const context = new ExtractionContext(
+            projectId,
+            userId,
+            documents as ExtractionDocument[],
+            extractionOptions
+          )
+          const result = await resolved.extractor(context)
+          entities = result.entities
+          break
+        }
+
+        logger.warn(
+          `[EXTRACTION-${entityType.toUpperCase()}] Knowledge Area Domain entity type not yet implemented, returning empty array`,
+          {
+            entityType,
+            projectId,
+            domain: this.getKnowledgeDomainForEntityType(entityType)
+          }
+        )
         entities = []
         break
+      }
       default:
         throw new Error(`Unknown entity type: ${entityType}`)
       }
@@ -8951,7 +9067,7 @@ Output valid JSON object with "performance_actuals" array only.`
           break
         // ===========================================================================
         // PMBOK 8 Knowledge Area Domain entity types (Tier 2)
-        // These are placeholders - full save methods to be implemented
+        // These use module savers when available
         // ===========================================================================
         // Governance Domain
         case 'governance_decisions':
@@ -8966,6 +9082,7 @@ Output valid JSON object with "performance_actuals" array only.`
         case 'scope_change_requests':
         case 'requirements_traceability':
         case 'scope_verification':
+        case 'dt_assets':
         // Schedule Domain
         case 'schedule_baseline': // singular
         case 'schedule_baselines':
@@ -9001,7 +9118,23 @@ Output valid JSON object with "performance_actuals" array only.`
         case 'communication_logs':
         case 'satisfaction_surveys':
         case 'stakeholder_issues':
-        case 'relationship_health':
+        case 'relationship_health': {
+          const resolved = await this.resolveEntityModule(entityType)
+          if (resolved?.saver) {
+            if (resolved.aliasApplied) {
+              logger.debug('[EXTRACTION] Normalized entity type alias for save', {
+                entityType,
+                normalizedType: resolved.normalizedType
+              })
+            }
+
+            const result = await resolved.saver(client, projectId, userId, entities)
+            if (result.failed > 0 && result.error) {
+              throw new Error(result.error)
+            }
+            break
+          }
+
           // Log info for Knowledge Area Domain entities (save methods not yet implemented)
           if (entities.length > 0) {
             logger.warn(`[EXTRACTION-${entityType.toUpperCase()}] Save method not yet implemented for Knowledge Area Domain entity`, {
@@ -9013,6 +9146,7 @@ Output valid JSON object with "performance_actuals" array only.`
           }
           // Skip saving - these will be empty arrays from extraction anyway
           break
+        }
         default:
           throw new Error(`Unknown entity type: ${entityType}`)
       }
