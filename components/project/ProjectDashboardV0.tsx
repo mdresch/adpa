@@ -339,7 +339,7 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
           type: config.label,
           icon: config.icon,
           count: count || 0,
-          lastExtract: "2 hours ago", // TODO: Fetch from API if available
+          lastExtract: null, // Will be populated from extraction summary API if available
           status: count > 0 ? "fresh" : "stale" as "fresh" | "stale"
         }
       })
@@ -872,7 +872,7 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
                             </span>
                           </td>
                           <td className="p-3 text-foreground font-semibold">{entity.count}</td>
-                          <td className="p-3 text-muted-foreground">{entity.lastExtract}</td>
+                          <td className="p-3 text-muted-foreground">{entity.lastExtract || "—"}</td>
                           <td className="p-3">
                             <Badge
                               className={

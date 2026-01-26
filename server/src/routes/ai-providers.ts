@@ -44,10 +44,28 @@ router.get('/', async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT id, name, provider_type, configuration, is_active, priority, 
-             available_models, default_model, created_at, updated_at
+             available_models, default_model, created_at, updated_at,
+             usage_stats
       FROM ai_providers 
       ORDER BY priority ASC, name ASC
     `)
+
+    const usageByProvider = await pool.query(`
+      SELECT 
+        provider_id::text,
+        COUNT(*)::int as total_requests,
+        COALESCE(AVG(response_time_ms), 0)::numeric as avg_response_time_ms,
+        (COUNT(*) FILTER (WHERE success = true) * 100.0 / NULLIF(COUNT(*), 0))::numeric as success_rate
+      FROM ai_usage_logs
+      WHERE created_at >= NOW() - INTERVAL '30 days'
+      GROUP BY provider_id
+    `)
+    const usageMap = new Map(
+      usageByProvider.rows.map((r: { provider_id: string; total_requests: number; avg_response_time_ms: number; success_rate: number }) => [
+        r.provider_id,
+        { total_requests: r.total_requests, avg_response_time_ms: Number(r.avg_response_time_ms), success_rate: Number(r.success_rate) },
+      ])
+    )
 
     const providers = result.rows.map(row => {
       // Parse available_models from JSONB column (synced via Model Discovery)
@@ -73,6 +91,11 @@ router.get('/', async (req, res) => {
         ? availableModels 
         : (configuredModels.length > 0 ? configuredModels : fallbackModels)
       
+      const uid = row.id as string
+      const usage = usageMap.get(uid)
+      const usageStats = row.usage_stats || {}
+      const totalRequests = usage?.total_requests ?? (typeof usageStats.total_requests === 'number' ? usageStats.total_requests : parseInt(String(usageStats.total_requests || '0'), 10))
+
       return {
         id: row.id,
         name: row.name,
@@ -84,9 +107,12 @@ router.get('/', async (req, res) => {
         priority: row.priority || 1,
         enabled: row.is_active,
         lastUsed: 'Never', // TODO: Add usage tracking
-        requestCount: 0, // TODO: Add usage tracking
-        errorRate: 0, // TODO: Add error tracking
+        requestCount: totalRequests,
+        errorRate: usage ? 100 - usage.success_rate : 0,
         is_active: row.is_active,
+        usage_stats: { ...usageStats, total_requests: totalRequests },
+        success_rate: usage?.success_rate ?? null,
+        avg_response_time_ms: usage?.avg_response_time_ms ?? null,
         models: models, // Top-level models field for frontend compatibility
         default_model: row.default_model || (models.length > 0 ? models[0] : null),
         configuration: {

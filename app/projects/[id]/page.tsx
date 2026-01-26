@@ -341,23 +341,8 @@ export default function ProjectDetail() {
     } catch (error) {
       console.error("Failed to fetch project:", error)
       toast.error("Failed to load project")
-
-      // Fallback to mock data
-      setProject({
-        id: projectId,
-        name: "Customer Portal Redesign",
-        description: "Complete redesign of the customer-facing portal with improved UX and new features",
-        status: "active",
-        framework: "PMBOK 7",
-        priority: "high",
-        owner_id: "user1",
-        team_members: ["John Doe", "Jane Smith", "Mike Wilson", "Lisa Chen"],
-        start_date: "2024-01-15",
-        end_date: "2024-06-30",
-        created_at: "2024-01-01T00:00:00Z",
-        updated_at: "2024-01-20T00:00:00Z",
-      })
-
+      // Don't set mock data - let the UI show error state
+      setProject(null)
       setDocuments([])
     } finally {
       setLoading(false)
@@ -2476,18 +2461,43 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
   }
 
   if (!project) {
+    if (loading) {
+      return (
+        <div className="flex h-screen bg-background">
+          <Sidebar />
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <Header />
+            <main className="flex-1 flex items-center justify-center">
+              <div className="text-center">
+                <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
+                <p className="text-muted-foreground">Loading project...</p>
+              </div>
+            </main>
+          </div>
+        </div>
+      )
+    }
     return (
       <div className="flex h-screen bg-background">
         <Sidebar />
         <div className="flex-1 flex flex-col overflow-hidden">
           <Header />
           <main className="flex-1 flex items-center justify-center">
-            <div className="text-center">
-              <h2 className="text-xl font-semibold mb-2">Project Not Found</h2>
-              <p className="text-muted-foreground mb-4">The project you're looking for doesn't exist.</p>
-              <Button asChild>
-                <Link href="/projects">Back to Projects</Link>
-              </Button>
+            <div className="text-center max-w-md">
+              <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
+              <h2 className="text-xl font-semibold mb-2">Failed to Load Project</h2>
+              <p className="text-muted-foreground mb-4">
+                Unable to load project data. Please check your connection and try again.
+              </p>
+              <div className="flex gap-2 justify-center">
+                <Button onClick={() => fetchProject()} variant="default">
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Retry
+                </Button>
+                <Button asChild variant="outline">
+                  <Link href="/projects">Back to Projects</Link>
+                </Button>
+              </div>
             </div>
           </main>
         </div>

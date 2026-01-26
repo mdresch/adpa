@@ -87,11 +87,28 @@ router.get("/dashboard",
         LIMIT 10
       `, [userId])
 
+      const aiPerformance = await pool.query(`
+        SELECT 
+          COALESCE(AVG(response_time_ms), 0)::numeric as avg_response_time_ms,
+          (COUNT(*) FILTER (WHERE success = true) * 100.0 / NULLIF(COUNT(*), 0))::numeric as success_rate
+        FROM ai_usage_logs
+        WHERE created_at >= NOW() - INTERVAL '30 days'
+      `)
+      const perf = aiPerformance.rows[0]
+      const ai_performance =
+        perf && Number(perf.avg_response_time_ms) >= 0 && Number(perf.success_rate) >= 0
+          ? {
+              avg_response_time_ms: Number(perf.avg_response_time_ms),
+              success_rate: Number(perf.success_rate),
+            }
+          : null
+
       const analytics = {
         projects: projectStats.rows[0],
         documents: documentStats.rows[0],
         ai: aiStats.rows[0],
         recent_activity: recentActivity.rows,
+        ai_performance,
         generated_at: new Date().toISOString(),
       }
 

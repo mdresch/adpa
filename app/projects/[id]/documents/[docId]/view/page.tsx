@@ -37,6 +37,9 @@ import {
   Star,
   MoreHorizontal,
   AlertTriangle,
+  RefreshCw,
+  AlertCircle,
+  Loader2,
 } from "@/components/ui/icons-shim"
 import { Award } from "@/components/ui/icons-shim"
 import { useAuth } from "@/contexts/AuthContext"
@@ -562,16 +565,13 @@ The ADPA system represents a significant advancement in document processing auto
       }
     } catch (error) {
       console.error("Failed to load document:", error)
-
-      // Fallback to mock data if API fails (for development/demo purposes)
-      setDocument(mockDocument)
-      setVersions(mockVersions)
-      setEditedContent(mockDocument.content)
-      setBaseContentSnapshot(mockDocument.content)
-      setLatestContentSnapshot(mockDocument.content)
-
-      // Show error toast but don't break the UI
-      toast.error("Failed to load document from API, showing demo data")
+      toast.error("Failed to load document from API")
+      // Don't set mock data - let the UI show error state
+      setDocument(null)
+      setVersions([])
+      setEditedContent("")
+      setBaseContentSnapshot("")
+      setLatestContentSnapshot("")
     } finally {
       setIsLoading(false)
     }
@@ -579,11 +579,6 @@ The ADPA system represents a significant advancement in document processing auto
 
   useEffect(() => {
     fetchDocument()
-
-    // Extract TOC when document loads
-    if (mockDocument.content) {
-      extractTableOfContents(mockDocument.content)
-    }
   }, [projectId, documentId])
 
   // Extract table of contents from markdown
@@ -1343,6 +1338,26 @@ The ADPA system represents a significant advancement in document processing auto
   }
 
   if (!document) {
+    if (isLoading) {
+      return (
+        <div className="min-h-screen bg-background flex">
+          <Sidebar />
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <Header />
+            <main className="flex-1 overflow-y-auto p-6">
+              <div className="max-w-7xl mx-auto">
+                <div className="flex items-center justify-center h-64">
+                  <div className="text-center">
+                    <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
+                    <p className="text-muted-foreground">Loading document...</p>
+                  </div>
+                </div>
+              </div>
+            </main>
+          </div>
+        </div>
+      )
+    }
     return (
       <div className="min-h-screen bg-background flex">
         <Sidebar />
@@ -1351,16 +1366,25 @@ The ADPA system represents a significant advancement in document processing auto
           <main className="flex-1 overflow-y-auto p-6">
             <div className="max-w-7xl mx-auto">
               <div className="flex items-center justify-center h-64">
-                <div className="text-center">
-                  <p className="text-muted-foreground">Document not found</p>
-                  <Button
-                    variant="outline"
-                    className="mt-4"
-                    onClick={() => router.back()}
-                  >
-                    <ArrowLeft className="h-4 w-4 mr-2" />
-                    Go Back
-                  </Button>
+                <div className="text-center max-w-md">
+                  <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
+                  <h2 className="text-xl font-semibold mb-2">Failed to Load Document</h2>
+                  <p className="text-muted-foreground mb-4">
+                    Unable to load document data. Please check your connection and try again.
+                  </p>
+                  <div className="flex gap-2 justify-center">
+                    <Button onClick={() => fetchDocument()} variant="default">
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Retry
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => router.back()}
+                    >
+                      <ArrowLeft className="h-4 w-4 mr-2" />
+                      Go Back
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
