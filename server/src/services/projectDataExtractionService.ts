@@ -478,6 +478,7 @@ export class ProjectDataExtractionService {
     string,
     { normalizedType: string; extractor?: ModuleExtractor; saver?: ModuleSaver }
   >()
+  private entityModuleCacheMax = 200
 
   /**
    * Validate AI response and throw error if empty/invalid
@@ -3908,10 +3909,35 @@ Output valid JSON object with "performance_actuals" array only.`
   }
 
   private toPascalCase(value: string): string {
+    if (!value || typeof value !== 'string') {
+      throw new Error('Invalid input for toPascalCase conversion')
+    }
+
     return value
       .split('_')
-      .map(part => (part ? `${part[0].toUpperCase()}${part.slice(1)}` : ''))
+      .filter(part => part.length > 0)
+      .map(part => `${part[0].toUpperCase()}${part.slice(1)}`)
       .join('')
+  }
+
+  private isValidEntityModuleName(value: string): boolean {
+    return /^[a-z_]+$/.test(value)
+  }
+
+  private setEntityModuleCache(
+    normalizedType: string,
+    entry: { normalizedType: string; extractor?: ModuleExtractor; saver?: ModuleSaver }
+  ): void {
+    if (this.entityModuleCache.has(normalizedType)) {
+      this.entityModuleCache.delete(normalizedType)
+    }
+    this.entityModuleCache.set(normalizedType, entry)
+    if (this.entityModuleCache.size > this.entityModuleCacheMax) {
+      const oldestKey = this.entityModuleCache.keys().next().value as string | undefined
+      if (oldestKey) {
+        this.entityModuleCache.delete(oldestKey)
+      }
+    }
   }
 
   private async resolveEntityModule(
@@ -3927,6 +3953,14 @@ Output valid JSON object with "performance_actuals" array only.`
       return { ...cached, aliasApplied }
     }
 
+    if (!this.isValidEntityModuleName(normalizedType)) {
+      logger.warn('[EXTRACTION] Invalid entity module name format', {
+        entityType,
+        normalizedType
+      })
+      return null
+    }
+
     try {
       const module = await import(`./extraction/entities/${normalizedType}`)
       const suffix = this.toPascalCase(normalizedType)
@@ -3938,26 +3972,27 @@ Output valid JSON object with "performance_actuals" array only.`
           entityType,
           normalizedType
         })
-        this.entityModuleCache.set(normalizedType, { normalizedType })
+        this.setEntityModuleCache(normalizedType, { normalizedType })
         return null
       }
 
       const resolved = { normalizedType, extractor, saver }
-      this.entityModuleCache.set(normalizedType, resolved)
+      this.setEntityModuleCache(normalizedType, resolved)
       return { ...resolved, aliasApplied }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error)
       const isModuleMissing =
         message.includes('Cannot find module') || message.includes('Cannot find package')
 
-      if (!isModuleMissing) {
+      if (isModuleMissing) {
+        this.setEntityModuleCache(normalizedType, { normalizedType })
+      } else {
         logger.warn('[EXTRACTION] Failed to load entity module', {
           entityType,
           normalizedType,
           error: message
         })
       }
-      this.entityModuleCache.set(normalizedType, { normalizedType })
       return null
     }
   }
