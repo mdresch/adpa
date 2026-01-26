@@ -349,44 +349,119 @@ export function OverviewTab({
         ])
 
         // Process lessons count
-        if (lessonsRes.status === 'fulfilled' && lessonsRes.value.ok) {
-          const lessonsData = await lessonsRes.value.json()
+        if (lessonsRes.status === 'fulfilled') {
+          if (lessonsRes.value.ok) {
+            try {
+              const lessonsData = await lessonsRes.value.json()
+              setAdditionalMetrics(prev => ({
+                ...prev,
+                lessonsCount: lessonsData.data?.length || lessonsData.count || 0,
+              }))
+            } catch (err) {
+              console.error('Failed to parse lessons data:', err)
+              // Set to 0 on error instead of leaving undefined
+              setAdditionalMetrics(prev => ({
+                ...prev,
+                lessonsCount: 0,
+              }))
+            }
+          } else {
+            // API error - log but don't break the UI
+            console.error('Failed to fetch lessons:', lessonsRes.value.status)
+            setAdditionalMetrics(prev => ({
+              ...prev,
+              lessonsCount: 0,
+            }))
+          }
+        } else if (lessonsRes.status === 'rejected') {
+          // Promise rejection - log and set to 0
+          console.error('Lessons fetch rejected:', lessonsRes.reason)
           setAdditionalMetrics(prev => ({
             ...prev,
-            lessonsCount: lessonsData.data?.length || lessonsData.count || 0,
+            lessonsCount: 0,
           }))
         }
 
         // Process baseline date
-        if (baselinesRes.status === 'fulfilled' && baselinesRes.value.ok) {
-          const baselineData = await baselinesRes.value.json()
-          const activeBaseline = baselineData.baseline || baselineData.data
-          if (activeBaseline?.approved_at || activeBaseline?.created_at) {
-            const date = activeBaseline.approved_at || activeBaseline.created_at
+        if (baselinesRes.status === 'fulfilled') {
+          if (baselinesRes.value.ok) {
+            try {
+              const baselineData = await baselinesRes.value.json()
+              const activeBaseline = baselineData.baseline || baselineData.data
+              if (activeBaseline?.approved_at || activeBaseline?.created_at) {
+                const date = activeBaseline.approved_at || activeBaseline.created_at
+                setAdditionalMetrics(prev => ({
+                  ...prev,
+                  baselineDate: new Date(date).toLocaleDateString(),
+                }))
+              } else {
+                // No active baseline - set to null (not an error)
+                setAdditionalMetrics(prev => ({
+                  ...prev,
+                  baselineDate: null,
+                }))
+              }
+            } catch (err) {
+              console.error('Failed to parse baseline data:', err)
+              setAdditionalMetrics(prev => ({
+                ...prev,
+                baselineDate: null,
+              }))
+            }
+          } else if (baselinesRes.value.status === 404) {
+            // 404 is expected when no baseline exists - handle gracefully
             setAdditionalMetrics(prev => ({
               ...prev,
-              baselineDate: new Date(date).toLocaleDateString(),
+              baselineDate: null,
+            }))
+          } else {
+            // Other errors - log but don't break the UI
+            console.error('Failed to fetch baseline:', baselinesRes.value.status)
+            setAdditionalMetrics(prev => ({
+              ...prev,
+              baselineDate: null,
             }))
           }
         }
 
         // Process performance KPI (SPI/CPI)
-        if (performanceRes.status === 'fulfilled' && performanceRes.value.ok) {
-          const perfData = await performanceRes.value.json()
-          const summary = perfData.data
-          if (summary) {
-            const spi = summary.schedule?.performance_index
-            const cpi = summary.cost?.performance_index
-            let kpi = null
-            if (spi !== null && cpi !== null) {
-              kpi = `SPI: ${spi.toFixed(2)}, CPI: ${cpi.toFixed(2)}`
-            } else if (spi !== null) {
-              kpi = `SPI: ${spi.toFixed(2)}`
-            } else if (cpi !== null) {
-              kpi = `CPI: ${cpi.toFixed(2)}`
+        if (performanceRes.status === 'fulfilled') {
+          if (performanceRes.value.ok) {
+            try {
+              const perfData = await performanceRes.value.json()
+              const summary = perfData.data
+              if (summary) {
+                const spi = summary.schedule?.performance_index
+                const cpi = summary.cost?.performance_index
+                let kpi = null
+                if (spi !== null && cpi !== null) {
+                  kpi = `SPI: ${spi.toFixed(2)}, CPI: ${cpi.toFixed(2)}`
+                } else if (spi !== null) {
+                  kpi = `SPI: ${spi.toFixed(2)}`
+                } else if (cpi !== null) {
+                  kpi = `CPI: ${cpi.toFixed(2)}`
+                }
+                setAdditionalMetrics(prev => ({ ...prev, performanceKpi: kpi }))
+              } else {
+                setAdditionalMetrics(prev => ({ ...prev, performanceKpi: null }))
+              }
+            } catch (err) {
+              console.error('Failed to parse performance data:', err)
+              setAdditionalMetrics(prev => ({ ...prev, performanceKpi: null }))
             }
-            setAdditionalMetrics(prev => ({ ...prev, performanceKpi: kpi }))
+          } else if (performanceRes.value.status === 403) {
+            // 403 Forbidden - user doesn't have access, but don't show error
+            console.warn('Access denied to performance data')
+            setAdditionalMetrics(prev => ({ ...prev, performanceKpi: null }))
+          } else {
+            // Other errors - log but don't break the UI
+            console.error('Failed to fetch performance data:', performanceRes.value.status)
+            setAdditionalMetrics(prev => ({ ...prev, performanceKpi: null }))
           }
+        } else if (performanceRes.status === 'rejected') {
+          // Promise rejection - log and set to null
+          console.error('Performance fetch rejected:', performanceRes.reason)
+          setAdditionalMetrics(prev => ({ ...prev, performanceKpi: null }))
         }
 
         // Process project data (financials, timeline)

@@ -221,10 +221,90 @@ router.post("/generate",
         }
       }
 
-      // Fetch source documents if includeDocuments is true
+      // Always initialize source documents array (project context is always included)
       let sourceDocuments: any[] = []
       let contextStats: any = null
       
+      // 🆕 Always add project context as a source document (project context is always used)
+      // Project context is ALWAYS used in document generation, so it should ALWAYS be in source documents
+      try {
+        const projectResult = await pool.query(
+          `SELECT name, description, framework FROM projects WHERE id = $1`,
+          [projectId]
+        )
+        
+        if (projectResult.rows.length > 0) {
+          const project = projectResult.rows[0]
+          // Project context is ALWAYS used - even if project has no name/description/framework,
+          // the project itself is context (project ID, project existence, etc.)
+          const projectContextEntry = {
+            id: `project_context:${projectId}`, // Unique identifier for project context
+            title: `Project Context: ${project.name || 'Project'}`,
+            name: `Project Context: ${project.name || 'Project'}`,
+            type: 'Project Context',
+            template_id: null,
+            status: 'active',
+            lifecycle_phase: 0, // Project context is foundational (phase 0)
+            phase_name: 'Foundation',
+            priority_rank: 0, // Highest priority - always first
+            character_count: (project.description?.length || 0) + (project.name?.length || 0) + (project.framework?.length || 0),
+            word_count: Math.round(((project.description?.length || 0) + (project.name?.length || 0) + (project.framework?.length || 0)) / 5),
+            reading_time_minutes: 0,
+            is_project_context: true // Flag to identify this as project context
+          }
+          // Insert at the beginning (highest priority)
+          sourceDocuments.push(projectContextEntry)
+          log.info('[DOC-GEN] Project context added to source documents', {
+            projectId,
+            projectName: project.name || 'Unknown',
+            sourceDocumentsCount: sourceDocuments.length,
+            hasProjectContext: true
+          })
+        } else {
+          // Project not found, but still add a placeholder entry
+          log.warn('[DOC-GEN] Project not found, but adding project context placeholder', { projectId })
+          const projectContextEntry = {
+            id: `project_context:${projectId}`,
+            title: `Project Context: Project ${projectId.substring(0, 8)}...`,
+            name: `Project Context: Project ${projectId.substring(0, 8)}...`,
+            type: 'Project Context',
+            template_id: null,
+            status: 'active',
+            lifecycle_phase: 0,
+            phase_name: 'Foundation',
+            priority_rank: 0,
+            character_count: 0,
+            word_count: 0,
+            reading_time_minutes: 0,
+            is_project_context: true
+          }
+          sourceDocuments.push(projectContextEntry)
+        }
+      } catch (error) {
+        log.error('[DOC-GEN] Failed to fetch project context for source documents, adding placeholder', {
+          projectId,
+          error: error instanceof Error ? error.message : String(error)
+        })
+        // Even on error, add a placeholder so we know project context was intended to be used
+        const projectContextEntry = {
+          id: `project_context:${projectId}`,
+          title: `Project Context: Project ${projectId.substring(0, 8)}...`,
+          name: `Project Context: Project ${projectId.substring(0, 8)}...`,
+          type: 'Project Context',
+          template_id: null,
+          status: 'active',
+          lifecycle_phase: 0,
+          phase_name: 'Foundation',
+          priority_rank: 0,
+          character_count: 0,
+          word_count: 0,
+          reading_time_minutes: 0,
+          is_project_context: true
+        }
+        sourceDocuments.push(projectContextEntry)
+      }
+      
+      // Fetch other source documents if includeDocuments is true
       if (includeDocuments) {
         try {
           // Get relevant documents from the project (exclude AI regenerations)
@@ -244,8 +324,8 @@ router.post("/generate",
           
           const relevantDocs = documentsResult.rows || []
           
-          // Build source documents metadata
-          sourceDocuments = relevantDocs.map((doc: any, index: number) => {
+          // Build source documents metadata (append to existing project context)
+          const otherDocuments = relevantDocs.map((doc: any, index: number) => {
             // Determine lifecycle phase for this document
             const docNameLower = (doc.name || '').toLowerCase()
             const templateNameLower = (doc.template_name || '').toLowerCase()
@@ -288,6 +368,9 @@ router.post("/generate",
             }
           })
           
+          // Append other documents to the existing sourceDocuments array (which already has project context)
+          sourceDocuments.push(...otherDocuments)
+
           // Get total document count for context stats
           const totalDocsResult = await pool.query(
             `SELECT COUNT(*) as count FROM documents 
@@ -313,6 +396,7 @@ router.post("/generate",
             total_documents: totalDocuments,
             documents_used: relevantDocs.length,
             documents_available: totalDocuments,
+            project_context_used: true, // Project context is always used
             stakeholders_included: stakeholderCount,
             stakeholders_available: stakeholderCount,
             estimated_context_tokens: estimatedContextTokens
@@ -331,6 +415,23 @@ router.post("/generate",
           })
           // Continue without source documents - non-blocking
         }
+      } else {
+        // Even if includeDocuments is false, we still have project context, so set contextStats
+        contextStats = {
+          total_documents: 0,
+          documents_used: 0,
+          documents_available: 0,
+          project_context_used: true, // Project context is always used
+          stakeholders_included: 0,
+          stakeholders_available: 0,
+          estimated_context_tokens: Math.round((userPrompt.length + (result.content?.length || 0)) / 4)
+        }
+        
+        log.info('[DOC-GEN] Project context added (no other documents)', {
+          projectId,
+          sourceDocumentsCount: sourceDocuments.length,
+          hasProjectContext: sourceDocuments.length > 0
+        })
       }
 
       // Calculate quality and compliance metrics
@@ -384,9 +485,45 @@ router.post("/generate",
           templateAdherence: qualityMetrics.complianceMetrics.templateAdherence,
           overallComplianceRating: qualityMetrics.complianceMetrics.overallComplianceRating
         },
-        ...(sourceDocuments.length > 0 && { source_documents: sourceDocuments }),
+        // Always include source_documents (should always have at least project context)
+        // Use sourceDocuments directly - it should always have project context by this point
+        source_documents: sourceDocuments,
         ...(contextStats && { context_stats: contextStats })
       }
+      
+      // 🔍 CRITICAL: Verify project context was added before saving
+      if (sourceDocuments.length === 0) {
+        log.error('[DOC-GEN] ⚠️ CRITICAL: sourceDocuments is empty! Adding project context as fallback', { projectId })
+        // Emergency fallback: add project context if somehow missing
+        const emergencyProjectContext = {
+          id: `project_context:${projectId}`,
+          title: `Project Context: Project ${projectId.substring(0, 8)}...`,
+          name: `Project Context: Project ${projectId.substring(0, 8)}...`,
+          type: 'Project Context',
+          template_id: null,
+          status: 'active',
+          lifecycle_phase: 0,
+          phase_name: 'Foundation',
+          priority_rank: 0,
+          character_count: 0,
+          word_count: 0,
+          reading_time_minutes: 0,
+          is_project_context: true
+        }
+        sourceDocuments.push(emergencyProjectContext)
+      }
+      
+      // 🔍 DEBUG: Log what we're saving
+      log.info('[DOC-GEN] Generation metadata being saved:', {
+        hasSourceDocuments: sourceDocuments.length > 0,
+        sourceDocumentsCount: sourceDocuments.length,
+        sourceDocumentsIds: sourceDocuments.map((doc: any) => doc.id),
+        hasProjectContext: sourceDocuments.some((doc: any) => doc.is_project_context),
+        hasContextStats: !!contextStats,
+        contextStatsProjectContextUsed: contextStats?.project_context_used,
+        firstSourceDocId: sourceDocuments[0]?.id,
+        firstSourceDocType: sourceDocuments[0]?.type
+      })
 
       // Create document in database
       const documentId = uuidv4()
@@ -415,7 +552,12 @@ router.post("/generate",
         ]
       )
 
-      log.info(`Document generated successfully: ${documentId}`)
+      log.info(`Document generated successfully: ${documentId}`, {
+        hasSourceDocuments: sourceDocuments.length > 0,
+        sourceDocumentsCount: sourceDocuments.length,
+        hasProjectContext: sourceDocuments.some((doc: any) => doc.is_project_context),
+        generationMetadataKeys: Object.keys(generationMetadata)
+      })
 
       // 🔍 Automatic Quality Audit: Trigger quality audit after document generation
       // This runs asynchronously and doesn't block the response

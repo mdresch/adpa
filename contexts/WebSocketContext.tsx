@@ -179,15 +179,48 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       })
 
       socketInstance.on("connect_error", (error: Error) => {
-        console.error("WebSocket connection error:", error)
+        // Only log connection errors in development or if explicitly enabled
+        // Suppress repeated connection errors to reduce console noise
+        if (process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_DEBUG_WS === 'true') {
+          console.warn("WebSocket connection error:", error.message || error)
+        }
         setIsConnected(false)
       })
 
       // Global event handlers
-      socketInstance.on("notification", (data: { message: string; description?: string }) => {
-        toast.info(data.message, {
-          description: data.description,
+      // Route notifications to notification center instead of showing toasts
+      // Filter out room join notifications - they're handled silently by RoomStatusList
+      socketInstance.on("notification", (data: { message: string; description?: string; title?: string }) => {
+        // Comprehensive filter for room join notifications - check all fields and case variations
+        const message = data.message?.toLowerCase() || ''
+        const title = data.title?.toLowerCase() || ''
+        const description = data.description?.toLowerCase() || ''
+        const combined = `${message} ${title} ${description}`.toLowerCase()
+        
+        // Skip room join notifications completely - they should not appear anywhere
+        if (combined.includes('joined') || 
+            combined.includes('realtime rooms') ||
+            combined.includes('realtime') ||
+            title.includes('realtime rooms') ||
+            message.includes('Joined') ||
+            message.includes('joined room')) {
+          // Silently ignore - these are handled by RoomStatusList component
+          return
+        }
+        
+        // Import notification system dynamically to avoid circular dependencies
+        import('@/lib/notifications').then(({ sendNotification }) => {
+          sendNotification({
+            type: 'info',
+            title: data.title || 'Notification',
+            message: data.message,
+            announce: true
+          })
+        }).catch(() => {
+          // Fallback to console if notification system unavailable
+          console.log('[WS Notification]', data.message, data.description)
         })
+        // Don't show toast - notifications go to notification center only
       })
 
       // Track recent status updates to prevent spam
@@ -391,6 +424,10 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           persistStatuses(next)
           return next
         })
+        
+        // Room join events are handled silently - no notifications needed
+        // The RoomStatusList component shows the connection status visually
+        // No toast or notification center entry for room joins to avoid UI clutter
       }
     }
 

@@ -1104,13 +1104,39 @@ router.get("/:id", authenticateToken, validateParams(Joi.object({ id: schemas.uu
     }
 
     // 🔍 DEBUG: Log what we're sending
+    const sourceDocs = document.generation_metadata?.source_documents || []
+    const projectContextDoc = Array.isArray(sourceDocs) 
+      ? sourceDocs.find((doc: any) => doc.is_project_context || (doc.id && doc.id.startsWith('project_context:')))
+      : null
+    
     log.info('📤 [GET-DOC] Sending to frontend:', {
       id: document.id,
       has_generation_metadata: !!document.generation_metadata,
       generation_metadata_type: typeof document.generation_metadata,
       has_aiProcessing: !!(document.generation_metadata?.aiProcessing),
-      has_quality: !!(document.generation_metadata?.quality || document.generation_metadata?.qualityMetrics)
+      has_quality: !!(document.generation_metadata?.quality || document.generation_metadata?.qualityMetrics),
+      has_source_documents: !!sourceDocs,
+      source_documents_count: Array.isArray(sourceDocs) ? sourceDocs.length : 0,
+      source_documents_type: typeof sourceDocs,
+      has_project_context: !!projectContextDoc,
+      project_context_entry: projectContextDoc ? {
+        id: projectContextDoc.id,
+        title: projectContextDoc.title,
+        is_project_context: projectContextDoc.is_project_context
+      } : null,
+      all_source_document_ids: Array.isArray(sourceDocs) ? sourceDocs.map((doc: any) => doc.id) : []
     })
+    
+    // Also log the full source_documents array for debugging
+    if (Array.isArray(sourceDocs) && sourceDocs.length > 0) {
+      log.info('📋 [GET-DOC] Full source_documents array:', JSON.stringify(sourceDocs, null, 2))
+    } else {
+      log.warn('⚠️ [GET-DOC] source_documents is empty or not an array!', {
+        isArray: Array.isArray(sourceDocs),
+        type: typeof sourceDocs,
+        value: sourceDocs
+      })
+    }
 
     // Check if user has access to the project
     // Super admin can access all projects

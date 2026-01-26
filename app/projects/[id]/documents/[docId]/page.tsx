@@ -274,13 +274,19 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
       
       // Also try to get signature status directly
       try {
-        const statusResponse = await apiClient.get(`/signatures/document/${docId}`)
+        const statusResponse = await apiClient.get(`/signatures/document/${docId}`, {
+          suppressNotFoundError: true // Suppress 404 logging - expected when no signature request exists
+        })
         if (statusResponse.data && statusResponse.data.recipients) {
           const signedRecipients = statusResponse.data.recipients.filter((r: any) => r.status === 'signed')
           setSignatureRecipients(signedRecipients)
         }
-      } catch (statusError) {
-        // No signature status, that's okay
+      } catch (statusError: any) {
+        // No signature status, that's okay - 404 is expected when no signature request exists
+        // Only log non-404 errors
+        if (statusError?.status !== 404) {
+          console.warn('[METADATA-PAGE] Error fetching signature status:', statusError)
+        }
       }
     } catch (error) {
       // No signature request yet, that's okay
@@ -412,6 +418,11 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
         throw new Error("Document not found")
       }
       
+      const genMetadata = (documentData as any).generation_metadata
+      // Handle both snake_case (source_documents) and camelCase (sourceDocuments) for backward compatibility
+      const sourceDocs = genMetadata?.source_documents || genMetadata?.sourceDocuments || []
+      const hasProjectContext = Array.isArray(sourceDocs) && sourceDocs.some((doc: any) => doc.is_project_context || (doc.id && doc.id.startsWith('project_context:')))
+      
       console.log('[METADATA-PAGE] Document fetched successfully:', {
         id: documentData.id,
         name: documentData.name,
@@ -419,8 +430,19 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
         status: documentData.status,
         hasMetadata: !!documentData.metadata,
         metadataKeys: documentData.metadata ? Object.keys(documentData.metadata) : [],
-        metadata: documentData.metadata
+        metadata: documentData.metadata,
+        hasGenerationMetadata: !!genMetadata,
+        generationMetadataKeys: genMetadata ? Object.keys(genMetadata) : [],
+        hasSourceDocuments: !!(genMetadata?.source_documents || genMetadata?.sourceDocuments),
+        sourceDocumentsCount: Array.isArray(sourceDocs) ? sourceDocs.length : 0,
+        sourceDocuments: sourceDocs,
+        hasProjectContext: hasProjectContext,
+        projectContextEntry: sourceDocs.find((doc: any) => doc.is_project_context || (doc.id && doc.id.startsWith('project_context:')))
       })
+      
+      // Also log the full generation_metadata as JSON for debugging
+      console.log('[METADATA-PAGE] Full generation_metadata JSON:', JSON.stringify(genMetadata, null, 2))
+      console.log('[METADATA-PAGE] Source documents array:', JSON.stringify(sourceDocs, null, 2))
       
       setDocument(documentData)
       await fetchSignatureRequest()
@@ -874,6 +896,8 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
 
   // Load data on component mount
   useEffect(() => {
+    let isMounted = true
+    
     if (!isAuthenticated) {
       console.log('[METADATA-PAGE] Not authenticated, skipping data fetch')
       setLoading(false)
@@ -891,14 +915,22 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
     setLoading(true)
     
     Promise.all([fetchDocument(), fetchProject(), fetchTemplates(), fetchQualityAudit()]).then(() => {
-      setLoading(false)
-      console.log('[METADATA-PAGE] All data loaded successfully')
+      if (isMounted) {
+        setLoading(false)
+        console.log('[METADATA-PAGE] All data loaded successfully')
+      }
     }).catch((error) => {
-      console.error('[METADATA-PAGE] Error loading data:', error)
-      setLoading(false)
-      const errorMessage = error instanceof Error ? error.message : "Failed to load document metadata"
-      toast.error(errorMessage || "Failed to load document metadata. Please try refreshing the page.")
+      if (isMounted) {
+        console.error('[METADATA-PAGE] Error loading data:', error)
+        setLoading(false)
+        const errorMessage = error instanceof Error ? error.message : "Failed to load document metadata"
+        toast.error(errorMessage || "Failed to load document metadata. Please try refreshing the page.")
+      }
     })
+    
+    return () => {
+      isMounted = false
+    }
   }, [isAuthenticated, docId, projectId])
 
   // Cleanup timeout on unmount to prevent stale state updates
@@ -2180,7 +2212,8 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                         <div className="space-y-2">
                           {(() => {
                             // Calculate complexity score for display (same logic as below)
-                            const sourceDocuments = (document as any)?.generation_metadata?.source_documents || []
+                            // Handle both snake_case (source_documents) and camelCase (sourceDocuments) for backward compatibility
+                            const sourceDocuments = (document as any)?.generation_metadata?.source_documents || (document as any)?.generation_metadata?.sourceDocuments || []
                             const wordCount = (document as any)?.generation_metadata?.contentMetrics?.words || 0
                             const paragraphs = (document as any)?.generation_metadata?.contentMetrics?.paragraphs || 0
                             const framework = (document as any)?.generation_metadata?.framework || document?.template_framework
@@ -2231,7 +2264,8 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                           {/* Complexity Time Estimate with Research Breakdown */}
                           {(() => {
                             // Get source documents from generation_metadata
-                            const sourceDocuments = (document as any)?.generation_metadata?.source_documents || []
+                            // Handle both snake_case (source_documents) and camelCase (sourceDocuments) for backward compatibility
+                            const sourceDocuments = (document as any)?.generation_metadata?.source_documents || (document as any)?.generation_metadata?.sourceDocuments || []
                             const sourceDocCount = sourceDocuments.length
                             
                             // Calculate total words in source documents
@@ -2637,7 +2671,8 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                     </CardHeader>
                     <CardContent>
                       {(() => {
-                        const sourceDocs = (document as any)?.generation_metadata?.source_documents || []
+                        // Handle both snake_case (source_documents) and camelCase (sourceDocuments) for backward compatibility
+                        const sourceDocs = (document as any)?.generation_metadata?.source_documents || (document as any)?.generation_metadata?.sourceDocuments || []
                         
                         if (sourceDocs.length === 0) {
                           return (
@@ -2651,16 +2686,31 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                           <>
                             {/* Individual Document Details */}
                             <div className="space-y-3">
-                              {sourceDocs.map((source: any, idx: number) => (
+                              {sourceDocs.map((source: any, idx: number) => {
+                                // Handle project context entries specially
+                                const isProjectContext = source.is_project_context || (source.id && source.id.startsWith('project_context:'))
+                                const linkUrl = isProjectContext 
+                                  ? `/projects/${projectId}` // Link to project page for project context
+                                  : `/projects/${projectId}/documents/${source.id}/view` // Link to document for regular documents
+                                
+                                return (
                                 <Link
                                   key={source.id || idx}
-                                  href={`/projects/${projectId}/documents/${source.id}/view`}
+                                  href={linkUrl}
                                   className="block p-4 border rounded-lg hover:bg-muted/50 transition-colors"
                                 >
                                   <div className="flex items-start space-x-3">
-                                    <div className="flex-shrink-0 w-8 h-8 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center">
-                                      <span className="text-sm font-bold text-blue-600 dark:text-blue-300">
-                                        {source.priority_rank || idx + 1}
+                                    <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
+                                      isProjectContext 
+                                        ? 'bg-purple-100 dark:bg-purple-900' 
+                                        : 'bg-blue-100 dark:bg-blue-900'
+                                    }`}>
+                                      <span className={`text-sm font-bold ${
+                                        isProjectContext 
+                                          ? 'text-purple-600 dark:text-purple-300' 
+                                          : 'text-blue-600 dark:text-blue-300'
+                                      }`}>
+                                        {isProjectContext ? '🏗️' : (source.priority_rank || idx + 1)}
                                       </span>
                                     </div>
                                     <div className="flex-1 min-w-0">
@@ -2668,7 +2718,12 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                                         <h4 className="text-sm font-semibold truncate">
                                           {source.title || source.name}
                                         </h4>
-                                        {source.status && (
+                                        {isProjectContext && (
+                                          <Badge variant="outline" className="bg-purple-50 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800 flex-shrink-0">
+                                            Project Context
+                                          </Badge>
+                                        )}
+                                        {!isProjectContext && source.status && (
                                           <Badge variant="outline" className="capitalize flex-shrink-0">
                                             {source.status}
                                           </Badge>
@@ -2722,7 +2777,8 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                                     <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                                   </div>
                                 </Link>
-                              ))}
+                                )
+                              })}
                             </div>
                             
                             {/* Context Stats Summary */}
@@ -2743,6 +2799,14 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                                             {contextStats.documents_used || contextStats.documents_used_as_context || sourceDocs.length} / {contextStats.total_documents || contextStats.total_documents_available || 0}
                                           </span>
                                         </div>
+                                        {contextStats.project_context_used && (
+                                          <div>
+                                            <span className="text-muted-foreground">Project Context:</span>
+                                            <span className="ml-2 font-medium text-purple-600 dark:text-purple-400">
+                                              ✓ Used
+                                            </span>
+                                          </div>
+                                        )}
                                         {contextStats.stakeholders_included > 0 && (
                                           <div>
                                             <span className="text-muted-foreground">Stakeholders:</span>

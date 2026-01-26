@@ -24,6 +24,7 @@ import { VariablesTab } from "./components/VariablesTab"
 import { TimelineTab } from "./components/TimelineTab"
 import { OverviewTab } from "./components/OverviewTab"
 import { DocumentsTab } from "./components/DocumentsTab"
+import { ProjectContextTab } from "./components/ProjectContextTab"
 import ProjectFinancialsTab from "@/components/project/ProjectFinancialsTab"
 import { ProjectRisksTab } from "@/components/project/ProjectRisksTab"
 import { ProjectIssuesTab } from "@/components/project/ProjectIssuesTab"
@@ -1219,6 +1220,28 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
         }
       })
 
+      // 🆕 Add project context as a source document if project context is used
+      // Project context is always used (name, description, framework, team, budget, timeline)
+      if (project && (project.name || project.description || project.framework)) {
+        const projectContextEntry = {
+          id: `project_context:${projectId}`, // Unique identifier for project context
+          title: `Project Context: ${projectName}`,
+          type: 'Project Context',
+          template_id: null,
+          status: 'active',
+          url: `/projects/${projectId}`, // Link to project page
+          lifecycle_phase: 0, // Project context is foundational (phase 0)
+          phase_name: 'Foundation',
+          priority_rank: 0, // Highest priority - always first
+          character_count: (projectDesc?.length || 0) + (projectName?.length || 0) + (framework?.length || 0),
+          word_count: Math.round(((projectDesc?.length || 0) + (projectName?.length || 0) + (framework?.length || 0)) / 5),
+          reading_time_minutes: 0,
+          is_project_context: true // Flag to identify this as project context
+        }
+        // Insert at the beginning (highest priority)
+        sourceDocuments.unshift(projectContextEntry)
+      }
+
       console.log('📚 [SAVE-1.5/6] Source documents tracked:', sourceDocuments.length, 'documents')
       if (sourceDocuments.length > 0) {
         console.log('  Source document names:', sourceDocuments.map(d => d.title).join(', '))
@@ -1236,6 +1259,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
           context_stats: {
             total_documents_available: documents.length,
             documents_used_as_context: relevantDocs.length,
+            project_context_used: true, // Project context is always used
             stakeholders_available: stakeholders?.length || 0,
             custom_settings_count: hasSettings ? Object.keys(project.settings).length : 0,
             custom_metadata_count: hasMetadata ? Object.keys(project.metadata).length : 0,
@@ -1247,6 +1271,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
           context_stats: {
             total_documents_available: documents.length,
             documents_used_as_context: relevantDocs.length,
+            project_context_used: true, // Project context is always used
             stakeholders_available: stakeholders?.length || 0,
             custom_settings_count: hasSettings ? Object.keys(project.settings).length : 0,
             custom_metadata_count: hasMetadata ? Object.keys(project.metadata).length : 0,
@@ -3487,6 +3512,10 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
               <TabsList aria-label="Project management sections">
                 <TabsTrigger value="overview">Overview</TabsTrigger>
                 <TabsTrigger value="documents">Documents</TabsTrigger>
+                <TabsTrigger value="context">
+                  <FileText className="h-4 w-4 mr-2" />
+                  Project Context
+                </TabsTrigger>
                 <TabsTrigger value="extraction">
                   <Database className="h-4 w-4 mr-2" />
                   AI Extraction
@@ -3555,6 +3584,10 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                   documentsPagination={documentsPagination}
                   setDocumentsPagination={setDocumentsPagination}
                 />
+              </TabsContent>
+
+              <TabsContent value="context" className="space-y-4">
+                <ProjectContextTab projectId={projectId} />
               </TabsContent>
 
               <TabsContent value="overview" className="space-y-4">
