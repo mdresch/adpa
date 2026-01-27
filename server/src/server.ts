@@ -46,6 +46,7 @@ import confluenceRoutes from "./routes/confluenceRoutes"
 import githubRoutes from "./routes/githubRoutes"
 import sharepointRoutes from "./routes/sharepointRoutes"
 import ibabsRoutes from "./routes/ibabsRoutes"
+import dynamics365GuidesRoutes from "./routes/dynamics365GuidesRoutes"
 import templateRoutes from "./routes/templates"
 import templateAnalyticsRoutes from "./routes/template-analytics"
 import { documentTemplateRoutes } from "./modules/documentTemplates"
@@ -276,6 +277,7 @@ app.use("/api/integrations/confluence", confluenceRoutes)
 app.use("/api/integrations/github", githubRoutes)
 app.use("/api/integrations/sharepoint", sharepointRoutes)
 app.use("/api/integrations/ibabs", ibabsRoutes)
+app.use("/api/dynamics365-guides", dynamics365GuidesRoutes)
 app.use("/api/templates", templateRoutes)
 app.use("/api/template-analytics", templateAnalyticsRoutes)
 app.use("/api/cost-management", costManagementRoutes)
