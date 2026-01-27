@@ -80,6 +80,7 @@ export function PMBOK8DomainDashboard({ projectId }: PMBOK8DomainDashboardProps)
   const [refreshing, setRefreshing] = useState(false)
 
   const fetchData = async () => {
+    if (!projectId || projectId === 'undefined') return
     try {
       setRefreshing(true)
       const [analyticsData, extractionData] = await Promise.all([
@@ -99,6 +100,7 @@ export function PMBOK8DomainDashboard({ projectId }: PMBOK8DomainDashboardProps)
   }
 
   useEffect(() => {
+    if (!projectId || projectId === 'undefined') return
     void fetchData()
   }, [projectId])
 

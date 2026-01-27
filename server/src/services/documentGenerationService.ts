@@ -71,6 +71,8 @@ class DocumentGenerationService {
         userPrompt: request.userPrompt,
         project,
         template,
+        projectId: request.projectId,
+        userId: request.userId,
       })
       
       logger.info(`Enriched prompt built (${enrichedPrompt.length} chars)`)
@@ -200,8 +202,10 @@ class DocumentGenerationService {
     userPrompt: string
     project: ProjectContext
     template: TemplateContext | null
+    projectId: string
+    userId: string
   }): Promise<string> {
-    const { userPrompt, project, template } = params
+    const { userPrompt, project, template, projectId, userId } = params
 
     let prompt = ""
 
@@ -228,6 +232,96 @@ class DocumentGenerationService {
         prompt += `- **${sh.name}** (${sh.role}) - Interest: ${sh.interest_level}, Influence: ${sh.influence_level}\n`
       })
       prompt += `\n`
+    }
+
+    // 4. Additional Project Context (Reference Materials)
+    try {
+      const contextItemsResult = await pool.query(
+        `SELECT id, type, title, content, source_url, integration_type, integration_page_id
+         FROM project_context_items
+         WHERE project_id = $1 AND is_active = true
+         ORDER BY priority DESC, created_at ASC`,
+        [projectId]
+      )
+
+      if (contextItemsResult.rows.length > 0) {
+        prompt += `## Additional Project Context (Reference Materials)\n\n`
+        prompt += `The following reference materials provide additional context for this project:\n\n`
+
+        // Group by type
+        const itemsByType: Record<string, typeof contextItemsResult.rows> = {}
+        contextItemsResult.rows.forEach((item) => {
+          if (!itemsByType[item.type]) {
+            itemsByType[item.type] = []
+          }
+          itemsByType[item.type].push(item)
+        })
+
+        // Custom text (highest priority)
+        if (itemsByType['custom_text']) {
+          prompt += `### Custom Context\n\n`
+          itemsByType['custom_text'].forEach((item) => {
+            prompt += `**${item.title}:**\n${item.content}\n\n`
+          })
+        }
+
+        // Integration pages
+        if (itemsByType['jira_page'] || itemsByType['confluence_page']) {
+          prompt += `### Integration Sources\n\n`
+          ;[...(itemsByType['jira_page'] || []), ...(itemsByType['confluence_page'] || [])].forEach((item) => {
+            const source = item.integration_type === 'jira' ? 'Jira' : 'Confluence'
+            prompt += `**${source} - ${item.title}:**\n${item.content.substring(0, 2000)}${item.content.length > 2000 ? '...' : ''}\n\n`
+          })
+        }
+
+        // URLs
+        if (itemsByType['url']) {
+          prompt += `### External Sources\n\n`
+          itemsByType['url'].forEach((item) => {
+            prompt += `**URL: ${item.source_url}**\n${item.content.substring(0, 2000)}${item.content.length > 2000 ? '...' : ''}\n\n`
+          })
+        }
+
+        // Reference documents
+        if (itemsByType['reference_document']) {
+          prompt += `### Reference Documents\n\n`
+          itemsByType['reference_document'].forEach((item) => {
+            prompt += `**Reference: ${item.title}**\n${item.content.substring(0, 2000)}${item.content.length > 2000 ? '...' : ''}\n\n`
+          })
+        }
+
+        prompt += `\n`
+
+        // Log usage for all context items used
+        const contextItemIds = contextItemsResult.rows.map((r) => r.id)
+        for (const itemId of contextItemIds) {
+          try {
+            await pool.query(
+              `INSERT INTO project_context_usage_log (
+                project_id, context_item_id, usage_type, usage_timestamp, metadata
+              ) VALUES ($1, $2, $3, NOW(), $4)`,
+              [
+                projectId,
+                itemId,
+                'document_generation',
+                JSON.stringify({ logged_by: userId }),
+              ]
+            )
+          } catch (logError: any) {
+            // Don't fail document generation if logging fails
+            logger.warn('Failed to log context item usage', {
+              itemId,
+              error: logError.message,
+            })
+          }
+        }
+      }
+    } catch (error: any) {
+      // Don't fail document generation if context items can't be fetched
+      logger.warn('Failed to fetch project context items', {
+        projectId,
+        error: error.message,
+      })
     }
 
     // 4. Template structure guidance (if provided)

@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect, useRef, use } from "react"
+import { useRouter, useParams } from "next/navigation"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -204,10 +204,12 @@ interface DocumentMetadata {
   custom_fields?: Record<string, any>
 }
 
-export default function DocumentMetadataPage({ params }: { params: { id: string; docId: string } }) {
+export default function DocumentMetadataPage({ params }: { params: Promise<{ id: string; docId: string }> | { id: string; docId: string } }) {
   const router = useRouter()
-  const projectId = params.id
-  const docId = params.docId
+  // Handle both Promise and direct params (for Next.js 15 compatibility)
+  const resolvedParams = 'then' in params ? use(params) : params
+  const projectId = resolvedParams.id
+  const docId = resolvedParams.docId
   const { isAuthenticated, user, token } = useAuth()
 
   const [document, setDocument] = useState<Document | null>(null)
@@ -272,13 +274,19 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
       
       // Also try to get signature status directly
       try {
-        const statusResponse = await apiClient.get(`/signatures/document/${docId}`)
+        const statusResponse = await apiClient.get(`/signatures/document/${docId}`, {
+          suppressNotFoundError: true // Suppress 404 logging - expected when no signature request exists
+        })
         if (statusResponse.data && statusResponse.data.recipients) {
           const signedRecipients = statusResponse.data.recipients.filter((r: any) => r.status === 'signed')
           setSignatureRecipients(signedRecipients)
         }
-      } catch (statusError) {
-        // No signature status, that's okay
+      } catch (statusError: any) {
+        // No signature status, that's okay - 404 is expected when no signature request exists
+        // Only log non-404 errors
+        if (statusError?.status !== 404) {
+          console.warn('[METADATA-PAGE] Error fetching signature status:', statusError)
+        }
       }
     } catch (error) {
       // No signature request yet, that's okay
@@ -290,13 +298,15 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
   const fetchQualityAudit = async () => {
     try {
       setLoadingAudit(true)
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+      const { getApiBaseUrl } = await import('@/lib/api-url')
+      const API_BASE_URL = getApiBaseUrl()
       const authToken = token || localStorage.getItem('auth_token') || localStorage.getItem('token')
       
-      if (!authToken) {
+      if (!authToken || !docId) {
         return
       }
 
+      // First, check if quality audit exists
       const response = await fetch(`${API_BASE_URL}/quality-audits/document/${docId}`, {
         headers: {
           'Authorization': `Bearer ${authToken}`,
@@ -307,7 +317,53 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
       if (response.ok) {
         const data = await response.json()
         if (data.success && data.audit) {
+          console.log('[QUALITY-AUDIT] Existing audit found:', { docId, overallScore: data.audit.overallScore })
           setQualityAudit(data.audit)
+          return
+        }
+      }
+
+      // If no audit exists (404 or no data), automatically trigger one
+      if (response.status === 404 || !response.ok) {
+        console.log('[QUALITY-AUDIT] No audit found, automatically triggering quality audit for document:', docId)
+        
+        // Automatically trigger quality audit
+        // The backend will fetch the document content itself, so we don't need to check it here
+        try {
+          const triggerResponse = await fetch(`${API_BASE_URL}/quality-audits/trigger`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${authToken}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ documentId: docId })
+          })
+
+          if (triggerResponse.ok) {
+            const triggerData = await triggerResponse.json()
+            if (triggerData.success) {
+              console.log('[QUALITY-AUDIT] Auto-triggered successfully, will refresh in 5 seconds')
+              toast.success("Quality audit started automatically. Results will appear shortly.")
+              // Wait a bit longer for audit to complete (quality audits can take 10-30 seconds)
+              setTimeout(async () => {
+                await fetchQualityAudit()
+              }, 5000)
+            } else {
+              console.error('[QUALITY-AUDIT] Auto-trigger failed:', triggerData.error)
+              toast.warning("Quality audit could not be started automatically. You can trigger it manually.")
+            }
+          } else {
+            const errorData = await triggerResponse.json().catch(() => ({}))
+            const errorMessage = errorData.error || triggerResponse.statusText
+            console.error('[QUALITY-AUDIT] Auto-trigger failed:', errorMessage)
+            // Only show toast if it's not a "no content" error (which is expected for some documents)
+            if (!errorMessage.includes('no content')) {
+              toast.warning("Quality audit could not be started automatically. You can trigger it manually.")
+            }
+          }
+        } catch (triggerError) {
+          console.error('[QUALITY-AUDIT] Error auto-triggering audit:', triggerError)
+          // Don't show error toast - user can trigger manually if needed
         }
       }
     } catch (error) {
@@ -347,9 +403,47 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
 
   // Fetch document data
   const fetchDocument = async () => {
+    if (!docId) {
+      console.error('[METADATA-PAGE] docId is missing:', { docId, projectId })
+      throw new Error("Document ID is required")
+    }
+    
     try {
-      setLoading(true)
+      console.log('[METADATA-PAGE] Fetching document:', { docId, projectId })
+      
       const documentData = await apiClient.getDocument(docId)
+      
+      if (!documentData) {
+        console.error('[METADATA-PAGE] Document data is null or undefined')
+        throw new Error("Document not found")
+      }
+      
+      const genMetadata = (documentData as any).generation_metadata
+      // Handle both snake_case (source_documents) and camelCase (sourceDocuments) for backward compatibility
+      const sourceDocs = genMetadata?.source_documents || genMetadata?.sourceDocuments || []
+      const hasProjectContext = Array.isArray(sourceDocs) && sourceDocs.some((doc: any) => doc.is_project_context || (doc.id && doc.id.startsWith('project_context:')))
+      
+      console.log('[METADATA-PAGE] Document fetched successfully:', {
+        id: documentData.id,
+        name: documentData.name,
+        title: documentData.title,
+        status: documentData.status,
+        hasMetadata: !!documentData.metadata,
+        metadataKeys: documentData.metadata ? Object.keys(documentData.metadata) : [],
+        metadata: documentData.metadata,
+        hasGenerationMetadata: !!genMetadata,
+        generationMetadataKeys: genMetadata ? Object.keys(genMetadata) : [],
+        hasSourceDocuments: !!(genMetadata?.source_documents || genMetadata?.sourceDocuments),
+        sourceDocumentsCount: Array.isArray(sourceDocs) ? sourceDocs.length : 0,
+        sourceDocuments: sourceDocs,
+        hasProjectContext: hasProjectContext,
+        projectContextEntry: sourceDocs.find((doc: any) => doc.is_project_context || (doc.id && doc.id.startsWith('project_context:')))
+      })
+      
+      // Also log the full generation_metadata as JSON for debugging
+      console.log('[METADATA-PAGE] Full generation_metadata JSON:', JSON.stringify(genMetadata, null, 2))
+      console.log('[METADATA-PAGE] Source documents array:', JSON.stringify(sourceDocs, null, 2))
+      
       setDocument(documentData)
       await fetchSignatureRequest()
       
@@ -359,12 +453,17 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
       }
       
       // Populate metadata form
-      setMetadataForm({
-        name: documentData.name || "",
+      // Handle both 'name' and 'title' fields (database may have either)
+      const documentName = documentData.name || documentData.title || ""
+      // Handle both 'framework' and 'template_framework' fields
+      const documentFramework = documentData.framework || documentData.template_framework || ""
+      
+      const formData = {
+        name: documentName,
         status: documentData.status || "draft",
         tags: documentData.tags || [],
         template_id: documentData.template_id || "",
-        framework: documentData.template_framework || "",
+        framework: documentFramework,
         category: documentData.metadata?.category || "",
         priority: documentData.metadata?.priority || "medium",
         author: documentData.metadata?.author || "",
@@ -373,100 +472,18 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
         description: documentData.metadata?.description || "",
         notes: documentData.metadata?.notes || "",
         custom_fields: documentData.metadata?.custom_fields || {}
-      })
-    } catch (error) {
-      console.error("Failed to fetch document:", error)
-      // Use mock data for demonstration
-      const mockDocument: Document = {
-        id: docId,
-        name: "Project Requirements Document",
-        template_id: null, // Mock data - no template ID
-        template_name: "AI-Enhanced Project Charter Template",
-        template_framework: "PMBOK 7",
-        status: "review",
-        version: 3,
-        created_by: "user-1",
-        updated_by: "user-1",
-        created_at: "2024-01-15T10:30:00Z",
-        updated_at: "2024-01-20T14:45:00Z",
-        word_count: 2847,
-        character_count: 15234,
-        file_size: 2048576,
-        mime_type: "text/markdown",
-        tags: ["requirements", "technical", "architecture"],
-        metadata: {
-          ai_model: "GPT-4 Turbo",
-          processing_time: "4.2s",
-          compression_ratio: 78,
-          framework_compliance: 92,
-          review_score: 85,
-          quality_score: 88,
-          readability_score: 82,
-          complexity_score: 75,
-          stakeholder_feedback: [
-            {
-              id: "feedback-1",
-              user: "Sarah Johnson",
-              comment: "Excellent technical depth and clear requirements. Minor suggestions for section 3.2.",
-              rating: 4,
-              timestamp: "2024-01-18T10:30:00Z"
-            },
-            {
-              id: "feedback-2",
-              user: "Michael Chen",
-              comment: "Well-structured document. Consider adding more detail on integration points.",
-              rating: 5,
-              timestamp: "2024-01-19T14:20:00Z"
-            }
-          ],
-          generation_stats: {
-            tokens_used: 12500,
-            cost: 0.25,
-            model_version: "gpt-4-turbo-preview",
-            temperature: 0.7,
-            max_tokens: 4000
-          },
-          compliance_metrics: {
-            template_alignment: 95,
-            framework_adherence: 92,
-            quality_gates_passed: 8,
-            review_cycles: 3
-          },
-          technical_metadata: {
-            file_hash: "sha256:abc123def456",
-            encoding: "utf-8",
-            language: "en",
-            structure_analysis: {
-              sections: 12,
-              subsections: 45,
-              tables: 3,
-              figures: 8
-            }
-          }
-        }
       }
-      setDocument(mockDocument)
-      setMetadataForm({
-        name: mockDocument.name,
-        status: mockDocument.status,
-        tags: mockDocument.tags || [],
-        template_id: mockDocument.template_id || "",
-        framework: mockDocument.template_framework || "",
-        category: "Technical Documentation",
-        priority: "high",
-        author: "John Smith",
-        reviewer: "Sarah Johnson",
-        due_date: "2024-02-15",
-        description: "Comprehensive project requirements document outlining technical specifications and implementation details",
-        notes: "Document has undergone 3 review cycles with positive stakeholder feedback",
-        custom_fields: {
-          "business_unit": "Engineering",
-          "project_phase": "Planning",
-          "compliance_level": "High"
-        }
-      })
-    } finally {
-      setLoading(false)
+      
+      console.log('[METADATA-PAGE] Populating metadata form:', formData)
+      setMetadataForm(formData)
+    } catch (error) {
+      console.error("[METADATA-PAGE] Failed to fetch document:", error)
+      const errorMessage = error instanceof Error ? error.message : "Failed to load document metadata"
+      toast.error(errorMessage)
+      
+      // Set document to null so UI can show error state
+      setDocument(null)
+      throw error // Re-throw so Promise.all can catch it
     }
   }
 
@@ -492,8 +509,32 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
 
   // Run quality audit
   const handleRunQualityAudit = async () => {
+    // Validate docId first
+    if (!docId) {
+      console.error('[QUALITY-AUDIT] docId is missing:', { docId, projectId, document: !!document })
+      toast.error("Document ID is missing. Please refresh the page and try again.")
+      return
+    }
+
     if (!document) {
-      toast.error("Document not loaded")
+      console.error('[QUALITY-AUDIT] Document not loaded:', { docId })
+      toast.error("Document not loaded. Please wait for the document to load and try again.")
+      return
+    }
+
+    // Validate document has content
+    // Handle both string content and object content
+    let documentContent: string = ""
+    if (typeof document.content === 'string') {
+      documentContent = document.content
+    } else if (document.content && typeof document.content === 'object') {
+      // Try to extract content from object
+      documentContent = (document.content as any).content || (document.content as any).text || JSON.stringify(document.content)
+    }
+
+    if (!documentContent || documentContent.trim().length === 0) {
+      console.warn('[QUALITY-AUDIT] Document has no content:', { docId, contentType: typeof document.content })
+      toast.error("Document has no content to audit. Please ensure the document has been generated.")
       return
     }
 
@@ -505,49 +546,121 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
 
     try {
       setRunningQualityAudit(true)
+      console.log('[QUALITY-AUDIT] Starting quality audit:', { docId, projectId, contentLength: documentContent.length })
       
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+      const { getApiBaseUrl } = await import('@/lib/api-url')
+      const API_BASE_URL = getApiBaseUrl()
       const authToken = token || localStorage.getItem('auth_token') || localStorage.getItem('token')
       
       if (!authToken) {
+        console.error('[QUALITY-AUDIT] No auth token available')
         toast.error("Authentication required. Please log in again.")
         setRunningQualityAudit(false)
         return
       }
 
-      // Trigger quality audit
-      const response = await fetch(`${API_BASE_URL}/quality-audits/trigger`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          documentId: docId
+      // Add timeout to fetch request (60 seconds)
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 60000)
+
+      let response: Response
+      let data: any
+
+      try {
+        console.log('[QUALITY-AUDIT] Sending request to:', `${API_BASE_URL}/quality-audits/trigger`)
+        response = await fetch(`${API_BASE_URL}/quality-audits/trigger`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            documentId: docId
+          }),
+          signal: controller.signal
         })
-      })
 
-      const data = await response.json()
+        console.log('[QUALITY-AUDIT] Response received:', { status: response.status, statusText: response.statusText, ok: response.ok })
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to trigger quality audit')
+        clearTimeout(timeoutId)
+
+        // Handle non-JSON responses
+        const contentType = response.headers.get('content-type')
+        if (contentType && contentType.includes('application/json')) {
+          data = await response.json()
+        } else {
+          const text = await response.text()
+          throw new Error(`Server returned non-JSON response: ${text.substring(0, 200)}`)
+        }
+
+        if (!response.ok) {
+          const errorMessage = data?.error || data?.message || `HTTP ${response.status}: ${response.statusText}`
+          throw new Error(errorMessage)
+        }
+
+        // Validate response structure
+        if (!data || data.success === false) {
+          console.error('[QUALITY-AUDIT] Invalid response:', data)
+          throw new Error(data?.error || 'Quality audit response was invalid')
+        }
+
+        console.log('[QUALITY-AUDIT] Audit completed successfully:', { 
+          success: data.success, 
+          hasAudit: !!data.audit,
+          overallScore: data.audit?.overallScore 
+        })
+
+        toast.success(data.message || "Quality audit completed successfully!")
+        
+        // Reset loading state immediately after successful trigger
+        setRunningQualityAudit(false)
+        
+        // Refresh audit data after a delay to show new results
+        // Store timeout ID in ref for cleanup
+        qualityAuditTimeoutRef.current = setTimeout(async () => {
+          console.log('[QUALITY-AUDIT] Refreshing audit data after delay')
+          await fetchQualityAudit()
+          setShowQualityAuditModal(true)
+          qualityAuditTimeoutRef.current = null // Clear ref after execution
+        }, 3000)
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId)
+        console.error('[QUALITY-AUDIT] Fetch error:', {
+          name: fetchError.name,
+          message: fetchError.message,
+          stack: fetchError.stack
+        })
+        
+        // Handle specific error types
+        if (fetchError.name === 'AbortError') {
+          throw new Error('Quality audit request timed out. The audit may still be processing. Please check back in a moment.')
+        } else if (fetchError instanceof TypeError && fetchError.message.includes('fetch')) {
+          throw new Error('Network error. Please check your connection and try again.')
+        } else {
+          throw fetchError
+        }
       }
-
-      toast.success("Quality audit started successfully!")
-      
-      // Reset loading state immediately after successful trigger
-      setRunningQualityAudit(false)
-      
-      // Refresh audit data after a delay to show new results
-      // Store timeout ID in ref for cleanup
-      qualityAuditTimeoutRef.current = setTimeout(async () => {
-        await fetchQualityAudit()
-        setShowQualityAuditModal(true)
-        qualityAuditTimeoutRef.current = null // Clear ref after execution
-      }, 3000)
     } catch (error) {
-      console.error("Failed to run quality audit:", error)
-      toast.error(error instanceof Error ? error.message : "Failed to run quality audit")
+      console.error("[QUALITY-AUDIT] Failed to run quality audit:", {
+        error,
+        docId,
+        projectId,
+        hasDocument: !!document,
+        errorType: error instanceof Error ? error.constructor.name : typeof error,
+        errorMessage: error instanceof Error ? error.message : String(error)
+      })
+      
+      // More descriptive error messages
+      let errorMessage = "Failed to run quality audit"
+      if (error instanceof Error) {
+        errorMessage = error.message
+      } else if (typeof error === 'string') {
+        errorMessage = error
+      } else if (error && typeof error === 'object' && 'message' in error) {
+        errorMessage = String((error as any).message)
+      }
+      
+      toast.error(errorMessage)
       setRunningQualityAudit(false)
       
       // Clear timeout if it was set before error occurred
@@ -611,7 +724,8 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
     try {
       setAnalyzingTemplate(true)
       
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+      const { getApiBaseUrl } = await import('@/lib/api-url')
+      const API_BASE_URL = getApiBaseUrl()
       
       const response = await fetch(`${API_BASE_URL}/quality-audits/analyze-templates`, {
         method: 'POST',
@@ -782,10 +896,40 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
 
   // Load data on component mount
   useEffect(() => {
-    if (isAuthenticated) {
-      Promise.all([fetchDocument(), fetchProject(), fetchTemplates(), fetchQualityAudit()]).then(() => {
+    let isMounted = true
+    
+    if (!isAuthenticated) {
+      console.log('[METADATA-PAGE] Not authenticated, skipping data fetch')
+      setLoading(false)
+      return
+    }
+    
+    if (!docId || !projectId) {
+      console.warn('[METADATA-PAGE] Missing required data:', { isAuthenticated, docId, projectId })
+      setLoading(false)
+      toast.error("Missing document or project ID. Please check the URL and try again.")
+      return
+    }
+    
+    console.log('[METADATA-PAGE] useEffect triggered - fetching data:', { docId, projectId, isAuthenticated })
+    setLoading(true)
+    
+    Promise.all([fetchDocument(), fetchProject(), fetchTemplates(), fetchQualityAudit()]).then(() => {
+      if (isMounted) {
         setLoading(false)
-      })
+        console.log('[METADATA-PAGE] All data loaded successfully')
+      }
+    }).catch((error) => {
+      if (isMounted) {
+        console.error('[METADATA-PAGE] Error loading data:', error)
+        setLoading(false)
+        const errorMessage = error instanceof Error ? error.message : "Failed to load document metadata"
+        toast.error(errorMessage || "Failed to load document metadata. Please try refreshing the page.")
+      }
+    })
+    
+    return () => {
+      isMounted = false
     }
   }, [isAuthenticated, docId, projectId])
 
@@ -813,6 +957,27 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
           <h2 className="text-xl font-semibold mb-2">Authentication Required</h2>
           <p className="text-muted-foreground">Please log in to access document metadata.</p>
         </div>
+      </div>
+    )
+  }
+
+  // Show error state if document failed to load
+  if (!loading && !document && docId) {
+    return (
+      <div className="container mx-auto p-6 max-w-4xl">
+        <Card>
+          <CardContent className="py-12 text-center">
+            <AlertCircle className="h-12 w-12 mx-auto mb-4 text-destructive" />
+            <h2 className="text-xl font-semibold mb-2">Failed to Load Document</h2>
+            <p className="text-muted-foreground mb-4">
+              Unable to load document metadata. Please try refreshing the page.
+            </p>
+            <Button onClick={() => window.location.reload()}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh Page
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     )
   }
@@ -941,7 +1106,7 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">Document Name</Label>
-                          <p className="text-lg font-semibold">{document?.name}</p>
+                          <p className="text-lg font-semibold">{document?.name || document?.title || "Loading..."}</p>
                         </div>
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">Status</Label>
@@ -960,9 +1125,9 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">Framework</Label>
                           <p className="text-sm">
-                            {document?.template_framework || 
+                            {document?.framework || 
+                             document?.template_framework || 
                              (document as any)?.generation_metadata?.framework || 
-                             document?.framework || 
                              "Not specified"}
                           </p>
                         </div>
@@ -1510,6 +1675,143 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                     </AnimatedCard>
                   )}
 
+                  {/* Quality Gates Section */}
+                  {(() => {
+                    const qualityGates = (document as any)?.generation_metadata?.quality_gate_results || 
+                                        (document as any)?.generation_metadata?.quality_gates || []
+                    const euAIActGate = qualityGates.find((gate: any) => 
+                      gate.gate_id === 'EU_AI_ACT_COMPLIANCE_GATE' || 
+                      gate.gate_name?.includes('EU AI Act')
+                    )
+                    
+                    if (qualityGates.length > 0 || euAIActGate) {
+                      return (
+                        <AnimatedCard>
+                          <CardHeader>
+                            <CardTitle className="flex items-center space-x-2">
+                              <ShieldCheck className="h-5 w-5" />
+                              <span>Quality Gates</span>
+                            </CardTitle>
+                            <CardDescription>
+                              Quality gate validation results from document generation
+                            </CardDescription>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="space-y-4">
+                              {/* EU AI Act Quality Gate */}
+                              {euAIActGate && (
+                                <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+                                  <div className="flex items-center justify-between mb-3">
+                                    <div className="flex items-center gap-2">
+                                      <Badge className="bg-blue-600 text-white text-xs">EU AI Act</Badge>
+                                      <span className="text-sm font-semibold">EU AI Act Compliance Gate</span>
+                                    </div>
+                                    {euAIActGate.passed ? (
+                                      <Badge className="bg-green-500 text-white text-xs">✓ Passed</Badge>
+                                    ) : (
+                                      <Badge className="bg-red-500 text-white text-xs">✗ Failed</Badge>
+                                    )}
+                                  </div>
+                                  
+                                  <div className="space-y-2">
+                                    <div className="flex justify-between items-center">
+                                      <span className="text-sm text-muted-foreground">Overall Score</span>
+                                      <div className="flex items-center space-x-2">
+                                        <div className="w-24 bg-gray-200 rounded-full h-2">
+                                          <div 
+                                            className={`h-2 rounded-full ${
+                                              (euAIActGate.score || 0) >= 75 ? 'bg-green-500' :
+                                              (euAIActGate.score || 0) >= 60 ? 'bg-yellow-500' :
+                                              'bg-red-500'
+                                            }`}
+                                            style={{ width: `${euAIActGate.score || 0}%` }}
+                                          />
+                                        </div>
+                                        <span className="text-sm font-medium w-12 text-right">{euAIActGate.score || 0}%</span>
+                                      </div>
+                                    </div>
+                                    
+                                    {euAIActGate.criteria_results && euAIActGate.criteria_results.length > 0 && (
+                                      <div className="grid grid-cols-2 gap-2 mt-3 text-xs">
+                                        {euAIActGate.criteria_results.map((criterion: any, idx: number) => {
+                                          const criterionName = criterion.criterion_id?.includes('TRANSPARENCY') ? 'Transparency' :
+                                                               criterion.criterion_id?.includes('HUMAN_OVERSIGHT') ? 'Human Oversight' :
+                                                               criterion.criterion_id?.includes('ACCURACY') ? 'Accuracy' :
+                                                               criterion.criterion_id?.includes('DATA_GOVERNANCE') ? 'Data Governance' :
+                                                               criterion.criterion_id?.includes('RECORD_KEEPING') ? 'Record Keeping' :
+                                                               criterion.criterion_name || 'Unknown'
+                                          
+                                          return (
+                                            <div key={idx} className="flex justify-between">
+                                              <span className="text-muted-foreground">{criterionName}:</span>
+                                              <span className={`font-medium ${
+                                                criterion.passed !== false ? 'text-green-600' : 'text-red-600'
+                                              }`}>
+                                                {criterion.score || 0}%
+                                              </span>
+                                            </div>
+                                          )
+                                        })}
+                                      </div>
+                                    )}
+                                    
+                                    {euAIActGate.message && (
+                                      <p className="text-xs text-muted-foreground mt-2 italic">
+                                        {euAIActGate.message}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                              
+                              {/* Other Quality Gates */}
+                              {qualityGates.filter((gate: any) => 
+                                gate.gate_id !== 'EU_AI_ACT_COMPLIANCE_GATE' && 
+                                !gate.gate_name?.includes('EU AI Act')
+                              ).map((gate: any, idx: number) => (
+                                <div key={idx} className="p-3 bg-gray-50 rounded-lg border">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-sm font-medium">{gate.gate_name || gate.gate_id || 'Quality Gate'}</span>
+                                    {gate.passed ? (
+                                      <Badge className="bg-green-500 text-white text-xs">✓ Passed</Badge>
+                                    ) : (
+                                      <Badge className="bg-red-500 text-white text-xs">✗ Failed</Badge>
+                                    )}
+                                  </div>
+                                  {gate.score !== undefined && (
+                                    <div className="mt-2 flex items-center space-x-2">
+                                      <div className="w-20 bg-gray-200 rounded-full h-1.5">
+                                        <div 
+                                          className={`h-1.5 rounded-full ${
+                                            gate.score >= 80 ? 'bg-green-500' :
+                                            gate.score >= 60 ? 'bg-yellow-500' :
+                                            'bg-red-500'
+                                          }`}
+                                          style={{ width: `${gate.score}%` }}
+                                        />
+                                      </div>
+                                      <span className="text-xs text-muted-foreground">{gate.score}%</span>
+                                    </div>
+                                  )}
+                                  {gate.message && (
+                                    <p className="text-xs text-muted-foreground mt-1">{gate.message}</p>
+                                  )}
+                                </div>
+                              ))}
+                              
+                              {qualityGates.length === 0 && !euAIActGate && (
+                                <p className="text-sm text-muted-foreground text-center py-4">
+                                  No quality gates available for this document
+                                </p>
+                              )}
+                            </div>
+                          </CardContent>
+                        </AnimatedCard>
+                      )
+                    }
+                    return null
+                  })()}
+
                   {/* Quality Audit Results */}
                   {qualityAudit && (
                     <AnimatedCard>
@@ -1652,6 +1954,75 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                                     <span className="font-medium">{qualityAudit.compliance_metrics.soc2}%</span>
                                   </div>
                                 </div>
+
+                                {/* EU AI Act Compliance Section */}
+                                {qualityAudit.compliance_metrics.euAIAct && (
+                                  <>
+                                    <Separator className="my-3" />
+                                    <div className="space-y-2">
+                                      <div className="flex items-center gap-2 mb-2">
+                                        <Badge className="bg-blue-600 text-white text-xs">EU AI Act</Badge>
+                                        <span className="text-sm font-semibold">EU AI Act Compliance</span>
+                                        {qualityAudit.compliance_metrics.euAIAct.passed ? (
+                                          <Badge className="bg-green-500 text-white text-xs">✓ Passed</Badge>
+                                        ) : (
+                                          <Badge className="bg-red-500 text-white text-xs">✗ Failed</Badge>
+                                        )}
+                                      </div>
+                                      <div className="flex justify-between items-center">
+                                        <span className="text-sm text-muted-foreground">Overall Score</span>
+                                        <div className="flex items-center space-x-2">
+                                          <div className="w-20 bg-gray-200 rounded-full h-2">
+                                            <div 
+                                              className={`h-2 rounded-full ${
+                                                qualityAudit.compliance_metrics.euAIAct.overallScore >= 75 ? 'bg-green-500' :
+                                                qualityAudit.compliance_metrics.euAIAct.overallScore >= 60 ? 'bg-yellow-500' :
+                                                'bg-red-500'
+                                              }`}
+                                              style={{ width: `${qualityAudit.compliance_metrics.euAIAct.overallScore}%` }}
+                                            />
+                                          </div>
+                                          <span className="text-sm font-medium w-12 text-right">{qualityAudit.compliance_metrics.euAIAct.overallScore}%</span>
+                                        </div>
+                                      </div>
+                                      <div className="grid grid-cols-2 gap-2 mt-2 text-xs">
+                                        <div className="flex justify-between">
+                                          <span className="text-muted-foreground">Transparency:</span>
+                                          <span className={`font-medium ${qualityAudit.compliance_metrics.euAIAct.criteria.transparency.passed ? 'text-green-600' : 'text-red-600'}`}>
+                                            {qualityAudit.compliance_metrics.euAIAct.criteria.transparency.score}%
+                                          </span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                          <span className="text-muted-foreground">Human Oversight:</span>
+                                          <span className={`font-medium ${qualityAudit.compliance_metrics.euAIAct.criteria.humanOversight.passed ? 'text-green-600' : 'text-red-600'}`}>
+                                            {qualityAudit.compliance_metrics.euAIAct.criteria.humanOversight.score}%
+                                          </span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                          <span className="text-muted-foreground">Accuracy:</span>
+                                          <span className={`font-medium ${qualityAudit.compliance_metrics.euAIAct.criteria.accuracy.passed ? 'text-green-600' : 'text-red-600'}`}>
+                                            {qualityAudit.compliance_metrics.euAIAct.criteria.accuracy.score}%
+                                          </span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                          <span className="text-muted-foreground">Data Governance:</span>
+                                          <span className={`font-medium ${qualityAudit.compliance_metrics.euAIAct.criteria.dataGovernance.passed ? 'text-green-600' : 'text-yellow-600'}`}>
+                                            {qualityAudit.compliance_metrics.euAIAct.criteria.dataGovernance.score}%
+                                          </span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                          <span className="text-muted-foreground">Record Keeping:</span>
+                                          <span className={`font-medium ${qualityAudit.compliance_metrics.euAIAct.criteria.recordKeeping.passed ? 'text-green-600' : 'text-yellow-600'}`}>
+                                            {qualityAudit.compliance_metrics.euAIAct.criteria.recordKeeping.score}%
+                                          </span>
+                                        </div>
+                                      </div>
+                                      <p className="text-xs text-muted-foreground mt-2 italic">
+                                        View full EU AI Act compliance matrix in the Quality Audit Report
+                                      </p>
+                                    </div>
+                                  </>
+                                )}
                               </div>
                             </>
                           )}
@@ -1841,7 +2212,8 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                         <div className="space-y-2">
                           {(() => {
                             // Calculate complexity score for display (same logic as below)
-                            const sourceDocuments = (document as any)?.generation_metadata?.source_documents || []
+                            // Handle both snake_case (source_documents) and camelCase (sourceDocuments) for backward compatibility
+                            const sourceDocuments = (document as any)?.generation_metadata?.source_documents || (document as any)?.generation_metadata?.sourceDocuments || []
                             const wordCount = (document as any)?.generation_metadata?.contentMetrics?.words || 0
                             const paragraphs = (document as any)?.generation_metadata?.contentMetrics?.paragraphs || 0
                             const framework = (document as any)?.generation_metadata?.framework || document?.template_framework
@@ -1892,7 +2264,8 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                           {/* Complexity Time Estimate with Research Breakdown */}
                           {(() => {
                             // Get source documents from generation_metadata
-                            const sourceDocuments = (document as any)?.generation_metadata?.source_documents || []
+                            // Handle both snake_case (source_documents) and camelCase (sourceDocuments) for backward compatibility
+                            const sourceDocuments = (document as any)?.generation_metadata?.source_documents || (document as any)?.generation_metadata?.sourceDocuments || []
                             const sourceDocCount = sourceDocuments.length
                             
                             // Calculate total words in source documents
@@ -2280,171 +2653,218 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                 </div>
 
                 {/* Source Documents */}
-                {document?.generation_metadata?.source_documents && document.generation_metadata.source_documents.length > 0 && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.35 }}
-                    className="mb-8"
-                  >
-                    <AnimatedCard>
-                      <CardHeader>
-                        <CardTitle className="flex items-center space-x-2">
-                          <FileText className="h-5 w-5" />
-                          <span>Source Documents</span>
-                        </CardTitle>
-                        <CardDescription>
-                          Documents used as context during AI generation
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        {/* Individual Document Details */}
-                        <div className="space-y-3">
-                          {document.generation_metadata.source_documents.map((source: any, idx: number) => (
-                            <Link
-                              key={source.id}
-                              href={`/projects/${document.project_id}/documents/${source.id}/view`}
-                              className="block p-4 border rounded-lg hover:bg-muted/50 transition-colors"
-                            >
-                              <div className="flex items-start space-x-3">
-                                <div className="flex-shrink-0 w-8 h-8 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center">
-                                  <span className="text-sm font-bold text-blue-600 dark:text-blue-300">
-                                    {source.priority_rank || idx + 1}
-                                  </span>
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center space-x-2 mb-1">
-                                    <h4 className="text-sm font-semibold truncate">
-                                      {source.title || source.name}
-                                    </h4>
-                                    {source.status && (
-                                      <Badge variant="outline" className="capitalize flex-shrink-0">
-                                        {source.status}
-                                      </Badge>
-                                    )}
-                                    {source.dependency_level && (
-                                      <Badge 
-                                        variant="secondary" 
-                                        className={`flex-shrink-0 ${
-                                          source.dependency_level >= 4 ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' :
-                                          source.dependency_level === 3 ? 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300' :
-                                          source.dependency_level === 2 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' :
-                                          'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
-                                        }`}
-                                      >
-                                        {source.dependency_level >= 4 ? '🔴 Critical' :
-                                         source.dependency_level === 3 ? '🟠 High' :
-                                         source.dependency_level === 2 ? '🟡 Medium' : '🟢 Low'}
-                                      </Badge>
-                                    )}
-                                  </div>
-                                  <div className="flex items-center space-x-2 text-xs text-muted-foreground">
-                                    {source.phase_name && (
-                                      <span className="flex items-center space-x-1">
-                                        <span className="font-medium">{source.phase_name}</span>
-                                      </span>
-                                    )}
-                                    {source.type && (
-                                      <>
-                                        <span>•</span>
-                                        <span>{source.type}</span>
-                                      </>
-                                    )}
-                                    {source.priority_rank && (
-                                      <>
-                                        <span>•</span>
-                                        <span className="font-medium">Score: {Math.round(source.priority_rank as number)}</span>
-                                      </>
-                                    )}
-                                  </div>
-                                  {/* Reading Metrics */}
-                                  {source.character_count && (
-                                    <div className="flex items-center space-x-2 text-xs text-muted-foreground/80 mt-1">
-                                      <span>📄 {source.character_count.toLocaleString()} chars</span>
-                                      <span>•</span>
-                                      <span>📖 {source.word_count?.toLocaleString() || 'N/A'} words</span>
-                                      <span>•</span>
-                                      <span className="font-medium">⏱️ ~{source.reading_time_minutes} min read</span>
-                                    </div>
-                                  )}
-                                </div>
-                                <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                              </div>
-                            </Link>
-                          ))}
-                        </div>
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.35 }}
+                  className="mb-8"
+                >
+                  <AnimatedCard>
+                    <CardHeader>
+                      <CardTitle className="flex items-center space-x-2">
+                        <FileText className="h-5 w-5" />
+                        <span>Source Documents</span>
+                      </CardTitle>
+                      <CardDescription>
+                        Documents used as context during AI generation
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {(() => {
+                        // Handle both snake_case (source_documents) and camelCase (sourceDocuments) for backward compatibility
+                        const sourceDocs = (document as any)?.generation_metadata?.source_documents || (document as any)?.generation_metadata?.sourceDocuments || []
                         
-                        {/* Context Stats Summary */}
-                        {document.generation_metadata.context_stats && (
-                          <div className="mt-4 p-3 bg-muted/50 rounded-lg">
-                            {(() => {
-                              // Calculate total reading metrics from all source documents
-                              const totalChars = document.generation_metadata.source_documents.reduce((sum: number, doc: any) => sum + (doc.character_count || 0), 0)
-                              const totalWords = document.generation_metadata.source_documents.reduce((sum: number, doc: any) => sum + (doc.word_count || 0), 0)
-                              const totalReadingTime = document.generation_metadata.source_documents.reduce((sum: number, doc: any) => sum + (doc.reading_time_minutes || 0), 0)
-                              
-                              return (
-                                <div className="space-y-3">
-                                  <div className="grid grid-cols-2 gap-3 text-xs">
-                                    <div>
-                                      <span className="text-muted-foreground">Documents Used:</span>
-                                      <span className="ml-2 font-medium">
-                                        {document.generation_metadata.context_stats.documents_used} / {document.generation_metadata.context_stats.total_documents}
+                        if (sourceDocs.length === 0) {
+                          return (
+                            <p className="text-sm text-muted-foreground text-center py-4">
+                              No source documents - this was the first document generated or no context was available.
+                            </p>
+                          )
+                        }
+                        
+                        return (
+                          <>
+                            {/* Individual Document Details */}
+                            <div className="space-y-3">
+                              {sourceDocs.map((source: any, idx: number) => {
+                                // Handle project context entries specially
+                                const isProjectContext = source.is_project_context || (source.id && source.id.startsWith('project_context:'))
+                                const linkUrl = isProjectContext 
+                                  ? `/projects/${projectId}` // Link to project page for project context
+                                  : `/projects/${projectId}/documents/${source.id}/view` // Link to document for regular documents
+                                
+                                return (
+                                <Link
+                                  key={source.id || idx}
+                                  href={linkUrl}
+                                  className="block p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                                >
+                                  <div className="flex items-start space-x-3">
+                                    <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
+                                      isProjectContext 
+                                        ? 'bg-purple-100 dark:bg-purple-900' 
+                                        : 'bg-blue-100 dark:bg-blue-900'
+                                    }`}>
+                                      <span className={`text-sm font-bold ${
+                                        isProjectContext 
+                                          ? 'text-purple-600 dark:text-purple-300' 
+                                          : 'text-blue-600 dark:text-blue-300'
+                                      }`}>
+                                        {isProjectContext ? '🏗️' : (source.priority_rank || idx + 1)}
                                       </span>
                                     </div>
-                                    {document.generation_metadata.context_stats.stakeholders_included > 0 && (
-                                      <div>
-                                        <span className="text-muted-foreground">Stakeholders:</span>
-                                        <span className="ml-2 font-medium">
-                                          {document.generation_metadata.context_stats.stakeholders_included}
-                                        </span>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center space-x-2 mb-1">
+                                        <h4 className="text-sm font-semibold truncate">
+                                          {source.title || source.name}
+                                        </h4>
+                                        {isProjectContext && (
+                                          <Badge variant="outline" className="bg-purple-50 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800 flex-shrink-0">
+                                            Project Context
+                                          </Badge>
+                                        )}
+                                        {!isProjectContext && source.status && (
+                                          <Badge variant="outline" className="capitalize flex-shrink-0">
+                                            {source.status}
+                                          </Badge>
+                                        )}
+                                        {source.dependency_level && (
+                                          <Badge 
+                                            variant="secondary" 
+                                            className={`flex-shrink-0 ${
+                                              source.dependency_level >= 4 ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' :
+                                              source.dependency_level === 3 ? 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300' :
+                                              source.dependency_level === 2 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' :
+                                              'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                                            }`}
+                                          >
+                                            {source.dependency_level >= 4 ? '🔴 Critical' :
+                                             source.dependency_level === 3 ? '🟠 High' :
+                                             source.dependency_level === 2 ? '🟡 Medium' : '🟢 Low'}
+                                          </Badge>
+                                        )}
                                       </div>
-                                    )}
-                                    {document.generation_metadata.context_stats.estimated_context_tokens && (
-                                      <div>
-                                        <span className="text-muted-foreground">Est. Context Tokens:</span>
-                                        <span className="ml-2 font-medium">
-                                          {document.generation_metadata.context_stats.estimated_context_tokens.toLocaleString()}
-                                        </span>
+                                      <div className="flex items-center space-x-2 text-xs text-muted-foreground">
+                                        {source.phase_name && (
+                                          <span className="flex items-center space-x-1">
+                                            <span className="font-medium">{source.phase_name}</span>
+                                          </span>
+                                        )}
+                                        {source.type && (
+                                          <>
+                                            <span>•</span>
+                                            <span>{source.type}</span>
+                                          </>
+                                        )}
+                                        {source.priority_rank && typeof source.priority_rank === 'number' && (
+                                          <>
+                                            <span>•</span>
+                                            <span className="font-medium">Score: {Math.round(source.priority_rank)}</span>
+                                          </>
+                                        )}
                                       </div>
-                                    )}
+                                      {/* Reading Metrics */}
+                                      {source.character_count && (
+                                        <div className="flex items-center space-x-2 text-xs text-muted-foreground/80 mt-1">
+                                          <span>📄 {source.character_count.toLocaleString()} chars</span>
+                                          <span>•</span>
+                                          <span>📖 {source.word_count?.toLocaleString() || 'N/A'} words</span>
+                                          <span>•</span>
+                                          <span className="font-medium">⏱️ ~{source.reading_time_minutes || Math.round((source.word_count || 0) / 250)} min read</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                    <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                                   </div>
+                                </Link>
+                                )
+                              })}
+                            </div>
+                            
+                            {/* Context Stats Summary */}
+                            {(document as any)?.generation_metadata?.context_stats && (
+                              <div className="mt-4 p-3 bg-muted/50 rounded-lg">
+                                {(() => {
+                                  const contextStats = (document as any).generation_metadata.context_stats
+                                  const totalChars = sourceDocs.reduce((sum: number, doc: any) => sum + (doc.character_count || 0), 0)
+                                  const totalWords = sourceDocs.reduce((sum: number, doc: any) => sum + (doc.word_count || 0), 0)
+                                  const totalReadingTime = sourceDocs.reduce((sum: number, doc: any) => sum + (doc.reading_time_minutes || 0), 0)
                                   
-                                  {/* Total Reading Metrics */}
-                                  {totalChars > 0 && (
-                                    <div className="pt-2 border-t">
-                                      <div className="text-xs font-medium text-muted-foreground mb-2">📚 Total Research Material:</div>
+                                  return (
+                                    <div className="space-y-3">
                                       <div className="grid grid-cols-2 gap-3 text-xs">
                                         <div>
-                                          <span className="text-muted-foreground">Total Characters:</span>
+                                          <span className="text-muted-foreground">Documents Used:</span>
                                           <span className="ml-2 font-medium">
-                                            {totalChars.toLocaleString()}
+                                            {contextStats.documents_used || contextStats.documents_used_as_context || sourceDocs.length} / {contextStats.total_documents || contextStats.total_documents_available || 0}
                                           </span>
                                         </div>
-                                        <div>
-                                          <span className="text-muted-foreground">Total Words:</span>
-                                          <span className="ml-2 font-medium">
-                                            {totalWords.toLocaleString()}
-                                          </span>
-                                        </div>
-                                        <div className="col-span-2">
-                                          <span className="text-muted-foreground">Total Reading Time:</span>
-                                          <span className="ml-2 font-bold text-primary">
-                                            ⏱️ ~{Math.round(totalReadingTime)} minutes ({Math.round(totalReadingTime / 60 * 10) / 10} hours)
-                                          </span>
-                                        </div>
+                                        {contextStats.project_context_used && (
+                                          <div>
+                                            <span className="text-muted-foreground">Project Context:</span>
+                                            <span className="ml-2 font-medium text-purple-600 dark:text-purple-400">
+                                              ✓ Used
+                                            </span>
+                                          </div>
+                                        )}
+                                        {contextStats.stakeholders_included > 0 && (
+                                          <div>
+                                            <span className="text-muted-foreground">Stakeholders:</span>
+                                            <span className="ml-2 font-medium">
+                                              {contextStats.stakeholders_included}
+                                            </span>
+                                          </div>
+                                        )}
+                                        {contextStats.estimated_context_tokens && (
+                                          <div>
+                                            <span className="text-muted-foreground">Est. Context Tokens:</span>
+                                            <span className="ml-2 font-medium">
+                                              {contextStats.estimated_context_tokens.toLocaleString()}
+                                            </span>
+                                          </div>
+                                        )}
                                       </div>
+                                      
+                                      {/* Total Reading Metrics */}
+                                      {totalChars > 0 && (
+                                        <div className="pt-2 border-t">
+                                          <div className="text-xs font-medium text-muted-foreground mb-2">📚 Total Research Material:</div>
+                                          <div className="grid grid-cols-2 gap-3 text-xs">
+                                            <div>
+                                              <span className="text-muted-foreground">Total Characters:</span>
+                                              <span className="ml-2 font-medium">
+                                                {totalChars.toLocaleString()}
+                                              </span>
+                                            </div>
+                                            <div>
+                                              <span className="text-muted-foreground">Total Words:</span>
+                                              <span className="ml-2 font-medium">
+                                                {totalWords.toLocaleString()}
+                                              </span>
+                                            </div>
+                                            <div className="col-span-2">
+                                              <span className="text-muted-foreground">Total Reading Time:</span>
+                                              <span className="ml-2 font-medium">
+                                                {totalReadingTime >= 60 
+                                                  ? `${Math.round(totalReadingTime / 60 * 10) / 10} hours` 
+                                                  : `${Math.round(totalReadingTime)} minutes`}
+                                              </span>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
                                     </div>
-                                  )}
-                                </div>
-                              )
-                            })()}
-                          </div>
-                        )}
-                      </CardContent>
-                    </AnimatedCard>
-                  </motion.div>
-                )}
+                                  )
+                                })()}
+                              </div>
+                            )}
+                          </>
+                        )
+                      })()}
+                    </CardContent>
+                  </AnimatedCard>
+                </motion.div>
+
 
                 {/* Stakeholder Feedback */}
                 <motion.div

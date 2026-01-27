@@ -102,6 +102,7 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
   const [loadingEntities, setLoadingEntities] = useState(true)
 
   useEffect(() => {
+    if (!projectId || projectId === 'undefined') return
     void fetchProjectData()
     void fetchDocuments()
     void fetchBaselines()
@@ -109,6 +110,7 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
   }, [projectId])
 
   const fetchProjectData = async () => {
+    if (!projectId || projectId === 'undefined') return
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/projects/${projectId}`, {
         headers: {
@@ -127,6 +129,7 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
   }
 
   const fetchDocuments = async () => {
+    if (!projectId || projectId === 'undefined') return
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/documents/project/${projectId}?limit=100`, {
         headers: {
@@ -144,6 +147,7 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
   }
 
   const fetchBaselines = async () => {
+    if (!projectId || projectId === 'undefined') return
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/baselines/project/${projectId}`, {
         headers: {
@@ -161,6 +165,10 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
   }
 
   const handleRunFullExtraction = async () => {
+    if (!projectId || projectId === 'undefined') {
+      toast.error('Invalid project')
+      return
+    }
     try {
       setIsExtracting(true)
       setExtractionProgress(0)
@@ -287,6 +295,7 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
   }
 
   const fetchPMBOK8Summary = async () => {
+    if (!projectId || projectId === 'undefined') return
     try {
       setLoadingEntities(true)
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/project-data-extraction/results/${projectId}`, {
@@ -330,7 +339,7 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
           type: config.label,
           icon: config.icon,
           count: count || 0,
-          lastExtract: "2 hours ago", // TODO: Fetch from API if available
+          lastExtract: null, // Will be populated from extraction summary API if available
           status: count > 0 ? "fresh" : "stale" as "fresh" | "stale"
         }
       })
@@ -863,7 +872,7 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
                             </span>
                           </td>
                           <td className="p-3 text-foreground font-semibold">{entity.count}</td>
-                          <td className="p-3 text-muted-foreground">{entity.lastExtract}</td>
+                          <td className="p-3 text-muted-foreground">{entity.lastExtract || "—"}</td>
                           <td className="p-3">
                             <Badge
                               className={

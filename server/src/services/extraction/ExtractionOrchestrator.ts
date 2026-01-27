@@ -55,7 +55,7 @@ async function getProjectDocuments(
     if (!pool) {
       throw new Error('Database pool not initialized after connection attempt')
     }
-    const result = await db.query(query, params)
+    const result = await pool.query(query, params)
     return result.rows
   } catch (error: unknown) {
     logger.error('[EXTRACTION] Failed to fetch project documents', {

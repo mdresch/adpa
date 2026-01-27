@@ -1104,13 +1104,39 @@ router.get("/:id", authenticateToken, validateParams(Joi.object({ id: schemas.uu
     }
 
     // 🔍 DEBUG: Log what we're sending
+    const sourceDocs = document.generation_metadata?.source_documents || []
+    const projectContextDoc = Array.isArray(sourceDocs) 
+      ? sourceDocs.find((doc: any) => doc.is_project_context || (doc.id && doc.id.startsWith('project_context:')))
+      : null
+    
     log.info('📤 [GET-DOC] Sending to frontend:', {
       id: document.id,
       has_generation_metadata: !!document.generation_metadata,
       generation_metadata_type: typeof document.generation_metadata,
       has_aiProcessing: !!(document.generation_metadata?.aiProcessing),
-      has_quality: !!(document.generation_metadata?.quality || document.generation_metadata?.qualityMetrics)
+      has_quality: !!(document.generation_metadata?.quality || document.generation_metadata?.qualityMetrics),
+      has_source_documents: !!sourceDocs,
+      source_documents_count: Array.isArray(sourceDocs) ? sourceDocs.length : 0,
+      source_documents_type: typeof sourceDocs,
+      has_project_context: !!projectContextDoc,
+      project_context_entry: projectContextDoc ? {
+        id: projectContextDoc.id,
+        title: projectContextDoc.title,
+        is_project_context: projectContextDoc.is_project_context
+      } : null,
+      all_source_document_ids: Array.isArray(sourceDocs) ? sourceDocs.map((doc: any) => doc.id) : []
     })
+    
+    // Also log the full source_documents array for debugging
+    if (Array.isArray(sourceDocs) && sourceDocs.length > 0) {
+      log.info('📋 [GET-DOC] Full source_documents array:', JSON.stringify(sourceDocs, null, 2))
+    } else {
+      log.warn('⚠️ [GET-DOC] source_documents is empty or not an array!', {
+        isArray: Array.isArray(sourceDocs),
+        type: typeof sourceDocs,
+        value: sourceDocs
+      })
+    }
 
     // Check if user has access to the project
     // Super admin can access all projects
@@ -1576,6 +1602,61 @@ router.post("/project/:projectId",
         templateVersion: templateVersion,
         wordCount: wordCount
       })
+
+      // 🔍 Automatic Quality Audit: Trigger quality audit after document creation
+      // This runs asynchronously and doesn't block the response
+      if (contentString && contentString.trim().length > 0) {
+        setImmediate(() => {
+          (async () => {
+            try {
+              // Get project context for quality audit
+              const projectResult = await pool.query(
+                'SELECT * FROM projects WHERE id = $1',
+                [projectId]
+              )
+
+              if (projectResult.rows.length > 0) {
+                log.info('🔍 [AUTO-QUALITY-AUDIT] Triggering automatic quality audit after document creation', {
+                  documentId: id,
+                  documentName: name,
+                  projectId,
+                  contentLength: contentString.length
+                })
+
+                // Use queue service for async processing
+                const { getQueueService } = await import('../services/queueService')
+                const auditJobId = uuidv4()
+                
+                await getQueueService().addJob('quality-audit', {
+                  jobId: auditJobId,
+                  documentId: id,
+                  documentContent: contentString,
+                  documentType: name || 'Document',
+                  projectContext: projectResult.rows[0],
+                  userId: req.user?.id || 'system'
+                })
+
+                log.info('🔍 [AUTO-QUALITY-AUDIT] Quality audit job enqueued successfully', {
+                  documentId: id,
+                  auditJobId
+                })
+              } else {
+                log.warn('🔍 [AUTO-QUALITY-AUDIT] Skipping quality audit - project not found', {
+                  documentId: id,
+                  projectId
+                })
+              }
+            } catch (auditError: any) {
+              // Don't fail document creation if quality audit trigger fails
+              log.error('🔍 [AUTO-QUALITY-AUDIT] Failed to trigger automatic quality audit', {
+                documentId: id,
+                error: auditError.message,
+                stack: auditError.stack
+              })
+            }
+          })()
+        })
+      }
 
       // Track document creation
       if (req.user?.id) {

@@ -32,6 +32,7 @@ import projectDataExtractionRoutes from "./routes/projectDataExtraction"
 import userRoutes from "./routes/users"
 import companiesRoutes from "./routes/companies"
 import aiRoutes from "./routes/ai"
+import aiCopilotRoutes from "./routes/ai-copilot"
 import aiProvidersRoutes from "./routes/ai-providers"
 import aiFailoverRoutes from "./routes/ai-failover"
 import analyticsRoutes from "./routes/analytics"
@@ -119,6 +120,10 @@ import lessonsLearnedRoutes from "./routes/lessonsLearnedRoutes"
 import contextOrchestratorRoutes from "./routes/contextOrchestrator"
 import uxDocumentationRoutes from "./routes/uxDocumentationRoutes"
 import playbookRoutes from "./routes/playbookRoutes"
+import digitalTwinAssetsRoutes from "./routes/digital-twin-assets"
+import digitalTwinEventsRoutes from "./routes/digital-twin-events"
+import digitalTwinTriggersRoutes from "./routes/digital-twin-triggers"
+import digitalTwinIngestionRoutes from "./routes/digital-twin-ingestion"
 
 const app = express()
 const server = createServer(app)
@@ -198,8 +203,22 @@ app.use(
 )
 // assign a request id to each incoming request
 app.use(requestIdMiddleware)
-app.use(express.json({ limit: "10mb" }))
-app.use(express.urlencoded({ extended: true, limit: "10mb" }))
+// JSON parser - skip multipart/form-data requests (handled by multer)
+app.use((req, res, next) => {
+  const contentType = req.headers['content-type'] || ''
+  if (contentType.startsWith('multipart/form-data')) {
+    return next()
+  }
+  express.json({ limit: "10mb" })(req, res, next)
+})
+// URL-encoded parser - skip multipart/form-data requests
+app.use((req, res, next) => {
+  const contentType = req.headers['content-type'] || ''
+  if (contentType.startsWith('multipart/form-data')) {
+    return next()
+  }
+  express.urlencoded({ extended: true, limit: "10mb" })(req, res, next)
+})
 
 // Make pool available to all routes
 app.locals.pool = pool
@@ -241,6 +260,7 @@ app.use("/api/document-generation", documentGenerationRoutes)
 app.use("/api/users", userRoutes)
 app.use("/api/companies", companiesRoutes)
 app.use("/api/ai", aiRoutes)
+app.use("/api/ai/copilot", aiCopilotRoutes)
 app.use("/api/ai-providers", aiProvidersRoutes)
 app.use("/api/ai-failover", aiFailoverRoutes)
 app.use("/api/analytics", analyticsRoutes)
@@ -290,6 +310,10 @@ app.use("/api/context-injection", contextInjectionRoutes)
 app.use("/api/pipeline", pipelineRoutes)
 app.use("/api/baselines", baselinesRoutes)
 app.use("/api/drift", driftRoutes)
+app.use("/api/digital-twin/assets", digitalTwinAssetsRoutes)
+app.use("/api/digital-twin/events", digitalTwinEventsRoutes)
+app.use("/api/digital-twin/triggers", digitalTwinTriggersRoutes)
+app.use("/api/digital-twin/ingestion", digitalTwinIngestionRoutes)
 app.use("/api/entities", entityBaselineRoutes)
 app.use("/api/emergency-meetings", emergencyMeetingsRoutes)
 app.use("/api/baseline-updates", baselineUpdatesRoutes)

@@ -6,7 +6,7 @@
  * Resolves baseline drift using AI to realign documents with approved baselines
  */
 
-import { pool } from '../database/connection'
+import { pool, getDatabasePool } from '../database/connection'
 import { logger } from '../utils/logger'
 import { aiService } from './aiService'
 import { DriftPoint } from './driftDetectionService'
@@ -18,8 +18,6 @@ import { approvalWorkflowService } from './approvalWorkflowService'
 import { createKnowledgeBaseFromDrift } from '../modules/knowledgeBase/integration'
 import { createHash } from 'crypto'
 import { redis } from '../database/redis'
-
-const db = pool
 
 export interface ResolutionResult {
   resolvedContent: string
@@ -235,7 +233,7 @@ export class DriftResolutionService {
     document: Document
   }> {
     try {
-      const result = await db.query(
+      const result = await getDatabasePool().query(
         `SELECT 
           bdd.id as drift_id,
           bdd.project_id,
@@ -313,7 +311,7 @@ export class DriftResolutionService {
    */
   private async getDriftRecord(driftRecordId: string): Promise<DriftRecord> {
     try {
-      const result = await db.query(
+      const result = await getDatabasePool().query(
         `SELECT * FROM baseline_drift_detection WHERE id = $1`,
         [driftRecordId]
       )
@@ -334,7 +332,7 @@ export class DriftResolutionService {
    */
   private async getBaseline(baselineId: string): Promise<Baseline> {
     try {
-      const result = await db.query(
+      const result = await getDatabasePool().query(
         `SELECT * FROM project_baselines WHERE id = $1`,
         [baselineId]
       )
@@ -355,7 +353,7 @@ export class DriftResolutionService {
    */
   private async getDocument(documentId: string): Promise<Document> {
     try {
-      const result = await db.query(
+      const result = await getDatabasePool().query(
         `SELECT * FROM documents WHERE id = $1`,
         [documentId]
       )
@@ -789,7 +787,7 @@ OUTPUT: Revised document (Markdown only, no explanations)`
       // Create a knowledge-base entry from the drift detection asynchronously.
       // Do this after the DB transaction commits so KB creation doesn't affect the primary flow.
       try {
-        const driftRes = await db.query('SELECT * FROM baseline_drift_detection WHERE id = $1', [driftRecordId])
+        const driftRes = await getDatabasePool().query('SELECT * FROM baseline_drift_detection WHERE id = $1', [driftRecordId])
         if (driftRes.rows.length > 0) {
           const driftRow = driftRes.rows[0]
           // Call KB integration but do not fail the main flow if it errors.

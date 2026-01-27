@@ -12,6 +12,7 @@ import { ContextInjectionService } from '../contextInjection/service'
 import { ContextAccessControlManager } from '../contextAccessControl/contextAccessControlManager'
 import { ContextFreshnessManager } from '../contextFreshness/contextFreshnessManager'
 import { ContextRetrievalService } from '../contextRetrieval/contextRetrievalService'
+import { getQdrantConfig } from '../contextRetrieval/config/qdrantConfig'
 import type {
   ContextGatheringRequest,
   ContextGatheringResult
@@ -170,9 +171,12 @@ export class ContextOrchestrator {
         throw new Error('relevanceScoringConfig is required')
       }
       
+      // Include Qdrant if configured
+      const qdrantConfig = getQdrantConfig()
       this.retrievalService = new ContextRetrievalService(
         semanticSearchConfig,
-        relevanceScoringConfig
+        relevanceScoringConfig,
+        qdrantConfig || undefined
       )
     } catch (error) {
       logger.error('[CONTEXT-ORCHESTRATOR] Failed to initialize dependencies', {

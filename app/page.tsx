@@ -10,7 +10,7 @@ import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { PageTransition } from "@/components/page-transition"
 import { AnimatedLayout, AnimatedCard, AnimatedGrid, AnimatedGridItem } from "@/components/animated-layout"
-import { motion } from "framer-motion"
+import { motion, MotionConfig } from "framer-motion"
 import {
   Activity as ActivityIcon,
   FileText,
@@ -31,6 +31,8 @@ import { useWebSocket, useJobUpdates } from "@/contexts/WebSocketContext"
 import { apiClient } from "@/lib/api"
 import { toast } from '@/lib/notify'
 import { ExecutiveDriftAlertsWidget } from "@/app/(dashboard)/components/ExecutiveDriftAlertsWidget"
+import { useReducedMotion } from "@/hooks/use-reduced-motion"
+import { Skeleton, SkeletonStats, SkeletonCard, SkeletonList } from "@/components/ui/skeleton"
 
 interface DashboardData {
   projects: {
@@ -53,7 +55,12 @@ interface DashboardData {
     resource_type: string
     resource_id: string
     created_at: string
+    new_values?: Record<string, unknown>
   }>
+  ai_performance?: {
+    avg_response_time_ms: number
+    success_rate: number
+  } | null
 }
 
 export default function Dashboard() {
@@ -64,7 +71,9 @@ export default function Dashboard() {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
   const [aiProviders, setAiProviders] = useState<any[]>([])
   const [recentJobs, setRecentJobs] = useState<any[]>([])
+  const [integrations, setIntegrations] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const prefersReducedMotion = useReducedMotion()
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -72,26 +81,22 @@ export default function Dashboard() {
 
       try {
         setLoading(true)
-        const [analytics, providers, jobs, projectsData] = await Promise.all([
+        const [analytics, providers, jobs, projectsData, integrationsRes] = await Promise.all([
           apiClient.getDashboardAnalytics(),
           apiClient.getAIProviders(),
           apiClient.getJobs({ limit: 5 }),
-          apiClient.getProjects({ page: 1, limit: 1 }) // Get total count from projects endpoint
+          apiClient.getProjects({ page: 1, limit: 1 }),
+          apiClient.getIntegrations().catch(() => [])
         ])
 
-        setDashboardData(analytics)
+        setDashboardData({
+          ...analytics,
+          projects: { ...analytics.projects, total_projects: projectsData.pagination.total },
+          ai_performance: analytics.ai_performance ?? null,
+        })
         setAiProviders(providers)
         setRecentJobs(jobs.jobs)
-
-        // Update analytics with correct project count from projects endpoint
-        const updatedAnalytics = {
-          ...analytics,
-          projects: {
-            ...analytics.projects,
-            total_projects: projectsData.pagination.total
-          }
-        }
-        setDashboardData(updatedAnalytics)
+        setIntegrations(Array.isArray(integrationsRes) ? integrationsRes : [])
       } catch (error) {
         console.error("Failed to fetch dashboard data:", error)
         toast.error("Failed to load dashboard data")
@@ -102,7 +107,6 @@ export default function Dashboard() {
 
     fetchDashboardData()
 
-    // Refresh data every 30 seconds
     const interval = setInterval(fetchDashboardData, 30000)
     return () => clearInterval(interval)
   }, [isAuthenticated])
@@ -149,20 +153,54 @@ export default function Dashboard() {
     },
   ]
 
-  const providersData = aiProviders.map(provider => ({
-    name: provider.name,
-    status: provider.is_active ? "active" : "inactive",
-    health: provider.is_active ? 95 + Math.floor(Math.random() * 5) : 0,
-    requests: provider.usage_stats?.total_requests || "0",
-    color: provider.is_active ? "emerald" : "slate",
-  }))
+  const providersData = aiProviders.map(provider => {
+    const totalRequests = provider.requestCount ?? provider.usage_stats?.total_requests ?? 0
+    const reqNum = typeof totalRequests === "number" ? totalRequests : parseInt(String(totalRequests || "0"), 10)
+    const successRate = provider.success_rate != null ? Math.round(provider.success_rate) : null
+    return {
+      id: provider.id ?? provider.name,
+      name: provider.name,
+      status: provider.is_active ? "active" : "inactive",
+      health: successRate,
+      requests: reqNum,
+      color: provider.is_active ? "emerald" : "slate",
+    }
+  })
 
-  const integrationData = [
-    { name: "Confluence", status: "connected", lastSync: "2 min ago", color: "emerald" },
-    { name: "SharePoint", status: "connected", lastSync: "5 min ago", color: "emerald" },
-    { name: "Adobe Document Services", status: "warning", lastSync: "1 hour ago", color: "yellow" },
-    { name: "GitHub", status: "connected", lastSync: "30 sec ago", color: "emerald" },
-  ]
+  const formatRelativeTime = (dateInput: string | Date | null | undefined): string => {
+    if (!dateInput) return "Never"
+    const date = new Date(dateInput)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffMins = Math.floor(diffMs / 60000)
+    const diffHours = Math.floor(diffMs / 3600000)
+    const diffDays = Math.floor(diffMs / 86400000)
+    if (diffMins < 1) return "Just now"
+    if (diffMins < 60) return `${diffMins} min ago`
+    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`
+    return `${diffDays} day${diffDays > 1 ? "s" : ""} ago`
+  }
+
+  const integrationTypeLabel: Record<string, string> = {
+    confluence: "Confluence",
+    sharepoint: "SharePoint",
+    github: "GitHub",
+    notion: "Notion",
+    jira: "Jira",
+    ibabs: "iBabs",
+    adobe: "Adobe Document Services",
+  }
+
+  const integrationData = integrations.slice(0, 8).map((i: any) => {
+    const status = i.sync_status === "completed" || i.sync_status === "success" ? "connected" : i.sync_status === "error" || i.sync_status === "failed" ? "error" : "warning"
+    const color = status === "connected" ? "emerald" : status === "error" ? "red" : "yellow"
+    return {
+      name: integrationTypeLabel[i.type?.toLowerCase()] || (typeof i.name === "string" ? i.name : i.type || "Integration"),
+      status,
+      lastSync: formatRelativeTime(i.last_sync),
+      color,
+    }
+  })
 
   const activityData = dashboardData?.recent_activity?.slice(0, 4).map(activity => {
     const action = activity.action.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
@@ -233,6 +271,21 @@ export default function Dashboard() {
     },
   ]
 
+  const activityDotClass: Record<string, string> = {
+    emerald: "bg-emerald-500",
+    blue: "bg-blue-500",
+    red: "bg-red-500",
+    purple: "bg-purple-500",
+  }
+  const providerBgClass: Record<string, string> = {
+    emerald: "bg-emerald-50 dark:bg-emerald-900/20",
+    slate: "bg-slate-50 dark:bg-slate-900/20",
+  }
+  const providerIconClass: Record<string, string> = {
+    emerald: "text-emerald-500",
+    slate: "text-slate-500",
+  }
+
   if (loading) {
     return (
       <PageTransition>
@@ -241,11 +294,14 @@ export default function Dashboard() {
           <div className="flex-1 flex flex-col overflow-hidden">
             <Header />
             <main className="flex-1 overflow-y-auto p-6 visible-scrollbar">
-              <div className="flex items-center justify-center h-96">
-                <div className="text-center">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-                  <p className="text-muted-foreground">Loading dashboard data...</p>
+              <div className="space-y-8 max-w-7xl mx-auto">
+                <Skeleton className="h-40 w-full rounded-2xl" />
+                <SkeletonStats items={4} />
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <SkeletonCard className="w-full" />
+                  <SkeletonCard className="w-full" />
                 </div>
+                <SkeletonList items={4} />
               </div>
             </main>
           </div>
@@ -256,6 +312,7 @@ export default function Dashboard() {
 
   return (
     <PageTransition>
+      <MotionConfig reducedMotion={prefersReducedMotion ? "user" : "always"}>
       <div className="flex h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
         <Sidebar />
         <div className="flex-1 flex flex-col overflow-hidden">
@@ -272,14 +329,14 @@ export default function Dashboard() {
                 <div className="absolute inset-0 bg-gradient-to-br from-blue-900/40 to-blue-800/20"></div>
                 <div className="relative z-10">
                   <motion.div
-                    initial={{ opacity: 0, x: -20 }}
+                    initial={prefersReducedMotion ? false : { opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.2, duration: 0.5 }}
+                    transition={prefersReducedMotion ? { duration: 0 } : { delay: 0.2, duration: 0.5 }}
                     className="flex items-center space-x-3 mb-4"
                   >
                     <motion.div
-                      animate={{ rotate: 360 }}
-                      transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, ease: "linear" }}
+                      animate={prefersReducedMotion ? {} : { rotate: 360 }}
+                      transition={prefersReducedMotion ? { duration: 0 } : { duration: 2, repeat: Number.POSITIVE_INFINITY, ease: "linear" }}
                     >
                       <Sparkles className="h-8 w-8" />
                     </motion.div>
@@ -294,16 +351,20 @@ export default function Dashboard() {
                     Advanced Document Processing Analytics - Where every document builds intelligence for the next generation
                   </motion.p>
                 </div>
-                <motion.div
-                  animate={{ scale: [1, 1.1, 1], opacity: [0.3, 0.5, 0.3] }}
-                  transition={{ duration: 4, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
-                  className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-32 translate-x-32"
-                />
-                <motion.div
-                  animate={{ scale: [1, 1.2, 1], opacity: [0.2, 0.4, 0.2] }}
-                  transition={{ duration: 3, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut", delay: 1 }}
-                  className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-24 -translate-x-24"
-                />
+                {!prefersReducedMotion && (
+                  <>
+                    <motion.div
+                      animate={{ scale: [1, 1.1, 1], opacity: [0.3, 0.5, 0.3] }}
+                      transition={{ duration: 4, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
+                      className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-32 translate-x-32"
+                    />
+                    <motion.div
+                      animate={{ scale: [1, 1.2, 1], opacity: [0.2, 0.4, 0.2] }}
+                      transition={{ duration: 3, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut", delay: 1 }}
+                      className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-24 -translate-x-24"
+                    />
+                  </>
+                )}
               </motion.div>
 
               {/* Compounding Intelligence Showcase */}
@@ -534,7 +595,7 @@ export default function Dashboard() {
                   >
                     {providersData.map((provider, index) => (
                       <motion.div
-                        key={provider.name}
+                        key={provider.id}
                         variants={{
                           initial: { opacity: 0, x: -20 },
                           animate: { opacity: 1, x: 0 },
@@ -547,29 +608,35 @@ export default function Dashboard() {
                           <motion.div
                             whileHover={{ rotate: 180 }}
                             transition={{ duration: 0.3 }}
-                            className={`p-2 rounded-lg bg-${provider.color}-50 dark:bg-${provider.color}-900/20`}
+                            className={`p-2 rounded-lg ${providerBgClass[provider.color] ?? providerBgClass.slate}`}
                           >
-                            <Zap className={`h-5 w-5 text-${provider.color}-500`} />
+                            <Zap className={`h-5 w-5 ${providerIconClass[provider.color] ?? providerIconClass.slate}`} />
                           </motion.div>
                           <div>
                             <p className="font-semibold text-slate-800 dark:text-slate-100">{provider.name}</p>
                             <p className="text-sm text-slate-500 dark:text-slate-400">
-                              {provider.requests} requests today
+                              {provider.requests} total requests
                             </p>
                           </div>
                         </div>
                         <div className="flex items-center space-x-4">
                           <div className="text-right">
-                            <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                              {provider.health}% uptime
-                            </p>
-                            <motion.div
-                              initial={{ width: 0 }}
-                              animate={{ width: "6rem" }}
-                              transition={{ delay: index * 0.1 + 0.5, duration: 0.8 }}
-                            >
-                              <Progress value={provider.health} className="w-24 h-2 mt-1" />
-                            </motion.div>
+                            {provider.health != null ? (
+                              <>
+                                <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                                  {provider.health}% success
+                                </p>
+                                <motion.div
+                                  initial={prefersReducedMotion ? false : { width: 0 }}
+                                  animate={{ width: "6rem" }}
+                                  transition={prefersReducedMotion ? { duration: 0 } : { delay: index * 0.1 + 0.5, duration: 0.8 }}
+                                >
+                                  <Progress value={provider.health} className="w-24 h-2 mt-1" />
+                                </motion.div>
+                              </>
+                            ) : (
+                              <p className="text-sm text-slate-400 dark:text-slate-500">—</p>
+                            )}
                           </div>
                           <motion.div
                             initial={{ scale: 0 }}
@@ -975,33 +1042,37 @@ export default function Dashboard() {
                 <CardContent>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     {[
-                      {
-                        label: "Avg Response Time",
-                        value: dashboardData?.ai?.total_generations ? "1.2s" : "N/A",
-                        icon: Clock,
-                        color: "text-blue-500",
-                        bgColor: "bg-blue-50 dark:bg-blue-900/20"
-                      },
-                      {
-                        label: "Success Rate",
-                        value: dashboardData?.ai?.total_generations ? "98.5%" : "N/A",
-                        icon: CheckCircle,
-                        color: "text-emerald-500",
-                        bgColor: "bg-emerald-50 dark:bg-emerald-900/20"
-                      },
+                      ...(dashboardData?.ai_performance
+                        ? [
+                            {
+                              label: "Avg Response Time",
+                              value: `${(dashboardData.ai_performance.avg_response_time_ms / 1000).toFixed(1)}s`,
+                              icon: Clock,
+                              color: "text-blue-500",
+                              bgColor: "bg-blue-50 dark:bg-blue-900/20",
+                            },
+                            {
+                              label: "Success Rate",
+                              value: `${dashboardData.ai_performance.success_rate.toFixed(1)}%`,
+                              icon: CheckCircle,
+                              color: "text-emerald-500",
+                              bgColor: "bg-emerald-50 dark:bg-emerald-900/20",
+                            },
+                          ]
+                        : []),
                       {
                         label: "Active Providers",
                         value: aiProviders.filter(p => p.is_active).length.toString(),
                         icon: Zap,
                         color: "text-purple-500",
-                        bgColor: "bg-purple-50 dark:bg-purple-900/20"
+                        bgColor: "bg-purple-50 dark:bg-purple-900/20",
                       },
                       {
-                        label: "Documents Today",
+                        label: "Documents (30d)",
                         value: dashboardData?.documents?.documents_last_30d?.toString() || "0",
                         icon: FileText,
                         color: "text-orange-500",
-                        bgColor: "bg-orange-50 dark:bg-orange-900/20"
+                        bgColor: "bg-orange-50 dark:bg-orange-900/20",
                       },
                     ].map((metric, index) => (
                       <motion.div
@@ -1063,32 +1134,36 @@ export default function Dashboard() {
                       }}
                       className="space-y-4"
                     >
-                      {integrationData.map((integration, index) => (
-                        <motion.div
-                          key={integration.name}
-                          variants={{
-                            initial: { opacity: 0, x: -20 },
-                            animate: { opacity: 1, x: 0 },
-                          }}
-                          whileHover={{ x: 4 }}
-                          className="flex items-center justify-between p-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-all duration-200"
-                        >
-                          <div className="flex items-center space-x-3">
-                            <motion.div
-                              animate={{ scale: [1, 1.2, 1] }}
-                              transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, delay: index * 0.5 }}
-                            >
-                              {integration.status === "connected" ? (
-                                <CheckCircle className="h-5 w-5 text-emerald-500" />
-                              ) : (
-                                <AlertCircle className="h-5 w-5 text-yellow-500" />
-                              )}
-                            </motion.div>
-                            <span className="font-medium text-slate-700 dark:text-slate-200">{integration.name}</span>
-                          </div>
-                          <span className="text-sm text-slate-500 dark:text-slate-400">{integration.lastSync}</span>
-                        </motion.div>
-                      ))}
+                      {integrationData.length === 0 ? (
+                        <p className="text-sm text-slate-500 dark:text-slate-400 py-4 text-center">No integrations configured</p>
+                      ) : (
+                        integrationData.map((integration, index) => (
+                          <motion.div
+                            key={integration.name}
+                            variants={{
+                              initial: { opacity: 0, x: -20 },
+                              animate: { opacity: 1, x: 0 },
+                            }}
+                            whileHover={{ x: 4 }}
+                            className="flex items-center justify-between p-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-all duration-200"
+                          >
+                            <div className="flex items-center space-x-3">
+                              <motion.div
+                                animate={prefersReducedMotion ? {} : { scale: [1, 1.2, 1] }}
+                                transition={prefersReducedMotion ? { duration: 0 } : { duration: 2, repeat: Number.POSITIVE_INFINITY, delay: index * 0.5 }}
+                              >
+                                {integration.status === "connected" ? (
+                                  <CheckCircle className="h-5 w-5 text-emerald-500" />
+                                ) : (
+                                  <AlertCircle className="h-5 w-5 text-yellow-500" />
+                                )}
+                              </motion.div>
+                              <span className="font-medium text-slate-700 dark:text-slate-200">{integration.name}</span>
+                            </div>
+                            <span className="text-sm text-slate-500 dark:text-slate-400">{integration.lastSync}</span>
+                          </motion.div>
+                        ))
+                      )}
                     </motion.div>
                   </CardContent>
                 </AnimatedCard>
@@ -1139,7 +1214,7 @@ export default function Dashboard() {
                           <motion.div
                             animate={{ scale: [1, 1.3, 1] }}
                             transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, delay: index * 0.3 }}
-                            className={`w-3 h-3 bg-${activity.color}-500 rounded-full mt-2`}
+                            className={`w-3 h-3 rounded-full mt-2 ${activityDotClass[activity.color] ?? "bg-slate-500"}`}
                           />
                           <div className="flex-1">
                             <p className="text-sm font-medium text-slate-700 dark:text-slate-200">{activity.action}</p>
@@ -1217,6 +1292,7 @@ export default function Dashboard() {
           </main>
         </div>
       </div>
+      </MotionConfig>
     </PageTransition>
   )
 }

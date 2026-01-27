@@ -1,6 +1,6 @@
 'use client'
 
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts'
 
 interface QualityTrend {
   date: string
@@ -64,8 +64,6 @@ export function QualityTrendsChart({ data }: QualityTrendsChartProps) {
             }}
             labelStyle={{ fontWeight: 'bold', marginBottom: '8px' }}
           />
-          // @ts-ignore
-          <Legend />
           <Area
             yAxisId="left"
             type="monotone"

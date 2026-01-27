@@ -216,7 +216,7 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
 
   // Check for extracted entities when dialog opens
   const checkForEntities = async () => {
-    if (!projectId) {
+    if (!projectId || projectId === 'undefined') {
       console.warn('No projectId available for entity check')
       return
     }
@@ -1156,32 +1156,75 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
                   Baseline Component Completeness
                 </h4>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                  {[
-                    { name: 'Scope', key: 'scope_baseline', completeness: 100, color: 'blue' },
-                    { name: 'Technical', key: 'technical_baseline', completeness: 100, color: 'green' },
-                    { name: 'Schedule', key: 'timeline_baseline', completeness: 75, color: 'yellow' },
-                    { name: 'Cost', key: 'cost_baseline', completeness: 50, color: 'orange' },
-                    { name: 'Resource', key: 'resource_baseline', completeness: 60, color: 'purple' },
-                    { name: 'Success Criteria', key: 'success_criteria', completeness: 90, color: 'emerald' }
-                  ].map((component) => {
-                    const hasData = viewingBaseline[component.key] && Object.keys(viewingBaseline[component.key]).length > 0
-                    const colorClass = hasData
-                      ? `border-${component.color}-200 bg-${component.color}-50`
-                      : 'border-gray-200 bg-gray-50'
+                  {(() => {
+                    const calculateCompleteness = (key: string, data: any): number => {
+                      if (!data) return 0
+                      let obj: any = data
+                      if (typeof data === 'string') {
+                        try {
+                          obj = JSON.parse(data)
+                        } catch {
+                          return 0
+                        }
+                      }
+                      if (!obj || typeof obj !== 'object') return 0
+                      
+                      // Expected fields per component type
+                      const expectedFields: Record<string, string[]> = {
+                        scope_baseline: ['deliverables', 'requirements', 'constraints', 'scope_items'],
+                        technical_baseline: ['technology_stack', 'technologies', 'architecture'],
+                        timeline_baseline: ['phases', 'key_milestones', 'activities', 'project_duration'],
+                        cost_baseline: ['total_budget', 'budget_resources', 'cost_breakdown'],
+                        resource_baseline: ['stakeholders', 'team_members', 'equipment'],
+                        success_criteria: ['kpis', 'success_metrics', 'acceptance_criteria']
+                      }
+                      
+                      const expected = expectedFields[key] || []
+                      if (expected.length === 0) return 0
+                      
+                      let populated = 0
+                      expected.forEach(field => {
+                        const value = obj[field]
+                        if (value !== undefined && value !== null) {
+                          if (Array.isArray(value) && value.length > 0) populated++
+                          else if (typeof value === 'object' && Object.keys(value).length > 0) populated++
+                          else if (typeof value === 'string' && value.trim().length > 0) populated++
+                          else if (typeof value === 'number' && value > 0) populated++
+                        }
+                      })
+                      
+                      return Math.round((populated / expected.length) * 100)
+                    }
                     
-                    return (
-                      <div key={component.key} className={`p-2 border rounded-lg ${colorClass}`}>
-                        <div className="flex items-center justify-between mb-1">
-                          <p className="text-xs font-medium">{component.name}</p>
-                          <span className="text-xs">{hasData ? '✅' : '❌'}</span>
+                    return [
+                      { name: 'Scope', key: 'scope_baseline', color: 'blue' },
+                      { name: 'Technical', key: 'technical_baseline', color: 'green' },
+                      { name: 'Schedule', key: 'timeline_baseline', color: 'yellow' },
+                      { name: 'Cost', key: 'cost_baseline', color: 'orange' },
+                      { name: 'Resource', key: 'resource_baseline', color: 'purple' },
+                      { name: 'Success Criteria', key: 'success_criteria', color: 'emerald' }
+                    ].map((component) => {
+                      const data = viewingBaseline[component.key as keyof Baseline]
+                      const hasData = data && (typeof data === 'object' ? Object.keys(data).length > 0 : true)
+                      const completeness = hasData ? calculateCompleteness(component.key, data) : 0
+                      const colorClass = hasData
+                        ? `border-${component.color}-200 bg-${component.color}-50`
+                        : 'border-gray-200 bg-gray-50'
+                      
+                      return (
+                        <div key={component.key} className={`p-2 border rounded-lg ${colorClass}`}>
+                          <div className="flex items-center justify-between mb-1">
+                            <p className="text-xs font-medium">{component.name}</p>
+                            <span className="text-xs">{hasData ? '✅' : '❌'}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Progress value={completeness} className="h-1.5 flex-1" />
+                            <span className="text-xs font-semibold">{completeness}%</span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Progress value={hasData ? component.completeness : 0} className="h-1.5 flex-1" />
-                          <span className="text-xs font-semibold">{hasData ? component.completeness : 0}%</span>
-                        </div>
-                      </div>
-                    )
-                  })}
+                      )
+                    })
+                  })()}
                 </div>
               </div>
 

@@ -386,6 +386,13 @@ export async function initializeRegistry(): Promise<void> {
     save: saveScopeVerification
   })
 
+  // Register dt_assets module (Digital Twin - extract from L0 YAML, save to extracted_dt_assets)
+  const { extractDtAssets, saveDtAssets } = await import('./entities/dt_assets')
+  extractionRegistry.register('dt_assets', {
+    extract: extractDtAssets,
+    save: saveDtAssets
+  })
+
   // Register schedule_baseline module (Phase 2 - Schedule)
   const { extractScheduleBaseline, saveScheduleBaseline } = await import('./entities/schedule_baseline')
   extractionRegistry.register('schedule_baseline', {
@@ -426,6 +433,13 @@ export async function initializeRegistry(): Promise<void> {
   extractionRegistry.register('budget_baseline', {
     extract: extractBudgetBaseline,
     save: saveBudgetBaseline
+  })
+
+  // Register cost_actuals module (Phase 2 - Finance)
+  const { extractCostActuals, saveCostActuals } = await import('./entities/cost_actuals')
+  extractionRegistry.register('cost_actuals', {
+    extract: extractCostActuals,
+    save: saveCostActuals
   })
 
   // Register cost_estimates module (Phase 2 - Finance)
@@ -491,6 +505,48 @@ export async function initializeRegistry(): Promise<void> {
     save: saveProjectOrgChart
   })
 
+  // Register resource_assignments module (Phase 3 - Resources)
+  const { extractResourceAssignments, saveResourceAssignments } = await import('./entities/resource_assignments')
+  extractionRegistry.register('resource_assignments', {
+    extract: extractResourceAssignments,
+    save: saveResourceAssignments
+  })
+
+  // Register resource_pool module (Phase 3 - Resources)
+  const { extractResourcePool, saveResourcePool } = await import('./entities/resource_pool')
+  extractionRegistry.register('resource_pool', {
+    extract: extractResourcePool,
+    save: saveResourcePool
+  })
+
+  // Register capacity_forecasts module (Phase 3 - Resources)
+  const { extractCapacityForecasts, saveCapacityForecasts } = await import('./entities/capacity_forecasts')
+  extractionRegistry.register('capacity_forecasts', {
+    extract: extractCapacityForecasts,
+    save: saveCapacityForecasts
+  })
+
+  // Register utilization_records module (Phase 3 - Resources)
+  const { extractUtilizationRecords, saveUtilizationRecords } = await import('./entities/utilization_records')
+  extractionRegistry.register('utilization_records', {
+    extract: extractUtilizationRecords,
+    save: saveUtilizationRecords
+  })
+
+  // Register resource_conflicts module (Phase 3 - Resources)
+  const { extractResourceConflicts, saveResourceConflicts } = await import('./entities/resource_conflicts')
+  extractionRegistry.register('resource_conflicts', {
+    extract: extractResourceConflicts,
+    save: saveResourceConflicts
+  })
+
+  // Register onboarding_offboarding module (Phase 3 - Resources)
+  const { extractOnboardingOffboarding, saveOnboardingOffboarding } = await import('./entities/onboarding_offboarding')
+  extractionRegistry.register('onboarding_offboarding', {
+    extract: extractOnboardingOffboarding,
+    save: saveOnboardingOffboarding
+  })
+
   // Register risk_appetite module (Phase 3 - Risk Extensions)
   const { extractRiskAppetite, saveRiskAppetite } = await import('./entities/risk_appetite')
   extractionRegistry.register('risk_appetite', {
@@ -510,6 +566,48 @@ export async function initializeRegistry(): Promise<void> {
   extractionRegistry.register('probability_impact_matrix', {
     extract: extractProbabilityImpactMatrix,
     save: saveProbabilityImpactMatrix
+  })
+
+  // Register risk_assessments module (Phase 3 - Risk Extensions)
+  const { extractRiskAssessments, saveRiskAssessments } = await import('./entities/risk_assessments')
+  extractionRegistry.register('risk_assessments', {
+    extract: extractRiskAssessments,
+    save: saveRiskAssessments
+  })
+
+  // Register risk_response_plans module (Phase 3 - Risk Extensions)
+  const { extractRiskResponsePlans, saveRiskResponsePlans } = await import('./entities/risk_response_plans')
+  extractionRegistry.register('risk_response_plans', {
+    extract: extractRiskResponsePlans,
+    save: saveRiskResponsePlans
+  })
+
+  // Register risk_triggers module (Phase 3 - Risk Extensions)
+  const { extractRiskTriggers, saveRiskTriggers } = await import('./entities/risk_triggers')
+  extractionRegistry.register('risk_triggers', {
+    extract: extractRiskTriggers,
+    save: saveRiskTriggers
+  })
+
+  // Register risk_reviews module (Phase 3 - Risk Extensions)
+  const { extractRiskReviews, saveRiskReviews } = await import('./entities/risk_reviews')
+  extractionRegistry.register('risk_reviews', {
+    extract: extractRiskReviews,
+    save: saveRiskReviews
+  })
+
+  // Register contingency_reserves module (Phase 3 - Risk Extensions)
+  const { extractContingencyReserves, saveContingencyReserves } = await import('./entities/contingency_reserves')
+  extractionRegistry.register('contingency_reserves', {
+    extract: extractContingencyReserves,
+    save: saveContingencyReserves
+  })
+
+  // Register risk_metrics module (Phase 3 - Risk Extensions)
+  const { extractRiskMetrics, saveRiskMetrics } = await import('./entities/risk_metrics')
+  extractionRegistry.register('risk_metrics', {
+    extract: extractRiskMetrics,
+    save: saveRiskMetrics
   })
 
   // Register issue_log module (Phase 3 - Issues)
@@ -538,6 +636,34 @@ export async function initializeRegistry(): Promise<void> {
   extractionRegistry.register('communication_logs', {
     extract: extractCommunicationLogs,
     save: saveCommunicationLogs
+  })
+
+  // Register engagement_actions module (Phase 4 - Stakeholder Ops)
+  const { extractEngagementActions, saveEngagementActions } = await import('./entities/engagement_actions')
+  extractionRegistry.register('engagement_actions', {
+    extract: extractEngagementActions,
+    save: saveEngagementActions
+  })
+
+  // Register satisfaction_surveys module (Phase 4 - Stakeholder Ops)
+  const { extractSatisfactionSurveys, saveSatisfactionSurveys } = await import('./entities/satisfaction_surveys')
+  extractionRegistry.register('satisfaction_surveys', {
+    extract: extractSatisfactionSurveys,
+    save: saveSatisfactionSurveys
+  })
+
+  // Register stakeholder_issues module (Phase 4 - Stakeholder Ops)
+  const { extractStakeholderIssues, saveStakeholderIssues } = await import('./entities/stakeholder_issues')
+  extractionRegistry.register('stakeholder_issues', {
+    extract: extractStakeholderIssues,
+    save: saveStakeholderIssues
+  })
+
+  // Register relationship_health module (Phase 4 - Stakeholder Ops)
+  const { extractRelationshipHealth, saveRelationshipHealth } = await import('./entities/relationship_health')
+  extractionRegistry.register('relationship_health', {
+    extract: extractRelationshipHealth,
+    save: saveRelationshipHealth
   })
 
   // Register action_items module (Phase 4 - Stakeholder Ops)
@@ -630,11 +756,18 @@ export async function initializeRegistry(): Promise<void> {
   extractionRegistry.setFeatureFlagFromEnv('schedule_variances')
   extractionRegistry.setFeatureFlagFromEnv('schedule_forecasts')
   extractionRegistry.setFeatureFlagFromEnv('budget_baseline')
+  extractionRegistry.setFeatureFlagFromEnv('cost_actuals')
   extractionRegistry.setFeatureFlagFromEnv('cost_estimates')
   extractionRegistry.setFeatureFlagFromEnv('funding_tranches')
   extractionRegistry.setFeatureFlagFromEnv('financial_variances')
   extractionRegistry.setFeatureFlagFromEnv('procurement_costs')
   extractionRegistry.setFeatureFlagFromEnv('resource_plans')
+  extractionRegistry.setFeatureFlagFromEnv('resource_assignments')
+  extractionRegistry.setFeatureFlagFromEnv('resource_pool')
+  extractionRegistry.setFeatureFlagFromEnv('capacity_forecasts')
+  extractionRegistry.setFeatureFlagFromEnv('utilization_records')
+  extractionRegistry.setFeatureFlagFromEnv('resource_conflicts')
+  extractionRegistry.setFeatureFlagFromEnv('onboarding_offboarding')
   extractionRegistry.setFeatureFlagFromEnv('roles_and_responsibilities')
   extractionRegistry.setFeatureFlagFromEnv('team_availability')
   extractionRegistry.setFeatureFlagFromEnv('labor_rates')
@@ -642,10 +775,20 @@ export async function initializeRegistry(): Promise<void> {
   extractionRegistry.setFeatureFlagFromEnv('risk_appetite')
   extractionRegistry.setFeatureFlagFromEnv('risk_checklists')
   extractionRegistry.setFeatureFlagFromEnv('probability_impact_matrix')
+  extractionRegistry.setFeatureFlagFromEnv('risk_assessments')
+  extractionRegistry.setFeatureFlagFromEnv('risk_response_plans')
+  extractionRegistry.setFeatureFlagFromEnv('risk_triggers')
+  extractionRegistry.setFeatureFlagFromEnv('risk_reviews')
+  extractionRegistry.setFeatureFlagFromEnv('contingency_reserves')
+  extractionRegistry.setFeatureFlagFromEnv('risk_metrics')
   extractionRegistry.setFeatureFlagFromEnv('issue_log')
   extractionRegistry.setFeatureFlagFromEnv('lessons_learned')
   extractionRegistry.setFeatureFlagFromEnv('stakeholder_engagements')
   extractionRegistry.setFeatureFlagFromEnv('communication_logs')
+  extractionRegistry.setFeatureFlagFromEnv('engagement_actions')
+  extractionRegistry.setFeatureFlagFromEnv('satisfaction_surveys')
+  extractionRegistry.setFeatureFlagFromEnv('stakeholder_issues')
+  extractionRegistry.setFeatureFlagFromEnv('relationship_health')
   extractionRegistry.setFeatureFlagFromEnv('action_items')
   extractionRegistry.setFeatureFlagFromEnv('meeting_minutes')
   extractionRegistry.setFeatureFlagFromEnv('project_charter_details')
@@ -653,6 +796,7 @@ export async function initializeRegistry(): Promise<void> {
   extractionRegistry.setFeatureFlagFromEnv('benefit_realization_plan')
   extractionRegistry.setFeatureFlagFromEnv('general_change_requests')
   extractionRegistry.setFeatureFlagFromEnv('project_team_evaluations')
+  extractionRegistry.setFeatureFlagFromEnv('dt_assets')
 
   logger.info('[EXTRACTION-REGISTRY] Registry initialized', {
     registeredEntities: extractionRegistry.getRegisteredEntities(),

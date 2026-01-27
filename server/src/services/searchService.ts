@@ -6,6 +6,7 @@
 import { pool } from '../database/connection'
 import { logger } from '../utils/logger'
 import { ContextRetrievalService } from '../modules/contextRetrieval/contextRetrievalService'
+import { getQdrantConfig } from '../modules/contextRetrieval/config/qdrantConfig'
 import type { ContextRetrievalRequest } from '../modules/contextRetrieval/types'
 
 export interface UniversalSearchRequest {
@@ -41,6 +42,8 @@ export interface SearchResult {
 }
 
 // Initialize ContextRetrievalService with default config
+// Include Qdrant if configured
+const qdrantConfig = getQdrantConfig()
 const contextRetrieval = new ContextRetrievalService(
   {
     model: 'text-embedding-ada-002',
@@ -73,7 +76,8 @@ const contextRetrieval = new ContextRetrievalService(
       mediumRelevance: 0.5,
       lowRelevance: 0.3
     }
-  }
+  },
+  qdrantConfig || undefined
 )
 
 /**

@@ -117,7 +117,9 @@ router.get(
         })
       }
 
-      const audit = await qualityAuditService.getDocumentAudit(documentId)
+      // Include document content for detailed compliance breakdown analysis
+      const includeContent = req.query.includeContent === 'true'
+      const audit = await qualityAuditService.getDocumentAudit(documentId, includeContent)
 
       if (!audit) {
         return res.status(404).json({
@@ -257,6 +259,7 @@ router.post(
       )
 
       if (docResult.rows.length === 0) {
+        logger.warn('[QUALITY-AUDIT-API] Document not found', { documentId })
         return res.status(404).json({
           success: false,
           error: 'Document not found'
@@ -265,25 +268,70 @@ router.post(
 
       const document = docResult.rows[0]
 
+      // Validate document has content
+      if (!document.content || typeof document.content !== 'string' || document.content.trim().length === 0) {
+        logger.warn('[QUALITY-AUDIT-API] Document has no content', { documentId })
+        return res.status(400).json({
+          success: false,
+          error: 'Document has no content to audit. Please ensure the document has been generated.'
+        })
+      }
+
       // Get project context
       const projectResult = await pool.query(
         'SELECT * FROM projects WHERE id = $1',
         [document.project_id]
       )
 
+      if (projectResult.rows.length === 0) {
+        logger.warn('[QUALITY-AUDIT-API] Project not found', { 
+          documentId, 
+          projectId: document.project_id 
+        })
+        return res.status(404).json({
+          success: false,
+          error: 'Project not found for this document'
+        })
+      }
+
       // Trigger audit
       logger.info('[QUALITY-AUDIT-API] Manual audit triggered', {
         documentId,
-        userId
+        userId,
+        timestamp: new Date().toISOString(),
+        contentLength: document.content.length
       })
 
-      const auditResult = await qualityAuditService.auditDocument(
+      // Wrap audit in try-catch for better error handling
+      let auditResult
+      try {
+        auditResult = await qualityAuditService.auditDocument(
+          documentId,
+          document.content,
+          document.document_type || document.title || 'Document',
+          projectResult.rows[0],
+          userId
+        )
+      } catch (auditError: any) {
+        logger.error('[QUALITY-AUDIT-API] Audit service failed', {
+          documentId,
+          userId,
+          error: auditError.message,
+          stack: auditError.stack
+        })
+        
+        return res.status(500).json({
+          success: false,
+          error: auditError.message || 'Quality audit failed. Please try again or contact support if the issue persists.'
+        })
+      }
+
+      logger.info('[QUALITY-AUDIT-API] Audit completed successfully', {
         documentId,
-        document.content,
-        document.document_type || document.title || 'Document',
-        projectResult.rows[0],
-        userId
-      )
+        userId,
+        overallScore: auditResult.overallScore,
+        overallGrade: auditResult.overallGrade
+      })
 
       res.json({
         success: true,

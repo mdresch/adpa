@@ -14,26 +14,9 @@ import { authenticateToken } from '../middleware/auth'
 import { validate } from '../middleware/validation'
 import { logger } from '../utils/logger'
 import { pool } from '../database/connection'
+import { verifyProjectAccess } from '../lib/projectAccess'
 
 const router = express.Router()
-
-/**
- * Helper function to check project access (admin or project owner)
- */
-async function checkProjectAccess(projectId: string, userId: string, userRole: string): Promise<boolean> {
-  if (userRole === 'admin') {
-    // Admin can access any project - just verify it exists
-    const projectCheck = await pool!.query('SELECT id FROM projects WHERE id = $1', [projectId])
-    return projectCheck.rows.length > 0
-  }
-
-  // Check if user is project owner
-  const result = await pool!.query(
-    'SELECT id FROM projects WHERE id = $1 AND created_by = $2',
-    [projectId, userId]
-  )
-  return result.rows.length > 0
-}
 
 /**
  * Determine project health based on SPI, CPI, and quality score
@@ -70,15 +53,25 @@ router.get(
     
     try {
       const { projectId } = req.params
-      const userId = (req as any).user?.id
-      const userRole = (req as any).user?.role || 'user'
+      const user = (req as any).user
 
-      // Check project access
-      const hasAccess = await checkProjectAccess(projectId, userId, userRole)
+      // Validate projectId format (should be UUID)
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      if (!uuidRegex.test(projectId)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid project ID format',
+          message: 'Project ID must be a valid UUID'
+        })
+      }
+
+      // Check project access using centralized function
+      const hasAccess = await verifyProjectAccess(user, projectId)
       if (!hasAccess) {
         return res.status(403).json({
           success: false,
-          error: 'Access denied: You do not have permission to view this project'
+          error: 'Access denied: You do not have permission to view this project',
+          message: 'You do not have access to this project'
         })
       }
 
@@ -182,9 +175,14 @@ router.get(
       })
     } catch (error: unknown) {
       log.error('[PERFORMANCE-ACTUALS] Failed to fetch performance actuals', {
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
+        projectId: req.params.projectId
       })
-      next(error)
+      res.status(500).json({
+        success: false,
+        error: 'Failed to fetch performance actuals',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      })
     }
   }
 )
@@ -201,15 +199,25 @@ router.get(
     
     try {
       const { projectId } = req.params
-      const userId = (req as any).user?.id
-      const userRole = (req as any).user?.role || 'user'
+      const user = (req as any).user
 
-      // Check project access
-      const hasAccess = await checkProjectAccess(projectId, userId, userRole)
+      // Validate projectId format (should be UUID)
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      if (!uuidRegex.test(projectId)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid project ID format',
+          message: 'Project ID must be a valid UUID'
+        })
+      }
+
+      // Check project access using centralized function
+      const hasAccess = await verifyProjectAccess(user, projectId)
       if (!hasAccess) {
         return res.status(403).json({
           success: false,
-          error: 'Access denied: You do not have permission to view this project'
+          error: 'Access denied: You do not have permission to view this project',
+          message: 'You do not have access to this project'
         })
       }
 
@@ -298,9 +306,14 @@ router.get(
       res.json(response)
     } catch (error: unknown) {
       log.error('[PERFORMANCE-ACTUALS] Failed to calculate performance summary', {
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
+        projectId: req.params.projectId
       })
-      next(error)
+      res.status(500).json({
+        success: false,
+        error: 'Failed to calculate performance summary',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      })
     }
   }
 )
@@ -337,15 +350,25 @@ router.post(
     
     try {
       const { projectId } = req.params
-      const userId = (req as any).user?.id
-      const userRole = (req as any).user?.role || 'user'
+      const user = (req as any).user
 
-      // Check project access
-      const hasAccess = await checkProjectAccess(projectId, userId, userRole)
+      // Validate projectId format (should be UUID)
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      if (!uuidRegex.test(projectId)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid project ID format',
+          message: 'Project ID must be a valid UUID'
+        })
+      }
+
+      // Check project access using centralized function
+      const hasAccess = await verifyProjectAccess(user, projectId)
       if (!hasAccess) {
         return res.status(403).json({
           success: false,
-          error: 'Access denied: You do not have permission to modify this project'
+          error: 'Access denied: You do not have permission to modify this project',
+          message: 'You do not have access to this project'
         })
       }
 
@@ -398,7 +421,7 @@ router.post(
           actual.rework_hours !== undefined ? actual.rework_hours : null,
           measurementDate,
           'manual',
-          userId,
+          user.id,
           actual.notes || null
         ]
       )
@@ -416,9 +439,14 @@ router.post(
       })
     } catch (error: unknown) {
       log.error('[PERFORMANCE-ACTUALS] Failed to save performance actual', {
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
+        projectId: req.params.projectId
       })
-      next(error)
+      res.status(500).json({
+        success: false,
+        error: 'Failed to save performance actual',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      })
     }
   }
 )

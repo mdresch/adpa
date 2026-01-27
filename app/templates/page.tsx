@@ -83,18 +83,16 @@ export default function Templates() {
   const router = useRouter()
   const [templates, setTemplates] = useState<any[]>([])
   const [loading, setLoading] = useState<boolean>(true)
-
-  useEffect(() => {
-    // handled by loadTemplates effect below; keep this effect minimal to satisfy React rules
-    // (no-op here)
-    return () => {}
-  }, [])
+  const [searchTerm, setSearchTerm] = useState("")
+  const [selectedFramework, setSelectedFramework] = useState("all")
 
   // load templates function (reusable by effects and manual refresh)
-  const loadTemplates = async (opts?: { showLoading?: boolean }) => {
+  const loadTemplates = async (opts?: { showLoading?: boolean; framework?: string }) => {
     if (opts?.showLoading !== false) setLoading(true)
     try {
-      const resp = await apiClient.getTemplates({ limit: 50 })
+      const params: { limit: number; framework?: string } = { limit: 200 }
+      if (opts?.framework && opts.framework !== "all") params.framework = opts.framework
+      const resp = await apiClient.getTemplates(params)
       setTemplates(resp.templates || [])
     } catch (err: any) {
       console.error("Failed to load templates", err)
@@ -103,22 +101,22 @@ export default function Templates() {
       setLoading(false)
     }
   }
-  // Polling and focus-based refresh: refresh every 15s and whenever window gains focus
+
+  // Polling and focus-based refresh: refresh every 15s and whenever window gains focus or framework filter changes
   useEffect(() => {
     let mounted = true
-    // initial load
-    loadTemplates()
+    const framework = selectedFramework !== "all" ? selectedFramework : undefined
+    loadTemplates({ framework })
 
     const interval = setInterval(() => {
       if (!mounted) return
-      loadTemplates({ showLoading: false })
+      loadTemplates({ showLoading: false, framework })
     }, 15000)
 
     const onFocus = () => {
       if (!mounted) return
-      loadTemplates({ showLoading: false })
-  }
-    // attach focus listener so switching back to the tab refreshes templates
+      loadTemplates({ showLoading: false, framework })
+    }
     window.addEventListener("focus", onFocus)
 
     return () => {
@@ -126,10 +124,7 @@ export default function Templates() {
       clearInterval(interval)
       window.removeEventListener("focus", onFocus)
     }
-  }, [])
-
-  const [searchTerm, setSearchTerm] = useState("")
-  const [selectedFramework, setSelectedFramework] = useState("all")
+  }, [selectedFramework])
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingTemplate, setEditingTemplate] = useState<any | null>(null)
 
@@ -260,7 +255,10 @@ export default function Templates() {
       await apiClient.cloneTemplate(id, { name: cloneName })
       toast.success('Template cloned')
       // refresh list to show the new clone
-      await loadTemplates({ showLoading: true })
+      await loadTemplates({
+        showLoading: true,
+        framework: selectedFramework !== 'all' ? selectedFramework : undefined,
+      })
     } catch (err: any) {
       console.error('Failed to clone template', err)
       toast.error(err?.message || 'Failed to clone template')
@@ -307,7 +305,10 @@ export default function Templates() {
     try {
       await apiClient.deleteTemplate(id)
       toast.success('Template deleted')
-      await loadTemplates({ showLoading: true })
+      await loadTemplates({
+        showLoading: true,
+        framework: selectedFramework !== 'all' ? selectedFramework : undefined,
+      })
     } catch (err: any) {
       console.error('Failed to delete template', err)
       toast.error(err?.message || 'Failed to delete template')
@@ -323,9 +324,11 @@ export default function Templates() {
     try {
       await apiClient.restoreTemplate(String(template.id))
       toast.success('Template restored')
-  await loadTemplates({ showLoading: true })
-  // refresh current archive page
-  await loadArchive(archivePage)
+      await loadTemplates({
+        showLoading: true,
+        framework: selectedFramework !== 'all' ? selectedFramework : undefined,
+      })
+      await loadArchive(archivePage)
     } catch (err: any) {
       console.error('Failed to restore template', err)
       toast.error(err?.message || 'Failed to restore template')
@@ -398,8 +401,10 @@ export default function Templates() {
 
       // Refresh templates from server to reflect DB state
       try {
-        const resp = await apiClient.getTemplates({ limit: 50 })
-        setTemplates(resp.templates || [])
+        await loadTemplates({
+          showLoading: false,
+          framework: selectedFramework !== 'all' ? selectedFramework : undefined,
+        })
       } catch (fetchErr) {
         console.warn("Failed to refresh templates after save", fetchErr)
       }
@@ -422,8 +427,8 @@ export default function Templates() {
 
   const filteredTemplates = templates.filter((template) => {
     const matchesSearch =
-      template.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      template.description.toLowerCase().includes(searchTerm.toLowerCase())
+      (template.name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (template.description || "").toLowerCase().includes(searchTerm.toLowerCase())
     const matchesFramework = selectedFramework === "all" || template.framework === selectedFramework
     // Exclude archived templates from main views (they appear only in Archive tab)
     const isNotArchived = template.development_status !== 'archived' && !template.deleted_at
@@ -449,7 +454,15 @@ export default function Templates() {
                   <Upload className="h-4 w-4 mr-2" />
                   Import Template
                 </Button>
-                <Button variant="outline" onClick={() => loadTemplates({ showLoading: true })}>
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    loadTemplates({
+                      showLoading: true,
+                      framework: selectedFramework !== 'all' ? selectedFramework : undefined,
+                    })
+                  }
+                >
                   Refresh
                 </Button>
                 <Dialog open={isDialogOpen} onOpenChange={(open: boolean) => { setIsDialogOpen(Boolean(open)); if (!open) { setEditingTemplate(null); } }}>
@@ -495,6 +508,7 @@ export default function Templates() {
                               <option value="BABOK v3">BABOK v3</option>
                               <option value="PMBOK 7">PMBOK 7</option>
                               <option value="DMBOK 2.0">DMBOK 2.0</option>
+                              <option value="Construction">Construction</option>
                               <option value="TOGAF">TOGAF</option>
                               <option value="SABSA">SABSA</option>
                               <option value="COBIT">COBIT</option>
@@ -772,6 +786,12 @@ export default function Templates() {
                   <option value="BABOK v3">BABOK v3</option>
                   <option value="PMBOK 7">PMBOK 7</option>
                   <option value="DMBOK 2.0">DMBOK 2.0</option>
+                  <option value="Construction">Construction</option>
+                  <option value="TOGAF">TOGAF</option>
+                  <option value="SABSA">SABSA</option>
+                  <option value="COBIT">COBIT</option>
+                  <option value="ITIL">ITIL</option>
+                  <option value="Custom">Custom</option>
                 </select>
               </div>
             </div>

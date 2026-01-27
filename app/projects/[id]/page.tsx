@@ -24,6 +24,7 @@ import { VariablesTab } from "./components/VariablesTab"
 import { TimelineTab } from "./components/TimelineTab"
 import { OverviewTab } from "./components/OverviewTab"
 import { DocumentsTab } from "./components/DocumentsTab"
+import { ProjectContextTab } from "./components/ProjectContextTab"
 import ProjectFinancialsTab from "@/components/project/ProjectFinancialsTab"
 import { ProjectRisksTab } from "@/components/project/ProjectRisksTab"
 import { ProjectIssuesTab } from "@/components/project/ProjectIssuesTab"
@@ -80,7 +81,7 @@ import {
   Shield,
   ExternalLink,
 } from "@/components/ui/icons-shim"
-import { Users2, Code } from "lucide-react"
+import { Users2, Code, Layers } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -341,23 +342,8 @@ export default function ProjectDetail() {
     } catch (error) {
       console.error("Failed to fetch project:", error)
       toast.error("Failed to load project")
-
-      // Fallback to mock data
-      setProject({
-        id: projectId,
-        name: "Customer Portal Redesign",
-        description: "Complete redesign of the customer-facing portal with improved UX and new features",
-        status: "active",
-        framework: "PMBOK 7",
-        priority: "high",
-        owner_id: "user1",
-        team_members: ["John Doe", "Jane Smith", "Mike Wilson", "Lisa Chen"],
-        start_date: "2024-01-15",
-        end_date: "2024-06-30",
-        created_at: "2024-01-01T00:00:00Z",
-        updated_at: "2024-01-20T00:00:00Z",
-      })
-
+      // Don't set mock data - let the UI show error state
+      setProject(null)
       setDocuments([])
     } finally {
       setLoading(false)
@@ -1234,6 +1220,28 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
         }
       })
 
+      // 🆕 Add project context as a source document if project context is used
+      // Project context is always used (name, description, framework, team, budget, timeline)
+      if (project && (project.name || project.description || project.framework)) {
+        const projectContextEntry = {
+          id: `project_context:${projectId}`, // Unique identifier for project context
+          title: `Project Context: ${projectName}`,
+          type: 'Project Context',
+          template_id: null,
+          status: 'active',
+          url: `/projects/${projectId}`, // Link to project page
+          lifecycle_phase: 0, // Project context is foundational (phase 0)
+          phase_name: 'Foundation',
+          priority_rank: 0, // Highest priority - always first
+          character_count: (projectDesc?.length || 0) + (projectName?.length || 0) + (framework?.length || 0),
+          word_count: Math.round(((projectDesc?.length || 0) + (projectName?.length || 0) + (framework?.length || 0)) / 5),
+          reading_time_minutes: 0,
+          is_project_context: true // Flag to identify this as project context
+        }
+        // Insert at the beginning (highest priority)
+        sourceDocuments.unshift(projectContextEntry)
+      }
+
       console.log('📚 [SAVE-1.5/6] Source documents tracked:', sourceDocuments.length, 'documents')
       if (sourceDocuments.length > 0) {
         console.log('  Source document names:', sourceDocuments.map(d => d.title).join(', '))
@@ -1251,6 +1259,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
           context_stats: {
             total_documents_available: documents.length,
             documents_used_as_context: relevantDocs.length,
+            project_context_used: true, // Project context is always used
             stakeholders_available: stakeholders?.length || 0,
             custom_settings_count: hasSettings ? Object.keys(project.settings).length : 0,
             custom_metadata_count: hasMetadata ? Object.keys(project.metadata).length : 0,
@@ -1262,6 +1271,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
           context_stats: {
             total_documents_available: documents.length,
             documents_used_as_context: relevantDocs.length,
+            project_context_used: true, // Project context is always used
             stakeholders_available: stakeholders?.length || 0,
             custom_settings_count: hasSettings ? Object.keys(project.settings).length : 0,
             custom_metadata_count: hasMetadata ? Object.keys(project.metadata).length : 0,
@@ -2188,7 +2198,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
   // Listen for document events via WebSocket and refresh documents for this project
   const { on, off } = useWebSocket()
   useEffect(() => {
-    // Join the project room to receive events
+    if (!projectId || projectId === 'undefined') return
     const room = `project:${projectId}`
     joinRoom(room)
 
@@ -2438,6 +2448,26 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
     )
   }
 
+  if (!projectId || projectId === 'undefined') {
+    return (
+      <div className="flex h-screen bg-background">
+        <Sidebar />
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <Header />
+          <main className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <h2 className="text-xl font-semibold mb-2">Invalid Project</h2>
+              <p className="text-muted-foreground mb-4">No project ID provided.</p>
+              <Button asChild>
+                <Link href="/projects">Back to Projects</Link>
+              </Button>
+            </div>
+          </main>
+        </div>
+      </div>
+    )
+  }
+
   if (loading) {
     return (
       <div className="flex h-screen bg-background">
@@ -2456,18 +2486,43 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
   }
 
   if (!project) {
+    if (loading) {
+      return (
+        <div className="flex h-screen bg-background">
+          <Sidebar />
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <Header />
+            <main className="flex-1 flex items-center justify-center">
+              <div className="text-center">
+                <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
+                <p className="text-muted-foreground">Loading project...</p>
+              </div>
+            </main>
+          </div>
+        </div>
+      )
+    }
     return (
       <div className="flex h-screen bg-background">
         <Sidebar />
         <div className="flex-1 flex flex-col overflow-hidden">
           <Header />
           <main className="flex-1 flex items-center justify-center">
-            <div className="text-center">
-              <h2 className="text-xl font-semibold mb-2">Project Not Found</h2>
-              <p className="text-muted-foreground mb-4">The project you're looking for doesn't exist.</p>
-              <Button asChild>
-                <Link href="/projects">Back to Projects</Link>
-              </Button>
+            <div className="text-center max-w-md">
+              <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
+              <h2 className="text-xl font-semibold mb-2">Failed to Load Project</h2>
+              <p className="text-muted-foreground mb-4">
+                Unable to load project data. Please check your connection and try again.
+              </p>
+              <div className="flex gap-2 justify-center">
+                <Button onClick={() => fetchProject()} variant="default">
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Retry
+                </Button>
+                <Button asChild variant="outline">
+                  <Link href="/projects">Back to Projects</Link>
+                </Button>
+              </div>
             </div>
           </main>
         </div>
@@ -2532,6 +2587,12 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                   <Link href={`/projects/${projectId}/drift`}>
                     <AlertTriangle className="h-4 w-4 mr-2" />
                     Drift Management
+                  </Link>
+                </Button>
+                <Button variant="outline" asChild>
+                  <Link href={`/projects/${projectId}/digital-twins`}>
+                    <Layers className="h-4 w-4 mr-2" />
+                    Digital Twins
                   </Link>
                 </Button>
                 <Dialog open={createDialogOpen} onOpenChange={(open: boolean) => {
@@ -3451,6 +3512,10 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
               <TabsList aria-label="Project management sections">
                 <TabsTrigger value="overview">Overview</TabsTrigger>
                 <TabsTrigger value="documents">Documents</TabsTrigger>
+                <TabsTrigger value="context">
+                  <FileText className="h-4 w-4 mr-2" />
+                  Project Context
+                </TabsTrigger>
                 <TabsTrigger value="extraction">
                   <Database className="h-4 w-4 mr-2" />
                   AI Extraction
@@ -3495,6 +3560,10 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                   <Settings className="h-4 w-4 mr-2" />
                   Integrations
                 </TabsTrigger>
+                <TabsTrigger value="digital-twins">
+                  <Layers className="h-4 w-4 mr-2" />
+                  Digital Twins
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="documents" className="space-y-4">
@@ -3515,6 +3584,10 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                   documentsPagination={documentsPagination}
                   setDocumentsPagination={setDocumentsPagination}
                 />
+              </TabsContent>
+
+              <TabsContent value="context" className="space-y-4">
+                <ProjectContextTab projectId={projectId} />
               </TabsContent>
 
               <TabsContent value="overview" className="space-y-4">
@@ -3597,6 +3670,28 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
 
               <TabsContent value="integrations" className="space-y-4">
                 <IntegrationsTab projectId={projectId} />
+              </TabsContent>
+
+              <TabsContent value="digital-twins" className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Layers className="h-5 w-5" />
+                      Digital Twins
+                    </CardTitle>
+                    <CardDescription>
+                      Manage physical assets, events, state snapshots, and document triggers.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Button asChild>
+                      <Link href={`/projects/${projectId}/digital-twins`}>
+                        <Layers className="h-4 w-4 mr-2" />
+                        Manage Digital Twins
+                      </Link>
+                    </Button>
+                  </CardContent>
+                </Card>
               </TabsContent>
             </Tabs>
           </div>

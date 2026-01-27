@@ -70,6 +70,31 @@ export function NotificationCenter() {
     // Track recent job notifications to prevent duplicate toasts
     const recentJobNotifications = new Set<string>()
     
+    // Listen for generic WebSocket notifications and route to notification center
+    // Filter out room join notifications to avoid spam
+    socket.on('notification', (data: { message: string; description?: string; title?: string }) => {
+      // Comprehensive filter for room join notifications - check all fields and case variations
+      const message = data.message?.toLowerCase() || ''
+      const title = data.title?.toLowerCase() || ''
+      const description = data.description?.toLowerCase() || ''
+      const combined = `${message} ${title} ${description}`.toLowerCase()
+      
+      // Skip room join notifications - they're handled by RoomStatusList component
+      if (combined.includes('joined') || 
+          combined.includes('realtime rooms') ||
+          combined.includes('realtime') ||
+          title.includes('realtime rooms') ||
+          message.includes('joined room')) {
+        return // Don't add to notification center
+      }
+      addNotification({
+        type: 'info',
+        title: data.title || 'Notification',
+        message: data.message,
+        metadata: {}
+      })
+    })
+    
     // Job completion notifications
     socket.on('job:completed', (data) => {
       addNotification({

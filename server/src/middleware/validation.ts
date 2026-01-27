@@ -98,7 +98,7 @@ export const schemas = {
   createProject: Joi.object({
     name: Joi.string().min(2).max(255).required(),
     description: Joi.string().max(3000).optional(),
-    framework: Joi.string().valid("TOGAF", "SABSA", "COBIT", "ITIL", "Custom", "BABOK", "PMBOK", "PMBOK 7", "DMBOK").required(),
+    framework: Joi.string().valid("TOGAF", "SABSA", "COBIT", "ITIL", "Custom", "BABOK", "PMBOK", "PMBOK 7", "DMBOK", "Construction").required(),
     priority: Joi.string().valid("low", "medium", "high", "critical").default("medium"),
     start_date: Joi.date().optional(),
     end_date: Joi.date().greater(Joi.ref("start_date")).optional(),
@@ -180,7 +180,7 @@ export const schemas = {
   createTemplate: Joi.object({
     name: Joi.string().min(2).max(255).required(),
     description: Joi.string().max(1000).optional(),
-    framework: Joi.string().valid("TOGAF", "SABSA", "COBIT", "ITIL", "Custom", "BABOK", "BABOK v3", "PMBOK", "PMBOK 7", "DMBOK", "DMBOK 2.0").required(),
+    framework: Joi.string().valid("TOGAF", "SABSA", "COBIT", "ITIL", "Custom", "BABOK", "BABOK v3", "PMBOK", "PMBOK 7", "DMBOK", "DMBOK 2.0", "Construction").required(),
     category: Joi.string().max(100).optional(),
     content: Joi.object().required(),
     variables: Joi.array().items(Joi.object({

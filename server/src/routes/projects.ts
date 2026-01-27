@@ -1,4 +1,5 @@
 import express from "express"
+import multer from "multer"
 import { pool } from "../database/connection"
 import { authenticateToken, requirePermission } from "../middleware/auth"
 import { logger, childLogger } from "../utils/logger"
@@ -7,6 +8,10 @@ import * as programService from "../services/programService"
 import { v4 as uuidv4, validate as isUuid } from "uuid"
 import { trackActivity } from "../middleware/analyticsMiddleware"
 import { extractionQueue } from "../services/queueService"
+import { urlContentFetcherService } from "../services/urlContentFetcherService"
+import { integrationPageService } from "../services/integrationPageService"
+import { referenceDocumentUploadService } from "../services/referenceDocumentUploadService"
+import { contextRecommendationService } from "../services/contextRecommendationService"
 
 const router = express.Router()
 
@@ -1200,11 +1205,673 @@ router.get("/:id/context", authenticateToken, async (req, res) => {
   }
 })
 
-// Get project by ID
+// ============================================================================
+// PROJECT CONTEXT ITEMS ROUTES (must be before /:id route)
+// ============================================================================
+console.log("✅ Context-items routes registered (before /:id route)")
+
+// Configure multer for file uploads (reference documents)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB max for reference documents
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedMimes = [
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'text/markdown',
+      'text/html',
+      'text/plain',
+    ]
+    const allowedExtensions = ['.pdf', '.docx', '.md', '.markdown', '.html', '.htm', '.txt']
+    const fileExtension = '.' + file.originalname.split('.').pop()?.toLowerCase()
+    
+    if (
+      allowedMimes.includes(file.mimetype) ||
+      allowedExtensions.includes(fileExtension)
+    ) {
+      cb(null, true)
+    } else {
+      cb(new Error(`File type not allowed. Allowed: ${allowedExtensions.join(', ')}`))
+    }
+  },
+})
+
+// Get all context items for a project
+router.get("/:projectId/context-items", authenticateToken, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  console.log(`[CONTEXT-ITEMS] GET /:projectId/context-items called with projectId: ${req.params.projectId}`)
+  try {
+    const { projectId } = req.params
+    const { type, is_active, integration_type } = req.query
+    const userId = (req as any).user?.id
+
+    // Verify project exists and user has access
+    const projectCheck = await pool.query(
+      `SELECT id FROM projects WHERE id = $1`,
+      [projectId]
+    )
+
+    if (projectCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Project not found" })
+    }
+
+    let query = `
+      SELECT 
+        id, project_id, type, title, content, source_url, original_filename, file_type,
+        integration_type, integration_page_id, metadata, is_active, priority,
+        created_by, created_at, updated_at
+      FROM project_context_items
+      WHERE project_id = $1
+    `
+    const params: any[] = [projectId]
+    let paramCount = 1
+
+    if (type) {
+      paramCount++
+      query += ` AND type = $${paramCount}`
+      params.push(type)
+    }
+
+    if (is_active !== undefined) {
+      paramCount++
+      query += ` AND is_active = $${paramCount}`
+      params.push(is_active === 'true')
+    }
+
+    if (integration_type) {
+      paramCount++
+      query += ` AND integration_type = $${paramCount}`
+      params.push(integration_type)
+    }
+
+    query += ` ORDER BY priority DESC, created_at DESC`
+
+    const result = await pool.query(query, params)
+
+    log.info(`Retrieved context items for project`, {
+      projectId,
+      userId,
+      count: result.rows.length,
+    })
+
+    res.json({
+      success: true,
+      items: result.rows.map((row) => ({
+        ...row,
+        metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
+      })),
+    })
+  } catch (error: any) {
+    log.error("Get context items error:", error)
+    res.status(500).json({
+      error: "Failed to retrieve context items",
+      details: error.message,
+    })
+  }
+})
+
+// Create a new context item
+router.post("/:projectId/context-items", authenticateToken, upload.single('file'), async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    const { projectId } = req.params
+    const { type, title, content, source_url, integration_type, integration_page_id, priority } = req.body
+    const userId = (req as any).user?.id
+    const file = req.file
+
+    // Verify project exists
+    const projectCheck = await pool.query(
+      `SELECT id FROM projects WHERE id = $1`,
+      [projectId]
+    )
+
+    if (projectCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Project not found" })
+    }
+
+    if (!type) {
+      return res.status(400).json({ error: "Type is required" })
+    }
+
+    const contextItemId = uuidv4()
+    let finalContent = content || ''
+    let finalTitle = title || 'Untitled'
+    let originalFilename: string | null = null
+    let fileType: string | null = null
+    let metadata: any = {}
+
+    // Handle different context item types
+    if (type === 'reference_document') {
+      if (!file) {
+        return res.status(400).json({ error: "File is required for reference_document type" })
+      }
+
+      // Validate file
+      const validation = referenceDocumentUploadService.validateFile(file)
+      if (!validation.valid) {
+        return res.status(400).json({ error: validation.error })
+      }
+
+      // Upload and convert to Markdown
+      const uploadResult = await referenceDocumentUploadService.uploadReferenceDocument(
+        projectId,
+        file,
+        userId,
+        title
+      )
+
+      finalContent = uploadResult.content
+      finalTitle = uploadResult.title
+      originalFilename = uploadResult.metadata.originalFilename
+      fileType = uploadResult.metadata.fileType
+      metadata = uploadResult.metadata
+
+    } else if (type === 'url') {
+      if (!source_url) {
+        return res.status(400).json({ error: "source_url is required for url type" })
+      }
+
+      // Use provided content if available (from frontend fetch), otherwise fetch it
+      if (content && typeof content === 'string' && content.trim().length > 0) {
+        // Content already fetched by frontend, use it
+        finalContent = content.trim()
+        finalTitle = title || source_url.split('/').pop() || 'Untitled'
+        // Create metadata from the provided content
+        const wordCount = finalContent.split(/\s+/).filter(word => word.length > 0).length
+        metadata = {
+          originalUrl: source_url,
+          fetchedAt: new Date().toISOString(),
+          wordCount,
+          characterCount: finalContent.length,
+          fetchMethod: 'frontend_preview',
+        }
+      } else {
+        // Fetch and convert URL content (fallback if content not provided)
+        log.info('Fetching URL content on backend (content not provided)', { source_url })
+        const fetchResult = await urlContentFetcherService.fetchAndConvert(source_url)
+        finalContent = fetchResult.content
+        finalTitle = title || fetchResult.title
+        metadata = {
+          ...fetchResult.metadata,
+          fetchMethod: 'backend_fetch',
+        }
+      }
+      
+      if (!finalContent || finalContent.trim().length === 0) {
+        return res.status(400).json({ error: "URL content is empty or invalid" })
+      }
+
+    } else if (type === 'custom_text') {
+      if (!content) {
+        return res.status(400).json({ error: "content is required for custom_text type" })
+      }
+      finalContent = content
+      finalTitle = title || 'Custom Context'
+
+    } else if (type === 'jira_page' || type === 'confluence_page') {
+      if (!integration_page_id) {
+        return res.status(400).json({ error: "integration_page_id is required for integration page types" })
+      }
+
+      const integrationType = type === 'jira_page' ? 'jira' : 'confluence'
+      const pageContent = await integrationPageService.fetchPageContent(integrationType, integration_page_id)
+      finalContent = pageContent.content
+      finalTitle = title || pageContent.title
+      metadata = pageContent.metadata
+    } else {
+      return res.status(400).json({ error: `Invalid type: ${type}` })
+    }
+
+    // Create context item in database and return it directly
+    const result = await pool.query(
+      `INSERT INTO project_context_items (
+        id, project_id, type, title, content, source_url, original_filename, file_type,
+        integration_type, integration_page_id, metadata, is_active, priority, created_by, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), NOW())
+      RETURNING *`,
+      [
+        contextItemId,
+        projectId,
+        type,
+        finalTitle,
+        finalContent,
+        source_url || null,
+        originalFilename,
+        fileType,
+        integration_type || (type === 'jira_page' ? 'jira' : type === 'confluence_page' ? 'confluence' : null),
+        integration_page_id || null,
+        JSON.stringify(metadata),
+        true, // is_active
+        priority ? parseInt(priority, 10) : 0,
+        userId,
+      ]
+    )
+
+    log.info(`Context item created`, {
+      contextItemId,
+      projectId,
+      type,
+      title: finalTitle,
+    })
+
+    if (!result.rows || result.rows.length === 0) {
+      log.error("Context item not returned after creation", { contextItemId, projectId })
+      return res.status(500).json({
+        success: false,
+        error: "Failed to create context item",
+        message: "Context item creation did not return the created item"
+      })
+    }
+
+    const createdItem = result.rows[0]
+    res.status(201).json({
+      success: true,
+      item: {
+        ...createdItem,
+        metadata: typeof createdItem.metadata === 'string' ? JSON.parse(createdItem.metadata) : (createdItem.metadata || {}),
+      },
+    })
+  } catch (error: any) {
+    log.error("Create context item error:", error)
+    res.status(500).json({
+      error: "Failed to create context item",
+      details: error.message,
+    })
+  }
+})
+
+// Update a context item
+router.put("/:projectId/context-items/:itemId", authenticateToken, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    const { projectId, itemId } = req.params
+    const { title, content, is_active, priority } = req.body
+    const userId = (req as any).user?.id
+
+    // Verify context item belongs to project
+    const itemCheck = await pool.query(
+      `SELECT id FROM project_context_items WHERE id = $1 AND project_id = $2`,
+      [itemId, projectId]
+    )
+
+    if (itemCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Context item not found" })
+    }
+
+    // Build update query dynamically
+    const updates: string[] = []
+    const params: any[] = []
+    let paramCount = 0
+
+    if (title !== undefined) {
+      paramCount++
+      updates.push(`title = $${paramCount}`)
+      params.push(title)
+    }
+
+    if (content !== undefined) {
+      paramCount++
+      updates.push(`content = $${paramCount}`)
+      params.push(content)
+    }
+
+    if (is_active !== undefined) {
+      paramCount++
+      updates.push(`is_active = $${paramCount}`)
+      params.push(is_active)
+    }
+
+    if (priority !== undefined) {
+      paramCount++
+      updates.push(`priority = $${paramCount}`)
+      params.push(parseInt(priority, 10))
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: "No fields to update" })
+    }
+
+    paramCount++
+    updates.push(`updated_at = NOW()`)
+    paramCount++
+    params.push(itemId)
+    paramCount++
+    params.push(projectId)
+
+    await pool.query(
+      `UPDATE project_context_items 
+       SET ${updates.join(', ')}
+       WHERE id = $${paramCount - 1} AND project_id = $${paramCount}`,
+      params
+    )
+
+    log.info(`Context item updated`, { itemId, projectId, userId })
+
+    // Fetch updated item
+    const result = await pool.query(
+      `SELECT * FROM project_context_items WHERE id = $1`,
+      [itemId]
+    )
+
+    if (!result.rows || result.rows.length === 0) {
+      log.error("Context item not found after update", { itemId, projectId })
+      return res.status(404).json({
+        success: false,
+        error: "Context item not found",
+        message: "The context item could not be found after update"
+      })
+    }
+
+    const updatedItem = result.rows[0]
+    res.json({
+      success: true,
+      item: {
+        ...updatedItem,
+        metadata: typeof updatedItem.metadata === 'string' ? JSON.parse(updatedItem.metadata) : (updatedItem.metadata || {}),
+      },
+    })
+  } catch (error: any) {
+    log.error("Update context item error:", error)
+    res.status(500).json({
+      error: "Failed to update context item",
+      details: error.message,
+    })
+  }
+})
+
+// Delete a context item
+router.delete("/:projectId/context-items/:itemId", authenticateToken, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    const { projectId, itemId } = req.params
+    const userId = (req as any).user?.id
+
+    // Verify context item belongs to project
+    const itemCheck = await pool.query(
+      `SELECT id FROM project_context_items WHERE id = $1 AND project_id = $2`,
+      [itemId, projectId]
+    )
+
+    if (itemCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Context item not found" })
+    }
+
+    await pool.query(
+      `DELETE FROM project_context_items WHERE id = $1 AND project_id = $2`,
+      [itemId, projectId]
+    )
+
+    log.info(`Context item deleted`, { itemId, projectId, userId })
+
+    res.json({
+      success: true,
+      message: "Context item deleted successfully",
+    })
+  } catch (error: any) {
+    log.error("Delete context item error:", error)
+    res.status(500).json({
+      error: "Failed to delete context item",
+      details: error.message,
+    })
+  }
+})
+
+// Fetch content from URL (preview before creating context item)
+router.post("/:projectId/context-items/fetch-url", authenticateToken, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    const { url } = req.body
+
+    if (!url) {
+      return res.status(400).json({ error: "URL is required" })
+    }
+
+    const fetchResult = await urlContentFetcherService.fetchAndConvert(url)
+
+    res.json({
+      success: true,
+      content: fetchResult.content,
+      title: fetchResult.title,
+      metadata: fetchResult.metadata,
+    })
+  } catch (error: any) {
+    log.error("Fetch URL error:", error)
+    res.status(500).json({
+      error: "Failed to fetch URL content",
+      details: error.message,
+    })
+  }
+})
+
+// Get available pages from integrations
+router.get("/:projectId/context-items/integration-pages", authenticateToken, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    const { projectId } = req.params
+    const { integration_type, search } = req.query
+
+    if (!integration_type || (integration_type !== 'jira' && integration_type !== 'confluence')) {
+      return res.status(400).json({ error: "integration_type must be 'jira' or 'confluence'" })
+    }
+
+    let pages
+    if (integration_type === 'jira') {
+      pages = await integrationPageService.getJiraPages(projectId, search as string)
+    } else {
+      pages = await integrationPageService.getConfluencePages(projectId, search as string)
+    }
+
+    res.json({
+      success: true,
+      pages,
+    })
+  } catch (error: any) {
+    log.error("Get integration pages error:", error)
+    res.status(500).json({
+      error: "Failed to fetch integration pages",
+      details: error.message,
+    })
+  }
+})
+
+// Get analytics for project context
+router.get("/:projectId/context-items/analytics", authenticateToken, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    const { projectId } = req.params
+
+    // Verify project exists
+    const projectCheck = await pool.query(
+      `SELECT id FROM projects WHERE id = $1`,
+      [projectId]
+    )
+
+    if (projectCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Project not found" })
+    }
+
+    // Get total items
+    const totalResult = await pool.query(
+      `SELECT COUNT(*) as total FROM project_context_items WHERE project_id = $1`,
+      [projectId]
+    )
+    const totalItems = parseInt(totalResult.rows[0].total, 10)
+
+    // Get items by type
+    const typeResult = await pool.query(
+      `SELECT type, COUNT(*) as count 
+       FROM project_context_items 
+       WHERE project_id = $1 
+       GROUP BY type`,
+      [projectId]
+    )
+    const itemsByType: Record<string, number> = {}
+    typeResult.rows.forEach((row) => {
+      itemsByType[row.type] = parseInt(row.count, 10)
+    })
+
+    // Get active items count
+    const activeResult = await pool.query(
+      `SELECT COUNT(*) as count FROM project_context_items WHERE project_id = $1 AND is_active = true`,
+      [projectId]
+    )
+    const activeItems = parseInt(activeResult.rows[0].count, 10)
+
+    // Get total content size (sum of character counts)
+    const sizeResult = await pool.query(
+      `SELECT SUM(LENGTH(content)) as total_size FROM project_context_items WHERE project_id = $1`,
+      [projectId]
+    )
+    const totalContentSize = parseInt(sizeResult.rows[0].total_size || '0', 10)
+
+    // Get most used items (from usage log)
+    const mostUsedResult = await pool.query(
+      `SELECT 
+        pci.id, pci.title, pci.type, COUNT(pcul.id) as usage_count
+       FROM project_context_items pci
+       LEFT JOIN project_context_usage_log pcul ON pci.id = pcul.context_item_id
+       WHERE pci.project_id = $1
+       GROUP BY pci.id, pci.title, pci.type
+       ORDER BY usage_count DESC, pci.created_at DESC
+       LIMIT 10`,
+      [projectId]
+    )
+
+    // Get recent items
+    const recentResult = await pool.query(
+      `SELECT id, title, type, created_at 
+       FROM project_context_items 
+       WHERE project_id = $1 
+       ORDER BY created_at DESC 
+       LIMIT 10`,
+      [projectId]
+    )
+
+    // Get usage over time (last 30 days)
+    const usageOverTimeResult = await pool.query(
+      `SELECT 
+        DATE(usage_timestamp) as date,
+        COUNT(*) as count
+       FROM project_context_usage_log
+       WHERE project_id = $1 
+         AND usage_timestamp >= NOW() - INTERVAL '30 days'
+       GROUP BY DATE(usage_timestamp)
+       ORDER BY date ASC`,
+      [projectId]
+    )
+
+    res.json({
+      success: true,
+      totalItems,
+      itemsByType,
+      activeItems,
+      totalContentSize,
+      mostUsedItems: mostUsedResult.rows,
+      recentItems: recentResult.rows,
+      usageOverTime: usageOverTimeResult.rows,
+    })
+  } catch (error: any) {
+    log.error("Get context analytics error:", error)
+    res.status(500).json({
+      error: "Failed to retrieve context analytics",
+      details: error.message,
+    })
+  }
+})
+
+// Log usage of a context item
+router.post("/:projectId/context-items/:itemId/log-usage", authenticateToken, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    const { projectId, itemId } = req.params
+    const { document_id, usage_type = 'document_generation' } = req.body
+    const userId = (req as any).user?.id
+
+    // Verify context item belongs to project
+    const itemCheck = await pool.query(
+      `SELECT id FROM project_context_items WHERE id = $1 AND project_id = $2`,
+      [itemId, projectId]
+    )
+
+    if (itemCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Context item not found" })
+    }
+
+    // Log usage
+    await pool.query(
+      `INSERT INTO project_context_usage_log (
+        project_id, context_item_id, document_id, usage_type, usage_timestamp, metadata
+      ) VALUES ($1, $2, $3, $4, NOW(), $5)`,
+      [
+        projectId,
+        itemId,
+        document_id || null,
+        usage_type,
+        JSON.stringify({ logged_by: userId }),
+      ]
+    )
+
+    log.info(`Context item usage logged`, { itemId, projectId, usage_type, document_id })
+
+    res.json({
+      success: true,
+      message: "Usage logged successfully",
+    })
+  } catch (error: any) {
+    log.error("Log context usage error:", error)
+    res.status(500).json({
+      error: "Failed to log context usage",
+      details: error.message,
+    })
+  }
+})
+
+// Get recommendations for project context
+router.get("/:projectId/context-items/recommendations", authenticateToken, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    const { projectId } = req.params
+
+    // Verify project exists
+    const projectCheck = await pool.query(
+      `SELECT id FROM projects WHERE id = $1`,
+      [projectId]
+    )
+
+    if (projectCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Project not found" })
+    }
+
+    const recommendations = await contextRecommendationService.getRecommendations(projectId)
+    const templateSuggestions = await contextRecommendationService.suggestTemplates(projectId)
+
+    res.json({
+      success: true,
+      recommendations,
+      templateSuggestions,
+    })
+  } catch (error: any) {
+    log.error("Get context recommendations error:", error)
+    res.status(500).json({
+      error: "Failed to get recommendations",
+      details: error.message,
+    })
+  }
+})
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+// Get project by ID (generic route - must be after all specific routes)
+console.log("✅ Generic /:id route registered (after context-items routes)")
 router.get("/:id", authenticateToken, async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId })
   try {
     const { id } = req.params
+    if (!id || id === 'undefined' || !UUID_RE.test(id)) {
+      return res.status(400).json({ error: 'Invalid project ID' })
+    }
     const userId = req.user?.id
     const userRole = req.user?.role
     const isSuperAdmin = userRole === "super_admin"
@@ -1780,6 +2447,61 @@ router.post("/:projectId/documents", authenticateToken, async (req, res) => {
     }
 
     const document = result.rows[0]
+
+    // 🔍 Automatic Quality Audit: Trigger quality audit after document creation
+    // This runs asynchronously and doesn't block the response
+    if (content && typeof content === 'string' && content.trim().length > 0) {
+      setImmediate(() => {
+        (async () => {
+          try {
+            // Get project context for quality audit
+            const projectResult = await pool.query(
+              'SELECT * FROM projects WHERE id = $1',
+              [projectId]
+            )
+
+            if (projectResult.rows.length > 0) {
+              log.info('🔍 [AUTO-QUALITY-AUDIT] Triggering automatic quality audit after document creation', {
+                documentId,
+                documentName: title,
+                projectId,
+                contentLength: content.length
+              })
+
+              // Use queue service for async processing
+              const { getQueueService } = await import('../services/queueService')
+              const auditJobId = uuidv4()
+              
+              await getQueueService().addJob('quality-audit', {
+                jobId: auditJobId,
+                documentId,
+                documentContent: content,
+                documentType: title || 'Document',
+                projectContext: projectResult.rows[0],
+                userId: userId || 'system'
+              })
+
+              log.info('🔍 [AUTO-QUALITY-AUDIT] Quality audit job enqueued successfully', {
+                documentId,
+                auditJobId
+              })
+            } else {
+              log.warn('🔍 [AUTO-QUALITY-AUDIT] Skipping quality audit - project not found', {
+                documentId,
+                projectId
+              })
+            }
+          } catch (auditError: any) {
+            // Don't fail document creation if quality audit trigger fails
+            log.error('🔍 [AUTO-QUALITY-AUDIT] Failed to trigger automatic quality audit', {
+              documentId,
+              error: auditError.message,
+              stack: auditError.stack
+            })
+          }
+        })()
+      })
+    }
 
     // 🔗 Auto-integration: Check project settings and auto-publish to Confluence/Jira if enabled
     // This runs asynchronously and doesn't block the response

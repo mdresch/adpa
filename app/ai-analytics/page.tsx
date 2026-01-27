@@ -28,6 +28,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import dynamic from 'next/dynamic'
 
 const UsageLineChart = dynamic(() => import('@/components/charts/RechartsWrappers').then(m => m.UsageLineChart), {
@@ -67,69 +68,6 @@ interface ModelStats {
   success_rate: number
 }
 
-interface DomainExtractionSummary {
-  total_runs: number
-  completed_runs: number
-  failed_runs: number
-  partial_runs: number
-  avg_success_rate: number
-  avg_entities: number
-  avg_runtime_ms: number
-}
-
-interface DomainExtractionDomainStat {
-  domain: string
-  total_runs: number
-  completed_runs: number
-  failed_runs: number
-  partial_runs: number
-  avg_entities: number
-  avg_success_rate: number
-  avg_cache_hit_rate: number
-  avg_runtime_ms: number
-  last_run_at: string | null
-}
-
-interface DomainProviderUsage {
-  provider_name: string
-  model_name: string
-  usage_count: number
-  avg_response_time_ms: number
-  total_cost_usd: number
-}
-
-interface DomainExtractionAnalytics {
-  success: boolean
-  period: string
-  projectId: string | null
-  generated_at: string
-  summary: DomainExtractionSummary
-  domains: DomainExtractionDomainStat[]
-  providerUsage: DomainProviderUsage[]
-  costByDomain: Array<{ domain: string; total_cost_usd: number; total_tokens: number }>
-}
-
-const DOMAIN_NAME_MAP: Record<string, string> = {
-  stakeholders: "Stakeholders",
-  team: "Team Performance",
-  development_approach: "Development Approach",
-  planning: "Planning",
-  project_work: "Project Work",
-  delivery: "Delivery",
-  measurement: "Measurement",
-  uncertainty: "Uncertainty"
-}
-
-const DOMAIN_COLOR_MAP: Record<string, string> = {
-  stakeholders: "#1872f0",
-  team: "#2563eb",
-  development_approach: "#8b5cf6",
-  planning: "#0ea5e9",
-  project_work: "#10b981",
-  delivery: "#f97316",
-  measurement: "#f59e0b",
-  uncertainty: "#ef4444"
-}
 
 export default function AIAnalyticsPage() {
   const { user, hasPermission } = useAuth()
@@ -143,7 +81,9 @@ export default function AIAnalyticsPage() {
   const [modelStats, setModelStats] = useState<ModelStats[]>([])
   const [aiSummary, setAiSummary] = useState<Record<string, unknown> | null>(null)
   const [hourlyUsage, setHourlyUsage] = useState<Array<Record<string, unknown>>>([])
-  const [domainAnalytics, setDomainAnalytics] = useState<DomainExtractionAnalytics | null>(null)
+  const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  const [dailyBreakdown, setDailyBreakdown] = useState<any>(null)
+  const [loadingBreakdown, setLoadingBreakdown] = useState(false)
 
   const fetchAIAnalytics = async () => {
     try {
@@ -168,13 +108,6 @@ export default function AIAnalyticsPage() {
           providers: response.providerStats?.length,
           models: response.modelStats?.length
         })
-      }
-
-      const domainResponse = await apiClient.getDomainExtractionAnalytics(timeRange).catch(() => null)
-      if (domainResponse) {
-        setDomainAnalytics(domainResponse)
-      } else {
-        setDomainAnalytics(null)
       }
       
     } catch (error) {
@@ -223,6 +156,62 @@ export default function AIAnalyticsPage() {
       'mistral': '#EF4444'
     }
     return colors[providerType as keyof typeof colors] || '#6B7280'
+  }
+
+  const fetchDailyBreakdown = async (date: string | Date) => {
+    try {
+      setLoadingBreakdown(true)
+      // Handle both Date objects and date strings
+      // IMPORTANT: Always treat date strings as UTC dates to avoid timezone shifts
+      let dateStr: string
+      if (date instanceof Date) {
+        // Use UTC methods to avoid timezone conversion
+        const year = date.getUTCFullYear()
+        const month = String(date.getUTCMonth() + 1).padStart(2, '0')
+        const day = String(date.getUTCDate()).padStart(2, '0')
+        dateStr = `${year}-${month}-${day}`
+      } else if (typeof date === 'string') {
+        // If it's already in YYYY-MM-DD format, use it directly (treat as UTC)
+        if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+          dateStr = date
+        } else {
+          // Parse as UTC to avoid timezone shifts
+          const parsed = new Date(date + 'T00:00:00Z')
+          const year = parsed.getUTCFullYear()
+          const month = String(parsed.getUTCMonth() + 1).padStart(2, '0')
+          const day = String(parsed.getUTCDate()).padStart(2, '0')
+          dateStr = `${year}-${month}-${day}`
+        }
+      } else {
+        throw new Error('Invalid date format')
+      }
+      
+      console.log('Fetching daily breakdown for date:', dateStr, 'original:', date)
+      const response = await apiClient.get<any>(`/ai-analytics/daily/${dateStr}`)
+      if (response.success) {
+        setDailyBreakdown(response)
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to load daily breakdown",
+          variant: "destructive"
+        })
+      }
+    } catch (error) {
+      console.error("Failed to fetch daily breakdown:", error)
+      toast({
+        title: "Error",
+        description: "Failed to load daily breakdown",
+        variant: "destructive"
+      })
+    } finally {
+      setLoadingBreakdown(false)
+    }
+  }
+
+  const handleDateClick = (date: string) => {
+    setSelectedDate(date)
+    void fetchDailyBreakdown(date)
   }
 
   if (!hasPermission("analytics.system")) {
@@ -416,7 +405,125 @@ export default function AIAnalyticsPage() {
                       </CardHeader>
                       <CardContent>
                         {modelUsageData.length > 0 && providerStats.length > 0 ? (
-                          <UsageLineChart data={modelUsageData} providerStats={providerStats} getProviderColor={getProviderColor} />
+                          <>
+                            <UsageLineChart data={modelUsageData} providerStats={providerStats} getProviderColor={getProviderColor} />
+                            
+                            {/* Usage Over Time Table */}
+                            <div className="mt-8">
+                              <h3 className="text-lg font-semibold mb-4">Usage Details by Date</h3>
+                              <div className="overflow-x-auto border rounded-lg">
+                                <table className="w-full text-sm">
+                                  <thead>
+                                    <tr className="border-b bg-muted/50">
+                                      <th className="text-left p-3 font-medium">Date</th>
+                                      {providerStats.map((provider) => (
+                                        <th key={provider.provider_name} className="text-right p-3 font-medium">
+                                          {provider.provider_name}
+                                        </th>
+                                      ))}
+                                      <th className="text-right p-3 font-medium">Total</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {modelUsageData.map((row, index) => {
+                                      // Calculate total for this row
+                                      const rowTotal = providerStats.reduce((sum, provider) => {
+                                        return sum + (Number(row[provider.provider_name] || 0))
+                                      }, 0)
+                                      
+                                      // Extract date string for the breakdown API call
+                                      // row.date should already be a string in YYYY-MM-DD format from the backend
+                                      // IMPORTANT: Use UTC methods to avoid timezone shifts
+                                      let dateForApi: string
+                                      if (typeof row.date === 'string') {
+                                        // Already a string, use it directly (should be YYYY-MM-DD)
+                                        dateForApi = row.date.split('T')[0]
+                                      } else if (row.date instanceof Date) {
+                                        // Use UTC methods to avoid timezone conversion
+                                        const year = row.date.getUTCFullYear()
+                                        const month = String(row.date.getUTCMonth() + 1).padStart(2, '0')
+                                        const day = String(row.date.getUTCDate()).padStart(2, '0')
+                                        dateForApi = `${year}-${month}-${day}`
+                                      } else {
+                                        // Fallback: parse as UTC
+                                        const parsed = new Date(String(row.date) + 'T00:00:00Z')
+                                        const year = parsed.getUTCFullYear()
+                                        const month = String(parsed.getUTCMonth() + 1).padStart(2, '0')
+                                        const day = String(parsed.getUTCDate()).padStart(2, '0')
+                                        dateForApi = `${year}-${month}-${day}`
+                                      }
+                                      
+                                      // Debug log for January 21st
+                                      if (dateForApi === '2026-01-21') {
+                                        console.log('January 21st click - dateForApi:', dateForApi, 'row.date:', row.date, 'type:', typeof row.date)
+                                      }
+                                      
+                                      return (
+                                        <tr 
+                                          key={index} 
+                                          className="border-b hover:bg-muted/30 cursor-pointer"
+                                          onClick={() => {
+                                            console.log('Date clicked:', dateForApi, 'original row.date:', row.date)
+                                            handleDateClick(dateForApi)
+                                          }}
+                                        >
+                                          <td className="p-3 font-medium">
+                                            {/* Bug 5 Fix: Parse date string as UTC to avoid timezone issues */}
+                                            {(() => {
+                                              // row.date is a string in 'YYYY-MM-DD' format from backend TO_CHAR
+                                              const dateStr = typeof row.date === 'string' ? row.date : String(row.date)
+                                              // Parse as UTC to avoid local timezone interpretation
+                                              const [year, month, day] = dateStr.split('-').map(Number)
+                                              const utcDate = new Date(Date.UTC(year, month - 1, day))
+                                              return utcDate.toLocaleDateString('en-US', { 
+                                                year: 'numeric', 
+                                                month: 'short', 
+                                                day: 'numeric',
+                                                timeZone: 'UTC'
+                                              })
+                                            })()}
+                                          </td>
+                                          {providerStats.map((provider) => (
+                                            <td key={provider.provider_name} className="text-right p-3">
+                                              {formatNumber(row[provider.provider_name] || 0)}
+                                            </td>
+                                          ))}
+                                          <td className="text-right p-3 font-semibold">
+                                            {formatNumber(rowTotal)}
+                                          </td>
+                                        </tr>
+                                      )
+                                    })}
+                                    {/* Summary row */}
+                                    {modelUsageData.length > 0 && (
+                                      <tr className="border-t-2 bg-muted/50 font-semibold">
+                                        <td className="p-3">Total</td>
+                                        {providerStats.map((provider) => {
+                                          const providerTotal = modelUsageData.reduce((sum, row) => {
+                                            return sum + (Number(row[provider.provider_name] || 0))
+                                          }, 0)
+                                          return (
+                                            <td key={provider.provider_name} className="text-right p-3">
+                                              {formatNumber(providerTotal)}
+                                            </td>
+                                          )
+                                        })}
+                                        <td className="text-right p-3">
+                                          {formatNumber(
+                                            modelUsageData.reduce((sum, row) => {
+                                              return sum + providerStats.reduce((rowSum, provider) => {
+                                                return rowSum + (Number(row[provider.provider_name] || 0))
+                                              }, 0)
+                                            }, 0)
+                                          )}
+                                        </td>
+                                      </tr>
+                                    )}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          </>
                         ) : (
                           <div className="h-96 flex items-center justify-center">
                             <div className="text-center">
@@ -430,6 +537,238 @@ export default function AIAnalyticsPage() {
                         )}
                       </CardContent>
                     </Card>
+
+                    {/* Daily Breakdown Dialog */}
+                    <Dialog open={selectedDate !== null} onOpenChange={(open) => !open && setSelectedDate(null)}>
+                      <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+                        <DialogHeader>
+                          <DialogTitle>
+                            Daily Breakdown - {selectedDate ? new Date(selectedDate).toLocaleDateString('en-US', { 
+                              year: 'numeric', 
+                              month: 'long', 
+                              day: 'numeric' 
+                            }) : ''}
+                          </DialogTitle>
+                          <DialogDescription>
+                            Detailed analysis of AI usage for this date
+                          </DialogDescription>
+                        </DialogHeader>
+                        {loadingBreakdown ? (
+                          <div className="flex items-center justify-center py-8">
+                            <RefreshCw className="h-8 w-8 animate-spin" />
+                            <p className="ml-2 text-muted-foreground">Loading breakdown...</p>
+                          </div>
+                        ) : dailyBreakdown ? (
+                          <div className="space-y-6">
+                            {/* Summary */}
+                            <Card>
+                              <CardHeader>
+                                <CardTitle>Summary</CardTitle>
+                              </CardHeader>
+                              <CardContent>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                  <div>
+                                    <p className="text-sm text-muted-foreground">Total Requests</p>
+                                    <p className="text-2xl font-bold">{formatNumber(dailyBreakdown.summary?.total_requests || 0)}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-sm text-muted-foreground">Total Tokens</p>
+                                    <p className="text-2xl font-bold">{formatNumber(dailyBreakdown.summary?.total_tokens || 0)}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-sm text-muted-foreground">Avg Response</p>
+                                    <p className="text-2xl font-bold">{formatDuration(dailyBreakdown.summary?.avg_response_time || 0)}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-sm text-muted-foreground">Success Rate</p>
+                                    <p className="text-2xl font-bold">{formatPercent(dailyBreakdown.summary?.success_rate || 0)}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-sm text-muted-foreground">Unique Users</p>
+                                    <p className="text-2xl font-bold">{dailyBreakdown.summary?.unique_users || 0}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-sm text-muted-foreground">Unique Projects</p>
+                                    <p className="text-2xl font-bold">{dailyBreakdown.summary?.unique_projects || 0}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-sm text-muted-foreground">Unique Providers</p>
+                                    <p className="text-2xl font-bold">{dailyBreakdown.summary?.unique_providers || 0}</p>
+                                  </div>
+                                </div>
+                              </CardContent>
+                            </Card>
+
+                            {/* Hourly Breakdown */}
+                            {dailyBreakdown.hourly && dailyBreakdown.hourly.length > 0 && (
+                              <Card>
+                                <CardHeader>
+                                  <CardTitle>Hourly Breakdown</CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                  <div className="overflow-x-auto">
+                                    <table className="w-full text-sm">
+                                      <thead>
+                                        <tr className="border-b">
+                                          <th className="text-left p-2">Hour</th>
+                                          <th className="text-right p-2">Requests</th>
+                                          <th className="text-right p-2">Tokens</th>
+                                          <th className="text-right p-2">Avg Response</th>
+                                          <th className="text-right p-2">Success Rate</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {dailyBreakdown.hourly.map((hour: any, idx: number) => (
+                                          <tr key={idx} className="border-b hover:bg-muted/30">
+                                            <td className="p-2">{hour.hour}:00</td>
+                                            <td className="p-2 text-right">{formatNumber(hour.request_count || 0)}</td>
+                                            <td className="p-2 text-right">{formatNumber(hour.total_tokens || 0)}</td>
+                                            <td className="p-2 text-right">{formatDuration(hour.avg_response_time || 0)}</td>
+                                            <td className="p-2 text-right">{formatPercent(hour.success_rate || 0)}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            )}
+
+                            {/* By Provider */}
+                            {dailyBreakdown.byProvider && dailyBreakdown.byProvider.length > 0 && (
+                              <Card>
+                                <CardHeader>
+                                  <CardTitle>By Provider</CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                  <div className="overflow-x-auto">
+                                    <table className="w-full text-sm">
+                                      <thead>
+                                        <tr className="border-b">
+                                          <th className="text-left p-2">Provider</th>
+                                          <th className="text-right p-2">Requests</th>
+                                          <th className="text-right p-2">Tokens</th>
+                                          <th className="text-right p-2">Avg Response</th>
+                                          <th className="text-right p-2">Success Rate</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {dailyBreakdown.byProvider.map((provider: any, idx: number) => (
+                                          <tr key={idx} className="border-b hover:bg-muted/30">
+                                            <td className="p-2 font-medium">{provider.provider_name}</td>
+                                            <td className="p-2 text-right">{formatNumber(provider.request_count || 0)}</td>
+                                            <td className="p-2 text-right">{formatNumber(provider.total_tokens || 0)}</td>
+                                            <td className="p-2 text-right">{formatDuration(provider.avg_response_time || 0)}</td>
+                                            <td className="p-2 text-right">{formatPercent(provider.success_rate || 0)}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            )}
+
+                            {/* By Model */}
+                            {dailyBreakdown.byModel && dailyBreakdown.byModel.length > 0 && (
+                              <Card>
+                                <CardHeader>
+                                  <CardTitle>By Model</CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                  <div className="overflow-x-auto">
+                                    <table className="w-full text-sm">
+                                      <thead>
+                                        <tr className="border-b">
+                                          <th className="text-left p-2">Model</th>
+                                          <th className="text-left p-2">Provider</th>
+                                          <th className="text-right p-2">Requests</th>
+                                          <th className="text-right p-2">Tokens</th>
+                                          <th className="text-right p-2">Avg Response</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {dailyBreakdown.byModel.map((model: any, idx: number) => (
+                                          <tr key={idx} className="border-b hover:bg-muted/30">
+                                            <td className="p-2 font-medium">{model.model_name}</td>
+                                            <td className="p-2">{model.provider_name}</td>
+                                            <td className="p-2 text-right">{formatNumber(model.request_count || 0)}</td>
+                                            <td className="p-2 text-right">{formatNumber(model.total_tokens || 0)}</td>
+                                            <td className="p-2 text-right">{formatDuration(model.avg_response_time || 0)}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            )}
+
+                            {/* By User */}
+                            {dailyBreakdown.byUser && dailyBreakdown.byUser.length > 0 && (
+                              <Card>
+                                <CardHeader>
+                                  <CardTitle>By User</CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                  <div className="overflow-x-auto">
+                                    <table className="w-full text-sm">
+                                      <thead>
+                                        <tr className="border-b">
+                                          <th className="text-left p-2">User</th>
+                                          <th className="text-right p-2">Requests</th>
+                                          <th className="text-right p-2">Tokens</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {dailyBreakdown.byUser.map((user: any, idx: number) => (
+                                          <tr key={idx} className="border-b hover:bg-muted/30">
+                                            <td className="p-2 font-medium">{user.user_name}</td>
+                                            <td className="p-2 text-right">{formatNumber(user.request_count || 0)}</td>
+                                            <td className="p-2 text-right">{formatNumber(user.total_tokens || 0)}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            )}
+
+                            {/* By Project */}
+                            {dailyBreakdown.byProject && dailyBreakdown.byProject.length > 0 && (
+                              <Card>
+                                <CardHeader>
+                                  <CardTitle>By Project</CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                  <div className="overflow-x-auto">
+                                    <table className="w-full text-sm">
+                                      <thead>
+                                        <tr className="border-b">
+                                          <th className="text-left p-2">Project</th>
+                                          <th className="text-right p-2">Requests</th>
+                                          <th className="text-right p-2">Tokens</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {dailyBreakdown.byProject.map((project: any, idx: number) => (
+                                          <tr key={idx} className="border-b hover:bg-muted/30">
+                                            <td className="p-2 font-medium">{project.project_name}</td>
+                                            <td className="p-2 text-right">{formatNumber(project.request_count || 0)}</td>
+                                            <td className="p-2 text-right">{formatNumber(project.total_tokens || 0)}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            )}
+                          </div>
+                        ) : null}
+                      </DialogContent>
+                    </Dialog>
                   </TabsContent>
 
                   {/* Provider Comparison */}
@@ -469,7 +808,7 @@ export default function AIAnalyticsPage() {
                           ) : (
                             <div className="h-80 flex items-center justify-center">
                               <div className="text-center">
-                                <PieChart className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+                                <BarChart3 className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
                                 <p className="text-sm text-muted-foreground">No token distribution data yet</p>
                               </div>
                             </div>
@@ -1043,136 +1382,6 @@ export default function AIAnalyticsPage() {
                   </TabsContent>
                 </Tabs>
               </div>
-            )}
-            {domainAnalytics && (
-              <section className="mt-12 space-y-6">
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                  <div>
-                    <h2 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">PMBOK 8 Domain Extraction</h2>
-                    <p className="text-muted-foreground">
-                      Domain-aware extraction success and provider performance
-                    </p>
-                  </div>
-                  <Badge variant="outline">
-                    Updated {new Date(domainAnalytics.generated_at).toLocaleString()}
-                  </Badge>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardDescription>Total Runs</CardDescription>
-                      <CardTitle className="text-3xl">{formatNumber(domainAnalytics.summary.total_runs)}</CardTitle>
-                    </CardHeader>
-                    <CardContent className="text-sm text-muted-foreground">
-                      Completed: {formatNumber(domainAnalytics.summary.completed_runs)} · Failed: {formatNumber(domainAnalytics.summary.failed_runs)}
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardDescription>Avg Success Rate</CardDescription>
-                      <CardTitle className="text-3xl">{formatPercent(domainAnalytics.summary.avg_success_rate)}</CardTitle>
-                    </CardHeader>
-                    <CardContent className="text-sm text-muted-foreground">
-                      Partial Runs: {formatNumber(domainAnalytics.summary.partial_runs)}
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardDescription>Avg Runtime</CardDescription>
-                      <CardTitle className="text-3xl">{formatDuration(Number(domainAnalytics.summary.avg_runtime_ms))}</CardTitle>
-                    </CardHeader>
-                    <CardContent className="text-sm text-muted-foreground">
-                      Avg Entities Captured: {formatNumber(domainAnalytics.summary.avg_entities)}
-                    </CardContent>
-                  </Card>
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                  {domainAnalytics.domains.map((domain) => {
-                    const label = DOMAIN_NAME_MAP[domain.domain] || domain.domain.replace('_', ' ')
-                    const successRate = Number(domain.avg_success_rate || 0)
-                    const completionRatio = domain.total_runs
-                      ? (domain.completed_runs / domain.total_runs) * 100
-                      : 0
-                    return (
-                      <Card key={domain.domain} className="border-l-4" style={{ borderColor: DOMAIN_COLOR_MAP[domain.domain] || '#0f172a' }}>
-                        <CardHeader className="pb-3">
-                          <div className="flex items-center justify-between">
-                            <CardTitle className="text-base">{label}</CardTitle>
-                            <Badge variant="secondary">{formatPercent(successRate)}</Badge>
-                          </div>
-                          <CardDescription>{formatNumber(domain.total_runs)} runs • {formatNumber(domain.completed_runs)} completed</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-3 text-sm">
-                          <div>
-                            <p className="text-muted-foreground mb-1">Completion</p>
-                            <div className="w-full bg-muted rounded-full h-2">
-                              <div
-                                className="h-2 rounded-full"
-                                style={{
-                                  width: `${completionRatio.toFixed(1)}%`,
-                                  backgroundColor: DOMAIN_COLOR_MAP[domain.domain] || '#2563eb'
-                                }}
-                              ></div>
-                            </div>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-muted-foreground">Avg Entities</span>
-                            <span className="font-medium">{formatNumber(domain.avg_entities)}</span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-muted-foreground">Avg Runtime</span>
-                            <span className="font-medium">{formatDuration(Number(domain.avg_runtime_ms))}</span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-muted-foreground">Cache Hit Rate</span>
-                            <span className="font-medium">{formatPercent(domain.avg_cache_hit_rate)}</span>
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            Last run: {domain.last_run_at ? new Date(domain.last_run_at).toLocaleString() : 'N/A'}
-                          </p>
-                        </CardContent>
-                      </Card>
-                    )
-                  })}
-                </div>
-
-                {domainAnalytics.providerUsage.length > 0 && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Provider Usage by Domain Runs</CardTitle>
-                      <CardDescription>Top models powering PMBOK 8 extractions</CardDescription>
-                    </CardHeader>
-                    <CardContent className="overflow-x-auto">
-                      <table className="min-w-full text-sm">
-                        <thead>
-                          <tr className="text-muted-foreground">
-                            <th className="text-left pb-2 pr-4">Provider</th>
-                            <th className="text-left pb-2 pr-4">Model</th>
-                            <th className="text-right pb-2 pr-4">Requests</th>
-                            <th className="text-right pb-2 pr-4">Avg Response</th>
-                            <th className="text-right pb-2">Total Cost</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {domainAnalytics.providerUsage.slice(0, 6).map((provider, index) => (
-                            <tr key={`${provider.provider_name}-${provider.model_name}-${index}`} className="border-t border-muted/50">
-                              <td className="py-2 pr-4 font-medium">{provider.provider_name}</td>
-                              <td className="py-2 pr-4">{provider.model_name}</td>
-                              <td className="py-2 pr-4 text-right">{formatNumber(provider.usage_count)}</td>
-                              <td className="py-2 pr-4 text-right">{formatDuration(provider.avg_response_time_ms)}</td>
-                              <td className="py-2 text-right">
-                                ${typeof provider.total_cost_usd === 'number' ? provider.total_cost_usd.toFixed(2) : '0.00'}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </CardContent>
-                  </Card>
-                )}
-              </section>
             )}
           </main>
         </div>

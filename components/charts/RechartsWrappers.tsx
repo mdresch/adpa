@@ -62,9 +62,10 @@ export function GenericBarChart({ data, xKey = 'name', dataKey = 'value', height
 }
 
 export function MultiBarChart({ data, xKey = 'name', bars = [{ key: 'value', fill: '#3B82F6' }], height = 240 }: any) {
+  const h = typeof height === 'number' ? height : 240
   return (
-    <div style={{ height }}>
-      <ResponsiveContainer width="100%" height="100%">
+    <div style={{ height: h, minHeight: 200 }} className="w-full">
+      <ResponsiveContainer width="100%" height={h} minHeight={200} minWidth={100}>
         <BarChart data={data}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey={xKey} />
@@ -146,8 +147,8 @@ export function AreaChartWrapper({ data, xKey = 'name', dataKey = 'value' }: any
 
 export function GenericPieChart({ data, dataKey = 'value', colorKey = 'color', labelFormatter }: any) {
   return (
-    <div className="h-80">
-      <ResponsiveContainer width="100%" height="100%">
+    <div className="h-80 min-h-[200px] w-full">
+      <ResponsiveContainer width="100%" height={320} minHeight={200} minWidth={100}>
         <PieChart>
           <Pie data={data} cx="50%" cy="50%" outerRadius={80} dataKey={dataKey} label={labelFormatter}>
             {data.map((entry: any, index: number) => (
@@ -163,8 +164,8 @@ export function GenericPieChart({ data, dataKey = 'value', colorKey = 'color', l
 
 export function SimpleLineChart({ data, lines = [{ key: 'value', color: '#3B82F6' }], xKey = 'name' }: any) {
   return (
-    <div className="h-80">
-      <ResponsiveContainer width="100%" height="100%">
+    <div className="h-80 min-h-[200px] w-full">
+      <ResponsiveContainer width="100%" height={320} minHeight={200} minWidth={100}>
         <LineChart data={data}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey={xKey} />

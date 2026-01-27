@@ -97,6 +97,82 @@ class QualityAuditService {
       const issues = this.extractIssues(analysisResults)
       const recommendations = this.extractRecommendations(analysisResults, overallScore)
 
+      // 4.5. Calculate compliance metrics if not available in generation_metadata
+      let complianceMetrics = null
+      let existingQualityGates = null
+      try {
+        // Try to get compliance metrics and quality gates from document's generation_metadata first
+        const docResult = await pool.query(
+          'SELECT generation_metadata, template_id, template_framework FROM documents WHERE id = $1',
+          [documentId]
+        )
+        
+        if (docResult.rows.length > 0) {
+          const doc = docResult.rows[0]
+          const genMetadata = doc.generation_metadata
+          
+          if (genMetadata) {
+            const metadata = typeof genMetadata === 'string' ? JSON.parse(genMetadata) : genMetadata
+            if (metadata.complianceMetrics) {
+              complianceMetrics = metadata.complianceMetrics
+              logger.info('[QUALITY-AUDIT] Using compliance metrics from generation_metadata', {
+                documentId,
+                hasComplianceMetrics: true
+              })
+            }
+            
+            // Extract existing quality gates
+            existingQualityGates = metadata.quality_gate_results || metadata.quality_gates || null
+            if (existingQualityGates) {
+              logger.info('[QUALITY-AUDIT] Found existing quality gates in generation_metadata', {
+                documentId,
+                gateCount: existingQualityGates.length
+              })
+            }
+          }
+        }
+        
+        // If not found in generation_metadata, calculate them
+        if (!complianceMetrics) {
+          logger.info('[QUALITY-AUDIT] Calculating compliance metrics', { documentId })
+          
+          // Import the calculateComplianceMetrics function
+          const { calculateComplianceMetrics } = await import('../utils/documentMetadata')
+          
+          // Create a minimal metadata object for compliance calculation
+          const tempMetadata = {
+            wordCount: documentContent.split(/\s+/).filter(Boolean).length,
+            characterCount: documentContent.length,
+            sentenceCount: (documentContent.match(/[.!?]+/g) || []).length,
+            paragraphCount: (documentContent.match(/\n\n+/g) || []).length + 1,
+            templateId: projectContext.templateId || undefined,
+            framework: projectContext.framework || undefined
+          } as any
+          
+          // Calculate compliance metrics directly
+          complianceMetrics = calculateComplianceMetrics(
+            documentContent,
+            tempMetadata,
+            projectContext.framework as string
+          )
+          
+          logger.info('[QUALITY-AUDIT] Compliance metrics calculated', {
+            documentId,
+            overallComplianceRating: complianceMetrics.overallComplianceRating,
+            pmbokGuide: complianceMetrics.pmbokGuide,
+            gdpr: complianceMetrics.gdpr,
+            hipaa: complianceMetrics.hipaa,
+            soc2: complianceMetrics.soc2
+          })
+        }
+      } catch (error) {
+        logger.warn('[QUALITY-AUDIT] Failed to calculate compliance metrics', {
+          documentId,
+          error: error instanceof Error ? error.message : String(error)
+        })
+        // Continue without compliance metrics - they're optional
+      }
+
       const analysisTime = Date.now() - startTime
 
       // 5. Save audit results to database
@@ -110,6 +186,8 @@ class QualityAuditService {
         findings,
         issues,
         recommendations,
+        complianceMetrics, // Include compliance metrics
+        existingQualityGates, // Include existing quality gates if found
         aiProvider: (analysisResults.provider as string) || 'google',
         aiModel: (analysisResults.model as string) || 'gemini-2.5-flash',
         analysisTokens: (analysisResults.tokens as number) || 0,
@@ -755,6 +833,8 @@ Remember: Your audit helps improve future document generation, so be detailed an
     findings: Record<string, string>
     issues: QualityIssue[]
     recommendations: string[]
+    complianceMetrics?: any // Compliance metrics (PMBOK, GDPR, HIPAA, etc.)
+    existingQualityGates?: any[] // Existing quality gates from generation_metadata
     aiProvider?: string
     aiModel?: string
     analysisTokens?: number
@@ -797,6 +877,136 @@ Remember: Your audit helps improve future document generation, so be detailed an
     )
 
     const auditId = result.rows[0].id
+
+    // Update document's generation_metadata with compliance metrics if calculated
+    if (auditData.complianceMetrics) {
+      try {
+        const docResult = await pool.query(
+          'SELECT generation_metadata FROM documents WHERE id = $1',
+          [auditData.documentId]
+        )
+        
+        if (docResult.rows.length > 0) {
+          let genMetadata = docResult.rows[0].generation_metadata
+          
+          // Parse if string, otherwise use as-is
+          if (typeof genMetadata === 'string') {
+            try {
+              genMetadata = JSON.parse(genMetadata)
+            } catch {
+              genMetadata = {}
+            }
+          } else if (!genMetadata) {
+            genMetadata = {}
+          }
+          
+          // Always update compliance metrics (they may have been recalculated)
+          genMetadata.complianceMetrics = auditData.complianceMetrics
+          
+          // Extract and store EU AI Act quality gate results if available
+          // This ensures quality gates are visible in metadata even if they weren't stored during generation
+          if (genMetadata.quality_gate_results || genMetadata.quality_gates || auditData.existingQualityGates) {
+            // Use existing quality gates or provided ones
+            const gatesToUse = genMetadata.quality_gate_results || genMetadata.quality_gates || auditData.existingQualityGates || []
+            genMetadata.quality_gate_results = gatesToUse
+            genMetadata.quality_gates = gatesToUse
+            
+            logger.info('[QUALITY-AUDIT] Quality gates already exist in generation_metadata', {
+              documentId: auditData.documentId,
+              gateCount: gatesToUse.length
+            })
+          } else {
+            // Try to extract EU AI Act gate from compliance metrics and create quality gate structure
+            // This ensures EU AI Act gates are visible even if they weren't stored during generation
+            const euAIActData = auditData.complianceMetrics?.euAIAct
+            if (euAIActData && euAIActData.criteria) {
+              const euAIActGate = {
+                gate_id: 'EU_AI_ACT_COMPLIANCE_GATE',
+                gate_name: 'EU AI Act Compliance Gate',
+                passed: euAIActData.passed !== false,
+                score: euAIActData.overallScore || 0,
+                action_on_failure: 'warn', // EU AI Act gates are warnings, not blockers
+                criteria_results: [
+                  {
+                    criterion_id: 'EU_AI_ACT_TRANSPARENCY',
+                    criterion_name: 'Transparency',
+                    score: euAIActData.criteria.transparency?.score || 0,
+                    threshold: euAIActData.criteria.transparency?.threshold || 80,
+                    passed: euAIActData.criteria.transparency?.passed !== false,
+                    weight: euAIActData.criteria.transparency?.weight || 0.30
+                  },
+                  {
+                    criterion_id: 'EU_AI_ACT_HUMAN_OVERSIGHT',
+                    criterion_name: 'Human Oversight',
+                    score: euAIActData.criteria.humanOversight?.score || 0,
+                    threshold: euAIActData.criteria.humanOversight?.threshold || 80,
+                    passed: euAIActData.criteria.humanOversight?.passed !== false,
+                    weight: euAIActData.criteria.humanOversight?.weight || 0.30
+                  },
+                  {
+                    criterion_id: 'EU_AI_ACT_ACCURACY',
+                    criterion_name: 'Accuracy',
+                    score: euAIActData.criteria.accuracy?.score || 0,
+                    threshold: euAIActData.criteria.accuracy?.threshold || 70,
+                    passed: euAIActData.criteria.accuracy?.passed !== false,
+                    weight: euAIActData.criteria.accuracy?.weight || 0.25
+                  },
+                  {
+                    criterion_id: 'EU_AI_ACT_DATA_GOVERNANCE',
+                    criterion_name: 'Data Governance',
+                    score: euAIActData.criteria.dataGovernance?.score || 0,
+                    threshold: euAIActData.criteria.dataGovernance?.threshold || 60,
+                    passed: euAIActData.criteria.dataGovernance?.passed !== false,
+                    weight: euAIActData.criteria.dataGovernance?.weight || 0.10
+                  },
+                  {
+                    criterion_id: 'EU_AI_ACT_RECORD_KEEPING',
+                    criterion_name: 'Record Keeping',
+                    score: euAIActData.criteria.recordKeeping?.score || 0,
+                    threshold: euAIActData.criteria.recordKeeping?.threshold || 70,
+                    passed: euAIActData.criteria.recordKeeping?.passed !== false,
+                    weight: euAIActData.criteria.recordKeeping?.weight || 0.05
+                  }
+                ],
+                message: `EU AI Act compliance: ${euAIActData.overallScore}% overall score`
+              }
+              
+              genMetadata.quality_gate_results = [euAIActGate]
+              genMetadata.quality_gates = [euAIActGate]
+              
+              logger.info('[QUALITY-AUDIT] Created EU AI Act quality gate in generation_metadata', {
+                documentId: auditData.documentId,
+                overallScore: euAIActData.overallScore,
+                passed: euAIActData.passed
+              })
+            }
+          }
+          
+          // Update document with compliance metrics and quality gates
+          await pool.query(
+            'UPDATE documents SET generation_metadata = $1 WHERE id = $2',
+            [JSON.stringify(genMetadata), auditData.documentId]
+          )
+          
+          logger.info('[QUALITY-AUDIT] Updated document generation_metadata with compliance metrics and quality gates', {
+            documentId: auditData.documentId,
+            auditId,
+            overallComplianceRating: auditData.complianceMetrics.overallComplianceRating,
+            pmbokGuide: auditData.complianceMetrics.pmbokGuide,
+            gdpr: auditData.complianceMetrics.gdpr,
+            hipaa: auditData.complianceMetrics.hipaa,
+            soc2: auditData.complianceMetrics.soc2,
+            hasQualityGates: !!(genMetadata.quality_gate_results || genMetadata.quality_gates)
+          })
+        }
+      } catch (error) {
+        logger.warn('[QUALITY-AUDIT] Failed to update document with compliance metrics', {
+          documentId: auditData.documentId,
+          error: error instanceof Error ? error.message : String(error)
+        })
+        // Non-blocking - continue even if update fails
+      }
+    }
 
     // Trigger low-quality notification if score below 70%
     if (auditData.overallScore < 70) {
@@ -951,13 +1161,15 @@ Remember: Your audit helps improve future document generation, so be detailed an
   /**
    * Get quality audit for a document
    * Also includes compliance metrics from generation_metadata if available
+   * Optionally includes document content and framework for detailed breakdown analysis
    */
-  async getDocumentAudit(documentId: string): Promise<any> {
+  async getDocumentAudit(documentId: string, includeContent: boolean = false): Promise<any> {
     const result = await pool.query(
       `SELECT qa.*, 
               COALESCE(d.title, d.name) as document_title,
               t.name as document_type,
-              d.generation_metadata
+              d.framework as framework_used,
+              d.generation_metadata${includeContent ? ', d.content as document_content' : ''}
        FROM quality_audits qa
        JOIN documents d ON qa.document_id = d.id
        LEFT JOIN templates t ON d.template_id = t.id
@@ -973,7 +1185,7 @@ Remember: Your audit helps improve future document generation, so be detailed an
 
     const audit = result.rows[0]
     
-    // Extract compliance metrics from generation_metadata if available
+    // Extract compliance metrics and EU AI Act compliance from generation_metadata if available
     if (audit.generation_metadata) {
       try {
         const metadata = typeof audit.generation_metadata === 'string' 
@@ -982,6 +1194,85 @@ Remember: Your audit helps improve future document generation, so be detailed an
         
         if (metadata.complianceMetrics) {
           audit.compliance_metrics = metadata.complianceMetrics
+          logger.info('[QUALITY-AUDIT] Extracted compliance metrics from generation_metadata', {
+            documentId,
+            hasComplianceMetrics: true,
+            overallComplianceRating: metadata.complianceMetrics.overallComplianceRating
+          })
+        } else {
+          logger.warn('[QUALITY-AUDIT] No compliance metrics found in generation_metadata', {
+            documentId,
+            metadataKeys: Object.keys(metadata || {})
+          })
+        }
+
+        // Extract EU AI Act compliance from quality gate results
+        const qualityGateResults = metadata.quality_gate_results || metadata.quality_gates || []
+        const euAIActGate = qualityGateResults.find((gate: any) => 
+          gate.gate_id === 'EU_AI_ACT_COMPLIANCE_GATE' || 
+          gate.gate_name?.includes('EU AI Act')
+        )
+
+        if (euAIActGate && euAIActGate.criteria_results) {
+          // Extract individual criterion scores
+          const criteria = euAIActGate.criteria_results.reduce((acc: any, criterion: any) => {
+            const criterionId = criterion.criterion_id || ''
+            if (criterionId.includes('TRANSPARENCY')) {
+              acc.transparency = {
+                score: criterion.score || 0,
+                threshold: criterion.threshold || 80,
+                passed: criterion.passed !== false,
+                weight: criterion.weight || 0.30
+              }
+            } else if (criterionId.includes('HUMAN_OVERSIGHT')) {
+              acc.humanOversight = {
+                score: criterion.score || 0,
+                threshold: criterion.threshold || 80,
+                passed: criterion.passed !== false,
+                weight: criterion.weight || 0.30
+              }
+            } else if (criterionId.includes('ACCURACY')) {
+              acc.accuracy = {
+                score: criterion.score || 0,
+                threshold: criterion.threshold || 70,
+                passed: criterion.passed !== false,
+                weight: criterion.weight || 0.25
+              }
+            } else if (criterionId.includes('DATA_GOVERNANCE')) {
+              acc.dataGovernance = {
+                score: criterion.score || 0,
+                threshold: criterion.threshold || 60,
+                passed: criterion.passed !== false,
+                weight: criterion.weight || 0.10
+              }
+            } else if (criterionId.includes('RECORD_KEEPING')) {
+              acc.recordKeeping = {
+                score: criterion.score || 0,
+                threshold: criterion.threshold || 70,
+                passed: criterion.passed !== false,
+                weight: criterion.weight || 0.05
+              }
+            }
+            return acc
+          }, {})
+
+          // Only add EU AI Act data if we found at least one criterion
+          if (Object.keys(criteria).length > 0) {
+            if (!audit.compliance_metrics) {
+              audit.compliance_metrics = {}
+            }
+            audit.compliance_metrics.euAIAct = {
+              overallScore: euAIActGate.score || 0,
+              passed: euAIActGate.passed !== false,
+              criteria: {
+                transparency: criteria.transparency || { score: 0, threshold: 80, passed: false, weight: 0.30 },
+                humanOversight: criteria.humanOversight || { score: 0, threshold: 80, passed: false, weight: 0.30 },
+                accuracy: criteria.accuracy || { score: 0, threshold: 70, passed: false, weight: 0.25 },
+                dataGovernance: criteria.dataGovernance || { score: 0, threshold: 60, passed: false, weight: 0.10 },
+                recordKeeping: criteria.recordKeeping || { score: 0, threshold: 70, passed: false, weight: 0.05 }
+              }
+            }
+          }
         }
       } catch (error) {
         logger.warn('[QUALITY-AUDIT] Failed to parse compliance metrics from generation_metadata', {
