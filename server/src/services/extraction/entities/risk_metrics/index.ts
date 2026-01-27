@@ -178,36 +178,95 @@ export async function saveRiskMetrics(
   }
 
   try {
+    const columnResult = await client.query<{ column_name: string }>(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'risk_metrics'`
+    )
+    const columnSet = new Set(columnResult.rows.map(row => row.column_name))
+
+    const pickColumn = (options: string[]): string | null => {
+      for (const option of options) {
+        if (columnSet.has(option)) {
+          return option
+        }
+      }
+      return null
+    }
+
+    const measurementDateColumn = pickColumn([
+      'measurement_date',
+      'report_date',
+      'as_of_date',
+      'recorded_at',
+      'metric_date'
+    ])
+    const exposureIndexColumn = pickColumn([
+      'exposure_index',
+      'risk_exposure_index',
+      'exposure_score'
+    ])
+    const newRisksColumn = pickColumn(['new_risks', 'new_risk_count'])
+    const closedRisksColumn = pickColumn(['closed_risks', 'closed_risk_count'])
+    const trendColumn = pickColumn(['trend', 'trend_direction'])
+    const topCategoriesColumn = pickColumn(['top_categories', 'categories', 'risk_categories'])
+    const notesColumn = pickColumn(['notes', 'commentary', 'details'])
+    const sourceDocumentColumn = pickColumn(['source_document_id'])
+    const createdByColumn = pickColumn(['created_by'])
+
+    const columnOrder: Array<{ name: string; value: (entity: RiskMetric) => any }> = [
+      { name: 'project_id', value: () => projectId }
+    ]
+
+    if (measurementDateColumn) {
+      columnOrder.push({ name: measurementDateColumn, value: (e) => e.measurement_date || null })
+    }
+    if (exposureIndexColumn) {
+      columnOrder.push({ name: exposureIndexColumn, value: (e) => e.exposure_index ?? null })
+    }
+    if (newRisksColumn) {
+      columnOrder.push({ name: newRisksColumn, value: (e) => e.new_risks ?? null })
+    }
+    if (closedRisksColumn) {
+      columnOrder.push({ name: closedRisksColumn, value: (e) => e.closed_risks ?? null })
+    }
+    if (trendColumn) {
+      columnOrder.push({ name: trendColumn, value: (e) => e.trend || null })
+    }
+    if (topCategoriesColumn) {
+      columnOrder.push({ name: topCategoriesColumn, value: (e) => e.top_categories || [] })
+    }
+    if (notesColumn) {
+      columnOrder.push({ name: notesColumn, value: (e) => e.notes || null })
+    }
+    if (sourceDocumentColumn) {
+      columnOrder.push({ name: sourceDocumentColumn, value: (e) => e.source_document_id || null })
+    }
+    if (createdByColumn) {
+      columnOrder.push({ name: createdByColumn, value: () => userId })
+    }
+
+    if (columnOrder.length === 0) {
+      throw new Error('risk_metrics table has no writable columns')
+    }
+
     await client.query('DELETE FROM risk_metrics WHERE project_id = $1', [projectId])
 
     const values: any[] = []
     const placeholders: string[] = []
 
     entities.forEach((e, index) => {
-      const offset = index * 10
-      placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10})`
-      )
-
-      values.push(
-        projectId,
-        e.measurement_date || null,
-        e.exposure_index ?? null,
-        e.new_risks ?? null,
-        e.closed_risks ?? null,
-        e.trend || null,
-        e.top_categories || [],
-        e.notes || null,
-        e.source_document_id || null,
-        userId
-      )
+      const offset = index * columnOrder.length
+      const rowPlaceholders = columnOrder.map((_, columnIndex) => `$${offset + columnIndex + 1}`)
+      placeholders.push(`(${rowPlaceholders.join(', ')})`)
+      columnOrder.forEach(column => {
+        values.push(column.value(e))
+      })
     })
 
     await client.query(
-      `INSERT INTO risk_metrics (
-        project_id, measurement_date, exposure_index, new_risks, closed_risks,
-        trend, top_categories, notes, source_document_id, created_by
-      )
+      `INSERT INTO risk_metrics (${columnOrder.map(col => col.name).join(', ')})
       VALUES ${placeholders.join(', ')}`,
       values
     )
