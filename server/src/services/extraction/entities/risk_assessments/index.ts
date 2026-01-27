@@ -180,38 +180,93 @@ export async function saveRiskAssessments(
   }
 
   try {
+    const columnResult = await client.query<{ column_name: string }>(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'risk_assessments'`
+    )
+    const columnSet = new Set(columnResult.rows.map(row => row.column_name))
+
+    const pickColumn = (options: string[]): string | null => {
+      for (const option of options) {
+        if (columnSet.has(option)) {
+          return option
+        }
+      }
+      return null
+    }
+
+    const riskIdColumn = pickColumn(['risk_id', 'risk_identifier'])
+    const riskTitleColumn = pickColumn(['risk_title', 'risk_name', 'title'])
+    const assessmentDateColumn = pickColumn(['assessment_date', 'assessed_at', 'review_date'])
+    const probabilityColumn = pickColumn(['probability', 'likelihood'])
+    const impactColumn = pickColumn(['impact'])
+    const detectabilityColumn = pickColumn(['detectability', 'detection_score'])
+    const rpnColumn = pickColumn(['rpn', 'risk_priority_number'])
+    const assessorColumn = pickColumn(['assessor', 'assessed_by'])
+    const notesColumn = pickColumn(['notes', 'assessment_notes'])
+    const sourceDocumentColumn = pickColumn(['source_document_id'])
+    const createdByColumn = pickColumn(['created_by'])
+
+    const columnOrder: Array<{ name: string; value: (entity: RiskAssessment) => any }> = [
+      { name: 'project_id', value: () => projectId }
+    ]
+
+    if (riskIdColumn) {
+      columnOrder.push({ name: riskIdColumn, value: (e) => e.risk_id || null })
+    }
+    if (riskTitleColumn) {
+      columnOrder.push({ name: riskTitleColumn, value: (e) => e.risk_title || null })
+    }
+    if (assessmentDateColumn) {
+      columnOrder.push({ name: assessmentDateColumn, value: (e) => e.assessment_date || null })
+    }
+    if (probabilityColumn) {
+      columnOrder.push({ name: probabilityColumn, value: (e) => e.probability || null })
+    }
+    if (impactColumn) {
+      columnOrder.push({ name: impactColumn, value: (e) => e.impact || null })
+    }
+    if (detectabilityColumn) {
+      columnOrder.push({ name: detectabilityColumn, value: (e) => e.detectability ?? null })
+    }
+    if (rpnColumn) {
+      columnOrder.push({ name: rpnColumn, value: (e) => e.rpn ?? null })
+    }
+    if (assessorColumn) {
+      columnOrder.push({ name: assessorColumn, value: (e) => e.assessor || null })
+    }
+    if (notesColumn) {
+      columnOrder.push({ name: notesColumn, value: (e) => e.notes || null })
+    }
+    if (sourceDocumentColumn) {
+      columnOrder.push({ name: sourceDocumentColumn, value: (e) => e.source_document_id || null })
+    }
+    if (createdByColumn) {
+      columnOrder.push({ name: createdByColumn, value: () => userId })
+    }
+
+    if (columnOrder.length === 0) {
+      throw new Error('risk_assessments table has no writable columns')
+    }
+
     await client.query('DELETE FROM risk_assessments WHERE project_id = $1', [projectId])
 
     const values: any[] = []
     const placeholders: string[] = []
 
     entities.forEach((e, index) => {
-      const offset = index * 12
-      placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12})`
-      )
-
-      values.push(
-        projectId,
-        e.risk_id || null,
-        e.risk_title || null,
-        e.assessment_date || null,
-        e.probability || null,
-        e.impact || null,
-        e.detectability ?? null,
-        e.rpn ?? null,
-        e.assessor || null,
-        e.notes || null,
-        e.source_document_id || null,
-        userId
-      )
+      const offset = index * columnOrder.length
+      const rowPlaceholders = columnOrder.map((_, columnIndex) => `$${offset + columnIndex + 1}`)
+      placeholders.push(`(${rowPlaceholders.join(', ')})`)
+      columnOrder.forEach(column => {
+        values.push(column.value(e))
+      })
     })
 
     await client.query(
-      `INSERT INTO risk_assessments (
-        project_id, risk_id, risk_title, assessment_date, probability,
-        impact, detectability, rpn, assessor, notes, source_document_id, created_by
-      )
+      `INSERT INTO risk_assessments (${columnOrder.map(col => col.name).join(', ')})
       VALUES ${placeholders.join(', ')}`,
       values
     )
