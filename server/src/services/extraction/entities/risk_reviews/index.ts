@@ -191,6 +191,7 @@ export async function saveRiskReviews(
     )
     const columnSet = new Set(columnResult.rows.map(row => row.column_name))
 
+<<<<<<< HEAD
     const pick = (opts: string[]) => opts.find(c => columnSet.has(c)) ?? null
 
     const reviewIdCol = pick(['review_id'])
@@ -240,6 +241,64 @@ export async function saveRiskReviews(
     if (createdByCol) columnOrder.push({ name: createdByCol, value: () => userId })
 
     if (columnOrder.length <= 1) {
+=======
+    const pickColumn = (options: string[]): string | null => {
+      for (const option of options) {
+        if (columnSet.has(option)) {
+          return option
+        }
+      }
+      return null
+    }
+
+    const reviewDateColumn = pickColumn(['review_date', 'reviewed_at', 'review_timestamp'])
+    const riskIdColumn = pickColumn(['risk_id', 'risk_identifier'])
+    const riskTitleColumn = pickColumn(['risk_title', 'risk_name', 'title'])
+    const statusBeforeColumn = pickColumn(['status_before', 'previous_status'])
+    const statusAfterColumn = pickColumn(['status_after', 'current_status'])
+    const actionsColumn = pickColumn(['actions', 'follow_up_actions'])
+    const reviewerColumn = pickColumn(['reviewer', 'reviewed_by', 'reviewer_name'])
+    const notesColumn = pickColumn(['notes', 'summary', 'review_notes'])
+    const sourceDocumentColumn = pickColumn(['source_document_id'])
+    const createdByColumn = pickColumn(['created_by'])
+
+    const columnOrder: Array<{ name: string; value: (entity: RiskReview) => any }> = [
+      { name: 'project_id', value: () => projectId }
+    ]
+
+    if (reviewDateColumn) {
+      columnOrder.push({ name: reviewDateColumn, value: (e) => e.review_date || null })
+    }
+    if (riskIdColumn) {
+      columnOrder.push({ name: riskIdColumn, value: (e) => e.risk_id || null })
+    }
+    if (riskTitleColumn) {
+      columnOrder.push({ name: riskTitleColumn, value: (e) => e.risk_title || null })
+    }
+    if (statusBeforeColumn) {
+      columnOrder.push({ name: statusBeforeColumn, value: (e) => e.status_before || null })
+    }
+    if (statusAfterColumn) {
+      columnOrder.push({ name: statusAfterColumn, value: (e) => e.status_after || null })
+    }
+    if (actionsColumn) {
+      columnOrder.push({ name: actionsColumn, value: (e) => e.actions || [] })
+    }
+    if (reviewerColumn) {
+      columnOrder.push({ name: reviewerColumn, value: (e) => e.reviewer || null })
+    }
+    if (notesColumn) {
+      columnOrder.push({ name: notesColumn, value: (e) => e.notes || null })
+    }
+    if (sourceDocumentColumn) {
+      columnOrder.push({ name: sourceDocumentColumn, value: (e) => e.source_document_id || null })
+    }
+    if (createdByColumn) {
+      columnOrder.push({ name: createdByColumn, value: () => userId })
+    }
+
+    if (columnOrder.length === 0) {
+>>>>>>> 349abf3391101e9126a8b665d7784e535c158240
       throw new Error('risk_reviews table has no writable columns')
     }
 
@@ -250,6 +309,7 @@ export async function saveRiskReviews(
 
     entities.forEach((e, index) => {
       const offset = index * columnOrder.length
+<<<<<<< HEAD
       placeholders.push(
         columnOrder.map((_, i) => `$${offset + i + 1}`).join(', ')
       )
@@ -259,6 +319,18 @@ export async function saveRiskReviews(
     await client.query(
       `INSERT INTO risk_reviews (${columnOrder.map(c => c.name).join(', ')})
        VALUES ${placeholders.map(p => `(${p})`).join(', ')}`,
+=======
+      const rowPlaceholders = columnOrder.map((_, columnIndex) => `$${offset + columnIndex + 1}`)
+      placeholders.push(`(${rowPlaceholders.join(', ')})`)
+      columnOrder.forEach(column => {
+        values.push(column.value(e))
+      })
+    })
+
+    await client.query(
+      `INSERT INTO risk_reviews (${columnOrder.map(col => col.name).join(', ')})
+      VALUES ${placeholders.join(', ')}`,
+>>>>>>> 349abf3391101e9126a8b665d7784e535c158240
       values
     )
 
