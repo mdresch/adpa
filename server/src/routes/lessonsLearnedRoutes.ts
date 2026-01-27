@@ -29,31 +29,78 @@ const router = Router()
  * Get lessons learned for a project
  */
 router.get('/projects/:projectId/lessons', authMiddleware, async (req, res) => {
+    const log = logger.child({ requestId: (req as any).requestId })
+    
     try {
         const { projectId } = req.params
         const { category, impact, positive, limit, offset } = req.query
 
-        // Verify project access
-        const hasAccess = await verifyProjectAccess(req.user, projectId)
-        if (!hasAccess) {
-            return res.status(403).json({
+        // Validate projectId format (should be UUID)
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+        if (!uuidRegex.test(projectId)) {
+            log.warn('[LESSONS-API] Invalid project ID format', { projectId })
+            return res.status(400).json({
                 success: false,
-                error: {
-                    code: 'FORBIDDEN',
-                    message: 'You do not have access to this project'
-                }
+                error: 'Invalid project ID format',
+                message: 'Project ID must be a valid UUID'
             })
         }
 
+        // Verify project access
+        log.info('[LESSONS-API] Verifying project access', { projectId, userId: req.user?.id })
+        const hasAccess = await verifyProjectAccess(req.user, projectId)
+        if (!hasAccess) {
+            log.warn('[LESSONS-API] Access denied', { projectId, userId: req.user?.id })
+            return res.status(403).json({
+                success: false,
+                error: 'Access denied: You do not have access to this project',
+                message: 'You do not have access to this project'
+            })
+        }
+
+        // Validate and parse filters
         const filters = {
             category: typeof category === 'string' ? category : undefined,
             impact: typeof impact === 'string' ? impact : undefined,
             positive: typeof positive === 'string' ? positive === 'true' : undefined,
-            limit: typeof limit === 'string' ? parseInt(limit) : undefined,
-            offset: typeof offset === 'string' ? parseInt(offset) : undefined
+            limit: typeof limit === 'string' ? (isNaN(parseInt(limit)) ? undefined : parseInt(limit)) : undefined,
+            offset: typeof offset === 'string' ? (isNaN(parseInt(offset)) ? undefined : parseInt(offset)) : undefined
+        }
+
+        // Validate limit and offset if provided
+        if (filters.limit !== undefined && filters.limit < 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid limit parameter',
+                message: 'Limit must be a positive number'
+            })
+        }
+        if (filters.offset !== undefined && filters.offset < 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid offset parameter',
+                message: 'Offset must be a positive number'
+            })
+        }
+
+        log.info('[LESSONS-API] Fetching lessons', { projectId, filters })
+        
+        // Check if service is properly initialized
+        if (!lessonsLearnedService) {
+            log.error('[LESSONS-API] Lessons learned service not initialized')
+            return res.status(500).json({
+                success: false,
+                error: 'Service initialization error',
+                message: 'Lessons learned service is not available'
+            })
         }
 
         const lessons = await lessonsLearnedService.getByProject(projectId, filters)
+
+        log.info('[LESSONS-API] Successfully fetched lessons', {
+            projectId,
+            count: lessons.length
+        })
 
         res.json({
             success: true,
@@ -61,9 +108,11 @@ router.get('/projects/:projectId/lessons', authMiddleware, async (req, res) => {
             count: lessons.length
         })
     } catch (error) {
-        logger.error('[LESSONS-API] Failed to get lessons by project', {
+        log.error('[LESSONS-API] Failed to get lessons by project', {
             error: error instanceof Error ? error.message : String(error),
-            projectId: req.params.projectId
+            stack: error instanceof Error ? error.stack : undefined,
+            projectId: req.params.projectId,
+            userId: req.user?.id
         })
 
         res.status(500).json({

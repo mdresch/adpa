@@ -35,6 +35,21 @@ type NotifyArgs = {
 const wrap = (type: 'success' | 'error' | 'info' | 'warning') => (message: string, opts?: { title?: string; announce?: boolean; suppressAdapter?: boolean }) => {
   const title = opts?.title ?? (type === 'success' ? 'Success' : type === 'error' ? 'Error' : 'Notification')
   const announce = opts?.announce ?? true
+  
+  // Filter out room join notifications - they should not appear as toasts
+  const messageLower = message?.toLowerCase() || ''
+  const titleLower = title?.toLowerCase() || ''
+  const combined = `${messageLower} ${titleLower}`.toLowerCase()
+  
+  if (combined.includes('joined') || 
+      combined.includes('realtime rooms') ||
+      combined.includes('realtime') ||
+      titleLower.includes('realtime rooms') ||
+      messageLower.includes('joined room')) {
+    // Silently ignore room join notifications - they're handled by RoomStatusList
+    return
+  }
+  
   // send to notifications center unless explicitly suppressed
   if (!opts?.suppressAdapter) {
     try {

@@ -6,14 +6,14 @@ nixPkgs = ["nodejs_20", "chromium"]
 
 [phases.install]
 cmds = [
-  "npm install --prefix server",
+  "cd server && npm install && npm install handlebars --no-save",
   "export PUPPETEER_EXECUTABLE_PATH=$(which chromium || which chromium-browser || echo '')"
 ]
 
 [phases.build]
-cmds = ["npm run build --prefix server || true"]
+cmds = ["cd server && npm run build || true"]
 
 [start]
-cmd = "export PUPPETEER_EXECUTABLE_PATH=$(which chromium || which chromium-browser || echo '') && npm start --prefix server"
+cmd = "export PUPPETEER_EXECUTABLE_PATH=$(which chromium || which chromium-browser || echo '') && cd server && npm start"
 
 

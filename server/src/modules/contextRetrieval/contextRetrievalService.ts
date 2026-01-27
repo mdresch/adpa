@@ -8,6 +8,7 @@ import { pool } from '../../database/connection'
 import { SemanticSearchEngine } from './engines/semanticSearchEngine'
 import { KeywordSearchEngine } from './engines/keywordSearchEngine'
 import { RelevanceScoringEngine } from './engines/relevanceScoringEngine'
+import { QdrantSearchEngine, type QdrantConfig } from './engines/qdrantSearchEngine'
 import type {
   ContextRetrievalService as IContextRetrievalService,
   ContextRetrievalRequest,
@@ -24,13 +25,15 @@ import type {
 export class ContextRetrievalService implements IContextRetrievalService {
   private semanticSearchEngine: SemanticSearchEngine
   private keywordSearchEngine: KeywordSearchEngine
+  private qdrantSearchEngine: QdrantSearchEngine | null
   private relevanceScoringEngine: RelevanceScoringEngine
   private semanticSearchConfig: SemanticSearchConfig
   private relevanceScoringConfig: RelevanceScoringConfig
 
   constructor(
     semanticSearchConfig: SemanticSearchConfig,
-    relevanceScoringConfig: RelevanceScoringConfig
+    relevanceScoringConfig: RelevanceScoringConfig,
+    qdrantConfig?: QdrantConfig
   ) {
     this.semanticSearchConfig = semanticSearchConfig
     this.relevanceScoringConfig = relevanceScoringConfig
@@ -38,6 +41,21 @@ export class ContextRetrievalService implements IContextRetrievalService {
     this.semanticSearchEngine = new SemanticSearchEngine(semanticSearchConfig)
     this.keywordSearchEngine = new KeywordSearchEngine()
     this.relevanceScoringEngine = new RelevanceScoringEngine(relevanceScoringConfig)
+    
+    // Initialize Qdrant engine if config provided
+    if (qdrantConfig) {
+      try {
+        this.qdrantSearchEngine = new QdrantSearchEngine(qdrantConfig, semanticSearchConfig)
+        logger.info('Qdrant search engine initialized', { collectionName: qdrantConfig.collectionName })
+      } catch (error: any) {
+        logger.warn('Failed to initialize Qdrant search engine, continuing without it', {
+          error: error.message
+        })
+        this.qdrantSearchEngine = null
+      }
+    } else {
+      this.qdrantSearchEngine = null
+    }
   }
 
   private getEmptyContextTypeDistribution(): Record<ContextType, number> {
@@ -259,8 +277,41 @@ export class ContextRetrievalService implements IContextRetrievalService {
       
       return results
 
-    } catch (error) {
+    } catch (error: any) {
       logger.error('Failed to retrieve keyword context', {
+        query: query.substring(0, 50),
+        contextTypes,
+        error: error.message
+      })
+      return []
+    }
+  }
+
+  async retrieveQdrantContext(query: string, contextTypes: ContextType[], filters?: ContextFilters): Promise<ContextRetrievalResult[]> {
+    try {
+      if (!this.qdrantSearchEngine) {
+        logger.debug('Qdrant search engine not available')
+        return []
+      }
+
+      logger.debug('Retrieving Qdrant context', { query: query.substring(0, 50), contextTypes })
+      
+      const results = await this.qdrantSearchEngine.search(
+        query,
+        contextTypes,
+        filters,
+        this.semanticSearchConfig.topK || 20
+      )
+      
+      logger.debug('Qdrant context retrieved', {
+        query: query.substring(0, 50),
+        resultsCount: results.length
+      })
+      
+      return results
+
+    } catch (error: any) {
+      logger.error('Failed to retrieve Qdrant context', {
         query: query.substring(0, 50),
         contextTypes,
         error: error.message
@@ -273,25 +324,43 @@ export class ContextRetrievalService implements IContextRetrievalService {
     try {
       logger.debug('Retrieving hybrid context', { query: query.substring(0, 50), contextTypes })
       
-      // Perform both semantic and keyword searches in parallel
-      const [semanticResults, keywordResults] = await Promise.all([
+      // Perform semantic, keyword, and Qdrant searches in parallel
+      const searchPromises: Promise<ContextRetrievalResult[]>[] = [
         this.retrieveSemanticContext(query, contextTypes, filters),
         this.retrieveKeywordContext(query, contextTypes, filters)
-      ])
+      ]
+
+      // Add Qdrant search if available
+      if (this.qdrantSearchEngine) {
+        searchPromises.push(
+          this.retrieveQdrantContext(query, contextTypes, filters).catch(err => {
+            logger.warn('Qdrant search failed in hybrid context', { error: err.message })
+            return [] // Return empty array on error to allow other searches to continue
+          })
+        )
+      }
+
+      const searchResults = await Promise.all(searchPromises)
+      const [semanticResults, keywordResults, qdrantResults = []] = searchResults
       
-      // Combine and deduplicate results
-      const combinedResults = this.combineSearchResults(semanticResults, keywordResults)
+      // Combine and deduplicate results from all search engines
+      const combinedResults = this.combineSearchResults(
+        semanticResults,
+        keywordResults,
+        qdrantResults
+      )
       
       logger.debug('Hybrid context retrieved', {
         query: query.substring(0, 50),
         semanticResultsCount: semanticResults.length,
         keywordResultsCount: keywordResults.length,
+        qdrantResultsCount: qdrantResults.length,
         combinedResultsCount: combinedResults.length
       })
       
       return combinedResults
 
-    } catch (error) {
+    } catch (error: any) {
       logger.error('Failed to retrieve hybrid context', {
         query: query.substring(0, 50),
         contextTypes,
@@ -408,7 +477,13 @@ export class ContextRetrievalService implements IContextRetrievalService {
       // Extract keywords
       const keywords = await this.keywordSearchEngine.extractKeywords(content)
       
-      // Update or insert into search index
+      const metadata = {
+        content_length: content.length,
+        keyword_count: keywords.length,
+        indexed_at: new Date().toISOString()
+      }
+
+      // Update or insert into PostgreSQL search index
       await pool.query(
         `
         INSERT INTO search_index (content, type, source, source_id, embeddings, keywords, metadata)
@@ -428,17 +503,37 @@ export class ContextRetrievalService implements IContextRetrievalService {
           sourceId,
           JSON.stringify(embeddings),
           keywords,
-          JSON.stringify({
-            content_length: content.length,
-            keyword_count: keywords.length,
-            indexed_at: new Date().toISOString()
-          })
+          JSON.stringify(metadata)
         ]
       )
 
+      // Also sync to Qdrant if available (non-blocking)
+      if (this.qdrantSearchEngine) {
+        this.qdrantSearchEngine.upsertPoint(
+          `${source}:${sourceId}`, // Use source:sourceId as unique ID
+          content,
+          type,
+          source,
+          sourceId,
+          {
+            ...metadata,
+            keywords,
+            indexed_at: new Date().toISOString()
+          }
+        ).catch(err => {
+          // Log but don't fail - Qdrant sync is optional
+          logger.warn('Failed to sync to Qdrant (non-blocking)', {
+            type,
+            source,
+            sourceId,
+            error: err.message
+          })
+        })
+      }
+
       logger.info('Search index updated', { type, source, sourceId })
 
-    } catch (error) {
+    } catch (error: any) {
       logger.error('Failed to update search index', {
         type,
         source,
@@ -732,7 +827,11 @@ export class ContextRetrievalService implements IContextRetrievalService {
     }
   }
 
-  private combineSearchResults(semanticResults: ContextRetrievalResult[], keywordResults: ContextRetrievalResult[]): ContextRetrievalResult[] {
+  private combineSearchResults(
+    semanticResults: ContextRetrievalResult[],
+    keywordResults: ContextRetrievalResult[],
+    qdrantResults: ContextRetrievalResult[] = []
+  ): ContextRetrievalResult[] {
     const resultMap = new Map<string, ContextRetrievalResult>()
     
     // Add semantic results first (they get priority)
@@ -748,6 +847,18 @@ export class ContextRetrievalService implements IContextRetrievalService {
         existing.relevanceScore = (existing.relevanceScore + result.relevanceScore) / 2
       } else {
         resultMap.set(result.id, result)
+      }
+    })
+    
+    // Add Qdrant results, combining scores if duplicate
+    qdrantResults.forEach(result => {
+      const existing = resultMap.get(result.id)
+      if (existing) {
+        // Combine scores for duplicate results (weighted average)
+        existing.relevanceScore = (existing.relevanceScore * 0.6 + result.relevanceScore * 0.4)
+      } else {
+        // Boost Qdrant results slightly
+        resultMap.set(result.id, { ...result, relevanceScore: result.relevanceScore * 1.1 })
       }
     })
     

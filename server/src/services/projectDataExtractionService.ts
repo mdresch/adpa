@@ -8785,6 +8785,24 @@ Output valid JSON object with "performance_actuals" array only.`
     let entities: any[]
     
     try {
+      // Check if entity type is registered in extraction registry first
+      try {
+        const orchestrator = await import('./extraction/ExtractionOrchestrator')
+        const registry = await import('./extraction/ExtractionRegistry')
+        if (registry && (registry as any).extractionRegistry && (registry as any).extractionRegistry.hasEntity(entityType)) {
+          logger.info(`[EXTRACTION-${entityType.toUpperCase()}] Using extraction registry for ${entityType}`)
+          entities = await (orchestrator as any).extractSingleEntityType(projectId, userId, entityType, extractionOptions)
+          // Cache the result
+          if (entities && entities.length > 0) {
+            await aiCacheService.set(projectId, documentContext, entityType, entities, bestProvider, bestModel)
+          }
+          return entities
+        }
+      } catch (err) {
+        // Fall back to switch statement below
+        logger.debug(`[EXTRACTION-${entityType.toUpperCase()}] Registry not available, using legacy extraction`)
+      }
+
       // Map entity type to extraction method - pass documents array, extractionOptions, documentMap, and documentList
       switch (entityType) {
       case 'stakeholders':

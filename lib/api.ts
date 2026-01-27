@@ -708,11 +708,22 @@ class ApiClient {
       })
 
       this.socket.on("connect", () => {
-        console.log("WebSocket connected")
+        if (process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_DEBUG_WS === 'true') {
+          console.log("WebSocket connected")
+        }
       })
 
       this.socket.on("disconnect", () => {
-        console.log("WebSocket disconnected")
+        if (process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_DEBUG_WS === 'true') {
+          console.log("WebSocket disconnected")
+        }
+      })
+      
+      // Suppress connection errors in production to reduce console noise
+      this.socket.on("connect_error", (error: Error) => {
+        if (process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_DEBUG_WS === 'true') {
+          console.warn("WebSocket connection error:", error.message || error)
+        }
       })
     }
 
@@ -1687,6 +1698,141 @@ class ApiClient {
     return this.get(`/api/drift/project/${projectId}${query}`)
   }
 
+  // Project Context Items API
+  async getProjectContextItems(projectId: string, filters?: {
+    type?: string
+    is_active?: boolean
+    integration_type?: string
+  }): Promise<{
+    success: boolean
+    items: ProjectContextItem[]
+  }> {
+    const params = new URLSearchParams()
+    if (filters?.type) params.append('type', filters.type)
+    if (filters?.is_active !== undefined) params.append('is_active', String(filters.is_active))
+    if (filters?.integration_type) params.append('integration_type', filters.integration_type)
+    const query = params.toString() ? `?${params.toString()}` : ''
+    return this.get(`/projects/${projectId}/context-items${query}`)
+  }
+
+  async createProjectContextItem(
+    projectId: string,
+    data: {
+      type: 'reference_document' | 'url' | 'custom_text' | 'jira_page' | 'confluence_page'
+      title?: string
+      content?: string
+      source_url?: string
+      integration_type?: string
+      integration_page_id?: string
+      priority?: number
+      file?: File
+    }
+  ): Promise<{
+    success: boolean
+    item: ProjectContextItem
+  }> {
+    if (data.type === 'reference_document' && data.file) {
+      // Use FormData for file upload
+      const formData = new FormData()
+      formData.append('type', data.type)
+      if (data.title) formData.append('title', data.title)
+      if (data.priority) formData.append('priority', String(data.priority))
+      formData.append('file', data.file)
+      
+      return this.request(`/projects/${projectId}/context-items`, {
+        method: 'POST',
+        body: formData,
+        headers: {}, // Let browser set Content-Type with boundary
+      })
+    } else {
+      return this.post(`/projects/${projectId}/context-items`, data)
+    }
+  }
+
+  async updateProjectContextItem(
+    projectId: string,
+    itemId: string,
+    data: {
+      title?: string
+      content?: string
+      is_active?: boolean
+      priority?: number
+    }
+  ): Promise<{
+    success: boolean
+    item: ProjectContextItem
+  }> {
+    return this.put(`/projects/${projectId}/context-items/${itemId}`, data)
+  }
+
+  async deleteProjectContextItem(
+    projectId: string,
+    itemId: string
+  ): Promise<{
+    success: boolean
+    message: string
+  }> {
+    return this.delete(`/projects/${projectId}/context-items/${itemId}`)
+  }
+
+  async fetchUrlContent(projectId: string, url: string): Promise<{
+    success: boolean
+    content: string
+    title: string
+    metadata: any
+  }> {
+    return this.post(`/projects/${projectId}/context-items/fetch-url`, { url })
+  }
+
+  async getIntegrationPages(
+    projectId: string,
+    integrationType: 'jira' | 'confluence',
+    search?: string
+  ): Promise<{
+    success: boolean
+    pages: IntegrationPage[]
+  }> {
+    const params = new URLSearchParams()
+    params.append('integration_type', integrationType)
+    if (search) params.append('search', search)
+    return this.get(`/projects/${projectId}/context-items/integration-pages?${params.toString()}`)
+  }
+
+  async getProjectContextAnalytics(projectId: string): Promise<{
+    success: boolean
+    totalItems: number
+    itemsByType: Record<string, number>
+    activeItems: number
+    totalContentSize: number
+    mostUsedItems: any[]
+    recentItems: any[]
+    usageOverTime: any[]
+  }> {
+    return this.get(`/projects/${projectId}/context-items/analytics`)
+  }
+
+  async getProjectContextRecommendations(projectId: string): Promise<{
+    success: boolean
+    recommendations: ContextRecommendation[]
+    templateSuggestions: TemplateSuggestion[]
+  }> {
+    return this.get(`/projects/${projectId}/context-items/recommendations`)
+  }
+
+  async logContextItemUsage(
+    projectId: string,
+    itemId: string,
+    data: {
+      document_id?: string
+      usage_type?: 'document_generation' | 'manual_review' | 'export'
+    }
+  ): Promise<{
+    success: boolean
+    message: string
+  }> {
+    return this.post(`/projects/${projectId}/context-items/${itemId}/log-usage`, data)
+  }
+
   // Review Scheduling API
   async getReviewSchedule(programId: string, reviewType?: string): Promise<{
     success: boolean
@@ -1898,6 +2044,56 @@ export interface ReviewCompliance {
   last_review_date?: string
   next_review_due_date?: string
   compliance_status: 'overdue' | 'on-track' | 'no-reviews'
+}
+
+// Project Context Items Types
+export interface ProjectContextItem {
+  id: string
+  project_id: string
+  type: 'reference_document' | 'url' | 'custom_text' | 'jira_page' | 'confluence_page'
+  title: string
+  content: string
+  source_url?: string
+  original_filename?: string
+  file_type?: string
+  integration_type?: string
+  integration_page_id?: string
+  metadata?: any
+  is_active: boolean
+  priority: number
+  created_by?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface IntegrationPage {
+  id: string
+  title: string
+  url: string
+  type: 'jira' | 'confluence'
+  lastModified?: string
+  spaceKey?: string
+  projectKey?: string
+  summary?: string
+}
+
+export interface ContextRecommendation {
+  id: string
+  type: 'template' | 'standard' | 'portfolio_standard' | 'missing_context'
+  title: string
+  message: string
+  action: string
+  priority: 'high' | 'medium' | 'low'
+  metadata?: any
+}
+
+export interface TemplateSuggestion {
+  suggestedTemplateName: string
+  basedOnContextItems: string[]
+  estimatedUsage: number
+  templateStructure?: any
+  action: 'create_template' | 'create_standards_doc' | 'create_portfolio_standard'
+  priority: 'high' | 'medium' | 'low'
 }
 
 export const apiClient = new ApiClient(API_BASE_URL)

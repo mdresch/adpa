@@ -225,6 +225,21 @@ export class AIGenerationJobService {
     const log = deps?.logger || logger
     const { jobId, userId, template_id, variables, projectId, documentIds, name, framework } = jobData
 
+    // 🔍 DEBUG: Log jobData to see what we received
+    log.info('[AI-JOB] createDocument called with jobData:', {
+      hasJobId: !!jobId,
+      hasUserId: !!userId,
+      hasTemplateId: !!template_id,
+      hasVariables: !!variables,
+      hasProjectId: !!projectId,
+      projectIdValue: projectId,
+      variablesProjectId: variables?.project_id,
+      hasDocumentIds: !!documentIds,
+      documentIdsCount: documentIds?.length || 0,
+      hasName: !!name,
+      hasFramework: !!framework
+    })
+
     let createdDocumentId: string | null = null
 
     try {
@@ -235,8 +250,150 @@ export class AIGenerationJobService {
       const rawContent = result?.content ? result.content : result
       const docContent = typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent)
       const projectIdForDoc = projectId || variables?.project_id || null
+      
+      // 🔍 DEBUG: Log projectId resolution
+      log.info('[AI-JOB] Project ID resolution:', {
+        projectIdFromJobData: projectId,
+        projectIdFromVariables: variables?.project_id,
+        resolvedProjectId: projectIdForDoc,
+        willAddProjectContext: !!projectIdForDoc
+      })
 
       const { wordCount, characterCount, sentenceCount, paragraphCount } = AIGenerationJobService.calculateContentStats(docContent)
+
+      // 🆕 Build source documents array with project context and document details
+      let sourceDocuments: any[] = []
+      let contextStats: any = null
+
+      // Always add project context if projectId exists
+      if (projectIdForDoc) {
+        try {
+          const projectResult = await db.query(
+            `SELECT name, description, framework FROM projects WHERE id = $1`,
+            [projectIdForDoc]
+          )
+          
+          if (projectResult.rows.length > 0) {
+            const project = projectResult.rows[0]
+            const projectContextEntry = {
+              id: `project_context:${projectIdForDoc}`,
+              title: `Project Context: ${project.name || 'Project'}`,
+              name: `Project Context: ${project.name || 'Project'}`,
+              type: 'Project Context',
+              template_id: null,
+              status: 'active',
+              lifecycle_phase: 0,
+              phase_name: 'Foundation',
+              priority_rank: 0,
+              character_count: (project.description?.length || 0) + (project.name?.length || 0) + (project.framework?.length || 0),
+              word_count: Math.round(((project.description?.length || 0) + (project.name?.length || 0) + (project.framework?.length || 0)) / 5),
+              reading_time_minutes: 0,
+              is_project_context: true
+            }
+            sourceDocuments.push(projectContextEntry)
+            log.info('[AI-JOB] Project context added to source documents', {
+              projectId: projectIdForDoc,
+              projectName: project.name || 'Unknown',
+              sourceDocumentsCount: sourceDocuments.length
+            })
+          } else {
+            // Project not found, but still add placeholder
+            log.warn('[AI-JOB] Project not found, adding project context placeholder', { projectId: projectIdForDoc })
+            const projectContextEntry = {
+              id: `project_context:${projectIdForDoc}`,
+              title: `Project Context: Project ${projectIdForDoc.substring(0, 8)}...`,
+              name: `Project Context: Project ${projectIdForDoc.substring(0, 8)}...`,
+              type: 'Project Context',
+              template_id: null,
+              status: 'active',
+              lifecycle_phase: 0,
+              phase_name: 'Foundation',
+              priority_rank: 0,
+              character_count: 0,
+              word_count: 0,
+              reading_time_minutes: 0,
+              is_project_context: true
+            }
+            sourceDocuments.push(projectContextEntry)
+          }
+        } catch (error) {
+          log.error('[AI-JOB] Failed to fetch project context, adding placeholder', {
+            projectId: projectIdForDoc,
+            error: error instanceof Error ? error.message : String(error)
+          })
+          const projectContextEntry = {
+            id: `project_context:${projectIdForDoc}`,
+            title: `Project Context: Project ${projectIdForDoc.substring(0, 8)}...`,
+            name: `Project Context: Project ${projectIdForDoc.substring(0, 8)}...`,
+            type: 'Project Context',
+            template_id: null,
+            status: 'active',
+            lifecycle_phase: 0,
+            phase_name: 'Foundation',
+            priority_rank: 0,
+            character_count: 0,
+            word_count: 0,
+            reading_time_minutes: 0,
+            is_project_context: true
+          }
+          sourceDocuments.push(projectContextEntry)
+        }
+
+        // Fetch document details for documentIds if provided
+        if (documentIds && documentIds.length > 0) {
+          try {
+            const placeholders = documentIds.map((_, idx) => `$${idx + 1}`).join(',')
+            const docsResult = await db.query(
+              `SELECT d.id, d.name, d.content, d.template_id, d.status, d.word_count, d.character_count,
+                      t.name as template_name
+               FROM documents d
+               LEFT JOIN templates t ON d.template_id = t.id
+               WHERE d.id IN (${placeholders})`,
+              documentIds
+            )
+            
+            const otherDocuments = docsResult.rows.map((doc: any, index: number) => {
+              const charCount = doc.character_count || (typeof doc.content === 'string' ? doc.content.length : 0)
+              const wordCount = doc.word_count || Math.round(charCount / 5)
+              const readingTimeMinutes = Math.round((wordCount / 250) * 10) / 10
+              
+              return {
+                id: doc.id,
+                title: doc.name,
+                name: doc.name,
+                type: doc.template_name || 'Document',
+                template_id: doc.template_id,
+                status: doc.status,
+                lifecycle_phase: 99,
+                phase_name: 'Other',
+                priority_rank: index + 1,
+                character_count: charCount,
+                word_count: wordCount,
+                reading_time_minutes: readingTimeMinutes
+              }
+            })
+            
+            sourceDocuments.push(...otherDocuments)
+            log.info('[AI-JOB] Added document details to source documents', {
+              documentIdsCount: documentIds.length,
+              documentsFound: otherDocuments.length,
+              totalSourceDocuments: sourceDocuments.length
+            })
+          } catch (error) {
+            log.error('[AI-JOB] Failed to fetch document details for source documents', {
+              documentIds,
+              error: error instanceof Error ? error.message : String(error)
+            })
+          }
+        }
+
+        // Build context stats
+        contextStats = {
+          project_context_used: true,
+          documents_used: sourceDocuments.filter((doc: any) => !doc.is_project_context).length,
+          total_documents: sourceDocuments.length
+        }
+      }
 
       const qualityMetrics = await AIGenerationJobService.calculateQualityMetrics(docContent, {
         wordCount,
@@ -245,7 +402,7 @@ export class AIGenerationJobService {
         paragraphCount,
         templateId: template_id,
         framework,
-        sourceDocCount: documentIds?.length || 0
+        sourceDocCount: sourceDocuments.length
       })
 
       const { provider, model } = jobData
@@ -256,6 +413,80 @@ export class AIGenerationJobService {
 
       const jobStartTime = jobData.started_at ? new Date(jobData.started_at) : new Date(jobData.timestamp || Date.now())
       const processingTimeSec = ((new Date().getTime() - jobStartTime.getTime()) / 1000).toFixed(2)
+
+      // 🔍 CRITICAL: Verify project context was added before saving
+      // If we have a projectId but no source documents, add project context as emergency fallback
+      if (projectIdForDoc && sourceDocuments.length === 0) {
+        log.error('[AI-JOB] ⚠️ CRITICAL: sourceDocuments is empty! Adding project context as fallback', { projectId: projectIdForDoc })
+        const emergencyProjectContext = {
+          id: `project_context:${projectIdForDoc}`,
+          title: `Project Context: Project ${projectIdForDoc.substring(0, 8)}...`,
+          name: `Project Context: Project ${projectIdForDoc.substring(0, 8)}...`,
+          type: 'Project Context',
+          template_id: null,
+          status: 'active',
+          lifecycle_phase: 0,
+          phase_name: 'Foundation',
+          priority_rank: 0,
+          character_count: 0,
+          word_count: 0,
+          reading_time_minutes: 0,
+          is_project_context: true
+        }
+        sourceDocuments.push(emergencyProjectContext)
+        // Also ensure contextStats is set
+        if (!contextStats) {
+          contextStats = {
+            project_context_used: true,
+            documents_used: 0,
+            total_documents: 1
+          }
+        }
+      }
+      
+      // 🔍 FINAL SAFETY CHECK: If we still don't have sourceDocuments but have projectIdForDoc, 
+      // try one more time to get project context (this should never happen, but just in case)
+      if (projectIdForDoc && sourceDocuments.length === 0) {
+        log.error('[AI-JOB] ⚠️⚠️⚠️ DOUBLE-CHECK FAILED: sourceDocuments still empty after fallback!', { 
+          projectId: projectIdForDoc,
+          hasProjectId: !!projectId,
+          hasVariablesProjectId: !!variables?.project_id
+        })
+        // Last resort: create minimal project context entry
+        const lastResortContext = {
+          id: `project_context:${projectIdForDoc}`,
+          title: `Project Context`,
+          name: `Project Context`,
+          type: 'Project Context',
+          template_id: null,
+          status: 'active',
+          lifecycle_phase: 0,
+          phase_name: 'Foundation',
+          priority_rank: 0,
+          character_count: 0,
+          word_count: 0,
+          reading_time_minutes: 0,
+          is_project_context: true
+        }
+        sourceDocuments.push(lastResortContext)
+        contextStats = {
+          project_context_used: true,
+          documents_used: 0,
+          total_documents: 1
+        }
+      }
+
+      // 🔍 DEBUG: Log what we're saving
+      log.info('[AI-JOB] Generation metadata being saved:', {
+        hasSourceDocuments: sourceDocuments.length > 0,
+        sourceDocumentsCount: sourceDocuments.length,
+        sourceDocumentsIds: sourceDocuments.map((doc: any) => doc.id),
+        hasProjectContext: sourceDocuments.some((doc: any) => doc.is_project_context),
+        hasContextStats: !!contextStats,
+        contextStatsProjectContextUsed: contextStats?.project_context_used,
+        firstSourceDocId: sourceDocuments[0]?.id,
+        firstSourceDocType: sourceDocuments[0]?.type
+      })
 
       const generationMetadata = AIGenerationJobService.buildGenerationMetadata({
         result,
@@ -274,7 +505,8 @@ export class AIGenerationJobService {
         paragraphCount,
         qualityMetrics,
         jobId,
-        documentIds
+        sourceDocuments, // Pass full source documents array
+        contextStats // Pass context stats
       })
 
       const insertResult = await db.query(
@@ -346,7 +578,11 @@ export class AIGenerationJobService {
   }
 
   private static buildGenerationMetadata(options: any): any {
-    const { result, provider, model, temperature, inputTokens, outputTokens, totalTokens, estimatedCost, processingTimeMs, processingTimeSec, wordCount, characterCount, sentenceCount, paragraphCount, qualityMetrics, jobId, documentIds } = options
+    const { result, provider, model, temperature, inputTokens, outputTokens, totalTokens, estimatedCost, processingTimeMs, processingTimeSec, wordCount, characterCount, sentenceCount, paragraphCount, qualityMetrics, jobId, sourceDocuments, contextStats } = options
+    
+    // Use provided sourceDocuments array if available, otherwise fall back to empty array
+    const finalSourceDocuments = sourceDocuments || []
+    
     return {
       aiProcessing: {
         provider: result?.provider || provider,
@@ -359,7 +595,8 @@ export class AIGenerationJobService {
       generation: { generated_at: new Date().toISOString(), job_id: jobId, status: 'completed' },
       contentMetrics: { wordCount, characterCount, sentenceCount, paragraphCount },
       qualityMetrics,
-      sourceDocuments: (documentIds || []).map((id: string, idx: number) => ({ id, order: idx + 1 }))
+      source_documents: finalSourceDocuments, // Use full source documents array with project context
+      context_stats: contextStats || null // Include context stats if available
     }
   }
 

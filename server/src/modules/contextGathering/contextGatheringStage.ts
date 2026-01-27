@@ -11,6 +11,7 @@ import { ExternalContextAnalyzer } from './analyzers/externalContextAnalyzer'
 import { TemplateContextAnalyzer } from './analyzers/templateContextAnalyzer'
 import { BaselineContextAnalyzer } from './analyzers/baselineContextAnalyzer'
 import { ContextRetrievalService } from '@/modules/contextRetrieval/contextRetrievalService'
+import { getQdrantConfig } from '@/modules/contextRetrieval/config/qdrantConfig'
 import { ContextIntegrator } from './integrators/contextIntegrator'
 import { ContextOptimizer } from './optimizers/contextOptimizer'
 import { ContextValidator } from './validators/contextValidator'
@@ -42,9 +43,12 @@ export class ContextGatheringStage implements IContextGatheringStage {
 
   constructor() {
     // Initialize RAG retrieval service (CR-2025-001: RAG Integration)
+    // Include Qdrant if configured
+    const qdrantConfig = getQdrantConfig()
     this.contextRetrievalService = new ContextRetrievalService(
       this.getDefaultSemanticSearchConfig(),
-      this.getDefaultRelevanceScoringConfig()
+      this.getDefaultRelevanceScoringConfig(),
+      qdrantConfig || undefined
     )
     
     // Inject retrieval service into all analyzers for RAG-powered context gathering

@@ -40,10 +40,20 @@ router.get(
         [projectId]
       )
 
-      res.json({ baselines: result.rows })
-    } catch (error) {
-      logger.error('Error fetching project baselines:', error)
-      res.status(500).json({ error: 'Failed to fetch baselines' })
+      res.json({
+        success: true,
+        baselines: result.rows
+      })
+    } catch (error: any) {
+      logger.error('Error fetching project baselines:', {
+        error: error instanceof Error ? error.message : String(error),
+        projectId: req.params.projectId
+      })
+      res.status(500).json({
+        success: false,
+        error: 'Failed to fetch baselines',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      })
     }
   }
 )
@@ -59,16 +69,42 @@ router.get(
   async (req, res) => {
     try {
       const { projectId } = req.params
+
+      // Validate projectId format (should be UUID)
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      if (!uuidRegex.test(projectId)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid project ID format',
+          message: 'Project ID must be a valid UUID'
+        })
+      }
+
       const baseline = await baselineService.getActiveBaseline(projectId)
 
       if (!baseline) {
-        return res.status(404).json({ error: 'No active baseline found for this project' })
+        // Return 200 with null baseline instead of 404 for better frontend handling
+        return res.status(200).json({
+          success: true,
+          baseline: null,
+          message: 'No active baseline found for this project'
+        })
       }
 
-      res.json({ baseline })
-    } catch (error) {
-      logger.error('Error fetching active baseline:', error)
-      res.status(500).json({ error: 'Failed to fetch active baseline' })
+      res.json({
+        success: true,
+        baseline
+      })
+    } catch (error: any) {
+      logger.error('Error fetching active baseline:', {
+        error: error instanceof Error ? error.message : String(error),
+        projectId: req.params.projectId
+      })
+      res.status(500).json({
+        success: false,
+        error: 'Failed to fetch active baseline',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      })
     }
   }
 )

@@ -203,8 +203,22 @@ app.use(
 )
 // assign a request id to each incoming request
 app.use(requestIdMiddleware)
-app.use(express.json({ limit: "10mb" }))
-app.use(express.urlencoded({ extended: true, limit: "10mb" }))
+// JSON parser - skip multipart/form-data requests (handled by multer)
+app.use((req, res, next) => {
+  const contentType = req.headers['content-type'] || ''
+  if (contentType.startsWith('multipart/form-data')) {
+    return next()
+  }
+  express.json({ limit: "10mb" })(req, res, next)
+})
+// URL-encoded parser - skip multipart/form-data requests
+app.use((req, res, next) => {
+  const contentType = req.headers['content-type'] || ''
+  if (contentType.startsWith('multipart/form-data')) {
+    return next()
+  }
+  express.urlencoded({ extended: true, limit: "10mb" })(req, res, next)
+})
 
 // Make pool available to all routes
 app.locals.pool = pool
