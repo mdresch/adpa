@@ -1,0 +1,8 @@
+# GitBook Git Sync – use the docs folder as content root
+# https://docs.gitbook.com/getting-started/git-sync/content-configuration
+
+root: ./docs/
+
+structure:
+  readme: ./README.md
+  summary: ./SUMMARY.md
