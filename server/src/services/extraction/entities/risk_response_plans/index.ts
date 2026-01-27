@@ -169,6 +169,22 @@ export async function extractRiskResponsePlans(
   }
 }
 
+const RESPONSE_STRATEGY = new Set([
+  'avoid', 'mitigate', 'transfer', 'accept', 'exploit', 'enhance', 'share'
+])
+
+function normalizeStrategy(v: unknown): string {
+  if (!v) return 'accept'
+  const s = String(v).toLowerCase().trim()
+  if (RESPONSE_STRATEGY.has(s)) return s
+  const map: Record<string, string> = {
+    avoid: 'avoid', mitigate: 'mitigate', mitigation: 'mitigate',
+    transfer: 'transfer', accept: 'accept', exploit: 'exploit',
+    enhance: 'enhance', share: 'share'
+  }
+  return map[s] ?? 'accept'
+}
+
 export async function saveRiskResponsePlans(
   client: PoolClient,
   projectId: string,
@@ -180,39 +196,99 @@ export async function saveRiskResponsePlans(
   }
 
   try {
+    const columnResult = await client.query<{ column_name: string }>(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'risk_response_plans'`
+    )
+    const columnSet = new Set(columnResult.rows.map(row => row.column_name))
+
+    const pick = (opts: string[]) => opts.find(c => columnSet.has(c)) ?? null
+
+    const strategyCol = pick(['response_strategy', 'strategy'])
+    const actionsCol = pick(['response_actions', 'actions'])
+    const ownerCol = pick(['responsible_party', 'owner'])
+    const deadlineCol = pick(['deadline', 'due_date'])
+    const costCol = pick(['cost_estimate'])
+    const statusCol = pick(['status'])
+    const residualCol = pick(['residual_risk_level', 'residual_risk'])
+    const riskIdCol = pick(['risk_id'])
+    const sourceDocCol = pick(['source_document_id'])
+    const createdByCol = pick(['created_by'])
+
+    const columnOrder: Array<{ name: string; value: (e: RiskResponsePlan) => unknown }> = [
+      { name: 'project_id', value: () => projectId }
+    ]
+    if (strategyCol) {
+      columnOrder.push({
+        name: strategyCol,
+        value: (e) => normalizeStrategy(e.strategy)
+      })
+    }
+    if (actionsCol) {
+      columnOrder.push({
+        name: actionsCol,
+        value: (e) => {
+          const a = e.actions
+          if (Array.isArray(a) && a.length > 0) return a
+          return ['(none)']
+        }
+      })
+    }
+    if (ownerCol) columnOrder.push({ name: ownerCol, value: (e) => e.owner || null })
+    if (deadlineCol) columnOrder.push({ name: deadlineCol, value: (e) => e.due_date || null })
+    if (costCol) columnOrder.push({ name: costCol, value: (e) => e.cost_estimate ?? null })
+    if (statusCol) columnOrder.push({ name: statusCol, value: (e) => e.status || null })
+    if (residualCol) {
+      columnOrder.push({
+        name: residualCol,
+        value: (e) => {
+          const v = e.residual_risk
+          if (!v) return null
+          const s = String(v).toLowerCase().replace(/\s+/g, '_')
+          const allowed = ['very_high', 'high', 'medium', 'low', 'very_low']
+          if (allowed.includes(s)) return s
+          if (['veryhigh', 'very_high'].includes(s)) return 'very_high'
+          if (['verylow', 'very_low'].includes(s)) return 'very_low'
+          return null
+        }
+      })
+    }
+    if (riskIdCol) {
+      columnOrder.push({
+        name: riskIdCol,
+        value: (e) => {
+          const v = e.risk_id
+          if (!v) return null
+          const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+          return typeof v === 'string' && uuid.test(v) ? v : null
+        }
+      })
+    }
+    if (sourceDocCol) columnOrder.push({ name: sourceDocCol, value: (e) => e.source_document_id || null })
+    if (createdByCol) columnOrder.push({ name: createdByCol, value: () => userId })
+
+    if (columnOrder.length <= 1) {
+      throw new Error('risk_response_plans table has no writable columns')
+    }
+
     await client.query('DELETE FROM risk_response_plans WHERE project_id = $1', [projectId])
 
-    const values: any[] = []
+    const values: unknown[] = []
     const placeholders: string[] = []
 
     entities.forEach((e, index) => {
-      const offset = index * 12
+      const offset = index * columnOrder.length
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12})`
+        columnOrder.map((_, i) => `$${offset + i + 1}`).join(', ')
       )
-
-      values.push(
-        projectId,
-        e.risk_id || null,
-        e.risk_title || null,
-        e.strategy || null,
-        e.actions || [],
-        e.owner || null,
-        e.due_date || null,
-        e.status || null,
-        e.cost_estimate ?? null,
-        e.residual_risk || null,
-        e.source_document_id || null,
-        userId
-      )
+      columnOrder.forEach(col => values.push(col.value(e)))
     })
 
     await client.query(
-      `INSERT INTO risk_response_plans (
-        project_id, risk_id, risk_title, strategy, actions, owner, due_date,
-        status, cost_estimate, residual_risk, source_document_id, created_by
-      )
-      VALUES ${placeholders.join(', ')}`,
+      `INSERT INTO risk_response_plans (${columnOrder.map(c => c.name).join(', ')})
+       VALUES ${placeholders.map(p => `(${p})`).join(', ')}`,
       values
     )
 

@@ -166,6 +166,12 @@ export async function extractRiskReviews(
   }
 }
 
+function safeReviewId(date: string, riskId: string | undefined, index: number): string {
+  const d = (date || '').replace(/[^0-9-]/g, '').slice(0, 10) || 'unknown'
+  const r = (riskId || `i${index}`).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 32)
+  return `ra-${d}-${r}`
+}
+
 export async function saveRiskReviews(
   client: PoolClient,
   projectId: string,
@@ -177,38 +183,82 @@ export async function saveRiskReviews(
   }
 
   try {
+    const columnResult = await client.query<{ column_name: string }>(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'risk_reviews'`
+    )
+    const columnSet = new Set(columnResult.rows.map(row => row.column_name))
+
+    const pick = (opts: string[]) => opts.find(c => columnSet.has(c)) ?? null
+
+    const reviewIdCol = pick(['review_id'])
+    const reviewDateCol = pick(['review_date'])
+    const reviewTypeCol = pick(['review_type'])
+    const actionItemsCol = pick(['action_items', 'actions'])
+    const reviewedByCol = pick(['reviewed_by', 'reviewer'])
+    const keyFindingsCol = pick(['key_findings', 'notes'])
+    const statusChangesCol = pick(['status_changes'])
+    const sourceDocCol = pick(['source_document_id'])
+    const createdByCol = pick(['created_by'])
+
+    const columnOrder: Array<{ name: string; value: (e: RiskReview, index: number) => unknown }> = [
+      { name: 'project_id', value: () => projectId }
+    ]
+    if (reviewIdCol) {
+      columnOrder.push({
+        name: reviewIdCol,
+        value: (e, i) => safeReviewId(e.review_date || '', e.risk_id, i)
+      })
+    }
+    if (reviewDateCol) {
+      columnOrder.push({
+        name: reviewDateCol,
+        value: (e) => e.review_date || new Date().toISOString().split('T')[0]
+      })
+    }
+    if (reviewTypeCol) columnOrder.push({ name: reviewTypeCol, value: () => 'ad_hoc' })
+    if (actionItemsCol) columnOrder.push({ name: actionItemsCol, value: (e) => e.actions || [] })
+    if (reviewedByCol) {
+      columnOrder.push({
+        name: reviewedByCol,
+        value: (e) => (e.reviewer ? [e.reviewer] : [])
+      })
+    }
+    if (keyFindingsCol) columnOrder.push({ name: keyFindingsCol, value: (e) => e.notes || null })
+    if (statusChangesCol) {
+      columnOrder.push({
+        name: statusChangesCol,
+        value: (e) => {
+          if (!e.status_before && !e.status_after) return []
+          return [{ old_status: e.status_before, new_status: e.status_after }]
+        }
+      })
+    }
+    if (sourceDocCol) columnOrder.push({ name: sourceDocCol, value: (e) => e.source_document_id || null })
+    if (createdByCol) columnOrder.push({ name: createdByCol, value: () => userId })
+
+    if (columnOrder.length <= 1) {
+      throw new Error('risk_reviews table has no writable columns')
+    }
+
     await client.query('DELETE FROM risk_reviews WHERE project_id = $1', [projectId])
 
-    const values: any[] = []
+    const values: unknown[] = []
     const placeholders: string[] = []
 
     entities.forEach((e, index) => {
-      const offset = index * 11
+      const offset = index * columnOrder.length
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11})`
+        columnOrder.map((_, i) => `$${offset + i + 1}`).join(', ')
       )
-
-      values.push(
-        projectId,
-        e.review_date || null,
-        e.risk_id || null,
-        e.risk_title || null,
-        e.status_before || null,
-        e.status_after || null,
-        e.actions || [],
-        e.reviewer || null,
-        e.notes || null,
-        e.source_document_id || null,
-        userId
-      )
+      columnOrder.forEach(col => values.push(col.value(e, index)))
     })
 
     await client.query(
-      `INSERT INTO risk_reviews (
-        project_id, review_date, risk_id, risk_title, status_before, status_after,
-        actions, reviewer, notes, source_document_id, created_by
-      )
-      VALUES ${placeholders.join(', ')}`,
+      `INSERT INTO risk_reviews (${columnOrder.map(c => c.name).join(', ')})
+       VALUES ${placeholders.map(p => `(${p})`).join(', ')}`,
       values
     )
 

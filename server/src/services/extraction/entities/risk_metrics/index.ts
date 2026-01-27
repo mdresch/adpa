@@ -220,7 +220,10 @@ export async function saveRiskMetrics(
     ]
 
     if (measurementDateColumn) {
-      columnOrder.push({ name: measurementDateColumn, value: (e) => e.measurement_date || null })
+      columnOrder.push({
+        name: measurementDateColumn,
+        value: (e) => e.measurement_date || new Date().toISOString().split('T')[0]
+      })
     }
     if (exposureIndexColumn) {
       columnOrder.push({ name: exposureIndexColumn, value: (e) => e.exposure_index ?? null })
