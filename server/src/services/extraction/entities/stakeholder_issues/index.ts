@@ -176,40 +176,97 @@ export async function saveStakeholderIssues(
   }
 
   try {
+    const columnResult = await client.query<{ column_name: string }>(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'stakeholder_issues'`
+    )
+    const columnSet = new Set(columnResult.rows.map(row => row.column_name))
+
+    const pickColumn = (options: string[]): string | null => {
+      for (const option of options) {
+        if (columnSet.has(option)) {
+          return option
+        }
+      }
+      return null
+    }
+
+    const issueTypeColumn = pickColumn(['issue_type', 'issue_category', 'category', 'type'])
+    const severityColumn = pickColumn(['severity', 'priority', 'impact'])
+    const descriptionColumn = pickColumn(['description', 'issue_description', 'details'])
+    const statusColumn = pickColumn(['status', 'issue_status'])
+    const reportedDateColumn = pickColumn(['reported_date', 'reported_at'])
+    const resolutionDateColumn = pickColumn(['resolution_date', 'resolved_at'])
+    const resolutionNotesColumn = pickColumn(['resolution_notes', 'resolution_summary', 'resolution'])
+    const stakeholderIdColumn = pickColumn(['stakeholder_id'])
+    const stakeholderNameColumn = pickColumn(['stakeholder_name'])
+    const issueIdColumn = pickColumn(['issue_id'])
+    const sourceDocumentColumn = pickColumn(['source_document_id'])
+    const createdByColumn = pickColumn(['created_by'])
+
+    const columnOrder: Array<{ name: string; value: (entity: StakeholderIssue) => any }> = [
+      { name: 'project_id', value: () => projectId }
+    ]
+
+    if (issueIdColumn) {
+      columnOrder.push({ name: issueIdColumn, value: (e) => e.issue_id || null })
+    }
+    if (stakeholderIdColumn) {
+      columnOrder.push({ name: stakeholderIdColumn, value: (e) => e.stakeholder_id || null })
+    }
+    if (stakeholderNameColumn) {
+      columnOrder.push({ name: stakeholderNameColumn, value: (e) => e.stakeholder_name || null })
+    }
+    if (issueTypeColumn) {
+      columnOrder.push({ name: issueTypeColumn, value: (e) => e.issue_type || null })
+    }
+    if (severityColumn) {
+      columnOrder.push({ name: severityColumn, value: (e) => e.severity || null })
+    }
+    if (descriptionColumn) {
+      columnOrder.push({ name: descriptionColumn, value: (e) => e.description || null })
+    }
+    if (statusColumn) {
+      columnOrder.push({ name: statusColumn, value: (e) => e.status || null })
+    }
+    if (reportedDateColumn) {
+      columnOrder.push({ name: reportedDateColumn, value: (e) => e.reported_date || null })
+    }
+    if (resolutionDateColumn) {
+      columnOrder.push({ name: resolutionDateColumn, value: (e) => e.resolution_date || null })
+    }
+    if (resolutionNotesColumn) {
+      columnOrder.push({ name: resolutionNotesColumn, value: (e) => e.resolution_notes || null })
+    }
+    if (sourceDocumentColumn) {
+      columnOrder.push({ name: sourceDocumentColumn, value: (e) => e.source_document_id || null })
+    }
+    if (createdByColumn) {
+      columnOrder.push({ name: createdByColumn, value: () => userId })
+    }
+
+    if (columnOrder.length === 0) {
+      throw new Error('stakeholder_issues table has no writable columns')
+    }
+
     await client.query('DELETE FROM stakeholder_issues WHERE project_id = $1', [projectId])
 
     const values: any[] = []
     const placeholders: string[] = []
 
     entities.forEach((e, index) => {
-      const offset = index * 13
-      placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13})`
-      )
-
-      values.push(
-        projectId,
-        e.issue_id || null,
-        e.stakeholder_id || null,
-        e.stakeholder_name || null,
-        e.issue_type || null,
-        e.severity || null,
-        e.description || null,
-        e.status || null,
-        e.reported_date || null,
-        e.resolution_date || null,
-        e.resolution_notes || null,
-        e.source_document_id || null,
-        userId
-      )
+      const offset = index * columnOrder.length
+      const rowPlaceholders = columnOrder.map((_, columnIndex) => `$${offset + columnIndex + 1}`)
+      placeholders.push(`(${rowPlaceholders.join(', ')})`)
+      columnOrder.forEach(column => {
+        values.push(column.value(e))
+      })
     })
 
     await client.query(
-      `INSERT INTO stakeholder_issues (
-        project_id, issue_id, stakeholder_id, stakeholder_name, issue_type, severity,
-        description, status, reported_date, resolution_date, resolution_notes,
-        source_document_id, created_by
-      )
+      `INSERT INTO stakeholder_issues (${columnOrder.map(col => col.name).join(', ')})
       VALUES ${placeholders.join(', ')}`,
       values
     )
