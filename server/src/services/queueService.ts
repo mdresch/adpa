@@ -44,6 +44,7 @@ export const extractionQueue = createRabbitQueue("project-data-extraction", 2, 5
 export const confluenceQueue = createRabbitQueue("confluence-publishing", 3, 2000)
 export const digitalTwinEventQueue = createRabbitQueue("digital-twin-events", 3, 2000)
 export const digitalTwinTriggerQueue = createRabbitQueue("digital-twin-triggers", 3, 3000)
+export const gkgSyncQueue = createRabbitQueue("gkg-sync", 2, 5000)
 
 // Trace attachment (lightweight)
 const tracer = trace.getTracer("adpa-queue-service")
@@ -100,6 +101,7 @@ const queues = [
   { name: "confluence-publishing", queue: confluenceQueue },
   { name: "digital-twin-events", queue: digitalTwinEventQueue },
   { name: "digital-twin-triggers", queue: digitalTwinTriggerQueue },
+  { name: "gkg-sync", queue: gkgSyncQueue },
 ]
 queues.forEach(({ name, queue }) => attachTracing(queue, name))
 
@@ -579,6 +581,46 @@ import("./digitalTwinTriggerService").then(({ processDocumentTrigger }) => {
   })
   logger.info(`[QUEUE] Registered process-trigger processor on digitalTwinTriggerQueue (Rabbit) with worker ID: ${WORKER_ID}`)
 })
+
+// GKG sync processing
+;(async () => {
+  const { getNeo4jDriver, getNeo4jDatabase } = await import("../utils/neo4j")
+  const { getDatabasePool } = await import("../database/connection")
+  const { runBootstrap, runSyncProject, runSyncDocument } = await import("./gkg")
+
+  gkgSyncQueue.process("gkg-bootstrap", QUEUE_PREFETCH, async (job) => {
+    const driver = getNeo4jDriver()
+    if (!driver) throw new Error("Neo4j not configured or unavailable")
+    const db = getNeo4jDatabase()
+    const result = await runBootstrap(driver, db)
+    logger.info(`[GKG] Bootstrap completed`, result)
+    return result
+  })
+
+  gkgSyncQueue.process("gkg-sync-project", QUEUE_PREFETCH, async (job) => {
+    const driver = getNeo4jDriver()
+    if (!driver) throw new Error("Neo4j not configured or unavailable")
+    const { projectId } = job.data as { projectId: string }
+    const pool = getDatabasePool()
+    const db = getNeo4jDatabase()
+    const result = await runSyncProject(pool, driver, db, projectId)
+    logger.info(`[GKG] Sync project completed`, { projectId, ...result })
+    return result
+  })
+
+  gkgSyncQueue.process("gkg-sync-document", QUEUE_PREFETCH, async (job) => {
+    const driver = getNeo4jDriver()
+    if (!driver) throw new Error("Neo4j not configured or unavailable")
+    const { documentId } = job.data as { documentId: string }
+    const pool = getDatabasePool()
+    const db = getNeo4jDatabase()
+    const result = await runSyncDocument(pool, driver, db, documentId)
+    logger.info(`[GKG] Sync document completed`, { documentId, ...result })
+    return result
+  })
+
+  logger.info(`[QUEUE] Registered GKG sync processors on gkgSyncQueue (Rabbit)`)
+})()
 
 // Export Redis client for legacy consumers
 export { redisClient }

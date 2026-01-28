@@ -133,9 +133,33 @@ export const publishToConfluenceJobDataSchema = baseJobDataSchema.keys({
 })
 
 /**
+ * GKG Bootstrap Job Data Schema
+ */
+export const gkgBootstrapJobDataSchema = baseJobDataSchema.keys({
+  jobId: Joi.string().uuid().optional(),
+  force: Joi.boolean().optional(),
+})
+
+/**
+ * GKG Sync Project Job Data Schema
+ */
+export const gkgSyncProjectJobDataSchema = baseJobDataSchema.keys({
+  jobId: Joi.string().uuid().optional(),
+  projectId: Joi.string().uuid().required(),
+})
+
+/**
+ * GKG Sync Document Job Data Schema
+ */
+export const gkgSyncDocumentJobDataSchema = baseJobDataSchema.keys({
+  jobId: Joi.string().uuid().optional(),
+  documentId: Joi.string().uuid().required(),
+})
+
+/**
  * Map of job types to their validation schemas
  */
-const jobTypeSchemaMap: Record<JobType, Joi.ObjectSchema> = {
+const jobTypeSchemaMap: Partial<Record<JobType, Joi.ObjectSchema>> = {
   'ai-generate': aiGenerationJobDataSchema,
   'document-convert': documentConversionJobDataSchema,
   'baseline-extract': baselineExtractionJobDataSchema,
@@ -145,13 +169,16 @@ const jobTypeSchemaMap: Record<JobType, Joi.ObjectSchema> = {
   'quality-audit': qualityAuditJobDataSchema,
   'pipeline-processing': pipelineProcessingJobDataSchema,
   'publish-to-confluence': publishToConfluenceJobDataSchema,
+  'gkg-bootstrap': gkgBootstrapJobDataSchema,
+  'gkg-sync-project': gkgSyncProjectJobDataSchema,
+  'gkg-sync-document': gkgSyncDocumentJobDataSchema,
 }
 
 /**
  * Get validation schema for a job type
  */
 export function getSchemaForJobType(type: JobType): Joi.ObjectSchema {
-  const schema = jobTypeSchemaMap[type]
+  const schema = jobTypeSchemaMap[type as keyof typeof jobTypeSchemaMap]
   if (schema) return schema
 
   // Allow dynamic entity extraction job types like 'extract-entity-stakeholders'
@@ -284,6 +311,9 @@ export function validateJobType(type: string): JobType {
     'quality-audit',
     'pipeline-processing',
     'publish-to-confluence',
+    'gkg-bootstrap',
+    'gkg-sync-project',
+    'gkg-sync-document',
   ]
 
   if (normalizedType.startsWith('extract-entity-')) {

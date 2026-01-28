@@ -1516,6 +1516,18 @@ export class ExtractionOrchestrationService {
         totalEntities
       })
 
+      // Enqueue GKG sync when Neo4j is configured (non-fatal if enqueue fails)
+      try {
+        const { isNeo4jConfigured } = await import("../utils/neo4j")
+        const { addJob } = await import("../queueService")
+        if (isNeo4jConfigured() && projectId) {
+          await addJob("gkg-sync-project", { projectId }, { attempts: 2, backoff: { type: "exponential", delay: 5000 } })
+          log.info(`[EXTRACTION-PARENT] Enqueued GKG sync for project ${projectId}`)
+        }
+      } catch (gkgErr: any) {
+        log.warn(`[EXTRACTION-PARENT] GKG sync enqueue failed (non-fatal): ${gkgErr?.message || gkgErr}`)
+      }
+
     } catch (error: any) {
       log.error(`[EXTRACTION-PARENT] Failed to finalize: ${jobId} ${error.message}`)
 

@@ -15,6 +15,7 @@ import requestIdMiddleware from "./middleware/requestId"
 import { logger } from "./utils/logger"
 import { connectDatabase } from "./database/connection"
 import { connectRedis } from "./utils/redis"
+import { connectNeo4j, isNeo4jConfigured, getNeo4jCircuitState } from "./utils/neo4j"
 import { SystemMonitoring } from "./utils/systemMonitoring"
 import { addJob, getJobStatus, cancelJob, updateJobStatus } from "./services/queueService"
 import { aiService } from "./services/aiService"
@@ -87,6 +88,7 @@ import templateStatsRoutes from "./routes/template-stats"
 import settingsRoutes from "./routes/settings"
 import jiraLinkageRoutes from "./routes/jiraLinkage"
 import baselinesRoutes from "./routes/baselines"
+import gkgRoutes from "./routes/gkg"
 import driftRoutes from "./routes/drift"
 import entityBaselineRoutes from "./routes/entityBaselineRoutes"
 import emergencyMeetingsRoutes from "./routes/emergency-meetings"
@@ -311,6 +313,7 @@ app.use("/api/compression", compressionRoutes)
 app.use("/api/context-injection", contextInjectionRoutes)
 app.use("/api/pipeline", pipelineRoutes)
 app.use("/api/baselines", baselinesRoutes)
+app.use("/api/gkg", gkgRoutes)
 app.use("/api/drift", driftRoutes)
 app.use("/api/digital-twin/assets", digitalTwinAssetsRoutes)
 app.use("/api/digital-twin/events", digitalTwinEventsRoutes)
@@ -575,6 +578,22 @@ async function startServer() {
           ? (redisError as { message?: string }).message
           : redisError
       )
+    }
+
+    // Neo4j: optional, parallel to PostgreSQL/Redis; only when NEO4J_URI is set
+    if (isNeo4jConfigured()) {
+      try {
+        console.log("🕸️ Connecting to Neo4j...")
+        await connectNeo4j()
+        console.log("✅ Neo4j connected successfully")
+      } catch (neo4jError) {
+        console.warn(
+          "⚠️  Neo4j connection failed, continuing without Neo4j:",
+          typeof neo4jError === "object" && neo4jError !== null && "message" in neo4jError
+            ? (neo4jError as { message?: string }).message
+            : neo4jError
+        )
+      }
     }
 
     // Job queues are now initialized automatically when the queueService module is imported

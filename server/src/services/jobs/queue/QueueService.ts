@@ -206,6 +206,11 @@ export class QueueService {
         case "extract-project-data":
           queueName = "project-data-extraction"
           break
+        case "gkg-bootstrap":
+        case "gkg-sync-project":
+        case "gkg-sync-document":
+          queueName = "gkg-sync"
+          break
         default:
           // Handle dynamic extract-entity types
           if (typeof validatedType === 'string' && (validatedType as string).startsWith('extract-entity-')) {

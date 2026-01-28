@@ -20,6 +20,9 @@ export type JobType =
   | 'quality-audit'
   | 'pipeline-processing'
   | 'publish-to-confluence'
+  | 'gkg-bootstrap'
+  | 'gkg-sync-project'
+  | 'gkg-sync-document'
   | `extract-entity-${string}`
 
 /**
@@ -207,6 +210,7 @@ export type QueueName =
   | 'quality-audit'
   | 'project-data-extraction'
   | 'confluence-publishing'
+  | 'gkg-sync'
 
 /**
  * Type guard to check if data matches a specific job type

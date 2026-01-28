@@ -19,6 +19,7 @@ import {
 import { logger, childLogger } from "../utils/logger"
 import { getRedisCircuitState } from "../utils/redis"
 import { getDbCircuitState } from "../database/connection"
+import { getNeo4jCircuitState } from "../utils/neo4j"
 
 const router = express.Router()
 
@@ -349,7 +350,8 @@ router.get("/health", authenticateToken, async (req, res) => {
       timestamp: new Date().toISOString(),
       dependencies: {
         redis: getRedisCircuitState(),
-        database: getDbCircuitState()
+        database: getDbCircuitState(),
+        neo4j: getNeo4jCircuitState()
       }
     })
   } catch (error) {

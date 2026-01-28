@@ -96,6 +96,7 @@
     "mammoth": "^1.11.0",
     "marked": "^11.1.0",
     "multer": "^2.0.2",
+    "neo4j-driver": "^5.28.0",
     "node-cron": "^4.2.1",
     "node-fetch": "^2.7.0",
     "node-schedule": "^2.1.1",
