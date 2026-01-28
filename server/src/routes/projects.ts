@@ -634,6 +634,7 @@ router.get("/:projectId/team-members", authenticateToken, async (req, res) => {
 })
 
 // Create a new risk for a project
+// Deduplication: reject if a risk already exists with same (project_id, normalized title).
 router.post("/:projectId/risks", authenticateToken, async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId })
   try {
@@ -655,6 +656,28 @@ router.post("/:projectId/risks", authenticateToken, async (req, res) => {
 
     if (!userId) {
       return res.status(401).json({ error: "Unauthorized" })
+    }
+
+    if (!title || typeof title !== 'string' || title.trim() === '') {
+      return res.status(400).json({ error: "Title is required" })
+    }
+
+    // Deduplication: same normalization as extraction (lower(trim(title)))
+    const normTitle = String(title).trim().toLowerCase()
+    const dupCheck = await pool.query(
+      `SELECT id FROM risks
+       WHERE project_id = $1 AND deleted_at IS NULL
+       AND (lower(trim(coalesce(title, name, ''))) = $2 OR lower(trim(coalesce(name, title, ''))) = $2)
+       LIMIT 1`,
+      [projectId, normTitle]
+    )
+    if (dupCheck.rows.length > 0) {
+      log.info(`Risk create skipped: duplicate title for project ${projectId}`, { title: title.trim() })
+      return res.status(409).json({
+        error: "A risk with this title already exists in this project",
+        code: "RISK_DUPLICATE_TITLE",
+        existingId: dupCheck.rows[0].id
+      })
     }
 
     // Verify project exists

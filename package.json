@@ -162,5 +162,15 @@
     "tsx": "^4.20.5",
     "typescript": "^5.9.3"
   },
-  "packageManager": "pnpm@10.24.0"
+  "packageManager": "pnpm@10.24.0",
+  "pnpm": {
+    "overrides": {
+      "qs": "^6.14.1",
+      "lodash": "^4.17.23",
+      "jspdf": "^4.0.0",
+      "mdast-util-to-hast": "^13.2.1",
+      "glob": ">=10.5.0",
+      "diff": "^8.0.3"
+    }
+  }
 }
