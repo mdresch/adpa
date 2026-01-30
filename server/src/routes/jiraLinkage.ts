@@ -76,9 +76,14 @@ router.get("/document/:documentId",
   authenticateToken,
   async (req, res) => {
     const log = childLogger({ requestId: (req as any).requestId })
-    const { documentId } = req.params
-    
+    const documentId = decodeURIComponent(req.params.documentId)
+
     try {
+      // Synthetic project-context documents are not stored in DB and have no Jira linkage
+      if (documentId.startsWith('project_context:')) {
+        return res.json({ linked: false })
+      }
+
       // Check if user has access to the document
       const { pool } = await import("../database/connection")
       const documentCheck = await pool.query(

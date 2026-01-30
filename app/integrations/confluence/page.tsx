@@ -156,12 +156,14 @@ export default function ConfluenceIntegrationPage() {
 
       if (confluenceIntegration) {
         setIntegration(confluenceIntegration)
-        console.log("Set integration state to:", confluenceIntegration)
+        const cfg = confluenceIntegration.configuration ?? {}
+        const baseUrl = (cfg as any).base_url ?? (cfg as any).baseUrl ?? ""
+        const targetSpaceKey = (cfg as any).target_space_key ?? (cfg as any).targetSpaceKey ?? ""
         setConfig({
-          baseUrl: confluenceIntegration.configuration.base_url || "",
+          baseUrl: baseUrl || "",
           username: "", // Credentials are encrypted and not returned
           apiToken: "", // Credentials are encrypted and not returned
-          targetSpaceKey: confluenceIntegration.configuration.target_space_key || "",
+          targetSpaceKey: targetSpaceKey || "",
         })
 
         if (confluenceIntegration.is_active) {

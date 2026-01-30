@@ -40,6 +40,7 @@ import {
   RefreshCw,
   AlertCircle,
   Loader2,
+  Layers,
 } from "@/components/ui/icons-shim"
 import { Award } from "@/components/ui/icons-shim"
 import { useAuth } from "@/contexts/AuthContext"
@@ -138,6 +139,14 @@ export default function ProjectDocumentViewer() {
   const [baseContentSnapshot, setBaseContentSnapshot] = useState<string>("")
   const [latestContentSnapshot, setLatestContentSnapshot] = useState<string>("")
   const [jiraLinkage, setJiraLinkage] = useState<{ issueKey: string; issueUrl: string; created: boolean } | null>(null)
+  const [showInjectedContextDialog, setShowInjectedContextDialog] = useState(false)
+  const [injectedContextData, setInjectedContextData] = useState<{
+    markdown: string
+    unitsCount: number
+    documentsCount: number
+    entityTypes: string[]
+    strategy?: Record<string, unknown>
+  } | null>(null)
 
   // Document regeneration hook
   const { regenerate, progress, isRegenerating, error: regenerationError, result, reset: resetRegeneration } = useDocumentRegeneration()
@@ -2300,72 +2309,119 @@ The ADPA system represents a significant advancement in document processing auto
                       </CardContent>
                     </AnimatedCard>
 
-                    {/* Context Statistics */}
-                    {(document as any).metadata?.context_stats && (
-                      <AnimatedCard>
-                        <CardHeader>
-                          <CardTitle className="flex items-center space-x-2">
-                            <BarChart3 className="h-5 w-5" />
-                            <span>Context Statistics</span>
-                          </CardTitle>
-                          <CardDescription>
-                            What context was used to generate this document
-                          </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="space-y-2 text-sm">
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Documents in Project:</span>
-                              <span className="font-medium">
-                                {(document as any).metadata.context_stats.total_documents_available}
-                              </span>
+                    {/* Context Statistics: from metadata.context_stats or derived from gkg_context_snapshot (e.g. project context doc) */}
+                    {(() => {
+                      const docAny = document as any
+                      const metaStats = docAny.metadata?.context_stats
+                      const gkg = docAny.generation_metadata?.gkg_context_snapshot
+                      const hasMetaStats = metaStats && (metaStats.total_documents_available != null || metaStats.documents_used_as_context != null || metaStats.estimated_context_tokens != null)
+                      const contextStats = hasMetaStats
+                        ? metaStats
+                        : gkg
+                          ? {
+                              total_documents_available: gkg.documentsCount ?? 0,
+                              documents_used_as_context: gkg.documentsCount ?? 0,
+                              stakeholders_available: 0,
+                              custom_settings_count: 0,
+                              custom_metadata_count: 0,
+                              estimated_context_tokens: typeof gkg.markdown === 'string' ? Math.ceil(gkg.markdown.length / 4) : undefined,
+                            }
+                          : null
+                      return contextStats ? (
+                        <AnimatedCard>
+                          <CardHeader>
+                            <CardTitle className="flex items-center space-x-2">
+                              <BarChart3 className="h-5 w-5" />
+                              <span>Context Statistics</span>
+                            </CardTitle>
+                            <CardDescription>
+                              What context was used to generate this document
+                            </CardDescription>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="space-y-2 text-sm">
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Documents in Project:</span>
+                                <span className="font-medium">
+                                  {contextStats.total_documents_available ?? '—'}
+                                </span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Used as Context:</span>
+                                <span className="font-medium text-primary">
+                                  {contextStats.documents_used_as_context ?? '—'}
+                                </span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Stakeholders Available:</span>
+                                <span className="font-medium">
+                                  {contextStats.stakeholders_available ?? '—'}
+                                </span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Custom Settings:</span>
+                                <span className="font-medium">
+                                  {contextStats.custom_settings_count ?? '—'}
+                                </span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Custom Metadata:</span>
+                                <span className="font-medium">
+                                  {contextStats.custom_metadata_count ?? '—'}
+                                </span>
+                              </div>
+                              <Separator className="my-2" />
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Context Tokens:</span>
+                                <span className="font-medium text-blue-600">
+                                  ~{contextStats.estimated_context_tokens != null ? contextStats.estimated_context_tokens.toLocaleString() : 'N/A'}
+                                </span>
+                              </div>
                             </div>
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Used as Context:</span>
-                              <span className="font-medium text-primary">
-                                {(document as any).metadata.context_stats.documents_used_as_context}
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Stakeholders Available:</span>
-                              <span className="font-medium">
-                                {(document as any).metadata.context_stats.stakeholders_available}
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Custom Settings:</span>
-                              <span className="font-medium">
-                                {(document as any).metadata.context_stats.custom_settings_count}
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Custom Metadata:</span>
-                              <span className="font-medium">
-                                {(document as any).metadata.context_stats.custom_metadata_count}
-                              </span>
-                            </div>
-                            <Separator className="my-2" />
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Context Tokens:</span>
-                              <span className="font-medium text-blue-600">
-                                ~{(document as any).metadata.context_stats.estimated_context_tokens?.toLocaleString() || 'N/A'}
-                              </span>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </AnimatedCard>
-                    )}
+                          </CardContent>
+                        </AnimatedCard>
+                      ) : null
+                    })()}
 
                     {/* Source Documents */}
                     <AnimatedCard>
                       <CardHeader>
-                        <CardTitle className="flex items-center space-x-2">
-                          <ExternalLink className="h-5 w-5" />
-                          <span>Source Documents</span>
-                        </CardTitle>
-                        <CardDescription>
-                          Documents used as context during generation
-                        </CardDescription>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <CardTitle className="flex items-center space-x-2">
+                              <ExternalLink className="h-5 w-5" />
+                              <span>Source Documents</span>
+                            </CardTitle>
+                            <CardDescription>
+                              Documents used as context during generation
+                            </CardDescription>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              const docAny = document as any
+                              const gkgFromPipeline = docAny.metadata?.context_gathering?.context_bundle?.context_data?.gkg_context
+                              const gkgFromGenMeta = docAny.generation_metadata?.gkg_context_snapshot
+                              const gkg = gkgFromPipeline || gkgFromGenMeta
+                              if (gkg?.markdown != null || (gkg?.unitsCount != null && gkg.unitsCount > 0)) {
+                                setInjectedContextData({
+                                  markdown: gkg.markdown || '',
+                                  unitsCount: gkg.unitsCount ?? 0,
+                                  documentsCount: gkg.documentsCount ?? 0,
+                                  entityTypes: Array.isArray(gkg.entityTypes) ? gkg.entityTypes : [],
+                                  strategy: gkg.strategy
+                                })
+                              } else {
+                                setInjectedContextData(null)
+                              }
+                              setShowInjectedContextDialog(true)
+                            }}
+                          >
+                            <Layers className="h-4 w-4 mr-2" />
+                            Show injected context
+                          </Button>
+                        </div>
                       </CardHeader>
                       <CardContent>
                         <div className="space-y-2">
@@ -2408,6 +2464,59 @@ The ADPA system represents a significant advancement in document processing auto
                         </div>
                       </CardContent>
                     </AnimatedCard>
+
+                    {/* Injected context (GKG) dialog - scrollable body and context text */}
+                    <Dialog open={showInjectedContextDialog} onOpenChange={setShowInjectedContextDialog}>
+                      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
+                        <DialogHeader className="shrink-0">
+                          <DialogTitle className="flex items-center space-x-2">
+                            <Layers className="h-5 w-5" />
+                            <span>Injected context (GKG)</span>
+                          </DialogTitle>
+                          <DialogDescription>
+                            Context from the semantic model (Governance Knowledge Graph) and GKG settings that was injected for the LLM when this document was generated.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="flex-1 min-h-0 flex flex-col gap-4 overflow-y-auto overflow-x-hidden">
+                          {injectedContextData ? (
+                            <>
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm shrink-0">
+                                <div className="rounded border p-2 bg-muted/50">
+                                  <span className="text-muted-foreground block">Semantic units</span>
+                                  <span className="font-medium">{injectedContextData.unitsCount}</span>
+                                </div>
+                                <div className="rounded border p-2 bg-muted/50">
+                                  <span className="text-muted-foreground block">Source documents</span>
+                                  <span className="font-medium">{injectedContextData.documentsCount}</span>
+                                </div>
+                                <div className="rounded border p-2 bg-muted/50 col-span-2">
+                                  <span className="text-muted-foreground block">Entity types</span>
+                                  <span className="font-medium">
+                                    {injectedContextData.entityTypes.length > 0
+                                      ? injectedContextData.entityTypes.join(', ')
+                                      : '—'}
+                                  </span>
+                                </div>
+                              </div>
+                              {injectedContextData.markdown ? (
+                                <div className="flex flex-col min-h-0 shrink-0">
+                                  <p className="text-sm text-muted-foreground mb-1">Context text sent to the LLM:</p>
+                                  <ScrollArea className="h-[50vh] min-h-[240px] max-h-[60vh] rounded border bg-muted/30 p-3 text-sm font-mono whitespace-pre-wrap">
+                                    {injectedContextData.markdown}
+                                  </ScrollArea>
+                                </div>
+                              ) : (
+                                <p className="text-sm text-muted-foreground italic">No context markdown was stored for this generation.</p>
+                              )}
+                            </>
+                          ) : (
+                            <p className="text-sm text-muted-foreground">
+                              Injected context was not recorded for this document. It may have been generated before this feature, without GKG context, or via a path that does not store the injected context.
+                            </p>
+                          )}
+                        </div>
+                      </DialogContent>
+                    </Dialog>
                   </div>
                 </div>
 

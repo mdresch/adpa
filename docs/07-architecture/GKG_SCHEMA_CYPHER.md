@@ -11,13 +11,25 @@
 Neo4j creates a backing index for each uniqueness constraint. Run in a single transaction or one-by-one.
 
 ```cypher
+// Program: adpa_id unique
+CREATE CONSTRAINT gkg_program_adpa_id IF NOT EXISTS
+FOR (n:Program) REQUIRE n.adpa_id IS UNIQUE;
+
 // Project: adpa_id unique
 CREATE CONSTRAINT gkg_project_adpa_id IF NOT EXISTS
 FOR (n:Project) REQUIRE n.adpa_id IS UNIQUE;
 
+// Task: adpa_id unique
+CREATE CONSTRAINT gkg_task_adpa_id IF NOT EXISTS
+FOR (n:Task) REQUIRE n.adpa_id IS UNIQUE;
+
 // Document: adpa_id unique
 CREATE CONSTRAINT gkg_document_adpa_id IF NOT EXISTS
 FOR (n:Document) REQUIRE n.adpa_id IS UNIQUE;
+
+// Template: adpa_id unique
+CREATE CONSTRAINT gkg_template_adpa_id IF NOT EXISTS
+FOR (n:Template) REQUIRE n.adpa_id IS UNIQUE;
 
 // SemanticUnit: (adpa_entity_type, adpa_id) unique
 CREATE CONSTRAINT gkg_semantic_unit_entity_id IF NOT EXISTS

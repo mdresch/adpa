@@ -24,6 +24,8 @@ export interface DocumentTemplate {
   context_injection_config?: ContextInjectionConfig
   prompt_build_up?: PromptBuildUpConfig
   template_paragraphs?: TemplateParagraph[]
+  /** Triggers which GKG semantic search to use for LLM context when generating from this template. */
+  gkg_context_strategy?: GkgContextStrategy
 }
 
 export interface TemplateVariable {
@@ -33,6 +35,47 @@ export interface TemplateVariable {
   default?: any
   options?: string[]
   description?: string
+}
+
+/**
+ * GKG context strategy: which semantic search to run against the Governance Knowledge Graph
+ * when building LLM context for document generation. Set on template to trigger the right
+ * context retrieval (entity types, scope, caps). See docs/07-architecture/GKG_CONTEXT_STRATEGY.md.
+ */
+export type GkgContextScope =
+  | 'same_project'           // Only entities from the target project
+  | 'same_project_top_docs'  // Same project, prioritize docs with most units
+  | 'dependent_projects'     // Same project + projects in project_dependencies
+  | 'all_accessible'         // All projects the user can access (e.g. company scope)
+
+export type GkgContextProfile =
+  | 'governance_full'   // Requirement, Risk, Stakeholder, Milestone, Constraint, Deliverable
+  | 'charter_light'     // Requirement, Risk, Stakeholder
+  | 'requirements_only'  // Requirement only
+  | 'risks_only'       // Risk only
+  | 'stakeholders_only'// Stakeholder only
+  | 'custom'           // Use entityTypes array
+
+/** When to include source documents by status: only approved/published, or also draft and in-review. */
+export type GkgDocumentStatusFilter =
+  | 'approved_published_only'  // Only documents with status approved or published
+  | 'include_draft_review'     // Include draft and in-review documents as well
+
+export interface GkgContextStrategy {
+  /** Preset profile; if set, entityTypes/scope can be overridden by profile defaults. */
+  profile?: GkgContextProfile
+  /** Entity types to include (e.g. Requirement, Risk, Stakeholder). Used when profile is custom or to override profile. */
+  entityTypes?: string[]
+  /** Where to pull context from in the GKG. */
+  scope?: GkgContextScope
+  /** Max number of source documents to pull units from (by unit count). */
+  maxDocuments?: number
+  /** Max total semantic units to include in context. */
+  maxUnits?: number
+  /** Include only units that have EXTRACTED_FROM (traceable to a document). */
+  traceableOnly?: boolean
+  /** Restrict to documents with status Approved/Published only, or include Draft and In Review. */
+  documentStatusFilter?: GkgDocumentStatusFilter
 }
 
 export interface ContextInjectionConfig {
@@ -91,6 +134,7 @@ export interface CreateTemplateRequest {
   context_injection_config?: ContextInjectionConfig
   prompt_build_up?: PromptBuildUpConfig
   template_paragraphs?: TemplateParagraph[]
+  gkg_context_strategy?: GkgContextStrategy
 }
 
 export interface UpdateTemplateRequest {
@@ -105,6 +149,7 @@ export interface UpdateTemplateRequest {
   context_injection_config?: ContextInjectionConfig
   prompt_build_up?: PromptBuildUpConfig
   template_paragraphs?: TemplateParagraph[]
+  gkg_context_strategy?: GkgContextStrategy
 }
 
 export interface CloneTemplateRequest {

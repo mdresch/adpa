@@ -488,7 +488,9 @@ router.post("/generate",
         // Always include source_documents (should always have at least project context)
         // Use sourceDocuments directly - it should always have project context by this point
         source_documents: sourceDocuments,
-        ...(contextStats && { context_stats: contextStats })
+        ...(contextStats && { context_stats: contextStats }),
+        // Injected GKG context (when template has gkg_context_strategy and Generate Document used it)
+        ...(result.gkg_context_snapshot && { gkg_context_snapshot: result.gkg_context_snapshot })
       }
       
       // 🔍 CRITICAL: Verify project context was added before saving

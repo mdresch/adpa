@@ -1,15 +1,18 @@
 /**
- * GKG (Governance Knowledge Graph) sync API.
- * On-demand trigger for bootstrap, project sync, or document sync.
+ * GKG (Governance Knowledge Graph) API.
+ * - Sync: on-demand bootstrap, project sync, or document sync.
+ * - Summary: simple dashboard-friendly overview of graph contents.
  * See docs/07-architecture/GKG_INGESTION_DESIGN.md §9.
  */
 
 import express from "express"
 import { authenticateToken, requirePermission } from "../middleware/auth"
-import { isNeo4jConfigured } from "../utils/neo4j"
+import { getNeo4jDatabase, getNeo4jDriver, isNeo4jConfigured } from "../utils/neo4j"
 import { addJob } from "../services/queueService"
+import { getContextForStrategy } from "../services/gkg/gkgContextService"
 import { logger } from "../utils/logger"
 import { v4 as uuidV4 } from "uuid"
+import type { GkgContextStrategy } from "../modules/documentTemplates/types"
 
 const router = express.Router()
 
@@ -57,6 +60,294 @@ router.post(
       const msg = err instanceof Error ? err.message : String(err)
       logger.error("[GKG] Sync enqueue failed", { error: msg })
       res.status(500).json({ status: "error", error: msg })
+    }
+  }
+)
+
+/**
+ * GET /api/gkg/summary
+ * Lightweight Neo4j summary for dashboards.
+ * Returns overall counts and top projects by SemanticUnit count.
+ */
+router.get(
+  "/summary",
+  authenticateToken,
+  requirePermission("projects.view"),
+  async (_req, res) => {
+    if (!isNeo4jConfigured()) {
+      return res.status(503).json({
+        status: "unavailable",
+        error: "Neo4j is not configured; set NEO4J_URI to enable GKG summary.",
+      })
+    }
+
+    const driver = getNeo4jDriver()
+    if (!driver) {
+      return res.status(503).json({
+        status: "unavailable",
+        error: "Neo4j driver is unavailable (circuit open or not connected).",
+      })
+    }
+
+    const database = getNeo4jDatabase()
+    const session = driver.session({ database })
+
+    try {
+      // Run queries sequentially; Neo4j sessions do not support multiple concurrent
+      // queries on the same session when a transaction is open.
+      const overviewResult = await session.run(
+        `
+          OPTIONAL MATCH (g:Program)
+          WITH count(DISTINCT g) AS programs
+          OPTIONAL MATCH (p:Project)
+          WITH programs, count(DISTINCT p) AS projects
+          OPTIONAL MATCH (d:Document)
+          WITH programs, projects, count(DISTINCT d) AS documents
+          OPTIONAL MATCH (t:Task)
+          WITH programs, projects, documents, count(DISTINCT t) AS tasks
+          OPTIONAL MATCH (u:SemanticUnit)
+          RETURN programs AS totalPrograms,
+                 projects AS totalProjects,
+                 documents AS totalDocuments,
+                 tasks AS totalTasks,
+                 count(DISTINCT u) AS totalUnits
+        `
+      )
+
+      const projectsResult = await session.run(
+        `
+          // Top projects by SemanticUnit count
+          MATCH (p:Project)<-[:BELONGS_TO]-(u:SemanticUnit)
+          OPTIONAL MATCH (d:Document)-[:BELONGS_TO]->(p)
+          RETURN
+            p.adpa_id AS projectId,
+            coalesce(p.name, p.adpa_id) AS name,
+            count(DISTINCT u) AS unitCount,
+            count(DISTINCT d) AS documentCount,
+            collect(DISTINCT u.adpa_entity_type)[0..6] AS entityTypes
+          ORDER BY unitCount DESC, name ASC
+          LIMIT 20
+        `
+      )
+
+      // Top documents by semantic unit count (best sources for LLM context)
+      const topDocsResult = await session.run(
+        `
+          MATCH (d:Document)<-[:EXTRACTED_FROM]-(u:SemanticUnit)
+          MATCH (d)-[:BELONGS_TO]->(p:Project)
+          WITH d, p, count(DISTINCT u) AS unitCount
+          RETURN
+            d.adpa_id AS documentId,
+            coalesce(d.title, d.adpa_id) AS title,
+            p.adpa_id AS projectId,
+            coalesce(p.name, p.adpa_id) AS projectName,
+            unitCount
+          ORDER BY unitCount DESC
+          LIMIT 15
+        `
+      )
+
+      // Entity type counts (what context types are available for LLM)
+      const entityTypesResult = await session.run(
+        `
+          MATCH (u:SemanticUnit)
+          RETURN u.adpa_entity_type AS entityType, count(*) AS count
+          ORDER BY count DESC
+        `
+      )
+
+      // Programs with project and task counts (for program-scoped context)
+      const programsResult = await session.run(
+        `
+          MATCH (g:Program)
+          OPTIONAL MATCH (p:Project)-[:BELONGS_TO]->(g)
+          OPTIONAL MATCH (t:Task)-[:BELONGS_TO]->(p)
+          RETURN
+            g.adpa_id AS programId,
+            coalesce(g.name, g.adpa_id) AS name,
+            count(DISTINCT p) AS projectCount,
+            count(DISTINCT t) AS taskCount
+          ORDER BY projectCount DESC, name ASC
+          LIMIT 20
+        `
+      )
+
+      const overviewRecord = overviewResult.records[0]
+      const totalPrograms = overviewRecord ? overviewRecord.get("totalPrograms").toNumber?.() ?? overviewRecord.get("totalPrograms") : 0
+      const totalProjects = overviewRecord ? overviewRecord.get("totalProjects").toNumber?.() ?? overviewRecord.get("totalProjects") : 0
+      const totalDocuments = overviewRecord ? overviewRecord.get("totalDocuments").toNumber?.() ?? overviewRecord.get("totalDocuments") : 0
+      const totalTasks = overviewRecord ? overviewRecord.get("totalTasks").toNumber?.() ?? overviewRecord.get("totalTasks") : 0
+      const totalUnits = overviewRecord ? overviewRecord.get("totalUnits").toNumber?.() ?? overviewRecord.get("totalUnits") : 0
+
+      const topProjects = projectsResult.records.map((rec) => ({
+        projectId: rec.get("projectId"),
+        name: rec.get("name"),
+        unitCount: rec.get("unitCount").toNumber?.() ?? rec.get("unitCount"),
+        documentCount: rec.get("documentCount").toNumber?.() ?? rec.get("documentCount"),
+        entityTypes: rec.get("entityTypes") || [],
+      }))
+
+      const topDocumentsForContext = topDocsResult.records.map((rec) => ({
+        documentId: rec.get("documentId"),
+        title: rec.get("title"),
+        projectId: rec.get("projectId"),
+        projectName: rec.get("projectName"),
+        unitCount: rec.get("unitCount").toNumber?.() ?? rec.get("unitCount"),
+      }))
+
+      const entityTypeCounts = entityTypesResult.records.map((rec) => ({
+        entityType: rec.get("entityType"),
+        count: rec.get("count").toNumber?.() ?? rec.get("count"),
+      }))
+
+      const programsWithProjects = programsResult.records.map((rec) => ({
+        programId: rec.get("programId"),
+        name: rec.get("name"),
+        projectCount: rec.get("projectCount").toNumber?.() ?? rec.get("projectCount"),
+        taskCount: rec.get("taskCount").toNumber?.() ?? rec.get("taskCount"),
+      }))
+
+      return res.json({
+        status: "ok",
+        totalPrograms,
+        totalProjects,
+        totalDocuments,
+        totalTasks,
+        totalUnits,
+        topProjects,
+        topDocumentsForContext,
+        entityTypeCounts,
+        programsWithProjects,
+      })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      logger.error("[GKG] Summary query failed", { error: msg })
+      return res.status(500).json({ status: "error", error: msg })
+    } finally {
+      await session.close()
+    }
+  }
+)
+
+/**
+ * GET /api/gkg/template/:templateId
+ * Returns documents generated by this template and entities (semantic units) extracted from those documents.
+ */
+router.get(
+  "/template/:templateId",
+  authenticateToken,
+  requirePermission("projects.view"),
+  async (req, res) => {
+    if (!isNeo4jConfigured()) {
+      return res.status(503).json({
+        status: "unavailable",
+        error: "Neo4j is not configured; set NEO4J_URI to enable GKG.",
+      })
+    }
+    const templateId = (req.params as { templateId: string }).templateId
+    if (!templateId) {
+      return res.status(400).json({ status: "bad_request", error: "templateId required" })
+    }
+    const driver = getNeo4jDriver()
+    if (!driver) {
+      return res.status(503).json({
+        status: "unavailable",
+        error: "Neo4j driver is unavailable.",
+      })
+    }
+    const database = getNeo4jDatabase()
+    const session = driver.session({ database })
+    try {
+      // Documents generated by this template (with project and unit count)
+      const docsResult = await session.run(
+        `
+        MATCH (tpl:Template {adpa_id: $templateId})
+        MATCH (d:Document)-[:GENERATED_FROM]->(tpl)
+        OPTIONAL MATCH (d)-[:BELONGS_TO]->(p:Project)
+        OPTIONAL MATCH (u:SemanticUnit)-[:EXTRACTED_FROM]->(d)
+        WITH d, p, count(DISTINCT u) AS unitCount
+        RETURN
+          d.adpa_id AS documentId,
+          coalesce(d.title, d.project_id) AS title,
+          p.adpa_id AS projectId,
+          coalesce(p.name, p.adpa_id) AS projectName,
+          unitCount
+        ORDER BY unitCount DESC
+        `,
+        { templateId }
+      )
+      // Entity type counts from documents generated by this template
+      const entitiesResult = await session.run(
+        `
+        MATCH (tpl:Template {adpa_id: $templateId})
+        MATCH (d:Document)-[:GENERATED_FROM]->(tpl)
+        MATCH (u:SemanticUnit)-[:EXTRACTED_FROM]->(d)
+        RETURN u.adpa_entity_type AS entityType, count(*) AS count
+        ORDER BY count DESC
+        `,
+        { templateId }
+      )
+      const documents = docsResult.records.map((rec) => ({
+        documentId: rec.get("documentId"),
+        title: rec.get("title"),
+        projectId: rec.get("projectId"),
+        projectName: rec.get("projectName"),
+        unitCount: (rec.get("unitCount") as { toNumber?: () => number })?.toNumber?.() ?? rec.get("unitCount") ?? 0,
+      }))
+      const entityTypeCounts = entitiesResult.records.map((rec) => ({
+        entityType: rec.get("entityType"),
+        count: (rec.get("count") as { toNumber?: () => number })?.toNumber?.() ?? rec.get("count") ?? 0,
+      }))
+      const totalDocuments = documents.length
+      const totalUnits = entityTypeCounts.reduce((sum, e) => sum + e.count, 0)
+      return res.json({
+        status: "ok",
+        templateId,
+        totalDocuments,
+        totalUnits,
+        documents,
+        entityTypeCounts,
+      })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      logger.error("[GKG] Template view failed", { templateId, error: msg })
+      return res.status(500).json({ status: "error", error: msg })
+    } finally {
+      await session.close()
+    }
+  }
+)
+
+/**
+ * POST /api/gkg/context
+ * Fetch GKG context for document generation by strategy (for preview or pipeline).
+ * Body: { projectId: string, strategy: GkgContextStrategy }
+ */
+router.post(
+  "/context",
+  authenticateToken,
+  requirePermission("projects.view"),
+  async (req, res) => {
+    if (!isNeo4jConfigured()) {
+      return res.status(503).json({
+        status: "unavailable",
+        error: "Neo4j is not configured; set NEO4J_URI to enable GKG context.",
+      })
+    }
+    const { projectId, strategy } = (req.body as { projectId?: string; strategy?: GkgContextStrategy }) ?? {}
+    if (!projectId || !strategy) {
+      return res.status(400).json({
+        status: "bad_request",
+        error: "Provide projectId and strategy in the request body.",
+      })
+    }
+    try {
+      const result = await getContextForStrategy(projectId, strategy)
+      return res.json({ status: "ok", ...result })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      logger.error("[GKG] Context fetch failed", { projectId, error: msg })
+      return res.status(500).json({ status: "error", error: msg })
     }
   }
 )

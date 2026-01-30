@@ -309,19 +309,25 @@ export function WorkflowTab({
             <div className="space-y-2">
               <Label htmlFor="model-select">Model</Label>
               <Select 
-                value={selectedModel} 
-                onValueChange={setSelectedModel}
+                value={selectedModel || undefined} 
+                onValueChange={(v) => setSelectedModel(v ?? '')}
                 disabled={!selectedAIProvider}
               >
                 <SelectTrigger>
                   <SelectValue placeholder={selectedAIProvider ? "Select a model" : "Select AI provider first"} />
                 </SelectTrigger>
                 <SelectContent>
-                  {availableModels.map((model) => (
-                    <SelectItem key={model.id} value={model.id}>
-                      {model.name} ({model.contextWindow ? formatNumber(model.contextWindow) : 'Unknown'} tokens)
-                    </SelectItem>
-                  ))}
+                  {availableModels.map((model) => {
+                    const id = model?.id != null ? String(model.id) : ''
+                    const name = model?.name ?? model?.id ?? 'Unknown'
+                    const ctx = typeof model?.contextWindow === 'number' ? model.contextWindow : null
+                    if (!id) return null
+                    return (
+                      <SelectItem key={id} value={id}>
+                        {name} ({ctx != null ? formatNumber(ctx) : 'Unknown'} tokens)
+                      </SelectItem>
+                    )
+                  })}
                 </SelectContent>
               </Select>
             </div>

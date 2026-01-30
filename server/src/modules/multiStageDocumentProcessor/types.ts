@@ -296,6 +296,13 @@ export interface DocumentSection {
   metadata: Record<string, any>
 }
 
+export interface GkgContextData {
+  markdown: string
+  unitsCount: number
+  documentsCount: number
+  entityTypes: string[]
+}
+
 export interface ContextData {
   project_context: ProjectContext
   user_context: UserContext
@@ -304,6 +311,8 @@ export interface ContextData {
   stakeholder_context?: StakeholderContext
   business_context?: BusinessContext
   organization_context?: OrganizationContext
+  /** GKG semantic units for LLM context (from template gkg_context_strategy). */
+  gkg_context?: GkgContextData
 }
 
 export interface ProjectContext {

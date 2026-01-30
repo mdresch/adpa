@@ -212,6 +212,62 @@ REFRESH MATERIALIZED VIEW IF EXISTS aggregated_template_entity_view;
    POST /api/template-analytics/analytics/rebuild-document-purposes/:projectId
    ```
 
+### Issue: project-data-extraction DLQ at maximum messages
+
+**Symptoms**: Dead-letter queue `project-data-extraction.dlq` has reached its max message limit (e.g. 20,000); new failed extraction jobs cannot be moved to the DLQ and may be dropped or cause errors.
+
+**Response**:
+
+1. **Purge the DLQ** (clears all failed messages so the queue is under the limit again):
+   ```bash
+   cd server
+   npx ts-node scripts/purge-extraction-dlq.ts
+   ```
+   Or with Node: `node --import ts-node/esm scripts/purge-extraction-dlq.ts`
+
+2. **Raise the DLQ limit** (optional, for future): Set `QUEUE_PROJECT_DATA_EXTRACTION_DLQ_MAX_LENGTH` (e.g. `50000`) in `server/.env`. This only applies when the queue is **created**; if the queue already exists with a broker policy, purge and delete the DLQ (via RabbitMQ management or `rabbitmqctl delete_queue project-data-extraction.dlq`), then restart the server so the queue is recreated with the new limit.
+
+3. **Investigate root cause**: Check logs and failed jobs to reduce extraction failures so the DLQ does not fill again.
+
+---
+
+### Why extraction jobs cause the majority of failures
+
+**Reasons**:
+
+1. **Volume**: Each extraction run creates many **child jobs** (one per entity type, e.g. 60+). A single parent run can enqueue dozens of children; any child that fails after retries goes to the DLQ, so extraction contributes many more failed messages than other queues.
+2. **External dependencies**: Child jobs call **AI providers** (OpenAI, Google, etc.). Timeouts, rate limits (429), and provider errors (5xx) are common and cause failures.
+3. **Heavy work**: Each child loads project documents, builds prompts, calls the model, parses JSON, and writes to the DB. Large documents, token limits, or DB constraints can cause failures.
+4. **Retries**: Extraction queue uses **2 attempts** and 5s backoff. Transient errors (e.g. brief rate limit) may still land in the DLQ if both attempts fail.
+
+**Common failure causes** (check `error_message` on failed jobs and `[EXTRACTION-CHILD]` in logs):
+
+| Cause | Example | Mitigation |
+|-------|---------|------------|
+| AI rate limit | 429, "rate limit" | Increase backoff; reduce concurrency (QUEUE_PREFETCH); use a provider with higher quota. |
+| AI timeout | ETIMEDOUT, "timeout" | Increase AI client timeout; use smaller documents or chunking. |
+| Token / length | "max_tokens", "context length" | Reduce document size sent to AI or increase max_tokens in extraction config. |
+| JSON parse | "Unexpected token", "JSON" | AI returned invalid JSON; add retry or stricter prompt/output validation. |
+| DB constraint | Unique violation, NOT NULL | Fix data or schema; ensure deduplication before insert. |
+| No documents | "No documents found" | Job may complete with 0 entities (orchestrator returns []); if it throws, ensure project has documents. |
+
+**Operational steps**:
+
+- **Query failed extraction jobs** (last 24h):
+  ```sql
+  SELECT id, type, status, error_message, created_at
+  FROM jobs
+  WHERE queue_name = 'project-data-extraction' AND status = 'failed'
+    AND created_at > NOW() - INTERVAL '24 hours'
+  ORDER BY created_at DESC
+  LIMIT 100;
+  ```
+- **Group by error_message** to find the most frequent failure reason.
+- **Adjust retries**: Child jobs are enqueued with `attempts: 3` and exponential backoff in `ExtractionOrchestrationService`; the main queue worker uses 2 attempts. Consider increasing extraction queue `defaultAttempts` (e.g. to 3) in `queueService.ts` for more retries on transient errors.
+- **Purge DLQ** when it hits the limit (see "Issue: project-data-extraction DLQ at maximum messages" above).
+
+---
+
 ### Issue: Database Performance Degradation
 
 **Symptoms**: Slow queries, high CPU usage during rebuilds

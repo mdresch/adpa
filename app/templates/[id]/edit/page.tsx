@@ -22,6 +22,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Checkbox } from "@/components/ui/checkbox"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { ChevronDown } from "lucide-react"
 import {
   FileText,
   Save,
@@ -40,6 +44,17 @@ import { useAuth } from "@/contexts/AuthContext"
 import { apiClient } from "@/lib/api"
 import { toast } from '@/lib/notify'
 
+/** GKG context strategy: which semantic search to run for LLM context. See docs/07-architecture/GKG_CONTEXT_STRATEGY.md */
+interface GkgContextStrategy {
+  profile?: 'governance_full' | 'charter_light' | 'requirements_only' | 'risks_only' | 'stakeholders_only' | 'custom'
+  entityTypes?: string[]
+  scope?: 'same_project' | 'same_project_top_docs' | 'dependent_projects' | 'all_accessible'
+  maxDocuments?: number
+  maxUnits?: number
+  traceableOnly?: boolean
+  documentStatusFilter?: 'approved_published_only' | 'include_draft_review'
+}
+
 interface Template {
   id: string
   name: string
@@ -53,6 +68,7 @@ interface Template {
   quality_threshold?: number
   prompt_version?: number
   is_public: boolean
+  gkg_context_strategy?: GkgContextStrategy | null
   created_by?: string
   created_at?: string
   updated_at?: string
@@ -94,6 +110,29 @@ const categories = [
   "Custom"
 ]
 
+/** Entity types available in the GKG for custom profile. Align with server GKG mapping. */
+const GKG_ENTITY_TYPES = [
+  "Requirement",
+  "Risk",
+  "Stakeholder",
+  "Milestone",
+  "Constraint",
+  "Deliverable",
+  "Phase",
+  "ActionItem",
+  "GovernanceDecision",
+  "Issue",
+  "Opportunity",
+  "WorkItem",
+  "WBSNode",
+  "ScopeBaseline",
+  "ScheduleBaseline",
+  "BudgetBaseline",
+  "BestPractice",
+  "SuccessCriteria",
+  "DTAsset",
+] as const
+
 export default function TemplateEditPage() {
   const params = useParams()
   const router = useRouter()
@@ -115,6 +154,15 @@ export default function TemplateEditPage() {
   const [isPublic, setIsPublic] = useState(false)
   const [variables, setVariables] = useState<Variable[]>([])
   const [templateContent, setTemplateContent] = useState("")
+  // GKG context strategy (template-driven semantic search for LLM context)
+  const [gkgEnabled, setGkgEnabled] = useState(false)
+  const [gkgProfile, setGkgProfile] = useState<GkgContextStrategy['profile']>('charter_light')
+  const [gkgScope, setGkgScope] = useState<GkgContextStrategy['scope']>('same_project_top_docs')
+  const [gkgMaxDocuments, setGkgMaxDocuments] = useState(5)
+  const [gkgMaxUnits, setGkgMaxUnits] = useState(500)
+  const [gkgTraceableOnly, setGkgTraceableOnly] = useState(true)
+  const [gkgDocumentStatusFilter, setGkgDocumentStatusFilter] = useState<GkgContextStrategy['documentStatusFilter']>('approved_published_only')
+  const [gkgEntityTypes, setGkgEntityTypes] = useState<string[]>([])
 
   useEffect(() => {
     fetchTemplate()
@@ -137,7 +185,17 @@ export default function TemplateEditPage() {
       setIsPublic(data.is_public || false)
       setVariables(data.variables || [])
       setTemplateContent(data.content ? JSON.stringify(data.content, null, 2) : "{}")
-      
+      const gkg = (data as any).gkg_context_strategy
+      setGkgEnabled(!!gkg)
+      if (gkg) {
+        setGkgProfile(gkg.profile ?? 'charter_light')
+        setGkgScope(gkg.scope ?? 'same_project_top_docs')
+        setGkgMaxDocuments(gkg.maxDocuments ?? 5)
+        setGkgMaxUnits(gkg.maxUnits ?? 500)
+        setGkgTraceableOnly(gkg.traceableOnly !== false)
+        setGkgDocumentStatusFilter(gkg.documentStatusFilter === 'include_draft_review' ? 'include_draft_review' : 'approved_published_only')
+        setGkgEntityTypes(Array.isArray(gkg.entityTypes) ? gkg.entityTypes : [])
+      }
     } catch (error) {
       console.error('Failed to fetch template:', error)
       toast.error('Failed to load template')
@@ -170,6 +228,18 @@ export default function TemplateEditPage() {
         return
       }
 
+      const gkg_context_strategy = gkgEnabled
+        ? {
+            profile: gkgProfile,
+            scope: gkgScope,
+            maxDocuments: gkgMaxDocuments,
+            maxUnits: gkgMaxUnits,
+            traceableOnly: gkgTraceableOnly,
+            documentStatusFilter: gkgDocumentStatusFilter,
+            ...(gkgProfile === 'custom' && gkgEntityTypes.length > 0 ? { entityTypes: gkgEntityTypes } : {}),
+          }
+        : null
+
       const payload = {
         name,
         description,
@@ -181,6 +251,7 @@ export default function TemplateEditPage() {
         quality_threshold: qualityThreshold / 100, // Convert percentage to 0-1
         prompt_version: promptVersion,
         is_public: isPublic,
+        gkg_context_strategy,
       }
 
       await apiClient.request(`/templates/${templateId}`, {
@@ -324,11 +395,12 @@ export default function TemplateEditPage() {
 
                 {/* Main Edit Form */}
                 <Tabs defaultValue="basic" className="space-y-6">
-                  <TabsList className="grid w-full grid-cols-4">
+                  <TabsList className="grid w-full grid-cols-5">
                     <TabsTrigger value="basic">Basic Info</TabsTrigger>
                     <TabsTrigger value="prompts">AI Prompts</TabsTrigger>
                     <TabsTrigger value="content">Template Content</TabsTrigger>
                     <TabsTrigger value="variables">Variables</TabsTrigger>
+                    <TabsTrigger value="gkg">GKG Context</TabsTrigger>
                   </TabsList>
 
                   {/* Basic Info Tab */}
@@ -778,6 +850,167 @@ CHARTER STRUCTURE:
                           </div>
                         )}
 
+                      </CardContent>
+                    </AnimatedCard>
+                  </TabsContent>
+
+                  {/* GKG Context Tab */}
+                  <TabsContent value="gkg" className="space-y-6">
+                    <AnimatedCard>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <Sparkles className="h-5 w-5 text-indigo-600" />
+                          GKG Context for Document Generation
+                        </CardTitle>
+                        <CardDescription>
+                          Choose which semantic search to run against the Governance Knowledge Graph when generating documents from this template. This context is injected into the LLM for better, evidence-based output.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-6">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <Label className="text-base font-medium">Enable GKG context</Label>
+                            <p className="text-sm text-muted-foreground">
+                              When enabled, document generation will fetch semantic units (requirements, risks, stakeholders, etc.) from the graph as LLM context.
+                            </p>
+                          </div>
+                          <Switch checked={gkgEnabled} onCheckedChange={setGkgEnabled} />
+                        </div>
+
+                        {gkgEnabled && (
+                          <>
+                            <Separator />
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <Label>Profile (entity set)</Label>
+                                <p className="text-xs text-muted-foreground">
+                                  Which types of entities to include in the context. The graph stores requirements, risks, stakeholders, milestones, constraints, deliverables, etc.; the profile selects which of these are sent to the LLM.
+                                </p>
+                                <Select value={gkgProfile} onValueChange={(v: GkgContextStrategy['profile']) => setGkgProfile(v)}>
+                                  <SelectTrigger>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="governance_full">Governance full — Requirement, Risk, Stakeholder, Milestone, Constraint, Deliverable (PMBOK-style docs)</SelectItem>
+                                    <SelectItem value="charter_light">Charter light — Requirement, Risk, Stakeholder (charters, light governance)</SelectItem>
+                                    <SelectItem value="requirements_only">Requirements only — Requirement (requirements docs, SRS)</SelectItem>
+                                    <SelectItem value="risks_only">Risks only — Risk (risk register, risk report)</SelectItem>
+                                    <SelectItem value="stakeholders_only">Stakeholders only — Stakeholder (stakeholder register, communication plan)</SelectItem>
+                                    <SelectItem value="custom">Custom — specify entity types below</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Scope</Label>
+                                <p className="text-xs text-muted-foreground">
+                                  Where to pull context from in the graph: one project, its best documents, dependent projects, or all projects you can access.
+                                </p>
+                                <Select value={gkgScope} onValueChange={(v: GkgContextStrategy['scope']) => setGkgScope(v)}>
+                                  <SelectTrigger>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="same_project">Same project only — entities from the target project only</SelectItem>
+                                    <SelectItem value="same_project_top_docs">Same project, top documents — same project; use documents with most units first (best sources first)</SelectItem>
+                                    <SelectItem value="dependent_projects">Same project + dependent projects — target project and projects linked via project dependencies</SelectItem>
+                                    <SelectItem value="all_accessible">All accessible projects — all projects you can access (e.g. company scope)</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <Label>Max documents</Label>
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  max={50}
+                                  value={gkgMaxDocuments}
+                                  onChange={(e) => setGkgMaxDocuments(Number(e.target.value) || 5)}
+                                />
+                                <p className="text-xs text-muted-foreground">Max source documents to pull units from</p>
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Max units</Label>
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  max={5000}
+                                  value={gkgMaxUnits}
+                                  onChange={(e) => setGkgMaxUnits(Number(e.target.value) || 500)}
+                                />
+                                <p className="text-xs text-muted-foreground">Max semantic units in context</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <Label className="text-base font-medium">Traceable only</Label>
+                                <p className="text-sm text-muted-foreground">Include only units that are linked to a source document (default: on). Excludes units not tied to a document for clearer, evidence-based context.</p>
+                              </div>
+                              <Switch checked={gkgTraceableOnly} onCheckedChange={setGkgTraceableOnly} />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Document status</Label>
+                              <p className="text-xs text-muted-foreground">
+                                Restrict context to documents with status Approved or Published only, or include Draft and In Review documents as well.
+                              </p>
+                              <Select value={gkgDocumentStatusFilter} onValueChange={(v: GkgContextStrategy['documentStatusFilter']) => setGkgDocumentStatusFilter(v)}>
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="approved_published_only">Approved / Published only — only use context from approved or published documents</SelectItem>
+                                  <SelectItem value="include_draft_review">Include Draft and In Review — also use context from draft and in-review documents</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            {gkgProfile === 'custom' && (
+                              <div className="space-y-2">
+                                <Label>Entity types</Label>
+                                <p className="text-xs text-muted-foreground">
+                                  Choose which entity types to include in the context. Only selected types will be fetched from the graph.
+                                </p>
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <Button
+                                      variant="outline"
+                                      className="w-full justify-between font-normal"
+                                    >
+                                      {gkgEntityTypes.length > 0
+                                        ? `${gkgEntityTypes.length} selected: ${gkgEntityTypes.slice(0, 3).join(", ")}${gkgEntityTypes.length > 3 ? "…" : ""}`
+                                        : "Select entity types…"}
+                                      <ChevronDown className="h-4 w-4 opacity-50" />
+                                    </Button>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-full min-w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                                    <ScrollArea className="h-64 rounded-md border-0">
+                                      <div className="p-2 space-y-1">
+                                        {GKG_ENTITY_TYPES.map((type) => (
+                                          <label
+                                            key={type}
+                                            className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm cursor-pointer hover:bg-accent"
+                                          >
+                                            <Checkbox
+                                              checked={gkgEntityTypes.includes(type)}
+                                              onCheckedChange={(checked) => {
+                                                setGkgEntityTypes((prev) =>
+                                                  checked
+                                                    ? [...prev, type]
+                                                    : prev.filter((t) => t !== type)
+                                                )
+                                              }}
+                                            />
+                                            {type}
+                                          </label>
+                                        ))}
+                                      </div>
+                                    </ScrollArea>
+                                  </PopoverContent>
+                                </Popover>
+                              </div>
+                            )}
+                          </>
+                        )}
                       </CardContent>
                     </AnimatedCard>
                   </TabsContent>

@@ -364,17 +364,28 @@ export default function ProcessFlowWorkflow() {
         data?: Array<{
           id: string
           name: string
-          providerId: string
-          maxTokens: number
-          contextWindow: number
+          providerId?: string
+          maxTokens?: number
+          contextWindow?: number
+        }>
+        models?: Array<{
+          id: string
+          name: string
+          providerId?: string
+          maxTokens?: number
+          contextWindow?: number
         }>
       }>(`/process-flow/providers/${providerId}/models`, { method: 'GET' })
       if (response.success) {
-        setAvailableModels(response.data || [])
+        const list = response.data ?? response.models ?? []
+        setAvailableModels(Array.isArray(list) ? list : [])
       }
     } catch (error) {
       console.error('Error loading available models:', error)
-      // toast.error('Failed to load AI models')
+      setAvailableModels([])
+      toast.error(error instanceof Error ? error.message : 'Check permissions (ai.read) or provider configuration.', {
+        title: 'Failed to load AI models',
+      })
     }
   }
 
@@ -662,18 +673,19 @@ export default function ProcessFlowWorkflow() {
     }
   }, [selectedAIProvider])
 
-  // Format numbers consistently to avoid hydration errors
-  const formatNumber = (num: number) => {
-    return num.toLocaleString('en-US')
+  // Format numbers consistently to avoid hydration errors (safe for undefined/null)
+  const formatNumber = (num: number | undefined | null): string => {
+    if (num != null && typeof num === 'number' && !Number.isNaN(num)) {
+      return num.toLocaleString('en-US')
+    }
+    return 'Unknown'
   }
 
   // Start workflow processing
   const startWorkflow = async () => {
     try {
       if (!selectedTemplate || !selectedProject) {
-        toast("Please select a template and project", {
-          type: "error"
-        })
+        toast.error("Please select a template and project")
         return
       }
 
@@ -689,9 +701,8 @@ export default function ProcessFlowWorkflow() {
         includeStakeholders: workflowConfig.includeStakeholders
       }
 
-      toast("Starting workflow processing...", {
-        type: "info",
-        description: "Processing your documents with AI compression"
+      toast.info("Processing your documents with AI compression", {
+        title: "Starting workflow processing...",
       })
       
       const response = await apiClient.post('/process-flow/start-workflow', config)
@@ -704,65 +715,60 @@ export default function ProcessFlowWorkflow() {
         
         // Show success message with document info
         const savedDoc = response.data.data.savedDocument
-        toast("Workflow completed!", {
-          type: "success",
-          description: `Document "${savedDoc.name}" saved to project.`,
-          action: {
-            label: "View Document",
-            onClick: () => {
-              // Navigate to document view (you can implement this)
-              window.open(`/documents/${savedDoc.id}`, '_blank')
-            }
-          }
+        toast.success(`Document "${savedDoc.name}" saved to project.`, {
+          title: "Workflow completed!",
         })
       } else {
-        toast("Workflow processing failed", {
-          type: "error"
-        })
+        toast.error("Workflow processing failed")
       }
     } catch (error) {
       console.error('Error starting workflow:', error)
-      toast("Failed to start workflow processing", {
-        type: "error"
-      })
+      toast.error("Failed to start workflow processing")
     }
   }
 
   // Update context window and max tokens when model changes
   useEffect(() => {
-    if (selectedModel && availableModels.length > 0) {
-      const model = availableModels.find(m => m.id === selectedModel)
-      if (model) {
-        // Update context window based on model's context window
-        if (model.contextWindow) {
-          setContextWindow([model.contextWindow])
-        }
-        
-        // Update workflow config with model parameters
-        setWorkflowConfig(prev => ({
-          ...prev,
-          maxTokens: model.contextWindow || 2000000,
-          modelId: model.id,
-          modelName: model.name,
-          modelMaxTokens: model.maxTokens || 4096
-        }))
-        
-        setModelParameters(model)
-        
-        // Show toast with model information
-        toast("Model Selected", {
-          description: `Selected ${model.name} with ${model.contextWindow ? formatNumber(model.contextWindow) : 'Unknown'} token context window`,
-        })
-      }
+    if (!selectedModel || availableModels.length === 0) return
+    try {
+      const model = availableModels.find(m => String(m?.id) === String(selectedModel))
+      if (!model) return
+      const contextWindow = typeof model.contextWindow === 'number' ? model.contextWindow : 2000000
+      const maxTokens = typeof model.maxTokens === 'number' ? model.maxTokens : 4096
+      setContextWindow([contextWindow])
+      setWorkflowConfig(prev => ({
+        ...prev,
+        maxTokens: contextWindow,
+        modelId: String(model.id),
+        modelName: String(model.name ?? model.id),
+        modelMaxTokens: maxTokens
+      }))
+      setModelParameters({
+        id: String(model.id),
+        name: String(model.name ?? model.id),
+        providerId: (model as any).providerId ?? selectedAIProvider ?? '',
+        maxTokens,
+        contextWindow,
+        temperature: (model as any).temperature,
+        topP: (model as any).topP,
+        frequencyPenalty: (model as any).frequencyPenalty,
+        presencePenalty: (model as any).presencePenalty,
+        type: (model as any).type ?? 'chat',
+      })
+      toast.success(`Selected ${model.name ?? model.id} with ${typeof contextWindow === 'number' ? formatNumber(contextWindow) : 'Unknown'} token context window`, {
+        title: 'Model Selected',
+      })
+    } catch (err) {
+      console.error('Error applying model selection:', err)
+      toast.error(err instanceof Error ? err.message : 'Please try again.', { title: 'Model selection error' })
     }
-  }, [selectedModel, availableModels])
+  }, [selectedModel, availableModels, selectedAIProvider])
 
   // Start workflow processing
   const startWorkflowProcessing = async () => {
     if (!selectedTemplate || !selectedProject || !selectedAIProvider || !selectedModel) {
-      toast("Selection Required", {
-        description: "Please select template, project, AI provider, and model",
-        type: "error",
+      toast.error("Please select template, project, AI provider, and model", {
+        title: "Selection Required",
       })
       return
     }
@@ -870,8 +876,8 @@ export default function ProcessFlowWorkflow() {
             setWorkflowResult({ savedDocument: response.data.savedDocument })
           }
           
-          toast("Processing Complete", {
-            description: "Workflow processing completed successfully! Click 'View Generated Document' to review.",
+          toast.success("Workflow processing completed successfully! Click 'View Generated Document' to review.", {
+            title: "Processing Complete",
           })
         } else {
           setProcessingStatus('processing')
@@ -884,9 +890,8 @@ export default function ProcessFlowWorkflow() {
       console.error('Error details:', error?.message)
       console.error('Error stack:', error?.stack)
       setProcessingStatus('error')
-      toast("Processing Failed", {
-        description: "Failed to start workflow processing",
-        type: "error",
+      toast.error("Failed to start workflow processing", {
+        title: "Processing Failed",
       })
     }
   }
@@ -1551,19 +1556,25 @@ export default function ProcessFlowWorkflow() {
                       <div className="space-y-2">
                         <Label htmlFor="model-select">Model</Label>
                         <Select 
-                          value={selectedModel} 
-                          onValueChange={setSelectedModel}
+                          value={selectedModel || undefined} 
+                          onValueChange={(v) => setSelectedModel(v ?? '')}
                           disabled={!selectedAIProvider}
                         >
                           <SelectTrigger>
                             <SelectValue placeholder={selectedAIProvider ? "Select a model" : "Select AI provider first"} />
                           </SelectTrigger>
                           <SelectContent>
-                            {availableModels.map((model) => (
-                              <SelectItem key={model.id} value={model.id}>
-                                {model.name} ({model.contextWindow ? formatNumber(model.contextWindow) : 'Unknown'} tokens)
-                              </SelectItem>
-                            ))}
+                            {availableModels.map((model) => {
+                              const id = model?.id != null ? String(model.id) : ''
+                              const name = model?.name ?? model?.id ?? 'Unknown'
+                              const ctx = typeof model?.contextWindow === 'number' ? model.contextWindow : null
+                              if (!id) return null
+                              return (
+                                <SelectItem key={id} value={id}>
+                                  {name} ({ctx != null ? formatNumber(ctx) : 'Unknown'} tokens)
+                                </SelectItem>
+                              )
+                            })}
                           </SelectContent>
                         </Select>
                       </div>
@@ -2487,8 +2498,8 @@ export default function ProcessFlowWorkflow() {
                     a.click()
                     document.body.removeChild(a)
                     URL.revokeObjectURL(url)
-                    toast("Document Downloaded", {
-                      description: "Document downloaded as Markdown"
+                    toast.success("Document downloaded as Markdown", {
+                      title: "Document Downloaded",
                     })
                   }
                 }}

@@ -12,6 +12,7 @@ import { urlContentFetcherService } from "../services/urlContentFetcherService"
 import { integrationPageService } from "../services/integrationPageService"
 import { referenceDocumentUploadService } from "../services/referenceDocumentUploadService"
 import { contextRecommendationService } from "../services/contextRecommendationService"
+import { getProjectContext } from "./context-injection"
 
 const router = express.Router()
 
@@ -2708,7 +2709,84 @@ router.post("/:projectId/documents", authenticateToken, async (req, res) => {
 router.get("/:projectId/documents/:documentId", authenticateToken, async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId })
   try {
-    const { projectId, documentId } = req.params
+    const { projectId } = req.params
+    const documentId = decodeURIComponent(req.params.documentId)
+
+    // Synthetic "Project Context" document: id is project_context:{projectId}
+    if (documentId.startsWith("project_context:")) {
+      const extractedProjectId = documentId.replace(/^project_context:/, "")
+      if (extractedProjectId !== projectId) {
+        return res.status(400).json({ error: "Document id project context project id mismatch" })
+      }
+      const projectContext = await getProjectContext(projectId)
+      if (!projectContext) {
+        return res.status(404).json({ error: "Project not found" })
+      }
+      const stakeholders = projectContext.stakeholders || []
+      const documents = projectContext.documents || []
+      const unitsCount = stakeholders.length + documents.length
+      const entityTypes = ["project", ...(stakeholders.length ? ["stakeholder"] : []), ...(documents.length ? ["document"] : [])]
+      const markdownParts: string[] = []
+      markdownParts.push(`# Project: ${projectContext.name}\n`)
+      if (projectContext.description) {
+        markdownParts.push(`## Description\n${projectContext.description}\n`)
+      }
+      if (projectContext.framework) {
+        markdownParts.push(`## Framework\n${projectContext.framework}\n`)
+      }
+      if (stakeholders.length > 0) {
+        markdownParts.push("## Stakeholders\n")
+        stakeholders.forEach((s: { name?: string; role?: string; email?: string }) => {
+          markdownParts.push(`- **${s.name || "Unknown"}**${s.role ? ` — ${s.role}` : ""}${s.email ? ` (${s.email})` : ""}\n`)
+        })
+      }
+      if (documents.length > 0) {
+        markdownParts.push("## Related documents\n")
+        documents.forEach((d: { name?: string; type?: string }) => {
+          markdownParts.push(`- ${d.name || "Untitled"}${d.type ? ` (${d.type})` : ""}\n`)
+        })
+      }
+      const markdown = markdownParts.join("")
+      const estimatedContextTokens = Math.ceil(markdown.length / 4)
+      const syntheticDoc = {
+        id: documentId,
+        title: `Project context: ${projectContext.name}`,
+        content: markdown,
+        author: "System",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        status: "published",
+        project_id: projectId,
+        project_name: projectContext.name,
+        version: "1.0.0",
+        word_count: markdown.split(/\s+/).filter(Boolean).length,
+        character_count: markdown.length,
+        metadata: {
+          ...(projectContext.metadata || {}),
+          context_stats: {
+            total_documents_available: documents.length,
+            documents_used_as_context: documents.length,
+            stakeholders_available: stakeholders.length,
+            custom_settings_count: 0,
+            custom_metadata_count: 0,
+            estimated_context_tokens: estimatedContextTokens,
+          },
+        },
+        generation_metadata: {
+          gkg_context_snapshot: {
+            markdown,
+            unitsCount,
+            documentsCount: documents.length,
+            entityTypes,
+          },
+        },
+        template_metadata: null,
+        template_id: null,
+        framework: projectContext.framework || null,
+        template_name: null,
+      }
+      return res.json(syntheticDoc)
+    }
 
     const query = `
       SELECT 
@@ -2809,7 +2887,60 @@ router.get("/:projectId/documents/:documentId", authenticateToken, async (req, r
 router.get("/:projectId/documents/:documentId/versions", authenticateToken, async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId })
   try {
-    const { projectId, documentId } = req.params
+    const { projectId } = req.params
+    const documentId = decodeURIComponent(req.params.documentId)
+
+    // Synthetic "Project Context" document has no version history; return a single synthetic version with same content as GET document
+    if (documentId.startsWith("project_context:")) {
+      const extractedProjectId = documentId.replace(/^project_context:/, "")
+      if (extractedProjectId !== projectId) {
+        return res.status(400).json({ error: "Document id project context project id mismatch" })
+      }
+      const projectContext = await getProjectContext(projectId)
+      if (!projectContext) {
+        return res.status(404).json({ error: "Project not found" })
+      }
+      const stakeholders = projectContext.stakeholders || []
+      const documents = projectContext.documents || []
+      const markdownParts: string[] = []
+      markdownParts.push(`# Project: ${projectContext.name}\n`)
+      if (projectContext.description) {
+        markdownParts.push(`## Description\n${projectContext.description}\n`)
+      }
+      if (projectContext.framework) {
+        markdownParts.push(`## Framework\n${projectContext.framework}\n`)
+      }
+      if (stakeholders.length > 0) {
+        markdownParts.push("## Stakeholders\n")
+        stakeholders.forEach((s: { name?: string; role?: string; email?: string }) => {
+          markdownParts.push(`- **${s.name || "Unknown"}**${s.role ? ` — ${s.role}` : ""}${s.email ? ` (${s.email})` : ""}\n`)
+        })
+      }
+      if (documents.length > 0) {
+        markdownParts.push("## Related documents\n")
+        documents.forEach((d: { name?: string; type?: string }) => {
+          markdownParts.push(`- ${d.name || "Untitled"}${d.type ? ` (${d.type})` : ""}\n`)
+        })
+      }
+      const markdown = markdownParts.join("")
+      const wordCount = markdown.split(/\s+/).filter(Boolean).length
+      return res.json([
+        {
+          id: documentId,
+          name: "Project context",
+          version: "1.0.0",
+          content: markdown,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          author: "System",
+          word_count: wordCount,
+          is_regeneration: false,
+          metadata: null,
+          is_current: true,
+          changes: "Project context summary",
+        },
+      ])
+    }
 
     // First verify the document exists and belongs to the project
     const verifyQuery = `

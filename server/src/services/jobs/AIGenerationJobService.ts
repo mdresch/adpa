@@ -98,9 +98,10 @@ export class AIGenerationJobService {
       // Update job status to processing and assign worker
       await updateJobStatus(actualJobId, "processing", 10, workerId, "ai-processing")
 
-      // Phase 6: Start incremental progress heartbeat for AI generation (10% -> 45%)
+      // Phase 6: Start incremental progress heartbeat for AI generation (10% -> 55%)
+      // Long documents + GKG context can take 3-5+ minutes; extended range so bar keeps moving
       const aiHeartbeat = AIGenerationJobService.startProgressHeartbeat(
-        actualJobId, 10, 45, updateJobStatus, workerId, deps, jobData
+        actualJobId, 10, 55, updateJobStatus, workerId, deps, jobData
       )
 
       let result;
@@ -686,9 +687,9 @@ export class AIGenerationJobService {
     let currentProgress = startProgress
 
     return setInterval(() => {
-      // Small random increments to make it feel natural (1-3%)
-      const increment = Math.floor(Math.random() * 2) + 1
-      if (currentProgress + increment < maxProgress) {
+      // 1% every 4s so bar keeps moving for ~3 min during long AI calls (e.g. large docs + GKG context)
+      const increment = 1
+      if (currentProgress + increment <= maxProgress) {
         currentProgress += increment
 
         // Update database using promise chaining to avoid top-level await in callbacks

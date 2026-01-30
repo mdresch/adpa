@@ -65,7 +65,6 @@ cp server/.env.example server/.env
 | Create AI Risk Management feature flag | Backend Dev | 2 hours | None |
 | Setup ML model server environment | DevOps | 1 day | Azure subscription |
 | Configure Azure AD app registration | DevOps | 4 hours | Azure AD tenant |
-| Create project Slack channel | PM | 1 hour | Slack workspace |
 | Setup Jira project board | PM | 2 hours | Jira access |
 
 #### 3.1.3 Azure AD SSO Implementation
@@ -94,6 +93,23 @@ cp server/.env.example server/.env
 | 6 | Frontend auth integration | 4h | Frontend Dev |
 | 7 | Write unit tests | 4h | QA |
 | 8 | Integration testing | 4h | QA |
+
+#### 3.1.4 AI Governance & Risk Foundations
+
+**Goal (Weeks 1-4)**: Stand up the core AI risk governance structure and baseline documentation needed for later phases.
+
+**Key artefacts created in this step** (stored under the AI risk management project docs):
+- `phase1-plan.md` – AI Risk Assessment Resolutions 2026 Phase 1 plan
+- `use-case-inventory.md` – AI use case inventory & criticality matrix
+- `risk-register-template.md` – AI risk register template
+
+| # | Task | Estimate | Owner | Dependencies |
+|---|------|----------|-------|--------------|
+| 1 | Draft and approve AI Governance Charter (roles, decision rights) | 8h | Risk Lead | Exec sponsor identified |
+| 2 | Define AI risk appetite & principles for 2026 | 8h | Risk Lead + Compliance | Charter draft |
+| 3 | Configure AI Risk Steering Committee cadence and workflow | 4h | PM | Charter approved |
+| 4 | Create initial AI use case intake form (aligned to `use-case-inventory.md`) | 4h | BA | None |
+| 5 | Link approved governance docs into repo and ADPA project | 4h | PM | Repo structure |
 
 ---
 
@@ -503,6 +519,22 @@ CREATE INDEX IF NOT EXISTS idx_users_escalation_level ON users(escalation_level)
 | 6 | 412_ai_governance_tables.sql | 30s | DROP TABLE compliance_audit_logs, ai_ethics_reviews, ai_models CASCADE; |
 | 7 | 413_existing_table_modifications.sql | 60s | See rollback script |
 
+#### 3.2.3 AI Use Case Inventory & Risk Register Initialization
+
+**Goal (Weeks 5-8)**: Populate the initial AI use case inventory and seed the AI risk register using the newly created governance structures.
+
+**Supporting documents** (Phase 1):
+- `use-case-inventory.md` – central inventory for all AI use cases
+- `risk-register-template.md` – standardized AI risk register structure
+
+| # | Task | Estimate | Owner | Dependencies |
+|---|------|----------|-------|--------------|
+| 1 | Facilitate workshops with domain teams to identify current and planned AI use cases | 16h | BA | Governance charter |
+| 2 | Populate `use-case-inventory.md` with all known AI use cases | 8h | BA | Workshops completed |
+| 3 | Classify each use case (impact, exposure, autonomy, regulatory) | 8h | Risk Lead | Inventory draft |
+| 4 | Flag high‑risk use cases and record in `risk-register-template.md` | 8h | Risk Lead | Classification |
+| 5 | Define Phase 2 assessment backlog from high‑risk items | 4h | PM | Initial register |
+
 ---
 
 ### 3.3 Sprint 5-6: Data Pipeline (Weeks 9-12)
@@ -534,6 +566,22 @@ CREATE INDEX IF NOT EXISTS idx_users_escalation_level ON users(escalation_level)
 | 7 | Write data quality validation rules | 6h | Data Scientist |
 | 8 | Integration testing with sample data | 8h | QA |
 | 9 | Production data import (supervised) | 16h | Team |
+
+#### 3.3.3 Data Readiness & Vendor Due Diligence (Phase 1)
+
+**Goal (Weeks 9-12)**: Ensure historical data and third‑party AI vendors meet baseline risk, privacy, and security requirements before Phase 2 pilots.
+
+**Supporting documents** (Phase 1):
+- `data-readiness-assessment.md` – AI data readiness & quality assessment
+- `vendor-due-diligence-questionnaire.md` – AI vendor questionnaire and scoring
+
+| # | Task | Estimate | Owner | Dependencies |
+|---|------|----------|-------|--------------|
+| 1 | Complete `data-readiness-assessment.md` for each core dataset used in risk models | 16h | Data Owner + Data Scientist | Historical data mapping |
+| 2 | Identify all current and candidate AI vendors (LLM, ML, analytics) | 8h | PM + Procurement | Use case inventory |
+| 3 | Issue `vendor-due-diligence-questionnaire.md` to each AI vendor | 8h | Procurement | Vendor list |
+| 4 | Score vendors and document risk rating & conditions | 12h | Security + Risk | Completed questionnaires |
+| 5 | Approve initial vendor shortlist for Phase 2 pilots | 4h | Steering Committee | Scoring summary |
 
 ---
 
@@ -629,6 +677,41 @@ app/risk-management/
 | 6 | RiskTrendChart | 6h | P1 | Recharts |
 | 7 | RiskAlertBanner | 4h | P1 | WebSocket |
 | 8 | ScenarioSimulator | 12h | P2 | Prediction API |
+
+---
+
+### 3.6 Phase 1 Closeout & Readiness Review
+
+#### 3.6.1 Phase 1 Completion Checklist
+
+**Objective**: Confirm that technical foundations and AI risk governance artefacts are in place before entering Phase 2 (Core AI Implementation).
+
+| Area | Checklist Item | Owner | Status |
+|------|----------------|-------|--------|
+| Governance | AI Governance Charter approved and published | Risk Lead | ☐ |
+| Governance | AI Risk Appetite Statement finalized for 2026 | Risk Lead + Compliance | ☐ |
+| Governance | AI Risk Steering Committee operating with defined cadence | PM | ☐ |
+| Inventory | `use-case-inventory.md` populated and high‑risk use cases tagged | BA + Risk Lead | ☐ |
+| Risk Register | Initial entries for all high‑risk use cases created in `risk-register-template.md` | Risk Lead | ☐ |
+| Data | `data-readiness-assessment.md` completed for each core dataset | Data Owner + Data Scientist | ☐ |
+| Vendors | `vendor-due-diligence-questionnaire.md` completed and scored for shortlisted AI vendors | Security + Procurement | ☐ |
+| Platform | Risk Analytics backend services deployed to staging | Tech Lead | ☐ |
+| Platform | Risk Management dashboard available in staging with basic analytics | Frontend Lead | ☐ |
+| Testing | Phase 1 regression tests passing in CI for backend and frontend | QA Lead | ☐ |
+
+#### 3.6.2 Gate Criteria Alignment
+
+This checklist maps to the **Phase 1 gate criteria** in Section 10.1:
+
+- **Infrastructure operational**  
+  - Database migrations 407–413 executed successfully in staging.  
+  - Risk Analytics services and dashboards reachable and monitored.
+- **Data imported**  
+  - Historical data import jobs completed for agreed pilot projects.  
+  - Data quality issues documented and remediation backlog created.
+- **Risk governance baseline in place** (Phase 1 extension)  
+  - Governance, inventory, risk register, data readiness, and vendor due diligence artefacts completed and stored under the AI risk management project docs.  
+  - High‑risk AI use cases identified and prioritized for Phase 2 pilots and deeper assessment.
 
 ---
 

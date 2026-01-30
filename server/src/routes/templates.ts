@@ -794,12 +794,21 @@ router.put("/:id",
       order: Joi.number().integer().min(1).required(),
       prompt_guidance: Joi.string().max(1000).optional(),
     })).optional(),
+    gkg_context_strategy: Joi.object({
+      profile: Joi.string().valid("governance_full", "charter_light", "requirements_only", "risks_only", "stakeholders_only", "custom").optional(),
+      entityTypes: Joi.array().items(Joi.string()).optional(),
+      scope: Joi.string().valid("same_project", "same_project_top_docs", "dependent_projects", "all_accessible").optional(),
+      maxDocuments: Joi.number().integer().min(1).max(50).optional(),
+      maxUnits: Joi.number().integer().min(1).max(5000).optional(),
+      traceableOnly: Joi.boolean().optional(),
+      documentStatusFilter: Joi.string().valid("approved_published_only", "include_draft_review").optional(),
+    }).allow(null).optional(),
   })),
   async (req, res) => {
     const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { id } = req.params
-      const { name, description, framework, category, content, variables, is_public, system_prompt, template_paragraphs, quality_threshold, prompt_version } = req.body
+      const { name, description, framework, category, content, variables, is_public, system_prompt, template_paragraphs, quality_threshold, prompt_version, gkg_context_strategy } = req.body
 
       // Check if template exists and user has permission
       const templateCheck = await pool.query(
@@ -850,8 +859,10 @@ router.put("/:id",
         }
       }
 
-      const result = await pool.query(
-        `
+      let result
+      try {
+        result = await pool.query(
+          `
         UPDATE templates 
         SET name = COALESCE($1, name),
             description = COALESCE($2, description),
@@ -864,25 +875,42 @@ router.put("/:id",
             template_paragraphs = COALESCE($9, template_paragraphs),
             quality_threshold = COALESCE($10, quality_threshold),
             prompt_version = COALESCE($11, prompt_version),
+            gkg_context_strategy = COALESCE($12, gkg_context_strategy),
             updated_at = CURRENT_TIMESTAMP
-        WHERE id = $12
+        WHERE id = $13
         RETURNING *
       `,
-        [
-          name,
-          description,
-          framework,
-          category,
-          content ? JSON.stringify(content) : null,
-          variables ? JSON.stringify(variables) : null,
-          is_public,
-          system_prompt || null,
-          template_paragraphs ? JSON.stringify(template_paragraphs) : null,
-          quality_threshold,
-          prompt_version,
-          id,
-        ]
-      )
+          [
+            name,
+            description,
+            framework,
+            category,
+            content ? JSON.stringify(content) : null,
+            variables ? JSON.stringify(variables) : null,
+            is_public,
+            system_prompt || null,
+            template_paragraphs ? JSON.stringify(template_paragraphs) : null,
+            quality_threshold,
+            prompt_version,
+            gkg_context_strategy != null ? JSON.stringify(gkg_context_strategy) : null,
+            id,
+          ]
+        )
+      } catch (updateErr: any) {
+        const msg = updateErr?.message || String(updateErr)
+        if (msg.includes('gkg_context_strategy') && msg.includes('does not exist')) {
+          log.warn('Template update failed: gkg_context_strategy column missing. Run: cd server && npm run migrate:672')
+          return res.status(503).json({
+            error: 'Database schema is missing the GKG context strategy column. Please run migration: cd server && npm run migrate:672',
+            code: 'MIGRATION_REQUIRED',
+          })
+        }
+        throw updateErr
+      }
+
+      if (!result?.rows?.[0]) {
+        return res.status(500).json({ error: 'Template update returned no rows' })
+      }
 
       // Clear cache
       await cache.del(`template:${id}`)

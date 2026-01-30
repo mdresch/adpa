@@ -844,15 +844,21 @@ Return ONLY the section content in markdown format. Do not include section heade
     const parts: string[] = []
 
     if (context.project_context) {
-      parts.push(`Project: ${JSON.stringify(context.project_context.project_data || {}, null, 2)}`)
+      const proj = context.project_context as any
+      parts.push(`Project: ${JSON.stringify(proj.project_data ?? { project_id: proj.project_id, project_name: proj.project_name } ?? proj ?? {}, null, 2)}`)
     }
 
-    if (context.user_context) {
-      parts.push(`User: ${context.user_context.user_profile?.name || 'Unknown'} (${context.user_context.user_profile?.role || 'Unknown role'})`)
+    const userCtx = (context as any).user_context ?? (context as any).user_profile_context
+    if (userCtx?.user_profile) {
+      parts.push(`User: ${userCtx.user_profile?.name || 'Unknown'} (${userCtx.user_profile?.role || 'Unknown role'})`)
     }
 
     if (context.historical_context && context.historical_context.best_practices) {
       parts.push(`Best Practices: ${context.historical_context.best_practices.map(bp => bp.practice_name).join(', ')}`)
+    }
+
+    if (context.gkg_context?.markdown) {
+      parts.push(context.gkg_context.markdown)
     }
 
     return parts.join('\n')

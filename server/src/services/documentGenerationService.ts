@@ -1,6 +1,8 @@
 import { pool } from "../database/connection"
 import { logger } from "../utils/logger"
 import { aiService } from "./aiService"
+import { documentTemplateService } from "../modules/documentTemplates/service"
+import { getContextForStrategy } from "./gkg"
 
 export interface DocumentGenerationRequest {
   projectId: string
@@ -65,14 +67,46 @@ class DocumentGenerationService {
         ? await this.getTemplate(request.templateId)
         : null
       logger.info(`Template: ${template?.name || 'None'}`)
+
+      // 2.5. Fetch GKG context when template has gkg_context_strategy (same as pipeline)
+      let gkg_context_snapshot: { markdown: string; unitsCount: number; documentsCount: number; entityTypes: string[] } | undefined
+      if (request.templateId && request.projectId) {
+        try {
+          const strategy = await documentTemplateService.getTemplateGkgStrategy(request.templateId)
+          if (strategy) {
+            const gkgResult = await getContextForStrategy(request.projectId, strategy, {
+              userId: request.userId,
+            })
+            if (gkgResult.unitsCount > 0 || (gkgResult.markdown && gkgResult.markdown.trim().length > 0)) {
+              gkg_context_snapshot = {
+                markdown: gkgResult.markdown,
+                unitsCount: gkgResult.unitsCount,
+                documentsCount: gkgResult.documentsCount,
+                entityTypes: gkgResult.entityTypes ?? [],
+              }
+              logger.info(`GKG context injected for generation`, {
+                templateId: request.templateId,
+                unitsCount: gkgResult.unitsCount,
+                entityTypes: gkgResult.entityTypes?.length ?? 0,
+              })
+            }
+          }
+        } catch (gkgErr) {
+          logger.warn('GKG context fetch failed (non-fatal)', {
+            templateId: request.templateId,
+            error: gkgErr instanceof Error ? gkgErr.message : String(gkgErr),
+          })
+        }
+      }
       
-      // 3. Build enriched prompt
+      // 3. Build enriched prompt (includes GKG context when available)
       const enrichedPrompt = await this.buildEnrichedPrompt({
         userPrompt: request.userPrompt,
         project,
         template,
         projectId: request.projectId,
         userId: request.userId,
+        gkgContext: gkg_context_snapshot,
       })
       
       logger.info(`Enriched prompt built (${enrichedPrompt.length} chars)`)
@@ -108,7 +142,7 @@ class DocumentGenerationService {
         logger.warn('[PUBLISH-CONFLUENCE] Integration check failed', e)
       }
 
-      // 7. Return structured result
+      // 7. Return structured result (include gkg_context_snapshot for document view "Show injected context")
       return {
         content: markdown,
         metadata: {
@@ -122,7 +156,8 @@ class DocumentGenerationService {
             stakeholdersIncluded: (project.stakeholders?.length || 0) > 0,
             documentsReferenced: (project.documents?.length || 0),
           }
-        }
+        },
+        ...(gkg_context_snapshot && { gkg_context_snapshot }),
       }
     } catch (error) {
       logger.error('Document generation failed:', error)
@@ -204,8 +239,9 @@ class DocumentGenerationService {
     template: TemplateContext | null
     projectId: string
     userId: string
+    gkgContext?: { markdown: string; unitsCount: number; documentsCount: number; entityTypes: string[] }
   }): Promise<string> {
-    const { userPrompt, project, template, projectId, userId } = params
+    const { userPrompt, project, template, projectId, userId, gkgContext } = params
 
     let prompt = ""
 
@@ -348,7 +384,13 @@ class DocumentGenerationService {
       }
     }
 
-    // 5. Output format requirements
+    // 5. GKG (Governance Knowledge Graph) context when template uses semantic model
+    if (gkgContext?.markdown?.trim()) {
+      prompt += gkgContext.markdown.trim()
+      prompt += `\n\n`
+    }
+
+    // 6. Output format requirements
     prompt += `## Output Requirements\n\n`
     prompt += `- Format: Markdown only\n`
     prompt += `- Use proper headings (# ## ###)\n`
@@ -357,7 +399,7 @@ class DocumentGenerationService {
     prompt += `- Include code blocks if relevant\n`
     prompt += `- Be professional and concise\n\n`
 
-    // 6. User's specific instructions
+    // 7. User's specific instructions
     prompt += `## User Request\n\n`
     prompt += userPrompt
     prompt += `\n\n---\n\n`

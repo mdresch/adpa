@@ -658,8 +658,8 @@ export default function JobMonitorPage() {
                                 <p className="text-xs text-muted-foreground font-medium">
                                   {job.progress <= 10 && "⚡ Starting job..."}
                                   {job.progress > 10 && job.progress <= 30 && "📚 Gathering context..."}
-                                  {job.progress > 30 && job.progress <= 50 && "🤖 AI generating..."}
-                                  {job.progress > 50 && job.progress <= 90 && "⚙️ Processing..."}
+                                  {job.progress > 30 && job.progress <= 55 && "🤖 AI generating..."}
+                                  {job.progress > 55 && job.progress <= 90 && "⚙️ Processing..."}
                                   {job.progress > 90 && job.progress < 100 && "✨ Finalizing..."}
                                 </p>
                               </div>
@@ -752,7 +752,14 @@ export default function JobMonitorPage() {
                                 </Button>
                               </div>
                               <CardDescription>
-                                Jobs waiting to be processed. Jobs pending &gt;5 minutes may be orphaned (not in queue).
+                                <div className="space-y-1">
+                                  <span>Jobs waiting to be processed. Jobs pending &gt;5 minutes may be orphaned (not in queue).</span>
+                                  {pendingJobs.some((j: { queue?: string; type?: string }) => (j.queue === "gkg-sync" || String(j.type || "").startsWith("gkg-"))) && (
+                                    <p className="text-amber-700 dark:text-amber-400 text-sm mt-2">
+                                      <strong>GKG jobs</strong> are processed by the same backend that serves the API. Restart the backend (process on port 5000) so the gkg-sync consumer runs, then use &quot;Retry&quot; on each job.
+                                    </p>
+                                  )}
+                                </div>
                               </CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-3">
@@ -903,8 +910,8 @@ export default function JobMonitorPage() {
                                               <>
                                             {job.progress <= 10 && "Starting job..."}
                                             {job.progress > 10 && job.progress <= 30 && "Gathering context..."}
-                                            {job.progress > 30 && job.progress <= 50 && "AI generating content..."}
-                                            {job.progress > 50 && job.progress <= 90 && "Processing response..."}
+                                            {job.progress > 30 && job.progress <= 55 && "AI generating content... (long documents may take 2–5 min)"}
+                                            {job.progress > 55 && job.progress <= 90 && "Processing response..."}
                                             {job.progress > 90 && job.progress < 100 && "Finalizing..."}
                                               </>
                                             )}

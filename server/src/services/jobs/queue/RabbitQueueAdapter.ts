@@ -10,6 +10,10 @@ interface RabbitQueueAdapterOptions {
   prefetch?: number
   defaultAttempts?: number
   defaultBackoffMs?: number
+  /** Max messages on main queue (RabbitMQ x-max-length). Only applied when queue is created. */
+  maxLength?: number
+  /** Max messages on DLQ (RabbitMQ x-max-length). Use a higher value than main queue so failed jobs are not dropped when DLQ is full. Only applied when queue is created. */
+  dlqMaxLength?: number
 }
 
 interface InternalMessage<T = any> {
@@ -88,6 +92,8 @@ export class RabbitQueueAdapter extends EventEmitter implements IQueue {
   private readonly prefetch: number
   private readonly defaultAttempts: number
   private readonly defaultBackoffMs: number
+  private readonly maxLength: number | undefined
+  private readonly dlqMaxLength: number | undefined
 
   constructor(options: RabbitQueueAdapterOptions) {
     super()
@@ -96,16 +102,18 @@ export class RabbitQueueAdapter extends EventEmitter implements IQueue {
     this.prefetch = options.prefetch ?? 4
     this.defaultAttempts = options.defaultAttempts ?? 3
     this.defaultBackoffMs = options.defaultBackoffMs ?? 2000
+    this.maxLength = options.maxLength
+    this.dlqMaxLength = options.dlqMaxLength
 
     this.channel = this.connection.createChannel({
       json: true,
       setup: async (channel: ConfirmChannel) => {
-        await channel.assertQueue(this.queueName, {
-          durable: true,
-        })
-        await channel.assertQueue(this.getDlqName(), {
-          durable: true,
-        })
+        const mainOptions: { durable: boolean; arguments?: Record<string, number> } = { durable: true }
+        if (this.maxLength != null && this.maxLength > 0) {
+          mainOptions.arguments = { 'x-max-length': this.maxLength }
+        }
+        await channel.assertQueue(this.queueName, mainOptions)
+        await channel.assertQueue(this.getDlqName(), this.getDlqAssertOptions())
         await channel.prefetch(this.prefetch)
       },
     })
@@ -115,6 +123,14 @@ export class RabbitQueueAdapter extends EventEmitter implements IQueue {
     return `${this.queueName}.dlq`
   }
 
+  private getDlqAssertOptions(): { durable: boolean; arguments?: Record<string, number> } {
+    const opts: { durable: boolean; arguments?: Record<string, number> } = { durable: true }
+    if (this.dlqMaxLength != null && this.dlqMaxLength > 0) {
+      opts.arguments = { 'x-max-length': this.dlqMaxLength }
+    }
+    return opts
+  }
+
   private getDelayQueueName(delayMs: number): string {
     return `${this.queueName}.delay.${delayMs}`
   }
@@ -122,7 +138,7 @@ export class RabbitQueueAdapter extends EventEmitter implements IQueue {
   private async ensureDelayQueue(delayMs: number): Promise<void> {
     const dlqName = this.getDlqName()
     await this.channel.addSetup(async (channel: ConfirmChannel) => {
-      await channel.assertQueue(dlqName, { durable: true })
+      await channel.assertQueue(dlqName, this.getDlqAssertOptions())
       await channel.assertQueue(this.getDelayQueueName(delayMs), {
         durable: true,
         arguments: {
@@ -191,6 +207,9 @@ export class RabbitQueueAdapter extends EventEmitter implements IQueue {
       const effectivePrefetch = Math.max(this.prefetch, concurrency)
       this.channel.addSetup(async (channel: ConfirmChannel) => {
         await channel.prefetch(effectivePrefetch)
+        if (this.queueName === 'gkg-sync') {
+          console.log('[RABBIT] Consumer attached for queue gkg-sync')
+        }
         const consume = await channel.consume(this.queueName, async (msg) => {
           if (!msg) return
           const headers = msg.properties.headers || {}
@@ -200,6 +219,10 @@ export class RabbitQueueAdapter extends EventEmitter implements IQueue {
           const maxAttempts = (headers.maxAttempts ?? this.defaultAttempts) as number
           const backoffDelay = (headers.backoffDelay ?? this.defaultBackoffMs) as number
           const backoffType = headers.backoffType ?? 'exponential'
+
+          if (this.queueName === 'gkg-sync') {
+            console.log('[RABBIT] Message received on gkg-sync', { jobType: jobType ?? 'missing' })
+          }
 
           if (!payload || !jobType) {
             try {
@@ -215,6 +238,7 @@ export class RabbitQueueAdapter extends EventEmitter implements IQueue {
 
           const runHandler = this.handlers.get(jobType)
           if (!runHandler) {
+            console.warn('[RABBIT] No handler for jobType', jobType, 'on queue', this.queueName)
             try {
               channel.ack(msg)
             } catch (ackErr) {

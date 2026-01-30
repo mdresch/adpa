@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
-import { FileText, Plus, Edit, Copy, Archive, Download, Upload, Search, Filter, Minus, Wand2, Brain, Sparkles, Eye } from "lucide-react"
+import { FileText, Plus, Edit, Copy, Archive, Download, Upload, Search, Filter, Minus, Wand2, Brain, Sparkles, Eye, Network } from "lucide-react"
 import { toast } from '@/lib/notify'
 import { apiClient } from "@/lib/api"
 import {
@@ -77,6 +77,41 @@ const statusConfig = {
   production: { emoji: '🟢', label: 'Production', color: 'default' },
   archived: { emoji: '📦', label: 'Archived', color: 'secondary' },
   deprecated: { emoji: '🔴', label: 'Deprecated', color: 'destructive' },
+}
+
+/** GKG context strategy summary for template list. Returns null if no strategy or empty. */
+function getGkgSummary(gkg: { profile?: string; scope?: string; documentStatusFilter?: string; maxDocuments?: number; maxUnits?: number; traceableOnly?: boolean; entityTypes?: string[] } | null | undefined): string | null {
+  if (!gkg || typeof gkg !== 'object') return null
+  const parts: string[] = []
+  if (gkg.profile) {
+    const profileLabels: Record<string, string> = {
+      governance_full: 'Gov full',
+      charter_light: 'Charter',
+      requirements_only: 'Reqs',
+      risks_only: 'Risks',
+      stakeholders_only: 'Stakeholders',
+      custom: 'Custom',
+    }
+    parts.push(profileLabels[gkg.profile] ?? gkg.profile)
+  }
+  if (gkg.scope) {
+    const scopeLabels: Record<string, string> = {
+      same_project: 'Same project',
+      same_project_top_docs: 'Top docs',
+      dependent_projects: 'Dependent',
+      all_accessible: 'All accessible',
+    }
+    parts.push(scopeLabels[gkg.scope] ?? gkg.scope)
+  }
+  if (gkg.documentStatusFilter === 'approved_published_only') parts.push('Approved/Published only')
+  if (gkg.documentStatusFilter === 'include_draft_review') parts.push('Includes draft/review')
+  if (gkg.maxDocuments != null) parts.push(`≤${gkg.maxDocuments} docs`)
+  if (gkg.maxUnits != null) parts.push(`≤${gkg.maxUnits} units`)
+  if (gkg.traceableOnly === true) parts.push('Traceable only')
+  if (gkg.profile === 'custom' && Array.isArray(gkg.entityTypes) && gkg.entityTypes.length > 0) {
+    parts.push(`${gkg.entityTypes.length} types`)
+  }
+  return parts.length > 0 ? parts.join(' · ') : null
 }
 
 export default function Templates() {
@@ -831,6 +866,12 @@ export default function Templates() {
                                 AI
                               </Badge>
                             )}
+                            {getGkgSummary(template.gkg_context_strategy) && (
+                              <Badge variant="secondary" className="bg-violet-100 text-violet-800">
+                                <Network className="h-3 w-3 mr-1" />
+                                GKG
+                              </Badge>
+                            )}
                           </div>
                         </div>
                         <CardTitle 
@@ -901,6 +942,19 @@ export default function Templates() {
                             </div>
                           )}
 
+                          {/* GKG Context (when template has GKG strategy) */}
+                          {getGkgSummary(template.gkg_context_strategy) && (
+                            <div className="pt-2 border-t">
+                              <div className="flex items-center gap-1.5 text-xs mb-1">
+                                <Network className="h-3.5 w-3.5 text-muted-foreground" />
+                                <span className="text-muted-foreground font-medium">GKG Context</span>
+                              </div>
+                              <p className="text-xs text-muted-foreground line-clamp-2">
+                                {getGkgSummary(template.gkg_context_strategy)}
+                              </p>
+                            </div>
+                          )}
+
                           <div className="flex space-x-2 pt-2">
                             <Button 
                               size="sm" 
@@ -953,6 +1007,12 @@ export default function Templates() {
                                 <span>•</span>
                                 <span>by {template?.created_by_name || template?.author || '—'}</span>
                               </div>
+                              {getGkgSummary(template.gkg_context_strategy) && (
+                                <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1">
+                                  <Network className="h-3.5 w-3.5" />
+                                  <span>GKG: {getGkgSummary(template.gkg_context_strategy)}</span>
+                                </div>
+                              )}
                             </div>
                           </div>
                             <div className="flex space-x-2">

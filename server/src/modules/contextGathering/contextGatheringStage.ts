@@ -16,6 +16,8 @@ import { ContextIntegrator } from './integrators/contextIntegrator'
 import { ContextOptimizer } from './optimizers/contextOptimizer'
 import { ContextValidator } from './validators/contextValidator'
 import { ContextQualityAssessor } from './assessors/contextQualityAssessor'
+import { documentTemplateService } from '../documentTemplates/service'
+import { getContextForStrategy } from '../../services/gkg/gkgContextService'
 import type {
   IContextGatheringStage,
   ContextGatheringRequest,
@@ -141,13 +143,18 @@ export class ContextGatheringStage implements IContextGatheringStage {
       const externalContext = await this.gatherExternalContextStage(request)
       const stage4Time = Date.now() - startTime - stage1Time - stage2Time - stage3Time
 
+      // Stage 4.5: GKG context (template-driven semantic search)
+      logger.info('[STAGE-4.5] GKG context (template strategy)')
+      const gkgContext = await this.gatherGKGContext(request)
+
       // Stage 5: Context Optimization & Merging
       logger.info('[STAGE-5] Context Optimization & Merging')
       const optimizedContextData = await this.optimizeAndMergeContext({
         rag: ragContext,
         baseline: baselineContext,
         direct: directContext,
-        external: externalContext
+        external: externalContext,
+        gkg: gkgContext
       }, request)
       const stage5Time = Date.now() - startTime - stage1Time - stage2Time - stage3Time - stage4Time
 
@@ -757,6 +764,38 @@ export class ContextGatheringStage implements IContextGatheringStage {
   }
 
   /**
+   * Stage 4.5: GKG context (template-driven)
+   * If template has gkg_context_strategy, fetch semantic units from Neo4j for LLM context.
+   */
+  private async gatherGKGContext(request: ContextGatheringRequest): Promise<{
+    markdown: string
+    unitsCount: number
+    documentsCount: number
+    entityTypes: string[]
+  } | null> {
+    try {
+      if (!request.template_id || !request.project_id) return null
+      const strategy = await documentTemplateService.getTemplateGkgStrategy(request.template_id)
+      if (!strategy) return null
+      const result = await getContextForStrategy(request.project_id, strategy, {
+        userId: request.user_id,
+      })
+      if (result.unitsCount === 0) return null
+      logger.info('[STAGE-4.5] GKG context gathered', {
+        templateId: request.template_id,
+        unitsCount: result.unitsCount,
+        entityTypes: result.entityTypes.length,
+      })
+      return result
+    } catch (error: unknown) {
+      logger.warn('[STAGE-4.5] GKG context failed (non-fatal)', {
+        error: error instanceof Error ? error.message : String(error),
+      })
+      return null
+    }
+  }
+
+  /**
    * Stage 5: Context Optimization & Merging
    * Merge all gathered context, de-duplicate, prioritize, and optimize for token budget
    */
@@ -766,6 +805,7 @@ export class ContextGatheringStage implements IContextGatheringStage {
       baseline: any
       direct: any
       external: any
+      gkg?: { markdown: string; unitsCount: number; documentsCount: number; entityTypes: string[] }
     },
     request: ContextGatheringRequest
   ): Promise<ContextData> {
@@ -791,6 +831,7 @@ export class ContextGatheringStage implements IContextGatheringStage {
         external_context: stages.external?.external_context || {} as any,
         template_context: stages.direct?.template_context || {} as any,
         baseline_context: stages.baseline, // NEW: Baseline integration
+        gkg_context: stages.gkg ?? undefined,
         integrated_context: await this.contextIntegrator.integrateContext({
           project_context: stages.direct?.project_context,
           user_profile_context: stages.direct?.user_profile_context,

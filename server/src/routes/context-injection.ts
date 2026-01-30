@@ -283,9 +283,10 @@ router.post('/structure-content', validate(Joi.object({
 })
 
 /**
- * Helper function to fetch project context
+ * Helper function to fetch project context (exported for use in projects route for synthetic project_context documents).
+ * Stakeholders and documents queries are resilient to missing tables/columns (e.g. project_stakeholders, documents.type).
  */
-async function getProjectContext(projectId: string) {
+export async function getProjectContext(projectId: string) {
   try {
     // Fetch project details
     const projectQuery = `
@@ -295,27 +296,48 @@ async function getProjectContext(projectId: string) {
     `
     const projectResult = await pool.query(projectQuery, [projectId])
 
-    if (projectResult.rows.length === 0) {
+    if (!projectResult?.rows?.length) {
       return null
     }
 
     const project = projectResult.rows[0]
 
-    // Fetch project stakeholders
-    const stakeholdersQuery = `
-      SELECT id, name, role, email, department, stakeholder_type, stakeholder_category
-      FROM project_stakeholders 
-      WHERE project_id = $1
-    `
-    const stakeholdersResult = await pool.query(stakeholdersQuery, [projectId])
+    // Fetch project stakeholders (table may not exist in all environments; check first to avoid DB-GUARD log)
+    let stakeholders: Array<{ id?: string; name?: string; role?: string; email?: string; department?: string; stakeholder_type?: string; stakeholder_category?: string }> = []
+    try {
+      const tableCheck = await pool.query(
+        `SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'project_stakeholders'`
+      )
+      if (tableCheck?.rows?.length) {
+        const stakeholdersResult = await pool.query(
+          `SELECT id, name, role, email, department, stakeholder_type, stakeholder_category
+           FROM project_stakeholders WHERE project_id = $1`,
+          [projectId]
+        )
+        stakeholders = stakeholdersResult?.rows ?? []
+      }
+    } catch (err) {
+      logger.warn('Project context: stakeholders query skipped (table or schema may differ)', { projectId, error: (err as Error)?.message })
+    }
 
-    // Fetch project documents
-    const documentsQuery = `
-      SELECT id, name, type, content, metadata
-      FROM documents 
-      WHERE project_id = $1
-    `
-    const documentsResult = await pool.query(documentsQuery, [projectId])
+    // Fetch project documents (use columns that exist: id, title/name, content, metadata; no "type")
+    let documents: Array<{ id: string; name?: string; type?: string; content?: unknown; metadata?: unknown }> = []
+    try {
+      const documentsQuery = `
+        SELECT id, COALESCE(title, name) as name, content, metadata
+        FROM documents 
+        WHERE project_id = $1
+      `
+      const documentsResult = await pool.query(documentsQuery, [projectId])
+      documents = (documentsResult?.rows ?? []).map((row: { id: string; name?: string; content?: unknown; metadata?: unknown }) => ({
+        id: row.id,
+        name: row.name,
+        content: row.content,
+        metadata: row.metadata
+      }))
+    } catch (err) {
+      logger.warn('Project context: documents query skipped (schema may differ)', { projectId, error: (err as Error)?.message })
+    }
 
     return {
       id: project.id,
@@ -323,8 +345,8 @@ async function getProjectContext(projectId: string) {
       description: project.description,
       framework: project.framework,
       metadata: project.metadata || {},
-      stakeholders: stakeholdersResult.rows,
-      documents: documentsResult.rows
+      stakeholders,
+      documents
     }
   } catch (error) {
     logger.error('Failed to fetch project context:', error)

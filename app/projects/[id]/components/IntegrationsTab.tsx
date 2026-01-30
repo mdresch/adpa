@@ -10,7 +10,7 @@ import { Separator } from "@/components/ui/separator"
 import { toast } from '@/lib/notify'
 import { sendNotification } from '@/lib/notifications'
 import { apiClient } from "@/lib/api"
-import { Loader2, ExternalLink, CheckCircle2, XCircle } from "lucide-react"
+import { Loader2, ExternalLink, CheckCircle2, XCircle, Network, RefreshCw } from "lucide-react"
 
 interface IntegrationSettings {
   confluence: {
@@ -50,11 +50,14 @@ const defaultSettings: IntegrationSettings = {
   settings: {}
 }
 
+type GkgAction = "idle" | "bootstrap" | "sync-project"
+
 export function IntegrationsTab({ projectId }: IntegrationsTabProps) {
   const [settings, setSettings] = useState<IntegrationSettings | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [localSettings, setLocalSettings] = useState<IntegrationSettings>(defaultSettings)
+  const [gkgAction, setGkgAction] = useState<GkgAction>("idle")
 
   useEffect(() => {
     fetchSettings()
@@ -151,6 +154,48 @@ export function IntegrationsTab({ projectId }: IntegrationsTabProps) {
         jira: { ...current.jira, ...updates }
       }
     })
+  }
+
+  const handleGkgBootstrap = async () => {
+    try {
+      setGkgAction("bootstrap")
+      const res = await apiClient.post<{ jobId: string; status: string; type: string }>("/gkg/sync", { bootstrap: true })
+      sendNotification({ type: "success", title: "GKG Bootstrap", message: `Job enqueued: ${(res as { jobId?: string })?.jobId ?? "ok"}`, announce: true })
+      toast.success("GKG bootstrap job enqueued")
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } }; message?: string })?.response?.data?.error
+        ?? (err as { message?: string })?.message
+        ?? "GKG bootstrap failed"
+      const is503 = (err as { status?: number })?.status === 503
+      if (is503) {
+        toast.error("Neo4j is not configured. Set NEO4J_URI on the server to enable GKG.")
+      } else {
+        toast.error(String(msg))
+      }
+    } finally {
+      setGkgAction("idle")
+    }
+  }
+
+  const handleGkgSyncProject = async () => {
+    try {
+      setGkgAction("sync-project")
+      const res = await apiClient.post<{ jobId: string; status: string; type: string; projectId: string }>("/gkg/sync", { projectId })
+      sendNotification({ type: "success", title: "GKG Sync", message: `Project sync enqueued: ${(res as { jobId?: string })?.jobId ?? "ok"}`, announce: true })
+      toast.success("GKG project sync job enqueued")
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } }; message?: string })?.response?.data?.error
+        ?? (err as { message?: string })?.message
+        ?? "GKG sync failed"
+      const is503 = (err as { status?: number })?.status === 503
+      if (is503) {
+        toast.error("Neo4j is not configured. Set NEO4J_URI on the server to enable GKG.")
+      } else {
+        toast.error(String(msg))
+      }
+    } finally {
+      setGkgAction("idle")
+    }
   }
 
   if (loading) {
@@ -351,6 +396,62 @@ export function IntegrationsTab({ projectId }: IntegrationsTabProps) {
               </div>
             </>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Governance Knowledge Graph (GKG) sync */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center space-x-2">
+            <Network className="h-5 w-5" />
+            <span>Governance Knowledge Graph (GKG)</span>
+          </CardTitle>
+          <CardDescription>
+            Sync this project&apos;s data to the Neo4j Governance Knowledge Graph. Run bootstrap once per environment, then sync this project to push documents and entities.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleGkgBootstrap}
+              disabled={gkgAction !== "idle"}
+            >
+              {gkgAction === "bootstrap" ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Running...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Bootstrap GKG
+                </>
+              )}
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={handleGkgSyncProject}
+              disabled={gkgAction !== "idle"}
+            >
+              {gkgAction === "sync-project" ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Syncing...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Sync this project to GKG
+                </>
+              )}
+            </Button>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Bootstrap seeds reference nodes (GovernanceDomain, MaturityLevel). Sync this project pushes Project, Documents, and SemanticUnits to Neo4j.
+          </p>
         </CardContent>
       </Card>
     </div>

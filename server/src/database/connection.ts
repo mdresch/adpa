@@ -85,6 +85,27 @@ let pool: Pool | null = null // Initialize lazily to prevent hanging on module l
 // Circuit breaker for DB to avoid hammering DB when it's unstable
 const dbBreaker = new CircuitBreaker(3, 30000) // open after 3 failures, reset after 30s
 
+function attachPoolErrorHandler(p: Pool) {
+  try {
+    // Prevent unhandled 'error' events from crashing the process when an idle client disconnects.
+    // This is common with poolers (e.g., Supabase PgBouncer/transaction pooler).
+    p.on("error", (err: any) => {
+      try {
+        logger.error("[DB] Pool error event (idle client)", { message: err?.message })
+      } catch {
+        // ignore
+      }
+      try {
+        dbBreaker.recordFailure()
+      } catch {
+        // ignore
+      }
+    })
+  } catch {
+    // ignore
+  }
+}
+
 function patchPoolQuery(p: Pool) {
   try {
     const orig = (p as any).query.bind(p)
@@ -237,6 +258,7 @@ export async function connectDatabase() {
       pool = testPool
       // Patch pool.query to avoid unhandled promise rejections from direct calls
       try { patchPoolQuery(pool) } catch (e) {}
+      try { attachPoolErrorHandler(pool) } catch (e) {}
       logger.info(`✅ Database connected successfully via DATABASE_URL`)
 
       // Diagnostic: estimate expected queue concurrency by scanning queueService.ts
@@ -311,6 +333,7 @@ export async function connectDatabase() {
 
           pool = insecurePool
           try { patchPoolQuery(pool) } catch (e) {}
+          try { attachPoolErrorHandler(pool) } catch (e) {}
           logger.info('✅ Database connected successfully via DATABASE_URL (insecure TLS)')
           return
         } catch (insecureErr) {
@@ -357,6 +380,7 @@ export async function connectDatabase() {
         // If successful, update the global pool and return
         pool = testPool
         try { patchPoolQuery(pool) } catch (e) {}
+        try { attachPoolErrorHandler(pool) } catch (e) {}
         logger.info(`Database connection established successfully via ${method.description}`)
         return
       } catch (error) {

@@ -419,11 +419,17 @@ safety_architecture:
 
 ### 5.3 Partnership Strategy
 
-**Tier 1: Strategic (Deep Integration)**
+**Tier 1: Strategic (Current AI Providers + Deep Integration)**
 
 | Partner | Type | Value Exchange |
 |---------|------|----------------|
-| **OpenAI** | AI Provider | API access, safety research collaboration |
+| **OpenAI** | AI Provider | GPT models, API access, document generation and extraction |
+| **Google AI** | AI Provider | Gemini models, API access, multi-modal and long-context support |
+| **Anthropic** | AI Provider | Claude models, API access, safety-aligned generation |
+| **Azure OpenAI** | AI Provider | OpenAI models via Azure, enterprise compliance and hosting |
+| **Ollama** | AI Provider | Local models, on-prem and air-gapped deployment |
+| **Mistral** | AI Provider | Open and commercial models, EU-friendly options |
+| **Groq** | AI Provider | Fast inference, low-latency generation |
 | **Bentley Systems** | Digital Twin | iTwin integration, enterprise distribution |
 | **Microsoft** | Cloud + AI | Azure hosting, HoloLens, Copilot ecosystem |
 
@@ -433,7 +439,8 @@ safety_architecture:
 |---------|------|----------------|
 | **Supabase** | Database | Realtime, auth, managed Postgres |
 | **Vercel** | Hosting | Edge deployment, serverless |
-| **Unity** | 3D/AR/VR | Visualization engine |
+| **Unity** | 3D/AR/VR | Visualization engine, digital twin rendering |
+| **Unreal Engine** | 3D/AR/VR | Visualization engine, high-fidelity digital twin and simulation; Tier 2 partner alongside Unity |
 
 **Tier 3: Channel (Distribution)**
 

@@ -213,8 +213,27 @@ class ProcessFlowService {
       }
 
       const provider = result.rows[0]
-      const availableModels = provider.available_models || []
-      
+      let rawModels = provider.available_models || []
+      if (typeof rawModels === 'string') {
+        try {
+          rawModels = JSON.parse(rawModels)
+        } catch {
+          rawModels = []
+        }
+      }
+      if (!Array.isArray(rawModels)) {
+        rawModels = []
+      }
+
+      // Normalize to array of { id: string, name: string } for consistent handling
+      const availableModels = rawModels.map((item: any) => {
+        if (item == null) return { id: '', name: '' }
+        if (typeof item === 'string') return { id: item, name: item }
+        const id = (item.id ?? item.model_id ?? item.name ?? '').toString()
+        const name = (item.name ?? item.display_name ?? id).toString()
+        return { id: id || 'unknown', name: name || id }
+      }).filter((m: { id: string }) => m.id && m.id !== 'unknown')
+
       if (availableModels.length === 0) {
         throw new Error('No models configured for this provider. Please use Model Discovery to sync models.')
       }
@@ -241,21 +260,27 @@ class ProcessFlowService {
         'open-mistral-7b': 32000,
       }
 
-      // Transform to expected format
-      const models = availableModels.map((modelId: string) => ({
-        id: modelId,
-        name: modelId,
-        providerType: provider.provider_type,
-        contextWindow: modelContextWindows[modelId] || 128000,
-        maxTokens: 8192,
-        temperature: 0.7,
-        topP: 1.0,
-        frequencyPenalty: 0.0,
-        presencePenalty: 0.0,
-        type: 'chat',
-        description: `${modelId} with ${(modelContextWindows[modelId] || 128000).toLocaleString()} token context window`,
-        configuration: {}
-      }))
+      // Transform to expected format (id and name always strings for frontend Select)
+      const models = availableModels.map(({ id, name }: { id: string; name: string }) => {
+        const idStr = String(id)
+        const nameStr = String(name || idStr)
+        const contextWindow = modelContextWindows[idStr] || 128000
+        return {
+          id: idStr,
+          name: nameStr,
+          providerId,
+          providerType: provider.provider_type,
+          contextWindow,
+          maxTokens: 8192,
+          temperature: 0.7,
+          topP: 1.0,
+          frequencyPenalty: 0.0,
+          presencePenalty: 0.0,
+          type: 'chat',
+          description: `${nameStr} with ${contextWindow.toLocaleString()} token context window`,
+          configuration: {}
+        }
+      })
       
       return models
     } catch (error) {

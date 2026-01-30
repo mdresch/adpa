@@ -216,6 +216,13 @@ export interface ContextGatheringResult {
   metadata: Record<string, any>
 }
 
+export interface GkgContextData {
+  markdown: string
+  unitsCount: number
+  documentsCount: number
+  entityTypes: string[]
+}
+
 export interface ContextData {
   project_context: ProjectContextData
   user_profile_context: UserProfileContextData
@@ -223,6 +230,7 @@ export interface ContextData {
   external_context: ExternalContextData
   template_context: TemplateContextData
   baseline_context?: BaselineContextData // NEW: Approved project baseline for drift-aware generation
+  gkg_context?: GkgContextData // GKG semantic units for LLM context (template strategy)
   integrated_context: IntegratedContextData
   optimized_context: OptimizedContextData
   metadata: ContextMetadata

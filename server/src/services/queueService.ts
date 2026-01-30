@@ -22,13 +22,19 @@ const QUEUE_PREFETCH = parseInt(process.env.QUEUE_PREFETCH || "4", 10)
 
 const connection = createRabbitConnection(RABBIT_URL)
 
-function createRabbitQueue(queueName: string, defaultAttempts: number, defaultBackoffMs: number) {
+function createRabbitQueue(
+  queueName: string,
+  defaultAttempts: number,
+  defaultBackoffMs: number,
+  options?: { maxLength?: number; dlqMaxLength?: number }
+) {
   return new RabbitQueueAdapter({
     connection,
     queueName,
     prefetch: QUEUE_PREFETCH,
     defaultAttempts,
     defaultBackoffMs,
+    ...options,
   })
 }
 
@@ -40,7 +46,14 @@ export const baselineQueue = createRabbitQueue("baseline-processing", 2, 3000)
 export const processFlowQueue = createRabbitQueue("process-flow-processing", 2, 10000)
 export const regenerationQueue = createRabbitQueue("document-regeneration", 3, 3000)
 export const qualityAuditQueue = createRabbitQueue("quality-audit", 2, 3000)
-export const extractionQueue = createRabbitQueue("project-data-extraction", 2, 5000)
+// DLQ max length: set QUEUE_PROJECT_DATA_EXTRACTION_DLQ_MAX_LENGTH (e.g. 50000) to avoid DLQ hitting broker limit (e.g. 20000). Only applies when queue is created.
+const extractionDlqMax = process.env.QUEUE_PROJECT_DATA_EXTRACTION_DLQ_MAX_LENGTH
+  ? parseInt(process.env.QUEUE_PROJECT_DATA_EXTRACTION_DLQ_MAX_LENGTH, 10)
+  : undefined
+// 3 attempts + 5s backoff to better absorb transient AI/network errors (extraction jobs dominate DLQ failures)
+export const extractionQueue = createRabbitQueue("project-data-extraction", 3, 5000, {
+  dlqMaxLength: extractionDlqMax && extractionDlqMax > 0 ? extractionDlqMax : undefined,
+})
 export const confluenceQueue = createRabbitQueue("confluence-publishing", 3, 2000)
 export const digitalTwinEventQueue = createRabbitQueue("digital-twin-events", 3, 2000)
 export const digitalTwinTriggerQueue = createRabbitQueue("digital-twin-triggers", 3, 3000)
@@ -584,42 +597,76 @@ import("./digitalTwinTriggerService").then(({ processDocumentTrigger }) => {
 
 // GKG sync processing
 ;(async () => {
-  const { getNeo4jDriver, getNeo4jDatabase } = await import("../utils/neo4j")
-  const { getDatabasePool } = await import("../database/connection")
-  const { runBootstrap, runSyncProject, runSyncDocument } = await import("./gkg")
+  try {
+    console.log("[GKG] Registering GKG sync processors...")
+    const { getNeo4jDriver, getNeo4jDatabase } = await import("../utils/neo4j")
+    const { getDatabasePool } = await import("../database/connection")
+    const { runBootstrap, runSyncProject, runSyncDocument } = await import("./gkg")
 
-  gkgSyncQueue.process("gkg-bootstrap", QUEUE_PREFETCH, async (job) => {
-    const driver = getNeo4jDriver()
-    if (!driver) throw new Error("Neo4j not configured or unavailable")
-    const db = getNeo4jDatabase()
-    const result = await runBootstrap(driver, db)
-    logger.info(`[GKG] Bootstrap completed`, result)
-    return result
+    gkgSyncQueue.process("gkg-bootstrap", QUEUE_PREFETCH, async (job) => {
+    console.log("[GKG] Processing gkg-bootstrap")
+    try {
+      const driver = getNeo4jDriver()
+      if (!driver) throw new Error("Neo4j not configured or unavailable")
+      const db = getNeo4jDatabase()
+      const result = await runBootstrap(driver, db)
+      console.log("[GKG] Bootstrap completed", result)
+      logger.info("[GKG] Bootstrap completed", result)
+      return result
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error("[GKG] Bootstrap failed:", msg)
+      throw err
+    }
   })
 
   gkgSyncQueue.process("gkg-sync-project", QUEUE_PREFETCH, async (job) => {
-    const driver = getNeo4jDriver()
-    if (!driver) throw new Error("Neo4j not configured or unavailable")
-    const { projectId } = job.data as { projectId: string }
-    const pool = getDatabasePool()
-    const db = getNeo4jDatabase()
-    const result = await runSyncProject(pool, driver, db, projectId)
-    logger.info(`[GKG] Sync project completed`, { projectId, ...result })
-    return result
+    const { projectId } = (job.data as { projectId?: string }) ?? {}
+    if (!projectId) throw new Error("gkg-sync-project: projectId required")
+    console.log("[GKG] Processing gkg-sync-project", { projectId })
+    try {
+      const driver = getNeo4jDriver()
+      if (!driver) throw new Error("Neo4j not configured or unavailable")
+      const pool = getDatabasePool()
+      const db = getNeo4jDatabase()
+      const result = await runSyncProject(pool, driver, db, projectId)
+      console.log("[GKG] Sync project completed", { projectId, ...result })
+      logger.info("[GKG] Sync project completed", { projectId, ...result })
+      return result
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error("[GKG] Sync project failed:", projectId, msg)
+      throw err
+    }
   })
 
   gkgSyncQueue.process("gkg-sync-document", QUEUE_PREFETCH, async (job) => {
-    const driver = getNeo4jDriver()
-    if (!driver) throw new Error("Neo4j not configured or unavailable")
-    const { documentId } = job.data as { documentId: string }
-    const pool = getDatabasePool()
-    const db = getNeo4jDatabase()
-    const result = await runSyncDocument(pool, driver, db, documentId)
-    logger.info(`[GKG] Sync document completed`, { documentId, ...result })
-    return result
+    const { documentId } = (job.data as { documentId?: string }) ?? {}
+    if (!documentId) throw new Error("gkg-sync-document: documentId required")
+    console.log("[GKG] Processing gkg-sync-document", { documentId })
+    try {
+      const driver = getNeo4jDriver()
+      if (!driver) throw new Error("Neo4j not configured or unavailable")
+      const pool = getDatabasePool()
+      const db = getNeo4jDatabase()
+      const result = await runSyncDocument(pool, driver, db, documentId)
+      console.log("[GKG] Sync document completed", { documentId, ...result })
+      logger.info("[GKG] Sync document completed", { documentId, ...result })
+      return result
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error("[GKG] Sync document failed:", documentId, msg)
+      throw err
+    }
   })
 
-  logger.info(`[QUEUE] Registered GKG sync processors on gkgSyncQueue (Rabbit)`)
+    logger.info(`[QUEUE] Registered GKG sync processors on gkgSyncQueue (Rabbit)`)
+    console.log("✅ GKG sync processors registered for queue: gkg-sync")
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    logger.error("[GKG] Failed to register GKG sync processors", { error: msg })
+    console.error("[GKG] Failed to register GKG sync processors:", msg)
+  }
 })()
 
 // Export Redis client for legacy consumers

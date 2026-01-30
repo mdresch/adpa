@@ -14,7 +14,8 @@ import type {
   CloneTemplateRequest,
   TemplateListQuery,
   TemplateListResponse,
-  AuthenticatedUser
+  AuthenticatedUser,
+  GkgContextStrategy
 } from './types'
 
 export class DocumentTemplateService {
@@ -148,6 +149,21 @@ export class DocumentTemplateService {
   }
 
   /**
+   * Get template GKG context strategy by ID (pipeline use only; no auth).
+   * Used by document generation to fetch GKG context by template strategy.
+   */
+  async getTemplateGkgStrategy(id: string): Promise<GkgContextStrategy | null> {
+    const result = await pool.query(
+      `SELECT gkg_context_strategy FROM templates WHERE id = $1 AND deleted_at IS NULL`,
+      [id]
+    )
+    if (result.rows.length === 0) return null
+    const row = result.rows[0]
+    const strategy = row?.gkg_context_strategy
+    return strategy && typeof strategy === 'object' ? strategy as GkgContextStrategy : null
+  }
+
+  /**
    * Create new template
    */
   async createTemplate(data: CreateTemplateRequest, user: AuthenticatedUser): Promise<DocumentTemplate> {
@@ -162,7 +178,8 @@ export class DocumentTemplateService {
       system_prompt, 
       context_injection_config,
       prompt_build_up,
-      template_paragraphs 
+      template_paragraphs,
+      gkg_context_strategy
     } = data
     const id = uuidv4()
 
@@ -170,9 +187,9 @@ export class DocumentTemplateService {
       `
       INSERT INTO templates (
         id, name, description, framework, category, content, variables, is_public, 
-        created_by, system_prompt, context_injection_config, prompt_build_up, template_paragraphs
+        created_by, system_prompt, context_injection_config, prompt_build_up, template_paragraphs, gkg_context_strategy
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       RETURNING *
     `,
       [
@@ -189,6 +206,7 @@ export class DocumentTemplateService {
         context_injection_config ? JSON.stringify(context_injection_config) : null,
         prompt_build_up ? JSON.stringify(prompt_build_up) : null,
         template_paragraphs ? JSON.stringify(template_paragraphs) : null,
+        gkg_context_strategy ? JSON.stringify(gkg_context_strategy) : null,
       ]
     )
 
@@ -212,7 +230,8 @@ export class DocumentTemplateService {
       system_prompt, 
       context_injection_config,
       prompt_build_up,
-      template_paragraphs 
+      template_paragraphs,
+      gkg_context_strategy
     } = data
 
     // Check if template exists and user has permission
@@ -245,8 +264,9 @@ export class DocumentTemplateService {
           context_injection_config = COALESCE($9, context_injection_config),
           prompt_build_up = COALESCE($10, prompt_build_up),
           template_paragraphs = COALESCE($11, template_paragraphs),
+          gkg_context_strategy = COALESCE($12, gkg_context_strategy),
           updated_at = CURRENT_TIMESTAMP
-      WHERE id = $12
+      WHERE id = $13
       RETURNING *
     `,
       [
@@ -261,6 +281,7 @@ export class DocumentTemplateService {
         context_injection_config ? JSON.stringify(context_injection_config) : null,
         prompt_build_up ? JSON.stringify(prompt_build_up) : null,
         template_paragraphs ? JSON.stringify(template_paragraphs) : null,
+        gkg_context_strategy ? JSON.stringify(gkg_context_strategy) : null,
         id,
       ]
     )

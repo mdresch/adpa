@@ -411,11 +411,14 @@ export class PipelineOrchestrator {
         // Get processed template from previous stage
         const templateStage = previousResults.find(r => r.stage_type === 'template_processing')
         if (templateStage) {
-          // Extract the processed_template from the result
           const result = templateStage.output.output_data
           input.processed_template = result?.processed_template || result
         }
-        // Also pass template_id for reference
+        // Pass gathered context from context_gathering so AI stage can use project, user, GKG context
+        const gatheredContextStage = previousResults.find(r => r.stage_type === 'context_gathering')
+        if (gatheredContextStage?.output?.output_data?.context_bundle?.context_data) {
+          input.context = gatheredContextStage.output.output_data.context_bundle.context_data
+        }
         input.template_id = request.template_id
         input.project_id = request.project_id
         input.user_id = request.user_id
