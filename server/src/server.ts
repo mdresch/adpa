@@ -127,6 +127,7 @@ import digitalTwinAssetsRoutes from "./routes/digital-twin-assets"
 import digitalTwinEventsRoutes from "./routes/digital-twin-events"
 import digitalTwinTriggersRoutes from "./routes/digital-twin-triggers"
 import digitalTwinIngestionRoutes from "./routes/digital-twin-ingestion"
+import digitalTwinExportRoutes from "./routes/digital-twin-export"
 
 const app = express()
 const server = createServer(app)
@@ -319,6 +320,7 @@ app.use("/api/digital-twin/assets", digitalTwinAssetsRoutes)
 app.use("/api/digital-twin/events", digitalTwinEventsRoutes)
 app.use("/api/digital-twin/triggers", digitalTwinTriggersRoutes)
 app.use("/api/digital-twin/ingestion", digitalTwinIngestionRoutes)
+app.use("/api/digital-twin/export", digitalTwinExportRoutes)
 app.use("/api/entities", entityBaselineRoutes)
 app.use("/api/emergency-meetings", emergencyMeetingsRoutes)
 app.use("/api/baseline-updates", baselineUpdatesRoutes)

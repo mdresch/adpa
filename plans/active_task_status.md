@@ -1,0 +1,28 @@
+# Task: Digital Twins and iTwin Models Integration Research
+
+- [ ] Locate implementation documents for Digital Twins and iTwin Models <!-- id: 0 -->
+    - [ ] Explore repository structure <!-- id: 1 -->
+    - [x] Search for relevant files (keywords: digital twin, itwin, implementation) <!-- id: 2 -->
+- [ ] Read and analyze the documents <!-- id: 3 -->
+    - [x] Read docs\roadmap\DIGITAL_TWIN_INTEGRATION_ROADMAP.md
+    - [x] Read docs\roadmap\ITWIN_MODELS_IMPLEMENTATION_ROADMAP.md
+    - [x] Read docs\roadmap\DIGITAL_TWIN_POC_DESIGN.md
+    - [x] Read plans\DIGITAL_TWIN_POC_IMPLEMENTATION_PLAN_REVISED.md
+    - [x] Read docs\projects\digital-twins-itwin\13-comprehensive-digital-twin-analysis.md
+- [x] Summarize findings for the user <!-- id: 4 -->
+- [x] Phase 1: Foundation Setup with Visio Bridge <!-- id: 5 -->
+    - [x] Search for existing Visio references/capabilities <!-- id: 6 -->
+    - [x] Update Implementation Plan to include Visio bridge <!-- id: 7 -->
+    - [x] Create Database Migration (Assets, States, Events, Triggers) <!-- id: 8 -->
+    - [x] Implement Core Services (Asset, Event, Trigger) <!-- id: 9 -->
+    - [x] Implement Visio-to-DigitalTwin Bridge (Intermediate Step) <!-- id: 10 -->
+- [x] Phase 2: Frontend Integration <!-- id: 11 -->
+    - [x] Create API Client & Hooks (React Query) <!-- id: 12 -->
+    - [x] Build Visio Upload Component <!-- id: 13 -->
+    - [x] Build Asset List Component (Table/Grid) <!-- id: 14 -->
+    - [x] Create Digital Twin Dashboard Page <!-- id: 15 -->
+- [x] Phase 3: Visio Generation (Export) <!-- id: 16 -->
+    - [x] Research VSDX Structure / libraries (jszip, xml2js) <!-- id: 17 -->
+    - [x] Create `VisioGenerationService` (Backend) <!-- id: 18 -->
+    - [x] Create API Route `GET /export/visio` <!-- id: 19 -->
+    - [x] Implement `VisioDownloadButton` (Frontend) <!-- id: 20 -->

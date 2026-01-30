@@ -1,188 +1,182 @@
-/**
- * Digital Twin Asset Service
- * Asset CRUD, current state, state history. Project-scoped.
- * @see plans/DIGITAL_TWIN_POC_IMPLEMENTATION_PLAN_REVISED.md
- */
-
-import { getDatabasePool } from '../database/connection';
-import { logger } from '../utils/logger';
-
-export type PlatformType = 'iTwin' | 'AzureDT' | 'Generic';
-
-export interface DigitalTwinAsset {
-  id: string;
-  project_id: string;
-  company_id: string | null;
-  external_id: string;
-  platform_type: PlatformType;
-  platform_instance_url: string | null;
-  name: string;
-  description: string | null;
-  asset_type: string | null;
-  location: Record<string, unknown> | null;
-  current_state_id: string | null;
-  current_state_version: number;
-  metadata: Record<string, unknown>;
-  last_synced_at: Date | null;
-  sync_status: 'active' | 'paused' | 'error' | 'disconnected';
-  sync_error_message: string | null;
-  created_at: Date;
-  updated_at: Date;
-  deleted_at: Date | null;
-}
-
-export interface DigitalTwinAssetState {
-  id: string;
-  asset_id: string;
-  state_snapshot: Record<string, unknown>;
-  state_version: number;
-  changed_fields: string[];
-  previous_state_id: string | null;
-  source_event_id: string | null;
-  is_current: boolean;
-  state_hash: string | null;
-  change_summary: string | null;
-  timestamp: Date;
-  created_at: Date;
-}
+import { pool } from '../database/connection'
+import { logger } from '../utils/logger'
+import { v4 as uuidv4 } from 'uuid'
 
 export interface DigitalTwinAssetInput {
-  external_id: string;
-  platform_type: PlatformType;
-  platform_instance_url?: string | null;
-  name: string;
-  description?: string | null;
-  asset_type?: string | null;
-  location?: Record<string, unknown> | null;
-  company_id?: string | null;
-  metadata?: Record<string, unknown>;
+  project_id: string
+  company_id?: string
+  external_id: string
+  platform_type: 'iTwin' | 'AzureDT' | 'Generic' | 'Visio'
+  platform_instance_url?: string
+  name: string
+  description?: string
+  asset_type?: string
+  location?: any
+  metadata?: any
+  source_document_id?: string
+  source_entity_id?: string
 }
 
-const pool = () => getDatabasePool();
-
-export async function getAssetsByProject(projectId: string): Promise<DigitalTwinAsset[]> {
-  const res = await pool().query(
-    `SELECT * FROM digital_twin_assets
-     WHERE project_id = $1 AND deleted_at IS NULL
-     ORDER BY name`,
-    [projectId]
-  );
-  return res.rows as DigitalTwinAsset[];
+export interface DigitalTwinAssetStateInput {
+  asset_id: string
+  state_snapshot: any
+  state_version: number
+  previous_state_id?: string
+  source_event_id?: string
+  is_current: boolean
+  state_hash?: string
+  change_summary?: string
+  changed_fields?: any
 }
 
-export async function getAssetById(assetId: string): Promise<DigitalTwinAsset | null> {
-  const res = await pool().query(
-    `SELECT * FROM digital_twin_assets WHERE id = $1 AND deleted_at IS NULL`,
-    [assetId]
-  );
-  return (res.rows[0] as DigitalTwinAsset) ?? null;
-}
-
-export async function registerAsset(
-  projectId: string,
-  input: DigitalTwinAssetInput
-): Promise<DigitalTwinAsset> {
-  const inst = input.platform_instance_url ?? '';
-  const res = await pool().query(
-    `INSERT INTO digital_twin_assets (
-       project_id, company_id, external_id, platform_type, platform_instance_url,
-       name, description, asset_type, location, metadata
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-     RETURNING *`,
-    [
-      projectId,
-      input.company_id ?? null,
-      input.external_id,
-      input.platform_type,
-      inst || null,
-      input.name,
-      input.description ?? null,
-      input.asset_type ?? null,
-      input.location ? JSON.stringify(input.location) : null,
-      input.metadata ? JSON.stringify(input.metadata) : '{}',
-    ]
-  );
-  const row = res.rows[0] as DigitalTwinAsset;
-  logger.info('Digital Twin asset registered', { assetId: row.id, projectId, name: row.name });
-  return row;
-}
-
-export async function updateAsset(
-  assetId: string,
-  updates: Partial<Pick<DigitalTwinAssetInput, 'name' | 'description' | 'asset_type' | 'location' | 'metadata' | 'sync_status' | 'sync_error_message'>>
-): Promise<DigitalTwinAsset | null> {
-  const allowed = ['name', 'description', 'asset_type', 'location', 'metadata', 'sync_status', 'sync_error_message'];
-  const set: string[] = [];
-  const vals: unknown[] = [];
-  let i = 1;
-  for (const [k, v] of Object.entries(updates)) {
-    if (!allowed.includes(k)) continue;
-    if (k === 'location' || k === 'metadata') {
-      set.push(`${k} = $${i}`);
-      vals.push(v != null ? JSON.stringify(v) : null);
-    } else {
-      set.push(`${k} = $${i}`);
-      vals.push(v ?? null);
-    }
-    i++;
-  }
-  if (set.length === 0) return getAssetById(assetId);
-  set.push(`updated_at = CURRENT_TIMESTAMP`);
-  vals.push(assetId);
-  const res = await pool().query(
-    `UPDATE digital_twin_assets SET ${set.join(', ')} WHERE id = $${i} AND deleted_at IS NULL RETURNING *`,
-    vals
-  );
-  return (res.rows[0] as DigitalTwinAsset) ?? null;
-}
-
-export async function deleteAsset(assetId: string): Promise<boolean> {
-  const res = await pool().query(
-    `UPDATE digital_twin_assets SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING id`,
-    [assetId]
-  );
-  return res.rowCount > 0;
-}
-
-export async function getCurrentState(assetId: string): Promise<DigitalTwinAssetState | null> {
-  const res = await pool().query(
-    `SELECT * FROM digital_twin_asset_states
-     WHERE asset_id = $1 AND is_current = true
-     LIMIT 1`,
-    [assetId]
-  );
-  const row = res.rows[0];
-  if (!row) return null;
-  if (typeof row.changed_fields === 'string') {
+export const digitalTwinAssetService = {
+  /**
+   * Register or Update a Digital Twin Asset
+   */
+  async registerAsset(data: DigitalTwinAssetInput) {
     try {
-      row.changed_fields = JSON.parse(row.changed_fields);
-    } catch {
-      row.changed_fields = [];
-    }
-  }
-  return row as DigitalTwinAssetState;
-}
+      const {
+        project_id, company_id, external_id, platform_type, platform_instance_url,
+        name, description, asset_type, location, metadata, source_document_id, source_entity_id
+      } = data
 
-export async function getStateHistory(
-  assetId: string,
-  limit = 50
-): Promise<DigitalTwinAssetState[]> {
-  const res = await pool().query(
-    `SELECT * FROM digital_twin_asset_states
-     WHERE asset_id = $1
-     ORDER BY state_version DESC
-     LIMIT $2`,
-    [assetId, limit]
-  );
-  const rows = res.rows as DigitalTwinAssetState[];
-  for (const r of rows) {
-    if (typeof r.changed_fields === 'string') {
-      try {
-        (r as any).changed_fields = JSON.parse(r.changed_fields);
-      } catch {
-        (r as any).changed_fields = [];
+      // Check if asset exists
+      const existingRes = await pool.query(
+        `SELECT id FROM digital_twin_assets 
+         WHERE external_id = $1 AND platform_type = $2 AND (platform_instance_url = $3 OR ($3 IS NULL AND platform_instance_url IS NULL))`,
+        [external_id, platform_type, platform_instance_url]
+      )
+
+      if (existingRes.rows.length > 0) {
+        // Update existing
+        const id = existingRes.rows[0].id
+        const updateRes = await pool.query(
+          `UPDATE digital_twin_assets 
+           SET name = $1, description = $2, asset_type = $3, location = $4, metadata = COALESCE(metadata, '{}'::jsonb) || $5::jsonb, updated_at = NOW()
+           WHERE id = $6
+           RETURNING *`,
+          [name, description, asset_type, location, JSON.stringify(metadata || {}), id]
+        )
+        return updateRes.rows[0]
+      } else {
+        // Create new
+        const insertRes = await pool.query(
+          `INSERT INTO digital_twin_assets 
+           (project_id, company_id, external_id, platform_type, platform_instance_url, name, description, asset_type, location, metadata, source_document_id, source_entity_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+           RETURNING *`,
+          [project_id, company_id, external_id, platform_type, platform_instance_url, name, description, asset_type, location, JSON.stringify(metadata || {}), source_document_id, source_entity_id]
+        )
+        return insertRes.rows[0]
       }
+    } catch (error) {
+      logger.error('digitalTwinAssetService.registerAsset error', { error })
+      throw error
+    }
+  },
+
+  async getAssetsByProject(projectId: string) {
+    try {
+      const result = await pool.query(
+        `SELECT * FROM digital_twin_assets WHERE project_id = $1 ORDER BY name ASC`,
+        [projectId]
+      )
+      return result.rows
+    } catch (error) {
+      logger.error('digitalTwinAssetService.getAssetsByProject error', { error })
+      throw error
+    }
+  },
+
+  async getAssetById(id: string) {
+    try {
+      const result = await pool.query(
+        `SELECT * FROM digital_twin_assets WHERE id = $1`,
+        [id]
+      )
+      return result.rows[0] || null
+    } catch (error) {
+      logger.error('digitalTwinAssetService.getAssetById error', { error })
+      throw error
+    }
+  },
+
+  /**
+   * Create a new state snapshot for an asset
+    */
+  async createState(data: DigitalTwinAssetStateInput) {
+    const client = await pool.connect()
+    try {
+      await client.query('BEGIN')
+
+      const {
+        asset_id, state_snapshot, state_version, previous_state_id,
+        source_event_id, is_current, state_hash, change_summary, changed_fields
+      } = data
+
+      // If is_current is true, update old current state to false
+      if (is_current) {
+        await client.query(
+          `UPDATE digital_twin_asset_states SET is_current = false WHERE asset_id = $1 AND is_current = true`,
+          [asset_id]
+        )
+      }
+
+      const insertRes = await client.query(
+        `INSERT INTO digital_twin_asset_states 
+         (asset_id, state_snapshot, state_version, previous_state_id, source_event_id, is_current, state_hash, change_summary, changed_fields)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         RETURNING *`,
+        [asset_id, JSON.stringify(state_snapshot), state_version, previous_state_id, source_event_id, is_current, state_hash, change_summary, JSON.stringify(changed_fields || [])]
+      )
+
+      const newState = insertRes.rows[0]
+
+      // If current, update parent asset
+      if (is_current) {
+        await client.query(
+          `UPDATE digital_twin_assets 
+           SET current_state_id = $1, current_state_version = $2, updated_at = NOW()
+           WHERE id = $3`,
+          [newState.id, state_version, asset_id]
+        )
+      }
+
+      await client.query('COMMIT')
+      return newState
+
+    } catch (error) {
+      await client.query('ROLLBACK')
+      logger.error('digitalTwinAssetService.createState error', { error })
+      throw error
+    } finally {
+      client.release()
+    }
+  },
+
+  async getCurrentState(assetId: string) {
+    try {
+      const res = await pool.query(
+        `SELECT * FROM digital_twin_asset_states WHERE asset_id = $1 AND is_current = true`,
+        [assetId]
+      )
+      return res.rows[0] || null
+    } catch (error) {
+      logger.error('digitalTwinAssetService.getCurrentState error', { error })
+      throw error
+    }
+  },
+
+  async getStateHistory(assetId: string, limit = 20) {
+    try {
+      const res = await pool.query(
+        `SELECT * FROM digital_twin_asset_states WHERE asset_id = $1 ORDER BY timestamp DESC LIMIT $2`,
+        [assetId, limit]
+      )
+      return res.rows
+    } catch (error) {
+      logger.error('digitalTwinAssetService.getStateHistory error', { error })
+      throw error
     }
   }
-  return rows;
 }

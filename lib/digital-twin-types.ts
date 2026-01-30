@@ -3,7 +3,7 @@
  * Align with server services (digitalTwinAssetService, etc.) and API responses.
  */
 
-export type PlatformType = 'iTwin' | 'AzureDT' | 'Generic';
+export type PlatformType = 'iTwin' | 'AzureDT' | 'Generic' | 'Visio';
 
 export interface DigitalTwinAsset {
   id: string;

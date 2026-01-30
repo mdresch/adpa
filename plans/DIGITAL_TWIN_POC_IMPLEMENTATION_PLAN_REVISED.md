@@ -59,6 +59,8 @@ This **REVISED** plan aligns with the approved design document (`DIGITAL_TWIN_PO
 
 #### **Core Tables (From Design Document):**
 
+> **NOTE:** Updated for Visio Bridge support (Added 'Visio' to platform_type check).
+
 ##### `digital_twin_assets` - Physical Assets Registry
 ```sql
 CREATE TABLE digital_twin_assets (
@@ -68,7 +70,7 @@ CREATE TABLE digital_twin_assets (
   
   -- Platform identification
   external_id VARCHAR(255) NOT NULL,
-  platform_type VARCHAR(20) NOT NULL CHECK (platform_type IN ('iTwin', 'AzureDT', 'Generic')),
+  platform_type VARCHAR(20) NOT NULL CHECK (platform_type IN ('iTwin', 'AzureDT', 'Generic', 'Visio')),
   platform_instance_url TEXT,
   
   -- Asset metadata
@@ -159,7 +161,7 @@ CREATE TABLE digital_twin_events (
   
   -- Platform reference
   platform_event_id VARCHAR(255),
-  platform_type VARCHAR(20) NOT NULL CHECK (platform_type IN ('iTwin', 'AzureDT', 'Generic')),
+  platform_type VARCHAR(20) NOT NULL CHECK (platform_type IN ('iTwin', 'AzureDT', 'Generic', 'Visio')),
   
   -- Processing metadata
   processed_at TIMESTAMPTZ,
@@ -435,6 +437,22 @@ interface DigitalTwinAssetService {
 
 #### `server/src/services/dtAssetImportService.ts`
 Imports **entities** from `extracted_dt_assets` into `digital_twin_assets` (Digital Twin Assets Register). Mirrors WBS import (entities → `project_tasks`). Supports import by **document** or by **project**; sets `source_document_id` and `source_entity_id` on each created/updated asset for traceability. Used by `POST /api/digital-twin/assets/import`.
+
+#### `server/src/services/visioIngestionService.ts` ⭐ NEW (Visio Bridge)
+Parses Visio (`.vsdx`) files to extract asset topology before 3D models are available.
+- **Extracts**: Shapes, Connectors, Shape Data (Properties).
+- **Maps**: Visio Shape ID → `external_id`, Shape Text → `name`, Connections → Relationships.
+- **Conversion**: Creates/Updates `digital_twin_assets` with `platform_type='Visio'`.
+- Allows "pre-staging" of assets using simple 2D diagrams.
+
+**Key Methods:**
+```typescript
+interface VisioIngestionService {
+  parseVisioFile(buffer: Buffer): Promise<VisioParseResult>
+  importVisioAssets(projectId: string, parseResult: VisioParseResult): Promise<ImportResult>
+  mapShapeToAsset(shape: VisioShape): DigitalTwinAssetInput
+}
+```
 
 #### `server/src/services/digitalTwinEventService.ts` ⭐ NEW
 Event processing service (event-driven architecture):
