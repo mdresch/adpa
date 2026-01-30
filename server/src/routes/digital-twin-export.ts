@@ -1,11 +1,11 @@
 import { Router, Request, Response } from 'express'
 import { VisioGenerationService } from '../services/visioGenerationService'
-import { DigitalTwinAssetService } from '../services/digitalTwinAssetService'
+import { digitalTwinAssetService } from '../services/digitalTwinAssetService'
 import { logger } from '../utils/logger'
 
 const router = Router()
 const visioService = new VisioGenerationService()
-const assetService = new DigitalTwinAssetService() // Assumes we can fetch assets
+const assetService = digitalTwinAssetService // Use the exported object directly
 
 // Helper to cast generic service to typed service or use direct DB access in future
 // For now, let's assume assetService has a method getAllAssets or we can query DB.

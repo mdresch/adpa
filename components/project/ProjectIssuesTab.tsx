@@ -17,8 +17,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { apiClient } from "@/lib/api"
+import { apiClient, Issue, IssueStats } from "@/lib/api"
 import { toast } from '@/lib/notify'
+import { ResolutionWorkflowCard } from "@/components/issues/ResolutionWorkflowCard"
 import {
   AlertCircle,
   AlertTriangle,
@@ -39,7 +40,7 @@ import {
   CheckCircle,
   X,
   Loader2,
-} from "lucide-react"
+} from "@/components/ui/icons-shim"
 import {
   BarChart,
   Bar,
@@ -58,13 +59,13 @@ import { format } from "date-fns"
 // Helper function to safely extract error message
 const getErrorMessage = (error: any, defaultMessage: string): string => {
   if (!error) return defaultMessage
-  
+
   // Check if error.response.data is an object with message/code/details
   const errorData = error.response?.data
   if (errorData) {
     // If it's a string, return it
     if (typeof errorData === 'string') return errorData
-    
+
     // If it's an object, try to extract message
     if (typeof errorData === 'object') {
       if (errorData.message && typeof errorData.message === 'string') {
@@ -79,55 +80,12 @@ const getErrorMessage = (error: any, defaultMessage: string): string => {
       }
     }
   }
-  
+
   // Fallback to error.message or default
   return error.message || defaultMessage
 }
 
-interface Issue {
-  id: string
-  project_id: string
-  title: string
-  description: string
-  category: 'technical' | 'resource' | 'schedule' | 'communication' | 'quality' | 'external' | 'scope' | 'budget' | 'other'
-  priority: 'critical' | 'high' | 'medium' | 'low'
-  impact?: string
-  affected_areas?: string[]
-  raised_by?: string
-  assigned_to?: string
-  escalated_to?: string
-  status: 'open' | 'acknowledged' | 'in_progress' | 'blocked' | 'resolved' | 'closed'
-  resolution?: string
-  workaround?: string
-  root_cause?: string
-  ai_suggested_resolution?: string
-  ai_confidence?: number
-  date_raised: string
-  target_resolution_date?: string
-  date_resolved?: string
-  date_closed?: string
-  related_risk_id?: string
-  tags?: string[]
-  created_at: string
-  updated_at: string
-  raised_by_name?: string
-  assigned_to_name?: string
-}
 
-interface IssueStats {
-  total_issues: number
-  open_issues: number
-  acknowledged_issues: number
-  in_progress_issues: number
-  blocked_issues: number
-  resolved_issues: number
-  closed_issues: number
-  critical_issues: number
-  high_issues: number
-  medium_issues: number
-  low_issues: number
-  overdue_issues: number
-}
 
 interface ProjectIssuesTabProps {
   projectId: string
@@ -162,21 +120,22 @@ export function ProjectIssuesTab({ projectId }: ProjectIssuesTabProps) {
   const [issues, setIssues] = useState<Issue[]>([])
   const [stats, setStats] = useState<IssueStats | null>(null)
   const [loading, setLoading] = useState(true)
-  
+
   // Filters
   const [statusFilter, setStatusFilter] = useState<string[]>([])
   const [priorityFilter, setPriorityFilter] = useState<string[]>([])
   const [categoryFilter, setCategoryFilter] = useState<string[]>([])
   const [searchQuery, setSearchQuery] = useState("")
-  
+
   // Dialog states
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null)
   const [suggestionsDialogOpen, setSuggestionsDialogOpen] = useState(false)
+  const [workflowVisibleForId, setWorkflowVisibleForId] = useState<string | null>(null)
   const [aiSuggestions, setAiSuggestions] = useState<any[]>([])
   const [loadingSuggestions, setLoadingSuggestions] = useState(false)
-  
+
   // Form states
   const [formData, setFormData] = useState({
     title: "",
@@ -195,7 +154,7 @@ export function ProjectIssuesTab({ projectId }: ProjectIssuesTabProps) {
       setLoading(true)
       const params = new URLSearchParams()
       params.append('project_id', projectId)
-      
+
       if (statusFilter.length > 0) {
         statusFilter.forEach(s => params.append('status', s))
       }
@@ -208,8 +167,8 @@ export function ProjectIssuesTab({ projectId }: ProjectIssuesTabProps) {
       if (searchQuery) {
         params.append('search', searchQuery)
       }
-      
-      const response = await apiClient.get(`/issues?${params.toString()}`)
+
+      const response = await apiClient.get<any>(`/issues?${params.toString()}`)
       setIssues(response.data || [])
     } catch (error: any) {
       console.error("Failed to fetch issues:", error)
@@ -222,7 +181,7 @@ export function ProjectIssuesTab({ projectId }: ProjectIssuesTabProps) {
   // Fetch stats
   const fetchStats = async () => {
     try {
-      const response = await apiClient.get(`/issues/stats/${projectId}`)
+      const response = await apiClient.get<any>(`/issues/stats/${projectId}`)
       setStats(response.data || null)
     } catch (error: any) {
       console.error("Failed to fetch issue stats:", error)
@@ -270,7 +229,7 @@ export function ProjectIssuesTab({ projectId }: ProjectIssuesTabProps) {
   // Update issue
   const handleUpdateIssue = async () => {
     if (!selectedIssue) return
-    
+
     try {
       // Convert empty strings to null for optional fields
       const payload = {
@@ -294,7 +253,7 @@ export function ProjectIssuesTab({ projectId }: ProjectIssuesTabProps) {
   // Delete issue
   const handleDeleteIssue = async (issueId: string) => {
     if (!confirm("Are you sure you want to delete this issue?")) return
-    
+
     try {
       await apiClient.delete(`/issues/${issueId}`)
       toast.success("Issue deleted successfully")
@@ -322,13 +281,13 @@ export function ProjectIssuesTab({ projectId }: ProjectIssuesTabProps) {
 
   // Filter issues
   const filteredIssues = issues.filter(issue => {
-    const matchesSearch = !searchQuery || 
+    const matchesSearch = !searchQuery ||
       issue.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       issue.description.toLowerCase().includes(searchQuery.toLowerCase())
     const matchesStatus = statusFilter.length === 0 || statusFilter.includes(issue.status)
     const matchesPriority = priorityFilter.length === 0 || priorityFilter.includes(issue.priority)
     const matchesCategory = categoryFilter.length === 0 || categoryFilter.includes(issue.category)
-    
+
     return matchesSearch && matchesStatus && matchesPriority && matchesCategory
   })
 
@@ -652,97 +611,129 @@ export function ProjectIssuesTab({ projectId }: ProjectIssuesTabProps) {
               </TableHeader>
               <TableBody>
                 {filteredIssues.map((issue) => (
-                  <TableRow key={issue.id}>
-                    <TableCell className="font-medium">
-                      <div className="flex flex-col gap-1">
-                        <div className="flex items-center gap-2">
-                          <span>{issue.title}</span>
-                          {issue.related_risk_id && (
-                            <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-300">
-                              <AlertTriangle className="h-3 w-3 mr-1" />
-                              From Risk
-                            </Badge>
+                  <React.Fragment key={issue.id}>
+                    <TableRow className={workflowVisibleForId === issue.id ? "bg-muted/30" : ""}>
+                      <TableCell className="font-medium">
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-2">
+                            <span>{issue.title}</span>
+                            {issue.related_risk_id && (
+                              <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-300">
+                                <AlertTriangle className="h-3 w-3 mr-1" />
+                                From Risk
+                              </Badge>
+                            )}
+                            {issue.playbook_execution_id && (
+                              <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-300">
+                                <Sparkles className="h-3 w-3 mr-1" />
+                                Playbook Active
+                              </Badge>
+                            )}
+                          </div>
+                          {issue.description && (
+                            <span className="text-xs text-muted-foreground line-clamp-1">
+                              {issue.description}
+                            </span>
                           )}
                         </div>
-                        {issue.description && (
-                          <span className="text-xs text-muted-foreground line-clamp-1">
-                            {issue.description}
-                          </span>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{issue.category}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        style={{
-                          backgroundColor: PRIORITY_COLORS[issue.priority] + '20',
-                          color: PRIORITY_COLORS[issue.priority],
-                        }}
-                      >
-                        {issue.priority}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        style={{
-                          backgroundColor: STATUS_COLORS[issue.status] + '20',
-                          color: STATUS_COLORS[issue.status],
-                        }}
-                      >
-                        {issue.status.replace('_', ' ')}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {format(new Date(issue.date_raised), 'MMM dd, yyyy')}
-                    </TableCell>
-                    <TableCell>
-                      {issue.target_resolution_date ? (
-                        format(new Date(issue.target_resolution_date), 'MMM dd, yyyy')
-                      ) : (
-                        <span className="text-muted-foreground">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setSelectedIssue(issue)
-                            setFormData({
-                              title: issue.title,
-                              description: issue.description,
-                              category: issue.category,
-                              priority: issue.priority,
-                              impact: issue.impact || "",
-                              assigned_to: issue.assigned_to || "",
-                              target_resolution_date: issue.target_resolution_date || "",
-                              tags: issue.tags || [],
-                            })
-                            setEditDialogOpen(true)
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{issue.category}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          style={{
+                            backgroundColor: PRIORITY_COLORS[issue.priority] + '20',
+                            color: PRIORITY_COLORS[issue.priority],
                           }}
                         >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleGetSuggestions(issue.id)}
-                        >
-                          <Sparkles className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeleteIssue(issue.id)}
-                        >
-                          <Trash2 className="h-4 w-4 text-red-600" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
+                          {issue.priority}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col gap-1">
+                          <Badge
+                            style={{
+                              backgroundColor: STATUS_COLORS[issue.status] + '20',
+                              color: STATUS_COLORS[issue.status],
+                            }}
+                          >
+                            {issue.status.replace('_', ' ')}
+                          </Badge>
+                          {issue.playbook_execution_id && (
+                            <span className="text-[10px] text-muted-foreground flex items-center">
+                              <TrendingUp className="h-2 w-2 mr-1" />
+                              Auto-resolving
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {format(new Date(issue.date_raised), 'MMM dd, yyyy')}
+                      </TableCell>
+                      <TableCell>
+                        {issue.target_resolution_date ? (
+                          format(new Date(issue.target_resolution_date), 'MMM dd, yyyy')
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-2">
+                          <Button
+                            variant={workflowVisibleForId === issue.id ? "secondary" : "ghost"}
+                            size="sm"
+                            onClick={() => setWorkflowVisibleForId(workflowVisibleForId === issue.id ? null : issue.id)}
+                            className={issue.playbook_execution_id ? "text-primary" : ""}
+                          >
+                            <Sparkles className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedIssue(issue)
+                              setFormData({
+                                title: issue.title,
+                                description: issue.description,
+                                category: issue.category,
+                                priority: issue.priority,
+                                impact: issue.impact || "",
+                                assigned_to: issue.assigned_to || "",
+                                target_resolution_date: issue.target_resolution_date || "",
+                                tags: issue.tags || [],
+                              })
+                              setEditDialogOpen(true)
+                            }}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteIssue(issue.id)}
+                          >
+                            <Trash2 className="h-4 w-4 text-red-600" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                    {workflowVisibleForId === issue.id && (
+                      <TableRow>
+                        <TableCell colSpan={7} className="p-4 bg-muted/20">
+                          <div className="max-w-3xl mx-auto">
+                            <ResolutionWorkflowCard
+                              issue={issue}
+                              onUpdate={() => {
+                                fetchIssues()
+                                fetchStats()
+                              }}
+                            />
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </React.Fragment>
                 ))}
               </TableBody>
             </Table>
@@ -764,7 +755,7 @@ export function ProjectIssuesTab({ projectId }: ProjectIssuesTabProps) {
               <Label>Title *</Label>
               <Input
                 value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, title: e.target.value })}
               />
             </div>
             <div>

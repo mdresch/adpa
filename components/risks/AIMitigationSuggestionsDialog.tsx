@@ -79,12 +79,12 @@ export function AIMitigationSuggestionsDialog({
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [selectedSuggestions, setSelectedSuggestions] = useState<Set<number>>(new Set())
   const [isCreatingPlans, setIsCreatingPlans] = useState(false)
-  
+
   const generateSuggestions = async () => {
     try {
       setLoading(true)
       setSuggestions([])
-      
+
       const response = await apiClient.post('/mitigation-plans/suggest', {
         risk_id: riskId,
         risk_title: riskTitle,
@@ -94,7 +94,7 @@ export function AIMitigationSuggestionsDialog({
         risk_impact: riskImpact,
         risk_severity: riskSeverity,
       })
-      
+
       if (response.success && response.data?.suggestions) {
         setSuggestions(response.data.suggestions)
         toast.success(`Generated ${response.data.suggestions.length} mitigation plan suggestions`)
@@ -103,10 +103,10 @@ export function AIMitigationSuggestionsDialog({
       }
     } catch (error: any) {
       console.error('Failed to generate suggestions:', error)
-      
+
       // Extract error message from various possible locations
       let errorMessage = 'Failed to generate AI suggestions'
-      
+
       // Handle global error handler format: {success: false, error: {message, statusCode}}
       if (error?.response?.data?.error?.message) {
         errorMessage = error.response.data.error.message
@@ -131,16 +131,16 @@ export function AIMitigationSuggestionsDialog({
         }
       } else if (error?.response?.data?.error) {
         const errorObj = error.response.data.error
-        errorMessage = typeof errorObj === 'string' 
-          ? errorObj 
+        errorMessage = typeof errorObj === 'string'
+          ? errorObj
           : (errorObj?.message || JSON.stringify(errorObj))
       }
-      
+
       // Clean up [object Object] strings and JSON-looking strings
       if (errorMessage === '[object Object]' || errorMessage.includes('[object Object]')) {
         errorMessage = 'Failed to generate AI suggestions. Please check your AI provider configuration.'
       }
-      
+
       // Check for common error patterns
       if (errorMessage.includes('No active providers') || errorMessage.includes('All active providers')) {
         errorMessage = 'No AI providers are currently configured or active. Please configure at least one AI provider in Settings.'
@@ -149,7 +149,7 @@ export function AIMitigationSuggestionsDialog({
       } else if (errorMessage.includes('rate limit') || errorMessage.includes('429')) {
         errorMessage = 'AI provider rate limit exceeded. Please try again in a few moments.'
       }
-      
+
       toast.error(errorMessage, {
         duration: 5000, // Show for 5 seconds for longer error messages
       })
@@ -157,7 +157,7 @@ export function AIMitigationSuggestionsDialog({
       setLoading(false)
     }
   }
-  
+
   useEffect(() => {
     if (open && riskId) {
       generateSuggestions()
@@ -167,13 +167,13 @@ export function AIMitigationSuggestionsDialog({
       setSelectedSuggestions(new Set())
     }
   }, [open, riskId])
-  
+
   const handleUseSuggestion = (suggestion: MitigationSuggestion) => {
     setSelectedSuggestion(suggestion)
     setIsCreateDialogOpen(true)
     onSuggestionSelected?.(suggestion)
   }
-  
+
   const handleToggleSuggestion = (index: number) => {
     const newSelected = new Set(selectedSuggestions)
     if (newSelected.has(index)) {
@@ -183,7 +183,7 @@ export function AIMitigationSuggestionsDialog({
     }
     setSelectedSuggestions(newSelected)
   }
-  
+
   const handleSelectAll = () => {
     if (selectedSuggestions.size === suggestions.length) {
       setSelectedSuggestions(new Set())
@@ -191,18 +191,18 @@ export function AIMitigationSuggestionsDialog({
       setSelectedSuggestions(new Set(suggestions.map((_, index) => index)))
     }
   }
-  
+
   const handleCreateSelectedPlans = async () => {
     if (selectedSuggestions.size === 0) {
       toast.error('Please select at least one suggestion')
       return
     }
-    
+
     try {
       setIsCreatingPlans(true)
       const selectedIndices = Array.from(selectedSuggestions)
       const plansToCreate = selectedIndices.map(index => suggestions[index])
-      
+
       // Create plans in parallel
       const createPromises = plansToCreate.map(async (suggestion) => {
         const payload = {
@@ -219,12 +219,12 @@ export function AIMitigationSuggestionsDialog({
           planned_completion_date: new Date(Date.now() + suggestion.estimated_duration_days * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
           due_date: new Date(Date.now() + suggestion.estimated_duration_days * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
         }
-        
+
         return apiClient.post('/mitigation-plans', payload)
       })
-      
+
       await Promise.all(createPromises)
-      
+
       toast.success(`Successfully created ${plansToCreate.length} mitigation plan${plansToCreate.length > 1 ? 's' : ''}`)
       setSelectedSuggestions(new Set())
       onPlanCreated?.()
@@ -236,14 +236,14 @@ export function AIMitigationSuggestionsDialog({
       setIsCreatingPlans(false)
     }
   }
-  
+
   const handlePlanCreated = () => {
     setIsCreateDialogOpen(false)
     setSelectedSuggestion(null)
     onPlanCreated?.()
     toast.success('Mitigation plan created from AI suggestion')
   }
-  
+
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -257,7 +257,7 @@ export function AIMitigationSuggestionsDialog({
               AI-generated mitigation plan suggestions for this risk. Select one or more suggestions to create plans.
             </DialogDescription>
           </DialogHeader>
-          
+
           {/* Selection Controls */}
           {suggestions.length > 0 && (
             <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
@@ -305,7 +305,7 @@ export function AIMitigationSuggestionsDialog({
               )}
             </div>
           )}
-          
+
           {loading ? (
             <div className="flex flex-col items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-purple-600 mb-4" />
@@ -327,11 +327,10 @@ export function AIMitigationSuggestionsDialog({
               {suggestions.map((suggestion, index) => {
                 const isSelected = selectedSuggestions.has(index)
                 return (
-                  <Card 
-                    key={index} 
-                    className={`hover:shadow-md transition-shadow cursor-pointer ${
-                      isSelected ? 'ring-2 ring-primary ring-offset-2' : ''
-                    }`}
+                  <Card
+                    key={index}
+                    className={`hover:shadow-md transition-shadow cursor-pointer ${isSelected ? 'ring-2 ring-primary ring-offset-2' : ''
+                      }`}
                     onClick={() => handleToggleSuggestion(index)}
                   >
                     <CardHeader>
@@ -346,9 +345,9 @@ export function AIMitigationSuggestionsDialog({
                           </div>
                           <div className="flex-1">
                             <CardTitle className="text-lg">{suggestion.title}</CardTitle>
-                            <CardDescription className="mt-2">
+                            <div className="text-sm text-muted-foreground mt-2">
                               {suggestion.description}
-                            </CardDescription>
+                            </div>
                           </div>
                         </div>
                         <div className="flex gap-2 flex-shrink-0">
@@ -361,114 +360,114 @@ export function AIMitigationSuggestionsDialog({
                         </div>
                       </div>
                     </CardHeader>
-                  <CardContent className="space-y-4">
-                    {/* Key Steps */}
-                    {suggestion.key_steps && suggestion.key_steps.length > 0 && (
-                      <div>
-                        <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
-                          <CheckCircle2 className="h-4 w-4" />
-                          Key Steps
-                        </h4>
-                        <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground ml-4">
-                          {suggestion.key_steps.map((step, stepIndex) => (
-                            <li key={stepIndex}>{step}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    
-                    {/* Details Grid */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                      <div className="flex items-center gap-2">
-                        <Target className="h-4 w-4 text-muted-foreground" />
+                    <CardContent className="space-y-4">
+                      {/* Key Steps */}
+                      {suggestion.key_steps && suggestion.key_steps.length > 0 && (
                         <div>
-                          <p className="text-muted-foreground">Effectiveness</p>
-                          <p className="font-medium">{suggestion.expected_effectiveness}%</p>
-                        </div>
-                      </div>
-                      {suggestion.cost_estimate && (
-                        <div className="flex items-center gap-2">
-                          <Badge 
-                            className={
-                              suggestion.cost_estimate === 'low' ? 'bg-green-100 text-green-800' :
-                              suggestion.cost_estimate === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                              'bg-orange-100 text-orange-800'
-                            }
-                          >
-                            {suggestion.cost_estimate.charAt(0).toUpperCase() + suggestion.cost_estimate.slice(1)} Cost
-                          </Badge>
+                          <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                            <CheckCircle2 className="h-4 w-4" />
+                            Key Steps
+                          </h4>
+                          <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground ml-4">
+                            {suggestion.key_steps.map((step, stepIndex) => (
+                              <li key={stepIndex}>{step}</li>
+                            ))}
+                          </ul>
                         </div>
                       )}
-                      <div className="flex items-center gap-2">
-                        <Clock className="h-4 w-4 text-muted-foreground" />
-                        <div>
-                          <p className="text-muted-foreground">Duration</p>
-                          <p className="font-medium">{suggestion.estimated_duration_days} days</p>
-                        </div>
-                      </div>
-                      {suggestion.resource_requirements && (
-                        <div className="flex items-center gap-2 md:col-span-2">
-                          <Users className="h-4 w-4 text-muted-foreground" />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-muted-foreground">Resources</p>
-                            <p className="font-medium truncate">{suggestion.resource_requirements}</p>
+
+                      {/* Details Grid */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div className="flex items-center gap-2">
+                          <Target className="h-4 w-4 text-muted-foreground" />
+                          <div>
+                            <p className="text-muted-foreground">Effectiveness</p>
+                            <p className="font-medium">{suggestion.expected_effectiveness}%</p>
                           </div>
                         </div>
-                      )}
-                    </div>
-                    
-                    {/* Success Criteria */}
-                    {suggestion.success_criteria && (
-                      <div className="p-3 bg-green-50 dark:bg-green-950 rounded-md border border-green-200 dark:border-green-800">
-                        <h4 className="text-sm font-semibold mb-1 text-green-900 dark:text-green-100">
-                          Success Criteria
-                        </h4>
-                        <p className="text-sm text-green-700 dark:text-green-300">
-                          {suggestion.success_criteria}
-                        </p>
-                      </div>
-                    )}
-                    
-                    <div className="flex gap-2">
-                      <Button
-                        onClick={async (e: React.MouseEvent) => {
-                          e.stopPropagation()
-                          handleUseSuggestion(suggestion)
-                        }}
-                        className="flex-1"
-                        variant="outline"
-                      >
-                        <CheckCircle2 className="h-4 w-4 mr-2" />
-                        Edit & Create
-                      </Button>
-                      <Button
-                        onClick={async (e: React.MouseEvent) => {
-                          e.stopPropagation()
-                          handleToggleSuggestion(index)
-                        }}
-                        className="flex-1"
-                        variant={isSelected ? "default" : "outline"}
-                      >
-                        {isSelected ? (
-                          <>
-                            <CheckSquare className="h-4 w-4 mr-2" />
-                            Selected
-                          </>
-                        ) : (
-                          <>
-                            <Square className="h-4 w-4 mr-2" />
-                            Select
-                          </>
+                        {suggestion.cost_estimate && (
+                          <div className="flex items-center gap-2">
+                            <Badge
+                              className={
+                                suggestion.cost_estimate === 'low' ? 'bg-green-100 text-green-800' :
+                                  suggestion.cost_estimate === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                                    'bg-orange-100 text-orange-800'
+                              }
+                            >
+                              {suggestion.cost_estimate.charAt(0).toUpperCase() + suggestion.cost_estimate.slice(1)} Cost
+                            </Badge>
+                          </div>
                         )}
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
+                        <div className="flex items-center gap-2">
+                          <Clock className="h-4 w-4 text-muted-foreground" />
+                          <div>
+                            <p className="text-muted-foreground">Duration</p>
+                            <p className="font-medium">{suggestion.estimated_duration_days} days</p>
+                          </div>
+                        </div>
+                        {suggestion.resource_requirements && (
+                          <div className="flex items-center gap-2 md:col-span-2">
+                            <Users className="h-4 w-4 text-muted-foreground" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-muted-foreground">Resources</p>
+                              <p className="font-medium truncate">{suggestion.resource_requirements}</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Success Criteria */}
+                      {suggestion.success_criteria && (
+                        <div className="p-3 bg-green-50 dark:bg-green-950 rounded-md border border-green-200 dark:border-green-800">
+                          <h4 className="text-sm font-semibold mb-1 text-green-900 dark:text-green-100">
+                            Success Criteria
+                          </h4>
+                          <p className="text-sm text-green-700 dark:text-green-300">
+                            {suggestion.success_criteria}
+                          </p>
+                        </div>
+                      )}
+
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={async (e: React.MouseEvent) => {
+                            e.stopPropagation()
+                            handleUseSuggestion(suggestion)
+                          }}
+                          className="flex-1"
+                          variant="outline"
+                        >
+                          <CheckCircle2 className="h-4 w-4 mr-2" />
+                          Edit & Create
+                        </Button>
+                        <Button
+                          onClick={async (e: React.MouseEvent) => {
+                            e.stopPropagation()
+                            handleToggleSuggestion(index)
+                          }}
+                          className="flex-1"
+                          variant={isSelected ? "default" : "outline"}
+                        >
+                          {isSelected ? (
+                            <>
+                              <CheckSquare className="h-4 w-4 mr-2" />
+                              Selected
+                            </>
+                          ) : (
+                            <>
+                              <Square className="h-4 w-4 mr-2" />
+                              Select
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
                 )
               })}
             </div>
           )}
-          
+
           <DialogFooter>
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               Close
@@ -482,7 +481,7 @@ export function AIMitigationSuggestionsDialog({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      
+
       {/* Create Plan Dialog with Pre-filled Data */}
       {selectedSuggestion && (
         <MitigationPlanDialog

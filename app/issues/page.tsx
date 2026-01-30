@@ -16,9 +16,11 @@ import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { useAuth } from "@/contexts/AuthContext"
 import { useWebSocket } from "@/contexts/WebSocketContext"
-import { apiClient } from "@/lib/api"
+import { apiClient, Issue, IssueStats } from "@/lib/api"
 import { getApiUrl } from "@/lib/api-url"
 import { toast } from '@/lib/notify'
+import { ResolutionWorkflowCard } from "@/components/issues/ResolutionWorkflowCard"
+import { ResolutionAnalyticsDashboard } from "@/components/issues/ResolutionAnalyticsDashboard"
 import {
   AlertCircle,
   TriangleAlert,
@@ -40,7 +42,7 @@ import {
   CheckCircle,
   X,
   Loader2,
-} from "lucide-react"
+} from "@/components/ui/icons-shim"
 import {
   BarChart,
   Bar,
@@ -56,49 +58,6 @@ import {
 } from "recharts"
 import { format } from "date-fns"
 
-interface Issue {
-  id: string
-  project_id: string
-  title: string
-  description: string
-  category: 'technical' | 'resource' | 'schedule' | 'communication' | 'quality' | 'external' | 'scope' | 'budget' | 'other'
-  priority: 'critical' | 'high' | 'medium' | 'low'
-  impact?: string
-  affected_areas?: string[]
-  raised_by?: string
-  assigned_to?: string
-  escalated_to?: string
-  status: 'open' | 'acknowledged' | 'in_progress' | 'blocked' | 'resolved' | 'closed'
-  resolution?: string
-  workaround?: string
-  root_cause?: string
-  ai_suggested_resolution?: string
-  date_raised: string
-  target_resolution_date?: string
-  date_resolved?: string
-  date_closed?: string
-  related_risk_id?: string
-  tags?: string[]
-  created_at: string
-  updated_at: string
-  raised_by_name?: string
-  assigned_to_name?: string
-}
-
-interface IssueStats {
-  total_issues: number
-  open_issues: number
-  acknowledged_issues: number
-  in_progress_issues: number
-  blocked_issues: number
-  resolved_issues: number
-  closed_issues: number
-  critical_issues: number
-  high_issues: number
-  medium_issues: number
-  low_issues: number
-  overdue_issues: number
-}
 
 const PRIORITY_COLORS = {
   critical: 'bg-red-500',
@@ -134,13 +93,13 @@ export default function IssuesPage() {
   const [loading, setLoading] = useState(true)
   const [selectedProject, setSelectedProject] = useState<string>("")
   const [projects, setProjects] = useState<Array<{ id: string; name: string }>>([])
-  
+
   // Filters
   const [statusFilter, setStatusFilter] = useState<string[]>([])
   const [priorityFilter, setPriorityFilter] = useState<string[]>([])
   const [categoryFilter, setCategoryFilter] = useState<string[]>([])
   const [searchQuery, setSearchQuery] = useState("")
-  
+
   // Dialog states
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
@@ -148,7 +107,7 @@ export default function IssuesPage() {
   const [suggestionsDialogOpen, setSuggestionsDialogOpen] = useState(false)
   const [aiSuggestions, setAiSuggestions] = useState<any[]>([])
   const [loadingSuggestions, setLoadingSuggestions] = useState(false)
-  
+
   // Form states
   const [formData, setFormData] = useState({
     title: "",
@@ -165,10 +124,10 @@ export default function IssuesPage() {
   useEffect(() => {
     const fetchProjects = async () => {
       try {
-        const data = await apiClient.get("/projects")
-        setProjects(data.projects || [])
-        if (data.projects && data.projects.length > 0 && !selectedProject) {
-          setSelectedProject(data.projects[0].id)
+        const response = await apiClient.get<any>("/projects")
+        setProjects(response.projects || [])
+        if (response.projects && response.projects.length > 0 && !selectedProject) {
+          setSelectedProject(response.projects[0].id)
         }
       } catch (error) {
         console.error("Failed to fetch projects:", error)
@@ -180,12 +139,12 @@ export default function IssuesPage() {
   // Fetch issues
   const fetchIssues = async () => {
     if (!selectedProject) return
-    
+
     try {
       setLoading(true)
       const params = new URLSearchParams()
       params.append('project_id', selectedProject)
-      
+
       if (statusFilter.length > 0) {
         statusFilter.forEach(s => params.append('status', s))
       }
@@ -198,29 +157,13 @@ export default function IssuesPage() {
       if (searchQuery) {
         params.append('search', searchQuery)
       }
-      
-      const response = await fetch(`${getApiUrl('/issues')}?${params.toString()}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-        }
-      })
-      
-      if (!response.ok) throw new Error('Failed to fetch issues')
-      
-      const data = await response.json()
+
+      const data = await apiClient.get<any>(`/issues?${params.toString()}`)
       setIssues(data.data || [])
-      
+
       // Fetch stats
-      const statsResponse = await fetch(`${getApiUrl(`/issues/stats/${selectedProject}`)}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-        }
-      })
-      
-      if (statsResponse.ok) {
-        const statsData = await statsResponse.json()
-        setStats(statsData.data || null)
-      }
+      const statsData = await apiClient.get<any>(`/issues/stats/${selectedProject}`)
+      setStats(statsData.data || null)
     } catch (error) {
       console.error("Failed to fetch issues:", error)
       toast.error("Failed to load issues")
@@ -246,12 +189,12 @@ export default function IssuesPage() {
           project_id: selectedProject,
         })
       })
-      
+
       if (!response.ok) {
         const error = await response.json()
         throw new Error(error.message || 'Failed to create issue')
       }
-      
+
       toast.success("Issue created successfully")
       setCreateDialogOpen(false)
       setFormData({
@@ -280,12 +223,12 @@ export default function IssuesPage() {
         },
         body: JSON.stringify(updates)
       })
-      
+
       if (!response.ok) {
         const error = await response.json()
         throw new Error(error.message || 'Failed to update issue')
       }
-      
+
       toast.success("Issue updated successfully")
       setEditDialogOpen(false)
       setSelectedIssue(null)
@@ -297,7 +240,7 @@ export default function IssuesPage() {
 
   const handleDeleteIssue = async (issueId: string) => {
     if (!confirm("Are you sure you want to delete this issue?")) return
-    
+
     try {
       const response = await fetch(getApiUrl(`/issues/${issueId}`), {
         method: 'DELETE',
@@ -305,12 +248,12 @@ export default function IssuesPage() {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         }
       })
-      
+
       if (!response.ok) {
         const error = await response.json()
         throw new Error(error.message || 'Failed to delete issue')
       }
-      
+
       toast.success("Issue deleted successfully")
       fetchIssues()
     } catch (error: any) {
@@ -323,7 +266,7 @@ export default function IssuesPage() {
       setLoadingSuggestions(true)
       setSelectedIssue(issue)
       setSuggestionsDialogOpen(true)
-      
+
       const response = await fetch(getApiUrl('/issues/suggest-resolution'), {
         method: 'POST',
         headers: {
@@ -339,12 +282,12 @@ export default function IssuesPage() {
           issue_impact: issue.impact,
         })
       })
-      
+
       if (!response.ok) {
         const error = await response.json()
         throw new Error(error.message || 'Failed to get AI suggestions')
       }
-      
+
       const data = await response.json()
       setAiSuggestions(data.data?.suggestions || [])
     } catch (error: any) {
@@ -358,8 +301,8 @@ export default function IssuesPage() {
   const filteredIssues = issues.filter(issue => {
     if (searchQuery) {
       const query = searchQuery.toLowerCase()
-      if (!issue.title.toLowerCase().includes(query) && 
-          !issue.description.toLowerCase().includes(query)) {
+      if (!issue.title.toLowerCase().includes(query) &&
+        !issue.description.toLowerCase().includes(query)) {
         return false
       }
     }
@@ -382,10 +325,16 @@ export default function IssuesPage() {
     { name: 'Low', value: stats.low_issues, color: '#3b82f6' },
   ].filter(item => item.value > 0) : []
 
-  if (authLoading) {
-    return <div>Loading...</div>
-  }
+  const [workflowVisibleForId, setWorkflowVisibleForId] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState("all")
 
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    )
+  }
   return (
     <PageTransition>
       <div className="flex h-screen bg-background">
@@ -396,13 +345,17 @@ export default function IssuesPage() {
             <AnimatedLayout>
               <div className="space-y-6">
                 {/* Header */}
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h1 className="text-3xl font-bold">Issues & Blockers</h1>
-                    <p className="text-muted-foreground mt-1">
-                      Track current problems, blockers, and impediments
-                    </p>
-                  </div>
+                <div>
+                  <h1 className="text-3xl font-bold">Issues & Blockers</h1>
+                  <p className="text-muted-foreground mt-1">
+                    Track current problems, blockers, and impediments
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant={activeTab === "analytics" ? "default" : "outline"} onClick={() => setActiveTab("analytics")}>
+                    <TrendingUp className="h-4 w-4 mr-2" />
+                    Analytics
+                  </Button>
                   <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
                     <DialogTrigger asChild>
                       <Button>
@@ -422,7 +375,7 @@ export default function IssuesPage() {
                           <Label>Title *</Label>
                           <Input
                             value={formData.title}
-                            onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, title: e.target.value })}
                             placeholder="Brief summary of the issue"
                           />
                         </div>
@@ -587,200 +540,198 @@ export default function IssuesPage() {
                   </AnimatedGrid>
                 )}
 
-                {/* Charts */}
-                {(statusData.length > 0 || priorityData.length > 0) && (
-                  <div className="grid grid-cols-2 gap-6">
-                    {statusData.length > 0 && (
-                      <Card>
-                        <CardHeader>
-                          <CardTitle>Issues by Status</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <ResponsiveContainer width="100%" height={300}>
-                            <PieChart>
-                              <Pie
-                                data={statusData}
-                                cx="50%"
-                                cy="50%"
-                                labelLine={false}
-                                label={({ name, value }: { name: string; value: number }) => `${name}: ${value}`}
-                                outerRadius={80}
-                                fill="#8884d8"
-                                dataKey="value"
-                              >
-                                {statusData.map((entry, index) => (
-                                  <Cell key={`cell-${index}`} fill={entry.color} />
-                                ))}
-                              </Pie>
-                              <Tooltip />
-                            </PieChart>
-                          </ResponsiveContainer>
-                        </CardContent>
-                      </Card>
-                    )}
-                    {priorityData.length > 0 && (
-                      <Card>
-                        <CardHeader>
-                          <CardTitle>Issues by Priority</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <ResponsiveContainer width="100%" height={300}>
-                            <BarChart data={priorityData}>
-                              <CartesianGrid strokeDasharray="3 3" />
-                              <XAxis dataKey="name" />
-                              <YAxis />
-                              <Tooltip />
-                              <Bar dataKey="value">
-                                {priorityData.map((entry, index) => (
-                                  <Cell key={`cell-${index}`} fill={entry.color} />
-                                ))}
-                              </Bar>
-                            </BarChart>
-                          </ResponsiveContainer>
-                        </CardContent>
-                      </Card>
-                    )}
-                  </div>
-                )}
+                {/* Tabs */}
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <TabsList>
+                      <TabsTrigger value="all">All Issues</TabsTrigger>
+                      <TabsTrigger value="active">Active & Blocked</TabsTrigger>
+                      <TabsTrigger value="resolved">Resolved</TabsTrigger>
+                      <TabsTrigger value="analytics">Performance Analytics</TabsTrigger>
+                    </TabsList>
 
-                {/* Filters */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Filters</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex flex-wrap gap-4">
-                      <div className="flex-1 min-w-[200px]">
+                    {activeTab !== "analytics" && (
+                      <div className="flex gap-2">
                         <Input
                           placeholder="Search issues..."
                           value={searchQuery}
-                          onChange={(e) => setSearchQuery(e.target.value)}
-                          className="w-full"
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
+                          className="w-64"
                         />
+                        <Select
+                          value={statusFilter.length === 0 ? 'all' : statusFilter[0]}
+                          onValueChange={(value: string) => setStatusFilter(value === 'all' ? [] : [value])}
+                        >
+                          <SelectTrigger className="w-[150px]">
+                            <SelectValue placeholder="Status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Statuses</SelectItem>
+                            <SelectItem value="open">Open</SelectItem>
+                            <SelectItem value="acknowledged">Acknowledged</SelectItem>
+                            <SelectItem value="in_progress">In Progress</SelectItem>
+                            <SelectItem value="blocked">Blocked</SelectItem>
+                            <SelectItem value="resolved">Resolved</SelectItem>
+                            <SelectItem value="closed">Closed</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
-                      <Select
-                        value={statusFilter.length === 0 ? 'all' : statusFilter[0]}
-                        onValueChange={(value: string) => setStatusFilter(value === 'all' ? [] : [value])}
-                      >
-                        <SelectTrigger className="w-[180px]">
-                          <SelectValue placeholder="Status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Statuses</SelectItem>
-                          <SelectItem value="open">Open</SelectItem>
-                          <SelectItem value="acknowledged">Acknowledged</SelectItem>
-                          <SelectItem value="in_progress">In Progress</SelectItem>
-                          <SelectItem value="blocked">Blocked</SelectItem>
-                          <SelectItem value="resolved">Resolved</SelectItem>
-                          <SelectItem value="closed">Closed</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <Select
-                        value={priorityFilter.length === 0 ? 'all' : priorityFilter[0]}
-                        onValueChange={(value: string) => setPriorityFilter(value === 'all' ? [] : [value])}
-                      >
-                        <SelectTrigger className="w-[180px]">
-                          <SelectValue placeholder="Priority" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Priorities</SelectItem>
-                          <SelectItem value="critical">Critical</SelectItem>
-                          <SelectItem value="high">High</SelectItem>
-                          <SelectItem value="medium">Medium</SelectItem>
-                          <SelectItem value="low">Low</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </CardContent>
-                </Card>
+                    )}
+                  </div>
 
-                {/* Issues List */}
-                <div className="space-y-4">
-                  {loading ? (
-                    <Card>
-                      <CardContent className="pt-6">
-                        <div className="text-center py-8">Loading issues...</div>
-                      </CardContent>
-                    </Card>
-                  ) : filteredIssues.length === 0 ? (
-                    <Card>
-                      <CardContent className="pt-6">
-                        <div className="text-center py-8">
-                          <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                          <p className="text-muted-foreground">No issues found</p>
+                  <TabsContent value="analytics" className="mt-6">
+                    <ResolutionAnalyticsDashboard projectId={selectedProject} />
+                  </TabsContent>
+
+                  <TabsContent value="all" className="space-y-4">
+                    {/* Charts */}
+                    {(statusData.length > 0 || priorityData.length > 0) && (
+                      <div className="grid grid-cols-2 gap-6">
+                        {statusData.length > 0 && (
+                          <Card>
+                            <CardHeader className="py-3">
+                              <CardTitle className="text-sm">Status Distribution</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <ResponsiveContainer width="100%" height={200}>
+                                <PieChart>
+                                  <Pie
+                                    data={statusData}
+                                    cx="50%"
+                                    cy="50%"
+                                    innerRadius={50}
+                                    outerRadius={70}
+                                    paddingAngle={5}
+                                    dataKey="value"
+                                  >
+                                    {statusData.map((entry, index) => (
+                                      <Cell key={`cell-${index}`} fill={entry.color} />
+                                    ))}
+                                  </Pie>
+                                  <Tooltip />
+                                </PieChart>
+                              </ResponsiveContainer>
+                            </CardContent>
+                          </Card>
+                        )}
+                        {priorityData.length > 0 && (
+                          <Card>
+                            <CardHeader className="py-3">
+                              <CardTitle className="text-sm">Priority Breakdown</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <ResponsiveContainer width="100%" height={200}>
+                                <BarChart data={priorityData}>
+                                  <XAxis dataKey="name" hide />
+                                  <YAxis hide />
+                                  <Tooltip />
+                                  <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                                    {priorityData.map((entry, index) => (
+                                      <Cell key={`cell-${index}`} fill={entry.color} />
+                                    ))}
+                                  </Bar>
+                                </BarChart>
+                              </ResponsiveContainer>
+                            </CardContent>
+                          </Card>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Issues List */}
+                    <div className="space-y-4">
+                      {loading ? (
+                        <div className="text-center py-12">
+                          <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
+                          <p className="mt-2 text-muted-foreground">Loading issues...</p>
                         </div>
-                      </CardContent>
-                    </Card>
-                  ) : (
-                    filteredIssues.map((issue) => {
-                      const StatusIcon = STATUS_ICONS[issue.status]
-                      return (
-                        <Card key={issue.id} className="hover:shadow-md transition-shadow">
+                      ) : filteredIssues.length === 0 ? (
+                        <Card>
                           <CardContent className="pt-6">
-                            <div className="flex items-start justify-between">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-3 mb-2">
-                                  <Badge className={PRIORITY_COLORS[issue.priority]}>
-                                    {issue.priority}
-                                  </Badge>
-                                  <Badge variant="outline" className="flex items-center gap-1">
-                                    <StatusIcon className="h-3 w-3" />
-                                    {issue.status.replace('_', ' ')}
-                                  </Badge>
-                                  <Badge variant="outline">{issue.category}</Badge>
-                                  <h3 className="font-semibold text-lg">{issue.title}</h3>
-                                </div>
-                                <p className="text-muted-foreground mb-3">{issue.description}</p>
-                                {issue.impact && (
-                                  <div className="mb-2">
-                                    <span className="text-sm font-medium">Impact: </span>
-                                    <span className="text-sm text-muted-foreground">{issue.impact}</span>
-                                  </div>
-                                )}
-                                <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                                  <span>Raised: {format(new Date(issue.date_raised), 'MMM d, yyyy')}</span>
-                                  {issue.target_resolution_date && (
-                                    <span>Target: {format(new Date(issue.target_resolution_date), 'MMM d, yyyy')}</span>
-                                  )}
-                                  {issue.assigned_to_name && (
-                                    <span>Assigned: {issue.assigned_to_name}</span>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleGetAISuggestions(issue)}
-                                >
-                                  <Sparkles className="h-4 w-4 mr-1" />
-                                  AI Suggestions
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => {
-                                    setSelectedIssue(issue)
-                                    setEditDialogOpen(true)
-                                  }}
-                                >
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleDeleteIssue(issue.id)}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
+                            <div className="text-center py-8">
+                              <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                              <p className="text-muted-foreground">No issues found</p>
                             </div>
                           </CardContent>
                         </Card>
-                      )
-                    })
-                  )}
-                </div>
+                      ) : (
+                        filteredIssues.map((issue) => (
+                          <React.Fragment key={issue.id}>
+                            <Card className={`hover:shadow-md transition-shadow ${workflowVisibleForId === issue.id ? 'ring-1 ring-primary/50' : ''}`}>
+                              <CardContent className="pt-6">
+                                <div className="flex items-start justify-between">
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-3 mb-2">
+                                      <Badge className={PRIORITY_COLORS[issue.priority]}>
+                                        {issue.priority}
+                                      </Badge>
+                                      <Badge variant="outline" className="flex items-center gap-1">
+                                        <Clock className="h-3 w-3" />
+                                        {issue.status.replace('_', ' ')}
+                                      </Badge>
+                                      <Badge variant="outline">{issue.category}</Badge>
+                                      {issue.playbook_execution_id && (
+                                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                                          <Sparkles className="h-3 w-3 mr-1" />
+                                          Playbook
+                                        </Badge>
+                                      )}
+                                      <h3 className="font-semibold text-lg">{issue.title}</h3>
+                                    </div>
+                                    <p className="text-muted-foreground mb-3">{issue.description}</p>
+                                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                                      <span>Raised: {format(new Date(issue.date_raised), 'MMM d, yyyy')}</span>
+                                      {issue.assigned_to_name && (
+                                        <span>Assigned: {issue.assigned_to_name}</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Button
+                                      variant={workflowVisibleForId === issue.id ? "secondary" : "outline"}
+                                      size="sm"
+                                      onClick={() => setWorkflowVisibleForId(workflowVisibleForId === issue.id ? null : issue.id)}
+                                    >
+                                      <Sparkles className="h-4 w-4 mr-1" />
+                                      Workflow
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => {
+                                        setSelectedIssue(issue)
+                                        setEditDialogOpen(true)
+                                      }}
+                                    >
+                                      <Edit className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleDeleteIssue(issue.id)}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              </CardContent>
+                            </Card>
+                            {workflowVisibleForId === issue.id && (
+                              <div className="mt-2 mb-4">
+                                <ResolutionWorkflowCard
+                                  issue={issue}
+                                  onUpdate={() => {
+                                    fetchIssues()
+                                  }}
+                                />
+                              </div>
+                            )}
+                          </React.Fragment>
+                        ))
+                      )}
+                    </div>
+                  </TabsContent>
+                </Tabs>
 
                 {/* Edit Issue Dialog */}
                 <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>

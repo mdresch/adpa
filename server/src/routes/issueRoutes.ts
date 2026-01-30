@@ -18,6 +18,8 @@ import {
   materializeRiskIntoIssue,
   escalateRiskToIssue,
   suggestRootCauseAnalysis,
+  getResolutionRecommendations,
+  getResolutionMetrics,
   IssueFilters,
   RiskToIssueEscalationInput
 } from '../services/issueService'
@@ -677,6 +679,72 @@ router.post(
       res.status(500).json({
         success: false,
         error: 'Failed to generate root cause analysis suggestions',
+        message: error.message
+      })
+    }
+  }
+)
+
+/**
+ * GET /api/issues/:id/resolution-recommendations
+ * Get resolution recommendations (playbooks) for an issue
+ */
+router.get(
+  '/:id/resolution-recommendations',
+  authenticateToken,
+  validate(Joi.object({
+    id: Joi.string().uuid().required()
+  })),
+  async (req: Request, res: Response) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { id } = req.params
+      const recommendations = await getResolutionRecommendations(id)
+
+      log.info('[ISSUES] Retrieved resolution recommendations', { id, count: recommendations.length })
+
+      res.json({
+        success: true,
+        data: { recommendations }
+      })
+    } catch (error: any) {
+      log.error('[ISSUES] Failed to get resolution recommendations:', error)
+      res.status(500).json({
+        success: false,
+        error: 'Failed to retrieve resolution recommendations',
+        message: error.message
+      })
+    }
+  }
+)
+
+/**
+ * GET /api/issues/project/:projectId/resolution-metrics
+ * Get resolution metrics for a project
+ */
+router.get(
+  '/project/:projectId/resolution-metrics',
+  authenticateToken,
+  validateParams(Joi.object({
+    projectId: Joi.string().uuid().required()
+  })),
+  async (req: Request, res: Response) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { projectId } = req.params
+      const metrics = await getResolutionMetrics(projectId)
+
+      log.info('[ISSUES] Retrieved resolution metrics', { projectId })
+
+      res.json({
+        success: true,
+        data: { metrics }
+      })
+    } catch (error: any) {
+      log.error('[ISSUES] Failed to get resolution metrics:', error)
+      res.status(500).json({
+        success: false,
+        error: 'Failed to retrieve resolution metrics',
         message: error.message
       })
     }

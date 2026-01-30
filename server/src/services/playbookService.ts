@@ -651,17 +651,17 @@ export async function findMatchingPlaybooks(
         let query = `
       SELECT p.*, 
         (
-          CASE WHEN $2 IS NOT NULL AND $2 = ANY(p.applicable_risk_categories) THEN 1 ELSE 0 END +
-          CASE WHEN $3 IS NOT NULL AND $3 = ANY(p.applicable_severity_levels) THEN 1 ELSE 0 END +
-          CASE WHEN $4 IS NOT NULL AND $4 = ANY(p.applicable_priority_levels) THEN 1 ELSE 0 END
+          CASE WHEN $2::text IS NOT NULL AND $2::text = ANY(p.applicable_risk_categories) THEN 1 ELSE 0 END +
+          CASE WHEN $3::text IS NOT NULL AND $3::text = ANY(p.applicable_severity_levels) THEN 1 ELSE 0 END +
+          CASE WHEN $4::text IS NOT NULL AND $4::text = ANY(p.applicable_priority_levels) THEN 1 ELSE 0 END
         ) as match_score
       FROM operational_playbooks p
       WHERE p.project_id = $1
         AND p.is_active = true
         AND (
-          p.applicable_risk_categories IS NULL OR $2 = ANY(p.applicable_risk_categories) OR
-          p.applicable_severity_levels IS NULL OR $3 = ANY(p.applicable_severity_levels) OR
-          p.applicable_priority_levels IS NULL OR $4 = ANY(p.applicable_priority_levels)
+          p.applicable_risk_categories IS NULL OR $2::text = ANY(p.applicable_risk_categories) OR
+          p.applicable_severity_levels IS NULL OR $3::text = ANY(p.applicable_severity_levels) OR
+          p.applicable_priority_levels IS NULL OR $4::text = ANY(p.applicable_priority_levels)
         )
       ORDER BY match_score DESC, p.created_at DESC
     `

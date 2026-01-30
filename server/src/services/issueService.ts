@@ -8,6 +8,7 @@
 import { pool } from '../database/connection'
 import { logger } from '../utils/logger'
 import { getMitigationPlans } from './mitigationPlanService'
+import * as playbookService from './playbookService'
 
 export interface Issue {
   id: string
@@ -40,6 +41,8 @@ export interface Issue {
   created_at: string
   updated_at: string
   created_by?: string
+  playbook_execution_id?: string
+  resolution_workflow?: any
 }
 
 export interface CreateIssueInput {
@@ -57,6 +60,7 @@ export interface CreateIssueInput {
   related_deliverable_id?: string
   source_document_id?: string
   tags?: string[]
+  playbook_execution_id?: string
 }
 
 export interface UpdateIssueInput {
@@ -76,6 +80,8 @@ export interface UpdateIssueInput {
   related_risk_id?: string
   notes?: string
   tags?: string[]
+  playbook_execution_id?: string
+  resolution_workflow?: any
 }
 
 export interface IssueFilters {
@@ -265,8 +271,8 @@ export async function createIssue(
         project_id, title, description, category, priority, impact,
         affected_areas, raised_by, assigned_to, target_resolution_date,
         related_risk_id, related_milestone_id, related_deliverable_id,
-        source_document_id, tags, created_by
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        source_document_id, tags, created_by, playbook_execution_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
       RETURNING *`,
       [
         input.project_id,
@@ -284,7 +290,8 @@ export async function createIssue(
         input.related_deliverable_id || null,
         input.source_document_id || null,
         input.tags || [],
-        userId
+        userId,
+        input.playbook_execution_id || null
       ]
     )
 
@@ -409,6 +416,18 @@ export async function updateIssue(
       params.push(input.tags)
     }
 
+    if (input.playbook_execution_id !== undefined) {
+      paramCount++
+      updates.push(`playbook_execution_id = $${paramCount}`)
+      params.push(input.playbook_execution_id || null)
+    }
+
+    if (input.resolution_workflow !== undefined) {
+      paramCount++
+      updates.push(`resolution_workflow = $${paramCount}`)
+      params.push(JSON.stringify(input.resolution_workflow))
+    }
+
     if (updates.length === 0) {
       // No updates, return existing issue
       const existing = await getIssueById(id)
@@ -418,7 +437,6 @@ export async function updateIssue(
       return existing
     }
 
-    paramCount++
     updates.push(`updated_at = CURRENT_TIMESTAMP`)
 
     paramCount++
@@ -697,14 +715,14 @@ function generateIssueDescription(
     sections.push('## Related Mitigation Plans')
     sections.push('The following mitigation plans were defined for this risk and may provide guidance for issue resolution:')
     sections.push('')
-    
+
     for (const plan of mitigationPlans) {
       sections.push(`### ${plan.title}`)
       sections.push(`**Action Type:** ${plan.action_type}`)
       sections.push(`**Status:** ${plan.status}`)
       sections.push(`**Priority:** ${plan.priority}`)
       sections.push(`**Completion:** ${plan.completion_percentage}%`)
-      
+
       if (plan.expected_effectiveness) {
         sections.push(`**Expected Effectiveness:** ${plan.expected_effectiveness}%`)
       }
@@ -740,7 +758,7 @@ function generateIssueDescription(
       }
       sections.push('')
     }
-    
+
     sections.push('**Note:** These mitigation plans may be used to initiate operational playbooks for issue resolution.')
     sections.push('')
   }
@@ -839,14 +857,14 @@ export async function escalateRiskToIssue(
     let mitigationPlans: any[] = []
     try {
       mitigationPlans = await getMitigationPlans({ risk_id: riskId }, userId)
-      logger.info('[ISSUE-SERVICE] Fetched mitigation plans for risk', { 
-        riskId, 
-        planCount: mitigationPlans.length 
+      logger.info('[ISSUE-SERVICE] Fetched mitigation plans for risk', {
+        riskId,
+        planCount: mitigationPlans.length
       })
     } catch (error: any) {
-      logger.warn('[ISSUE-SERVICE] Failed to fetch mitigation plans', { 
-        riskId, 
-        error: error.message 
+      logger.warn('[ISSUE-SERVICE] Failed to fetch mitigation plans', {
+        riskId,
+        error: error.message
       })
       // Continue without mitigation plans if fetch fails
     }
@@ -903,7 +921,7 @@ export async function escalateRiskToIssue(
             `   - Completion: ${plan.completion_percentage}%`,
             plan.expected_effectiveness ? `   - Expected Effectiveness: ${plan.expected_effectiveness}%` : '',
             plan.cost_estimate ? `   - Cost Estimate: ${plan.cost_estimate}` : '',
-            plan.status === 'in_progress' || plan.status === 'planned' 
+            plan.status === 'in_progress' || plan.status === 'planned'
               ? '   - ⚠️ ACTIVE: May trigger playbook execution'
               : ''
           ].filter(Boolean).join('\n')
@@ -912,7 +930,7 @@ export async function escalateRiskToIssue(
         '',
         'Playbook Trigger Candidates:',
         ...mitigationPlans
-          .filter(plan => 
+          .filter(plan =>
             (plan.status === 'in_progress' || plan.status === 'planned') &&
             (plan.action_type === 'contingency' || plan.action_type === 'mitigation')
           )
@@ -921,16 +939,16 @@ export async function escalateRiskToIssue(
 
       // Append to existing notes or create new notes
       const existingNotes = issue.notes || ''
-      const updatedNotes = existingNotes 
+      const updatedNotes = existingNotes
         ? `${existingNotes}\n\n${mitigationPlanNotes}`
         : mitigationPlanNotes
 
       await updateIssue(issue.id, { notes: updatedNotes }, userId)
-      
+
       logger.info('[ISSUE-SERVICE] Stored mitigation plan references in issue notes', {
         issueId: issue.id,
         planCount: mitigationPlans.length,
-        playbookCandidates: mitigationPlans.filter(p => 
+        playbookCandidates: mitigationPlans.filter(p =>
           (p.status === 'in_progress' || p.status === 'planned') &&
           (p.action_type === 'contingency' || p.action_type === 'mitigation')
         ).length
@@ -1036,5 +1054,48 @@ export function suggestRootCauseAnalysis(
     suggestedHypotheses: analysis.hypotheses,
     suggestedContributingFactors: analysis.factors,
     analysisQuestions: analysis.questions
+  }
+}
+
+/**
+ * Get resolution recommendations (playbooks) for an issue (Phase 2 Enhancement)
+ */
+export async function getResolutionRecommendations(issueId: string): Promise<playbookService.Playbook[]> {
+  try {
+    const result = await pool.query("SELECT project_id, category, priority FROM issues WHERE id = $1", [issueId])
+    if (result.rows.length === 0) return []
+
+    const issue = result.rows[0]
+    return await playbookService.findMatchingPlaybooks({
+      project_id: issue.project_id,
+      risk_category: issue.category,
+      priority_level: issue.priority
+    })
+  } catch (error) {
+    logger.error('[ISSUES] Error getting resolution recommendations:', error)
+    return []
+  }
+}
+
+/**
+ * Get resolution metrics for a project (Phase 2 Enhancement)
+ */
+export async function getResolutionMetrics(projectId: string): Promise<any> {
+  try {
+    const stats = await pool.query(`
+      SELECT 
+        COUNT(*) as total_issues,
+        COUNT(CASE WHEN status = 'resolved' OR status = 'closed' THEN 1 END) as closed_issues,
+        AVG(CASE WHEN status = 'resolved' OR status = 'closed' THEN 
+          EXTRACT(EPOCH FROM (date_resolved - date_raised)) / 3600 END) as avg_resolution_hours,
+        COUNT(CASE WHEN playbook_execution_id IS NOT NULL THEN 1 END) as issues_with_playbooks
+      FROM issues
+      WHERE project_id = $1
+    `, [projectId])
+
+    return stats.rows[0]
+  } catch (error) {
+    logger.error('[ISSUES] Error getting resolution metrics:', error)
+    return null
   }
 }

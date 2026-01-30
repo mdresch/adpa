@@ -41,6 +41,7 @@
     "migrate:670": "ts-node -r tsconfig-paths/register scripts/run-migration-670.ts",
     "migrate:671": "ts-node -r tsconfig-paths/register scripts/run-migration-671.ts",
     "migrate:672": "ts-node -r tsconfig-paths/register scripts/run-migration-672.ts",
+    "migrate:673": "ts-node -r tsconfig-paths/register scripts/run-migration-673.ts",
     "verify:risk-dedup": "ts-node -r tsconfig-paths/register scripts/verify-risk-deduplication.ts",
     "verify:requirements-dedup": "ts-node -r tsconfig-paths/register scripts/verify-requirements-deduplication.ts",
     "verify:milestones-dedup": "ts-node -r tsconfig-paths/register scripts/verify-milestones-deduplication.ts",

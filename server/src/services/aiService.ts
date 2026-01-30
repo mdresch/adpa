@@ -69,6 +69,19 @@ class AIService {
     logger.info("AI Service initialized - will fetch AI Gateway key from database")
   }
 
+  /**
+   * Decrypt API key (simple base64 as used in aiProviderService)
+   */
+  private decryptApiKey(encryptedApiKey?: string): string | undefined {
+    if (!encryptedApiKey) return undefined
+    try {
+      return Buffer.from(encryptedApiKey, 'base64').toString('utf-8')
+    } catch (error) {
+      logger.error('Failed to decrypt API key:', error)
+      return undefined
+    }
+  }
+
   private normalizeUsage(usage: any) {
     const inputTokens =
       usage?.inputTokens ??
@@ -126,14 +139,14 @@ class AIService {
   private calculateBackoffDelay(failureCount: number): number {
     // Exponential backoff: delay = initial * (multiplier ^ failureCount)
     let delay = this.INITIAL_BACKOFF_MS * Math.pow(this.BACKOFF_MULTIPLIER, failureCount - 1)
-    
+
     // Cap at max backoff
     delay = Math.min(delay, this.MAX_BACKOFF_MS)
-    
+
     // Add jitter to prevent thundering herd (±10%)
     const jitter = delay * this.BACKOFF_JITTER * (Math.random() * 2 - 1)
     delay = delay + jitter
-    
+
     return Math.floor(delay)
   }
 
@@ -142,18 +155,18 @@ class AIService {
    */
   private isProviderAvailable(provider: string): boolean {
     const backoffState = this.providerBackoff.get(provider)
-    
+
     if (!backoffState) {
       return true // No backoff state, provider is available
     }
-    
+
     const now = Date.now()
     if (now < backoffState.nextRetryTime) {
       const waitTime = Math.ceil((backoffState.nextRetryTime - now) / 1000)
       logger.info(`⏸️ [AI-BACKOFF] Provider ${provider} in backoff, retry in ${waitTime}s`)
       return false
     }
-    
+
     return true
   }
 
@@ -163,18 +176,18 @@ class AIService {
   private recordProviderFailure(provider: string): void {
     const now = Date.now()
     const existingState = this.providerBackoff.get(provider)
-    
+
     const failureCount = existingState ? existingState.failureCount + 1 : 1
     const backoffDelay = this.calculateBackoffDelay(failureCount)
     const nextRetryTime = now + backoffDelay
-    
+
     this.providerBackoff.set(provider, {
       provider,
       failureCount,
       lastFailureTime: now,
       nextRetryTime
     })
-    
+
     logger.warn(`⏸️ [AI-BACKOFF] Provider ${provider} failed (attempt ${failureCount}), backing off for ${Math.ceil(backoffDelay / 1000)}s`)
   }
 
@@ -183,7 +196,7 @@ class AIService {
    */
   private resetProviderBackoff(provider: string): void {
     const existingState = this.providerBackoff.get(provider)
-    
+
     if (existingState && existingState.failureCount > 0) {
       logger.info(`✅ [AI-BACKOFF] Provider ${provider} recovered, resetting backoff (was ${existingState.failureCount} failures)`)
       this.providerBackoff.delete(provider)
@@ -222,12 +235,12 @@ class AIService {
    * Dynamically checks database for active providers with exponential backoff
    */
   async generateWithFallback(
-    request: AIGenerateRequest, 
+    request: AIGenerateRequest,
     fallbackProviders?: string[]
   ): Promise<AIGenerateResponse & { providerUsed: string }> {
     // Always get active providers from database for filtering
     const activeProvidersFromDb = await this.getActiveProviders()
-    
+
     // Build provider list
     let availableProviders: string[]
     if (fallbackProviders && fallbackProviders.length > 0) {
@@ -236,10 +249,10 @@ class AIService {
     } else {
       availableProviders = activeProvidersFromDb
     }
-    
+
     // Check if requested provider is active
     const isRequestedProviderActive = activeProvidersFromDb.includes(request.provider)
-    
+
     // Build provider chain: only include requested provider if it's active
     let providers: string[]
     if (isRequestedProviderActive) {
@@ -248,16 +261,16 @@ class AIService {
       logger.info(`⚠️ [AI-FALLBACK] Requested provider ${request.provider} is not active, using active providers only`)
       providers = availableProviders
     }
-    
+
     // Filter out providers in backoff period
     const providersBeforeBackoff = providers.length
     providers = providers.filter(p => this.isProviderAvailable(p))
-    
+
     if (providers.length < providersBeforeBackoff) {
       const skipped = providersBeforeBackoff - providers.length
       logger.info(`⏸️ [AI-BACKOFF] Skipped ${skipped} provider(s) in backoff period`)
     }
-    
+
     // Auto-disable providers with insufficient funds
     const autoDisableProvider = async (providerType: string, reason: string) => {
       try {
@@ -276,35 +289,35 @@ class AIService {
         logger.error(`Failed to auto-disable provider ${providerType}:`, error)
       }
     }
-    
+
     if (providers.length === 0) {
       throw new Error('All active providers are currently in backoff period. Please try again later.')
     }
-    
+
     logger.info(`🔄 [AI-FALLBACK] Provider chain (active only): ${providers.join(' → ')}`)
-    
+
     let lastError: Error | null = null
     let attemptsWithBackoff = 0
-    
+
     for (const provider of providers) {
       try {
         attemptsWithBackoff++
         logger.info(`🔄 [AI-FALLBACK] Trying provider: ${provider} (attempt ${attemptsWithBackoff}/${providers.length})`)
-        
+
         const result = await this.generate({ ...request, provider })
-        
+
         // Success! Reset backoff for this provider
         this.resetProviderBackoff(provider)
-        
+
         logger.info(`✅ [AI-FALLBACK] Success with provider: ${provider}`)
         return { ...result, providerUsed: provider }
       } catch (error: any) {
         const errorMessage = error.message || 'Unknown error'
         logger.warn(`⚠️ [AI-FALLBACK] Provider ${provider} failed: ${errorMessage}`)
-        
+
         // Check if error is due to insufficient funds/credits or capacity exceeded
         const errorMessageLower = errorMessage.toLowerCase()
-        const isInsufficientFunds = 
+        const isInsufficientFunds =
           errorMessageLower.includes('insufficient funds') ||
           errorMessageLower.includes('insufficient_funds') ||
           errorMessageLower.includes('no credits') ||
@@ -321,13 +334,13 @@ class AIService {
           error.statusCode === 429 || // Too Many Requests
           error.type === 'insufficient_funds' ||
           error.code === 'rate_limit_exceeded'
-        
+
         // Check if it's a model not found error (should trigger fallback, not disable provider)
-        const isModelNotFound = 
+        const isModelNotFound =
           error.type === 'model_not_found' ||
           errorMessageLower.includes('model not found') ||
           errorMessageLower.includes('model:') && errorMessageLower.includes('not found')
-        
+
         if (isInsufficientFunds) {
           logger.error(`💳 [AI-CREDITS] Provider ${provider} has insufficient funds/credits or capacity exceeded`)
           await autoDisableProvider(provider, `Insufficient capacity: ${errorMessage}`)
@@ -339,9 +352,9 @@ class AIService {
           // Record failure and apply backoff for other errors
           this.recordProviderFailure(provider)
         }
-        
+
         lastError = error
-        
+
         // Add delay between provider attempts (progressive backoff)
         if (attemptsWithBackoff < providers.length) {
           const delayMs = Math.min(1000 * attemptsWithBackoff, 5000) // Max 5s between attempts
@@ -352,7 +365,7 @@ class AIService {
         }
       }
     }
-    
+
     // All providers failed
     logger.error('❌ [AI-FALLBACK] All active providers failed')
     throw lastError || new Error('All AI providers failed')
@@ -360,7 +373,7 @@ class AIService {
 
   async generate(request: AIGenerateRequest): Promise<AIGenerateResponse> {
     const startTime = Date.now()  // Capture start time for analytics
-    
+
     logger.debug('[AI-SERVICE] Generate called', {
       provider: request.provider,
       model: request.model,
@@ -368,11 +381,11 @@ class AIService {
       promptLength: request.prompt?.length || 0,
       hasPrompt: !!request.prompt
     })
-    
+
     // Fetch AI Gateway API key from database (optional - will fallback to direct provider calls if not configured)
     const { getAIGatewayKey } = await import("../routes/settings")
     const gatewayApiKey = await getAIGatewayKey()
-    
+
     if (!gatewayApiKey) {
       logger.info('[AI-SERVICE] No AI Gateway API key configured - will use direct provider APIs')
     } else {
@@ -382,7 +395,7 @@ class AIService {
     // KISS: Build system and user messages separately
     let systemMessage: string | undefined = undefined
     let userMessage: string = request.prompt
-    
+
     if (request.template_id) {
       const templateSystemPrompt = await this.getTemplateSystemPrompt(request.template_id)
       if (templateSystemPrompt) {
@@ -395,7 +408,7 @@ class AIService {
     } else {
       logger.debug('[AI-SERVICE] No template, using direct prompt')
     }
-    
+
     // If system_prompt provided directly in request, use that
     if (request.system_prompt) {
       systemMessage = request.system_prompt
@@ -407,7 +420,7 @@ class AIService {
       logger.debug('[AI-SERVICE] Looking up provider type')
       // Try to find provider by provider_type first (e.g., "mistral", "openai"), then by name
       const providerResult = await pool.query(
-        "SELECT provider_type, configuration FROM ai_providers WHERE (provider_type = $1 OR LOWER(name) = LOWER($1)) AND is_active = true LIMIT 1",
+        "SELECT provider_type, api_key_encrypted, configuration FROM ai_providers WHERE (provider_type = $1 OR LOWER(name) = LOWER($1)) AND is_active = true LIMIT 1",
         [request.provider]
       )
 
@@ -423,36 +436,37 @@ class AIService {
 
       const providerType = providerResult.rows[0].provider_type
       logger.debug('[AI-SERVICE] Provider type:', providerType)
-      
+
       // OPTIMIZATION: Skip AI Gateway for providers not natively supported
       // DeepSeek, Moonshot, xAI are OpenAI-compatible but not in AI Gateway's provider list
       // Anthropic bypassed to use user's direct credits (avoid Vercel AI Gateway billing)
       // Go straight to direct API to avoid unnecessary 404 errors or Vercel billing
       const directProviders = ['deepseek', 'moonshot', 'xai', 'anthropic']
       const useDirect = directProviders.includes(providerType)
-      
+
       if (useDirect) {
         logger.info(`🔄 [AI-SERVICE] Provider ${providerType} not in AI Gateway - using direct API`)
-        
-        // Get direct API key from provider configuration
-        const directApiKey = providerResult.rows[0].configuration?.apiKey
+
+        // Get direct API key from provider configuration OR encrypted field
+        const directApiKey = providerResult.rows[0].configuration?.apiKey || this.decryptApiKey(providerResult.rows[0].api_key_encrypted)
+
         if (!directApiKey) {
-          throw new Error(`Direct ${providerType} API key not found in provider configuration`)
+          throw new Error(`Direct ${providerType} API key not found in provider configuration or database`)
         }
-        
+
         // Handle each provider's direct API
         if (providerType === 'deepseek') {
           logger.info('🔄 [AI-SERVICE] Using official @ai-sdk/deepseek package...')
-          
-          const deepseek = createDeepSeek({ 
+
+          const deepseek = createDeepSeek({
             apiKey: directApiKey
           })
-          
+
           const deepseekModels = ['deepseek-chat', 'deepseek-reasoner', 'deepseek-coder']
-          const modelName = deepseekModels.includes(request.model || '') 
-            ? request.model 
+          const modelName = deepseekModels.includes(request.model || '')
+            ? request.model
             : 'deepseek-chat'
-          
+
           const deepseekResult = await generateText({
             model: deepseek(modelName),
             messages: [
@@ -462,16 +476,16 @@ class AIService {
             temperature: request.temperature,
             maxOutputTokens: request.max_tokens
           })
-          
+
           const { inputTokens, outputTokens, totalTokens } = this.normalizeUsage(deepseekResult.usage)
-          
+
           logger.info(`[AI] ✓ DeepSeek/${modelName} - ${totalTokens} tokens - ${Date.now() - startTime}ms`)
-          
+
           // Update usage stats
           await this.updateUsageStats(request.provider, {
             total_tokens: totalTokens,
           })
-          
+
           // Track detailed AI usage for analytics
           const responseTimeMs = Date.now() - startTime
           setImmediate(() => {
@@ -481,7 +495,7 @@ class AIService {
               total_tokens: totalTokens,
             }, responseTimeMs, true, request.userId, request.projectId, request.documentId)
           })
-          
+
           return {
             content: deepseekResult.text,
             provider: request.provider,
@@ -493,25 +507,25 @@ class AIService {
             },
           }
         }
-        
+
         if (providerType === 'moonshot') {
           logger.info('🔄 [AI-SERVICE] Using NATIVE OpenAI SDK for Moonshot...')
-          
+
           // OFFICIAL: Use native OpenAI SDK as per Moonshot documentation
-          const moonshotClient = new OpenAI({ 
+          const moonshotClient = new OpenAI({
             apiKey: directApiKey,
             baseURL: 'https://api.moonshot.ai/v1'
           })
-          
+
           // Official models from Moonshot docs
           const moonshotModels = ['kimi-k2-turbo-preview', 'moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k']
-          const modelName = moonshotModels.includes(request.model || '') 
-            ? request.model 
+          const modelName = moonshotModels.includes(request.model || '')
+            ? request.model
             : 'kimi-k2-turbo-preview'  // Use official working model
-          
+
           logger.info(`[AI-SERVICE] Moonshot model: ${modelName}`)
           logger.info(`[AI-SERVICE] Calling native chat.completions.create() - as per official docs`)
-          
+
           // Use native OpenAI SDK - exactly as Moonshot documentation shows
           const completion = await moonshotClient.chat.completions.create({
             model: modelName,
@@ -522,19 +536,19 @@ class AIService {
             temperature: request.temperature || 0.7,
             max_tokens: request.max_tokens
           })
-          
+
           const totalTokens = completion.usage?.total_tokens || 0
           const promptTokens = completion.usage?.prompt_tokens || 0
           const completionTokens = completion.usage?.completion_tokens || 0
           const content = completion.choices[0]?.message?.content || ''
-          
+
           logger.info(`[AI] ✓ Moonshot/${modelName} - ${totalTokens} tokens - ${Date.now() - startTime}ms`)
-          
+
           // Update usage stats
           await this.updateUsageStats(request.provider, {
             total_tokens: totalTokens,
           })
-          
+
           // Track detailed AI usage for analytics
           const responseTimeMs = Date.now() - startTime
           setImmediate(() => {
@@ -544,7 +558,7 @@ class AIService {
               total_tokens: totalTokens,
             }, responseTimeMs, true, request.userId, request.projectId, request.documentId)
           })
-          
+
           return {
             content,
             provider: request.provider,
@@ -556,19 +570,19 @@ class AIService {
             },
           }
         }
-        
+
         if (providerType === 'xai') {
           logger.info('🔄 [AI-SERVICE] Using official @ai-sdk/xai package...')
-          
-          const xai = createXai({ 
+
+          const xai = createXai({
             apiKey: directApiKey
           })
-          
+
           const xaiModels = ['grok-beta', 'grok-vision-beta']
-          const modelName = xaiModels.includes(request.model || '') 
-            ? request.model 
+          const modelName = xaiModels.includes(request.model || '')
+            ? request.model
             : 'grok-beta'
-          
+
           const xaiResult = await generateText({
             model: xai(modelName),
             messages: [
@@ -578,16 +592,16 @@ class AIService {
             temperature: request.temperature,
             maxOutputTokens: request.max_tokens
           })
-          
+
           const { inputTokens, outputTokens, totalTokens } = this.normalizeUsage(xaiResult.usage)
-          
+
           logger.info(`[AI] ✓ xAI/${modelName} - ${totalTokens} tokens - ${Date.now() - startTime}ms`)
-          
+
           // Update usage stats
           await this.updateUsageStats(request.provider, {
             total_tokens: totalTokens,
           })
-          
+
           // Track detailed AI usage for analytics
           const responseTimeMs = Date.now() - startTime
           setImmediate(() => {
@@ -597,7 +611,7 @@ class AIService {
               total_tokens: totalTokens,
             }, responseTimeMs, true, request.userId, request.projectId, request.documentId)
           })
-          
+
           return {
             content: xaiResult.text,
             provider: request.provider,
@@ -609,20 +623,20 @@ class AIService {
             },
           }
         }
-        
+
         if (providerType === 'anthropic') {
           logger.info('🔄 [AI-SERVICE] Using NATIVE Anthropic SDK to bypass Vercel AI Gateway...')
-          
+
           // Use native Anthropic SDK to use user's direct credits
-          const anthropicClient = new Anthropic({ 
+          const anthropicClient = new Anthropic({
             apiKey: directApiKey
           })
-          
+
           // Anthropic model name mapping - use full model names with date suffixes or -latest
           // Valid model names: claude-3-5-sonnet-20241022, claude-3-5-sonnet-latest, claude-3-opus-20240229, etc.
           const normalizeAnthropicModel = (model: string): string => {
             if (!model) return 'claude-sonnet-4-20250514'
-            
+
             // Map short names to full valid Anthropic model names
             const modelMappings: Record<string, string> = {
               'claude-3-5-sonnet': 'claude-sonnet-4-20250514',
@@ -638,45 +652,45 @@ class AIService {
               'claude-opus-4.0': 'claude-3-opus-20240229',
               'claude-4-opus': 'claude-3-opus-20240229'
             }
-            
+
             // If model already has a date suffix (YYYYMMDD), it's already valid
             const dateSuffixPattern = /-\d{8}$/
             if (dateSuffixPattern.test(model)) {
               return model
             }
-            
+
             // If model ends with -latest, it's already valid
             if (model.endsWith('-latest')) {
               return model
             }
-            
+
             // Map short name to full name
             const mapped = modelMappings[model.toLowerCase()] || modelMappings[model]
             if (mapped) {
               logger.debug(`[AI-SERVICE] Mapped Anthropic model: ${model} -> ${mapped}`)
               return mapped
             }
-            
+
             // If no mapping found, return as-is and let Anthropic API validate
             return model
           }
-          
+
           // Use the model name provided by the user, normalized
           const rawModelName = request.model || 'claude-sonnet-4-20250514'
           const modelName = normalizeAnthropicModel(rawModelName)
-          
+
           logger.info(`[AI-SERVICE] Anthropic model: ${modelName}${rawModelName !== modelName ? ` (normalized from ${rawModelName})` : ''}`)
           logger.info(`[AI-SERVICE] Calling native Anthropic messages.create()`)
-          
+
           // Build messages for Anthropic (separate system from messages)
           const anthropicMessages: Array<{ role: 'user' | 'assistant', content: string }> = []
-          
+
           // Add user message
           anthropicMessages.push({
             role: 'user',
             content: userMessage
           })
-          
+
           // Call native Anthropic API with proper error handling for fallback
           let completion
           try {
@@ -691,7 +705,7 @@ class AIService {
             // Format Anthropic errors for proper fallback handling
             const errorMessage = anthropicError?.error?.message || anthropicError?.message || 'Anthropic API error'
             const errorType = anthropicError?.error?.type || anthropicError?.type || 'unknown_error'
-            
+
             // Check if it's a model not found error - this should trigger fallback
             if (errorType === 'not_found_error' || errorMessage.includes('model:') || errorMessage.includes('not found')) {
               logger.warn(`⚠️ [AI-SERVICE] Anthropic model not found: ${modelName} - will trigger fallback`)
@@ -704,7 +718,7 @@ class AIService {
               fallbackError.originalError = anthropicError
               throw fallbackError
             }
-            
+
             // Re-throw other errors as-is for fallback mechanism
             // Ensure error has provider info for fallback handling
             if (!anthropicError.provider) {
@@ -712,19 +726,19 @@ class AIService {
             }
             throw anthropicError
           }
-          
+
           const content = completion.content[0]?.type === 'text' ? completion.content[0].text : ''
           const totalTokens = completion.usage.input_tokens + completion.usage.output_tokens
           const promptTokens = completion.usage.input_tokens
           const completionTokens = completion.usage.output_tokens
-          
+
           logger.info(`[AI] ✓ Anthropic/${modelName} - ${totalTokens} tokens - ${Date.now() - startTime}ms`)
-          
+
           // Update usage stats
           await this.updateUsageStats(request.provider, {
             total_tokens: totalTokens,
           })
-          
+
           // Track detailed AI usage for analytics
           const responseTimeMs = Date.now() - startTime
           setImmediate(() => {
@@ -734,7 +748,7 @@ class AIService {
               total_tokens: totalTokens,
             }, responseTimeMs, true, request.userId, request.projectId, request.documentId)
           })
-          
+
           return {
             content,
             provider: request.provider,
@@ -747,37 +761,37 @@ class AIService {
           }
         }
       }
-      
+
       // Continue with AI Gateway for supported providers (OpenAI, Google, Groq, Mistral)
       // Build AI Gateway model ID (e.g., 'groq/llama-3.1-8b-instant')
       const gatewayModelId = await this.buildGatewayModelId(providerType, request.model)
-      
+
       logger.info('🌐 [AI-SERVICE-6/8] AI Gateway generation starting:', gatewayModelId)
       logger.info('⏱️ [AI-SERVICE] Temperature:', request.temperature || 0.7)
       logger.info('📝 [AI-SERVICE] User message length:', userMessage.length, 'chars')
       if (systemMessage) {
         logger.info('📝 [AI-SERVICE] System message length:', systemMessage.length, 'chars')
       }
-      
+
       // FIXED: Use environment variable for AI Gateway (Vercel AI SDK requirement)
       // The SDK reads from process.env.OPENAI_API_KEY automatically
       // We temporarily set it in a try-finally block to minimize race condition window
       logger.info('🔑 [AI-SERVICE] Using AI Gateway API key (thread-safe as possible)')
-      
+
       // Use AI Gateway unified API (Vercel AI SDK)
       logger.info('🔗 [AI-SERVICE] Calling generateText() with AI Gateway...')
       logger.info('🔗 [AI-SERVICE] Model ID:', gatewayModelId)
       logger.info('🔑 [AI-SERVICE] API Key configured:', !!gatewayApiKey) // Don't log length (security)
-      
+
       // FIXED: Vercel AI SDK looks for AI_GATEWAY_API_KEY environment variable!
       // Documentation: https://vercel.com/docs/ai-gateway
       // Temporarily set process.env for this request
       const previousKey = process.env.AI_GATEWAY_API_KEY
       process.env.AI_GATEWAY_API_KEY = gatewayApiKey
-      
+
       let result
       let gatewaySuccess = false
-      
+
       try {
         // If AI Gateway is not configured, skip directly to fallback
         if (!gatewayApiKey) {
@@ -806,19 +820,19 @@ class AIService {
             maxOutputTokens: request.max_tokens || 2000,
           } as any)
         }
-        
+
         // Validate that result has content before marking as successful
         if (!result || !result.text || result.text.trim().length === 0) {
           logger.warn('[AI-SERVICE] AI Gateway returned empty content, triggering fallback')
           throw new Error('AI_GATEWAY_EMPTY_RESPONSE')
         }
-        
+
         gatewaySuccess = true
       } catch (gatewayError: any) {
         // Check if this is a "not configured" error (should fallback immediately)
         const isNotConfigured = gatewayError?.message === 'AI_GATEWAY_NOT_CONFIGURED'
         const isEmptyResponse = gatewayError?.message === 'AI_GATEWAY_EMPTY_RESPONSE'
-        
+
         if (isNotConfigured) {
           logger.info('🔄 [AI-SERVICE] AI Gateway not configured - using direct provider API')
         } else if (isEmptyResponse) {
@@ -827,13 +841,13 @@ class AIService {
           logger.warn('⚠️ [AI-SERVICE] AI Gateway failed, attempting direct provider fallback...')
           logger.warn('⚠️ [AI-SERVICE] Gateway error:', gatewayError?.message || gatewayError)
         }
-        
+
         // Check if result exists but is empty (edge case where gateway "succeeds" but returns empty)
         if (result && (!result.text || result.text.trim().length === 0)) {
           logger.warn('[AI-SERVICE] AI Gateway returned empty content, triggering fallback')
           gatewaySuccess = false // Mark as failed so fallback triggers
         }
-        
+
         // Restore key before fallback (only if we had one)
         if (gatewayApiKey) {
           if (previousKey) {
@@ -842,20 +856,20 @@ class AIService {
             delete process.env.AI_GATEWAY_API_KEY
           }
         }
-        
+
         // FALLBACK: Try direct Google AI
         if (providerType === 'google') {
           logger.info('🔄 [AI-SERVICE] Falling back to direct Google AI...')
-          
+
           // Get direct API key from provider configuration
           const directApiKey = providerResult.rows[0].configuration?.apiKey
           if (!directApiKey) {
             throw new Error('Direct Google AI API key not found in provider configuration')
           }
-          
+
           logger.debug('[AI-SERVICE] Using direct Google AI')
           const genAI = new GoogleGenerativeAI(directApiKey)
-          
+
           // Map deprecated/unavailable models to current working ones
           // Note: gemini-1.5-flash and gemini-1.5-pro are NOT available in v1beta API
           // Use gemini-2.0-flash-exp or gemini-2.5-flash which are confirmed working
@@ -867,16 +881,16 @@ class AIService {
             'gemini-1.5-flash': 'gemini-2.0-flash-exp', // Not available in v1beta
             'gemini-1.5-pro': 'gemini-2.0-flash-exp', // Not available in v1beta
           }
-          
+
           // Use mapped model or fallback to current default (gemini-2.0-flash-exp works in v1beta)
           const requestedModel = request.model || 'gemini-2.0-flash-exp'
           const modelName = modelMap[requestedModel] || requestedModel
-          
+
           // Validate model name (ensure it's a current model that works in v1beta API)
           // Only include models confirmed to work in v1beta API
           const validModels = ['gemini-2.0-flash-exp', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.5-flash-lite']
           const finalModel = validModels.includes(modelName) ? modelName : 'gemini-2.0-flash-exp'
-          
+
           // Log model mapping for debugging
           if (requestedModel !== finalModel) {
             logger.info(`[AI-SERVICE] Model mapping: ${requestedModel} → ${finalModel}`, {
@@ -889,15 +903,15 @@ class AIService {
           } else {
             logger.debug(`[AI-SERVICE] Using model: ${finalModel}`)
           }
-          
+
           const model = genAI.getGenerativeModel({ model: finalModel })
           // KISS: Combine system and user message for Google AI (it doesn't have separate system role)
-          const combinedPrompt = systemMessage 
+          const combinedPrompt = systemMessage
             ? `${systemMessage}\n\n---\n\n${userMessage}`
             : userMessage
           const googleResult = await model.generateContent(combinedPrompt)
           const response = await googleResult.response
-          
+
           // Check for safety filter blocks
           const blocked = response.promptFeedback?.blockReason
           if (blocked) {
@@ -907,9 +921,9 @@ class AIService {
             })
             throw new Error(`Google AI safety filter blocked content: ${blocked}`)
           }
-          
+
           const text = response.text()
-          
+
           // Validate that Google AI returned content
           if (!text || text.trim().length === 0) {
             logger.error('[AI-SERVICE] Google AI returned empty content', {
@@ -919,18 +933,18 @@ class AIService {
             })
             throw new Error('Google AI returned empty response - possible safety filter or content policy violation')
           }
-          
+
           logger.debug('[AI-SERVICE] Google AI successful:', { contentLength: text.length })
-          
+
           // Estimate token usage (Google AI doesn't always provide it)
           const promptLength = systemMessage ? systemMessage.length + userMessage.length : userMessage.length
           const estimatedTokens = Math.ceil((promptLength + text.length) / 4)
-          
+
           // Update usage stats
           await this.updateUsageStats(request.provider, {
             total_tokens: estimatedTokens,
           })
-          
+
           // Track detailed AI usage for analytics (background, non-blocking)
           const responseTimeMs = Date.now() - startTime
           setImmediate(() => {
@@ -940,9 +954,9 @@ class AIService {
               total_tokens: estimatedTokens,
             }, responseTimeMs, true, request.userId, request.projectId, request.documentId)
           })
-          
+
           logger.info(`[AI] ✓ Google AI/${finalModel} - ${estimatedTokens} tokens - ${Date.now() - startTime}ms`)
-          
+
           return {
             content: text,
             provider: request.provider,
@@ -954,27 +968,27 @@ class AIService {
             },
           }
         }
-        
+
         // FALLBACK: Try direct Mistral AI
         if (providerType === 'mistral') {
           logger.info('🔄 [AI-SERVICE] Falling back to direct Mistral AI...')
-          
+
           // Get direct API key from provider configuration
           const directApiKey = providerResult.rows[0].configuration?.apiKey
           if (!directApiKey) {
             throw new Error('Direct Mistral AI API key not found in provider configuration')
           }
-          
+
           logger.debug('[AI-SERVICE] Using direct Mistral AI')
-          
+
           const mistral = createMistral({ apiKey: directApiKey })
-          
+
           // Use appropriate Mistral model (not Google model!)
           const mistralModels = ['mistral-large-latest', 'mistral-small-latest', 'open-mistral-7b', 'open-mixtral-8x7b']
-          const modelName = mistralModels.includes(request.model || '') 
-            ? request.model 
+          const modelName = mistralModels.includes(request.model || '')
+            ? request.model
             : 'mistral-small-latest' // Default to small (free tier)
-          
+
           const mistralResult = await generateText({
             model: mistral(modelName),
             messages: [
@@ -984,16 +998,16 @@ class AIService {
             temperature: request.temperature,
             maxOutputTokens: request.max_tokens
           })
-          
+
           logger.debug('[AI-SERVICE] Mistral AI successful:', { contentLength: mistralResult.text.length })
-          
+
           const { inputTokens, outputTokens, totalTokens } = this.normalizeUsage(mistralResult.usage)
-          
+
           // Update usage stats
           await this.updateUsageStats(request.provider, {
             total_tokens: totalTokens,
           })
-          
+
           // Track detailed AI usage for analytics (background, non-blocking)
           const responseTimeMs = Date.now() - startTime
           setImmediate(() => {
@@ -1003,9 +1017,9 @@ class AIService {
               total_tokens: totalTokens,
             }, responseTimeMs, true, request.userId, request.projectId, request.documentId)
           })
-          
+
           logger.info(`[AI] ✓ Mistral AI/${modelName} - ${totalTokens} tokens - ${Date.now() - startTime}ms`)
-          
+
           return {
             content: mistralResult.text,
             provider: request.provider,
@@ -1017,30 +1031,30 @@ class AIService {
             },
           }
         }
-        
+
         // FALLBACK: Try direct DeepSeek
         if (providerType === 'deepseek') {
           logger.info('🔄 [AI-SERVICE] Falling back to direct DeepSeek...')
-          
+
           // Get direct API key from provider configuration
           const directApiKey = providerResult.rows[0].configuration?.apiKey
           if (!directApiKey) {
             throw new Error('Direct DeepSeek API key not found in provider configuration')
           }
-          
+
           logger.debug('[AI-SERVICE] Using direct DeepSeek (OpenAI-compatible)')
-          
-          const deepseek = createOpenAI({ 
+
+          const deepseek = createOpenAI({
             apiKey: directApiKey,
             baseURL: 'https://api.deepseek.com'
           })
-          
+
           // Use appropriate DeepSeek model
           const deepseekModels = ['deepseek-chat', 'deepseek-reasoner', 'deepseek-coder']
-          const modelName = deepseekModels.includes(request.model || '') 
-            ? request.model 
+          const modelName = deepseekModels.includes(request.model || '')
+            ? request.model
             : 'deepseek-chat' // Default to chat mode
-          
+
           const deepseekResult = await generateText({
             model: deepseek(modelName),
             messages: [
@@ -1050,16 +1064,16 @@ class AIService {
             temperature: request.temperature,
             maxOutputTokens: request.max_tokens
           })
-          
+
           logger.debug('[AI-SERVICE] DeepSeek successful:', { contentLength: deepseekResult.text.length })
-          
+
           const { inputTokens, outputTokens, totalTokens } = this.normalizeUsage(deepseekResult.usage)
-          
+
           // Update usage stats
           await this.updateUsageStats(request.provider, {
             total_tokens: totalTokens,
           })
-          
+
           // Track detailed AI usage for analytics (background, non-blocking)
           const responseTimeMs = Date.now() - startTime
           setImmediate(() => {
@@ -1069,9 +1083,9 @@ class AIService {
               total_tokens: totalTokens,
             }, responseTimeMs, true, request.userId, request.projectId, request.documentId)
           })
-          
+
           logger.info(`[AI] ✓ DeepSeek/${modelName} - ${totalTokens} tokens - ${Date.now() - startTime}ms`)
-          
+
           return {
             content: deepseekResult.text,
             provider: request.provider,
@@ -1083,30 +1097,30 @@ class AIService {
             },
           }
         }
-        
+
         // FALLBACK: Try direct Moonshot AI
         if (providerType === 'moonshot') {
           logger.info('🔄 [AI-SERVICE] Falling back to direct Moonshot AI...')
-          
+
           // Get direct API key from provider configuration
           const directApiKey = providerResult.rows[0].configuration?.apiKey
           if (!directApiKey) {
             throw new Error('Direct Moonshot AI API key not found in provider configuration')
           }
-          
+
           logger.debug('[AI-SERVICE] Using direct Moonshot AI (OpenAI-compatible)')
-          
-          const moonshot = createOpenAI({ 
+
+          const moonshot = createOpenAI({
             apiKey: directApiKey,
             baseURL: 'https://api.moonshot.ai/v1'
           })
-          
+
           // Use appropriate Moonshot model
           const moonshotModels = ['kimi-k2-0905-preview', 'moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k']
-          const modelName = moonshotModels.includes(request.model || '') 
-            ? request.model 
+          const modelName = moonshotModels.includes(request.model || '')
+            ? request.model
             : 'kimi-k2-0905-preview' // Default to latest Kimi K2
-          
+
           const moonshotResult = await generateText({
             model: moonshot(modelName),
             messages: [
@@ -1116,16 +1130,16 @@ class AIService {
             temperature: request.temperature,
             maxOutputTokens: request.max_tokens
           })
-          
+
           logger.debug('[AI-SERVICE] Moonshot AI successful:', { contentLength: moonshotResult.text.length })
-          
+
           const { inputTokens, outputTokens, totalTokens } = this.normalizeUsage(moonshotResult.usage)
-          
+
           // Update usage stats
           await this.updateUsageStats(request.provider, {
             total_tokens: totalTokens,
           })
-          
+
           // Track detailed AI usage for analytics (background, non-blocking)
           const responseTimeMs = Date.now() - startTime
           setImmediate(() => {
@@ -1135,9 +1149,9 @@ class AIService {
               total_tokens: totalTokens,
             }, responseTimeMs, true, request.userId, request.projectId, request.documentId)
           })
-          
+
           logger.info(`[AI] ✓ Moonshot AI/${modelName} - ${totalTokens} tokens - ${Date.now() - startTime}ms`)
-          
+
           return {
             content: moonshotResult.text,
             provider: request.provider,
@@ -1149,28 +1163,28 @@ class AIService {
             },
           }
         }
-        
+
         // FALLBACK: Try direct Ollama (uses native API, not OpenAI-compatible)
         if (providerType === 'ollama') {
           logger.info('🔄 [AI-SERVICE] Falling back to direct Ollama...')
-          
+
           // Ollama doesn't require API key for local connections
-          const ollamaEndpoint = providerResult.rows[0].configuration?.endpoint || 
-                                providerResult.rows[0].configuration?.baseURL || 
-                                'http://localhost:11434'
-          
+          const ollamaEndpoint = providerResult.rows[0].configuration?.endpoint ||
+            providerResult.rows[0].configuration?.baseURL ||
+            'http://localhost:11434'
+
           // Use the model specified in request, or default to llama3.1
           const modelName = request.model || 'llama3.1:latest'
-          
+
           logger.debug('[AI-SERVICE] Using Ollama native API', { endpoint: ollamaEndpoint, model: modelName })
-          
+
           try {
             // Build messages for Ollama chat API
             const messages = [
               ...(systemMessage ? [{ role: 'system', content: systemMessage }] : []),
               { role: 'user', content: userMessage }
             ]
-            
+
             // Call Ollama's native /api/chat endpoint
             const ollamaResponse = await fetch(`${ollamaEndpoint}/api/chat`, {
               method: 'POST',
@@ -1185,31 +1199,31 @@ class AIService {
                 }
               })
             })
-            
+
             if (!ollamaResponse.ok) {
               const errorText = await ollamaResponse.text()
               throw new Error(`Ollama API error (${ollamaResponse.status}): ${errorText}`)
             }
-            
+
             const ollamaData = await ollamaResponse.json() as any
             const generatedText = ollamaData.message?.content || ollamaData.response || ''
-            
-            logger.debug('[AI-SERVICE] Ollama successful:', { 
+
+            logger.debug('[AI-SERVICE] Ollama successful:', {
               contentLength: generatedText.length,
               totalDuration: ollamaData.total_duration,
               loadDuration: ollamaData.load_duration,
               promptEvalCount: ollamaData.prompt_eval_count,
               evalCount: ollamaData.eval_count
             })
-            
+
             // Calculate tokens (Ollama returns token counts in response)
             const promptTokens = ollamaData.prompt_eval_count || 0
             const completionTokens = ollamaData.eval_count || 0
             const totalTokens = promptTokens + completionTokens
-            
+
             // Update usage stats
             await this.updateUsageStats(request.provider, { total_tokens: totalTokens })
-            
+
             // Track detailed AI usage for analytics (background, non-blocking)
             const responseTimeMs = Date.now() - startTime
             setImmediate(() => {
@@ -1228,9 +1242,9 @@ class AIService {
                 request.documentId
               )
             })
-            
+
             logger.info(`[AI] ✓ Ollama/${modelName} - ${totalTokens} tokens - ${responseTimeMs}ms`)
-            
+
             return {
               content: generatedText,
               provider: request.provider,
@@ -1246,23 +1260,23 @@ class AIService {
             throw new Error(`Ollama generation failed: ${ollamaError.message}`)
           }
         }
-        
+
         // FALLBACK: Try direct OpenAI
         if (providerType === 'openai') {
           logger.info('🔄 [AI-SERVICE] Falling back to direct OpenAI...')
-          
+
           // Get direct API key from provider configuration
           const directApiKey = providerResult.rows[0].configuration?.apiKey
           if (!directApiKey) {
             throw new Error('Direct OpenAI API key not found in provider configuration')
           }
-          
+
           logger.debug('[AI-SERVICE] Using direct OpenAI')
           const openai = createOpenAI({ apiKey: directApiKey })
-          
+
           // Use the model specified in request, or default to gpt-4o
           const modelName = request.model || 'gpt-4o'
-          
+
           const openaiResult = await generateText({
             model: openai(modelName),
             messages: [
@@ -1272,16 +1286,16 @@ class AIService {
             temperature: request.temperature || 0.7,
             maxOutputTokens: request.max_tokens || 2000
           })
-          
+
           logger.debug('[AI-SERVICE] OpenAI successful:', { contentLength: openaiResult.text.length })
-          
+
           const { inputTokens, outputTokens, totalTokens } = this.normalizeUsage(openaiResult.usage)
-          
+
           // Update usage stats
           await this.updateUsageStats(request.provider, {
             total_tokens: totalTokens,
           })
-          
+
           // Track detailed AI usage for analytics (background, non-blocking)
           const responseTimeMs = Date.now() - startTime
           setImmediate(() => {
@@ -1300,9 +1314,9 @@ class AIService {
               request.documentId
             )
           })
-          
+
           logger.info(`[AI] ✓ OpenAI/${modelName} - ${totalTokens} tokens - ${responseTimeMs}ms`)
-          
+
           return {
             content: openaiResult.text,
             provider: request.provider,
@@ -1314,7 +1328,7 @@ class AIService {
             },
           }
         }
-        
+
         // No fallback available for this provider
         throw gatewayError
       } finally {
@@ -1376,7 +1390,7 @@ class AIService {
           },
         }
       }
-      
+
       // If we reach here, gateway failed or returned empty - should have been handled by fallback
       // This should not happen, but log it for debugging
       logger.error('[AI-SERVICE] Unexpected state: gatewaySuccess=false but no fallback return', {
@@ -1399,10 +1413,10 @@ class AIService {
   private async buildGatewayModelId(providerType: string, model?: string): Promise<string> {
     const defaultModels: Record<string, string> = {
       'openai': 'gpt-4o',
-      'google': 'gemini-2.0-flash-exp', // Use v1beta-compatible model
+      'google': 'gemini-2.0-flash', // Use stable flash model
       'groq': 'llama-3.3-70b-versatile',
       'mistral': 'mistral-large-latest',
-      'anthropic': 'claude-sonnet-4',
+      'anthropic': 'claude-3-5-sonnet-latest',
       'azure': 'gpt-4',
       'deepseek': 'deepseek-chat',
       'moonshot': 'kimi-k2-0905-preview',
@@ -1427,18 +1441,18 @@ class AIService {
     // Model mapping for deprecated/unavailable models (centralized validation)
     const modelMaps: Record<string, Record<string, string>> = {
       'google': {
-        'gemini-pro': 'gemini-2.0-flash-exp',
-        'gemini-pro-vision': 'gemini-2.0-flash-exp',
-        'gemini-1.0-pro': 'gemini-2.0-flash-exp',
-        'gemini-1.0-pro-vision': 'gemini-2.0-flash-exp',
-        'gemini-1.5-flash': 'gemini-2.0-flash-exp', // Not available in v1beta
-        'gemini-1.5-pro': 'gemini-2.0-flash-exp', // Not available in v1beta
+        'gemini-pro': 'gemini-2.0-flash',
+        'gemini-pro-vision': 'gemini-2.0-flash',
+        'gemini-1.0-pro': 'gemini-2.0-flash',
+        'gemini-1.0-pro-vision': 'gemini-2.0-flash',
+        'gemini-1.5-flash': 'gemini-2.0-flash',
+        'gemini-1.5-pro': 'gemini-2.0-flash',
       }
     }
 
     // Validate and map model if needed
     let modelId = model || defaultModels[providerType] || 'gpt-4o'
-    
+
     // Apply model mapping for deprecated models
     if (modelMaps[providerType] && modelMaps[providerType][modelId]) {
       const mappedModel = modelMaps[providerType][modelId]
@@ -1449,7 +1463,7 @@ class AIService {
       })
       modelId = mappedModel
     }
-    
+
     // Validate model against valid models list for Google (v1beta API compatibility)
     if (providerType === 'google') {
       const validModels = ['gemini-2.0-flash-exp', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.5-flash-lite']
@@ -1458,13 +1472,13 @@ class AIService {
         modelId = 'gemini-2.0-flash-exp'
       }
     }
-    
+
     // Check if the requested model is compatible with the provider
     const compatibleFamilies = providerModelFamilies[providerType] || []
-    const isCompatible = compatibleFamilies.some(family => 
+    const isCompatible = compatibleFamilies.some(family =>
       modelId.toLowerCase().includes(family.toLowerCase())
     )
-    
+
     // If model is incompatible, use provider's default model
     if (!isCompatible && model) {
       const fallback = defaultModels[providerType] || 'gpt-4o'
@@ -1476,7 +1490,7 @@ class AIService {
     if (modelId == null || modelId === '') {
       modelId = defaultModels[providerType] || 'gpt-4o'
     }
-    
+
     // Handle deprecated Groq models
     const groqModelMapping: Record<string, string> = {
       'gemma2-9b-it': 'llama3-8b-8192',
@@ -1484,7 +1498,7 @@ class AIService {
       'llama-3.2-90b-text-preview': 'llama-3.3-70b-versatile',
       'llama2-70b-4096': 'llama3-70b-8192',
     }
-    
+
     if (providerType === 'groq' && groqModelMapping[modelId]) {
       logger.info(`Mapping deprecated Groq model ${modelId} -> ${groqModelMapping[modelId]}`)
       modelId = groqModelMapping[modelId]
@@ -1526,12 +1540,12 @@ class AIService {
             }
           }
         }
-        
+
         // Only use fallback if available_models is empty or null
         if (!availableModels || availableModels.length === 0) {
           availableModels = this.getModelsForProvider(provider.provider_type)
         }
-        
+
         providers.push({
           id: provider.id,
           name: provider.name,
@@ -1652,10 +1666,10 @@ class AIService {
       } else {
         provider = providerResult.rows[0]
       }
-      
+
       // Calculate estimated cost
       const estimatedCost = this.calculateCost(provider.provider_type, usage.total_tokens)
-      
+
       // Track usage
       await AnalyticsTrackingService.trackAIUsage({
         providerId: provider.id,
@@ -1677,7 +1691,7 @@ class AIService {
         requestPayload: null,  // Can be enhanced later
         responseMetadata: null,
       })
-      
+
       logger.info(`📊 [ANALYTICS] Tracked: ${providerName}/${modelName} - ${usage.total_tokens} tokens, $${estimatedCost.toFixed(4)}`)
     } catch (error) {
       logger.error('📊 [ANALYTICS] Failed to track AI usage:', error)
@@ -1705,7 +1719,7 @@ class AIService {
       'azure': 30.00,       // Similar to OpenAI
       'ollama': 0.00,       // Local deployment - FREE
     }
-    
+
     const rate = costPer1M[providerType.toLowerCase()] || 10.00
     return (tokens / 1000000) * rate
   }
@@ -1728,13 +1742,13 @@ class AIService {
 
       const template = result.rows[0]
       let systemMessage = template.system_prompt || ''
-      
+
       // Add template content structure if defined
       if (template.content && Object.keys(template.content).length > 0) {
         systemMessage += '\n\nTEMPLATE STRUCTURE:\n'
         systemMessage += JSON.stringify(template.content, null, 2)
       }
-      
+
       return systemMessage
     } catch (error) {
       logger.error(`Failed to get template system prompt for ${templateId}:`, error)
@@ -1752,31 +1766,31 @@ class AIService {
     additionalContext?: string
   ): string {
     let userMessage = ''
-    
+
     // 1. Add variables (project-specific data)
     if (variables && Object.keys(variables).length > 0) {
       userMessage += 'PROJECT CONTEXT:\n'
       userMessage += JSON.stringify(variables, null, 2)
       userMessage += '\n\n'
     }
-    
+
     // 2. Add user's request
     if (userPrompt) {
       userMessage += 'USER REQUEST:\n'
       userMessage += userPrompt
       userMessage += '\n\n'
     }
-    
+
     // 3. Add additional context (from project/documents/integrations)
     if (additionalContext) {
       userMessage += 'ADDITIONAL CONTEXT:\n'
       userMessage += additionalContext
       userMessage += '\n\n'
     }
-    
+
     // 4. Add explicit instruction
     userMessage += 'Please extract the information above and populate the template using the provided data.'
-    
+
     return userMessage
   }
 

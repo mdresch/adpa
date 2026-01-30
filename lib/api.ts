@@ -189,6 +189,142 @@ export interface ProgramMetrics {
   }
 }
 
+export interface Risk {
+  id: string
+  project_id: string
+  title: string
+  description: string
+  category: string
+  probability: string
+  impact: string
+  severity: string
+  status: string
+  mitigation_plan?: string
+  contingency_plan?: string
+  owner_id?: string
+  identified_at: string
+  last_evaluated_at?: string
+  created_at: string
+  updated_at: string
+  // Playbook fields
+  recommended_playbook_id?: string
+  last_playbook_check_at?: string
+}
+
+export interface Issue {
+  id: string
+  project_id: string
+  title: string
+  description: string
+  category: 'technical' | 'resource' | 'schedule' | 'communication' | 'quality' | 'external' | 'scope' | 'budget' | 'other'
+  priority: 'critical' | 'high' | 'medium' | 'low'
+  impact?: string
+  affected_areas?: string[]
+  raised_by?: string
+  assigned_to?: string
+  escalated_to?: string
+  status: 'open' | 'acknowledged' | 'in_progress' | 'blocked' | 'resolved' | 'closed'
+  resolution?: string
+  workaround?: string
+  root_cause?: string
+  ai_suggested_resolution?: string
+  ai_confidence?: number
+  date_raised: string
+  target_resolution_date?: string
+  date_resolved?: string
+  date_closed?: string
+  related_risk_id?: string
+  tags?: string[]
+  created_at: string
+  updated_at: string
+  raised_by_name?: string
+  assigned_to_name?: string
+  // Playbook fields
+  playbook_execution_id?: string
+  resolution_workflow?: {
+    current_phase: string
+    playbook_started_at: string
+    completed_steps: string[]
+    last_action_at?: string
+    notes?: string
+  }
+}
+export interface IssueStats {
+  total_issues: number
+  open_issues: number
+  acknowledged_issues: number
+  in_progress_issues: number
+  blocked_issues: number
+  resolved_issues: number
+  closed_issues: number
+  critical_issues: number
+  high_issues: number
+  medium_issues: number
+  low_issues: number
+  overdue_issues: number
+  issues_with_playbooks?: number
+}
+
+export interface Playbook {
+  id: string
+  project_id: string
+  title: string
+  description: string
+  category: string
+  risk_category: string
+  severity_level: string
+  priority_level: string
+  is_active: boolean
+  usage_count: number
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+
+export interface PlaybookScenario {
+  id: string
+  playbook_id: string
+  scenario_name: string
+  condition_type: string
+  condition_value: any
+  logic_operator: string
+}
+
+export interface PlaybookStep {
+  id: string
+  playbook_id: string
+  step_order: number
+  title: string
+  description: string
+  action_type: string
+  expected_outcome?: string
+  sla_hours?: number
+}
+
+export interface PlaybookExecution {
+  id: string
+  playbook_id: string
+  project_id: string
+  risk_id?: string
+  issue_id?: string
+  started_at: string
+  completed_at?: string
+  status: 'active' | 'completed' | 'failed' | 'aborted'
+  current_step_order: number
+  metadata?: any
+}
+
+export interface PlaybookStepExecution {
+  id: string
+  execution_id: string
+  step_id: string
+  status: 'pending' | 'in_progress' | 'completed' | 'skipped' | 'failed'
+  started_at?: string
+  completed_at?: string
+  completed_by?: string
+  comments?: string
+}
+
 export interface Job {
   id: string
   type: string
@@ -250,6 +386,66 @@ export interface FixPendingJobsResponse {
     markedFailed: number
     errors: string[]
   }
+}
+
+export interface Playbook {
+  id: string
+  project_id: string
+  title: string
+  description: string
+  category: string
+  risk_category: string
+  severity_level: string
+  priority_level: string
+  is_active: boolean
+  usage_count: number
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+
+export interface PlaybookScenario {
+  id: string
+  playbook_id: string
+  scenario_name: string
+  condition_type: string
+  condition_value: any
+  logic_operator: string
+}
+
+export interface PlaybookStep {
+  id: string
+  playbook_id: string
+  step_order: number
+  title: string
+  description: string
+  action_type: string
+  expected_outcome?: string
+  sla_hours?: number
+}
+
+export interface PlaybookExecution {
+  id: string
+  playbook_id: string
+  project_id: string
+  risk_id?: string
+  issue_id?: string
+  started_at: string
+  completed_at?: string
+  status: 'active' | 'completed' | 'failed' | 'aborted'
+  current_step_order: number
+  metadata?: any
+}
+
+export interface PlaybookStepExecution {
+  id: string
+  execution_id: string
+  step_id: string
+  status: 'pending' | 'in_progress' | 'completed' | 'skipped' | 'failed'
+  started_at?: string
+  completed_at?: string
+  completed_by?: string
+  comments?: string
 }
 
 
@@ -718,7 +914,7 @@ class ApiClient {
           console.log("WebSocket disconnected")
         }
       })
-      
+
       // Suppress connection errors in production to reduce console noise
       this.socket.on("connect_error", (error: Error) => {
         if (process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_DEBUG_WS === 'true') {
@@ -1738,7 +1934,7 @@ class ApiClient {
       if (data.title) formData.append('title', data.title)
       if (data.priority) formData.append('priority', String(data.priority))
       formData.append('file', data.file)
-      
+
       return this.request(`/projects/${projectId}/context-items`, {
         method: 'POST',
         body: formData,
@@ -1958,6 +2154,51 @@ class ApiClient {
     return this.post(`/reviews/auto-generate`, {
       months_ahead: monthsAhead || 3
     })
+  }
+
+  // Playbook Management API
+  async getPlaybooks(params?: { project_id?: string; category?: string; is_active?: boolean }): Promise<{ playbooks: Playbook[] }> {
+    const query = params ? '?' + new URLSearchParams(params as any).toString() : ''
+    return this.get<{ playbooks: Playbook[] }>(`/playbooks${query}`)
+  }
+
+  async getPlaybook(id: string): Promise<{ playbook: Playbook; scenarios: PlaybookScenario[]; steps: PlaybookStep[] }> {
+    return this.get<{ playbook: Playbook; scenarios: PlaybookScenario[]; steps: PlaybookStep[] }>(`/playbooks/${id}`)
+  }
+
+  async createPlaybook(data: any): Promise<{ playbook: Playbook }> {
+    return this.post<{ playbook: Playbook }>('/playbooks', data)
+  }
+
+  async updatePlaybook(id: string, data: any): Promise<{ playbook: Playbook }> {
+    return this.put<{ playbook: Playbook }>(`/playbooks/${id}`, data)
+  }
+
+  async executePlaybook(playbookId: string, context: { project_id: string; risk_id?: string; issue_id?: string }): Promise<{ execution: PlaybookExecution }> {
+    return this.post<{ execution: PlaybookExecution }>(`/playbooks/${playbookId}/execute`, context)
+  }
+
+  async getMatchingPlaybooks(criteria: { project_id: string; risk_category?: string; severity_level?: string; priority_level?: string }): Promise<{ playbooks: Playbook[] }> {
+    const query = new URLSearchParams(criteria as any).toString()
+    return this.get<{ playbooks: Playbook[] }>(`/playbooks/match?${query}`)
+  }
+
+  async getPlaybookExecutions(params: { project_id?: string; status?: string }): Promise<{ executions: PlaybookExecution[] }> {
+    const query = new URLSearchParams(params as any).toString()
+    return this.get<{ executions: PlaybookExecution[] }>(`/playbooks/executions?${query}`)
+  }
+
+  async completePlaybookStep(executionId: string, stepId: string, comments?: string): Promise<{ success: boolean; next_step?: PlaybookStep }> {
+    return this.post<{ success: boolean; next_step?: PlaybookStep }>(`/playbooks/executions/${executionId}/steps/${stepId}/complete`, { comments })
+  }
+
+  // Issue Resolution API (Phase 2)
+  async getIssueResolutionRecommendations(issueId: string): Promise<{ recommendations: Playbook[] }> {
+    return this.get<{ recommendations: Playbook[] }>(`/issues/${issueId}/resolution-recommendations`)
+  }
+
+  async getIssueResolutionMetrics(projectId: string): Promise<{ metrics: any }> {
+    return this.get<{ metrics: any }>(`/issues/project/${projectId}/resolution-metrics`)
   }
 }
 

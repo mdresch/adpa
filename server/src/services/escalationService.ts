@@ -10,6 +10,7 @@ import { pool } from '../database/connection'
 import { logger } from '../utils/logger'
 import { emailNotificationService, BudgetOverrunEmailData, ScopeCreepEmailData } from './emailNotificationService'
 import { emergencyMeetingService } from './emergencyMeetingService'
+import * as playbookService from './playbookService'
 
 export interface EscalationRule {
   id: string
@@ -48,6 +49,7 @@ export interface DriftEvaluationResult {
   matchedRule: EscalationRule | null
   variancePercentage: number | null
   suggestedActions: string[]
+  recommendedPlaybooks?: playbookService.Playbook[]
 }
 
 export class EscalationService {
@@ -89,20 +91,32 @@ export class EscalationService {
         }
       }
 
+      // 3. Find matching playbooks (Phase 2 Enhancement)
+      const recommendedPlaybooks = await playbookService.findMatchingPlaybooks({
+        project_id: projectId,
+        risk_category: driftType.split('_')[0], // Extract category from drift type
+        severity_level: matchedRule?.severity_level || driftSeverity,
+        impact: matchedRule?.severity_level || driftSeverity
+      })
+
       // Generate suggested actions based on rule
       const suggestedActions = this.generateSuggestedActions(matchedRule, driftData)
 
-      logger.info('[ESCALATION] Escalation rule matched', {
-        ruleName: matchedRule.rule_name,
-        severity: matchedRule.severity_level,
-        escalateTo: matchedRule.escalate_to
+      if (recommendedPlaybooks.length > 0) {
+        suggestedActions.push(`Consider executing playbook: ${recommendedPlaybooks[0].title}`)
+      }
+
+      logger.info('[ESCALATION] Escalation evaluation complete', {
+        ruleMatched: !!matchedRule,
+        playbooksFound: recommendedPlaybooks.length
       })
 
       return {
-        shouldEscalate: true,
+        shouldEscalate: !!matchedRule || recommendedPlaybooks.length > 0,
         matchedRule,
         variancePercentage,
-        suggestedActions
+        suggestedActions,
+        recommendedPlaybooks
       }
     } catch (error) {
       logger.error('[ESCALATION] Error evaluating drift:', error)
@@ -313,8 +327,8 @@ export class EscalationService {
     driftData: any
   ): string {
     const emoji = rule.severity_level === 'emergency' ? '🚨🚨' :
-                  rule.severity_level === 'critical' ? '🚨' :
-                  rule.severity_level === 'high' ? '🔴' : '⚠️'
+      rule.severity_level === 'critical' ? '🚨' :
+        rule.severity_level === 'high' ? '🔴' : '⚠️'
 
     let summary = `${emoji} ${rule.severity_level.toUpperCase()}: `
 
@@ -427,7 +441,7 @@ export class EscalationService {
     if (Object.keys(updates).length > 0) {
       const setClauses = Object.keys(updates).map((key, i) => `${key} = $${i + 2}`).join(', ')
       const values = [alert.id, ...Object.values(updates)]
-      
+
       await pool.query(
         `UPDATE escalation_alerts SET ${setClauses}, status = 'notified', updated_at = NOW() WHERE id = $1`,
         values
@@ -574,7 +588,7 @@ export class EscalationService {
   ): Promise<void> {
     // TODO: Integrate with change request system
     logger.info('[ESCALATION] Change request would be auto-created for alert:', alert.id)
-    
+
     await pool.query(
       `UPDATE escalation_alerts 
        SET change_request_created = true, updated_at = NOW() 
@@ -605,13 +619,13 @@ export class EscalationService {
       // Only schedule meetings for budget overrun drift (as per TASK-743)
       if (rule.drift_type === 'budget_overrun' && alert.alert_details) {
         const driftData = alert.alert_details
-        
+
         // Get project details
         const projectResult = await pool.query(
           'SELECT id, name FROM projects WHERE id = $1',
           [alert.project_id]
         )
-        
+
         if (projectResult.rows.length === 0) {
           logger.warn('[ESCALATION] Project not found, cannot schedule meeting', {
             projectId: alert.project_id
@@ -691,7 +705,7 @@ export class EscalationService {
         logger.info('[ESCALATION] Meeting required but auto-scheduling only supports budget overrun', {
           driftType: rule.drift_type
         })
-        
+
         await pool.query(
           `UPDATE escalation_alerts 
            SET updated_at = NOW() 
@@ -794,6 +808,47 @@ export class EscalationService {
       notes,
       userId
     )
+  }
+
+  /**
+   * Proactively check for risk indicators in a project (Phase 2 Enhancement)
+   * Scans for patterns that might indicate emerging risks before they hit escalation thresholds
+   */
+  async checkRiskIndicators(projectId: string): Promise<playbookService.Playbook[]> {
+    try {
+      logger.info('[ESCALATION] Checking proactive risk indicators', { projectId })
+
+      // 1. Get recent project metrics/status
+      const projectResult = await pool.query(
+        "SELECT status, health_score, budget_status FROM projects WHERE id = $1",
+        [projectId]
+      )
+
+      if (projectResult.rows.length === 0) return []
+      const project = projectResult.rows[0]
+
+      // 2. Identify potential issues (simplified for this implementation)
+      const issues: any[] = []
+      if (project.health_score < 70) issues.push({ category: 'quality', severity: 'medium' })
+      if (project.status === 'on_hold') issues.push({ category: 'schedule', severity: 'high' })
+
+      // 3. Match playbooks for each identified issue
+      const allRecommended: playbookService.Playbook[] = []
+      for (const issue of issues) {
+        const matches = await playbookService.findMatchingPlaybooks({
+          project_id: projectId,
+          risk_category: issue.category,
+          severity_level: issue.severity
+        })
+        allRecommended.push(...matches)
+      }
+
+      // Deduplicate by ID
+      return Array.from(new Map(allRecommended.map(p => [p.id, p])).values())
+    } catch (error) {
+      logger.error('[ESCALATION] Error checking risk indicators:', error)
+      return []
+    }
   }
 }
 

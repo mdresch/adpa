@@ -1,0 +1,75 @@
+  console.log
+    ≡ƒöì DATABASE_URL check: Found (postgresql://postgres.blxzjbxc...)
+
+      at Object.<anonymous> (src/database/connection.ts:57:9)
+
+  console.log
+    ≡ƒöì NODE_ENV: test
+
+      at Object.<anonymous> (src/database/connection.ts:58:9)
+
+  console.log
+    ≡ƒöî Trying database connection via DATABASE_URL
+
+      at connectDatabase (src/database/connection.ts:178:17)
+
+  console.log
+    ≡ƒöº Using Supabase Transaction Pooler (port 6543) - using hostname directly
+
+      at connectDatabase (src/database/connection.ts:229:25)
+
+  console.log
+       Hostname: aws-1-us-east-1.pooler.supabase.com
+
+      at connectDatabase (src/database/connection.ts:230:25)
+
+  console.log
+       Username: postgres.blxzjbxczpmmgiwbtmdo
+
+      at connectDatabase (src/database/connection.ts:231:25)
+
+  console.log
+    ≡ƒöì DATABASE_URL check: Found (postgresql://postgres.blxzjbxc...)
+
+      at Object.<anonymous> (src/database/connection.ts:57:9)
+
+  console.log
+    ≡ƒöì NODE_ENV: test
+
+      at Object.<anonymous> (src/database/connection.ts:58:9)
+
+  console.log
+    ≡ƒöî Trying database connection via DATABASE_URL
+
+      at connectDatabase (src/database/connection.ts:178:17)
+
+  console.log
+    ≡ƒöº Using Supabase Transaction Pooler (port 6543) - using hostname directly
+
+      at connectDatabase (src/database/connection.ts:229:25)
+
+  console.log
+       Hostname: aws-1-us-east-1.pooler.supabase.com
+
+      at connectDatabase (src/database/connection.ts:230:25)
+
+  console.log
+       Username: postgres.blxzjbxczpmmgiwbtmdo
+
+      at connectDatabase (src/database/connection.ts:231:25)
+
+PASS src/__tests__/integration/resolution-workflow.test.ts (22.168 s)
+  Resolution Workflow Integration
+    ΓêÜ should recommend and associate a playbook with an issue (1869 ms)
+
+PASS src/__tests__/integration/playbook-execution.test.ts (22.167 s)
+  Playbook Execution Integration
+    ΓêÜ should recommend and execute a playbook during drift evaluation (1626 ms)
+
+A worker process has failed to exit gracefully and has been force exited. This is likely caused by tests leaking due to improper teardown. Try running with --detectOpenHandles to find leaks. Active timers can also cause this, ensure that .unref() was called on them.
+Test Suites: 2 passed, 2 total
+Tests:       2 passed, 2 total
+Snapshots:   0 total
+Time:        23.964 s
+Ran all test suites matching /src\\__tests__\\integration\\playbook-execution.test.ts|src\\__tests__\\integration\\resolution-workflow.test.ts/i.
+Force exiting Jest: Have you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
