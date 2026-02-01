@@ -181,8 +181,10 @@ export function ProjectIssuesTab({ projectId }: ProjectIssuesTabProps) {
   // Fetch stats
   const fetchStats = async () => {
     try {
-      const response = await apiClient.get<any>(`/issues/stats/${projectId}`)
-      setStats(response.data || null)
+      const response = await apiClient.get<{ success: boolean; data: any }>(`/issues/stats/${projectId}`)
+      // Backend returns { success: true, data: stats }
+      const statsData = response?.data || null
+      setStats(statsData)
     } catch (error: any) {
       console.error("Failed to fetch issue stats:", error)
     }
@@ -234,7 +236,7 @@ export function ProjectIssuesTab({ projectId }: ProjectIssuesTabProps) {
       // Convert empty strings to null for optional fields
       const payload = {
         ...formData,
-        project_id: projectId,
+        // project_id is not allowed in update (PUT)
         impact: formData.impact || null,
         assigned_to: formData.assigned_to || null,
         target_resolution_date: formData.target_resolution_date || null,
@@ -291,21 +293,21 @@ export function ProjectIssuesTab({ projectId }: ProjectIssuesTabProps) {
     return matchesSearch && matchesStatus && matchesPriority && matchesCategory
   })
 
-  // Chart data
+  // Chart data - convert string values to numbers
   const statusData = stats ? [
-    { name: 'Open', value: stats.open_issues, color: STATUS_COLORS.open },
-    { name: 'Acknowledged', value: stats.acknowledged_issues, color: STATUS_COLORS.acknowledged },
-    { name: 'In Progress', value: stats.in_progress_issues, color: STATUS_COLORS.in_progress },
-    { name: 'Blocked', value: stats.blocked_issues, color: STATUS_COLORS.blocked },
-    { name: 'Resolved', value: stats.resolved_issues, color: STATUS_COLORS.resolved },
-    { name: 'Closed', value: stats.closed_issues, color: STATUS_COLORS.closed },
+    { name: 'Open', value: Number(stats.open_issues) || 0, color: STATUS_COLORS.open },
+    { name: 'Acknowledged', value: Number(stats.acknowledged_issues) || 0, color: STATUS_COLORS.acknowledged },
+    { name: 'In Progress', value: Number(stats.in_progress_issues) || 0, color: STATUS_COLORS.in_progress },
+    { name: 'Blocked', value: Number(stats.blocked_issues) || 0, color: STATUS_COLORS.blocked },
+    { name: 'Resolved', value: Number(stats.resolved_issues) || 0, color: STATUS_COLORS.resolved },
+    { name: 'Closed', value: Number(stats.closed_issues) || 0, color: STATUS_COLORS.closed },
   ].filter(item => item.value > 0) : []
 
   const priorityData = stats ? [
-    { name: 'Critical', value: stats.critical_issues, color: PRIORITY_COLORS.critical },
-    { name: 'High', value: stats.high_issues, color: PRIORITY_COLORS.high },
-    { name: 'Medium', value: stats.medium_issues, color: PRIORITY_COLORS.medium },
-    { name: 'Low', value: stats.low_issues, color: PRIORITY_COLORS.low },
+    { name: 'Critical', value: Number(stats.critical_issues) || 0, color: PRIORITY_COLORS.critical },
+    { name: 'High', value: Number(stats.high_issues) || 0, color: PRIORITY_COLORS.high },
+    { name: 'Medium', value: Number(stats.medium_issues) || 0, color: PRIORITY_COLORS.medium },
+    { name: 'Low', value: Number(stats.low_issues) || 0, color: PRIORITY_COLORS.low },
   ].filter(item => item.value > 0) : []
 
   return (

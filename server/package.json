@@ -29,6 +29,7 @@
     "migrate:030": "node scripts/migrate-030-heartbeats.js",
     "migrate:031": "node scripts/migrate-031-system-metrics.js",
     "migrate:058": "node scripts/run-migration-058.js",
+    "migrate:356": "node scripts/migrate-single.js 356",
     "migrate:361": "node scripts/run-migration-361.ts",
     "migrate:401": "node scripts/run-migration-401.js",
     "migrate:663": "ts-node -r tsconfig-paths/register scripts/run-migration-663.ts",

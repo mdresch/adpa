@@ -269,49 +269,55 @@ export interface Playbook {
   id: string
   project_id: string
   title: string
-  description: string
-  category: string
-  risk_category: string
-  severity_level: string
-  priority_level: string
+  description?: string
+  category: 'risk' | 'incident' | 'escalation' | 'resolution'
+  trigger_type: 'auto' | 'manual' | 'threshold'
+  applicable_risk_categories?: string[]
+  applicable_severity_levels?: string[]
+  applicable_priority_levels?: string[]
   is_active: boolean
-  usage_count: number
-  created_by: string
   created_at: string
   updated_at: string
+  version: number
 }
 
 export interface PlaybookScenario {
   id: string
   playbook_id: string
-  scenario_name: string
-  condition_type: string
-  condition_value: any
-  logic_operator: string
+  scenario_condition: any
+  trigger_type: 'auto' | 'manual'
+  priority: number
+  description?: string
 }
 
 export interface PlaybookStep {
   id: string
   playbook_id: string
   step_order: number
-  title: string
-  description: string
-  action_type: string
-  expected_outcome?: string
+  step_title: string
+  step_description?: string
+  step_type: 'action' | 'approval' | 'notification' | 'escalation' | 'documentation' | 'wait'
+  assigned_role?: string
   sla_hours?: number
+  step_config: any
 }
 
 export interface PlaybookExecution {
   id: string
   playbook_id: string
-  project_id: string
-  risk_id?: string
-  issue_id?: string
+  triggered_by_type: 'risk' | 'issue' | 'escalation' | 'manual'
+  triggered_by_id: string
+  trigger_type: 'auto' | 'manual'
+  status: 'pending' | 'in_progress' | 'completed' | 'cancelled' | 'failed'
+  current_step_id?: string
+  current_step_order?: number
+  completed_steps: number
+  total_steps: number
   started_at: string
   completed_at?: string
-  status: 'active' | 'completed' | 'failed' | 'aborted'
-  current_step_order: number
-  metadata?: any
+  playbook_title?: string
+  playbook_category?: string
+  step_executions?: PlaybookStepExecution[]
 }
 
 export interface PlaybookStepExecution {
@@ -322,7 +328,9 @@ export interface PlaybookStepExecution {
   started_at?: string
   completed_at?: string
   completed_by?: string
-  comments?: string
+  completion_notes?: string
+  step_title?: string
+  step_order?: number
 }
 
 export interface Job {
@@ -388,65 +396,6 @@ export interface FixPendingJobsResponse {
   }
 }
 
-export interface Playbook {
-  id: string
-  project_id: string
-  title: string
-  description: string
-  category: string
-  risk_category: string
-  severity_level: string
-  priority_level: string
-  is_active: boolean
-  usage_count: number
-  created_by: string
-  created_at: string
-  updated_at: string
-}
-
-export interface PlaybookScenario {
-  id: string
-  playbook_id: string
-  scenario_name: string
-  condition_type: string
-  condition_value: any
-  logic_operator: string
-}
-
-export interface PlaybookStep {
-  id: string
-  playbook_id: string
-  step_order: number
-  title: string
-  description: string
-  action_type: string
-  expected_outcome?: string
-  sla_hours?: number
-}
-
-export interface PlaybookExecution {
-  id: string
-  playbook_id: string
-  project_id: string
-  risk_id?: string
-  issue_id?: string
-  started_at: string
-  completed_at?: string
-  status: 'active' | 'completed' | 'failed' | 'aborted'
-  current_step_order: number
-  metadata?: any
-}
-
-export interface PlaybookStepExecution {
-  id: string
-  execution_id: string
-  step_id: string
-  status: 'pending' | 'in_progress' | 'completed' | 'skipped' | 'failed'
-  started_at?: string
-  completed_at?: string
-  completed_by?: string
-  comments?: string
-}
 
 
 // PMBOK 8 Performance Domain Types
@@ -763,7 +712,7 @@ class ApiClient {
         // Create an error object that includes the response data for better error handling
         // Extract message from various possible locations in the response
         const responseData = data as Record<string, unknown>
-        let errorMessage = responseData?.message || responseData?.error || `HTTP error! status: ${response.status}`
+        let errorMessage: any = responseData?.message || responseData?.error || `HTTP error! status: ${response.status}`
 
         // Ensure errorMessage is a string
         if (typeof errorMessage !== 'string') {
@@ -2174,8 +2123,20 @@ class ApiClient {
     return this.put<{ playbook: Playbook }>(`/playbooks/${id}`, data)
   }
 
-  async executePlaybook(playbookId: string, context: { project_id: string; risk_id?: string; issue_id?: string }): Promise<{ execution: PlaybookExecution }> {
-    return this.post<{ execution: PlaybookExecution }>(`/playbooks/${playbookId}/execute`, context)
+  async executePlaybook(
+    playbookId: string,
+    data: {
+      triggered_by_type: 'risk' | 'issue' | 'escalation' | 'manual',
+      triggered_by_id: string,
+      trigger_type: 'auto' | 'manual',
+      trigger_reason?: string
+    }
+  ): Promise<{ execution: PlaybookExecution }> {
+    return this.post<{ execution: PlaybookExecution }>(`/playbooks/${playbookId}/execute`, data)
+  }
+
+  async getExecutionById(executionId: string): Promise<{ execution: PlaybookExecution }> {
+    return this.get<{ execution: PlaybookExecution }>(`/playbooks/executions/${executionId}`)
   }
 
   async getMatchingPlaybooks(criteria: { project_id: string; risk_category?: string; severity_level?: string; priority_level?: string }): Promise<{ playbooks: Playbook[] }> {

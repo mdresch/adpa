@@ -50,6 +50,17 @@ async function verify() {
         }, userId);
         console.log(`✅ Step added: ${step.id}`);
 
+        // 4.5 Add Second Step
+        console.log('📝 Adding second step...');
+        const step2 = await playbookService.addStep({
+            playbook_id: playbook.id,
+            step_order: 2,
+            step_title: 'Verify Second Step',
+            step_type: 'action',
+            step_config: { check: 'done' }
+        }, userId);
+        console.log(`✅ Second step added: ${step2.id}`);
+
         // 5. Execute Playbook
         console.log('⚡ Executing playbook...');
         const execution = await playbookService.executePlaybook({
@@ -59,6 +70,11 @@ async function verify() {
             trigger_type: 'manual'
         }, userId);
         console.log(`✅ Execution started: ${execution.id}`);
+
+        if (execution.current_step_order !== 1) {
+            throw new Error(`❌ Expected current_step_order to be 1, got ${execution.current_step_order}`);
+        }
+        console.log('✅ Initial step order verified as 1');
 
         // 6. Complete Step
         console.log('✅ Completing step...');
@@ -70,6 +86,13 @@ async function verify() {
             { status: 'ok' }
         );
         console.log('✅ Step completed');
+
+        // 6.1 Verify Step Order Increment
+        const updatedExecution = await playbookService.getExecutionById(execution.id);
+        if (updatedExecution?.current_step_order !== 2) {
+            throw new Error(`❌ Expected current_step_order to be 2, got ${updatedExecution?.current_step_order}`);
+        }
+        console.log('✅ Step order incremented to 2 verified');
 
         // 7. Cleanup
         console.log('🧹 Cleaning up...');

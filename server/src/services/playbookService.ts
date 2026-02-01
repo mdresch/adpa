@@ -69,6 +69,7 @@ export interface PlaybookExecution {
     trigger_reason?: string
     status: 'pending' | 'in_progress' | 'completed' | 'cancelled' | 'failed'
     current_step_id?: string
+    current_step_order?: number
     completed_steps: number
     total_steps: number
     started_at?: string
@@ -792,7 +793,10 @@ export async function executePlaybook(
             JSON.stringify({})
         ])
 
-        const execution = executionResult.rows[0]
+        const execution = {
+            ...executionResult.rows[0],
+            current_step_order: firstStep?.step_order || (totalSteps > 0 ? 1 : null)
+        }
 
         // Create step execution records for all steps
         for (const step of stepsResult.rows) {
@@ -986,9 +990,11 @@ export async function getExecutionById(
         const execResult = await pool.query(`
       SELECT pe.*, 
         op.title as playbook_title,
-        op.category as playbook_category
+        op.category as playbook_category,
+        prs.step_order as current_step_order
       FROM playbook_executions pe
       JOIN operational_playbooks op ON pe.playbook_id = op.id
+      LEFT JOIN playbook_response_steps prs ON pe.current_step_id = prs.id
       WHERE pe.id = $1
     `, [executionId])
 
@@ -1040,9 +1046,11 @@ export async function getExecutions(
       SELECT pe.*, 
         op.title as playbook_title,
         op.category as playbook_category,
-        op.project_id
+        op.project_id,
+        prs.step_order as current_step_order
       FROM playbook_executions pe
       JOIN operational_playbooks op ON pe.playbook_id = op.id
+      LEFT JOIN playbook_response_steps prs ON pe.current_step_id = prs.id
       WHERE 1=1
     `
         const params: any[] = []

@@ -14,8 +14,14 @@ import {
     ChevronRight,
     Sparkles,
     CheckCircle,
-    Loader2
+    Loader2,
+    MoreVertical,
+    XCircle
 } from "@/components/ui/icons-shim"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { format, differenceInHours } from "date-fns"
 import { apiClient, Issue, Playbook, PlaybookExecution, PlaybookStep } from "@/lib/api"
 import { toast } from "@/lib/notify"
@@ -32,6 +38,15 @@ export function ResolutionWorkflowCard({ issue, onUpdate }: ResolutionWorkflowCa
     const [steps, setSteps] = useState<PlaybookStep[]>([])
     const [stepExecutions, setStepExecutions] = useState<any[]>([])
     const [loadingAction, setLoadingAction] = useState<string | null>(null)
+
+    // Completion Dialog State
+    const [completionDialogOpen, setCompletionDialogOpen] = useState(false)
+    const [selectedStepId, setSelectedStepId] = useState<string | null>(null)
+    const [completionNotes, setCompletionNotes] = useState("")
+
+    // Cancellation State
+    const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
+    const [cancelReason, setCancelReason] = useState("")
 
     useEffect(() => {
         if (issue.playbook_execution_id) {
@@ -56,20 +71,12 @@ export function ResolutionWorkflowCard({ issue, onUpdate }: ResolutionWorkflowCa
     const fetchExecutionDetails = async (executionId: string) => {
         try {
             setLoading(true)
-            // We need an endpoint to get execution details with steps
-            // For now, let's assume getPlaybook returns execution info or we have a specific execution endpoint
-            // Let's use getPlaybook for the playbook info and assume steps are there
-            // Wait, I need to know which playbook is being executed
-            const executionsResp = await apiClient.getPlaybookExecutions({ project_id: issue.project_id })
-            const currentExec = executionsResp.executions.find(e => e.id === executionId)
+            const { execution: currentExec } = await apiClient.getExecutionById(executionId)
 
             if (currentExec) {
                 setExecution(currentExec)
                 const playbookResp = await apiClient.getPlaybook(currentExec.playbook_id)
                 setSteps(playbookResp.steps || [])
-
-                // In a real app, we'd also fetch step executions to know which are completed
-                // For this demo/phase, we'll derive from current_step_order
             }
         } catch (error) {
             console.error("Failed to fetch execution details:", error)
@@ -82,8 +89,9 @@ export function ResolutionWorkflowCard({ issue, onUpdate }: ResolutionWorkflowCa
         try {
             setLoadingAction(playbookId)
             const resp = await apiClient.executePlaybook(playbookId, {
-                project_id: issue.project_id,
-                issue_id: issue.id
+                triggered_by_type: 'issue',
+                triggered_by_id: issue.id,
+                trigger_type: 'manual'
             })
             toast.success("Playbook started successfully")
             if (onUpdate) onUpdate()
@@ -94,24 +102,60 @@ export function ResolutionWorkflowCard({ issue, onUpdate }: ResolutionWorkflowCa
         }
     }
 
-    const handleCompleteStep = async (stepId: string) => {
-        if (!execution) return
+    const initiateCompleteStep = (stepId: string) => {
+        setSelectedStepId(stepId)
+        setCompletionNotes("")
+        setCompletionDialogOpen(true)
+    }
+
+    const submitCompleteStep = async () => {
+        if (!execution || !selectedStepId) return
 
         try {
-            setLoadingAction(stepId)
-            await apiClient.completePlaybookStep(execution.id, stepId)
+            setLoadingAction(selectedStepId)
+            setCompletionDialogOpen(false) // Close immediately to show loading on button
+
+            await apiClient.completePlaybookStep(execution.id, selectedStepId, completionNotes)
+
             toast.success("Step completed")
             fetchExecutionDetails(execution.id)
             if (onUpdate) onUpdate()
         } catch (error: any) {
             toast.error(error.message || "Failed to complete step")
+            setCompletionDialogOpen(true) // Re-open on error
         } finally {
             setLoadingAction(null)
+            if (!completionDialogOpen) setSelectedStepId(null)
+        }
+    }
+
+    const handleCancelPlaybook = async () => {
+        if (!execution) return
+
+        try {
+            setLoading(true)
+            setCancelDialogOpen(false)
+
+            // Assuming there's a cancel method in API, if not we'll need to add it or use raw fetch
+            // But based on previous context, apiClient.cancelPlaybookExecution might not be exposed yet
+            // verifying api.ts previously showed `cancelExecution` in backend service but we need to check client
+            // If missing in client types, we might need to use generic post for now or add it to client.
+            // Using generic post as safe fallback based on route verification: POST /api/playbooks/executions/:id/cancel
+
+            await apiClient.post(`/playbooks/executions/${execution.id}/cancel`, { reason: cancelReason })
+
+            toast.success("Playbook execution cancelled")
+            fetchExecutionDetails(execution.id)
+            if (onUpdate) onUpdate()
+        } catch (error: any) {
+            toast.error(error.message || "Failed to cancel playbook")
+        } finally {
+            setLoading(false)
         }
     }
 
     const calculateProgress = () => {
-        if (!steps.length || !execution) return 0
+        if (!steps.length || !execution || !execution.current_step_order) return 0
         return Math.round(((execution.current_step_order - 1) / steps.length) * 100)
     }
 
@@ -135,9 +179,24 @@ export function ResolutionWorkflowCard({ issue, onUpdate }: ResolutionWorkflowCa
                         <CardTitle className="text-lg">Resolution Workflow</CardTitle>
                     </div>
                     {execution && (
-                        <Badge variant={execution.status === 'active' ? 'default' : 'secondary'}>
-                            {execution.status.toUpperCase()}
+                        <Badge variant={execution.status === 'in_progress' ? 'default' : execution.status === 'completed' ? 'secondary' : 'destructive'}>
+                            {execution.status.replace('_', ' ').toUpperCase()}
                         </Badge>
+                    )}
+                    {execution && execution.status === 'in_progress' && (
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                    <MoreVertical className="h-4 w-4" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => setCancelDialogOpen(true)} className="text-red-600 focus:text-red-600">
+                                    <XCircle className="mr-2 h-4 w-4" />
+                                    Cancel Playbook
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                     )}
                 </div>
                 <CardDescription>
@@ -181,7 +240,7 @@ export function ResolutionWorkflowCard({ issue, onUpdate }: ResolutionWorkflowCa
                                         <div className="flex-1">
                                             <div className="flex items-center justify-between">
                                                 <p className={`font-medium text-sm ${isCurrent ? 'text-primary' : ''}`}>
-                                                    {step.title}
+                                                    {step.step_title}
                                                 </p>
                                                 {step.sla_hours && isCurrent && (
                                                     <div className="flex items-center text-[10px] text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded">
@@ -191,7 +250,7 @@ export function ResolutionWorkflowCard({ issue, onUpdate }: ResolutionWorkflowCa
                                                 )}
                                             </div>
                                             <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
-                                                {step.description}
+                                                {step.step_description}
                                             </p>
 
                                             {isCurrent && (
@@ -199,7 +258,7 @@ export function ResolutionWorkflowCard({ issue, onUpdate }: ResolutionWorkflowCa
                                                     size="sm"
                                                     variant="ghost"
                                                     className="mt-2 h-7 text-xs bg-primary text-primary-foreground hover:bg-primary/90"
-                                                    onClick={() => handleCompleteStep(step.id)}
+                                                    onClick={() => initiateCompleteStep(step.id)}
                                                     disabled={loadingAction === step.id}
                                                 >
                                                     {loadingAction === step.id ? (
@@ -241,7 +300,7 @@ export function ResolutionWorkflowCard({ issue, onUpdate }: ResolutionWorkflowCa
                                         </Badge>
                                         <span className="text-[10px] text-muted-foreground flex items-center gap-1">
                                             <Sparkles className="h-3 w-3 text-orange-400" />
-                                            {playbook.usage_count || 0} successful runs
+                                            Standardized procedure
                                         </span>
                                     </div>
                                 </div>
@@ -283,6 +342,61 @@ export function ResolutionWorkflowCard({ issue, onUpdate }: ResolutionWorkflowCa
                     </div>
                 </CardFooter>
             )}
+            {/* Completion Dialog */}
+            <Dialog open={completionDialogOpen} onOpenChange={setCompletionDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Complete Step</DialogTitle>
+                        <DialogDescription>
+                            Provide any notes or observations before marking this step as complete.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-2">
+                        <div className="space-y-2">
+                            <Label htmlFor="notes">Notes (Optional)</Label>
+                            <Textarea
+                                id="notes"
+                                placeholder="Enter details about what was done..."
+                                value={completionNotes}
+                                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setCompletionNotes(e.target.value)}
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setCompletionDialogOpen(false)}>Cancel</Button>
+                        <Button onClick={submitCompleteStep}>Complete Step</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Cancellation Dialog */}
+            <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Cancel Playbook</DialogTitle>
+                        <DialogDescription>
+                            Are you sure you want to stop this playbook? This action cannot be undone.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-2">
+                        <div className="space-y-2">
+                            <Label htmlFor="reason">Reason for Cancellation</Label>
+                            <Textarea
+                                id="reason"
+                                placeholder="Why is this playbook being cancelled?"
+                                value={cancelReason}
+                                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setCancelReason(e.target.value)}
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setCancelDialogOpen(false)}>Go Back</Button>
+                        <Button variant="destructive" onClick={handleCancelPlaybook} disabled={!cancelReason.trim()}>
+                            Cancel Playbook
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </Card>
     )
 }

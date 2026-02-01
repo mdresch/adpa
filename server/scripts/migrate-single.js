@@ -9,6 +9,7 @@
 const db = require('../src/lib/db');
 const fs = require('fs');
 const path = require('path');
+const { Pool } = require('pg');
 
 // Load environment variables from server directory - try both .env and ../.env
 require('dotenv').config({ path: path.join(__dirname, '.env') });
@@ -39,7 +40,8 @@ const migrationMap = {
     '018': { file: '018_earned_value_metrics.sql', description: 'Earned Value Metrics' },
     '019': { file: '019_opportunities.sql', description: 'Opportunities' },
     '020': { file: '020_risk_responses.sql', description: 'Risk Responses' },
-    '021': { file: '021_performance_actuals.sql', description: 'Performance Actuals' }
+    '021': { file: '021_performance_actuals.sql', description: 'Performance Actuals' },
+    '356': { file: '356_add_materialized_status_to_risks.sql', description: 'Add Materialized Status to Risks' }
 };
 
 const migration = migrationMap[migrationNumber];
@@ -151,7 +153,7 @@ async function applyMigration() {
         }
     } finally {
         client.release();
-        try { await db.end() } catch (e) {}
+        try { await db.end() } catch (e) { }
     }
 }
 

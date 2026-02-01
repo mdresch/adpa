@@ -12,6 +12,7 @@ describe('Playbook Service', () => {
     let testProjectId: string;
     let testPlaybookId: string;
     let testStepId: string;
+    let testStep2Id: string;
 
     beforeAll(async () => {
         await connectDatabase();
@@ -124,6 +125,20 @@ describe('Playbook Service', () => {
             const step = await playbookService.updateStep(testStepId, input, testUserId);
             expect(step.step_title).toBe(input.step_title);
         });
+        it('should add a second step to a playbook', async () => {
+            const input = {
+                playbook_id: testPlaybookId,
+                step_order: 2,
+                step_title: 'Mitigate Risk',
+                step_description: 'Execute mitigation plan',
+                step_type: 'action' as const,
+                sla_hours: 24
+            };
+
+            const step = await playbookService.addStep(input, testUserId);
+            expect(step).toBeDefined();
+            testStep2Id = step.id;
+        });
     });
 
     describe('Playbook Matching', () => {
@@ -161,6 +176,7 @@ describe('Playbook Service', () => {
             expect(execution).toBeDefined();
             expect(execution.playbook_id).toBe(testPlaybookId);
             expect(execution.status).toBe('in_progress');
+            expect(execution.current_step_order).toBe(1);
             executionId = execution.id;
         });
 
@@ -187,6 +203,7 @@ describe('Playbook Service', () => {
 
             const updatedExec = await playbookService.getExecutionById(executionId);
             expect(updatedExec?.completed_steps).toBe(1);
+            expect(updatedExec?.current_step_order).toBe(2);
         });
 
         it('should cancel an execution', async () => {
