@@ -5,7 +5,7 @@ import { useDigitalTwin } from '@/hooks/use-digital-twin'
 import { AssetList } from '@/components/digital-twin/AssetList'
 import { VisioUpload } from '@/components/digital-twin/VisioUpload'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
-import { api } from '@/lib/api'
+import { apiClient } from '@/lib/api'
 
 export default function DigitalTwinPage() {
     // We need to fetch the current project ID from the layout/context or URL
@@ -30,7 +30,7 @@ export default function DigitalTwinPage() {
         // Attempt to find a project to default to
         const init = async () => {
             try {
-                const projects = await api.getProjects({ limit: 1 })
+                const projects = await apiClient.getProjects({ limit: 1 })
                 // api.getProjects returns different shape? check api.ts
                 // api.getProjects returns Promise<ApiResponse<Project[]> | Project[]> depending on implementation
                 // api.ts: async getProjects(params?: {...}) 
@@ -50,7 +50,7 @@ export default function DigitalTwinPage() {
                 // 1. Fetch projects
                 // 2. Set first project as active
 
-                const res: any = await api.getProjects()
+                const res: any = await apiClient.getProjects()
                 const projectList = res.data || res.projects || (Array.isArray(res) ? res : [])
                 if (projectList.length > 0) {
                     const firstId = projectList[0].id

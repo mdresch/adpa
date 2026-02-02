@@ -692,7 +692,7 @@ router.post(
 router.get(
   '/:id/resolution-recommendations',
   authenticateToken,
-  validate(Joi.object({
+  validateParams(Joi.object({
     id: Joi.string().uuid().required()
   })),
   async (req: Request, res: Response) => {

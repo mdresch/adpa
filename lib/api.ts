@@ -2108,7 +2108,8 @@ class ApiClient {
   // Playbook Management API
   async getPlaybooks(params?: { project_id?: string; category?: string; is_active?: boolean }): Promise<{ playbooks: Playbook[] }> {
     const query = params ? '?' + new URLSearchParams(params as any).toString() : ''
-    return this.get<{ playbooks: Playbook[] }>(`/playbooks${query}`)
+    const response = await this.get<{ success: boolean; data: Playbook[] }>(`/playbooks${query}`)
+    return { playbooks: response.data }
   }
 
   async getPlaybook(id: string): Promise<{ playbook: Playbook; scenarios: PlaybookScenario[]; steps: PlaybookStep[] }> {
@@ -2160,6 +2161,10 @@ class ApiClient {
 
   async getIssueResolutionMetrics(projectId: string): Promise<{ metrics: any }> {
     return this.get<{ metrics: any }>(`/issues/project/${projectId}/resolution-metrics`)
+  }
+
+  async updateIssue(id: string, data: Partial<Issue>): Promise<{ issue: Issue }> {
+    return this.put<{ issue: Issue }>(`/issues/${id}`, data)
   }
 }
 
