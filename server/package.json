@@ -31,6 +31,7 @@
     "migrate:058": "node scripts/run-migration-058.js",
     "migrate:356": "node scripts/migrate-single.js 356",
     "migrate:361": "node scripts/run-migration-361.ts",
+    "migrate:362": "node scripts/migrate-single.js 362",
     "migrate:401": "node scripts/run-migration-401.js",
     "migrate:663": "ts-node -r tsconfig-paths/register scripts/run-migration-663.ts",
     "migrate:664": "ts-node -r tsconfig-paths/register scripts/run-migration-664.ts",

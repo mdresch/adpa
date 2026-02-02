@@ -5,7 +5,7 @@ import { logger } from '../utils/logger'
 
 const router = Router()
 const visioService = new VisioGenerationService()
-const assetService = digitalTwinAssetService // Use the exported object directly
+const assetService = new DigitalTwinAssetService() // Assumes we can fetch assets
 
 // Helper to cast generic service to typed service or use direct DB access in future
 // For now, let's assume assetService has a method getAllAssets or we can query DB.

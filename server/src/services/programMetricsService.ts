@@ -302,29 +302,29 @@ async function getProjectMetrics(programId: string) {
  */
 async function getMilestoneMetrics(programId: string) {
   try {
-    // Query milestones table - milestones are stored with 'date' column (not planned_date/actual_date)
+    // Query milestones table - milestones are stored with 'due_date' column (not planned_date/actual_date)
     const result = await pool.query(
       `
       SELECT 
         m.id,
         m.name,
         m.description,
-        m.date,
+        m.due_date,
         m.status,
         m.project_id,
         m.updated_at,
-        m.actual_date
+        m.due_date as actual_date
       FROM milestones m
       JOIN projects p ON m.project_id = p.id
       WHERE p.program_id = $1
         AND m.deleted_at IS NULL
-      ORDER BY m.date ASC
+      ORDER BY m.due_date ASC
       `,
       [programId]
     )
 
     const milestones = result.rows.map((row: any) => {
-      const plannedDate = row.date
+      const plannedDate = row.due_date
       const today = new Date()
       const planned = plannedDate ? new Date(plannedDate) : today
 
