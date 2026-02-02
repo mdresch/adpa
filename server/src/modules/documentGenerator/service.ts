@@ -165,6 +165,9 @@ export class DocumentGeneratorService {
       // Post-generation hook: Enqueue Confluence publishing if project is mapped
       await this.enqueueConfluencePublishing(response, request, user)
 
+      // Post-generation hook: Enqueue entity extraction for the generated document
+      await this.enqueueEntityExtraction(response, request, user)
+
       logger.info(`Document generation completed: ${generationId}`, {
         generation_time_ms: generationTime,
         file_size: fileSize,
@@ -792,6 +795,60 @@ export class DocumentGeneratorService {
     } catch (error) {
       // Don't fail document generation if Confluence publishing fails to enqueue
       logger.error('Failed to enqueue Confluence publishing job', {
+        error: error.message,
+        documentId: response.id,
+        userId: user.id
+      })
+    }
+  }
+
+  /**
+   * Enqueue entity extraction for the generated document
+   */
+  private async enqueueEntityExtraction(
+    response: DocumentGenerationResponse,
+    request: DocumentGenerationRequest,
+    user: AuthenticatedUser
+  ): Promise<void> {
+    try {
+      // Extract project ID from request data if available
+      const projectId = request.data?.project_id
+      if (!projectId) {
+        logger.info('Skipping entity extraction - no project_id found in request data')
+        return
+      }
+
+      // Enqueue entity extraction job
+      const { addJob } = await import('../../services/queueService')
+      const jobId = await addJob(
+        'extract-project-data',
+        {
+          projectId,
+          userId: user.id,
+          documentId: response.id,
+          triggeredBy: 'document-generation',
+          generationId: response.id
+        },
+        {
+          attempts: 3,
+          backoff: {
+            type: 'exponential',
+            delay: 5000
+          },
+          timeout: 300000 // 5 minutes
+        }
+      )
+
+      logger.info(`Enqueued entity extraction job ${jobId} for document ${response.id}`, {
+        projectId,
+        documentId: response.id,
+        userId: user.id,
+        generationId: response.id
+      })
+
+    } catch (error) {
+      // Don't fail document generation if entity extraction fails to enqueue
+      logger.error('Failed to enqueue entity extraction job', {
         error: error.message,
         documentId: response.id,
         userId: user.id

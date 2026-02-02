@@ -248,6 +248,7 @@ export const CheckSquare = getIcon("CheckSquare")
 export const Square = getIcon("Square")
 export const FileDown = getIcon("FileDown")
 export const Printer = getIcon("Printer")
+export const BookOpen = getIcon("BookOpen")
 
 // PMBOK 8 Domain-specific icons
 export const CheckCircle2 = getIcon("CheckCircle2")
@@ -410,6 +411,7 @@ export default {
   Square,
   FileDown,
   Printer,
+  BookOpen,
   // PMBOK 8 Domain-specific icons
   CheckCircle2,
   Building2,

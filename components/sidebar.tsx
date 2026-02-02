@@ -32,6 +32,7 @@ import {
   Target,
   Gauge,
   Building2,
+  FileDown,
 } from "lucide-react"
 
 const navigation = [
@@ -45,6 +46,7 @@ const navigation = [
   { name: "AI Readiness", href: "/ai-readiness", icon: Target },
   { name: "Integrations", href: "/integrations", icon: LinkIcon, adminOnly: true },
   { name: "Templates", href: "/templates", icon: FileText },
+  { name: "Playbook Generator", href: "/playbook-generation", icon: FileDown },
   { name: "Template Builder", href: "/templates/builder", icon: Layers, adminOnly: true },
   // { name: "PMBOK 6 Processes", href: "/pmbok6", icon: BookOpen }, // Temporarily hidden for testing
   { name: "Process Flow Workflow", href: "/process-flow", icon: Workflow, adminOnly: true },

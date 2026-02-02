@@ -97,6 +97,7 @@ import escalationRoutes from "./routes/escalation"
 import qualityAuditRoutes from "./routes/qualityAuditRoutes"
 import documentUploadRoutes from "./routes/documentUploadRoutes"
 import adminRoutes from "./routes/adminRoutes"
+import playbookGenerationRoutes from "./routes/playbookGeneration"
 import assessmentExportRoutes from "./routes/assessmentExportRoutes"
 import portfolioAssessmentRoutes from "./routes/portfolioAssessmentRoutes"
 import executiveDashboardRoutes from "./routes/executive-dashboard"
@@ -357,7 +358,9 @@ app.use("/api/lessons", lessonsLearnedRoutes)
 app.use("/api/context-orchestrator", contextOrchestratorRoutes)
 app.use("/api/ux-documentation", uxDocumentationRoutes)
 app.use("/api/playbooks", playbookRoutes)
-console.log("✅ All API routes registered (including approvals, notifications, email notifications, knowledge base, assessment, executive dashboard, performance actuals, team agreements, OKRs, signatures, search, PMBOK 6, review scheduling, UX documentation, and playbooks)")
+app.use("/api/playbook-generation", playbookGenerationRoutes)
+app.use("/api/playbook-projects", require("./routes/playbookProjects").default)
+console.log("✅ All API routes registered (including approvals, notifications, email notifications, knowledge base, assessment, executive dashboard, performance actuals, team agreements, OKRs, signatures, search, PMBOK 6, review scheduling, UX documentation, playbooks, and playbook generation)")
 
 // WebSocket connection handling
 io.on("connection", (socket) => {
