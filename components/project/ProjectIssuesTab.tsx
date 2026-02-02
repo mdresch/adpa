@@ -136,6 +136,13 @@ export function ProjectIssuesTab({ projectId }: ProjectIssuesTabProps) {
   const [aiSuggestions, setAiSuggestions] = useState<any[]>([])
   const [loadingSuggestions, setLoadingSuggestions] = useState(false)
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const issueIdFromQuery = params.get('issueId')
+    if (issueIdFromQuery) setWorkflowVisibleForId(issueIdFromQuery)
+  }, [])
+
   // Form states
   const [formData, setFormData] = useState({
     title: "",
@@ -271,8 +278,8 @@ export function ProjectIssuesTab({ projectId }: ProjectIssuesTabProps) {
     try {
       setLoadingSuggestions(true)
       setSuggestionsDialogOpen(true)
-      const response = await apiClient.post(`/issues/suggest-resolution`, { issue_id: issueId })
-      setAiSuggestions(response.data?.suggestions || [])
+      const response: any = await apiClient.post(`/issues/suggest-resolution`, { issue_id: issueId })
+      setAiSuggestions(response?.data?.suggestions || [])
     } catch (error: any) {
       toast.error(getErrorMessage(error, "Failed to get AI suggestions"))
       setSuggestionsDialogOpen(false)
@@ -339,7 +346,7 @@ export function ProjectIssuesTab({ projectId }: ProjectIssuesTabProps) {
                 <Label>Title *</Label>
                 <Input
                   value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, title: e.target.value })}
                   placeholder="Brief summary of the issue"
                 />
               </div>
@@ -407,7 +414,7 @@ export function ProjectIssuesTab({ projectId }: ProjectIssuesTabProps) {
                 <Input
                   type="date"
                   value={formData.target_resolution_date}
-                  onChange={(e) => setFormData({ ...formData, target_resolution_date: e.target.value })}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, target_resolution_date: e.target.value })}
                 />
               </div>
             </div>
@@ -489,7 +496,7 @@ export function ProjectIssuesTab({ projectId }: ProjectIssuesTabProps) {
                       cx="50%"
                       cy="50%"
                       labelLine={false}
-                      label={({ name, value }) => `${name}: ${value}`}
+                      label={({ name, value }: { name: any; value: any }) => `${name}: ${value}`}
                       outerRadius={80}
                       fill="#8884d8"
                       dataKey="value"
@@ -517,7 +524,7 @@ export function ProjectIssuesTab({ projectId }: ProjectIssuesTabProps) {
                       cx="50%"
                       cy="50%"
                       labelLine={false}
-                      label={({ name, value }) => `${name}: ${value}`}
+                      label={({ name, value }: { name: any; value: any }) => `${name}: ${value}`}
                       outerRadius={80}
                       fill="#8884d8"
                       dataKey="value"
@@ -545,7 +552,7 @@ export function ProjectIssuesTab({ projectId }: ProjectIssuesTabProps) {
                 <Input
                   placeholder="Search issues..."
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
                   className="pl-10"
                 />
               </div>

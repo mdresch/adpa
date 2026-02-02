@@ -1,6 +1,7 @@
 import { pool, connectDatabase } from '../src/database/connection'
 import { v4 as uuidv4 } from 'uuid'
 import { logger } from '../src/utils/logger'
+import { createPlaybookWithSteps, NATO_COMPLIANCE_PLAYBOOK } from '../src/utils/playbookUtils'
 
 async function seedPlaybooks() {
     console.log('🌱 Starting playbook seed...')
@@ -47,7 +48,7 @@ async function seedPlaybooks() {
                 }
 
                 // 1. Standard Issue Resolution (Generic)
-                await createPlaybook(client, project.id, userId, {
+                await createPlaybookWithSteps(client, project.id, userId, {
                     title: 'Standard Issue Resolution',
                     description: 'A general-purpose workflow for resolving standard project issues.',
                     category: 'resolution',
@@ -62,7 +63,7 @@ async function seedPlaybooks() {
                 })
 
                 // 2. Technical Bug Fix (Technical)
-                await createPlaybook(client, project.id, userId, {
+                await createPlaybookWithSteps(client, project.id, userId, {
                     title: 'Technical Bug Fix',
                     description: 'Streamlined process for software defects and technical debt.',
                     category: 'resolution',
@@ -78,7 +79,7 @@ async function seedPlaybooks() {
                 })
 
                 // 3. Risk Mitigation (Risk)
-                await createPlaybook(client, project.id, userId, {
+                await createPlaybookWithSteps(client, project.id, userId, {
                     title: 'Risk Mitigation Protocol',
                     description: 'Standard procedure for addressing materialized risks.',
                     category: 'risk',
@@ -91,6 +92,9 @@ async function seedPlaybooks() {
                         { title: 'Update Risk Register', type: 'documentation', description: 'Log the outcome and close the risk entry.' }
                     ]
                 })
+
+                // 4. NATO IT Security Compliance (Security)
+                await createPlaybookWithSteps(client, project.id, userId, NATO_COMPLIANCE_PLAYBOOK)
             }
 
             console.log('\n✨ Seeding complete!')
@@ -102,50 +106,8 @@ async function seedPlaybooks() {
     } catch (error) {
         console.error('❌ Seeding failed:', error)
     } finally {
-        await pool.end()
+        if (pool) await pool.end()
     }
-}
-
-async function createPlaybook(client: any, projectId: string, userId: string, data: any) {
-    const playbookId = uuidv4()
-
-    // Create Playbook
-    await client.query(`
-        INSERT INTO operational_playbooks (
-            id, project_id, title, description, category, trigger_type, 
-            applicable_risk_categories, is_active, created_by, created_at, updated_at, version
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8, NOW(), NOW(), 1)
-    `, [
-        playbookId,
-        projectId,
-        data.title,
-        data.description,
-        data.category,
-        data.trigger_type,
-        data.applicable_risk_categories || null,
-        userId
-    ])
-
-    // Create Steps
-    for (let i = 0; i < data.steps.length; i++) {
-        const step = data.steps[i]
-        await client.query(`
-            INSERT INTO playbook_response_steps (
-                id, playbook_id, step_order, step_title, step_description, 
-                step_type, step_config, created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
-        `, [
-            uuidv4(),
-            playbookId,
-            i + 1,
-            step.title,
-            step.description,
-            step.type,
-            '{}'
-        ])
-    }
-
-    console.log(`  + Created playbook: "${data.title}"`)
 }
 
 // Run the seed

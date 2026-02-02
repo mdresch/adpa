@@ -34,6 +34,7 @@ import {
 import { apiClient, Playbook, PlaybookScenario, PlaybookStep, PlaybookExecution } from "@/lib/api"
 import { toast } from "@/lib/notify"
 import { format, differenceInDays } from "date-fns"
+import { SYSTEM_USER_GUID } from "@/server/src/constants/playbook"
 
 interface PlaybookWithStats {
     id: string
@@ -114,9 +115,15 @@ export default function PlaybooksPage() {
     const fetchExecutions = async (playbookId: string) => {
         try {
             const response = await apiClient.getPlaybookExecutions({})
-            setExecutions(response.executions.filter(e => e.playbook_id === playbookId))
+            if (response && response.executions) {
+                setExecutions(response.executions.filter(e => e.playbook_id === playbookId))
+            } else {
+                setExecutions([])
+            }
         } catch (error) {
-            toast.error("Failed to fetch executions")
+            console.error("Failed to fetch executions:", error)
+            setExecutions([])
+            // Don't show toast for this error as it's not critical
         }
     }
 
@@ -165,7 +172,7 @@ export default function PlaybooksPage() {
         try {
             const response = await apiClient.executePlaybook(playbookId, {
                 triggered_by_type: 'manual',
-                triggered_by_id: 'system',
+                triggered_by_id: SYSTEM_USER_GUID,
                 trigger_type: 'manual',
                 trigger_reason: 'Manual execution from management interface'
             })

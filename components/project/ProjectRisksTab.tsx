@@ -31,9 +31,21 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
-  AlertTriangle, Plus, Pencil, Trash2, Loader2, Filter, Search, 
-  FileText, CheckCircle, XCircle, Eye, EyeOff, RefreshCw, AlertCircle, Shield
-} from 'lucide-react';
+  AlertTriangle,
+  Plus,
+  Edit as Pencil,
+  Trash2,
+  Loader2,
+  Filter,
+  Search,
+  FileText,
+  CheckCircle,
+  XCircle,
+  Eye,
+  RefreshCw,
+  AlertCircle,
+  Shield,
+} from '@/components/ui/icons-shim';
 import { toast } from '@/lib/notify';
 import { apiClient } from '@/lib/api';
 import { useRouter } from 'next/navigation';
@@ -76,13 +88,14 @@ interface ProjectRisk {
   probability: 'very_high' | 'high' | 'medium' | 'low' | 'very_low';
   impact: 'very_high' | 'high' | 'medium' | 'low' | 'very_low';
   severity: 'critical' | 'high' | 'medium' | 'low';
-  status: 'identified' | 'assessed' | 'mitigated' | 'closed';
+  status: 'identified' | 'assessed' | 'mitigated' | 'materialized' | 'closed';
   mitigation_strategy?: string;
   contingency_plan?: string;
   owner?: string;
   extracted_from_document_id?: string;
   source_document_id?: string;
   source_document_title?: string; // Document title for traceability
+  related_issue_id?: string;
   risk_origin?: 'project-extraction' | 'program-level' | 'portfolio-level' | 'manual-entry' | 'risk-workshop' | 'strategic-review';
   risk_level?: 'project' | 'program' | 'portfolio' | 'systemic';
   is_curated?: boolean; // Whether risk has been reviewed/curated
@@ -176,7 +189,7 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
     try {
       setLoading(true);
       console.log('[RISKS] Fetching risks for project:', projectId);
-      const response = await apiClient.get(`/projects/${projectId}/risks`);
+      const response: any = await apiClient.get(`/projects/${projectId}/risks`);
       console.log('[RISKS] API Response:', {
         responseType: typeof response,
         isArray: Array.isArray(response),
@@ -239,8 +252,8 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
       // Try fallback only for server errors (500, 502, 503, etc.)
       if (error?.response?.status >= 500) {
         try {
-          const extractionResponse = await apiClient.get(`/project-data-extraction/project/${projectId}/risks`);
-          if (extractionResponse.data && extractionResponse.data.success !== false) {
+          const extractionResponse: any = await apiClient.get(`/project-data-extraction/project/${projectId}/risks`);
+          if (extractionResponse?.data && extractionResponse.data.success !== false) {
             setRisks(extractionResponse.data.data || []);
             toast.success('Loaded risks from extraction endpoint');
           }
@@ -645,7 +658,7 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
                 <Input
                   placeholder="Search risks..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
                   className="pl-10"
                 />
               </div>
@@ -828,20 +841,32 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
                               </Button>
                             }
                           />
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleMaterializeRisk(risk)}
-                            disabled={materializingRiskId === risk.id || risk.status === 'closed'}
-                            title="Convert to Issue (Risk has materialized)"
-                            className="text-orange-600 hover:text-orange-700"
-                          >
-                            {materializingRiskId === risk.id ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <AlertCircle className="h-4 w-4" />
-                            )}
-                          </Button>
+                          {risk.related_issue_id ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => router.push(`/projects/${projectId}?tab=issues&issueId=${risk.related_issue_id}`)}
+                              title="View linked issue"
+                              className="text-blue-600 hover:text-blue-700"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleMaterializeRisk(risk)}
+                              disabled={materializingRiskId === risk.id || risk.status === 'closed'}
+                              title="Convert to Issue (Risk has materialized)"
+                              className="text-orange-600 hover:text-orange-700"
+                            >
+                              {materializingRiskId === risk.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <AlertCircle className="h-4 w-4" />
+                              )}
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="sm"
@@ -908,7 +933,7 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
               <Input
                 id="title"
                 value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, title: e.target.value })}
                 placeholder="Risk title"
               />
             </div>
@@ -930,7 +955,7 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
                 <Input
                   id="category"
                   value={formData.category}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, category: e.target.value })}
                   placeholder="e.g., technical, schedule, budget"
                 />
               </div>
@@ -940,7 +965,7 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
                 <Input
                   id="owner"
                   value={formData.owner}
-                  onChange={(e) => setFormData({ ...formData, owner: e.target.value })}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, owner: e.target.value })}
                   placeholder="Risk owner"
                 />
               </div>
@@ -1057,7 +1082,7 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
                 type="checkbox"
                 id="is_curated"
                 checked={formData.is_curated}
-                onChange={(e) => setFormData({ ...formData, is_curated: e.target.checked })}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, is_curated: e.target.checked })}
                 className="rounded"
               />
               <Label htmlFor="is_curated" className="cursor-pointer">
@@ -1127,7 +1152,7 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
                 <Textarea
                   id="trigger_description"
                   value={escalationData.trigger_description}
-                  onChange={(e) => setEscalationData({ ...escalationData, trigger_description: e.target.value })}
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setEscalationData({ ...escalationData, trigger_description: e.target.value })}
                   placeholder="Describe why this risk is being escalated to an issue (minimum 10 characters)"
                   rows={4}
                   className={escalationData.trigger_description.length > 0 && escalationData.trigger_description.length < 10 ? 'border-yellow-500' : ''}
@@ -1150,7 +1175,7 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
                 <Textarea
                   id="root_cause_hypothesis"
                   value={escalationData.root_cause_hypothesis}
-                  onChange={(e) => setEscalationData({ ...escalationData, root_cause_hypothesis: e.target.value })}
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setEscalationData({ ...escalationData, root_cause_hypothesis: e.target.value })}
                   placeholder="Initial hypothesis about the root cause of this issue"
                   rows={3}
                 />
@@ -1161,9 +1186,9 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
                 <div className="flex gap-2">
                   <Input
                     value={escalationData.contributing_factor_input}
-                    onChange={(e) => setEscalationData({ ...escalationData, contributing_factor_input: e.target.value })}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEscalationData({ ...escalationData, contributing_factor_input: e.target.value })}
                     placeholder="Add contributing factor"
-                    onKeyPress={(e) => {
+                    onKeyPress={(e: React.KeyboardEvent<HTMLInputElement>) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
                         addContributingFactor();
@@ -1198,9 +1223,9 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
                 <div className="flex gap-2">
                   <Input
                     value={escalationData.evidence_input}
-                    onChange={(e) => setEscalationData({ ...escalationData, evidence_input: e.target.value })}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEscalationData({ ...escalationData, evidence_input: e.target.value })}
                     placeholder="Add evidence item"
-                    onKeyPress={(e) => {
+                    onKeyPress={(e: React.KeyboardEvent<HTMLInputElement>) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
                         addEvidence();
@@ -1240,7 +1265,7 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
                 <Textarea
                   id="actual_impact"
                   value={escalationData.actual_impact}
-                  onChange={(e) => setEscalationData({ ...escalationData, actual_impact: e.target.value })}
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setEscalationData({ ...escalationData, actual_impact: e.target.value })}
                   placeholder="Describe the actual impact of this issue"
                   rows={3}
                 />
@@ -1251,9 +1276,9 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
                 <div className="flex gap-2">
                   <Input
                     value={escalationData.affected_area_input}
-                    onChange={(e) => setEscalationData({ ...escalationData, affected_area_input: e.target.value })}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEscalationData({ ...escalationData, affected_area_input: e.target.value })}
                     placeholder="Add affected area (e.g., Schedule, Budget, Quality)"
-                    onKeyPress={(e) => {
+                    onKeyPress={(e: React.KeyboardEvent<HTMLInputElement>) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
                         addAffectedArea();
@@ -1288,9 +1313,9 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
                 <div className="flex gap-2">
                   <Input
                     value={escalationData.stakeholder_input}
-                    onChange={(e) => setEscalationData({ ...escalationData, stakeholder_input: e.target.value })}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEscalationData({ ...escalationData, stakeholder_input: e.target.value })}
                     placeholder="Add stakeholder name or role"
-                    onKeyPress={(e) => {
+                    onKeyPress={(e: React.KeyboardEvent<HTMLInputElement>) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
                         addStakeholder();
@@ -1349,7 +1374,7 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
                 <Textarea
                   id="immediate_actions_taken"
                   value={escalationData.immediate_actions_taken}
-                  onChange={(e) => setEscalationData({ ...escalationData, immediate_actions_taken: e.target.value })}
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setEscalationData({ ...escalationData, immediate_actions_taken: e.target.value })}
                   placeholder="Describe any immediate actions that have been taken"
                   rows={3}
                 />
@@ -1360,7 +1385,7 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
                 <Textarea
                   id="workaround_applied"
                   value={escalationData.workaround_applied}
-                  onChange={(e) => setEscalationData({ ...escalationData, workaround_applied: e.target.value })}
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setEscalationData({ ...escalationData, workaround_applied: e.target.value })}
                   placeholder="Describe any temporary workarounds that have been applied"
                   rows={3}
                 />
@@ -1376,7 +1401,7 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
                 <Textarea
                   id="recommended_mitigation"
                   value={escalationData.recommended_mitigation}
-                  onChange={(e) => setEscalationData({ ...escalationData, recommended_mitigation: e.target.value })}
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setEscalationData({ ...escalationData, recommended_mitigation: e.target.value })}
                   placeholder="Recommendations for resolving this issue"
                   rows={3}
                 />
@@ -1388,7 +1413,7 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
                   id="target_resolution_date"
                   type="date"
                   value={escalationData.target_resolution_date}
-                  onChange={(e) => setEscalationData({ ...escalationData, target_resolution_date: e.target.value })}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEscalationData({ ...escalationData, target_resolution_date: e.target.value })}
                 />
               </div>
             </div>

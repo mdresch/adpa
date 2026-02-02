@@ -234,11 +234,17 @@ export interface Issue {
   date_resolved?: string
   date_closed?: string
   related_risk_id?: string
+  source_document_id?: string
   tags?: string[]
   created_at: string
   updated_at: string
   raised_by_name?: string
   assigned_to_name?: string
+  source_document?: {
+    id: string
+    title: string
+    type: string
+  }
   // Playbook fields
   playbook_execution_id?: string
   resolution_workflow?: {
@@ -279,6 +285,8 @@ export interface Playbook {
   created_at: string
   updated_at: string
   version: number
+  scenarios?: PlaybookScenario[]
+  steps?: PlaybookStep[]
 }
 
 export interface PlaybookScenario {
@@ -2120,7 +2128,12 @@ class ApiClient {
   }
 
   async getPlaybook(id: string): Promise<{ playbook: Playbook; scenarios: PlaybookScenario[]; steps: PlaybookStep[] }> {
-    return this.get<{ playbook: Playbook; scenarios: PlaybookScenario[]; steps: PlaybookStep[] }>(`/playbooks/${id}`)
+    const response = await this.get<{ success: boolean; data: Playbook }>(`/playbooks/${id}`)
+    return {
+      playbook: response.data,
+      scenarios: response.data.scenarios || [],
+      steps: response.data.steps || [],
+    }
   }
 
   async createPlaybook(data: any): Promise<{ playbook: Playbook }> {
@@ -2140,11 +2153,13 @@ class ApiClient {
       trigger_reason?: string
     }
   ): Promise<{ execution: PlaybookExecution }> {
-    return this.post<{ execution: PlaybookExecution }>(`/playbooks/${playbookId}/execute`, data)
+    const response = await this.post<{ success: boolean; data: PlaybookExecution }>(`/playbooks/${playbookId}/execute`, data)
+    return { execution: response.data }
   }
 
   async getExecutionById(executionId: string): Promise<{ execution: PlaybookExecution }> {
-    return this.get<{ execution: PlaybookExecution }>(`/playbooks/executions/${executionId}`)
+    const response = await this.get<{ success: boolean; data: PlaybookExecution }>(`/playbooks/executions/${executionId}`)
+    return { execution: response.data }
   }
 
   async getMatchingPlaybooks(criteria: { project_id: string; risk_category?: string; severity_level?: string; priority_level?: string }): Promise<{ playbooks: Playbook[] }> {
@@ -2157,13 +2172,34 @@ class ApiClient {
     return this.get<{ executions: PlaybookExecution[] }>(`/playbooks/executions?${query}`)
   }
 
-  async completePlaybookStep(executionId: string, stepId: string, comments?: string): Promise<{ success: boolean; next_step?: PlaybookStep }> {
-    return this.post<{ success: boolean; next_step?: PlaybookStep }>(`/playbooks/executions/${executionId}/steps/${stepId}/complete`, { comments })
+  async completePlaybookStep(
+    executionId: string,
+    stepId: string,
+    notes?: string,
+    evidence?: Record<string, unknown>
+  ): Promise<{ success: boolean; data: PlaybookStepExecution }> {
+    return this.post<{ success: boolean; data: PlaybookStepExecution }>(
+      `/playbooks/executions/${executionId}/steps/${stepId}/complete`,
+      { notes, evidence: evidence || {} }
+    )
+  }
+
+  async updatePlaybookStepNotes(
+    executionId: string,
+    stepId: string,
+    notes?: string,
+    evidence?: Record<string, unknown>
+  ): Promise<{ success: boolean; data: PlaybookStepExecution }> {
+    return this.post<{ success: boolean; data: PlaybookStepExecution }>(
+      `/playbooks/executions/${executionId}/steps/${stepId}/notes`,
+      { notes, evidence: evidence || {} }
+    )
   }
 
   // Issue Resolution API (Phase 2)
   async getIssueResolutionRecommendations(issueId: string): Promise<{ recommendations: Playbook[] }> {
-    return this.get<{ recommendations: Playbook[] }>(`/issues/${issueId}/resolution-recommendations`)
+    const response = await this.get<{ success: boolean; data: { recommendations: Playbook[] } }>(`/issues/${issueId}/resolution-recommendations`)
+    return response.data
   }
 
   async getIssueResolutionMetrics(projectId: string): Promise<{ metrics: any }> {

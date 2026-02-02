@@ -32,6 +32,7 @@ import { Slider } from "@/components/ui/slider"
 import { format, differenceInHours } from "date-fns"
 import { apiClient, Issue, Playbook, PlaybookExecution, PlaybookStep } from "@/lib/api"
 import { toast } from "@/lib/notify"
+import { CONFIDENCE_WEIGHTS, CONFIDENCE_THRESHOLDS } from "@/server/src/constants/playbook"
 
 // Enhanced interfaces for confidence scoring
 interface PlaybookWithConfidence extends Playbook {
@@ -62,11 +63,12 @@ export function ResolutionWorkflowCard({ issue, onUpdate, bulkMode = false, sele
     const [steps, setSteps] = useState<PlaybookStep[]>([])
     const [stepExecutions, setStepExecutions] = useState<any[]>([])
     const [loadingAction, setLoadingAction] = useState<string | null>(null)
+    const [activePlaybookTitle, setActivePlaybookTitle] = useState<string | null>(null)
 
     // Auto-assignment state
     const [autoAssignSettings, setAutoAssignSettings] = useState<AutoAssignmentSettings>({
         enabled: true,
-        confidence_threshold: 75,
+        confidence_threshold: CONFIDENCE_THRESHOLDS.AUTO_ASSIGN,
         require_approval: false,
         auto_execute: false
     })
@@ -79,6 +81,11 @@ export function ResolutionWorkflowCard({ issue, onUpdate, bulkMode = false, sele
     const [selectedStepId, setSelectedStepId] = useState<string | null>(null)
     const [completionNotes, setCompletionNotes] = useState("")
 
+    // Step Notes Update Dialog State
+    const [updateNotesDialogOpen, setUpdateNotesDialogOpen] = useState(false)
+    const [updateNotesStepId, setUpdateNotesStepId] = useState<string | null>(null)
+    const [updateNotesText, setUpdateNotesText] = useState("")
+
     // Cancellation State
     const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
     const [cancelReason, setCancelReason] = useState("")
@@ -89,23 +96,53 @@ export function ResolutionWorkflowCard({ issue, onUpdate, bulkMode = false, sele
         
         // Category match (40% weight)
         if (playbook.applicable_risk_categories?.includes(issue.category)) {
-            score += 40
+            score += CONFIDENCE_WEIGHTS.CATEGORY_MATCH
         }
-        
+
         // Priority match (25% weight)
         if (playbook.applicable_priority_levels?.includes(issue.priority)) {
-            score += 25
+            score += CONFIDENCE_WEIGHTS.PRIORITY_MATCH
         }
         
         // Historical success rate (20% weight)
         const successRate = getHistoricalSuccessRate(playbook)
-        score += successRate * 0.2
+        score += successRate * (CONFIDENCE_WEIGHTS.SUCCESS_RATE / 100)
         
         // Recency and relevance (15% weight)
         const recencyScore = getRecencyScore(playbook)
-        score += recencyScore * 0.15
+        score += recencyScore * (CONFIDENCE_WEIGHTS.RECENCY / 100)
         
         return Math.min(100, Math.round(score))
+    }
+
+    const initiateUpdateStepNotes = (stepId: string) => {
+        const stepExecution = Array.isArray(stepExecutions)
+            ? stepExecutions.find(se => se && se.step_id === stepId)
+            : undefined
+
+        setUpdateNotesStepId(stepId)
+        setUpdateNotesText((stepExecution as any)?.completion_notes || "")
+        setUpdateNotesDialogOpen(true)
+    }
+
+    const submitUpdateStepNotes = async () => {
+        if (!execution || !updateNotesStepId) return
+
+        try {
+            setLoadingAction(updateNotesStepId)
+            setUpdateNotesDialogOpen(false)
+
+            await apiClient.updatePlaybookStepNotes(execution.id, updateNotesStepId, updateNotesText)
+            toast.success('Notes updated')
+            fetchExecutionDetails(execution.id)
+            if (onUpdate) onUpdate()
+        } catch (error: any) {
+            toast.error(error.message || 'Failed to update notes')
+            setUpdateNotesDialogOpen(true)
+        } finally {
+            setLoadingAction(null)
+            setUpdateNotesStepId(null)
+        }
     }
     
     const getMatchReasons = (playbook: Playbook, issue: Issue): string[] => {
@@ -153,6 +190,15 @@ export function ResolutionWorkflowCard({ issue, onUpdate, bulkMode = false, sele
     // Auto-assignment handlers
     const handleAutoAssign = async (playbook: PlaybookWithConfidence) => {
         try {
+            // Add defensive check
+            if (!playbook || !playbook.id) {
+                console.error('[RESOLUTION_WORKFLOW] Invalid playbook for auto-assignment:', playbook)
+                toast.error("Invalid playbook for auto-assignment")
+                return
+            }
+            
+            console.log('[RESOLUTION_WORKFLOW] Auto-assigning playbook:', playbook.title, 'ID:', playbook.id)
+            
             setLoadingAction('auto-assign')
             const resp = await apiClient.executePlaybook(playbook.id, {
                 triggered_by_type: 'issue',
@@ -161,8 +207,18 @@ export function ResolutionWorkflowCard({ issue, onUpdate, bulkMode = false, sele
                 trigger_reason: `Auto-assigned with ${playbook.confidence_score}% confidence`
             })
             
+            console.log('[RESOLUTION_WORKFLOW] Execute playbook response:', resp)
+            
+            // Defensive check for response structure
+            if (!resp || !resp.execution || !resp.execution.id) {
+                console.error('[RESOLUTION_WORKFLOW] Invalid response from executePlaybook:', resp)
+                toast.error("Invalid response from playbook execution")
+                return
+            }
+            
             // Update issue with execution ID
             await apiClient.updateIssue(issue.id, {
+                id: issue.id,
                 playbook_execution_id: resp.execution.id,
                 resolution_workflow: {
                     current_phase: 'auto_assigned',
@@ -176,6 +232,7 @@ export function ResolutionWorkflowCard({ issue, onUpdate, bulkMode = false, sele
             setAutoAssignedPlaybook(null)
             if (onUpdate) onUpdate()
         } catch (error: any) {
+            console.error('[RESOLUTION_WORKFLOW] Auto-assignment failed:', error)
             toast.error(error.message || "Failed to auto-assign playbook")
         } finally {
             setLoadingAction(null)
@@ -243,6 +300,16 @@ export function ResolutionWorkflowCard({ issue, onUpdate, bulkMode = false, sele
             setLoading(true)
             const resp = await apiClient.getIssueResolutionRecommendations(issue.id)
             
+            if (!resp.recommendations || resp.recommendations.length === 0) {
+                console.warn('[RESOLUTION_WORKFLOW] No playbook recommendations found', {
+                    issueId: issue.id,
+                    category: issue.category,
+                    priority: issue.priority
+                })
+                setRecommendations([])
+                return
+            }
+            
             // Calculate confidence scores for each recommendation
             const enhancedRecommendations = await Promise.all(
                 (resp.recommendations || []).map(async (playbook: Playbook) => {
@@ -289,8 +356,20 @@ export function ResolutionWorkflowCard({ issue, onUpdate, bulkMode = false, sele
 
             if (currentExec) {
                 setExecution(currentExec)
+                setStepExecutions((currentExec as any).step_executions || [])
+                if ((currentExec as any).playbook_title) {
+                    setActivePlaybookTitle((currentExec as any).playbook_title)
+                }
+
                 const playbookResp = await apiClient.getPlaybook(currentExec.playbook_id)
                 setSteps(playbookResp.steps || [])
+                if (playbookResp.playbook?.title) {
+                    setActivePlaybookTitle(playbookResp.playbook.title)
+                }
+
+                if (currentExec.status !== 'in_progress') {
+                    await fetchRecommendations()
+                }
             }
         } catch (error) {
             console.error("Failed to fetch execution details:", error)
@@ -299,7 +378,7 @@ export function ResolutionWorkflowCard({ issue, onUpdate, bulkMode = false, sele
         }
     }
 
-    const handleStartPlaybook = async (playbookId: string) => {
+    const handleStartPlaybook = async (playbookId: string, playbookTitle?: string) => {
         try {
             setLoadingAction(playbookId)
             const resp = await apiClient.executePlaybook(playbookId, {
@@ -307,7 +386,18 @@ export function ResolutionWorkflowCard({ issue, onUpdate, bulkMode = false, sele
                 triggered_by_id: issue.id,
                 trigger_type: 'manual'
             })
+            await apiClient.updateIssue(issue.id, {
+                id: issue.id,
+                playbook_execution_id: resp.execution.id,
+                resolution_workflow: {
+                    current_phase: 'manual_started',
+                    playbook_started_at: new Date().toISOString(),
+                    completed_steps: [],
+                    notes: `Started playbook: ${playbookTitle || playbookId}`
+                }
+            })
             toast.success("Playbook started successfully")
+            fetchExecutionDetails(resp.execution.id)
             if (onUpdate) onUpdate()
         } catch (error: any) {
             toast.error(error.message || "Failed to start playbook")
@@ -358,8 +448,25 @@ export function ResolutionWorkflowCard({ issue, onUpdate, bulkMode = false, sele
 
             await apiClient.post(`/playbooks/executions/${execution.id}/cancel`, { reason: cancelReason })
 
+            await apiClient.updateIssue(issue.id, {
+                id: issue.id,
+                playbook_execution_id: '',
+                resolution_workflow: {
+                    current_phase: 'cancelled',
+                    playbook_started_at: issue.resolution_workflow?.playbook_started_at || new Date().toISOString(),
+                    completed_steps: issue.resolution_workflow?.completed_steps || [],
+                    last_action_at: new Date().toISOString(),
+                    notes: `Cancelled playbook execution: ${activePlaybookTitle || execution.id}${cancelReason ? ` (Reason: ${cancelReason})` : ''}`
+                }
+            })
+
+            setExecution(null)
+            setSteps([])
+            setStepExecutions([])
+            setActivePlaybookTitle(null)
+
             toast.success("Playbook execution cancelled")
-            fetchExecutionDetails(execution.id)
+            await fetchRecommendations()
             if (onUpdate) onUpdate()
         } catch (error: any) {
             toast.error(error.message || "Failed to cancel playbook")
@@ -369,8 +476,22 @@ export function ResolutionWorkflowCard({ issue, onUpdate, bulkMode = false, sele
     }
 
     const calculateProgress = () => {
-        if (!steps.length || !execution || !execution.current_step_order) return 0
-        return Math.round(((execution.current_step_order - 1) / steps.length) * 100)
+        if (!execution) return 0
+
+        if (typeof execution.total_steps === 'number' && execution.total_steps > 0 && typeof execution.completed_steps === 'number') {
+            return Math.max(0, Math.min(100, Math.round((execution.completed_steps / execution.total_steps) * 100)))
+        }
+
+        if (Array.isArray(stepExecutions) && stepExecutions.length > 0 && steps.length > 0) {
+            const completed = stepExecutions.filter(se => se && se.status === 'completed').length
+            return Math.max(0, Math.min(100, Math.round((completed / steps.length) * 100)))
+        }
+
+        if (steps.length && execution.current_step_order) {
+            return Math.max(0, Math.min(100, Math.round(((execution.current_step_order - 1) / steps.length) * 100)))
+        }
+
+        return 0
     }
 
     if (loading && !execution && recommendations.length === 0) {
@@ -415,7 +536,7 @@ export function ResolutionWorkflowCard({ issue, onUpdate, bulkMode = false, sele
                 </div>
                 <CardDescription>
                     {execution
-                        ? `Active Playbook: ${steps.length > 0 ? 'Solving issue with structured steps' : 'Initializing...'}`
+                        ? `Active Playbook: ${activePlaybookTitle || (execution as any).playbook_title || 'Initializing...'}`
                         : 'Structured path to resolve this issue effectively'}
                 </CardDescription>
             </CardHeader>
@@ -431,16 +552,27 @@ export function ResolutionWorkflowCard({ issue, onUpdate, bulkMode = false, sele
                             <Progress value={calculateProgress()} className="h-2" />
                         </div>
 
+                    {execution.status === 'in_progress' ? (
                         <div className="space-y-3 mt-4">
-                            {steps.map((step, index) => {
-                                const isCompleted = step.step_order < (execution.current_step_order || 1)
-                                const isCurrent = step.step_order === (execution.current_step_order || 1)
+                            {steps.map((step) => {
+                                const stepExecution = Array.isArray(stepExecutions)
+                                    ? stepExecutions.find(se => se && se.step_id === step.id)
+                                    : undefined
+
+                                const isCompleted = stepExecution
+                                    ? stepExecution.status === 'completed'
+                                    : step.step_order < (execution.current_step_order || 1)
+
+                                const isCurrent = stepExecution
+                                    ? stepExecution.status === 'in_progress' || (!isCompleted && stepExecution.status === 'pending')
+                                    : step.step_order === (execution.current_step_order || 1)
 
                                 return (
                                     <div
                                         key={step.id}
-                                        className={`flex items-start gap-3 p-3 rounded-lg border transition-colors ${isCurrent ? 'bg-primary/5 border-primary/20 ring-1 ring-primary/10' : 'bg-card'
-                                            }`}
+                                        className={`flex items-start gap-3 p-3 rounded-lg border transition-colors ${
+                                            isCurrent ? 'bg-primary/5 border-primary/20 ring-1 ring-primary/10' : 'bg-card'
+                                        }`}
                                     >
                                         <div className="mt-0.5">
                                             {isCompleted ? (
@@ -451,6 +583,7 @@ export function ResolutionWorkflowCard({ issue, onUpdate, bulkMode = false, sele
                                                 <Circle className="h-5 w-5 text-muted-foreground/30" />
                                             )}
                                         </div>
+
                                         <div className="flex-1">
                                             <div className="flex items-center justify-between">
                                                 <p className={`font-medium text-sm ${isCurrent ? 'text-primary' : ''}`}>
@@ -463,11 +596,12 @@ export function ResolutionWorkflowCard({ issue, onUpdate, bulkMode = false, sele
                                                     </div>
                                                 )}
                                             </div>
+
                                             <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
                                                 {step.step_description}
                                             </p>
 
-                                            {isCurrent && (
+                                            {isCurrent && execution.status === 'in_progress' && (
                                                 <Button
                                                     size="sm"
                                                     variant="ghost"
@@ -483,45 +617,136 @@ export function ResolutionWorkflowCard({ issue, onUpdate, bulkMode = false, sele
                                                     Mark as Completed
                                                 </Button>
                                             )}
+
+                                            {isCompleted && (
+                                                <Button
+                                                    size="sm"
+                                                    variant="link"
+                                                    className="mt-2 h-7 px-0 text-xs"
+                                                    onClick={() => initiateUpdateStepNotes(step.id)}
+                                                    disabled={loadingAction === step.id}
+                                                >
+                                                    Add Notes
+                                                </Button>
+                                            )}
                                         </div>
                                     </div>
                                 )
                             })}
                         </div>
-                    </>
-                ) : recommendations.length > 0 ? (
-                    <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                            <p className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                                <Target className="h-4 w-4 text-orange-500" />
-                                Recommended Playbooks
+                    ) : (
+                        <div className="py-4 text-center border rounded-lg border-dashed">
+                            <p className="text-sm text-muted-foreground">
+                                This playbook execution is {execution.status.replace('_', ' ')}. You can start a different playbook from the recommendations below.
                             </p>
-                            {bulkMode && (
-                                <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={handleBulkAssign}
-                                    disabled={loadingAction === 'bulk-assign' || selectedIssues.length === 0}
-                                    className="text-xs"
-                                >
-                                    {loadingAction === 'bulk-assign' ? (
-                                        <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                                    ) : (
-                                        <Zap className="h-3 w-3 mr-1" />
-                                    )}
-                                    Bulk Assign ({selectedIssues.length})
-                                </Button>
-                            )}
                         </div>
+                    )}
+
+                    {execution.status !== 'in_progress' && (
+                        recommendations.length > 0 ? (
+                            <div className="space-y-4">
+                                {recommendations.map((playbook) => (
+                                    <div
+                                        key={playbook.id}
+                                        className={`group flex items-start justify-between p-3 rounded-lg border transition-all cursor-pointer ${
+                                            playbook.confidence_score >= CONFIDENCE_THRESHOLDS.HIGH ? 'border-green-200 bg-green-50/30' :
+                                            playbook.confidence_score >= CONFIDENCE_THRESHOLDS.MEDIUM ? 'border-yellow-200 bg-yellow-50/30' :
+                                            'border-gray-200 hover:border-primary/50 hover:bg-primary/[0.02]'
+                                        }`}
+                                        onClick={() => handleStartPlaybook(playbook.id, playbook.title)}
+                                    >
+                                        <div className="flex-1">
+                                            <div className="flex items-start justify-between">
+                                                <div>
+                                                    <h4 className="font-semibold text-sm group-hover:text-primary transition-colors">
+                                                        {playbook.title}
+                                                    </h4>
+                                                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                                                        {playbook.description}
+                                                    </p>
+                                                    <div className="flex items-center gap-2 mt-2">
+                                                        <Badge variant="outline" className="text-[10px] font-normal py-0">
+                                                            {playbook.category}
+                                                        </Badge>
+                                                        <div className="flex items-center gap-1">
+                                                            <div className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                                                                playbook.confidence_score >= CONFIDENCE_THRESHOLDS.HIGH ? 'bg-green-100 text-green-700' :
+                                                                playbook.confidence_score >= CONFIDENCE_THRESHOLDS.MEDIUM ? 'bg-yellow-100 text-yellow-700' :
+                                                                'bg-gray-100 text-gray-700'
+                                                            }`}>
+                                                                {playbook.confidence_score}% Match
+                                                            </div>
+                                                            <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                                                <TrendingUp className="h-3 w-3" />
+                                                                {Math.round(playbook.success_rate)}% Success
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                    {playbook.match_reasons.length > 0 && (
+                                                        <div className="mt-2">
+                                                            <p className="text-[10px] text-muted-foreground mb-1">Why this matches:</p>
+                                                            <div className="flex flex-wrap gap-1">
+                                                                {playbook.match_reasons.slice(0, 2).map((reason, index) => (
+                                                                    <Badge key={index} variant="secondary" className="text-[8px]">
+                                                                        {reason}
+                                                                    </Badge>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <div className="flex flex-col items-end gap-2 ml-4">
+                                                    <div className="text-[10px] text-muted-foreground text-right">
+                                                        Est. {Math.round(playbook.estimated_duration)}h
+                                                    </div>
+                                                    <Button
+                                                        size="sm"
+                                                        variant={playbook.confidence_score >= CONFIDENCE_THRESHOLDS.HIGH ? 'default' : 'ghost'}
+                                                        className="h-8 px-3 rounded-full group-hover:bg-primary group-hover:text-primary-foreground"
+                                                        disabled={loadingAction === playbook.id}
+                                                        onClick={() => handleStartPlaybook(playbook.id, playbook.title)}
+                                                    >
+                                                        {loadingAction === playbook.id ? (
+                                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                                        ) : (
+                                                            <Play className="h-4 w-4" />
+                                                        )}
+                                                        {playbook.confidence_score >= CONFIDENCE_THRESHOLDS.HIGH ? 'Auto' : 'Start'}
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="py-6 text-center border rounded-lg border-dashed">
+                                <p className="text-sm text-muted-foreground">
+                                    No matching playbooks found for this issue category.
+                                </p>
+                                <Button
+                                    variant="link"
+                                    className="text-xs text-primary mt-1"
+                                    onClick={() => window.location.href = '/playbooks'}
+                                >
+                                    Browse all playbooks
+                                </Button>
+                            </div>
+                        )
+                    )}
+                </>
+            ) : (
+                recommendations.length > 0 ? (
+                    <div className="space-y-4">
                         {recommendations.map((playbook) => (
                             <div
                                 key={playbook.id}
                                 className={`group flex items-start justify-between p-3 rounded-lg border transition-all cursor-pointer ${
-                                    playbook.confidence_score >= 80 ? 'border-green-200 bg-green-50/30' :
-                                    playbook.confidence_score >= 60 ? 'border-yellow-200 bg-yellow-50/30' :
+                                    playbook.confidence_score >= CONFIDENCE_THRESHOLDS.HIGH ? 'border-green-200 bg-green-50/30' :
+                                    playbook.confidence_score >= CONFIDENCE_THRESHOLDS.MEDIUM ? 'border-yellow-200 bg-yellow-50/30' :
                                     'border-gray-200 hover:border-primary/50 hover:bg-primary/[0.02]'
                                 }`}
-                                onClick={() => handleStartPlaybook(playbook.id)}
+                                onClick={() => handleStartPlaybook(playbook.id, playbook.title)}
                             >
                                 <div className="flex-1">
                                     <div className="flex items-start justify-between">
@@ -538,8 +763,8 @@ export function ResolutionWorkflowCard({ issue, onUpdate, bulkMode = false, sele
                                                 </Badge>
                                                 <div className="flex items-center gap-1">
                                                     <div className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                                                        playbook.confidence_score >= 80 ? 'bg-green-100 text-green-700' :
-                                                        playbook.confidence_score >= 60 ? 'bg-yellow-100 text-yellow-700' :
+                                                        playbook.confidence_score >= CONFIDENCE_THRESHOLDS.HIGH ? 'bg-green-100 text-green-700' :
+                                                        playbook.confidence_score >= CONFIDENCE_THRESHOLDS.MEDIUM ? 'bg-yellow-100 text-yellow-700' :
                                                         'bg-gray-100 text-gray-700'
                                                     }`}>
                                                         {playbook.confidence_score}% Match
@@ -569,16 +794,17 @@ export function ResolutionWorkflowCard({ issue, onUpdate, bulkMode = false, sele
                                             </div>
                                             <Button
                                                 size="sm"
-                                                variant={playbook.confidence_score >= 80 ? 'default' : 'ghost'}
+                                                variant={playbook.confidence_score >= CONFIDENCE_THRESHOLDS.HIGH ? 'default' : 'ghost'}
                                                 className="h-8 px-3 rounded-full group-hover:bg-primary group-hover:text-primary-foreground"
                                                 disabled={loadingAction === playbook.id}
+                                                onClick={() => handleStartPlaybook(playbook.id, playbook.title)}
                                             >
                                                 {loadingAction === playbook.id ? (
                                                     <Loader2 className="h-4 w-4 animate-spin" />
                                                 ) : (
                                                     <Play className="h-4 w-4" />
                                                 )}
-                                                {playbook.confidence_score >= 80 ? 'Auto' : 'Start'}
+                                                {playbook.confidence_score >= CONFIDENCE_THRESHOLDS.HIGH ? 'Auto' : 'Start'}
                                             </Button>
                                         </div>
                                     </div>
@@ -591,11 +817,15 @@ export function ResolutionWorkflowCard({ issue, onUpdate, bulkMode = false, sele
                         <p className="text-sm text-muted-foreground">
                             No matching playbooks found for this issue category.
                         </p>
-                        <Button variant="link" className="text-xs text-primary mt-1">
+                        <Button 
+                            variant="link" 
+                            className="text-xs text-primary mt-1"
+                            onClick={() => window.location.href = '/playbooks'}
+                        >
                             Browse all playbooks
                         </Button>
                     </div>
-                )}
+                ))}
             </CardContent>
 
             {execution && (
@@ -632,6 +862,35 @@ export function ResolutionWorkflowCard({ issue, onUpdate, bulkMode = false, sele
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setCompletionDialogOpen(false)}>Cancel</Button>
                         <Button onClick={submitCompleteStep}>Complete Step</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Update Notes Dialog */}
+            <Dialog open={updateNotesDialogOpen} onOpenChange={setUpdateNotesDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Update Step Notes</DialogTitle>
+                        <DialogDescription>
+                            Add or update notes for this completed step.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-2">
+                        <div className="space-y-2">
+                            <Label htmlFor="update-notes">Notes</Label>
+                            <Textarea
+                                id="update-notes"
+                                placeholder="Enter additional notes..."
+                                value={updateNotesText}
+                                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setUpdateNotesText(e.target.value)}
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setUpdateNotesDialogOpen(false)}>Cancel</Button>
+                        <Button onClick={submitUpdateStepNotes} disabled={!updateNotesStepId || loadingAction === updateNotesStepId}>
+                            Save Notes
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
@@ -681,7 +940,7 @@ export function ResolutionWorkflowCard({ issue, onUpdate, bulkMode = false, sele
                                 <Switch
                                     id="auto-approve"
                                     checked={!autoAssignSettings.require_approval}
-                                    onCheckedChange={(checked) => 
+                                    onCheckedChange={(checked: boolean) => 
                                         setAutoAssignSettings(prev => ({ ...prev, require_approval: !checked }))
                                     }
                                 />

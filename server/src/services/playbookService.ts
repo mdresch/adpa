@@ -33,6 +33,46 @@ export interface Playbook {
     steps?: PlaybookResponseStep[]
 }
 
+/**
+ * Update completion notes/evidence for an existing step execution
+ */
+export async function updateStepNotes(
+    executionId: string,
+    stepId: string,
+    userId: string,
+    notes?: string,
+    evidence?: Record<string, any>
+): Promise<PlaybookStepExecution> {
+    const log = logger.child({ service: 'playbookService', method: 'updateStepNotes' })
+
+    try {
+        const result = await pool.query(`
+      UPDATE playbook_step_executions
+      SET
+        completion_notes = $3,
+        completion_evidence = $4,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE execution_id = $1 AND step_id = $2 AND status = 'completed'
+      RETURNING *
+    `, [
+            executionId,
+            stepId,
+            notes || null,
+            JSON.stringify(evidence || {})
+        ])
+
+        if (result.rows.length === 0) {
+            throw new Error('Completed step execution not found')
+        }
+
+        log.info('[PLAYBOOKS] Updated step notes', { executionId, stepId, userId })
+        return result.rows[0]
+    } catch (error: any) {
+        log.error('[PLAYBOOKS] Failed to update step notes:', error)
+        throw error
+    }
+}
+
 export interface PlaybookScenario {
     id: string
     playbook_id: string
@@ -648,59 +688,108 @@ export async function findMatchingPlaybooks(
     const log = logger.child({ service: 'playbookService', method: 'findMatchingPlaybooks' })
 
     try {
+        log.info('[PLAYBOOKS] Starting playbook matching', { criteria })
+        
         // Find active playbooks for the project that match criteria
         let query = `
       SELECT p.*, 
         (
-          CASE WHEN $2::text IS NOT NULL AND $2::text = ANY(p.applicable_risk_categories) THEN 1 ELSE 0 END +
-          CASE WHEN $3::text IS NOT NULL AND $3::text = ANY(p.applicable_severity_levels) THEN 1 ELSE 0 END +
-          CASE WHEN $4::text IS NOT NULL AND $4::text = ANY(p.applicable_priority_levels) THEN 1 ELSE 0 END
+          CASE WHEN $2::text IS NOT NULL AND p.applicable_risk_categories IS NOT NULL AND 
+                EXISTS(SELECT 1 FROM unnest(p.applicable_risk_categories) as cat WHERE LOWER(cat) = LOWER($2::text)) THEN 1 ELSE 0 END +
+          CASE WHEN $3::text IS NOT NULL AND p.applicable_severity_levels IS NOT NULL AND 
+                EXISTS(SELECT 1 FROM unnest(p.applicable_severity_levels) as lvl WHERE LOWER(lvl) = LOWER($3::text)) THEN 1 ELSE 0 END +
+          CASE WHEN $4::text IS NOT NULL AND p.applicable_priority_levels IS NOT NULL AND 
+                EXISTS(SELECT 1 FROM unnest(p.applicable_priority_levels) as pri WHERE LOWER(pri) = LOWER($4::text)) THEN 1 ELSE 0 END +
+          CASE WHEN $2::text IS NOT NULL AND LOWER(p.category) = LOWER($2::text) THEN 2 ELSE 0 END
         ) as match_score
       FROM operational_playbooks p
       WHERE p.project_id = $1
         AND p.is_active = true
         AND (
-          p.applicable_risk_categories IS NULL OR $2::text = ANY(p.applicable_risk_categories) OR
-          p.applicable_severity_levels IS NULL OR $3::text = ANY(p.applicable_severity_levels) OR
-          p.applicable_priority_levels IS NULL OR $4::text = ANY(p.applicable_priority_levels)
+          p.applicable_risk_categories IS NULL OR $2::text IS NULL OR 
+          EXISTS(SELECT 1 FROM unnest(p.applicable_risk_categories) as cat WHERE LOWER(cat) = LOWER($2::text)) OR
+          p.applicable_severity_levels IS NULL OR $3::text IS NULL OR 
+          EXISTS(SELECT 1 FROM unnest(p.applicable_severity_levels) as lvl WHERE LOWER(lvl) = LOWER($3::text)) OR
+          p.applicable_priority_levels IS NULL OR $4::text IS NULL OR 
+          EXISTS(SELECT 1 FROM unnest(p.applicable_priority_levels) as pri WHERE LOWER(pri) = LOWER($4::text)) OR
+          LOWER(p.category) = LOWER($2::text)
         )
       ORDER BY match_score DESC, p.created_at DESC
     `
 
-        const result = await pool.query(query, [
+        const queryParams = [
             criteria.project_id,
             criteria.risk_category || null,
             criteria.severity_level || criteria.impact || null,
             criteria.priority_level || null
-        ])
+        ]
+        
+        log.info('[PLAYBOOKS] Executing query', { 
+            projectId: criteria.project_id,
+            riskCategory: criteria.risk_category,
+            severityLevel: criteria.severity_level,
+            priorityLevel: criteria.priority_level,
+            queryParams
+        })
+
+        const result = await pool.query(query, queryParams)
+
+        if (!result || !result.rows) {
+            log.error('[PLAYBOOKS] Database query returned null or invalid result')
+            return []
+        }
+
+        log.info('[PLAYBOOKS] Initial query results', { 
+            totalPlaybooksFound: result.rows.length,
+            playbookIds: result.rows.map(r => r.id)
+        })
 
         // Also check scenario conditions for more precise matching
+        // Optimize: Get all scenarios for matching playbooks in a single query
+        const playbookIds = result.rows.map(row => row.id)
+        let scenariosResult = null
+        
+        if (playbookIds.length > 0) {
+            scenariosResult = await pool.query(`
+                SELECT * FROM playbook_scenarios 
+                WHERE playbook_id = ANY($1) 
+                ORDER BY priority DESC
+            `, [playbookIds])
+        }
+
+        // Group scenarios by playbook_id for efficient lookup
+        const scenariosByPlaybook = new Map<string, any[]>()
+        if (scenariosResult && scenariosResult.rows) {
+            for (const scenario of scenariosResult.rows) {
+                if (!scenariosByPlaybook.has(scenario.playbook_id)) {
+                    scenariosByPlaybook.set(scenario.playbook_id, [])
+                }
+                scenariosByPlaybook.get(scenario.playbook_id)!.push(scenario)
+            }
+        }
+
+        // Check scenario matches
         const playbooks: Playbook[] = []
         for (const row of result.rows) {
-            // Get scenarios for this playbook
-            const scenariosResult = await pool.query(`
-        SELECT * FROM playbook_scenarios 
-        WHERE playbook_id = $1 
-        ORDER BY priority DESC
-      `, [row.id])
+            const scenarios = scenariosByPlaybook.get(row.id) || []
 
             // Check if any scenario matches the criteria
-            let matches = scenariosResult.rows.length === 0 // If no scenarios, it's a general match
+            let matches = scenarios.length === 0 // If no scenarios, it's a general match
 
-            for (const scenario of scenariosResult.rows) {
+            for (const scenario of scenarios) {
                 const condition = scenario.scenario_condition
                 let scenarioMatches = true
 
-                if (condition.risk_category && criteria.risk_category !== condition.risk_category) {
+                if (condition.risk_category && criteria.risk_category && criteria.risk_category.toLowerCase() !== condition.risk_category.toLowerCase()) {
                     scenarioMatches = false
                 }
-                if (condition.impact && criteria.severity_level !== condition.impact) {
+                if (condition.impact && criteria.severity_level && criteria.severity_level.toLowerCase() !== condition.impact.toLowerCase()) {
                     scenarioMatches = false
                 }
-                if (condition.severity && criteria.severity_level !== condition.severity) {
+                if (condition.severity && criteria.severity_level && criteria.severity_level.toLowerCase() !== condition.severity.toLowerCase()) {
                     scenarioMatches = false
                 }
-                if (condition.probability && criteria.probability !== condition.probability) {
+                if (condition.probability && criteria.probability && criteria.probability.toLowerCase() !== condition.probability.toLowerCase()) {
                     scenarioMatches = false
                 }
 
@@ -711,14 +800,15 @@ export async function findMatchingPlaybooks(
             }
 
             if (matches) {
-                row.scenarios = scenariosResult.rows
+                row.scenarios = scenarios
                 playbooks.push(row)
             }
         }
 
         log.info('[PLAYBOOKS] Found matching playbooks', {
             criteria,
-            matchCount: playbooks.length
+            matchCount: playbooks.length,
+            playbookTitles: playbooks.map(p => ({ id: p.id, title: p.title, matchScore: (p as any).match_score }))
         })
 
         return playbooks
@@ -1116,6 +1206,7 @@ export const playbookService = {
     // Execution
     executePlaybook,
     completeStep,
+    updateStepNotes,
     cancelExecution,
     getExecutionById,
     getExecutions

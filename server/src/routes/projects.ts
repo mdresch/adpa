@@ -455,6 +455,18 @@ router.get("/:projectId/risks", authenticateToken, async (req, res) => {
       joinClause = 'LEFT JOIN documents d ON FALSE'
     }
 
+    // Attach the most recent issue created from this risk (if any)
+    selectFields.push('ri.issue_id as related_issue_id')
+    joinClause += `
+      LEFT JOIN LATERAL (
+        SELECT i.id as issue_id
+        FROM issues i
+        WHERE i.related_risk_id = r.id
+        ORDER BY i.created_at DESC
+        LIMIT 1
+      ) ri ON TRUE
+    `
+
     // Build ORDER BY clause - handle severity if it exists or was calculated
     const createdAtField = availableColumns.has('created_at') ? 'r.created_at' : 'r.id'
     let orderByClause = ''

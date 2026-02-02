@@ -445,7 +445,9 @@ router.put(
     target_resolution_date: Joi.string().isoDate().optional().allow('', null),
     related_risk_id: Joi.string().uuid().optional().allow('', null),
     notes: Joi.string().optional().allow('', null),
-    tags: Joi.array().items(Joi.string()).optional()
+    tags: Joi.array().items(Joi.string()).optional(),
+    playbook_execution_id: Joi.string().uuid().optional().allow('', null),
+    resolution_workflow: Joi.object().optional()
   })),
   async (req: Request, res: Response) => {
     const log = childLogger({ requestId: (req as any).requestId })
@@ -697,9 +699,18 @@ router.get(
   })),
   async (req: Request, res: Response) => {
     const log = childLogger({ requestId: (req as any).requestId })
+    
+    // Add simple console.log to verify this endpoint is being called
+    console.log('=== API CALL: /issues/:id/resolution-recommendations ===')
+    console.log('Issue ID:', req.params.id)
+    
     try {
       const { id } = req.params
+      console.log('About to call getResolutionRecommendations for:', id)
+      
       const recommendations = await getResolutionRecommendations(id)
+      console.log('Got recommendations:', recommendations.length, 'items')
+      console.log('Recommendations data:', JSON.stringify(recommendations, null, 2))
 
       log.info('[ISSUES] Retrieved resolution recommendations', { id, count: recommendations.length })
 

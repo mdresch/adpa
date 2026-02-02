@@ -433,4 +433,46 @@ router.post(
     }
 )
 
+/**
+ * POST /api/playbooks/executions/:id/steps/:stepId/notes
+ * Update completion notes for a completed step
+ */
+router.post(
+    '/executions/:id/steps/:stepId/notes',
+    authenticateToken,
+    validateParams(Joi.object({
+        id: Joi.string().uuid().required(),
+        stepId: Joi.string().uuid().required()
+    })),
+    validate(Joi.object({
+        notes: Joi.string().optional().allow('', null),
+        evidence: Joi.object().optional().default({})
+    })),
+    async (req: Request, res: Response) => {
+        const log = childLogger({ requestId: (req as any).requestId })
+        const userId = (req as any).user.id
+        try {
+            const stepExecution = await playbookService.updateStepNotes(
+                req.params.id,
+                req.params.stepId,
+                userId,
+                req.body.notes,
+                req.body.evidence
+            )
+
+            res.json({
+                success: true,
+                data: stepExecution
+            })
+        } catch (error: any) {
+            log.error('[PLAYBOOKS] Failed to update step notes:', error)
+            res.status(500).json({
+                success: false,
+                error: 'Failed to update step notes',
+                message: error.message
+            })
+        }
+    }
+)
+
 export default router

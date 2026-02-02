@@ -904,7 +904,52 @@ export async function escalateRiskToIssue(
       }, userId)
     }
 
-    // Store mitigation plan references in issue notes for playbook initiation
+    // Store escalation details in issue notes for complete audit trail
+    const escalationNotes = [
+      '=== RISK ESCALATION DETAILS ===',
+      `Risk ID: ${riskId}`,
+      `Original Risk Title: ${risk.title}`,
+      `Risk Category: ${risk.category}`,
+      `Risk Probability: ${risk.probability}`,
+      `Risk Impact: ${risk.impact}`,
+      `Trigger Reason: ${escalationInput.trigger_reason}`,
+      `Trigger Description: ${escalationInput.trigger_description}`,
+      '',
+      'ROOT CAUSE ANALYSIS:',
+      escalationInput.root_cause_hypothesis ? `Hypothesis: ${escalationInput.root_cause_hypothesis}` : 'No hypothesis provided',
+      escalationInput.contributing_factors && escalationInput.contributing_factors.length > 0 
+        ? `Contributing Factors:\n${escalationInput.contributing_factors.map((factor, i) => `  ${i + 1}. ${factor}`).join('\n')}` 
+        : 'No contributing factors identified',
+      escalationInput.evidence_collected && escalationInput.evidence_collected.length > 0 
+        ? `Evidence Collected:\n${escalationInput.evidence_collected.map((evidence, i) => `  ${i + 1}. ${evidence}`).join('\n')}` 
+        : 'No evidence collected',
+      '',
+      'IMPACT ASSESSMENT:',
+      escalationInput.actual_impact ? `Actual Impact: ${escalationInput.actual_impact}` : 'No actual impact documented',
+      escalationInput.affected_areas && escalationInput.affected_areas.length > 0 
+        ? `Affected Areas:\n${escalationInput.affected_areas.map((area, i) => `  ${i + 1}. ${area}`).join('\n')}` 
+        : 'No affected areas specified',
+      escalationInput.affected_stakeholders && escalationInput.affected_stakeholders.length > 0 
+        ? `Affected Stakeholders:\n${escalationInput.affected_stakeholders.map((stakeholder, i) => `  ${i + 1}. ${stakeholder}`).join('\n')}` 
+        : 'No affected stakeholders specified',
+      '',
+      'IMMEDIATE ACTIONS:',
+      escalationInput.immediate_actions_taken ? `Actions Taken: ${escalationInput.immediate_actions_taken}` : 'No immediate actions documented',
+      escalationInput.workaround_applied ? `Workaround Applied: ${escalationInput.workaround_applied}` : 'No workaround applied',
+      escalationInput.recommended_mitigation ? `Recommended Mitigation: ${escalationInput.recommended_mitigation}` : 'No recommended mitigation',
+      '',
+      `Escalation Priority: ${priority}`,
+      escalationInput.target_resolution_date ? `Target Resolution Date: ${escalationInput.target_resolution_date}` : 'No target resolution date set',
+      '',
+      'SOURCE DOCUMENTATION:',
+      risk.source_document_id ? `Source Document ID: ${risk.source_document_id}` : 'No source document referenced',
+      risk.source_document_name ? `Source Document Name: ${risk.source_document_name}` : '',
+      ''
+    ]
+
+    // Combine all notes and update the issue
+    const allNotes = [...escalationNotes]
+    
     if (mitigationPlans.length > 0) {
       const mitigationPlanNotes = [
         '=== MITIGATION PLANS FOR PLAYBOOK INITIATION ===',
@@ -936,24 +981,27 @@ export async function escalateRiskToIssue(
           )
           .map(plan => `- ${plan.title} (${plan.action_type}, ${plan.priority} priority)`)
       ].join('\n')
-
-      // Append to existing notes or create new notes
-      const existingNotes = issue.notes || ''
-      const updatedNotes = existingNotes
-        ? `${existingNotes}\n\n${mitigationPlanNotes}`
-        : mitigationPlanNotes
-
-      await updateIssue(issue.id, { notes: updatedNotes }, userId)
-
-      logger.info('[ISSUE-SERVICE] Stored mitigation plan references in issue notes', {
-        issueId: issue.id,
-        planCount: mitigationPlans.length,
-        playbookCandidates: mitigationPlans.filter(p =>
-          (p.status === 'in_progress' || p.status === 'planned') &&
-          (p.action_type === 'contingency' || p.action_type === 'mitigation')
-        ).length
-      })
+      
+      allNotes.push(mitigationPlanNotes)
     }
+
+    // Append to existing notes or create new notes
+    const existingNotes = issue.notes || ''
+    const updatedNotes = existingNotes
+      ? `${existingNotes}\n\n${allNotes.join('\n')}`
+      : allNotes.join('\n')
+
+    await updateIssue(issue.id, { notes: updatedNotes }, userId)
+
+    logger.info('[ISSUE-SERVICE] Stored escalation details and mitigation plan references in issue notes', {
+      issueId: issue.id,
+      riskId,
+      planCount: mitigationPlans.length,
+      playbookCandidates: mitigationPlans.filter(p =>
+        (p.status === 'in_progress' || p.status === 'planned') &&
+        (p.action_type === 'contingency' || p.action_type === 'mitigation')
+      ).length
+    })
 
     // Update risk status to 'materialized'
     try {
@@ -1061,18 +1109,50 @@ export function suggestRootCauseAnalysis(
  * Get resolution recommendations (playbooks) for an issue (Phase 2 Enhancement)
  */
 export async function getResolutionRecommendations(issueId: string): Promise<playbookService.Playbook[]> {
+  const log = logger.child({ service: 'issueService', method: 'getResolutionRecommendations' })
+  
   try {
+    log.info('[ISSUES] Starting resolution recommendations', { issueId })
+    
     const result = await pool.query("SELECT project_id, category, priority FROM issues WHERE id = $1", [issueId])
-    if (result.rows.length === 0) return []
+    
+    log.info('[ISSUES] Database query result', { 
+      issueId, 
+      rowsFound: result.rows.length,
+      hasResult: !!result,
+      hasRows: !!(result && result.rows)
+    })
+    
+    if (result.rows.length === 0) {
+      log.warn('[ISSUES] Issue not found for resolution recommendations', { issueId })
+      return []
+    }
 
     const issue = result.rows[0]
-    return await playbookService.findMatchingPlaybooks({
+    
+    // Log the issue data for debugging
+    log.info('[ISSUES] Getting resolution recommendations for issue', {
+      issueId,
+      projectId: issue.project_id,
+      category: issue.category,
+      priority: issue.priority
+    })
+
+    const playbooks = await playbookService.findMatchingPlaybooks({
       project_id: issue.project_id,
       risk_category: issue.category,
       priority_level: issue.priority
     })
+    
+    log.info('[ISSUES] Playbook matching completed', {
+      issueId,
+      playbooksFound: playbooks.length,
+      playbookTitles: playbooks.map(p => p.title)
+    })
+
+    return playbooks
   } catch (error) {
-    logger.error('[ISSUES] Error getting resolution recommendations:', error)
+    log.error('[ISSUES] Error getting resolution recommendations:', { issueId, error })
     return []
   }
 }
