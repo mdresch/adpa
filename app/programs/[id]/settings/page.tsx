@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { toast } from '@/lib/notify'
-import { Trash2, Loader2, AlertCircle } from 'lucide-react'
+import { Trash2, Loader2, AlertCircle, Check } from 'lucide-react'
 import { apiClient } from '@/lib/api'
 import {
   AlertDialog,
@@ -243,23 +243,17 @@ export default function ProgramSettingsPage() {
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header />
-        <main className="flex-1 overflow-y-auto">
-          <div className="container mx-auto px-6 py-8 max-w-4xl">
-            {/* Header */}
-            <div className="mb-8">
-              <Button
-                variant="ghost"
-                onClick={() => router.push(`/programs/${programId}`)}
-                className="mb-4"
-              >
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Back to Program
-              </Button>
-              <h1 className="text-3xl font-bold text-foreground">Program Settings</h1>
-              <p className="text-sm text-muted-foreground mt-2">
-                Manage program details, budget, and configuration
-              </p>
-            </div>
+        <main className="flex-1 overflow-y-auto p-6">
+          <div className="max-w-4xl mx-auto">
+            {/* Back Button */}
+            <Button
+              variant="outline"
+              onClick={() => router.push(`/programs/${programId}`)}
+              className="mb-4"
+            >
+              ← Back to Program
+            </Button>
+            <h1 className="text-3xl font-bold text-foreground mb-6">Program Settings</h1>
 
             <div className="space-y-6">
               {/* Basic Information */}
@@ -522,7 +516,7 @@ export default function ProgramSettingsPage() {
                       </>
                     ) : (
                       <>
-                        <Save className="h-4 w-4 mr-2" />
+                        <Check className="h-4 w-4 mr-2" />
                         Save Changes
                       </>
                     )}
