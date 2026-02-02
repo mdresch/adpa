@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { formatCurrency, formatPercentage } from '@/lib/utils/formatUtils';
-import { TrendingUp, TrendingDown, AlertCircle } from 'lucide-react';
+import { TrendingUp, AlertCircle } from 'lucide-react';
 
 interface PortfolioFinancialMetrics {
   totalBudget: number;
@@ -60,7 +60,7 @@ export default function PortfolioFinancialPage() {
         setLoading(true);
         setError(null);
 
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
         // Fetch portfolio financial metrics
         const metricsRes = await fetch(`${apiUrl}/portfolio/financial`);

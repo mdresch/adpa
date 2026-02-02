@@ -58,14 +58,8 @@ export default function AIProviders() {
     id: string
     name: string
     type: string
-    model: string
-    status: string
     priority: number
     endpoint: string
-    apiKey: string
-    lastUsed: string
-    requestCount: number
-    errorRate: number
     enabled: boolean
   }>>([])
   const [loading, setLoading] = useState(false)
@@ -186,8 +180,12 @@ export default function AIProviders() {
 
   const validateForm = (state = formState) => {
     const errs: Record<string, string> = {}
-    if (!state.name || state.name.trim().length < 2) {
-      errs.name = "Name is required (min 2 characters)"
+    
+    // Name validation - Only in Add mode
+    if (!state.id) {
+      if (!state.name || state.name.trim().length < 2) {
+        errs.name = "Name is required (min 2 characters)"
+      }
     }
 
     // Map UI type directly to provider_type (including copilot)
@@ -200,8 +198,8 @@ export default function AIProviders() {
       errs.type = "Unsupported provider type for creation."
     }
 
-    // Skip API key validation until a provider is selected, and for Ollama (no key required)
-    if (uiType && uiType !== "ollama") {
+    // Skip API key validation until a provider is selected, and for Ollama (no key required), or when editing
+    if (uiType && uiType !== "ollama" && !state.id) {
       if (!state.apiKey || state.apiKey.trim().length < 16) {
         errs.apiKey = "API key looks too short. Paste the full key (min 16 chars)."
       }
@@ -213,8 +211,21 @@ export default function AIProviders() {
       delete errs.apiKey
     }
 
-    // Azure AI Foundry specific validation
-    if (providerType === "azure") {
+    // Priority validation - different rules for Add vs Edit mode
+    if (state.id) {
+      // Edit mode: only allow 1, 2, or 3
+      if (!state.priority || ![1, 2, 3].includes(state.priority)) {
+        errs.priority = "Priority must be 1 (Primary), 2 (Backup 1), or 3 (Backup 2)"
+      }
+    } else {
+      // Add mode: allow 1-10
+      if (!state.priority || state.priority < 1 || state.priority > 10) {
+        errs.priority = "Priority must be between 1 (Primary) and 10"
+      }
+    }
+
+    // Azure AI Foundry specific validation - Only in Add mode
+    if (providerType === "azure" && !state.id) {
       if (!state.endpoint || !state.endpoint.includes("cognitiveservices.azure.com")) {
         errs.endpoint = "Azure AI endpoint must be a valid cognitiveservices.azure.com URL"
       }
@@ -275,40 +286,104 @@ export default function AIProviders() {
         // Use apiClient for authenticated requests
         // Bug 1 Fix: Type assertion ensures type is never empty string
         const providerType = formState.type as Exclude<typeof formState.type, "">
-        await apiClient.request('/context-ai/providers', {
-          method: "POST",
+        
+        const isEditing = !!formState.id
+        const endpoint = isEditing 
+          ? `/context-ai/providers/${formState.id}/configure`
+          : '/context-ai/providers'
+        
+        const method = "POST" // Always use POST for both create and update
+        
+        // Debug: Log what we're sending with detailed formState
+        console.log('🔧 API Debug - Sending:', {
+          isEditing,
+          endpoint,
+          formState: {
+            id: formState.id,
+            type: formState.type,
+            priority: formState.priority,
+            enabled: formState.enabled
+          },
+          requestBody: {
+            ...(isEditing ? {
+              configuration: { 
+                endpoint: formState.endpoint, 
+                priority: parseInt(formState.priority?.toString() || '1')
+              },
+              is_active: formState.enabled,
+            } : {
+              name: formState.name,
+              provider_type: providerType,
+              api_key: formState.apiKey,
+              configuration: { 
+                endpoint: formState.endpoint, 
+                priority: formState.priority
+              },
+              is_active: formState.enabled,
+            })
+          }
+        })
+        
+        const response = await apiClient.request(endpoint, {
+          method,
           body: JSON.stringify({
-            name: formState.name,
-            provider_type: providerType,
-            api_key: formState.apiKey,
-            configuration: { 
-              endpoint: formState.endpoint, 
-              priority: formState.priority,
-              // Azure AI Foundry specific configuration
-              ...(providerType === "azure" && {
-                resourceName: formState.resourceName,
-                deploymentName: formState.deploymentName,
-                apiVersion: formState.apiVersion,
-                tenantId: formState.tenantId,
-                clientId: formState.clientId,
-                clientSecret: formState.clientSecret,
-                subscriptionId: formState.subscriptionId,
-                region: formState.region,
-                authorizationType: formState.authorizationType
-              })
-            },
-            is_active: formState.enabled,
+            ...(isEditing ? {
+              // Edit mode - only send configuration and active status
+              configuration: { 
+                endpoint: formState.endpoint, 
+                priority: parseInt(formState.priority?.toString() || '1'), // Ensure number
+                // Azure AI Foundry specific configuration
+                ...(providerType === "azure" && {
+                  resourceName: formState.resourceName,
+                  deploymentName: formState.deploymentName,
+                  apiVersion: formState.apiVersion,
+                  tenantId: formState.tenantId,
+                  clientId: formState.clientId,
+                  clientSecret: formState.clientSecret,
+                  subscriptionId: formState.subscriptionId,
+                  region: formState.region,
+                  authorizationType: formState.authorizationType
+                })
+              },
+              is_active: formState.enabled,
+            } : {
+              // Add mode - send all fields
+              name: formState.name,
+              provider_type: providerType,
+              api_key: formState.apiKey,
+              configuration: { 
+                endpoint: formState.endpoint, 
+                priority: formState.priority,
+                // Azure AI Foundry specific configuration
+                ...(providerType === "azure" && {
+                  resourceName: formState.resourceName,
+                  deploymentName: formState.deploymentName,
+                  apiVersion: formState.apiVersion,
+                  tenantId: formState.tenantId,
+                  clientId: formState.clientId,
+                  clientSecret: formState.clientSecret,
+                  subscriptionId: formState.subscriptionId,
+                  region: formState.region,
+                  authorizationType: formState.authorizationType
+                })
+              },
+              is_active: formState.enabled,
+            }),
           }),
         })
 
-  await loadProviders()
-  resetForm()
-  setAddDialogOpen(false)
-  toast.success("Provider created")
+        await loadProviders()
+        resetForm()
+        setAddDialogOpen(false)
+        toast.success(isEditing ? "Provider updated successfully" : "Provider created successfully")
+        
+        // Debug: Log successful response
+        console.log('✅ API Success - Provider updated, reloading providers')
+        console.log('📄 API Response:', response)
       } catch (err: any) {
         console.error(err)
-        setError(err?.message || "Failed to create provider")
-  toast.error(err?.message || "Failed to create provider")
+        setError(err?.message || `Failed to ${formState.id ? 'update' : 'create'} provider`)
+        toast.error(err?.message || `Failed to ${formState.id ? 'update' : 'create'} provider`)
       } finally {
         setActionLoading((s) => ({ ...s, create: false }))
       }
@@ -424,32 +499,36 @@ export default function AIProviders() {
       // Use the same endpoint as dashboard for consistency
       const providers = await apiClient.getAIProviders()
       // normalize providers for display
-      const normalized = providers.map((p: {
-        id: string
-        name: string
-        type: string
-        models?: string[]
-        is_active: boolean
-        configuration?: any
-      }) => ({ 
+      const normalized = providers.map((p) => ({
         id: p.id,
         name: p.name,
         type: p.type,
-        model: p.models?.[0] || 'Not specified', // Use first model as default
-        status: p.is_active ? 'active' : 'inactive',
-        priority: 1, // Default priority
-        endpoint: p.configuration?.endpoint || '', // Will be populated from configuration if needed
-        apiKey: 'Set', // Don't expose actual key
-        lastUsed: 'Never',
-        requestCount: 0,
-        errorRate: 0,
+        priority: p.configuration?.priority || 1, // Get priority from configuration or default to 1
+        endpoint: p.configuration?.endpoint || '',
         enabled: p.is_active
       }))
       setProviders(normalized)
-    } catch (err: unknown) {
-      console.error(err)
-      const errorMessage = err instanceof Error ? err.message : "Failed to load providers"
-      setError(errorMessage)
+      
+      // Debug: Log loaded providers with priority details
+      const providerDebug = normalized.map(p => ({
+        id: p.id,
+        name: p.name,
+        type: p.type,
+        priority: p.priority,
+        enabled: p.enabled
+      }))
+      console.log('📋 Loaded Providers:', providerDebug)
+      
+      // Debug: Check if any provider has priority != 1
+      const nonDefaultPriorities = providerDebug.filter(p => p.priority !== 1)
+      if (nonDefaultPriorities.length > 0) {
+        console.log('✅ Found providers with non-default priorities:', nonDefaultPriorities)
+      } else {
+        console.log('⚠️ All providers have default priority (1) - priority not being saved')
+      }
+    } catch (err: any) {
+      console.error('Failed to load providers:', err)
+      setError(err.message)
     } finally {
       setLoading(false)
     }
@@ -685,89 +764,198 @@ export default function AIProviders() {
                   open={addDialogOpen}
                   onOpenChange={(open: boolean) => {
                     setAddDialogOpen(open)
-                    if (open) resetForm()
+                    if (open && !formState.id) resetForm() // Only reset if not editing
                   }}
                 >
                   <DialogContent className="sm:max-w-[425px]">
                     <form onSubmit={handleAddProvider}>
                       <DialogHeader>
-                        <DialogTitle>Add AI Provider</DialogTitle>
+                        <DialogTitle>{formState.id ? 'Edit AI Provider' : 'Add AI Provider'}</DialogTitle>
                         <DialogDescription>
-                          Configure a new AI provider for document generation.
+                          {formState.id 
+                            ? 'Set failover priority for this provider. API key and configuration are already stored.'
+                            : 'Configure a new AI provider for document generation.'
+                          }
                         </DialogDescription>
                       </DialogHeader>
                       <div className="grid gap-4 py-4">
-                      <div className="grid grid-cols-4 items-center gap-4">
-                        <Label htmlFor="provider-type" className="text-right">
-                          Provider
-                        </Label>
-                        <Select
-                          value={formState.type || undefined}
-                          onValueChange={(val: string) => setFormState((s) => ({ ...s, type: (val || "") as typeof s.type }))}
-                        >
-                          <SelectTrigger className="col-span-3">
-                            <SelectValue placeholder="Select provider (priorities in Failover Settings)" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="openai">OpenAI</SelectItem>
-                            <SelectItem value="google">Google AI</SelectItem>
-                            <SelectItem value="groq">Groq AI (FREE & Fast)</SelectItem>
-                            <SelectItem value="azure">Azure AI Foundry</SelectItem>
-                            <SelectItem value="mistral">Mistral AI</SelectItem>
-                            <SelectItem value="anthropic">Anthropic (Claude)</SelectItem>
-                            <SelectItem value="deepseek">DeepSeek AI</SelectItem>
-                            <SelectItem value="moonshot">Moonshot AI (Kimi)</SelectItem>
-                            <SelectItem value="xai">xAI (Grok)</SelectItem>
-                            <SelectItem value="ollama">Ollama (Local)</SelectItem>
-                            <SelectItem value="copilot">GitHub Copilot</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="grid grid-cols-4 items-center gap-4">
-                        <Label htmlFor="name" className="text-right">
-                          Name
-                        </Label>
-                        <div className="col-span-3">
-                          <Input id="name" value={formState.name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState((s) => ({ ...s, name: e.target.value }))} placeholder="Provider name" />
-                          {formErrors.name && <div className="text-xs text-red-600 mt-1">{formErrors.name}</div>}
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-4 items-center gap-4">
-                        <Label htmlFor="api-key" className="text-right">
-                          API Key
-                        </Label>
-                        <div className="col-span-3">
-                          <Input 
-                            id="api-key" 
-                            type="password" 
-                            value={formState.apiKey} 
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState((s) => ({ ...s, apiKey: e.target.value }))} 
-                            placeholder={
-                              !formState.type
-                                ? "Select a provider first"
-                                : formState.type === "ollama"
-                                ? "Not required for local Ollama"
-                                : "Enter API key (will be encrypted and stored securely)"
-                            }
-                            disabled={!formState.type || formState.type === "ollama"}
-                          />
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {!formState.type
-                              ? "Select a provider above. Priorities and failover are configured in Failover Settings."
-                              : formState.type === "ollama"
-                              ? "🏠 Local Ollama doesn't require an API key - it runs locally on your machine."
-                              : formState.type === "copilot"
-                              ? "🔒 GitHub tokens usually start with 'ghp_' or 'github_pat_'. API key will be encrypted and stored securely."
-                              : "🔒 API key will be encrypted and stored securely. Only the application can access it."
-                            }
-                          </p>
-                          {formErrors.apiKey && <div className="text-xs text-red-600 mt-1">{formErrors.apiKey}</div>}
-                        </div>
-                      </div>
 
-                      
-                      {/* Azure AI Foundry specific fields */}
-                      {formState.type === "azure" && (
+                      {/* Conditional form fields based on Add/Edit mode */}
+                      {formState.id ? (
+                        // EDIT MODE: Show provider selector and priority field
+                        <>
+                          {/* Provider Type Selector */}
+                          <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="provider-type" className="text-right">
+                              Provider
+                            </Label>
+                            <Select
+                              value={formState.type || undefined}
+                              onValueChange={(val: string) => {
+                                // Find provider with matching type and load its data
+                                const matchingProvider = providers.find(p => p.type === val)
+                                if (matchingProvider) {
+                                  setFormState({
+                                    ...formState,
+                                    type: val as typeof formState.type,
+                                    name: matchingProvider.name,
+                                    priority: matchingProvider.priority,
+                                    endpoint: matchingProvider.endpoint,
+                                    enabled: matchingProvider.enabled,
+                                    id: matchingProvider.id // Switch to editing this provider
+                                  })
+                                } else {
+                                  // If no existing provider of this type, just update type
+                                  setFormState((s) => ({ ...s, type: (val || "") as typeof s.type }))
+                                }
+                              }}
+                            >
+                              <SelectTrigger className="col-span-3">
+                                <SelectValue placeholder="Select provider" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="openai">OpenAI</SelectItem>
+                                <SelectItem value="google">Google AI</SelectItem>
+                                <SelectItem value="groq">Groq AI (FREE & Fast)</SelectItem>
+                                <SelectItem value="azure">Azure AI Foundry</SelectItem>
+                                <SelectItem value="mistral">Mistral AI</SelectItem>
+                                <SelectItem value="anthropic">Anthropic (Claude)</SelectItem>
+                                <SelectItem value="deepseek">DeepSeek AI</SelectItem>
+                                <SelectItem value="moonshot">Moonshot AI (Kimi)</SelectItem>
+                                <SelectItem value="xai">xAI (Grok)</SelectItem>
+                                <SelectItem value="ollama">Ollama (Local)</SelectItem>
+                                <SelectItem value="copilot">GitHub Copilot</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          {/* Priority Field - Only field for Edit Mode */}
+                          <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="priority" className="text-right">
+                              Failover Priority
+                            </Label>
+                            <div className="col-span-3">
+                              <Select
+                                value={formState.priority?.toString()}
+                                onValueChange={(val: string) => setFormState((s) => ({ ...s, priority: parseInt(val) || 1 }))}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select priority" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="1">1 - Primary (tried first)</SelectItem>
+                                  <SelectItem value="2">2 - Backup 1 (tried if primary fails)</SelectItem>
+                                  <SelectItem value="3">3 - Backup 2 (tried if primary and backup 1 fail)</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Set the order this provider will be tried during failover
+                              </p>
+                              {formErrors.priority && <div className="text-xs text-red-600 mt-1">{formErrors.priority}</div>}
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        // ADD MODE: Show all fields including API key
+                        <>
+                          <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="provider-type" className="text-right">
+                              Provider
+                            </Label>
+                            <Select
+                              value={formState.type || undefined}
+                              onValueChange={(val: string) => setFormState((s) => ({ ...s, type: (val || "") as typeof s.type }))}
+                            >
+                              <SelectTrigger className="col-span-3">
+                                <SelectValue placeholder="Select provider (priorities in Failover Settings)" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="openai">OpenAI</SelectItem>
+                                <SelectItem value="google">Google AI</SelectItem>
+                                <SelectItem value="groq">Groq AI (FREE & Fast)</SelectItem>
+                                <SelectItem value="azure">Azure AI Foundry</SelectItem>
+                                <SelectItem value="mistral">Mistral AI</SelectItem>
+                                <SelectItem value="anthropic">Anthropic (Claude)</SelectItem>
+                                <SelectItem value="deepseek">DeepSeek AI</SelectItem>
+                                <SelectItem value="moonshot">Moonshot AI (Kimi)</SelectItem>
+                                <SelectItem value="xai">xAI (Grok)</SelectItem>
+                                <SelectItem value="ollama">Ollama (Local)</SelectItem>
+                                <SelectItem value="copilot">GitHub Copilot</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="name" className="text-right">
+                              Name
+                            </Label>
+                            <div className="col-span-3">
+                              <Input id="name" value={formState.name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState((s) => ({ ...s, name: e.target.value }))} placeholder="Provider name" />
+                              {formErrors.name && <div className="text-xs text-red-600 mt-1">{formErrors.name}</div>}
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="api-key" className="text-right">
+                              API Key
+                            </Label>
+                            <div className="col-span-3">
+                              <Input 
+                                id="api-key" 
+                                type="password" 
+                                value={formState.apiKey} 
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState((s) => ({ ...s, apiKey: e.target.value }))} 
+                                placeholder={
+                                  !formState.type
+                                    ? "Select a provider first"
+                                    : formState.type === "ollama"
+                                    ? "Not required for local Ollama"
+                                    : "Enter API key (will be encrypted and stored securely)"
+                                }
+                                disabled={!formState.type || formState.type === "ollama"}
+                              />
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {!formState.type
+                                  ? "Select a provider above. Priorities and failover are configured in Failover Settings."
+                                  : formState.type === "ollama"
+                                  ? "🏠 Local Ollama doesn't require an API key - it runs locally on your machine."
+                                  : formState.type === "copilot"
+                                  ? "🔒 GitHub tokens usually start with 'ghp_' or 'github_pat_'. API key will be encrypted and stored securely."
+                                  : "🔒 API key will be encrypted and stored securely. Only the application can access it."
+                                }
+                              </p>
+                              {formErrors.apiKey && <div className="text-xs text-red-600 mt-1">{formErrors.apiKey}</div>}
+                            </div>
+                          </div>
+
+                          {/* Priority Field - Full version for Add Mode */}
+                          <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="priority" className="text-right">
+                              Priority
+                            </Label>
+                            <div className="col-span-3">
+                              <Input 
+                                id="priority" 
+                                type="number" 
+                                value={formState.priority} 
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState((s) => ({ ...s, priority: parseInt(e.target.value) || 1 }))} 
+                                placeholder="1 (Primary), 2 (Backup 1), 3 (Backup 2)" 
+                                min="1"
+                                max="10"
+                              />
+                              <p className="text-xs text-muted-foreground mt-1">
+                                <strong>Priority System:</strong> Lower numbers = higher priority<br/>
+                                • <strong>1</strong> = Primary provider (tried first)<br/>
+                                • <strong>2</strong> = Backup 1 (tried if primary fails)<br/>
+                                • <strong>3</strong> = Backup 2 (tried if primary and backup 1 fail)<br/>
+                                • Higher numbers = lower priority
+                              </p>
+                              {formErrors.priority && <div className="text-xs text-red-600 mt-1">{formErrors.priority}</div>}
+                            </div>
+                          </div>
+                        </>
+                      )}
+
+                      {/* Azure AI Foundry specific fields - Only show in Add Mode */}
+                      {!formState.id && formState.type === "azure" && (
                         <>
                           <div className="grid grid-cols-4 items-center gap-4">
                             <Label htmlFor="endpoint" className="text-right">
@@ -941,8 +1129,8 @@ export default function AIProviders() {
                             <div>
                               <CardTitle className="text-lg flex items-center space-x-2">
                                 <span>{provider.name}</span>
-                                <Badge variant={provider.status === "active" ? "default" : "secondary"}>
-                                  {provider.status}
+                                <Badge variant={provider.enabled ? "default" : "secondary"}>
+                                  {provider.enabled ? "Active" : "Inactive"}
                                 </Badge>
                               </CardTitle>
                             </div>
@@ -967,7 +1155,7 @@ export default function AIProviders() {
                           <div className="grid grid-cols-2 gap-4">
                             <div>
                               <Label className="text-sm font-medium">Model</Label>
-                              <p className="text-sm text-muted-foreground mt-1">{provider.model || 'Not specified'}</p>
+                              <p className="text-sm text-muted-foreground mt-1">{provider.type}</p>
                             </div>
                             <div>
                               <Label className="text-sm font-medium">Priority</Label>
@@ -978,17 +1166,13 @@ export default function AIProviders() {
                           <div className="grid grid-cols-2 gap-4">
                             <div>
                               <Label className="text-sm font-medium">Last Used</Label>
-                              <p className="text-sm text-muted-foreground mt-1">{provider.lastUsed || 'Never'}</p>
+                              <p className="text-sm text-muted-foreground mt-1">Not available</p>
                             </div>
                             <div>
                               <Label className="text-sm font-medium">API Key</Label>
                               <div className="flex items-center space-x-2 mt-1">
-                                <Badge variant={
-                                  provider.type === "ollama" ? "secondary" : 
-                                  provider.apiKey ? "default" : "destructive"
-                                }>
-                                  {provider.type === "ollama" ? "Not Required" : 
-                                   provider.apiKey ? "Configured" : "Not Set"}
+                                <Badge variant="secondary">
+                                  Configured
                                 </Badge>
                               </div>
                             </div>
@@ -1163,7 +1347,7 @@ export default function AIProviders() {
                           <div>
                             <p className="text-sm text-muted-foreground">Last Tested</p>
                             <p className="text-sm mt-1">
-                              {provider.lastUsed || "Never"}
+                              Not available
                             </p>
                           </div>
                         </div>
@@ -1367,7 +1551,7 @@ export default function AIProviders() {
                                     {provider.enabled ? "Active" : "Inactive"}
                                   </Badge>
                                 </div>
-                                <p className="text-sm text-muted-foreground capitalize">{provider.type} • {provider.model}</p>
+                                <p className="text-sm text-muted-foreground capitalize">{provider.type}</p>
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
@@ -1384,6 +1568,77 @@ export default function AIProviders() {
                           </div>
                         ))}
                     </div>
+
+                    {/* Priority Management Section */}
+                    {providers.length > 0 && (
+                      <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                        <div className="flex items-center justify-between mb-4">
+                          <div>
+                            <h4 className="font-medium text-blue-900 dark:text-blue-100">Quick Priority Management</h4>
+                            <p className="text-sm text-blue-700 dark:text-blue-300">
+                              Click to set provider as Primary, Backup 1, or Backup 2
+                            </p>
+                          </div>
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => setAddDialogOpen(true)}
+                          >
+                            <Plus className="h-4 w-4 mr-2" />
+                            Add Provider
+                          </Button>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          {providers
+                            .sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0))
+                            .slice(0, 3)
+                            .map((provider, index) => (
+                              <Button
+                                key={provider.id}
+                                variant={provider.enabled ? "default" : "secondary"}
+                                className="h-auto p-4 flex flex-col items-start"
+                                onClick={() => {
+                                  // Open edit dialog with current provider for priority adjustment
+                                  setFormState({
+                                    id: provider.id,
+                                    name: provider.name,
+                                    type: provider.type as any,
+                                    apiKey: "",
+                                    endpoint: provider.endpoint,
+                                    priority: provider.priority || (index + 1),
+                                    enabled: provider.enabled,
+                                    resourceName: "",
+                                    deploymentName: "",
+                                    apiVersion: "",
+                                    tenantId: "",
+                                    clientId: "",
+                                    clientSecret: "",
+                                    subscriptionId: "",
+                                    region: "",
+                                    authorizationType: "api-key"
+                                  });
+                                  setAddDialogOpen(true);
+                                }}
+                              >
+                                <div className="w-full text-left">
+                                  <div className="flex items-center justify-between w-full mb-2">
+                                    <span className="font-medium">{provider.name}</span>
+                                    <Badge variant="outline" className="text-xs">
+                                      {index === 0 ? "Primary" : `Backup ${index}`}
+                                    </Badge>
+                                  </div>
+                                  <div className="text-xs opacity-80">
+                                    Priority: {provider.priority || (index + 1)}
+                                  </div>
+                                  <div className="text-xs opacity-80">
+                                    {provider.type} • {provider.enabled ? "Active" : "Inactive"}
+                                  </div>
+                                </div>
+                              </Button>
+                            ))}
+                        </div>
+                      </div>
+                    )}
 
                     {providers.length === 0 && (
                       <div className="text-center py-8">

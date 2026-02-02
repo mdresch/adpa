@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { toast } from '@/lib/notify'
-import { ArrowLeft, Save, Trash2, Loader2, AlertTriangle } from 'lucide-react'
+import { Trash2, Loader2, AlertCircle } from 'lucide-react'
 import { apiClient } from '@/lib/api'
 import {
   AlertDialog,
@@ -41,6 +41,9 @@ interface Program {
   rag_status?: 'green' | 'amber' | 'red'
   created_at?: string
   updated_at?: string
+  project_count?: number
+  total_project_budget?: number
+  total_actual_cost?: number
 }
 
 export default function ProgramSettingsPage() {
@@ -52,6 +55,8 @@ export default function ProgramSettingsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [calculatedBudget, setCalculatedBudget] = useState<number>(0)
+  const [projectCount, setProjectCount] = useState<number>(0)
 
   // Form state
   const [formData, setFormData] = useState({
@@ -85,6 +90,9 @@ export default function ProgramSettingsPage() {
       
       setProgram(programData)
       
+      // Fetch projects to calculate budget
+      await fetchProgramBudget(programId)
+      
       // Populate form with existing data
       setFormData({
         name: programData.name || '',
@@ -110,6 +118,36 @@ export default function ProgramSettingsPage() {
     }
   }
 
+  const fetchProgramBudget = async (programId: string) => {
+    try {
+      // Fetch projects for this program using the correct API
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/projects?programId=${programId}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        }
+      })
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch projects')
+      }
+      
+      const projectsData = await response.json()
+      
+      if (projectsData && projectsData.projects) {
+        const totalBudget = projectsData.projects.reduce((sum: number, project: any) => {
+          return sum + (project.budget || 0)
+        }, 0)
+        
+        setCalculatedBudget(totalBudget)
+        setProjectCount(projectsData.projects.length)
+      }
+    } catch (error: any) {
+      console.error('Failed to fetch program budget:', error)
+      setCalculatedBudget(0)
+      setProjectCount(0)
+    }
+  }
+
   const handleSave = async () => {
     if (!formData.name.trim()) {
       toast.error('Program name is required')
@@ -121,13 +159,14 @@ export default function ProgramSettingsPage() {
 
       const updateData = {
         name: formData.name.trim(),
-        description: formData.description.trim() || null,
+        description: formData.description.trim() || undefined,
         status: formData.status,
-        budget: formData.budget ? parseFloat(formData.budget) : null,
         currency: formData.currency_code, // Backend expects 'currency', not 'currency_code'
-        start_date: formData.start_date || null,
-        end_date: formData.end_date || null,
+        start_date: formData.start_date || undefined,
+        end_date: formData.end_date || undefined,
       }
+
+      console.log('🔧 Sending update data:', updateData)
 
       // Use apiClient.updateProgram() which handles the response format correctly
       await apiClient.updateProgram(programId, updateData)
@@ -189,7 +228,7 @@ export default function ProgramSettingsPage() {
           <Header />
           <main className="flex-1 flex items-center justify-center">
             <div className="text-center">
-              <AlertTriangle className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
+              <AlertCircle className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
               <h2 className="text-xl font-semibold mb-2">Program Not Found</h2>
               <Button onClick={() => router.push('/programs')}>Back to Programs</Button>
             </div>
@@ -292,21 +331,24 @@ export default function ProgramSettingsPage() {
               <Card>
                 <CardHeader>
                   <CardTitle>Financial Information</CardTitle>
-                  <CardDescription>Set budget and financial parameters</CardDescription>
+                  <CardDescription>Budget is automatically calculated from all underlying projects</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Budget */}
                     <div className="space-y-2">
-                      <Label htmlFor="budget">Total Budget</Label>
+                      <Label htmlFor="budget">Total Budget (Calculated from Projects)</Label>
                       <Input
                         id="budget"
                         type="number"
-                        value={formData.budget}
-                        onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
+                        value={calculatedBudget.toLocaleString()}
+                        readOnly
+                        className="bg-muted"
                         placeholder="0.00"
-                        step="0.01"
                       />
+                      <p className="text-xs text-muted-foreground">
+                        This is the sum of all project budgets ({projectCount} projects)
+                      </p>
                     </div>
 
                     {/* Currency */}
@@ -328,11 +370,14 @@ export default function ProgramSettingsPage() {
                   </div>
 
                   {/* Display Budget */}
-                  {formData.budget && !isNaN(parseFloat(formData.budget)) && (
+                  {calculatedBudget > 0 && (
                     <div className="p-4 bg-muted rounded-lg">
-                      <p className="text-sm text-muted-foreground">Budget Preview</p>
+                      <p className="text-sm text-muted-foreground">Program Budget Summary</p>
                       <p className="text-2xl font-bold text-foreground">
-                        {formData.currency_code} {parseFloat(formData.budget).toLocaleString()}
+                        {formData.currency_code} {calculatedBudget.toLocaleString()}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        From {projectCount} underlying projects
                       </p>
                     </div>
                   )}
@@ -490,7 +535,7 @@ export default function ProgramSettingsPage() {
                 <Card className="border-yellow-300 bg-yellow-50">
                   <CardContent className="pt-6">
                     <div className="flex items-center gap-2 text-yellow-800">
-                      <AlertTriangle className="h-5 w-5" />
+                      <AlertCircle className="h-5 w-5" />
                       <span className="text-sm font-medium">
                         End date cannot be before start date
                       </span>
