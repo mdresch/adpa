@@ -40,8 +40,7 @@ const migrationMap = {
     '018': { file: '018_earned_value_metrics.sql', description: 'Earned Value Metrics' },
     '019': { file: '019_opportunities.sql', description: 'Opportunities' },
     '020': { file: '020_risk_responses.sql', description: 'Risk Responses' },
-    '021': { file: '021_performance_actuals.sql', description: 'Performance Actuals' },
-    '356': { file: '356_add_materialized_status_to_risks.sql', description: 'Add Materialized Status to Risks' }
+    '021': { file: '021_performance_actuals.sql', description: 'Performance Actuals' }
 };
 
 const migration = migrationMap[migrationNumber];
@@ -104,7 +103,7 @@ async function applyMigration() {
         console.log(`🚀 Applying migration ${migrationNumber}: ${migration.description}`);
 
         // Read the migration file
-        const migrationPath = path.join(__dirname, '../src/database/migrations', migration.file);
+        const migrationPath = path.join(__dirname, '../migrations', migration.file);
 
         if (!fs.existsSync(migrationPath)) {
             console.error(`❌ Migration file not found: ${migrationPath}`);
