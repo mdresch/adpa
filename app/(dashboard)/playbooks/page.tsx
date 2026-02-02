@@ -40,16 +40,17 @@ interface PlaybookWithStats {
     project_id: string
     title: string
     description?: string
-    category: string
-    trigger_type: string
+    category: 'risk' | 'incident' | 'escalation' | 'resolution'
+    trigger_type: 'auto' | 'manual' | 'threshold'
     applicable_risk_categories?: string[]
     applicable_severity_levels?: string[]
     applicable_priority_levels?: string[]
     is_active: boolean
     created_by?: string
-    created_at?: string
-    updated_at?: string
-    version?: number
+    created_at: string
+    updated_at: string
+    version: number
+    previous_version_id?: string
     // Stats
     executions_count?: number
     success_rate?: number
@@ -57,6 +58,9 @@ interface PlaybookWithStats {
     last_execution?: string
     scenarios_count?: number
     steps_count?: number
+    // Joined data
+    scenarios?: any[]
+    steps?: any[]
 }
 
 export default function PlaybooksPage() {
@@ -77,8 +81,8 @@ export default function PlaybooksPage() {
     const [formData, setFormData] = useState({
         title: "",
         description: "",
-        category: "risk" as string,
-        trigger_type: "manual" as string,
+        category: "risk" as 'risk' | 'incident' | 'escalation' | 'resolution',
+        trigger_type: "manual" as 'auto' | 'manual' | 'threshold',
         applicable_risk_categories: [] as string[],
         applicable_severity_levels: [] as string[],
         applicable_priority_levels: [] as string[],

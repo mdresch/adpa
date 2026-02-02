@@ -2108,8 +2108,15 @@ class ApiClient {
   // Playbook Management API
   async getPlaybooks(params?: { project_id?: string; category?: string; is_active?: boolean }): Promise<{ playbooks: Playbook[] }> {
     const query = params ? '?' + new URLSearchParams(params as any).toString() : ''
-    const response = await this.get<{ success: boolean; data: Playbook[] }>(`/playbooks${query}`)
-    return { playbooks: response.data }
+    const response = await this.get<{ success: boolean; data: Playbook[] } | { playbooks: Playbook[] }>(`/playbooks${query}`)
+    // Handle both old and new response formats for backward compatibility
+    if ('data' in response) {
+      return { playbooks: response.data }
+    } else if ('playbooks' in response) {
+      return { playbooks: response.playbooks }
+    } else {
+      return { playbooks: [] }
+    }
   }
 
   async getPlaybook(id: string): Promise<{ playbook: Playbook; scenarios: PlaybookScenario[]; steps: PlaybookStep[] }> {
