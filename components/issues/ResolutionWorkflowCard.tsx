@@ -32,7 +32,7 @@ import { Slider } from "@/components/ui/slider"
 import { format, differenceInHours } from "date-fns"
 import { apiClient, Issue, Playbook, PlaybookExecution, PlaybookStep } from "@/lib/api"
 import { toast } from "@/lib/notify"
-import { CONFIDENCE_WEIGHTS, CONFIDENCE_THRESHOLDS } from "@/server/src/constants/playbook"
+import { CONFIDENCE_WEIGHTS, CONFIDENCE_THRESHOLDS } from '@/lib/constants/playbook'
 
 // Enhanced interfaces for confidence scoring
 interface PlaybookWithConfidence extends Playbook {

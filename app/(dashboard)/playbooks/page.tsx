@@ -34,7 +34,7 @@ import {
 import { apiClient, Playbook, PlaybookScenario, PlaybookStep, PlaybookExecution } from "@/lib/api"
 import { toast } from "@/lib/notify"
 import { format, differenceInDays } from "date-fns"
-import { SYSTEM_USER_GUID } from "@/server/src/constants/playbook"
+import { SYSTEM_USER_GUID } from '@/lib/constants/playbook'
 
 interface PlaybookWithStats {
     id: string
