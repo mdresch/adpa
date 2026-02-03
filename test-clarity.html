@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ADPA - Microsoft Clarity Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 15px;
+            border-radius: 6px;
+            margin: 10px 0;
+        }
+        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .info { background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        .warning { background-color: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background-color: #0056b3; }
+        .test-area {
+            border: 2px dashed #ccc;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        .debug-info {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+    </style>
+    
+    <!-- Microsoft Clarity Analytics Script -->
+    <script
+        type="text/javascript"
+        dangerouslySetInnerHTML="
+          (function(c,l,a,r,i,t,y){
+              c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+              t=l.createElement(r);t.async=1;t.src=&quot;https://www.clarity.ms/tag/&quot;+i;
+              y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+          })(window, document, &quot;clarity&quot;, &quot;script&quot;, &quot;uhyjwbsgsg&quot;);
+        "
+    ></script>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Microsoft Clarity Test Page</h1>
+        <p>This page tests the Microsoft Clarity analytics integration for the ADPA application.</p>
+        
+        <div class="status success">
+            ✅ <strong>Clarity Script Loaded:</strong> The Microsoft Clarity tracking script has been successfully integrated.
+        </div>
+        
+        <div class="status info">
+            📊 <strong>Project ID:</strong> uhyjwbsgsg
+        </div>
+        
+        <div class="status warning">
+            ⏱️ <strong>Data Processing:</strong> Analytics data will appear in the Clarity dashboard within 2-4 hours.
+        </div>
+        
+        <h2>🧪 Interactive Test Elements</h2>
+        <p>Interact with these elements to generate test data for Clarity:</p>
+        
+        <div class="test-area">
+            <h3>Click Test Area</h3>
+            <p>Click anywhere in this area to test click tracking and heatmaps.</p>
+            <button onclick="testButtonClick()">Test Button Click</button>
+            <button onclick="testFormInteraction()">Test Form Interaction</button>
+            <button onclick="testNavigation()">Test Navigation</button>
+        </div>
+        
+        <div class="test-area">
+            <h3>Form Test</h3>
+            <input type="text" placeholder="Test input field" style="padding: 8px; margin: 5px; width: 200px;">
+            <input type="email" placeholder="Test email field" style="padding: 8px; margin: 5px; width: 200px;">
+            <br><br>
+            <textarea placeholder="Test textarea" style="padding: 8px; margin: 5px; width: 300px; height: 60px;"></textarea>
+        </div>
+        
+        <h2>🔍 Debug Information</h2>
+        <div class="debug-info">
+            <div id="debug-info">Loading debug information...</div>
+        </div>
+        
+        <h2>📊 What Clarity Tracks</h2>
+        <ul>
+            <li><strong>Clicks:</strong> Every click on this page</li>
+            <li><strong>Movement:</strong> Mouse movement patterns</li>
+            <li><strong>Scrolling:</strong> How far you scroll down the page</li>
+            <li><strong>Sessions:</strong> Duration and page interactions</li>
+            <li><strong>Device:</strong> Browser, OS, and screen resolution</li>
+            <li><strong>Performance:</strong> Page load times and Core Web Vitals</li>
+        </ul>
+        
+        <h2>🌐 Accessing Clarity Dashboard</h2>
+        <ol>
+            <li>Go to <a href="https://clarity.microsoft.com/" target="_blank">Microsoft Clarity</a></li>
+            <li>Sign in with your Microsoft account</li>
+            <li>Select the ADPA project (ID: uhyjwbsgsg)</li>
+            <li>View heatmaps, session recordings, and analytics</li>
+        </ol>
+    </div>
+
+    <script>
+        // Test functions for generating Clarity events
+        function testButtonClick() {
+            alert('Button clicked! This interaction will be tracked by Clarity.');
+            if (typeof window.clarity !== 'undefined') {
+                window.clarity('set', 'test_button_clicked', 'success');
+            }
+        }
+        
+        function testFormInteraction() {
+            alert('Form interaction test! This will be tracked as user engagement.');
+            if (typeof window.clarity !== 'undefined') {
+                window.clarity('set', 'form_interaction', 'test');
+            }
+        }
+        
+        function testNavigation() {
+            alert('Navigation test! This simulates user navigation behavior.');
+            if (typeof window.clarity !== 'undefined') {
+                window.clarity('set', 'navigation_test', 'completed');
+            }
+        }
+        
+        // Debug information display
+        function updateDebugInfo() {
+            const debugDiv = document.getElementById('debug-info');
+            const info = [];
+            
+            info.push('=== Microsoft Clarity Debug Info ===');
+            info.push(`Clarity Loaded: ${typeof window.clarity !== 'undefined' ? 'YES' : 'NO'}`);
+            
+            if (typeof window.clarity !== 'undefined') {
+                info.push(`Clarity Queue: ${window.clarity.q ? window.clarity.q.length : 0} events`);
+                info.push(`Project ID: uhyjwbsgsg`);
+                info.push(`Current URL: ${window.location.href}`);
+                info.push(`User Agent: ${navigator.userAgent}`);
+                info.push(`Screen Resolution: ${screen.width}x${screen.height}`);
+                info.push(`Viewport: ${window.innerWidth}x${window.innerHeight}`);
+            }
+            
+            info.push('');
+            info.push('=== Network Requests ===');
+            info.push('Check the Network tab in Developer Tools (F12)');
+            info.push('Look for requests to: clarity.ms/tag/uhyjwbsgsg');
+            
+            info.push('');
+            info.push('=== Manual Clarity Commands ===');
+            info.push('Run these in browser console:');
+            info.push('typeof window.clarity');
+            info.push('window.clarity && window.clarity.q');
+            info.push('window.clarity("set", "custom_event", "value")');
+            
+            debugDiv.innerHTML = info.join('\n');
+        }
+        
+        // Update debug info after page loads
+        setTimeout(updateDebugInfo, 1000);
+        
+        // Check for Clarity loading
+        setTimeout(() => {
+            if (typeof window.clarity !== 'undefined') {
+                console.log('✅ Microsoft Clarity loaded successfully!');
+                console.log('📊 Tracking project: uhyjwbsgsg');
+                console.log('🌐 Dashboard: https://clarity.microsoft.com/');
+            } else {
+                console.warn('⚠️ Microsoft Clarity not detected. Check script loading.');
+            }
+        }, 2000);
+    </script>
+</body>
+</html>

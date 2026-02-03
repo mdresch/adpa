@@ -10,6 +10,7 @@ import { parseAIResponse } from '../../base/Parser'
 import { buildExtractionPrompt } from '../../base/PromptBuilder'
 import { resolveSourceDocumentIdStrict } from '../../base/SourceDocumentResolver'
 import { extractionCacheService } from '../../cache'
+import { isValidUUID } from '../../base/Persistence'
 import type { PoolClient } from 'pg'
 import type { PersistenceResult } from '../../base/Persistence'
 
@@ -211,10 +212,10 @@ export async function saveStakeholderIssues(
     ]
 
     if (issueIdColumn) {
-      columnOrder.push({ name: issueIdColumn, value: (e) => e.issue_id || null })
+      columnOrder.push({ name: issueIdColumn, value: (e) => isValidUUID(e.issue_id) ? e.issue_id : null })
     }
     if (stakeholderIdColumn) {
-      columnOrder.push({ name: stakeholderIdColumn, value: (e) => e.stakeholder_id || null })
+      columnOrder.push({ name: stakeholderIdColumn, value: (e) => isValidUUID(e.stakeholder_id) ? e.stakeholder_id : null })
     }
     if (stakeholderNameColumn) {
       columnOrder.push({ name: stakeholderNameColumn, value: (e) => e.stakeholder_name || null })

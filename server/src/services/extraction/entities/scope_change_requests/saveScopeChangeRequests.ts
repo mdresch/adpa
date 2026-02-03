@@ -5,6 +5,7 @@
 import { logger } from '../../../../utils/logger'
 import type { PoolClient } from 'pg'
 import type { PersistenceResult } from '../../base/Persistence'
+import { normalizeDate } from '../../base/Persistence'
 import type { ScopeChangeRequest } from './types'
 
 export async function saveScopeChangeRequests(
@@ -40,7 +41,7 @@ export async function saveScopeChangeRequests(
                 e.cost_impact || null,
                 e.schedule_impact_days || null,
                 e.status || 'Pending',
-                e.decision_date || null,
+                normalizeDate(e.decision_date), // Use normalizeDate
                 e.source_document_id || null,
                 userId
             )

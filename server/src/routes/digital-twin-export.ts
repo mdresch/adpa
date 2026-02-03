@@ -5,7 +5,7 @@ import { logger } from '../utils/logger'
 
 const router = Router()
 const visioService = new VisioGenerationService()
-const assetService = new DigitalTwinAssetService() // Assumes we can fetch assets
+// Using the imported service object directly
 
 // Helper to cast generic service to typed service or use direct DB access in future
 // For now, let's assume assetService has a method getAllAssets or we can query DB.
@@ -23,9 +23,9 @@ router.get('/visio', async (req: Request, res: Response) => {
         }
 
         // Fetch Assets
-        // Note: DigitalTwinAssetService.getProjectAssets or similar
+        // Note: digitalTwinAssetService.getProjectAssets or similar
         // Let's assume assetService.getAssets(projectId)
-        const assets = await assetService.getAssetsByProject(projectId)
+        const assets = await digitalTwinAssetService.getAssetsByProject(projectId)
 
         if (!assets || assets.length === 0) {
             // We can still generate an empty template

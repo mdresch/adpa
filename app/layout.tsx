@@ -11,6 +11,7 @@ import { WebSocketProvider } from "@/contexts/WebSocketContext"
 import RoomStatusList from "@/components/room-status-list"
 import { Analytics } from "@vercel/analytics/next"
 import { SpeedInsights } from "@vercel/speed-insights/next"
+import { ClarityProvider } from "@/components/analytics/ClarityProvider"
 
 export const metadata: Metadata = {
   title: "ADPA Admin Portal",
@@ -26,23 +27,25 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="font-sans antialiased">
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-          <AuthProvider>
-            <WebSocketProvider>
-              <Suspense fallback={null}>
-                <RouteProgress />
-              </Suspense>
-              {/* Mobile/Phone Warning (tablets OK!) */}
-              <MobileWarning mode="warning" />
-              {children}
-              {/* Floating realtime rooms panel */}
-              <div className="fixed bottom-6 right-6 z-50 w-80">
-                <RoomStatusList />
-              </div>
-              <Toaster />
-            </WebSocketProvider>
-          </AuthProvider>
-        </ThemeProvider>
+        <ClarityProvider projectId="uhyjwbsgsg">
+          <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+            <AuthProvider>
+              <WebSocketProvider>
+                <Suspense fallback={null}>
+                  <RouteProgress />
+                </Suspense>
+                {/* Mobile/Phone Warning (tablets OK!) */}
+                <MobileWarning mode="warning" />
+                {children}
+                {/* Floating realtime rooms panel */}
+                <div className="fixed bottom-6 right-6 z-50 w-80">
+                  <RoomStatusList />
+                </div>
+                <Toaster />
+              </WebSocketProvider>
+            </AuthProvider>
+          </ThemeProvider>
+        </ClarityProvider>
         <Analytics />
         <SpeedInsights />
       </body>

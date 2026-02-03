@@ -179,20 +179,21 @@ export async function saveResourceAssignments(
   }
 
   try {
-    await client.query('DELETE FROM resource_assignments WHERE project_id = $1', [projectId])
+    await client.query('DELETE FROM project_resource_assignments WHERE project_id = $1', [projectId])
 
     const values: any[] = []
     const placeholders: string[] = []
 
     entities.forEach((e, index) => {
-      const offset = index * 12
+      const offset = index * 14
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14})`
       )
 
       values.push(
         projectId,
-        e.resource_id || null,
+        e.resource_id || null, // user_id (using resource_id as user_id for now)
+        null, // role_id (nullable for extraction)
         e.resource_name || null,
         e.activity_id || null,
         e.activity_name || null,
@@ -202,15 +203,17 @@ export async function saveResourceAssignments(
         e.skill_required || null,
         e.skill_level || null,
         e.source_document_id || null,
-        userId
+        userId, // created_by
+        0.00, // hourly_rate (nullable with default)
+        'full-time' // assignment_type (required default)
       )
     })
 
     await client.query(
-      `INSERT INTO resource_assignments (
-        project_id, resource_id, resource_name, activity_id, activity_name,
+      `INSERT INTO project_resource_assignments (
+        project_id, user_id, role_id, resource_name, activity_id, activity_name,
         allocation_pct, start_date, end_date, skill_required, skill_level,
-        source_document_id, created_by
+        source_document_id, created_by, hourly_rate, assignment_type
       )
       VALUES ${placeholders.join(', ')}`,
       values

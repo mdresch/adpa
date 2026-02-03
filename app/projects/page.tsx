@@ -24,6 +24,15 @@ import {
 } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import {
+  trackTemplateGeneration,
+  trackFeatureUsage,
+  trackPerformance,
+  trackError,
+  trackPageEngagement,
+  trackDocumentUpload,
+  trackFilterUsage
+} from "@/lib/analytics/clarity"
+import {
   FolderOpen,
   Plus,
   Search,
@@ -498,8 +507,22 @@ export default function Projects() {
       return
     }
 
+    const startTime = Date.now()
+    const templateName = templates.find(t => t.id === documentGenerationForm.template_id)?.name || 'Custom'
+    
     try {
       setGeneratingDocument(true)
+      
+      // Track template generation start
+      trackTemplateGeneration(templateName, 'success')
+      
+      // Track feature usage
+      trackFeatureUsage('template_generation', 'started', {
+        project_id: selectedProjectForGeneration.id,
+        template_name: templateName,
+        provider: documentGenerationForm.provider || "Groq AI",
+        model: documentGenerationForm.model || "llama-3.1-8b-instant"
+      })
       
       // Step 1: Preparing context
       setGenerationProgress({
@@ -520,6 +543,8 @@ export default function Projects() {
         percentage: 50,
       })
       
+      const aiStartTime = Date.now()
+      
       // Generate content using AI Gateway
       const aiResponse = await apiClient.generateContent({
         prompt: documentGenerationForm.prompt,
@@ -528,6 +553,11 @@ export default function Projects() {
         temperature: documentGenerationForm.temperature || 0.7,
         template_id: documentGenerationForm.template_id || undefined,
       })
+
+      const aiDuration = Date.now() - aiStartTime
+      
+      // Track AI performance
+      trackPerformance('ai_generation_time', aiDuration)
 
       // Extract Markdown content from response
       const content = aiResponse.result?.content || aiResponse.result?.text || aiResponse.content || aiResponse.text || "# Document content not generated"
@@ -556,6 +586,23 @@ export default function Projects() {
         percentage: 100,
       })
       
+      const totalDuration = Date.now() - startTime
+      
+      // Track successful template generation
+      trackTemplateGeneration(templateName, 'success')
+      
+      // Track performance
+      trackPerformance('template_generation_time', totalDuration)
+      
+      // Track feature usage success
+      trackFeatureUsage('template_generation', 'completed', {
+        project_id: selectedProjectForGeneration.id,
+        template_name: templateName,
+        provider: documentGenerationForm.provider || "Groq AI",
+        generation_duration_ms: totalDuration.toString(),
+        ai_duration_ms: aiDuration.toString()
+      })
+      
       // Small delay to show success message
       await new Promise(resolve => setTimeout(resolve, 800))
 
@@ -572,7 +619,25 @@ export default function Projects() {
       })
       setGenerationProgress({ step: 0, totalSteps: 4, message: '', percentage: 0 })
     } catch (error) {
+      const totalDuration = Date.now() - startTime
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      
       console.error("Failed to generate document:", error)
+      
+      // Track failed template generation
+      trackTemplateGeneration(templateName, 'failed')
+      
+      // Track error
+      trackError('template_generation', errorMessage)
+      
+      // Track feature usage failure
+      trackFeatureUsage('template_generation', 'failed', {
+        project_id: selectedProjectForGeneration?.id || 'unknown',
+        template_name: templateName,
+        provider: documentGenerationForm.provider || "Groq AI",
+        error_type: 'generation_error'
+      })
+      
       toast.error("Failed to generate document")
       setGenerationProgress({ step: 0, totalSteps: 4, message: '', percentage: 0 })
     } finally {
@@ -589,30 +654,47 @@ export default function Projects() {
       return
     }
 
+    const startTime = Date.now()
+    const templateName = templates.find(t => t.id === documentUploadForm.template_id)?.name || 'Unknown'
+    
+    // CRITICAL: Validate file object is actually a File, not a metadata object
+    if (!(documentUploadForm.file instanceof File)) {
+      console.error('❌ Invalid file object:', documentUploadForm.file)
+      throw new Error("Invalid file object. Please select a valid file.")
+    }
+
+    const fileName = documentUploadForm.file.name
+    const fileSize = documentUploadForm.file.size
+
     try {
       setUploadingDocument(true)
+      
+      // Track document upload start
+      trackDocumentUpload('started', templateName)
+      
+      // Track feature usage
+      trackFeatureUsage('document_upload', 'started', {
+        project_id: selectedProjectForUpload.id,
+        template_name: templateName,
+        file_name: fileName,
+        file_size_bytes: fileSize.toString()
+      })
       
       // For binary files, we'll store them as base64 or use FormData
       // For now, let's handle text files and create a placeholder for binary files
       let content: any
-      
-      // CRITICAL: Validate file object is actually a File, not a metadata object
-      if (!(documentUploadForm.file instanceof File)) {
-        console.error('❌ Invalid file object:', documentUploadForm.file)
-        throw new Error("Invalid file object. Please select a valid file.")
-      }
 
       // CRITICAL: For PDF/DOCX files, use the upload endpoint that converts to Markdown
       // For text files, we can create directly with Markdown content
       // Use case-insensitive file extension checks as primary detection method
-      const fileName = documentUploadForm.file.name.toLowerCase()
+      const fileNameLower = documentUploadForm.file.name.toLowerCase()
       const fileType = documentUploadForm.file.type?.toLowerCase() || ''
       
       // Check file extension first (more reliable than MIME type)
-      const isPDF = fileName.endsWith('.pdf')
-      const isDOCX = fileName.endsWith('.docx') || fileName.endsWith('.doc')
-      const isTXT = fileName.endsWith('.txt')
-      const isMD = fileName.endsWith('.md') || fileName.endsWith('.markdown')
+      const isPDF = fileNameLower.endsWith('.pdf')
+      const isDOCX = fileNameLower.endsWith('.docx') || fileNameLower.endsWith('.doc')
+      const isTXT = fileNameLower.endsWith('.txt')
+      const isMD = fileNameLower.endsWith('.md') || fileNameLower.endsWith('.markdown')
       
       // Also check MIME types as secondary check
       const isPDFMime = fileType === 'application/pdf'
@@ -705,6 +787,23 @@ export default function Projects() {
 
         await apiClient.createDocument(selectedProjectForUpload.id, documentData)
 
+      const totalDuration = Date.now() - startTime
+      
+      // Track successful document upload
+      trackDocumentUpload('success', templateName)
+      
+      // Track performance
+      trackPerformance('document_upload_time', totalDuration)
+      
+      // Track feature usage success
+      trackFeatureUsage('document_upload', 'completed', {
+        project_id: selectedProjectForUpload.id,
+        template_name: templateName,
+        file_name: fileName,
+        file_size_bytes: fileSize.toString(),
+        upload_duration_ms: totalDuration.toString()
+      })
+
       toast.success("Document uploaded successfully!")
       setUploadDialogOpen(false)
       setSelectedProjectForUpload(null)
@@ -728,13 +827,31 @@ export default function Projects() {
         throw new Error(`Unsupported file type: ${documentUploadForm.file.name}. Please upload PDF, DOCX, TXT, or Markdown files. The file type could not be determined.`)
       }
     } catch (error: any) {
+      const totalDuration = Date.now() - startTime
+      const errorMessage = error.message || 'Unknown error'
+      
       console.error("❌ Failed to upload document:", {
-        error: error.message,
+        error: errorMessage,
         fileName: documentUploadForm.file?.name,
         fileType: documentUploadForm.file?.type,
         stack: error.stack
       })
-      toast.error(error.message || "Failed to upload document. Please ensure the file is a PDF, DOCX, TXT, or Markdown file.")
+      
+      // Track failed document upload
+      trackDocumentUpload('failed', templateName)
+      
+      // Track error
+      trackError('document_upload', errorMessage)
+      
+      // Track feature usage failure
+      trackFeatureUsage('document_upload', 'failed', {
+        project_id: selectedProjectForUpload?.id || 'unknown',
+        template_name: templateName,
+        file_name: fileName,
+        error_type: 'upload_error'
+      })
+      
+      toast.error(errorMessage || "Failed to upload document. Please ensure the file is a PDF, DOCX, TXT, or Markdown file.")
     } finally {
       setUploadingDocument(false)
     }
@@ -745,6 +862,14 @@ export default function Projects() {
       project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (project.description?.toLowerCase().includes(searchTerm.toLowerCase()) || false)
     const matchesStatus = statusFilter === "all" || project.status === statusFilter
+    
+    // Track filter usage when filters are applied
+    if (statusFilter !== "all" || searchTerm) {
+      const filterType = statusFilter !== "all" ? 'status' : 'search'
+      const filterValue = statusFilter !== "all" ? statusFilter : searchTerm
+      trackFilterUsage(filterType, filterValue, projects.length)
+    }
+    
     return matchesSearch && matchesStatus
   })
 
@@ -765,6 +890,28 @@ export default function Projects() {
       fetchProjects()
     }
   }, [isAuthenticated, statusFilter, searchTerm, pagination.page])
+
+  // Track page engagement for projects page
+  useEffect(() => {
+    const startTime = Date.now()
+    let interactionCount = 0
+    
+    const handleInteraction = () => {
+      interactionCount++
+    }
+    
+    document.addEventListener('click', handleInteraction)
+    document.addEventListener('scroll', handleInteraction)
+    
+    return () => {
+      // Calculate engagement when page unloads
+      const timeSpent = Math.floor((Date.now() - startTime) / 1000)
+      trackPageEngagement('/projects', timeSpent, interactionCount)
+      
+      document.removeEventListener('click', handleInteraction)
+      document.removeEventListener('scroll', handleInteraction)
+    }
+  }, [])
 
   // Auto-open create dialog if coming from AI page
   useEffect(() => {

@@ -12,6 +12,7 @@ import { logger } from '@/utils/logger'
 import { convertQuarterDate, isValidDate, addDays, getCurrentDate } from '@/utils/dateUtils'
 import { aiService } from './aiService'
 import { aiCacheService } from './aiCacheService'
+import { analytics } from '@/utils/analytics'
 import { ExtractionContext } from './extraction/base/ExtractionContext'
 import type { ExtractionDocument, ExtractionResult as ModuleExtractionResult } from './extraction/base/ExtractionResult'
 import type { PersistenceResult } from './extraction/base/Persistence'
@@ -593,6 +594,15 @@ export class ProjectDataExtractionService {
         throw new Error('No documents found for entity extraction')
       }
 
+      // Track extraction start
+      analytics.trackEntityExtractionStart(
+        projectId,
+        userId,
+        documents.length,
+        bestProvider,
+        bestModel
+      )
+
       logger.info(`[EXTRACTION] Processing ${documents.length} documents`)
 
       // Step 2: Build document map for source_document_id resolution
@@ -652,37 +662,51 @@ export class ProjectDataExtractionService {
         this.extractPerformanceActuals(documents, projectId, extractionOptions, documentMap, documentList)
       ])
 
-      const extractionTime = Date.now() - startTime
+      const duration = Date.now() - startTime
+
+      // Calculate entity counts for analytics
+      const entityCounts = {
+        stakeholders: stakeholders.length,
+        requirements: requirements.length,
+        risks: risks.length,
+        milestones: milestones.length,
+        constraints: constraints.length,
+        success_criteria: successCriteria.length,
+        best_practices: bestPractices.length,
+        phases: phases.length,
+        resources: resources.length,
+        technologies: technologies.length,
+        quality_standards: qualityStandards.length,
+        deliverables: deliverables.length,
+        scope_items: scopeItems.length,
+        activities: activities.length,
+        team_agreements: teamAgreements.length,
+        development_approaches: developmentApproaches.length,
+        project_iterations: projectIterations.length,
+        work_items: workItems.length,
+        capacity_plans: capacityPlans.length,
+        performance_measurements: performanceMeasurements.length,
+        earned_value_metrics: earnedValueMetrics.length,
+        opportunities: opportunities.length,
+        risk_responses: riskResponses.length,
+        performance_actuals: performanceActuals.length
+      }
+
+      // Track extraction completion
+      analytics.trackEntityExtractionComplete(
+        projectId,
+        userId,
+        duration,
+        entityCounts,
+        bestProvider,
+        bestModel
+      )
 
       logger.info('[EXTRACTION] Entity extraction completed', {
         projectId,
-        extractionTime,
-        counts: {
-          stakeholders: stakeholders.length,
-          requirements: requirements.length,
-          risks: risks.length,
-          milestones: milestones.length,
-          constraints: constraints.length,
-          successCriteria: successCriteria.length,
-          bestPractices: bestPractices.length,
-          phases: phases.length,
-          resources: resources.length,
-          technologies: technologies.length,
-          qualityStandards: qualityStandards.length,
-          deliverables: deliverables.length,
-          scopeItems: scopeItems.length,
-          activities: activities.length,
-          teamAgreements: teamAgreements.length,
-          developmentApproaches: developmentApproaches.length,
-          projectIterations: projectIterations.length,
-          workItems: workItems.length,
-          capacityPlans: capacityPlans.length,
-          performanceMeasurements: performanceMeasurements.length,
-          earnedValueMetrics: earnedValueMetrics.length,
-          opportunities: opportunities.length,
-          riskResponses: riskResponses.length,
-          performanceActuals: performanceActuals.length
-        }
+        duration,
+        totalEntities: Object.values(entityCounts).reduce((sum, count) => sum + count, 0),
+        entityCounts
       })
 
       return {
@@ -712,10 +736,24 @@ export class ProjectDataExtractionService {
         performance_actuals: performanceActuals
       }
     } catch (error: unknown) {
+      const duration = Date.now() - startTime
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      
       logger.error('[EXTRACTION] Entity extraction failed', {
         projectId,
-        error: error instanceof Error ? error.message : String(error)
+        error: errorMessage
       })
+
+      // Track extraction failure
+      analytics.trackEntityExtractionFailure(
+        projectId,
+        userId,
+        errorMessage,
+        bestProvider,
+        bestModel,
+        duration
+      )
+      
       throw error
     }
   }
@@ -935,6 +973,8 @@ export class ProjectDataExtractionService {
     documentMap: Map<string, string>,
     documentList: string
   ): Promise<Stakeholder[]> {
+    const startTime = Date.now()
+    
     try {
       logger.info('[EXTRACTION-STAKEHOLDERS] Starting extraction')
 
@@ -1036,10 +1076,40 @@ Requirements:
       
       logger.info(`[EXTRACTION-STAKEHOLDERS] Extracted ${validStakeholders.length} stakeholders with valid source_document_id (${rejectedCount} rejected)`)
 
+      const duration = Date.now() - startTime
+      
+      // Track successful entity type extraction
+      analytics.trackEntityTypeExtraction(
+        projectId,
+        'system', // userId not available in private method
+        'stakeholders',
+        validStakeholders.length,
+        duration,
+        true
+      )
+
       return validStakeholders
     } catch (error: unknown) {
+      const duration = Date.now() - startTime
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      
       logger.error('[EXTRACTION-STAKEHOLDERS] Extraction failed', {
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage,
+      })
+
+      // Track failed entity type extraction
+      analytics.trackEntityTypeExtraction(
+        projectId,
+        'system', // userId not available in private method
+        'stakeholders',
+        0,
+        duration,
+        false,
+        errorMessage
+      )
+      
+      logger.error('[EXTRACTION-STAKEHOLDERS] Extraction failed', {
+        error: errorMessage,
         stack: error instanceof Error ? error.stack : undefined
       })
       // Re-throw to trigger Bull retry and provider fallback

@@ -10,6 +10,7 @@ import { parseAIResponse } from '../../base/Parser'
 import { buildExtractionPrompt } from '../../base/PromptBuilder'
 import { resolveSourceDocumentIdStrict } from '../../base/SourceDocumentResolver'
 import { extractionCacheService } from '../../cache'
+import { isValidUUID } from '../../base/Persistence'
 import type { PoolClient } from 'pg'
 import type { PersistenceResult } from '../../base/Persistence'
 
@@ -201,8 +202,8 @@ export async function saveEngagementActions(
 
       values.push(
         projectId,
-        e.action_id || null,
-        e.stakeholder_id || null,
+        isValidUUID(e.action_id) ? e.action_id : null, // Validate UUID
+        isValidUUID(e.stakeholder_id) ? e.stakeholder_id : null, // Validate UUID
         e.stakeholder_name || null,
         e.action_type || null,
         e.description || null,

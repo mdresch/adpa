@@ -71,44 +71,57 @@ export class BaselineExtractionJobService {
     const ws = deps?.websocket || io
     const log = deps?.logger || logger
     const { jobId, userId, project_id, document_ids, ai_provider, ai_model } = job.data as BaselineExtractionJobData
-    let { project_name } = job.data as BaselineExtractionJobData
     const { workerId, updateJobStatus } = options
 
     try {
       // Update job status to processing and assign worker
       await updateJobStatus(jobId, "processing", 10, workerId, "baseline-processing")
 
-      // Look up project name if not provided
-      if (!project_name && project_id) {
-        project_name = await this.getProjectName(project_id, deps)
-      }
+      // Get project name
+      const project_name = await this.getProjectName(project_id, deps)
 
       log.info(`Starting baseline extraction for project ${project_id} (${project_name || 'Unknown'})`)
 
-      // Extract baseline using AI (this takes 3-10 seconds)
-      const { baselineService } = await import('../baselineService')
-
+      // Get project documents directly from database
       await updateJobStatus(jobId, "processing", 30, workerId, "baseline-processing")
 
-      const extractionResult = await baselineService.extractBaselineFromCorpus(
+      let documentsQuery = `
+        SELECT id, name as title, content, template_name 
+        FROM documents 
+        WHERE project_id = $1 AND deleted_at IS NULL
+      `
+      let queryParams: any[] = [project_id]
+
+      if (document_ids && document_ids.length > 0) {
+        documentsQuery += ` AND id = ANY($2)`
+        queryParams = [project_id, document_ids]
+      }
+
+      const documentsResult = await db.query(documentsQuery, queryParams)
+      const documents = documentsResult.rows
+
+      // Extract entities with location tracking using enhanced coordinator
+      const { EnhancedEntityExtractionCoordinator } = await import('../enhancedEntityExtractionCoordinator')
+      const enhancedCoordinator = new EnhancedEntityExtractionCoordinator()
+      const extractionResults = await enhancedCoordinator.extractAllEntitiesWithLocations(
+        documents,
         project_id,
-        userId,
         {
-          includeDocumentIds: document_ids,
           aiProvider: ai_provider,
           aiModel: ai_model
         }
       )
 
+      // Convert enhanced results to baseline format
+      const extractionResult = this.convertEnhancedResultsToBaselineFormat(extractionResults)
+
       await updateJobStatus(jobId, "processing", 70, workerId, "baseline-processing")
 
       // Create baseline in database
-      const corpus = document_ids || (await baselineService.getProjectDocumentCorpus(project_id)).map((d: any) => d.id)
-      const baseline = await baselineService.createBaseline(
+      const { baselineService } = await import('../baselineService')
+      const baseline = await baselineService.createBaselineFromEntities(
         project_id,
-        userId,
-        extractionResult,
-        corpus
+        userId
       )
 
       await updateJobStatus(jobId, "processing", 90, workerId, "baseline-processing")
@@ -166,12 +179,79 @@ export class BaselineExtractionJobService {
         userId,
         status: "failed",
         error: error instanceof Error ? error.message : "Unknown error",
-        message: `Failed to extract baseline for ${project_name || 'project'}`,
+        message: `Failed to extract baseline for project`,
         projectId: project_id,
       })
 
       throw error
     }
+  }
+
+  /**
+   * Convert enhanced extraction results to baseline format
+   */
+  private static convertEnhancedResultsToBaselineFormat(results: any): any {
+    // Combine all entity types into a single array for baseline compatibility
+    const allEntities = [
+      ...(results.performance_actuals || []),
+      ...(results.requirements || []),
+      ...(results.tasks || []),
+      ...(results.risks || []),
+      ...(results.mitigations || []),
+      ...(results.issues || []),
+      ...(results.playbooks || []),
+      ...(results.deliverables || []),
+      ...(results.stakeholders || []),
+      ...(results.resources || []),
+      ...(results.milestones || []),
+      ...(results.work_items || []),
+      ...(results.success_criteria || []),
+      ...(results.constraints || []),
+      ...(results.scope_items || []),
+      ...(results.activities || []),
+      ...(results.phases || []),
+      ...(results.opportunities || []),
+      ...(results.quality_audits || []),
+      ...(results.best_practices || []),
+      ...(results.template_improvements || [])
+    ]
+
+    return {
+      entities: allEntities,
+      totalExtracted: allEntities.length,
+      byType: this.countEntitiesByType(results),
+      averageConfidence: this.calculateAverageConfidence(allEntities)
+    }
+  }
+
+  /**
+   * Count entities by type from enhanced results
+   */
+  private static countEntitiesByType(results: any): Record<string, number> {
+    const counts: Record<string, number> = {}
+    
+    Object.entries(results).forEach(([type, entities]: [string, any[]]) => {
+      if (Array.isArray(entities)) {
+        counts[type] = entities.length
+      }
+    })
+    
+    return counts
+  }
+
+  /**
+   * Calculate average confidence from entities
+   */
+  private static calculateAverageConfidence(entities: any[]): number {
+    if (entities.length === 0) return 0
+    
+    const confidenceValues = entities
+      .map(entity => entity.extraction_confidence || 0)
+      .filter(conf => conf > 0)
+    
+    if (confidenceValues.length === 0) return 0
+    
+    return confidenceValues.reduce((sum, conf) => sum + conf, 0) / confidenceValues.length
   }
 
   /**
@@ -192,4 +272,3 @@ export class BaselineExtractionJobService {
     return undefined
   }
 }
-

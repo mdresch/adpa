@@ -56,8 +56,8 @@ export async function getContextForStrategy(
 ): Promise<GkgContextResult> {
   const entityTypes = resolveEntityTypes(strategy)
   const scope = resolveScope(strategy)
-  const maxUnits = strategy.maxUnits ?? 500
-  const maxDocuments = strategy.maxDocuments ?? 10
+  const maxUnits = Math.floor(Number(strategy.maxUnits ?? 500)) // Ensure integer
+  const maxDocuments = Math.floor(Number(strategy.maxDocuments ?? 10)) // Ensure integer
   const traceableOnly = strategy.traceableOnly ?? false
   const documentStatusFilter: GkgDocumentStatusFilter | undefined = strategy.documentStatusFilter
 
@@ -164,7 +164,7 @@ async function queryByProject(
   const result = await session.run(q, {
     projectId,
     entityTypes: entityTypes.length ? entityTypes : null,
-    maxUnits,
+    maxUnits: Math.floor(maxUnits),
     approvedStatuses: approvedOnly ? APPROVED_PUBLISHED_STATUSES : null,
   })
   return result.records.map((r) => ({
@@ -209,8 +209,8 @@ async function queryByTopDocs(
   const result = await session.run(q, {
     projectId,
     entityTypes: entityTypes.length ? entityTypes : null,
-    maxDocuments,
-    maxUnits,
+    maxDocuments: Math.floor(Number(maxDocuments)), // Ensure integer
+    maxUnits: Math.floor(maxUnits),
     approvedStatuses: approvedOnly ? APPROVED_PUBLISHED_STATUSES : null,
   })
   return result.records.map((r) => ({
@@ -257,7 +257,7 @@ async function queryByDependentProjects(
   const result = await session.run(q, {
     projectId,
     entityTypes: entityTypes.length ? entityTypes : null,
-    maxUnits,
+    maxUnits: Math.floor(maxUnits),
     approvedStatuses: approvedOnly ? APPROVED_PUBLISHED_STATUSES : null,
   })
   return result.records.map((r) => ({
@@ -299,7 +299,7 @@ async function queryByProjectIds(
   const result = await session.run(q, {
     projectIds,
     entityTypes: entityTypes.length ? entityTypes : null,
-    maxUnits,
+    maxUnits: Math.floor(maxUnits),
     approvedStatuses: approvedOnly ? APPROVED_PUBLISHED_STATUSES : null,
   })
   return result.records.map((r) => ({

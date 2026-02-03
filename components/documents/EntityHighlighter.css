@@ -1,0 +1,33 @@
+/* Entity Highlighter Styles */
+.entity-highlighter-container {
+  position: relative;
+}
+
+.entity-highlight {
+  background-color: rgb(254 240 138);
+  border: 1px solid rgb(251 191 36);
+  border-radius: 0.25rem;
+  padding: 0.125rem 0.25rem;
+  font-weight: 500;
+  transition: all 0.2s ease-in-out;
+}
+
+.entity-highlight:hover {
+  background-color: rgb(253 224 71);
+  border-color: rgb(245 158 11);
+}
+
+.entity-highlight-pulse {
+  animation: entity-highlight-pulse 2s cubic-bezier(0.4, 0, 0.6, 1);
+}
+
+@keyframes entity-highlight-pulse {
+  0%, 100% {
+    background-color: rgb(254 240 138);
+    box-shadow: 0 0 0 0 rgb(254 240 138);
+  }
+  50% {
+    background-color: rgb(253 224 71);
+    box-shadow: 0 0 0 4px rgb(254 240 138);
+  }
+}
