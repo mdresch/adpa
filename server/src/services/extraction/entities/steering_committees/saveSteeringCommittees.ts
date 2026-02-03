@@ -5,6 +5,7 @@
 import { logger } from '../../../../utils/logger'
 import type { PoolClient } from 'pg'
 import type { PersistenceResult } from '../../base/Persistence'
+import { normalizeDate } from '../../base/Persistence'
 import type { SteeringCommittee } from './types'
 
 export async function saveSteeringCommittees(
@@ -36,7 +37,7 @@ export async function saveSteeringCommittees(
                 e.mandate || null,
                 e.members || [],
                 e.meeting_cadence || null,
-                e.last_meeting_date || null,
+                normalizeDate(e.last_meeting_date), // Use normalizeDate
                 e.source_document_id || null,
                 userId
             )

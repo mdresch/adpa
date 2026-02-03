@@ -23,6 +23,7 @@ import {
   Check,
   Loader2,
 } from "lucide-react"
+import { trackSearch, trackFilterUsage } from "@/lib/analytics/clarity"
 
 // Generic item interface
 export interface SearchableItem {
@@ -135,8 +136,15 @@ export function SearchDialog<T extends SearchableItem>({
   // Filter items based on search query
   const filteredItems = useMemo(() => {
     if (!searchQuery.trim()) return items
-    return items.filter((item: any) => filterFn(item, searchQuery))
-  }, [items, searchQuery, filterFn])
+    const filtered = items.filter((item: any) => filterFn(item, searchQuery))
+    
+    // Track search analytics when query changes and has results
+    if (searchQuery.trim().length > 0) {
+      trackSearch(searchQuery, filtered.length, itemType)
+    }
+    
+    return filtered
+  }, [items, searchQuery, filterFn, itemType])
 
   // Reset focused index when filtered items change
   useEffect(() => {
@@ -178,6 +186,9 @@ export function SearchDialog<T extends SearchableItem>({
   }
 
   const handleSelect = (item: T) => {
+    // Track search result selection
+    trackFilterUsage('search_selection', itemType, 1)
+    
     onSelectItem(item)
     onOpenChange(false)
     setSearchQuery("")

@@ -12,6 +12,13 @@ import { Header } from "@/components/header"
 import { PageTransition } from "@/components/page-transition"
 import { AnimatedLayout, AnimatedCard } from "@/components/animated-layout"
 import { motion } from "framer-motion"
+import { 
+  trackEntityExtraction, 
+  trackEntityHighlighting, 
+  trackEntityNavigation,
+  trackPageEngagement,
+  trackFeatureUsage 
+} from "@/lib/analytics/clarity"
 import {
   FileText,
   ArrowLeft,
@@ -298,6 +305,26 @@ export default function DocumentEntitiesPage() {
     }
     void fetchDocumentEntities()
     
+    // Track page engagement
+    const startTime = Date.now()
+    let interactionCount = 0
+    
+    const handleInteraction = () => {
+      interactionCount++
+    }
+    
+    document.addEventListener('click', handleInteraction)
+    document.addEventListener('scroll', handleInteraction)
+    
+    return () => {
+      // Calculate engagement when page unloads
+      const timeSpent = Math.floor((Date.now() - startTime) / 1000)
+      trackPageEngagement(`/projects/${projectId}/documents/${docId}/entities`, timeSpent, interactionCount)
+      
+      document.removeEventListener('click', handleInteraction)
+      document.removeEventListener('scroll', handleInteraction)
+    }
+    
     // Cleanup polling on unmount to prevent memory leaks and stale state updates
     return () => {
       cleanupPolling()
@@ -326,6 +353,16 @@ export default function DocumentEntitiesPage() {
       setEntityCounts(data.entityCounts || {})
       setEntityData(data.entities || {})
       setTotalEntities(data.totalEntities || 0)
+
+      // Track entity extraction for each entity type
+      if (data.entityCounts) {
+        Object.entries(data.entityCounts).forEach(([entityType, count]) => {
+          const entityCount = typeof count === 'number' ? count : 0
+          if (entityCount > 0) {
+            trackEntityExtraction(entityType, entityCount)
+          }
+        })
+      }
 
       if (data.inferredPrimaryDomain) {
         const key = data.inferredPrimaryDomain as KnowledgeDomainKey
@@ -545,18 +582,70 @@ export default function DocumentEntitiesPage() {
       }
     }
 
-    // Special handling for source_document_id - show clickable link
+    // Special handling for source_document_id - show clickable link with highlighting
     if (key === 'source_document_id' && value) {
+      const handleViewSourceDocument = () => {
+        // Track entity highlighting usage
+        trackEntityHighlighting('viewed')
+        
+        // Track entity navigation
+        trackEntityNavigation('entities_page', 'document_viewer')
+        
+        // Track feature usage with metadata
+        trackFeatureUsage('entity_source_navigation', 'clicked', {
+          entity_type: selectedEntityType || 'unknown',
+          has_location_data: entity.source_text_start !== null ? 'true' : 'false',
+          document_id: value
+        })
+        
+        // Navigate to the document viewer with highlighting parameters
+        const params = new URLSearchParams()
+        
+        // Add highlighting parameters if available
+        if (entity.source_text_start !== null && entity.source_text_start !== undefined) {
+          params.append('highlightStart', entity.source_text_start.toString())
+        }
+        if (entity.source_text_end !== null && entity.source_text_end !== undefined) {
+          params.append('highlightEnd', entity.source_text_end.toString())
+        }
+        if (entity.source_line_start !== null && entity.source_line_start !== undefined) {
+          params.append('highlightLineStart', entity.source_line_start.toString())
+        }
+        if (entity.source_line_end !== null && entity.source_line_end !== undefined) {
+          params.append('highlightLineEnd', entity.source_line_end.toString())
+        }
+        if (entity.source_snippet) {
+          params.append('highlightSnippet', entity.source_snippet)
+        }
+        if (entity.entity_markdown_tag) {
+          params.append('highlightTag', entity.entity_markdown_tag)
+        }
+        
+        // Add entity info for context
+        params.append('entityName', entity.name || entity.title || '')
+        params.append('entityType', selectedEntityType || '')
+        
+        const queryString = params.toString()
+        const viewUrl = `/projects/${projectId}/documents/${value}/view${queryString ? `?${queryString}` : ''}`
+        
+        router.push(viewUrl)
+      }
+      
       return (
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
             size="sm"
-            onClick={() => router.push(`/projects/${projectId}/documents/${value}`)}
+            onClick={handleViewSourceDocument}
             className="flex items-center gap-1"
           >
             <FileText className="h-4 w-4" />
             View Source Document
+            {entity.source_text_start !== null && entity.source_text_start !== undefined && (
+              <span className="ml-1 px-1 py-0.5 bg-green-100 text-green-800 text-xs rounded">
+                📍 Highlighted
+              </span>
+            )}
           </Button>
         </div>
       )

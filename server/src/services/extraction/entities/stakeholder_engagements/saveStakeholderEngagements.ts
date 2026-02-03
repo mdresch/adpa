@@ -5,6 +5,7 @@
 import { logger } from '../../../../utils/logger'
 import type { PoolClient } from 'pg'
 import type { PersistenceResult } from '../../base/Persistence'
+import { normalizeDate } from '../../base/Persistence'
 import type { StakeholderEngagement } from './types'
 
 export async function saveStakeholderEngagements(
@@ -34,7 +35,7 @@ export async function saveStakeholderEngagements(
                 projectId,
                 e.stakeholder_name || '',
                 e.engagement_type || 'Other',
-                e.engagement_date || null,
+                normalizeDate(e.engagement_date), // Use normalizeDate
                 e.objective || null,
                 e.outcome || null,
                 e.feedback || null,

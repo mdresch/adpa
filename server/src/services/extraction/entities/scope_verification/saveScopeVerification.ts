@@ -5,6 +5,7 @@
 import { logger } from '../../../../utils/logger'
 import type { PoolClient } from 'pg'
 import type { PersistenceResult } from '../../base/Persistence'
+import { normalizeDate } from '../../base/Persistence'
 import type { ScopeVerification } from './types'
 
 export async function saveScopeVerification(
@@ -33,7 +34,7 @@ export async function saveScopeVerification(
             values.push(
                 projectId,
                 e.deliverable_name || '',
-                e.verification_date || null,
+                normalizeDate(e.verification_date), // Use normalizeDate utility
                 e.verifier || null,
                 e.method || null,
                 e.outcome || null,

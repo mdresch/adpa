@@ -180,36 +180,41 @@ export async function saveResourcePool(
   }
 
   try {
-    await client.query('DELETE FROM resource_pool WHERE project_id = $1', [projectId])
+    await client.query('DELETE FROM resources WHERE project_id = $1', [projectId])
 
     const values: any[] = []
     const placeholders: string[] = []
 
     entities.forEach((e, index) => {
-      const offset = index * 11
+      const offset = index * 13
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13})`
       )
 
       values.push(
         projectId,
-        e.resource_name || null,
-        e.role || null,
-        e.resource_type || null,
+        e.resource_name || '',
+        e.resource_type || 'human',
+        null, // description (not available from resource_pool)
+        e.availability_pct || null,
+        e.cost_rate || null,
         e.skills || [],
-        e.availability_pct ?? null,
-        e.cost_rate ?? null,
-        e.capacity_hours ?? null,
+        e.role || null,
+        e.availability_pct || null,
+        e.cost_rate || null,
+        e.capacity_hours || null,
         e.location || null,
         e.source_document_id || null,
-        userId
+        new Date().toISOString(), // created_at
+        new Date().toISOString()  // updated_at
       )
     })
 
     await client.query(
-      `INSERT INTO resource_pool (
-        project_id, resource_name, role, resource_type, skills,
-        availability_pct, cost_rate, capacity_hours, location, source_document_id, created_by
+      `INSERT INTO resources (
+        project_id, name, type, description, allocation, cost_estimate, 
+        skills, role, availability_pct, cost_rate, capacity_hours, location,
+        source_document_id, created_at, updated_at
       )
       VALUES ${placeholders.join(', ')}`,
       values

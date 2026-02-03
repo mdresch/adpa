@@ -16,6 +16,15 @@ import { Header } from "@/components/header"
 import { PageTransition } from "@/components/page-transition"
 import { AnimatedLayout, AnimatedCard } from "@/components/animated-layout"
 import { motion } from "framer-motion"
+import { 
+  trackPageEngagement,
+  trackEntityHighlighting,
+  trackDocumentExport,
+  trackFeatureUsage,
+  trackPerformance,
+  trackDocumentShare,
+  trackCollaboration
+} from "@/lib/analytics/clarity"
 import {
   Download,
   Edit,
@@ -57,6 +66,7 @@ import { RegenerationProgress } from "@/components/documents/RegenerationProgres
 import { VersionViewerDialog } from "@/components/documents/VersionViewerDialog"
 import { VersionListDialog } from "@/components/documents/VersionListDialog"
 import { DriftHighlighter } from "@/components/documents/DriftHighlighter"
+import { EntityHighlighter } from "@/components/documents/EntityHighlighter"
 import { useDocumentRegeneration } from "@/hooks/use-document-regeneration"
 import { Sparkles } from "@/components/ui/icons-shim"
 import { DocumentEntityEditor } from "@/components/documents/DocumentEntityEditor"
@@ -146,6 +156,18 @@ export default function ProjectDocumentViewer() {
     documentsCount: number
     entityTypes: string[]
     strategy?: Record<string, unknown>
+  } | null>(null)
+
+  // Entity highlighting state
+  const [entityHighlight, setEntityHighlight] = useState<{
+    entityName: string
+    entityType: string
+    highlightStart?: number
+    highlightEnd?: number
+    highlightLineStart?: number
+    highlightLineEnd?: number
+    highlightSnippet?: string
+    highlightTag?: string
   } | null>(null)
 
   // Document regeneration hook
@@ -587,7 +609,84 @@ The ADPA system represents a significant advancement in document processing auto
   }
 
   useEffect(() => {
+    // Ensure we're in a browser environment
+    if (typeof window === 'undefined' || typeof document === 'undefined') return
+    
     fetchDocument()
+    
+    // Track page engagement for document viewer
+    const startTime = Date.now()
+    let interactionCount = 0
+    
+    const handleInteraction = () => {
+      interactionCount++
+    }
+    
+    // Add null check for document
+    if (document) {
+      document.addEventListener('click', handleInteraction)
+      document.addEventListener('scroll', handleInteraction)
+    }
+    
+    return () => {
+      // Calculate engagement when page unloads
+      const timeSpent = Math.floor((Date.now() - startTime) / 1000)
+      trackPageEngagement(`/projects/${projectId}/documents/${documentId}/view`, timeSpent, interactionCount)
+      
+      // Remove event listeners if document exists
+      if (document) {
+        document.removeEventListener('click', handleInteraction)
+        document.removeEventListener('scroll', handleInteraction)
+      }
+    }
+  }, [projectId, documentId])
+
+  // Parse URL parameters for entity highlighting
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search)
+      
+      const entityName = urlParams.get('entityName')
+      const entityType = urlParams.get('entityType')
+      const highlightStart = urlParams.get('highlightStart')
+      const highlightEnd = urlParams.get('highlightEnd')
+      const highlightLineStart = urlParams.get('highlightLineStart')
+      const highlightLineEnd = urlParams.get('highlightLineEnd')
+      const highlightSnippet = urlParams.get('highlightSnippet')
+      const highlightTag = urlParams.get('highlightTag')
+      
+      if (entityName && entityType) {
+        const decodedEntityName = decodeURIComponent(entityName)
+        const decodedEntityType = decodeURIComponent(entityType)
+        
+        setEntityHighlight({
+          entityName: decodedEntityName,
+          entityType: decodedEntityType,
+          highlightStart: highlightStart ? parseInt(highlightStart, 10) : undefined,
+          highlightEnd: highlightEnd ? parseInt(highlightEnd, 10) : undefined,
+          highlightLineStart: highlightLineStart ? parseInt(highlightLineStart, 10) : undefined,
+          highlightLineEnd: highlightLineEnd ? parseInt(highlightLineEnd, 10) : undefined,
+          highlightSnippet: highlightSnippet ? decodeURIComponent(highlightSnippet) : undefined,
+          highlightTag: highlightTag ? decodeURIComponent(highlightTag) : undefined
+        })
+        
+        // Track entity highlighting when parameters are detected
+        trackEntityHighlighting('scrolled')
+        
+        // Track feature usage with metadata
+        trackFeatureUsage('entity_highlighting', 'active', {
+          entity_type: decodedEntityType,
+          entity_name: decodedEntityName,
+          has_location_data: (highlightStart || highlightLineStart) ? 'true' : 'false',
+          highlighting_method: highlightStart ? 'character' : highlightLineStart ? 'line' : highlightSnippet ? 'snippet' : 'tag'
+        })
+        
+        // Show notification about entity highlighting
+        setTimeout(() => {
+          toast.info(`Highlighting "${decodedEntityName}" from ${decodedEntityType}`)
+        }, 1000)
+      }
+    }
   }, [projectId, documentId])
 
   // Extract table of contents from markdown
@@ -734,9 +833,13 @@ The ADPA system represents a significant advancement in document processing auto
 
   // Scroll spy for active section tracking
   useEffect(() => {
+    // Ensure we're in a browser environment
+    if (typeof window === 'undefined' || typeof document === 'undefined') return
     if (isEditing || tableOfContents.length === 0) return
 
     const handleScroll = () => {
+      if (!window || !window.document) return
+      
       const scrollPosition = window.scrollY + 150
 
       for (let i = tableOfContents.length - 1; i >= 0; i--) {
@@ -750,10 +853,17 @@ The ADPA system represents a significant advancement in document processing auto
       }
     }
 
-    window.addEventListener('scroll', handleScroll, { passive: true })
-    handleScroll()
+    // Add null check for window
+    if (window) {
+      window.addEventListener('scroll', handleScroll, { passive: true })
+      handleScroll()
+    }
 
-    return () => window.removeEventListener('scroll', handleScroll)
+    return () => {
+      if (window) {
+        window.removeEventListener('scroll', handleScroll)
+      }
+    }
   }, [tableOfContents, isEditing])
 
   const handlePublishToConfluence = async () => {
@@ -866,6 +976,10 @@ The ADPA system represents a significant advancement in document processing auto
     if (!document) return
 
     try {
+      // Track export start
+      trackDocumentExport('pdf', false)
+      const startTime = Date.now()
+      
       const loadingToast = toast.loading("Generating PDF...")
       const blob = await apiClient.exportDocumentPdf(documentId)
       
@@ -879,10 +993,28 @@ The ADPA system represents a significant advancement in document processing auto
       document.body.removeChild(link)
       window.URL.revokeObjectURL(url)
 
+      const duration = Date.now() - startTime
+      
       toast.dismiss(loadingToast)
       toast.success("Document exported to PDF")
+      
+      // Track successful export
+      trackDocumentExport('pdf', true)
+      trackPerformance('pdf_export_time', duration, 'ms')
+      trackFeatureUsage('document_export', 'pdf', {
+        document_id: documentId,
+        export_duration_ms: duration.toString()
+      })
+      
     } catch (error: any) {
       console.error("PDF export error:", error)
+      
+      // Track failed export
+      trackDocumentExport('pdf', false)
+      trackFeatureUsage('document_export', 'pdf_failed', {
+        document_id: documentId,
+        error_type: error?.response?.status?.toString() || 'unknown'
+      })
       
       // Extract error message safely
       let errorMessage = "Failed to export PDF"
@@ -1037,6 +1169,10 @@ The ADPA system represents a significant advancement in document processing auto
   const shareDocument = () => {
     if (!document) return
 
+    // Track document sharing analytics
+    trackDocumentShare(document.id, 'native_share', 1)
+    trackCollaboration('share', document.id, 1)
+
     if (navigator.share) {
       navigator.share({
         title: document.title,
@@ -1044,12 +1180,17 @@ The ADPA system represents a significant advancement in document processing auto
         url: window.location.href,
       })
     } else {
+      // Fallback to clipboard copy - track as alternative sharing method
+      trackDocumentShare(document.id, 'clipboard_copy', 1)
       copyToClipboard()
     }
   }
 
   const saveEdit = async () => {
     if (!document) return
+
+    // Track document editing collaboration
+    trackCollaboration('edit', document.id, 1)
 
     try {
       // Save to the API
@@ -1612,15 +1753,22 @@ The ADPA system represents a significant advancement in document processing auto
                       </CardHeader>
                       <CardContent className="p-8">
                         {!isEditing ? (
-                          <DriftHighlighter
+                          <EntityHighlighter
                             content={typeof document.content === 'string' ? document.content : JSON.stringify(document.content, null, 2)}
-                            drifts={drifts}
-                            showHighlights={showDriftHighlights}
-                            onEnhancedContentReady={handleEnhancedContentReady}
-                            onAcceptDrift={handleAcceptDrift}
-                            onEditDocument={handleEditDocument}
-                            onRemoveDrift={handleRemoveDrift}
-                          />
+                            entityHighlight={entityHighlight}
+                          >
+                            {(highlightedContent) => (
+                              <DriftHighlighter
+                                content={highlightedContent}
+                                drifts={drifts}
+                                showHighlights={showDriftHighlights}
+                                onEnhancedContentReady={handleEnhancedContentReady}
+                                onAcceptDrift={handleAcceptDrift}
+                                onEditDocument={handleEditDocument}
+                                onRemoveDrift={handleRemoveDrift}
+                              />
+                            )}
+                          </EntityHighlighter>
                         ) : (
                           <textarea
                             value={editedContent}

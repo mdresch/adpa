@@ -5,9 +5,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { Loader2, TrendingUp, TrendingDown, AlertCircle, CheckCircle, Activity, Calendar, DollarSign, Target, BarChart3 } from "lucide-react"
+import { Loader2, TrendingUp, AlertCircle, CheckCircle, BarChart3, Clock } from "lucide-react"
 import { apiClient } from "@/lib/api"
 import { cn } from "@/lib/utils"
+import { PerformanceEntryDialog } from "./PerformanceEntryDialog"
 
 interface PerformanceDashboardProps {
   projectId: string
@@ -70,6 +71,10 @@ export function PerformanceDashboard({ projectId }: PerformanceDashboardProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+  
+  // Dialog state
+  const [showEntryDialog, setShowEntryDialog] = useState(false)
+  const [editingActual, setEditingActual] = useState<PerformanceActual | null>(null)
 
   useEffect(() => {
     if (!projectId || projectId === 'undefined') return
@@ -90,12 +95,12 @@ export function PerformanceDashboard({ projectId }: PerformanceDashboardProps) {
 
       // Fetch summary and actuals in parallel
       const [summaryResponse, actualsResponse] = await Promise.all([
-        fetch(`${process.env.NEXT_PUBLIC_API_URL}/performance-actuals/${projectId}/summary`, {
+        fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/performance-actuals/${projectId}/summary`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
         }),
-        fetch(`${process.env.NEXT_PUBLIC_API_URL}/performance-actuals/${projectId}?limit=50`, {
+        fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/performance-actuals/${projectId}?limit=50`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -127,6 +132,28 @@ export function PerformanceDashboard({ projectId }: PerformanceDashboardProps) {
     setRefreshing(true)
     await fetchData()
     setRefreshing(false)
+  }
+
+  // Dialog handlers
+  const handleAddNew = () => {
+    setEditingActual(null)
+    setShowEntryDialog(true)
+  }
+
+  const handleEdit = (actual: PerformanceActual) => {
+    setEditingActual(actual)
+    setShowEntryDialog(true)
+  }
+
+  const handleDialogClose = () => {
+    setShowEntryDialog(false)
+    setEditingActual(null)
+  }
+
+  const handleDialogSuccess = () => {
+    setShowEntryDialog(false)
+    setEditingActual(null)
+    fetchData()
   }
 
   const getHealthColor = (value: number | null, type: 'spi' | 'cpi'): string => {
@@ -203,7 +230,7 @@ export function PerformanceDashboard({ projectId }: PerformanceDashboardProps) {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Activity className="h-5 w-5" />
+            <BarChart3 className="h-5 w-5" />
             Performance Dashboard
           </CardTitle>
           <CardDescription>
@@ -211,7 +238,7 @@ export function PerformanceDashboard({ projectId }: PerformanceDashboardProps) {
           </CardDescription>
         </CardHeader>
         <CardContent className="text-center py-12 text-muted-foreground">
-          <Activity className="h-12 w-12 mx-auto mb-3 opacity-50" />
+          <BarChart3 className="h-12 w-12 mx-auto mb-3 opacity-50" />
           <p className="font-medium mb-1">No Performance Data</p>
           <p className="text-sm">Run AI extraction to extract performance actuals from project documents</p>
         </CardContent>
@@ -224,12 +251,20 @@ export function PerformanceDashboard({ projectId }: PerformanceDashboardProps) {
 
   return (
     <div className="space-y-6">
+      {/* Performance Entry Dialog */}
+      <PerformanceEntryDialog
+        projectId={projectId}
+        isOpen={showEntryDialog}
+        onClose={handleDialogClose}
+        onSuccess={handleDialogSuccess}
+        editingActual={editingActual}
+      />
       {/* Header */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
           <div>
             <CardTitle className="flex items-center gap-2">
-              <Activity className="h-5 w-5" />
+              <BarChart3 className="h-5 w-5" />
               Performance Dashboard
             </CardTitle>
             <CardDescription>
@@ -258,13 +293,24 @@ export function PerformanceDashboard({ projectId }: PerformanceDashboardProps) {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          {/* Floating Action Button */}
+          <div className="flex justify-end">
+            <Button
+              onClick={handleAddNew}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              <TrendingUp className="h-4 w-4 mr-2" />
+              Add Performance Actual
+            </Button>
+          </div>
+
           {/* Performance Indices */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* SPI */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium flex items-center gap-2">
-                  <Calendar className="h-4 w-4" />
+                  <Clock className="h-4 w-4" />
                   Schedule Performance Index (SPI)
                 </span>
                 <span className={cn("text-2xl font-bold", getHealthColor(spi, 'spi'))}>
@@ -291,7 +337,7 @@ export function PerformanceDashboard({ projectId }: PerformanceDashboardProps) {
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium flex items-center gap-2">
-                  <DollarSign className="h-4 w-4" />
+                  <TrendingUp className="h-4 w-4" />
                   Cost Performance Index (CPI)
                 </span>
                 <span className={cn("text-2xl font-bold", getHealthColor(cpi, 'cpi'))}>
@@ -360,7 +406,7 @@ export function PerformanceDashboard({ projectId }: PerformanceDashboardProps) {
         <Card>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
-              <Calendar className="h-5 w-5" />
+              <Clock className="h-5 w-5" />
               Schedule Variance
             </CardTitle>
             <CardDescription>
@@ -412,6 +458,16 @@ export function PerformanceDashboard({ projectId }: PerformanceDashboardProps) {
                             'N/A'
                           )}
                         </td>
+                        <td className="p-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleEdit(actual)}
+                            className="h-8 px-2"
+                          >
+                            <BarChart3 className="h-3 w-3" />
+                          </Button>
+                        </td>
                       </tr>
                     ))}
                 </tbody>
@@ -431,7 +487,7 @@ export function PerformanceDashboard({ projectId }: PerformanceDashboardProps) {
         <Card>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
-              <DollarSign className="h-5 w-5" />
+              <TrendingUp className="h-5 w-5" />
               Cost Variance
             </CardTitle>
             <CardDescription>
@@ -482,6 +538,16 @@ export function PerformanceDashboard({ projectId }: PerformanceDashboardProps) {
                           ) : (
                             'N/A'
                           )}
+                        </td>
+                        <td className="p-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleEdit(actual)}
+                            className="h-8 px-2"
+                          >
+                            <BarChart3 className="h-3 w-3" />
+                          </Button>
                         </td>
                       </tr>
                     ))}

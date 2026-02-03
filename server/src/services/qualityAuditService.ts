@@ -32,9 +32,9 @@ interface QualityIssue {
 }
 
 interface QualityAuditResult {
-  overallScore: number
-  overallGrade: string
-  qualityLevel: string
+  overallScore: number | null
+  overallGrade: string | null
+  qualityLevel: string | null
   dimensionalScores: QualityDimensionalScores
   findings: Record<string, string>
   issues: QualityIssue[]
@@ -44,6 +44,7 @@ interface QualityAuditResult {
   analysisTokens?: number
   analysisCost?: number
   analysisTime?: number
+  auditPerformed?: boolean
 }
 
 class QualityAuditService {
@@ -86,11 +87,24 @@ class QualityAuditService {
         projectContext
       )
 
-      // 3. Calculate overall score (weighted average)
+      // 3. Calculate overall score (weighted average) - only if audit was performed
       const dimensionalScores = this.extractDimensionalScores(analysisResults)
-      const overallScore = this.calculateOverallScore(dimensionalScores)
-      const overallGrade = this.calculateGrade(overallScore)
-      const qualityLevel = this.getQualityLevel(overallScore)
+      const auditPerformed = analysisResults.audit_performed !== false
+      
+      let overallScore: number | null = null
+      let overallGrade: string | null = null
+      let qualityLevel: string | null = null
+      
+      if (auditPerformed) {
+        overallScore = this.calculateOverallScore(dimensionalScores)
+        overallGrade = this.calculateGrade(overallScore)
+        qualityLevel = this.getQualityLevel(overallScore)
+      } else {
+        // No audit performed - keep values as null
+        overallScore = null
+        overallGrade = null
+        qualityLevel = null
+      }
 
       // 4. Extract findings, issues, and recommendations
       const findings = this.extractFindings(analysisResults)
@@ -363,7 +377,7 @@ class QualityAuditService {
           hasResult: !!result,
           resultKeys: result ? Object.keys(result) : []
         })
-        return this.getDefaultScores()
+        return this.getNoAuditResponse()
       }
 
       // Extract token usage from AI response
@@ -396,8 +410,8 @@ class QualityAuditService {
         stack: error instanceof Error ? error.stack : undefined
       })
       
-      // Fallback: Return default scores if AI fails
-      return this.getDefaultScores()
+      // Fallback: Return no audit response if AI fails
+      return this.getNoAuditResponse()
     }
   }
 
@@ -644,8 +658,8 @@ Remember: Your audit helps improve future document generation, so be detailed an
         content: content.substring(0, 200)
       })
       
-      // Return default scores if parsing fails
-      return this.getDefaultScores()
+      // Return no audit response if parsing fails
+      return this.getNoAuditResponse()
     }
   }
 
@@ -777,32 +791,35 @@ Remember: Your audit helps improve future document generation, so be detailed an
   }
 
   /**
-   * Get default scores when AI analysis fails
+   * Get "no audit performed" response when AI analysis fails
+   * This ensures transparency and avoids misleading mock scores
    */
-  private getDefaultScores(): Record<string, unknown> {
-    logger.warn('[QUALITY-AUDIT] Using default scores (AI analysis failed)')
+  private getNoAuditResponse(): Record<string, unknown> {
+    logger.warn('[QUALITY-AUDIT] AI analysis unavailable - no audit performed')
     
     return {
-      completeness: 70,
-      consistency: 70,
-      professional_quality: 70,
-      standards_compliance: 70,
-      accuracy: 80,
-      context_relevance: 80,
+      completeness: null,
+      consistency: null,
+      professional_quality: null,
+      standards_compliance: null,
+      accuracy: null,
+      context_relevance: null,
       findings: {
-        completeness: 'AI analysis unavailable - default score applied',
-        consistency: 'AI analysis unavailable - default score applied',
-        professional_quality: 'AI analysis unavailable - default score applied',
-        standards_compliance: 'AI analysis unavailable - default score applied',
-        accuracy: 'AI analysis unavailable - default score applied',
-        context_relevance: 'AI analysis unavailable - default score applied'
+        completeness: 'AI analysis unavailable - no audit performed',
+        consistency: 'AI analysis unavailable - no audit performed',
+        professional_quality: 'AI analysis unavailable - no audit performed',
+        standards_compliance: 'AI analysis unavailable - no audit performed',
+        accuracy: 'AI analysis unavailable - no audit performed',
+        context_relevance: 'AI analysis unavailable - no audit performed'
       },
       issues: [],
-      recommendations: ['AI analysis was unavailable. Manual review recommended.'],
+      recommendations: ['AI analysis was unavailable. Manual quality review recommended.'],
       provider: 'none',
       model: 'none',
       tokens: 0,
-      cost: 0
+      cost: 0,
+      audit_performed: false,
+      audit_status: 'not_performed'
     }
   }
 
@@ -826,9 +843,9 @@ Remember: Your audit helps improve future document generation, so be detailed an
   private async saveAuditResults(auditData: {
     documentId: string
     auditJobId: string
-    overallScore: number
-    overallGrade: string
-    qualityLevel: string
+    overallScore: number | null
+    overallGrade: string | null
+    qualityLevel: string | null
     dimensionalScores: QualityDimensionalScores
     findings: Record<string, string>
     issues: QualityIssue[]

@@ -5,6 +5,7 @@
 import { logger } from '../../../../utils/logger'
 import type { PoolClient } from 'pg'
 import type { PersistenceResult } from '../../base/Persistence'
+import { normalizeDate } from '../../base/Persistence'
 import type { TeamAvailability } from './types'
 
 export async function saveTeamAvailability(
@@ -35,8 +36,8 @@ export async function saveTeamAvailability(
                 e.person_name || '',
                 e.role || null,
                 e.availability_percent || 100,
-                e.start_date || null,
-                e.end_date || null,
+                normalizeDate(e.start_date), // Use normalizeDate
+                normalizeDate(e.end_date), // Use normalizeDate
                 e.source_document_id || null,
                 userId
             )

@@ -220,8 +220,11 @@ export class DocumentGeneratorService {
       // Register Handlebars helpers
       this.registerHandlebarsHelpers()
 
-      // Compile template
-      const compiledTemplate = Handlebars.compile(JSON.stringify(template.content))
+      // Compile template - use content directly, not JSON.stringify
+      const templateContent = typeof template.content === 'string' 
+        ? template.content 
+        : JSON.stringify(template.content)
+      const compiledTemplate = Handlebars.compile(templateContent)
 
       // Resolve variables
       const variablesResolved: Record<string, any> = {}
@@ -559,6 +562,21 @@ export class DocumentGeneratorService {
     Handlebars.registerHelper('ne', (a: any, b: any) => a !== b)
     Handlebars.registerHelper('gt', (a: number, b: number) => a > b)
     Handlebars.registerHelper('lt', (a: number, b: number) => a < b)
+
+    // Register generateTableOfContents helper for playbook templates
+    Handlebars.registerHelper('generateTableOfContents', (tableOfContents: any) => {
+      if (!tableOfContents || !tableOfContents.sections) {
+        return ''
+      }
+      
+      let toc = ''
+      tableOfContents.sections.forEach((section: any) => {
+        const indent = '  '.repeat(section.level - 1)
+        toc += `${indent}- [${section.title}](#${section.title.toLowerCase().replace(/\s+/g, '-')})\n`
+      })
+      
+      return toc.trim()
+    })
   }
 
   /**
