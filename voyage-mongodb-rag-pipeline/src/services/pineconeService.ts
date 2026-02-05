@@ -1,0 +1,437 @@
+import { Pinecone, PineconeRecord } from '@pinecone-database/pinecone';
+import { logger } from '../utils/logger';
+import { config } from '../config';
+
+interface PineconeConfig {
+  apiKey: string;
+  environment?: string;
+}
+
+interface UpsertResult {
+  upsertedCount: number;
+  errors?: string[];
+}
+
+interface ProjectVector {
+  id: string;
+  values: number[];
+  metadata: {
+    type: 'project';
+    name: string;
+    description?: string;
+    framework?: string;
+    status?: string;
+    priority?: string;
+    start_date?: string;
+    end_date?: string;
+    budget?: number;
+    owner_id?: string;
+    team_members?: string[];
+    created_at: string;
+    updated_at: string;
+  };
+}
+
+interface DocumentVector {
+  id: string;
+  values: number[];
+  metadata: {
+    type: 'document';
+    project_id: string;
+    title: string;
+    content?: string;
+    mime_type?: string;
+    file_size?: number;
+    created_at: string;
+    updated_at: string;
+  };
+}
+
+interface EntityVector {
+  id: string;
+  values: number[];
+  metadata: {
+    type: 'entity';
+    name: string;
+    entity_type: string;
+    confidence?: number;
+    document_id?: string;
+    project_id?: string;
+    created_at: string;
+  };
+}
+
+export class PineconeService {
+  private pc: Pinecone;
+  private index: any;
+  private indexName: string;
+
+  constructor() {
+    const pineconeConfig: PineconeConfig = {
+      apiKey: process.env.PINECONE_API_KEY || '',
+      environment: process.env.PINECONE_ENVIRONMENT || 'us-west1-gcp'
+    };
+
+    if (!pineconeConfig.apiKey) {
+      logger.warn('Pinecone API key not configured');
+      throw new Error('Pinecone API key is required');
+    }
+
+    this.pc = new Pinecone({
+      apiKey: pineconeConfig.apiKey
+    });
+
+    this.indexName = process.env.PINECONE_INDEX_NAME || 'adpa-rag-index';
+    this.index = this.pc.index(this.indexName);
+
+    logger.info('Pinecone service initialized', {
+      indexName: this.indexName,
+      environment: pineconeConfig.environment
+    });
+  }
+
+  /**
+   * Test Pinecone connection
+   */
+  async testConnection(): Promise<boolean> {
+    try {
+      const stats = await this.index.describeIndexStats();
+      logger.info('Pinecone connection successful', { stats });
+      return true;
+    } catch (error) {
+      logger.error('Pinecone connection failed', {
+        error: (error as Error).message
+      });
+      return false;
+    }
+  }
+
+  /**
+   * Upsert projects to Pinecone
+   */
+  async upsertProjects(projects: any[]): Promise<UpsertResult> {
+    try {
+      logger.info('Starting project upsert with integrated embedding', { projectsCount: projects.length });
+      
+      // Use integrated embedding with correct record format from documentation
+      const records = projects.map(project => ({
+        _id: `project_${project.id}`, // Use _id as required by upsert_records
+        text: `${project.name || ''} ${project.description || ''} ${project.framework || ''}`.trim(), // Combined text for embedding
+        type: 'project',
+        name: project.name || '',
+        description: project.description || '',
+        framework: project.framework || '',
+        status: project.status || '',
+        priority: project.priority || '',
+        start_date: project.start_date || '',
+        end_date: project.end_date || '',
+        budget: project.budget || 0,
+        owner_id: project.owner_id || '',
+        team_members: project.team_members || [],
+        created_at: project.created_at || new Date().toISOString(),
+        updated_at: project.updated_at || new Date().toISOString()
+      }));
+
+      logger.info('Generated records for integrated embedding', { 
+        recordsCount: records.length,
+        sampleRecord: records[0] ? {
+          _id: records[0]._id,
+          textLength: records[0].text?.length,
+          hasType: !!records[0].type
+        } : null
+      });
+
+      // Use upsert_records method with integrated embedding
+      const result = await this.index.upsertRecords({
+        records: records
+      });
+      
+      logger.info('Projects upserted to Pinecone with integrated embedding', {
+        count: projects.length,
+        result: result || 'No result returned'
+      });
+
+      return {
+        upsertedCount: result?.upsertedCount || projects.length
+      };
+    } catch (error) {
+      logger.error('Failed to upsert projects to Pinecone', {
+        error: (error as Error).message,
+        projectsCount: projects.length
+      });
+
+      return {
+        upsertedCount: 0,
+        errors: [(error as Error).message]
+      };
+    }
+  }
+
+  /**
+   * Upsert documents to Pinecone using integrated embedding
+   */
+  async upsertDocuments(documents: any[]): Promise<UpsertResult> {
+    try {
+      logger.info('Starting document upsert with integrated embedding', { documentsCount: documents.length });
+      
+      // Use integrated embedding with correct record format from documentation
+      // Remove large content field to stay under 40KB metadata limit
+      const records = documents.map(doc => ({
+        _id: `document_${doc.id}`, // Use _id as required by upsert_records
+        text: `${doc.title || doc.name || ''} ${doc.content ? doc.content.substring(0, 1000) : ''}`.trim(), // Truncate content to 1000 chars
+        type: 'document',
+        project_id: doc.project_id || '',
+        title: doc.title || doc.name || '',
+        content_length: doc.content ? doc.content.length : 0, // Store length instead of full content
+        mime_type: doc.mime_type || doc.type || '',
+        file_size: doc.file_size || 0,
+        created_at: doc.created_at || new Date().toISOString(),
+        updated_at: doc.updated_at || new Date().toISOString()
+      }));
+
+      logger.info('Generated records for integrated embedding', { 
+        recordsCount: records.length,
+        sampleRecord: records[0] ? {
+          _id: records[0]._id,
+          textLength: records[0].text?.length,
+          hasType: !!records[0].type
+        } : null
+      });
+
+      // Use upsert_records method with integrated embedding
+      const result = await this.index.upsertRecords({
+        records: records
+      });
+      
+      logger.info('Documents upserted to Pinecone with integrated embedding', {
+        count: documents.length,
+        result: result || 'No result returned'
+      });
+
+      return {
+        upsertedCount: result?.upsertedCount || documents.length
+      };
+    } catch (error) {
+      logger.error('Failed to upsert documents to Pinecone with integrated embedding', {
+        error: (error as Error).message,
+        documentsCount: documents.length
+      });
+
+      return {
+        upsertedCount: 0,
+        errors: [(error as Error).message]
+      };
+    }
+  }
+
+  /**
+   * Upsert entities to Pinecone using integrated embedding
+   */
+  async upsertEntities(entities: any[]): Promise<UpsertResult> {
+    try {
+      logger.info('Starting entity upsert with integrated embedding', { entitiesCount: entities.length });
+      
+      // Use integrated embedding with correct record format from documentation
+      const records = entities.map(entity => ({
+        _id: `entity_${entity.id || entity.name}`, // Use _id as required by upsert_records
+        text: `${entity.name} ${entity.type || entity.entity_type || ''} ${entity.description || ''}`.trim(), // Combined text for embedding
+        type: 'entity',
+        name: entity.name,
+        entity_type: entity.type || entity.entity_type || 'unknown',
+        confidence: entity.confidence || 0.85,
+        document_id: entity.document_id || '',
+        project_id: entity.project_id || '',
+        created_at: entity.created_at || new Date().toISOString()
+      }));
+
+      // Use upsert_records method with integrated embedding
+      const result = await this.index.upsertRecords({
+        records: records
+      });
+      
+      logger.info('Entities upserted to Pinecone with integrated embedding', {
+        count: entities.length,
+        result: result || 'No result returned'
+      });
+
+      return {
+        upsertedCount: result?.upsertedCount || entities.length
+      };
+    } catch (error) {
+      logger.error('Failed to upsert entities to Pinecone with integrated embedding', {
+        error: (error as Error).message,
+        entitiesCount: entities.length
+      });
+
+      return {
+        upsertedCount: 0,
+        errors: [(error as Error).message]
+      };
+    }
+  }
+
+  /**
+   * Generate embedding for project
+   */
+  private generateProjectEmbedding(project: any): number[] {
+    // Create a text representation of the project for embedding
+    const text = [
+      project.name || '',
+      project.description || '',
+      project.framework || '',
+      project.status || '',
+      project.priority || '',
+      project.team_members?.join(' ') || ''
+    ].join(' ').toLowerCase();
+
+    // For now, generate a simple hash-based embedding
+    // In production, you'd use VoyageAI or another embedding service
+    return this.textToEmbedding(text);
+  }
+
+  /**
+   * Generate embedding for document
+   */
+  private generateDocumentEmbedding(doc: any): number[] {
+    const text = [
+      doc.title || doc.name || '',
+      doc.content || '',
+      doc.mime_type || doc.type || ''
+    ].join(' ').toLowerCase();
+
+    const embedding = this.textToEmbedding(text);
+    
+    logger.info('Generated document embedding', {
+      docId: doc.id,
+      textLength: text.length,
+      embeddingLength: embedding.length,
+      embeddingSample: embedding.slice(0, 5)
+    });
+
+    return embedding;
+  }
+
+  /**
+   * Generate embedding for entity
+   */
+  private generateEntityEmbedding(entity: any): number[] {
+    const text = [
+      entity.name || '',
+      entity.type || entity.entity_type || '',
+      entity.description || ''
+    ].join(' ').toLowerCase();
+
+    return this.textToEmbedding(text);
+  }
+
+  /**
+   * Simple text to embedding conversion (placeholder)
+   * In production, replace with VoyageAI embeddings
+   */
+  private textToEmbedding(text: string): number[] {
+    // Handle empty text
+    if (!text || text.trim().length === 0) {
+      text = 'empty content';
+    }
+
+    // Simple hash-based embedding for demonstration
+    // Replace with actual VoyageAI embeddings in production
+    const embedding = new Array(1024).fill(0);
+    
+    for (let i = 0; i < text.length; i++) {
+      const charCode = text.charCodeAt(i);
+      const index = charCode % embedding.length;
+      embedding[index] = (embedding[index] + charCode / 1000) % 1;
+    }
+
+    // Add some variation to prevent all zeros
+    for (let i = 0; i < embedding.length; i++) {
+      if (embedding[i] === 0) {
+        embedding[i] = Math.sin(i + 1) * 0.1; // Add small non-zero values
+      }
+    }
+
+    // Normalize the embedding
+    const magnitude = Math.sqrt(embedding.reduce((sum, val) => sum + val * val, 0));
+    const normalizedEmbedding = magnitude > 0 ? embedding.map(val => val / magnitude) : embedding;
+    
+    // Ensure no zeros remain
+    for (let i = 0; i < normalizedEmbedding.length; i++) {
+      if (normalizedEmbedding[i] === 0) {
+        normalizedEmbedding[i] = 0.0001; // Small non-zero value
+      }
+    }
+    
+    return normalizedEmbedding;
+  }
+
+  /**
+   * Search for similar items in Pinecone
+   */
+  async search(query: string, topK: number = 10, filter?: any): Promise<any[]> {
+    try {
+      const queryVector = this.textToEmbedding(query.toLowerCase());
+      
+      const searchRequest: any = {
+        vector: queryVector,
+        topK,
+        includeMetadata: true
+      };
+
+      if (filter) {
+        searchRequest.filter = filter;
+      }
+
+      const results = await this.index.query(searchRequest);
+      
+      logger.info('Pinecone search completed', {
+        query,
+        topK,
+        resultsCount: results.matches?.length || 0
+      });
+
+      return results.matches || [];
+    } catch (error) {
+      logger.error('Pinecone search failed', {
+        error: (error as Error).message,
+        query
+      });
+      return [];
+    }
+  }
+
+  /**
+   * Delete vectors by IDs
+   */
+  async delete(ids: string[]): Promise<boolean> {
+    try {
+      await this.index.deleteOne(ids);
+      logger.info('Vectors deleted from Pinecone', { count: ids.length });
+      return true;
+    } catch (error) {
+      logger.error('Failed to delete vectors from Pinecone', {
+        error: (error as Error).message,
+        idsCount: ids.length
+      });
+      return false;
+    }
+  }
+
+  /**
+   * Get index statistics
+   */
+  async getIndexStats(): Promise<any> {
+    try {
+      const stats = await this.index.describeIndexStats();
+      return stats;
+    } catch (error) {
+      logger.error('Failed to get Pinecone index stats', {
+        error: (error as Error).message
+      });
+      return null;
+    }
+  }
+}
+
+// Export singleton instance
+export const pineconeService = new PineconeService();

@@ -6,24 +6,23 @@ This document outlines the strategic roadmap for the ADPA platform, focusing on 
 
 ## � Top Priorities (Q1 2026)
 
-### 1. � Performance Actuals & Measurement Domain
+### 1. 🟡 Lessons Learned & Issues Log Entities
 **Status**: 🔵 Planned | **Priority**: CRITICAL (P0)  
-**Target Domain**: Measurement Performance Domain  
-**File**: [`ENTITY_TYPE_PERFORMANCE_ACTUALS.md`](./ENTITY_TYPE_PERFORMANCE_ACTUALS.md)
+**Target Domain**: Project Work Performance Domain, Uncertainty Domain  
+**Files**:
+- [`ENTITY_TYPE_LESSONS_LEARNED.md`](./ENTITY_TYPE_LESSONS_LEARNED.md)
+- [`ENTITY_TYPE_ISSUES_LOG.md`](./ENTITY_TYPE_ISSUES_LOG.md)
 
-**Goal**: Close the "Actuals Gap" by tracking what actually happened (cost, schedule, scope) vs. what was planned. This enables automated SPI/CPI calculation and variance alerts.
+**Goal**: Complete PMBOK 8 Project Work Domain (65% → 80%) and Uncertainty Domain (95% → 100%) compliance through automated extraction of lessons learned and issue tracking.
 
 ---
 
-### 2. 🟢 Team Performance Domain (Deepening)
-**Status**: � **In Progress** | **Priority**: HIGH (P0)  
-**Target Domain**: Team Performance Domain  
-**File**: [`ENTITY_TYPE_TEAM_AGREEMENTS.md`](./ENTITY_TYPE_TEAM_AGREEMENTS.md)
+### 2. 🟡 Development Approach & Life Cycle Metadata
+**Status**: 🔵 Planned | **Priority**: HIGH (P0)  
+**Target Domain**: Development Approach & Life Cycle Performance Domain  
+**File**: [`ENTITY_TYPE_DEVELOPMENT_APPROACH.md`](./ENTITY_TYPE_DEVELOPMENT_APPROACH.md)
 
-**Goal**: Move beyond resource tracking to capture team culture, norms, and psychological safety through automated extraction of "Team Agreements".
-- ✅ Database Schema & Migration complete
-- ✅ AI Extraction (14th Entity Type) integrated
-- ✅ Frontend display by category implemented
+**Goal**: Capture methodology selection, tailoring decisions, and life cycle approach to achieve 90% Development Approach Domain coverage.
 
 ---
 
@@ -54,13 +53,31 @@ ADPA is expanding from a project-centric tool to a strategic enterprise platform
 
 ---
 
-## 🎉 Recently Completed (December 18, 2025)
+## 🎉 Recently Completed (December 2025 - January 2026)
 
-These major stability and visibility hurdles have been cleared:
+These major PMBOK 8 compliance milestones have been achieved:
+
+### ✅ Performance Actuals & Measurement Domain
+**Status**: ✅ **COMPLETED** (Dec 2025)  
+**Archive**: [`archive/2026/ENTITY_TYPE_PERFORMANCE_ACTUALS_COMPLETED.md`](./archive/2026/ENTITY_TYPE_PERFORMANCE_ACTUALS_COMPLETED.md)  
+**Impact**:
+- Closed the "Actuals Gap" - now tracking actual vs. planned performance
+- Automated SPI/CPI calculation and variance alerts
+- Measurement Domain coverage: 70% → 95%
+- EVM metrics: earned_value, actual_cost_evm, planned_value, SPI, CPI
+
+### ✅ Team Performance Domain (Deepening)
+**Status**: ✅ **COMPLETED** (Dec 2025)  
+**Archive**: [`archive/2026/ENTITY_TYPE_TEAM_AGREEMENTS_COMPLETED.md`](./archive/2026/ENTITY_TYPE_TEAM_AGREEMENTS_COMPLETED.md)  
+**Impact**:
+- Moved beyond resource tracking to capture team culture and norms
+- Automated extraction of 14th entity type (Team Agreements)
+- Team Domain coverage: 60% → 90%
+- Psychological safety and collaboration tracking
 
 ### ✅ Automatic Drift Detection & AI Resolution
 **Status**: ✅ **COMPLETED** (Dec 2025)  
-**File**: [`DRIFT_AUTO_RESOLUTION_FEATURE.md`](./DRIFT_AUTO_RESOLUTION_FEATURE.md)  
+**Archive**: [`archive/2026/DRIFT_AUTO_RESOLUTION_FEATURE_COMPLETED.md`](./archive/2026/DRIFT_AUTO_RESOLUTION_FEATURE_COMPLETED.md)  
 **Impact**: Document-baseline realignment is now automated. Users can "Resolve with AI" using Conservative, Balanced, or Permissive strategies with full change previews.
 
 ### ✅ Job Monitor & Worker Visibility
@@ -77,10 +94,15 @@ These major stability and visibility hurdles have been cleared:
 ## 📅 Roadmap Timeline
 
 ### Q1 2026 - PMBOK 8 Compliance Completion
-- 🔴 Performance Actuals (Measurement Domain)
-- 🔴 Team Agreements (Team Domain - Final Polish)
-- 🟡 Lessons Learned & Issues Log Entities
-- 🟡 Development Approach & Life Cycle Metadata
+- 🟡 Lessons Learned & Issues Log Entities (Project Work & Uncertainty Domains)
+- 🟡 Development Approach & Life Cycle Metadata (Development Approach Domain)
+- 🟢 Smart Document Versioning (Governance & Quality)
+- 🟢 Unlimited Documents Support (Enterprise Scalability)
+
+### Q2 2026 - Strategic Core
+- 🟢 Program Financial Management (Budget Rollups, EVM)
+- � Portfolio Prioritization Engine
+- � Advanced AI Summarization (Monthly Portfolio Reports)
 
 ### Q2 2026 - Strategic Core
 - 🟢 Program Financial Management (Budget Rollups, EVM)
@@ -99,5 +121,6 @@ These major stability and visibility hurdles have been cleared:
 
 ---
 
-**Last Updated**: December 18, 2025  
+**Last Updated**: January 15, 2026  
 *Previous Roadmap (2025) Archived at: [`archive/2025/ROADMAP_README_COMPLETE_2025.md`](./archive/2025/ROADMAP_README_COMPLETE_2025.md)*
+*Completed Features (2026) Archived at: [`archive/2026/`](./archive/2026/)*

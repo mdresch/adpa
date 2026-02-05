@@ -121,6 +121,7 @@ import portfolioFinancialRoutes from "./routes/portfolioFinancial"
 import taskCostRoutes from "./routes/taskCosts"
 import developmentApproachRoutes from "./routes/developmentApproachRoutes"
 import lessonsLearnedRoutes from "./routes/lessonsLearnedRoutes"
+import developmentApproachModuleRoutes from "./modules/developmentApproach/routes"
 import contextOrchestratorRoutes from "./routes/contextOrchestrator"
 import uxDocumentationRoutes from "./routes/uxDocumentationRoutes"
 import playbookRoutes from "./routes/playbookRoutes"
@@ -334,6 +335,7 @@ app.use("/api/portfolio-assessment", portfolioAssessmentRoutes)
 app.use("/api/executive-dashboard", executiveDashboardRoutes)
 app.use("/api/projects", projectSimilarityRoutes)
 app.use("/api/projects", developmentApproachRoutes)
+app.use("/api/development-approach", developmentApproachModuleRoutes)
 console.log("✅ All API routes registered")
 app.use("/api/notifications", notificationsRoutes)
 app.use("/api/email-notifications", emailNotificationsRoutes)
