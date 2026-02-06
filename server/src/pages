@@ -25,7 +25,7 @@ export default function Dashboard() {
   const [timeRange, setTimeRange] = useState('1h')
   const [activeTab, setActiveTab] = useState('overview')
   const { data: metrics, isLoading, error, refetch } = useMetrics(timeRange)
-  const { data: pineconeMetrics, isLoading: pineconeLoading, refetch: refetchPinecone } = usePineconeMetrics()
+  const { data: pineconeMetrics, isLoading: pineconeLoading } = usePineconeMetrics()
   const { data: gkgMetrics, isLoading: gkgLoading } = useGKGMetrics()
 
   useEffect(() => {
@@ -67,11 +67,7 @@ export default function Dashboard() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.15 }}
               >
-                <PineconeAnalytics 
-                  metrics={pineconeMetrics} 
-                  isLoading={pineconeLoading} 
-                  onRefresh={refetchPinecone}
-                />
+                <PineconeAnalytics metrics={pineconeMetrics} isLoading={pineconeLoading} />
               </motion.div>
 
               <motion.div
@@ -114,11 +110,7 @@ export default function Dashboard() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
             >
-              <PineconeAnalytics 
-                metrics={pineconeMetrics} 
-                isLoading={pineconeLoading} 
-                onRefresh={refetchPinecone}
-              />
+              <PineconeAnalytics metrics={pineconeMetrics} isLoading={pineconeLoading} />
             </motion.div>
             
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

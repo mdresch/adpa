@@ -30,6 +30,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Switch } from "@/components/ui/switch"
 import { Slider } from "@/components/ui/slider"
 import { format, differenceInHours } from "date-fns"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { apiClient, Issue, Playbook, PlaybookExecution, PlaybookStep } from "@/lib/api"
 import { toast } from "@/lib/notify"
 import { CONFIDENCE_WEIGHTS, CONFIDENCE_THRESHOLDS } from '@/lib/constants/playbook'
@@ -64,6 +65,9 @@ export function ResolutionWorkflowCard({ issue, onUpdate, bulkMode = false, sele
     const [stepExecutions, setStepExecutions] = useState<any[]>([])
     const [loadingAction, setLoadingAction] = useState<string | null>(null)
     const [activePlaybookTitle, setActivePlaybookTitle] = useState<string | null>(null)
+    const [history, setHistory] = useState<any[]>([])
+    const [loadingHistory, setLoadingHistory] = useState(false)
+    const [showHistory, setShowHistory] = useState(false)
 
     // Auto-assignment state
     const [autoAssignSettings, setAutoAssignSettings] = useState<AutoAssignmentSettings>({
@@ -93,7 +97,7 @@ export function ResolutionWorkflowCard({ issue, onUpdate, bulkMode = false, sele
     // Confidence scoring and matching algorithms
     const calculateConfidenceScore = (playbook: Playbook, issue: Issue): number => {
         let score = 0
-        
+
         // Category match (40% weight)
         if (playbook.applicable_risk_categories?.includes(issue.category)) {
             score += CONFIDENCE_WEIGHTS.CATEGORY_MATCH
@@ -103,15 +107,15 @@ export function ResolutionWorkflowCard({ issue, onUpdate, bulkMode = false, sele
         if (playbook.applicable_priority_levels?.includes(issue.priority)) {
             score += CONFIDENCE_WEIGHTS.PRIORITY_MATCH
         }
-        
+
         // Historical success rate (20% weight)
         const successRate = getHistoricalSuccessRate(playbook)
         score += successRate * (CONFIDENCE_WEIGHTS.SUCCESS_RATE / 100)
-        
+
         // Recency and relevance (15% weight)
         const recencyScore = getRecencyScore(playbook)
         score += recencyScore * (CONFIDENCE_WEIGHTS.RECENCY / 100)
-        
+
         return Math.min(100, Math.round(score))
     }
 
@@ -144,49 +148,49 @@ export function ResolutionWorkflowCard({ issue, onUpdate, bulkMode = false, sele
             setUpdateNotesStepId(null)
         }
     }
-    
+
     const getMatchReasons = (playbook: Playbook, issue: Issue): string[] => {
         const reasons: string[] = []
-        
+
         if (playbook.applicable_risk_categories?.includes(issue.category)) {
             reasons.push(`Matches issue category: ${issue.category}`)
         }
-        
+
         if (playbook.applicable_priority_levels?.includes(issue.priority)) {
             reasons.push(`Suitable for ${issue.priority} priority issues`)
         }
-        
+
         if (playbook.trigger_type === 'auto') {
             reasons.push('Auto-triggered playbook')
         }
-        
+
         if (playbook.is_active) {
             reasons.push('Active and maintained')
         }
-        
+
         return reasons
     }
-    
+
     const getHistoricalSuccessRate = (playbook: Playbook): number => {
         // Mock implementation - would fetch from analytics API
         return Math.random() * 30 + 70 // 70-100% success rate
     }
-    
+
     const getRecencyScore = (playbook: Playbook): number => {
         const daysSinceUpdate = differenceInHours(new Date(), new Date(playbook.updated_at)) / 24
         return Math.max(0, 100 - daysSinceUpdate * 2) // Decay over time
     }
-    
+
     const estimatePlaybookDuration = async (playbook: Playbook): Promise<number> => {
         // Mock implementation - would calculate from playbook steps
         return Math.random() * 48 + 24 // 24-72 hours
     }
-    
+
     const getPlaybookSuccessRate = async (playbook: Playbook): Promise<number> => {
         // Mock implementation - would fetch from analytics API
         return Math.random() * 25 + 75 // 75-100% success rate
     }
-    
+
     // Auto-assignment handlers
     const handleAutoAssign = async (playbook: PlaybookWithConfidence) => {
         try {
@@ -196,9 +200,9 @@ export function ResolutionWorkflowCard({ issue, onUpdate, bulkMode = false, sele
                 toast.error("Invalid playbook for auto-assignment")
                 return
             }
-            
+
             console.log('[RESOLUTION_WORKFLOW] Auto-assigning playbook:', playbook.title, 'ID:', playbook.id)
-            
+
             setLoadingAction('auto-assign')
             const resp = await apiClient.executePlaybook(playbook.id, {
                 triggered_by_type: 'issue',
@@ -206,16 +210,16 @@ export function ResolutionWorkflowCard({ issue, onUpdate, bulkMode = false, sele
                 trigger_type: 'auto',
                 trigger_reason: `Auto-assigned with ${playbook.confidence_score}% confidence`
             })
-            
+
             console.log('[RESOLUTION_WORKFLOW] Execute playbook response:', resp)
-            
+
             // Defensive check for response structure
             if (!resp || !resp.execution || !resp.execution.id) {
                 console.error('[RESOLUTION_WORKFLOW] Invalid response from executePlaybook:', resp)
                 toast.error("Invalid response from playbook execution")
                 return
             }
-            
+
             // Update issue with execution ID
             await apiClient.updateIssue(issue.id, {
                 id: issue.id,
@@ -227,7 +231,7 @@ export function ResolutionWorkflowCard({ issue, onUpdate, bulkMode = false, sele
                     notes: `Auto-assigned playbook: ${playbook.title}`
                 }
             })
-            
+
             toast.success(`Auto-assigned playbook: ${playbook.title}`)
             setAutoAssignedPlaybook(null)
             if (onUpdate) onUpdate()
@@ -238,27 +242,27 @@ export function ResolutionWorkflowCard({ issue, onUpdate, bulkMode = false, sele
             setLoadingAction(null)
         }
     }
-    
+
     const handleAcceptAutoAssign = () => {
         if (autoAssignedPlaybook) {
             handleAutoAssign(autoAssignedPlaybook)
             setShowAutoAssignDialog(false)
         }
     }
-    
+
     const handleRejectAutoAssign = () => {
         setAutoAssignedPlaybook(null)
         setShowAutoAssignDialog(false)
         toast.info("Auto-assignment declined. Manual selection available.")
     }
-    
+
     // Bulk assignment handlers
     const handleBulkAssign = async () => {
         if (!selectedIssues.length) {
             toast.error("No issues selected for bulk assignment")
             return
         }
-        
+
         try {
             setLoadingAction('bulk-assign')
             const results = await Promise.allSettled(
@@ -276,7 +280,7 @@ export function ResolutionWorkflowCard({ issue, onUpdate, bulkMode = false, sele
                     return null
                 })
             )
-            
+
             const successful = results.filter(r => r.status === 'fulfilled').length
             toast.success(`Bulk assigned playbooks to ${successful}/${selectedIssues.length} issues`)
             if (onUpdate) onUpdate()
@@ -293,13 +297,26 @@ export function ResolutionWorkflowCard({ issue, onUpdate, bulkMode = false, sele
         } else {
             fetchRecommendations()
         }
+        fetchHistory()
     }, [issue.id, issue.playbook_execution_id])
+
+    const fetchHistory = async () => {
+        try {
+            setLoadingHistory(true)
+            const historyData = await apiClient.getIssueHistory(issue.id)
+            setHistory(historyData)
+        } catch (error) {
+            console.error("Failed to fetch issue history:", error)
+        } finally {
+            setLoadingHistory(false)
+        }
+    }
 
     const fetchRecommendations = async () => {
         try {
             setLoading(true)
             const resp = await apiClient.getIssueResolutionRecommendations(issue.id)
-            
+
             if (!resp.recommendations || resp.recommendations.length === 0) {
                 console.warn('[RESOLUTION_WORKFLOW] No playbook recommendations found', {
                     issueId: issue.id,
@@ -309,13 +326,13 @@ export function ResolutionWorkflowCard({ issue, onUpdate, bulkMode = false, sele
                 setRecommendations([])
                 return
             }
-            
+
             // Calculate confidence scores for each recommendation
             const enhancedRecommendations = await Promise.all(
                 (resp.recommendations || []).map(async (playbook: Playbook) => {
                     const confidence = calculateConfidenceScore(playbook, issue)
                     const reasons = getMatchReasons(playbook, issue)
-                    
+
                     return {
                         ...playbook,
                         confidence_score: confidence,
@@ -325,11 +342,11 @@ export function ResolutionWorkflowCard({ issue, onUpdate, bulkMode = false, sele
                     }
                 })
             )
-            
+
             // Sort by confidence score
             enhancedRecommendations.sort((a, b) => b.confidence_score - a.confidence_score)
             setRecommendations(enhancedRecommendations)
-            
+
             // Auto-assign if enabled and confidence is high enough
             if (autoAssignSettings.enabled && !bulkMode) {
                 const bestMatch = enhancedRecommendations[0]
@@ -542,6 +559,35 @@ export function ResolutionWorkflowCard({ issue, onUpdate, bulkMode = false, sele
             </CardHeader>
 
             <CardContent className="space-y-4">
+                {issue.root_cause && (
+                    <div className="bg-amber-50/30 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-900/50 rounded-xl overflow-hidden mb-4 transition-all hover:shadow-sm">
+                        <div className="bg-amber-100/50 dark:bg-amber-900/30 px-3 py-2 flex items-center justify-between border-b border-amber-200/50 dark:border-amber-900/50">
+                            <div className="flex items-center gap-2">
+                                <div className="bg-amber-200 dark:bg-amber-800 p-1 rounded">
+                                    <AlertCircle className="h-3.5 w-3.5 text-amber-700 dark:text-amber-300" />
+                                </div>
+                                <span className="text-[11px] font-bold text-amber-900 dark:text-amber-100 uppercase tracking-tight">Root Cause Analysis</span>
+                            </div>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-[10px] text-amber-700 dark:text-amber-300 hover:bg-amber-200/50 dark:hover:bg-amber-800/50"
+                                onClick={() => {
+                                    navigator.clipboard.writeText(issue.root_cause || "")
+                                    toast.success("RCA copied to clipboard")
+                                }}
+                            >
+                                <Users className="h-3 w-3 mr-1" />
+                                Copy
+                            </Button>
+                        </div>
+                        <ScrollArea className="h-[180px] w-full p-3">
+                            <div className="text-[12px] text-amber-900/90 dark:text-amber-200/90 whitespace-pre-wrap leading-relaxed pb-2">
+                                {issue.root_cause}
+                            </div>
+                        </ScrollArea>
+                    </div>
+                )}
                 {execution ? (
                     <>
                         <div className="space-y-2">
@@ -552,281 +598,351 @@ export function ResolutionWorkflowCard({ issue, onUpdate, bulkMode = false, sele
                             <Progress value={calculateProgress()} className="h-2" />
                         </div>
 
-                    {execution.status === 'in_progress' ? (
-                        <div className="space-y-3 mt-4">
-                            {steps.map((step) => {
-                                const stepExecution = Array.isArray(stepExecutions)
-                                    ? stepExecutions.find(se => se && se.step_id === step.id)
-                                    : undefined
+                        {execution.status === 'in_progress' ? (
+                            <div className="space-y-3 mt-4">
+                                {steps.map((step) => {
+                                    const stepExecution = Array.isArray(stepExecutions)
+                                        ? stepExecutions.find(se => se && se.step_id === step.id)
+                                        : undefined
 
-                                const isCompleted = stepExecution
-                                    ? stepExecution.status === 'completed'
-                                    : step.step_order < (execution.current_step_order || 1)
+                                    const isCompleted = stepExecution
+                                        ? stepExecution.status === 'completed'
+                                        : step.step_order < (execution.current_step_order || 1)
 
-                                const isCurrent = stepExecution
-                                    ? stepExecution.status === 'in_progress' || (!isCompleted && stepExecution.status === 'pending')
-                                    : step.step_order === (execution.current_step_order || 1)
+                                    const isCurrent = stepExecution
+                                        ? stepExecution.status === 'in_progress' || (!isCompleted && stepExecution.status === 'pending')
+                                        : step.step_order === (execution.current_step_order || 1)
 
-                                return (
-                                    <div
-                                        key={step.id}
-                                        className={`flex items-start gap-3 p-3 rounded-lg border transition-colors ${
-                                            isCurrent ? 'bg-primary/5 border-primary/20 ring-1 ring-primary/10' : 'bg-card'
-                                        }`}
-                                    >
-                                        <div className="mt-0.5">
-                                            {isCompleted ? (
-                                                <CheckCircle2 className="h-5 w-5 text-green-500" />
-                                            ) : isCurrent ? (
-                                                <Circle className="h-5 w-5 text-primary animate-pulse" />
-                                            ) : (
-                                                <Circle className="h-5 w-5 text-muted-foreground/30" />
-                                            )}
-                                        </div>
-
-                                        <div className="flex-1">
-                                            <div className="flex items-center justify-between">
-                                                <p className={`font-medium text-sm ${isCurrent ? 'text-primary' : ''}`}>
-                                                    {step.step_title}
-                                                </p>
-                                                {step.sla_hours && isCurrent && (
-                                                    <div className="flex items-center text-[10px] text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded">
-                                                        <Clock className="h-3 w-3 mr-1" />
-                                                        {step.sla_hours}h SLA
-                                                    </div>
+                                    return (
+                                        <div
+                                            key={step.id}
+                                            className={`flex items-start gap-3 p-3 rounded-lg border transition-colors ${isCurrent ? 'bg-primary/5 border-primary/20 ring-1 ring-primary/10' : 'bg-card'
+                                                }`}
+                                        >
+                                            <div className="mt-0.5">
+                                                {isCompleted ? (
+                                                    <CheckCircle2 className="h-5 w-5 text-green-500" />
+                                                ) : isCurrent ? (
+                                                    <Circle className="h-5 w-5 text-primary animate-pulse" />
+                                                ) : (
+                                                    <Circle className="h-5 w-5 text-muted-foreground/30" />
                                                 )}
                                             </div>
 
-                                            <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
-                                                {step.step_description}
-                                            </p>
-
-                                            {isCurrent && execution.status === 'in_progress' && (
-                                                <Button
-                                                    size="sm"
-                                                    variant="ghost"
-                                                    className="mt-2 h-7 text-xs bg-primary text-primary-foreground hover:bg-primary/90"
-                                                    onClick={() => initiateCompleteStep(step.id)}
-                                                    disabled={loadingAction === step.id}
-                                                >
-                                                    {loadingAction === step.id ? (
-                                                        <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                                                    ) : (
-                                                        <CheckCircle className="h-3 w-3 mr-1" />
-                                                    )}
-                                                    Mark as Completed
-                                                </Button>
-                                            )}
-
-                                            {isCompleted && (
-                                                <Button
-                                                    size="sm"
-                                                    variant="link"
-                                                    className="mt-2 h-7 px-0 text-xs"
-                                                    onClick={() => initiateUpdateStepNotes(step.id)}
-                                                    disabled={loadingAction === step.id}
-                                                >
-                                                    Add Notes
-                                                </Button>
-                                            )}
-                                        </div>
-                                    </div>
-                                )
-                            })}
-                        </div>
-                    ) : (
-                        <div className="py-4 text-center border rounded-lg border-dashed">
-                            <p className="text-sm text-muted-foreground">
-                                This playbook execution is {execution.status.replace('_', ' ')}. You can start a different playbook from the recommendations below.
-                            </p>
-                        </div>
-                    )}
-
-                    {execution.status !== 'in_progress' && (
-                        recommendations.length > 0 ? (
-                            <div className="space-y-4">
-                                {recommendations.map((playbook) => (
-                                    <div
-                                        key={playbook.id}
-                                        className={`group flex items-start justify-between p-3 rounded-lg border transition-all cursor-pointer ${
-                                            playbook.confidence_score >= CONFIDENCE_THRESHOLDS.HIGH ? 'border-green-200 bg-green-50/30' :
-                                            playbook.confidence_score >= CONFIDENCE_THRESHOLDS.MEDIUM ? 'border-yellow-200 bg-yellow-50/30' :
-                                            'border-gray-200 hover:border-primary/50 hover:bg-primary/[0.02]'
-                                        }`}
-                                        onClick={() => handleStartPlaybook(playbook.id, playbook.title)}
-                                    >
-                                        <div className="flex-1">
-                                            <div className="flex items-start justify-between">
-                                                <div>
-                                                    <h4 className="font-semibold text-sm group-hover:text-primary transition-colors">
-                                                        {playbook.title}
-                                                    </h4>
-                                                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                                                        {playbook.description}
+                                            <div className="flex-1">
+                                                <div className="flex items-center justify-between">
+                                                    <p className={`font-medium text-sm ${isCurrent ? 'text-primary' : ''}`}>
+                                                        {step.step_title}
                                                     </p>
-                                                    <div className="flex items-center gap-2 mt-2">
-                                                        <Badge variant="outline" className="text-[10px] font-normal py-0">
-                                                            {playbook.category}
-                                                        </Badge>
-                                                        <div className="flex items-center gap-1">
-                                                            <div className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                                                                playbook.confidence_score >= CONFIDENCE_THRESHOLDS.HIGH ? 'bg-green-100 text-green-700' :
-                                                                playbook.confidence_score >= CONFIDENCE_THRESHOLDS.MEDIUM ? 'bg-yellow-100 text-yellow-700' :
-                                                                'bg-gray-100 text-gray-700'
-                                                            }`}>
-                                                                {playbook.confidence_score}% Match
-                                                            </div>
-                                                            <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-                                                                <TrendingUp className="h-3 w-3" />
-                                                                {Math.round(playbook.success_rate)}% Success
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                    {playbook.match_reasons.length > 0 && (
-                                                        <div className="mt-2">
-                                                            <p className="text-[10px] text-muted-foreground mb-1">Why this matches:</p>
-                                                            <div className="flex flex-wrap gap-1">
-                                                                {playbook.match_reasons.slice(0, 2).map((reason, index) => (
-                                                                    <Badge key={index} variant="secondary" className="text-[8px]">
-                                                                        {reason}
-                                                                    </Badge>
-                                                                ))}
-                                                            </div>
+                                                    {step.sla_hours && isCurrent && (
+                                                        <div className="flex items-center text-[10px] text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded">
+                                                            <Clock className="h-3 w-3 mr-1" />
+                                                            {step.sla_hours}h SLA
                                                         </div>
                                                     )}
                                                 </div>
-                                                <div className="flex flex-col items-end gap-2 ml-4">
-                                                    <div className="text-[10px] text-muted-foreground text-right">
-                                                        Est. {Math.round(playbook.estimated_duration)}h
-                                                    </div>
+
+                                                <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
+                                                    {step.step_description}
+                                                </p>
+
+                                                {isCurrent && execution.status === 'in_progress' && (
                                                     <Button
                                                         size="sm"
-                                                        variant={playbook.confidence_score >= CONFIDENCE_THRESHOLDS.HIGH ? 'default' : 'ghost'}
-                                                        className="h-8 px-3 rounded-full group-hover:bg-primary group-hover:text-primary-foreground"
-                                                        disabled={loadingAction === playbook.id}
-                                                        onClick={() => handleStartPlaybook(playbook.id, playbook.title)}
+                                                        variant="ghost"
+                                                        className="mt-2 h-7 text-xs bg-primary text-primary-foreground hover:bg-primary/90"
+                                                        onClick={() => initiateCompleteStep(step.id)}
+                                                        disabled={loadingAction === step.id}
                                                     >
-                                                        {loadingAction === playbook.id ? (
-                                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                                        {loadingAction === step.id ? (
+                                                            <Loader2 className="h-3 w-3 animate-spin mr-1" />
                                                         ) : (
-                                                            <Play className="h-4 w-4" />
+                                                            <CheckCircle className="h-3 w-3 mr-1" />
                                                         )}
-                                                        {playbook.confidence_score >= CONFIDENCE_THRESHOLDS.HIGH ? 'Auto' : 'Start'}
+                                                        Mark as Completed
                                                     </Button>
+                                                )}
+
+                                                {isCompleted && (
+                                                    <Button
+                                                        size="sm"
+                                                        variant="link"
+                                                        className="mt-2 h-7 px-0 text-xs"
+                                                        onClick={() => initiateUpdateStepNotes(step.id)}
+                                                        disabled={loadingAction === step.id}
+                                                    >
+                                                        Add Notes
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        ) : (
+                            <div className="py-4 text-center border rounded-lg border-dashed">
+                                <p className="text-sm text-muted-foreground">
+                                    This playbook execution is {execution.status.replace('_', ' ')}. You can start a different playbook from the recommendations below.
+                                </p>
+                            </div>
+                        )}
+
+                        {execution.status !== 'in_progress' && (
+                            recommendations.length > 0 ? (
+                                <div className="space-y-4">
+                                    {recommendations.map((playbook) => (
+                                        <div
+                                            key={playbook.id}
+                                            className={`group flex items-start justify-between p-3 rounded-lg border transition-all cursor-pointer ${playbook.confidence_score >= CONFIDENCE_THRESHOLDS.HIGH ? 'border-green-200 bg-green-50/30' :
+                                                playbook.confidence_score >= CONFIDENCE_THRESHOLDS.MEDIUM ? 'border-yellow-200 bg-yellow-50/30' :
+                                                    'border-gray-200 hover:border-primary/50 hover:bg-primary/[0.02]'
+                                                }`}
+                                            onClick={() => handleStartPlaybook(playbook.id, playbook.title)}
+                                        >
+                                            <div className="flex-1">
+                                                <div className="flex items-start justify-between">
+                                                    <div>
+                                                        <h4 className="font-semibold text-sm group-hover:text-primary transition-colors">
+                                                            {playbook.title}
+                                                        </h4>
+                                                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                                                            {playbook.description}
+                                                        </p>
+                                                        <div className="flex items-center gap-2 mt-2">
+                                                            <Badge variant="outline" className="text-[10px] font-normal py-0">
+                                                                {playbook.category}
+                                                            </Badge>
+                                                            <div className="flex items-center gap-1">
+                                                                <div className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${playbook.confidence_score >= CONFIDENCE_THRESHOLDS.HIGH ? 'bg-green-100 text-green-700' :
+                                                                    playbook.confidence_score >= CONFIDENCE_THRESHOLDS.MEDIUM ? 'bg-yellow-100 text-yellow-700' :
+                                                                        'bg-gray-100 text-gray-700'
+                                                                    }`}>
+                                                                    {playbook.confidence_score}% Match
+                                                                </div>
+                                                                <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                                                    <TrendingUp className="h-3 w-3" />
+                                                                    {Math.round(playbook.success_rate)}% Success
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                        {playbook.match_reasons.length > 0 && (
+                                                            <div className="mt-2">
+                                                                <p className="text-[10px] text-muted-foreground mb-1">Why this matches:</p>
+                                                                <div className="flex flex-wrap gap-1">
+                                                                    {playbook.match_reasons.slice(0, 2).map((reason, index) => (
+                                                                        <Badge key={index} variant="secondary" className="text-[8px]">
+                                                                            {reason}
+                                                                        </Badge>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex flex-col items-end gap-2 ml-4">
+                                                        <div className="text-[10px] text-muted-foreground text-right">
+                                                            Est. {Math.round(playbook.estimated_duration)}h
+                                                        </div>
+                                                        <Button
+                                                            size="sm"
+                                                            variant={playbook.confidence_score >= CONFIDENCE_THRESHOLDS.HIGH ? 'default' : 'ghost'}
+                                                            className="h-8 px-3 rounded-full group-hover:bg-primary group-hover:text-primary-foreground"
+                                                            disabled={loadingAction === playbook.id}
+                                                            onClick={() => handleStartPlaybook(playbook.id, playbook.title)}
+                                                        >
+                                                            {loadingAction === playbook.id ? (
+                                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                                            ) : (
+                                                                <Play className="h-4 w-4" />
+                                                            )}
+                                                            {playbook.confidence_score >= CONFIDENCE_THRESHOLDS.HIGH ? 'Auto' : 'Start'}
+                                                        </Button>
+                                                    </div>
                                                 </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="py-6 text-center border rounded-lg border-dashed">
+                                    <p className="text-sm text-muted-foreground">
+                                        No matching playbooks found for this issue category.
+                                    </p>
+                                    <Button
+                                        variant="link"
+                                        className="text-xs text-primary mt-1"
+                                        onClick={() => window.location.href = '/playbooks'}
+                                    >
+                                        Browse all playbooks
+                                    </Button>
+                                </div>
+                            )
+                        )}
+                    </>
+                ) : (
+                    recommendations.length > 0 ? (
+                        <div className="space-y-4">
+                            {recommendations.map((playbook) => (
+                                <div
+                                    key={playbook.id}
+                                    className={`group flex items-start justify-between p-3 rounded-lg border transition-all cursor-pointer ${playbook.confidence_score >= CONFIDENCE_THRESHOLDS.HIGH ? 'border-green-200 bg-green-50/30' :
+                                        playbook.confidence_score >= CONFIDENCE_THRESHOLDS.MEDIUM ? 'border-yellow-200 bg-yellow-50/30' :
+                                            'border-gray-200 hover:border-primary/50 hover:bg-primary/[0.02]'
+                                        }`}
+                                    onClick={() => handleStartPlaybook(playbook.id, playbook.title)}
+                                >
+                                    <div className="flex-1">
+                                        <div className="flex items-start justify-between">
+                                            <div>
+                                                <h4 className="font-semibold text-sm group-hover:text-primary transition-colors">
+                                                    {playbook.title}
+                                                </h4>
+                                                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                                                    {playbook.description}
+                                                </p>
+                                                <div className="flex items-center gap-2 mt-2">
+                                                    <Badge variant="outline" className="text-[10px] font-normal py-0">
+                                                        {playbook.category}
+                                                    </Badge>
+                                                    <div className="flex items-center gap-1">
+                                                        <div className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${playbook.confidence_score >= CONFIDENCE_THRESHOLDS.HIGH ? 'bg-green-100 text-green-700' :
+                                                            playbook.confidence_score >= CONFIDENCE_THRESHOLDS.MEDIUM ? 'bg-yellow-100 text-yellow-700' :
+                                                                'bg-gray-100 text-gray-700'
+                                                            }`}>
+                                                            {playbook.confidence_score}% Match
+                                                        </div>
+                                                        <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                                            <TrendingUp className="h-3 w-3" />
+                                                            {Math.round(playbook.success_rate)}% Success
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                {playbook.match_reasons.length > 0 && (
+                                                    <div className="mt-2">
+                                                        <p className="text-[10px] text-muted-foreground mb-1">Why this matches:</p>
+                                                        <div className="flex flex-wrap gap-1">
+                                                            {playbook.match_reasons.slice(0, 2).map((reason, index) => (
+                                                                <Badge key={index} variant="secondary" className="text-[8px]">
+                                                                    {reason}
+                                                                </Badge>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="flex flex-col items-end gap-2 ml-4">
+                                                <div className="text-[10px] text-muted-foreground text-right">
+                                                    Est. {Math.round(playbook.estimated_duration)}h
+                                                </div>
+                                                <Button
+                                                    size="sm"
+                                                    variant={playbook.confidence_score >= CONFIDENCE_THRESHOLDS.HIGH ? 'default' : 'ghost'}
+                                                    className="h-8 px-3 rounded-full group-hover:bg-primary group-hover:text-primary-foreground"
+                                                    disabled={loadingAction === playbook.id}
+                                                    onClick={() => handleStartPlaybook(playbook.id, playbook.title)}
+                                                >
+                                                    {loadingAction === playbook.id ? (
+                                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                                    ) : (
+                                                        <Play className="h-4 w-4" />
+                                                    )}
+                                                    {playbook.confidence_score >= CONFIDENCE_THRESHOLDS.HIGH ? 'Auto' : 'Start'}
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="py-6 text-center border rounded-lg border-dashed">
+                            <p className="text-sm text-muted-foreground">
+                                No matching playbooks found for this issue category.
+                            </p>
+                            <Button
+                                variant="link"
+                                className="text-xs text-primary mt-1"
+                                onClick={() => window.location.href = '/playbooks'}
+                            >
+                                Browse all playbooks
+                            </Button>
+                        </div>
+                    ))}
+            </CardContent>
+
+            {/* Status History Section */}
+            <div className="px-6 py-4 border-t bg-muted/10">
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full flex items-center justify-between hover:bg-muted/20"
+                    onClick={() => setShowHistory(!showHistory)}
+                >
+                    <div className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm font-semibold">Issue Lifecycle & History</span>
+                        <Badge variant="secondary" className="text-[10px] ml-2">
+                            {history.length} events
+                        </Badge>
+                    </div>
+                    <ChevronRight className={`h-4 w-4 transition-transform ${showHistory ? 'rotate-90' : ''}`} />
+                </Button>
+
+                {showHistory && (
+                    <div className="mt-4 space-y-4 px-2">
+                        {loadingHistory ? (
+                            <div className="flex justify-center py-4">
+                                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                            </div>
+                        ) : history.length > 0 ? (
+                            <div className="relative pl-6 space-y-6 before:absolute before:inset-y-0 before:left-2 before:w-0.5 before:bg-muted-foreground/20">
+                                {history.map((event, idx) => (
+                                    <div key={event.id || idx} className="relative">
+                                        <div className="absolute -left-[22px] top-1 h-3.5 w-3.5 rounded-full border-2 border-background bg-primary ring-4 ring-background" />
+                                        <div className="flex flex-col gap-1">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    <Badge
+                                                        variant="outline"
+                                                        className={`text-[10px] capitalize ${event.new_status === 'resolved' ? 'border-green-200 text-green-700 bg-green-50' :
+                                                                event.new_status === 'closed' ? 'border-gray-200 text-gray-700 bg-gray-50' :
+                                                                    'border-blue-200 text-blue-700 bg-blue-50'
+                                                            }`}
+                                                    >
+                                                        {event.new_status}
+                                                    </Badge>
+                                                    {event.old_status && (
+                                                        <span className="text-[10px] text-muted-foreground">
+                                                            from {event.old_status}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <span className="text-[10px] text-muted-foreground">
+                                                    {format(new Date(event.changed_at), 'MMM d, HH:mm')}
+                                                </span>
+                                            </div>
+                                            {event.notes && (
+                                                <p className="text-xs text-muted-foreground bg-muted/30 p-2 rounded-md mt-1 italic border-l-2 border-muted">
+                                                    "{event.notes}"
+                                                </p>
+                                            )}
+                                            <div className="flex items-center gap-1.5 mt-0.5">
+                                                <Users className="h-3 w-3 text-muted-foreground" />
+                                                <span className="text-[10px] font-medium text-muted-foreground">
+                                                    {event.changed_by_name || 'System Auto-action'}
+                                                </span>
                                             </div>
                                         </div>
                                     </div>
                                 ))}
                             </div>
                         ) : (
-                            <div className="py-6 text-center border rounded-lg border-dashed">
-                                <p className="text-sm text-muted-foreground">
-                                    No matching playbooks found for this issue category.
-                                </p>
-                                <Button
-                                    variant="link"
-                                    className="text-xs text-primary mt-1"
-                                    onClick={() => window.location.href = '/playbooks'}
-                                >
-                                    Browse all playbooks
-                                </Button>
+                            <div className="text-center py-6 border rounded-lg border-dashed bg-muted/5">
+                                <p className="text-sm text-muted-foreground">No history events recorded yet.</p>
                             </div>
-                        )
-                    )}
-                </>
-            ) : (
-                recommendations.length > 0 ? (
-                    <div className="space-y-4">
-                        {recommendations.map((playbook) => (
-                            <div
-                                key={playbook.id}
-                                className={`group flex items-start justify-between p-3 rounded-lg border transition-all cursor-pointer ${
-                                    playbook.confidence_score >= CONFIDENCE_THRESHOLDS.HIGH ? 'border-green-200 bg-green-50/30' :
-                                    playbook.confidence_score >= CONFIDENCE_THRESHOLDS.MEDIUM ? 'border-yellow-200 bg-yellow-50/30' :
-                                    'border-gray-200 hover:border-primary/50 hover:bg-primary/[0.02]'
-                                }`}
-                                onClick={() => handleStartPlaybook(playbook.id, playbook.title)}
-                            >
-                                <div className="flex-1">
-                                    <div className="flex items-start justify-between">
-                                        <div>
-                                            <h4 className="font-semibold text-sm group-hover:text-primary transition-colors">
-                                                {playbook.title}
-                                            </h4>
-                                            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                                                {playbook.description}
-                                            </p>
-                                            <div className="flex items-center gap-2 mt-2">
-                                                <Badge variant="outline" className="text-[10px] font-normal py-0">
-                                                    {playbook.category}
-                                                </Badge>
-                                                <div className="flex items-center gap-1">
-                                                    <div className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                                                        playbook.confidence_score >= CONFIDENCE_THRESHOLDS.HIGH ? 'bg-green-100 text-green-700' :
-                                                        playbook.confidence_score >= CONFIDENCE_THRESHOLDS.MEDIUM ? 'bg-yellow-100 text-yellow-700' :
-                                                        'bg-gray-100 text-gray-700'
-                                                    }`}>
-                                                        {playbook.confidence_score}% Match
-                                                    </div>
-                                                    <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-                                                        <TrendingUp className="h-3 w-3" />
-                                                        {Math.round(playbook.success_rate)}% Success
-                                                    </span>
-                                                </div>
-                                            </div>
-                                            {playbook.match_reasons.length > 0 && (
-                                                <div className="mt-2">
-                                                    <p className="text-[10px] text-muted-foreground mb-1">Why this matches:</p>
-                                                    <div className="flex flex-wrap gap-1">
-                                                        {playbook.match_reasons.slice(0, 2).map((reason, index) => (
-                                                            <Badge key={index} variant="secondary" className="text-[8px]">
-                                                                {reason}
-                                                            </Badge>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                        <div className="flex flex-col items-end gap-2 ml-4">
-                                            <div className="text-[10px] text-muted-foreground text-right">
-                                                Est. {Math.round(playbook.estimated_duration)}h
-                                            </div>
-                                            <Button
-                                                size="sm"
-                                                variant={playbook.confidence_score >= CONFIDENCE_THRESHOLDS.HIGH ? 'default' : 'ghost'}
-                                                className="h-8 px-3 rounded-full group-hover:bg-primary group-hover:text-primary-foreground"
-                                                disabled={loadingAction === playbook.id}
-                                                onClick={() => handleStartPlaybook(playbook.id, playbook.title)}
-                                            >
-                                                {loadingAction === playbook.id ? (
-                                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                                ) : (
-                                                    <Play className="h-4 w-4" />
-                                                )}
-                                                {playbook.confidence_score >= CONFIDENCE_THRESHOLDS.HIGH ? 'Auto' : 'Start'}
-                                            </Button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
+                        )}
                     </div>
-                ) : (
-                    <div className="py-6 text-center border rounded-lg border-dashed">
-                        <p className="text-sm text-muted-foreground">
-                            No matching playbooks found for this issue category.
-                        </p>
-                        <Button 
-                            variant="link" 
-                            className="text-xs text-primary mt-1"
-                            onClick={() => window.location.href = '/playbooks'}
-                        >
-                            Browse all playbooks
-                        </Button>
-                    </div>
-                ))}
-            </CardContent>
+                )}
+            </div>
 
             {execution && (
                 <CardFooter className="bg-muted/30 pt-4 flex justify-between items-center border-t text-[10px] text-muted-foreground">
@@ -940,7 +1056,7 @@ export function ResolutionWorkflowCard({ issue, onUpdate, bulkMode = false, sele
                                 <Switch
                                     id="auto-approve"
                                     checked={!autoAssignSettings.require_approval}
-                                    onCheckedChange={(checked: boolean) => 
+                                    onCheckedChange={(checked: boolean) =>
                                         setAutoAssignSettings(prev => ({ ...prev, require_approval: !checked }))
                                     }
                                 />

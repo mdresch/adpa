@@ -18,6 +18,7 @@ import {
   materializeRiskIntoIssue,
   escalateRiskToIssue,
   suggestRootCauseAnalysis,
+  analyzeIssueRootCauseWithAI,
   getResolutionRecommendations,
   getResolutionMetrics,
   IssueFilters,
@@ -308,7 +309,7 @@ Guidelines:
 router.get(
   '/:id',
   authenticateToken,
-  validate(Joi.object({
+  validateParams(Joi.object({
     id: Joi.string().uuid().required()
   })),
   async (req: Request, res: Response) => {
@@ -349,7 +350,7 @@ router.get(
 router.get(
   '/:id/history',
   authenticateToken,
-  validate(Joi.object({
+  validateParams(Joi.object({
     id: Joi.string().uuid().required()
   })),
   async (req: Request, res: Response) => {
@@ -428,8 +429,11 @@ router.post(
 router.put(
   '/:id',
   authenticateToken,
+  validateParams(Joi.object({
+    id: Joi.string().uuid().required()
+  })),
   validate(Joi.object({
-    id: Joi.string().uuid().required(),
+    id: Joi.string().uuid().optional(),
     title: Joi.string().optional().min(1).max(200),
     description: Joi.string().optional().min(1),
     category: Joi.string().valid('technical', 'resource', 'schedule', 'communication', 'quality', 'external', 'scope', 'budget', 'other').optional(),
@@ -481,7 +485,7 @@ router.put(
 router.delete(
   '/:id',
   authenticateToken,
-  validate(Joi.object({
+  validateParams(Joi.object({
     id: Joi.string().uuid().required()
   })),
   async (req: Request, res: Response) => {
@@ -522,6 +526,9 @@ router.delete(
 router.post(
   '/materialize-risk/:riskId',
   authenticateToken,
+  validateParams(Joi.object({
+    riskId: Joi.string().uuid().required()
+  })),
   validate(Joi.object({
     impact: Joi.string().optional().allow('', null),
     affected_areas: Joi.array().items(Joi.string()).optional(),
@@ -561,6 +568,9 @@ router.post(
 router.post(
   '/escalate-risk/:riskId',
   authenticateToken,
+  validateParams(Joi.object({
+    riskId: Joi.string().uuid().required()
+  })),
   validate(Joi.object({
     // Required escalation context
     trigger_reason: Joi.string().valid(
@@ -688,6 +698,41 @@ router.post(
 )
 
 /**
+ * POST /api/issues/:id/analyze-rca
+ * Analyze an existing issue using AI to identify root causes
+ */
+router.post(
+  '/:id/analyze-rca',
+  authenticateToken,
+  validateParams(Joi.object({
+    id: Joi.string().uuid().required()
+  })),
+  async (req: Request, res: Response) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { id } = req.params
+      const userId = (req as any).user?.id
+
+      const analysis = await analyzeIssueRootCauseWithAI(id, userId)
+
+      log.info('[ISSUES] AI RCA analysis successful', { issueId: id, user: userId })
+
+      res.json({
+        success: true,
+        data: analysis
+      })
+    } catch (error: any) {
+      log.error('[ISSUES] Failed to analyze issue RCA with AI:', error)
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Failed to analyze root cause with AI',
+        error: error.message
+      })
+    }
+  }
+)
+
+/**
  * GET /api/issues/:id/resolution-recommendations
  * Get resolution recommendations (playbooks) for an issue
  */
@@ -699,15 +744,15 @@ router.get(
   })),
   async (req: Request, res: Response) => {
     const log = childLogger({ requestId: (req as any).requestId })
-    
+
     // Add simple console.log to verify this endpoint is being called
     console.log('=== API CALL: /issues/:id/resolution-recommendations ===')
     console.log('Issue ID:', req.params.id)
-    
+
     try {
       const { id } = req.params
       console.log('About to call getResolutionRecommendations for:', id)
-      
+
       const recommendations = await getResolutionRecommendations(id)
       console.log('Got recommendations:', recommendations.length, 'items')
       console.log('Recommendations data:', JSON.stringify(recommendations, null, 2))
@@ -763,3 +808,5 @@ router.get(
 )
 
 export default router
+
+// Force restart

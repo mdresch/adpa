@@ -25,6 +25,11 @@ interface LessonItem {
   category: string
   impact: 'low' | 'medium' | 'high' | 'critical'
   positive_or_negative: boolean
+  status: 'identified' | 'documented' | 'shared' | 'applied' | 'archived'
+  severity: 'low' | 'medium' | 'high' | 'critical'
+  phase: string
+  date_identified?: string
+  shared_with_org: boolean
 }
 
 interface LessonDialogProps {
@@ -41,6 +46,10 @@ const initialState: Omit<LessonItem, 'id'> = {
   category: '',
   impact: 'medium',
   positive_or_negative: true,
+  status: 'identified',
+  severity: 'medium',
+  phase: '',
+  shared_with_org: false,
 };
 
 export default function LessonDialog({ isOpen, onClose, onSave, projectId, lesson }: LessonDialogProps) {
@@ -55,6 +64,10 @@ export default function LessonDialog({ isOpen, onClose, onSave, projectId, lesso
         category: lesson.category,
         impact: lesson.impact,
         positive_or_negative: lesson.positive_or_negative,
+        status: lesson.status || 'identified',
+        severity: lesson.severity || 'medium',
+        phase: lesson.phase || '',
+        shared_with_org: lesson.shared_with_org || false,
       });
     } else {
       setFormData(initialState);
@@ -78,7 +91,7 @@ export default function LessonDialog({ isOpen, onClose, onSave, projectId, lesso
     try {
       setIsSaving(true);
       const payload = { ...formData, project_id: projectId };
-      let response;
+      let response: { success: boolean; data?: any; error?: string };
 
       if (lesson?.id) {
         // Update existing lesson
@@ -135,7 +148,7 @@ export default function LessonDialog({ isOpen, onClose, onSave, projectId, lesso
             <Label htmlFor="impact" className="text-right">
               Impact
             </Label>
-            <Select name="impact" value={formData.impact} onValueChange={(value) => handleSelectChange('impact', value)}>
+            <Select name="impact" value={formData.impact} onValueChange={(value: string) => handleSelectChange('impact', value)}>
               <SelectTrigger className="col-span-3">
                 <SelectValue placeholder="Select impact" />
               </SelectTrigger>
@@ -148,10 +161,65 @@ export default function LessonDialog({ isOpen, onClose, onSave, projectId, lesso
             </Select>
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="severity" className="text-right">
+              Severity
+            </Label>
+            <Select name="severity" value={formData.severity} onValueChange={(value: string) => handleSelectChange('severity', value)}>
+              <SelectTrigger className="col-span-3">
+                <SelectValue placeholder="Select severity" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="low">Low</SelectItem>
+                <SelectItem value="medium">Medium</SelectItem>
+                <SelectItem value="high">High</SelectItem>
+                <SelectItem value="critical">Critical</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="status" className="text-right">
+              Status
+            </Label>
+            <Select name="status" value={formData.status} onValueChange={(value: string) => handleSelectChange('status', value)}>
+              <SelectTrigger className="col-span-3">
+                <SelectValue placeholder="Select status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="identified">Identified</SelectItem>
+                <SelectItem value="documented">Documented</SelectItem>
+                <SelectItem value="shared">Shared</SelectItem>
+                <SelectItem value="applied">Applied</SelectItem>
+                <SelectItem value="archived">Archived</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="phase" className="text-right">
+              Phase
+            </Label>
+            <Input id="phase" name="phase" value={formData.phase} onChange={handleChange} className="col-span-3" placeholder="e.g. Planning, Execution" />
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="shared_with_org" className="text-right">
+              Shared
+            </Label>
+            <div className="flex items-center space-x-2 col-span-3">
+              <input
+                type="checkbox"
+                id="shared_with_org"
+                name="shared_with_org"
+                checked={formData.shared_with_org}
+                onChange={(e) => setFormData(prev => ({ ...prev, shared_with_org: e.target.checked }))}
+                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600"
+              />
+              <label htmlFor="shared_with_org" className="text-sm text-gray-700">Share with organization</label>
+            </div>
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="positive_or_negative" className="text-right">
               Outcome
             </Label>
-            <Select name="positive_or_negative" value={String(formData.positive_or_negative)} onValueChange={(value) => handleBooleanChange('positive_or_negative', value)}>
+            <Select name="positive_or_negative" value={String(formData.positive_or_negative)} onValueChange={(value: string) => handleBooleanChange('positive_or_negative', value)}>
               <SelectTrigger className="col-span-3">
                 <SelectValue placeholder="Select outcome" />
               </SelectTrigger>
@@ -169,6 +237,6 @@ export default function LessonDialog({ isOpen, onClose, onSave, projectId, lesso
           </Button>
         </DialogFooter>
       </DialogContent>
-    </Dialog>
+    </Dialog >
   );
 }

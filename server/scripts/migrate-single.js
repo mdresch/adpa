@@ -41,6 +41,10 @@ const migrationMap = {
     '019': { file: '019_opportunities.sql', description: 'Opportunities' },
     '020': { file: '020_risk_responses.sql', description: 'Risk Responses' },
     '021': { file: '021_performance_actuals.sql', description: 'Performance Actuals' },
+    '356': { file: '356_add_materialized_status_to_risks.sql', description: 'Add Materialized Status to Risks' },
+    '357': { file: '357_add_issue_id_to_mitigation_plans.sql', description: 'Add Issue ID to Mitigation Plans' },
+    '358': { file: '358_fix_extraction_errors.sql', description: 'Fix Extraction Errors' },
+    '358': { file: '358_fix_extraction_errors.sql', description: 'Fix Extraction Errors' },
     '363': { file: '363_add_unique_constraint_performance_actuals.sql', description: 'Add Unique Constraint to Performance Actuals' },
     '364': { file: '364_fix_unique_constraint.sql', description: 'Fix Unique Constraint to Remove Measurement Date' },
     '365': { file: '365_proper_unique_constraint.sql', description: 'Create Proper Unique Constraint for Performance Actuals' },
@@ -72,7 +76,8 @@ const migrationMap = {
     '391': { file: '391_add_resource_conflicts_columns.sql', description: 'Add Resource Conflicts Columns to Resources Table' },
     '392': { file: '392_add_resource_assignments_columns.sql', description: 'Add Resource Assignments Columns to Project Resource Assignments Table' },
     '393': { file: '393_make_resource_assignments_nullable.sql', description: 'Make Resource Assignments Columns Nullable for Extraction' },
-    '394': { file: '394_add_missing_extraction_columns.sql', description: 'Add Missing Columns for Resource Pool, Onboarding Offboarding, and Risk Triggers' }
+    '394': { file: '394_add_missing_extraction_columns.sql', description: 'Add Missing Columns for Resource Pool, Onboarding Offboarding, and Risk Triggers' },
+    '395': { file: '395_enhance_lessons_learned_schema.sql', description: 'Enhance Lessons Learned Schema' }
 };
 
 const migration = migrationMap[migrationNumber];

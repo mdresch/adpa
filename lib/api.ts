@@ -234,7 +234,10 @@ export interface Issue {
   date_resolved?: string
   date_closed?: string
   related_risk_id?: string
+  related_milestone_id?: string
+  related_deliverable_id?: string
   source_document_id?: string
+  notes?: string
   tags?: string[]
   created_at: string
   updated_at: string
@@ -2196,18 +2199,72 @@ class ApiClient {
     )
   }
 
-  // Issue Resolution API (Phase 2)
-  async getIssueResolutionRecommendations(issueId: string): Promise<{ recommendations: Playbook[] }> {
-    const response = await this.get<{ success: boolean; data: { recommendations: Playbook[] } }>(`/issues/${issueId}/resolution-recommendations`)
+  // Issues API
+  async getIssues(params?: {
+    project_id?: string
+    status?: string[]
+    priority?: string[]
+    category?: string[]
+    assigned_to?: string
+    search?: string
+  }): Promise<{ data: Issue[]; count: number }> {
+    const queryParams = new URLSearchParams()
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined) {
+          if (Array.isArray(value)) {
+            value.forEach(v => queryParams.append(key, v))
+          } else {
+            queryParams.append(key, value.toString())
+          }
+        }
+      })
+    }
+    return this.get<{ data: Issue[]; count: number; success: boolean }>(`/issues?${queryParams.toString()}`)
+  }
+
+  async getIssue(id: string): Promise<Issue> {
+    const response = await this.get<{ success: boolean; data: Issue }>(`/issues/${id}`)
+    return response.data
+  }
+
+  async getIssueStats(projectId: string): Promise<IssueStats> {
+    const response = await this.get<{ success: boolean; data: IssueStats }>(`/issues/stats/${projectId}`)
+    return response.data
+  }
+
+  async createIssue(issueData: Partial<Issue>): Promise<Issue> {
+    const response = await this.post<{ success: boolean; data: Issue }>("/issues", issueData)
+    return response.data
+  }
+
+  async updateIssue(id: string, issueData: Partial<Issue>): Promise<Issue> {
+    const response = await this.put<{ success: boolean; data: Issue }>(`/issues/${id}`, issueData)
+    return response.data
+  }
+
+  async deleteIssue(id: string): Promise<void> {
+    await this.delete(`/issues/${id}`)
+  }
+
+  async analyzeIssueRCA(id: string): Promise<any> {
+    const response = await this.post<{ success: boolean; data: any }>(`/issues/${id}/analyze-rca`, {})
+    return response.data
+  }
+
+  async getIssueHistory(id: string): Promise<any[]> {
+    const response = await this.get<{ success: boolean; data: any[] }>(`/issues/${id}/history`)
+    return response.data || []
+  }
+
+  async getIssueResolutionRecommendations(id: string): Promise<{ recommendations: Playbook[] }> {
+    const response = await this.get<{ success: boolean; data: { recommendations: Playbook[] } }>(`/issues/${id}/resolution-recommendations`)
     return response.data
   }
 
   async getIssueResolutionMetrics(projectId: string): Promise<{ metrics: any }> {
-    return this.get<{ metrics: any }>(`/issues/project/${projectId}/resolution-metrics`)
-  }
-
-  async updateIssue(id: string, data: Partial<Issue>): Promise<{ issue: Issue }> {
-    return this.put<{ issue: Issue }>(`/issues/${id}`, data)
+    const response = await this.get<{ success: boolean; data: { metrics: any } }>(`/issues/project/${projectId}/resolution-metrics`)
+    return response.data
   }
 }
 

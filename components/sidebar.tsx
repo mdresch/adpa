@@ -46,7 +46,7 @@ const navigation = [
   { name: "AI Readiness", href: "/ai-readiness", icon: Target },
   { name: "Integrations", href: "/integrations", icon: LinkIcon, adminOnly: true },
   { name: "Templates", href: "/templates", icon: FileText },
-  { name: "Playbook Generator", href: "/playbook-generation", icon: FileDown },
+
   { name: "Template Builder", href: "/templates/builder", icon: Layers, adminOnly: true },
   // { name: "PMBOK 6 Processes", href: "/pmbok6", icon: BookOpen }, // Temporarily hidden for testing
   { name: "Process Flow Workflow", href: "/process-flow", icon: Workflow, adminOnly: true },
@@ -137,53 +137,53 @@ export function Sidebar() {
               return true
             })
             .map((item, index) => {
-            const isActive = pathname === item.href
-            const showBadge = item.badge && pendingCount > 0
-            return (
-              <Link key={item.name} href={item.href}>
-                <Button
-                  variant={isActive ? "secondary" : "ghost"}
-                  className={cn(
-                    "w-full justify-start transition-all duration-200 hover-lift group relative overflow-hidden",
-                    collapsed && "px-2",
-                    isActive &&
-                      "bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 border border-blue-200 dark:border-blue-700 shadow-md",
-                    !isActive && "hover:bg-slate-100 dark:hover:bg-slate-700 hover:shadow-md",
-                  )}
-                  style={{ animationDelay: `${index * 0.1}s` }}
-                >
-                  <item.icon
+              const isActive = pathname === item.href
+              const showBadge = item.badge && pendingCount > 0
+              return (
+                <Link key={item.name} href={item.href}>
+                  <Button
+                    variant={isActive ? "secondary" : "ghost"}
                     className={cn(
-                      "h-5 w-5 transition-all duration-200",
-                      isActive && "text-blue-600 dark:text-blue-400",
-                      "group-hover:scale-110",
+                      "w-full justify-start transition-all duration-200 hover-lift group relative overflow-hidden",
+                      collapsed && "px-2",
+                      isActive &&
+                      "bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 border border-blue-200 dark:border-blue-700 shadow-md",
+                      !isActive && "hover:bg-slate-100 dark:hover:bg-slate-700 hover:shadow-md",
                     )}
-                  />
-                  {!collapsed && (
-                    <span
+                    style={{ animationDelay: `${index * 0.1}s` }}
+                  >
+                    <item.icon
                       className={cn(
-                        "ml-3 transition-all duration-200 flex-1",
-                        isActive && "font-semibold text-blue-700 dark:text-blue-300",
+                        "h-5 w-5 transition-all duration-200",
+                        isActive && "text-blue-600 dark:text-blue-400",
+                        "group-hover:scale-110",
                       )}
-                    >
-                      {item.name}
-                    </span>
-                  )}
-                  {showBadge && !collapsed && (
-                    <Badge className="ml-auto bg-red-500 hover:bg-red-600 text-white">
-                      {pendingCount}
-                    </Badge>
-                  )}
-                  {showBadge && collapsed && (
-                    <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white dark:border-slate-800"></div>
-                  )}
-                  {isActive && (
-                    <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-purple-500/10 animate-pulse" />
-                  )}
-                </Button>
-              </Link>
-            )
-          })}
+                    />
+                    {!collapsed && (
+                      <span
+                        className={cn(
+                          "ml-3 transition-all duration-200 flex-1",
+                          isActive && "font-semibold text-blue-700 dark:text-blue-300",
+                        )}
+                      >
+                        {item.name}
+                      </span>
+                    )}
+                    {showBadge && !collapsed && (
+                      <Badge className="ml-auto bg-red-500 hover:bg-red-600 text-white">
+                        {pendingCount}
+                      </Badge>
+                    )}
+                    {showBadge && collapsed && (
+                      <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white dark:border-slate-800"></div>
+                    )}
+                    {isActive && (
+                      <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-purple-500/10 animate-pulse" />
+                    )}
+                  </Button>
+                </Link>
+              )
+            })}
         </nav>
       </ScrollArea>
 

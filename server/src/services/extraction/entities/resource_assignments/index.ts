@@ -185,9 +185,9 @@ export async function saveResourceAssignments(
     const placeholders: string[] = []
 
     entities.forEach((e, index) => {
-      const offset = index * 14
+      const offset = index * 15  // Fixed: was 14, should be 15
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14}, $${offset + 15})`
       )
 
       values.push(

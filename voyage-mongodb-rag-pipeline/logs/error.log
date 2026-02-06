@@ -4261,3 +4261,83 @@
   message: 'Failed to upsert documents to Pinecone with integrated embedding',
   timestamp: '2026-02-04 18:10:33'
 }
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  error: '[GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent: [404 Not Found] models/gemini-pro is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.',
+  level: 'error',
+  message: 'LLM response generation failed',
+  timestamp: '2026-02-05 20:10:52'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  error: '[GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent: [404 Not Found] models/gemini-pro is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.',
+  level: 'error',
+  message: 'LLM response generation failed',
+  timestamp: '2026-02-05 20:10:52'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  error: '[GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent: [404 Not Found] models/gemini-pro is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.',
+  level: 'error',
+  message: 'LLM response generation failed',
+  timestamp: '2026-02-05 20:10:53'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  error: '[GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent: [404 Not Found] models/gemini-pro is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.',
+  level: 'error',
+  message: 'LLM response generation failed',
+  timestamp: '2026-02-05 20:10:53'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  error: '[GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent: [404 Not Found] models/gemini-pro is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.',
+  level: 'error',
+  message: 'LLM response generation failed',
+  timestamp: '2026-02-05 20:10:53'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  error: '[GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent: [404 Not Found] models/gemini-pro is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.',
+  level: 'error',
+  message: 'LLM response generation failed',
+  timestamp: '2026-02-05 20:10:54'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  error: '[GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent: [404 Not Found] models/gemini-pro is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.',
+  level: 'error',
+  message: 'LLM response generation failed',
+  timestamp: '2026-02-05 20:10:54'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  error: '[GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent: [404 Not Found] models/gemini-pro is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.',
+  level: 'error',
+  message: 'LLM response generation failed',
+  timestamp: '2026-02-05 20:10:54'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  error: '[GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent: [404 Not Found] models/gemini-pro is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.',
+  level: 'error',
+  message: 'LLM response generation failed',
+  timestamp: '2026-02-05 20:10:54'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  error: '[GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent: [404 Not Found] models/gemini-pro is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.',
+  level: 'error',
+  message: 'LLM response generation failed',
+  timestamp: '2026-02-05 20:10:55'
+}

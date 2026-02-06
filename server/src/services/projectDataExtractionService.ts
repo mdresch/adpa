@@ -1,4 +1,4 @@
-;(async function(){ try{ await (require('../lib/db')).initDb() } catch(e){} })();
+; (async function () { try { await (require('../lib/db')).initDb() } catch (e) { } })();
 /**
  * Project Data Extraction Service
  * AI-powered extraction of structured entities from project documents
@@ -286,17 +286,17 @@ interface TeamAgreement {
   title: string
   description?: string
   category:
-    | 'working_hours'
-    | 'communication'
-    | 'decision_making'
-    | 'conflict_resolution'
-    | 'quality_standards'
-    | 'meeting_norms'
-    | 'code_of_conduct'
-    | 'collaboration_tools'
-    | 'response_times'
-    | 'knowledge_sharing'
-    | 'other'
+  | 'working_hours'
+  | 'communication'
+  | 'decision_making'
+  | 'conflict_resolution'
+  | 'quality_standards'
+  | 'meeting_norms'
+  | 'code_of_conduct'
+  | 'collaboration_tools'
+  | 'response_times'
+  | 'knowledge_sharing'
+  | 'other'
   agreed_by?: string[]
   facilitated_by?: string
   effective_date?: string
@@ -314,21 +314,21 @@ interface DevelopmentApproach {
   // Approach selection
   approach: 'predictive' | 'adaptive' | 'hybrid' | 'incremental' | 'iterative'
   methodology?: 'waterfall' | 'scrum' | 'kanban' | 'lean' | 'safe' | 'prince2' | 'custom'
-  
+
   // Justification
   justification: string
-  
+
   // Context factors (PMBOK 8 Domain 3)
   uncertainty_level?: 'low' | 'medium' | 'high'
   requirements_stability?: 'stable' | 'evolving' | 'uncertain'
   stakeholder_engagement_model?: string
   delivery_cadence?: 'single' | 'iterative' | 'incremental' | 'continuous'
-  
+
   // Organizational context
   organizational_maturity?: 'low' | 'medium' | 'high'
   team_experience_level?: 'junior' | 'mixed' | 'senior'
   regulatory_constraints?: boolean
-  
+
   // Tailoring decisions
   tailoring_decisions?: Array<{
     area: string
@@ -336,16 +336,16 @@ interface DevelopmentApproach {
     tailored_process: string
     justification: string
   }>
-  
+
   // Life cycle
   life_cycle_phases?: string[]
   iteration_length?: number
   iteration_unit?: 'days' | 'weeks'
-  
+
   // Governance
   governance_approach?: 'lightweight' | 'standard' | 'formal'
   review_gates?: string[]
-  
+
   // Legacy fields (for backward compatibility with existing extraction)
   framework?: string
   lifecycle_model?: string
@@ -522,16 +522,16 @@ export class ProjectDataExtractionService {
         // Pass model through - aiService.generate() will validate/map it
         return { provider: requestedProvider, model: requestedModel }
       }
-      
+
       // No provider specified - use AI service's centralized fallback mechanism
       // Get available providers (includes is_active flag)
       const availableProviders = await aiService.getAvailableProviders()
       const activeProviders = availableProviders.filter(p => p.is_active)
-      
+
       if (activeProviders.length === 0) {
         throw new Error('No active AI providers configured')
       }
-      
+
       // Use first active provider - let AI service handle model selection
       const selectedProvider = activeProviders[0]
       logger.info(`[EXTRACTION] Auto-selected provider: ${selectedProvider.type}`, {
@@ -539,11 +539,11 @@ export class ProjectDataExtractionService {
         defaultModel: selectedProvider.default_model || 'auto-select',
         note: 'Model selection/validation handled by AI service fallback mechanism'
       })
-      
+
       // Pass default_model if available, otherwise let AI service select
-      return { 
-        provider: selectedProvider.type, 
-        model: selectedProvider.default_model || requestedModel 
+      return {
+        provider: selectedProvider.type,
+        model: selectedProvider.default_model || requestedModel
       }
     } catch (error) {
       logger.error('[EXTRACTION] Error selecting AI provider:', error)
@@ -569,14 +569,14 @@ export class ProjectDataExtractionService {
       options.aiProvider,
       options.aiModel
     )
-    
+
     // Override options with best provider/model
     const extractionOptions = {
       ...options,
       aiProvider: bestProvider,
       aiModel: bestModel
     }
-    
+
     try {
       logger.info('[EXTRACTION] Starting project entity extraction', {
         projectId,
@@ -589,7 +589,7 @@ export class ProjectDataExtractionService {
 
       // Step 1: Gather project documents
       const documents = await this.getProjectDocuments(projectId, options.documentIds)
-      
+
       if (documents.length === 0) {
         throw new Error('No documents found for entity extraction')
       }
@@ -738,7 +738,7 @@ export class ProjectDataExtractionService {
     } catch (error: unknown) {
       const duration = Date.now() - startTime
       const errorMessage = error instanceof Error ? error.message : String(error)
-      
+
       logger.error('[EXTRACTION] Entity extraction failed', {
         projectId,
         error: errorMessage
@@ -753,7 +753,7 @@ export class ProjectDataExtractionService {
         bestModel,
         duration
       )
-      
+
       throw error
     }
   }
@@ -770,7 +770,7 @@ export class ProjectDataExtractionService {
       throw new Error('Database pool not initialized')
     }
     const client = await pool.connect()
-    
+
     try {
       await client.query('BEGIN')
 
@@ -924,7 +924,7 @@ export class ProjectDataExtractionService {
         const { connectDatabase } = await import('@/database/connection')
         await connectDatabase()
       }
-      
+
       let query = `
         SELECT 
           d.id,
@@ -974,12 +974,12 @@ export class ProjectDataExtractionService {
     documentList: string
   ): Promise<Stakeholder[]> {
     const startTime = Date.now()
-    
+
     try {
       logger.info('[EXTRACTION-STAKEHOLDERS] Starting extraction')
 
       const documentContext = this.buildDocumentContext(documents)
-      
+
       const prompt = `Analyze the following project documents and extract ALL stakeholders mentioned.
 
 ${documentContext}
@@ -1031,7 +1031,7 @@ Requirements:
       this.validateAIResponse(standardResponse, 'stakeholders', options)
 
       const parsed = this.parseAIResponse(response.content)
-      
+
       // Log if parsing returned empty object
       if (!parsed || Object.keys(parsed).length === 0) {
         logger.warn('[EXTRACTION-STAKEHOLDERS] AI response parsed to empty object', {
@@ -1040,12 +1040,12 @@ Requirements:
         })
         return []
       }
-      
+
       const rawStakeholders = parsed.stakeholders || []
 
       // Deduplicate stakeholders within the extracted batch (no DB check here)
       const stakeholders = this.deduplicateStakeholdersBatch(rawStakeholders)
-      
+
       if (rawStakeholders.length !== stakeholders.length) {
         logger.info(`[EXTRACTION-STAKEHOLDERS] Removed ${rawStakeholders.length - stakeholders.length} duplicates within batch`)
       }
@@ -1053,7 +1053,7 @@ Requirements:
       // Resolve source_document_id for each stakeholder (STRICT: reject if missing)
       const validStakeholders: Stakeholder[] = []
       let rejectedCount = 0
-      
+
       stakeholders.forEach(stakeholder => {
         const isValid = this.resolveSourceDocumentIdStrict(
           stakeholder,
@@ -1062,7 +1062,7 @@ Requirements:
           'STAKEHOLDERS',
           stakeholder.name || 'Unnamed Stakeholder'
         )
-        
+
         if (isValid) {
           validStakeholders.push(stakeholder)
         } else {
@@ -1073,11 +1073,11 @@ Requirements:
       if (rejectedCount > 0) {
         logger.warn(`[EXTRACTION-STAKEHOLDERS] REJECTED ${rejectedCount} stakeholders without valid source_document_id (out of ${stakeholders.length} total)`)
       }
-      
+
       logger.info(`[EXTRACTION-STAKEHOLDERS] Extracted ${validStakeholders.length} stakeholders with valid source_document_id (${rejectedCount} rejected)`)
 
       const duration = Date.now() - startTime
-      
+
       // Track successful entity type extraction
       analytics.trackEntityTypeExtraction(
         projectId,
@@ -1092,7 +1092,7 @@ Requirements:
     } catch (error: unknown) {
       const duration = Date.now() - startTime
       const errorMessage = error instanceof Error ? error.message : String(error)
-      
+
       logger.error('[EXTRACTION-STAKEHOLDERS] Extraction failed', {
         error: errorMessage,
       })
@@ -1107,7 +1107,7 @@ Requirements:
         false,
         errorMessage
       )
-      
+
       logger.error('[EXTRACTION-STAKEHOLDERS] Extraction failed', {
         error: errorMessage,
         stack: error instanceof Error ? error.stack : undefined
@@ -1131,7 +1131,7 @@ Requirements:
       logger.info('[EXTRACTION-REQUIREMENTS] Starting extraction')
 
       const documentContext = this.buildDocumentContext(documents)
-      
+
       const prompt = `Analyze the following project documents and extract ALL requirements mentioned.
 
 ${documentContext}
@@ -1180,7 +1180,7 @@ Requirements:
       // Resolve source_document_id for each requirement (STRICT: reject if missing)
       const validRequirements: Requirement[] = []
       let rejectedCount = 0
-      
+
       requirements.forEach((req: any) => {
         const isValid = this.resolveSourceDocumentIdStrict(
           req,
@@ -1189,7 +1189,7 @@ Requirements:
           'REQUIREMENTS',
           req.title || req.name || 'Unnamed Requirement'
         )
-        
+
         if (isValid) {
           validRequirements.push(req)
         } else {
@@ -1200,9 +1200,9 @@ Requirements:
       if (rejectedCount > 0) {
         logger.warn(`[EXTRACTION-REQUIREMENTS] REJECTED ${rejectedCount} requirements without valid source_document_id (out of ${requirements.length} total)`)
       }
-      
+
       logger.info(`[EXTRACTION-REQUIREMENTS] Extracted ${validRequirements.length} requirements with valid source_document_id (${rejectedCount} rejected)`)
-      
+
       return validRequirements
     } catch (error: unknown) {
       logger.error('[EXTRACTION-REQUIREMENTS] Extraction failed', {
@@ -1226,7 +1226,7 @@ Requirements:
       logger.info('[EXTRACTION-RISKS] Starting extraction')
 
       const documentContext = this.buildDocumentContext(documents)
-      
+
       const prompt = `Analyze the following project documents and extract ALL risks mentioned.
 
 ${documentContext}
@@ -1274,7 +1274,7 @@ Requirements:
       // Resolve source_document_id for each risk (STRICT: reject if missing)
       const validRisks: Risk[] = []
       let rejectedCount = 0
-      
+
       risks.forEach((risk: any) => {
         const isValid = this.resolveSourceDocumentIdStrict(
           risk,
@@ -1283,7 +1283,7 @@ Requirements:
           'RISKS',
           risk.title || 'Unnamed Risk'
         )
-        
+
         if (isValid) {
           validRisks.push(risk)
         } else {
@@ -1294,9 +1294,9 @@ Requirements:
       if (rejectedCount > 0) {
         logger.warn(`[EXTRACTION-RISKS] REJECTED ${rejectedCount} risks without valid source_document_id (out of ${risks.length} total)`)
       }
-      
+
       logger.info(`[EXTRACTION-RISKS] Extracted ${validRisks.length} risks with valid source_document_id (${rejectedCount} rejected)`)
-      
+
       return validRisks
     } catch (error: unknown) {
       logger.error('[EXTRACTION-RISKS] Extraction failed', {
@@ -1320,7 +1320,7 @@ Requirements:
       logger.info('[EXTRACTION-MILESTONES] Starting extraction')
 
       const documentContext = this.buildDocumentContext(documents)
-      
+
       const prompt = `Analyze the following project documents and extract ONLY major project milestones.
 
 ${documentContext}
@@ -1372,7 +1372,7 @@ Requirements:
       // Resolve source_document_id for each milestone (STRICT: reject if missing)
       const validMilestones: Milestone[] = []
       let rejectedCount = 0
-      
+
       milestones.forEach((milestone: any) => {
         const isValid = this.resolveSourceDocumentIdStrict(
           milestone,
@@ -1381,7 +1381,7 @@ Requirements:
           'MILESTONES',
           milestone.name || 'Unnamed Milestone'
         )
-        
+
         if (isValid) {
           validMilestones.push(milestone)
         } else {
@@ -1392,9 +1392,9 @@ Requirements:
       if (rejectedCount > 0) {
         logger.warn(`[EXTRACTION-MILESTONES] REJECTED ${rejectedCount} milestones without valid source_document_id (out of ${milestones.length} total)`)
       }
-      
+
       logger.info(`[EXTRACTION-MILESTONES] Extracted ${validMilestones.length} milestones with valid source_document_id (${rejectedCount} rejected)`)
-      
+
       return validMilestones
     } catch (error: unknown) {
       logger.error('[EXTRACTION-MILESTONES] Extraction failed', {
@@ -1418,7 +1418,7 @@ Requirements:
       logger.info('[EXTRACTION-CONSTRAINTS] Starting extraction')
 
       const documentContext = this.buildDocumentContext(documents)
-      
+
       const prompt = `Analyze the following project documents and extract ALL constraints mentioned.
 
 ${documentContext}
@@ -1464,7 +1464,7 @@ Requirements:
       // Resolve source_document_id for each constraint (STRICT: reject if missing)
       const validConstraints: Constraint[] = []
       let rejectedCount = 0
-      
+
       constraints.forEach((constraint: any) => {
         const isValid = this.resolveSourceDocumentIdStrict(
           constraint,
@@ -1473,7 +1473,7 @@ Requirements:
           'CONSTRAINTS',
           constraint.title || 'Unnamed Constraint'
         )
-        
+
         if (isValid) {
           validConstraints.push(constraint)
         } else {
@@ -1484,9 +1484,9 @@ Requirements:
       if (rejectedCount > 0) {
         logger.warn(`[EXTRACTION-CONSTRAINTS] REJECTED ${rejectedCount} constraints without valid source_document_id (out of ${constraints.length} total)`)
       }
-      
+
       logger.info(`[EXTRACTION-CONSTRAINTS] Extracted ${validConstraints.length} constraints with valid source_document_id (${rejectedCount} rejected)`)
-      
+
       return validConstraints
     } catch (error: unknown) {
       logger.error('[EXTRACTION-CONSTRAINTS] Extraction failed', {
@@ -1510,7 +1510,7 @@ Requirements:
       logger.info('[EXTRACTION-SUCCESS-CRITERIA] Starting extraction')
 
       const documentContext = this.buildDocumentContext(documents)
-      
+
       const prompt = `Analyze the following project documents and extract ALL success criteria and KPIs mentioned.
 
 ${documentContext}
@@ -1558,7 +1558,7 @@ Requirements:
       // Resolve source_document_id for each success criterion (STRICT: reject if missing)
       const validSuccessCriteria: SuccessCriterion[] = []
       let rejectedCount = 0
-      
+
       successCriteria.forEach((criterion: any) => {
         const isValid = this.resolveSourceDocumentIdStrict(
           criterion,
@@ -1567,7 +1567,7 @@ Requirements:
           'SUCCESS-CRITERIA',
           criterion.title || 'Unnamed Success Criterion'
         )
-        
+
         if (isValid) {
           validSuccessCriteria.push(criterion)
         } else {
@@ -1578,9 +1578,9 @@ Requirements:
       if (rejectedCount > 0) {
         logger.warn(`[EXTRACTION-SUCCESS-CRITERIA] REJECTED ${rejectedCount} success criteria without valid source_document_id (out of ${successCriteria.length} total)`)
       }
-      
+
       logger.info(`[EXTRACTION-SUCCESS-CRITERIA] Extracted ${validSuccessCriteria.length} success criteria with valid source_document_id (${rejectedCount} rejected)`)
-      
+
       return validSuccessCriteria
     } catch (error: unknown) {
       logger.error('[EXTRACTION-SUCCESS-CRITERIA] Extraction failed', {
@@ -1604,7 +1604,7 @@ Requirements:
       logger.info('[EXTRACTION-BEST-PRACTICES] Starting extraction')
 
       const documentContext = this.buildDocumentContext(documents)
-      
+
       const prompt = `Analyze the following project documents and extract ALL best practices, lessons learned, and recommendations mentioned.
 
 ${documentContext}
@@ -1647,7 +1647,7 @@ Requirements:
       // Resolve source_document_id for each best practice (STRICT: reject if missing)
       const validBestPractices: BestPractice[] = []
       let rejectedCount = 0
-      
+
       bestPractices.forEach((practice: any) => {
         const isValid = this.resolveSourceDocumentIdStrict(
           practice,
@@ -1656,7 +1656,7 @@ Requirements:
           'BEST-PRACTICES',
           practice.title || 'Unnamed Best Practice'
         )
-        
+
         if (isValid) {
           validBestPractices.push(practice)
         } else {
@@ -1667,7 +1667,7 @@ Requirements:
       if (rejectedCount > 0) {
         logger.warn(`[EXTRACTION-BEST-PRACTICES] REJECTED ${rejectedCount} best practices without valid source_document_id (out of ${bestPractices.length} total)`)
       }
-      
+
       logger.info(`[EXTRACTION-BEST-PRACTICES] Extracted ${validBestPractices.length} best practices with valid source_document_id (${rejectedCount} rejected)`)
 
       return validBestPractices
@@ -1693,7 +1693,7 @@ Requirements:
       logger.info('[EXTRACTION-PHASES] Starting extraction')
 
       const documentContext = this.buildDocumentContext(documents)
-      
+
       const prompt = `Analyze the following project documents and extract ALL project phases mentioned.
 
 ${documentContext}
@@ -1741,7 +1741,7 @@ Requirements:
       // Resolve source_document_id for each phase (STRICT: reject if missing)
       const validPhases: Phase[] = []
       let rejectedCount = 0
-      
+
       phases.forEach((phase: any) => {
         const isValid = this.resolveSourceDocumentIdStrict(
           phase,
@@ -1750,7 +1750,7 @@ Requirements:
           'PHASES',
           phase.name || 'Unnamed Phase'
         )
-        
+
         if (isValid) {
           validPhases.push(phase)
         } else {
@@ -1761,7 +1761,7 @@ Requirements:
       if (rejectedCount > 0) {
         logger.warn(`[EXTRACTION-PHASES] REJECTED ${rejectedCount} phases without valid source_document_id (out of ${phases.length} total)`)
       }
-      
+
       logger.info(`[EXTRACTION-PHASES] Extracted ${validPhases.length} phases with valid source_document_id (${rejectedCount} rejected)`)
 
       return validPhases
@@ -1787,7 +1787,7 @@ Requirements:
       logger.info('[EXTRACTION-RESOURCES] Starting extraction')
 
       const documentContext = this.buildDocumentContext(documents)
-      
+
       const prompt = `Analyze the following project documents and extract ALL resources mentioned.
 
 ${documentContext}
@@ -1857,7 +1857,7 @@ Requirements:
       // Resolve source_document_id for each resource (with fallback)
       const validResources: Resource[] = []
       let rejectedCount = 0
-      
+
       resources.forEach((resource: any) => {
         const isValid = this.resolveSourceDocumentIdStrict(
           resource,
@@ -1866,7 +1866,7 @@ Requirements:
           'RESOURCES',
           resource.name || 'Unnamed Resource'
         )
-        
+
         if (isValid) {
           validResources.push(resource)
         } else {
@@ -1877,7 +1877,7 @@ Requirements:
       if (rejectedCount > 0) {
         logger.warn(`[EXTRACTION-RESOURCES] REJECTED ${rejectedCount} resources without valid source_document_id (out of ${resources.length} total)`)
       }
-      
+
       logger.info(`[EXTRACTION-RESOURCES] Extracted ${validResources.length} resources with valid source_document_id (${rejectedCount} rejected)`)
 
       return validResources
@@ -1903,7 +1903,7 @@ Requirements:
       logger.info('[EXTRACTION-TECHNOLOGIES] Starting extraction')
 
       const documentContext = this.buildDocumentContext(documents)
-      
+
       const prompt = `You are a **Technology Architect** tasked with extracting and structuring technology recommendations from project documentation to populate a **Technical Architecture Baseline** (PMBOK 7 - Technical Performance Domain).
 
 CONTEXT:
@@ -2016,7 +2016,7 @@ Return pure JSON only.`
       // Resolve source_document_id for each technology (STRICT: reject if missing)
       const validTechnologies: Technology[] = []
       let rejectedCount = 0
-      
+
       technologies.forEach((tech: any) => {
         const isValid = this.resolveSourceDocumentIdStrict(
           tech,
@@ -2025,7 +2025,7 @@ Return pure JSON only.`
           'TECHNOLOGIES',
           tech.name || 'Unnamed Technology'
         )
-        
+
         if (isValid) {
           validTechnologies.push(tech)
         } else {
@@ -2036,9 +2036,9 @@ Return pure JSON only.`
       if (rejectedCount > 0) {
         logger.warn(`[EXTRACTION-TECHNOLOGIES] REJECTED ${rejectedCount} technologies without valid source_document_id (out of ${technologies.length} total)`)
       }
-      
+
       logger.info(`[EXTRACTION-TECHNOLOGIES] Extracted ${validTechnologies.length} technologies with valid source_document_id (${rejectedCount} rejected)`)
-      
+
       return validTechnologies
     } catch (error) {
       logger.error('[EXTRACTION-TECHNOLOGIES] Extraction failed', { error })
@@ -2060,7 +2060,7 @@ Return pure JSON only.`
       logger.info('[EXTRACTION-QUALITY] Starting extraction')
 
       const documentContext = this.buildDocumentContext(documents)
-      
+
       const prompt = `Analyze the following project documents and extract ALL quality standards and requirements mentioned.
 
 ${documentContext}
@@ -2109,7 +2109,7 @@ Requirements:
       // Resolve source_document_id for each quality standard (STRICT: reject if missing)
       const validQualityStandards: QualityStandard[] = []
       let rejectedCount = 0
-      
+
       qualityStandards.forEach((standard: any) => {
         const isValid = this.resolveSourceDocumentIdStrict(
           standard,
@@ -2118,7 +2118,7 @@ Requirements:
           'QUALITY-STANDARDS',
           standard.title || standard.standard_name || 'Unnamed Quality Standard'
         )
-        
+
         if (isValid) {
           validQualityStandards.push(standard)
         } else {
@@ -2129,7 +2129,7 @@ Requirements:
       if (rejectedCount > 0) {
         logger.warn(`[EXTRACTION-QUALITY-STANDARDS] REJECTED ${rejectedCount} quality standards without valid source_document_id (out of ${qualityStandards.length} total)`)
       }
-      
+
       logger.info(`[EXTRACTION-QUALITY-STANDARDS] Extracted ${validQualityStandards.length} quality standards with valid source_document_id (${rejectedCount} rejected)`)
 
       return validQualityStandards
@@ -2155,7 +2155,7 @@ Requirements:
       logger.info('[EXTRACTION-COMPLIANCE-SECURITY] Starting extraction')
 
       const documentContext = this.buildDocumentContext(documents)
-      
+
       const prompt = `Analyze the following project documents and extract ALL compliance, security, legal, and standards requirements mentioned.
 
 ${documentContext}
@@ -2275,7 +2275,7 @@ Requirements:
       // Resolve source_document_id for each item (STRICT: reject if missing)
       const validItems: ComplianceSecurity[] = []
       let rejectedCount = 0
-      
+
       complianceSecurityItems.forEach((item: any) => {
         const isValid = this.resolveSourceDocumentIdStrict(
           item,
@@ -2284,7 +2284,7 @@ Requirements:
           'COMPLIANCE-SECURITY',
           item.title || item.type || 'Unnamed Compliance/Security Requirement'
         )
-        
+
         if (isValid) {
           validItems.push(item)
         } else {
@@ -2295,7 +2295,7 @@ Requirements:
       if (rejectedCount > 0) {
         logger.warn(`[EXTRACTION-COMPLIANCE-SECURITY] REJECTED ${rejectedCount} items without valid source_document_id (out of ${complianceSecurityItems.length} total)`)
       }
-      
+
       logger.info(`[EXTRACTION-COMPLIANCE-SECURITY] Extracted ${validItems.length} compliance/security items with valid source_document_id (${rejectedCount} rejected)`)
 
       return validItems
@@ -2321,7 +2321,7 @@ Requirements:
       logger.info('[EXTRACTION-DELIVERABLES] Starting extraction')
 
       const documentContext = this.buildDocumentContext(documents)
-      
+
       const prompt = `Analyze the following project documents and extract ALL deliverables mentioned.
 
 ${documentContext}
@@ -2372,7 +2372,7 @@ Requirements:
       // Resolve source_document_id for each deliverable (STRICT: reject if missing)
       const validDeliverables: Deliverable[] = []
       let rejectedCount = 0
-      
+
       deliverables.forEach((deliverable: any) => {
         const isValid = this.resolveSourceDocumentIdStrict(
           deliverable,
@@ -2381,7 +2381,7 @@ Requirements:
           'DELIVERABLES',
           deliverable.name || 'Unnamed Deliverable'
         )
-        
+
         if (isValid) {
           validDeliverables.push(deliverable)
         } else {
@@ -2392,7 +2392,7 @@ Requirements:
       if (rejectedCount > 0) {
         logger.warn(`[EXTRACTION-DELIVERABLES] REJECTED ${rejectedCount} deliverables without valid source_document_id (out of ${deliverables.length} total)`)
       }
-      
+
       logger.info(`[EXTRACTION-DELIVERABLES] Extracted ${validDeliverables.length} deliverables with valid source_document_id (${rejectedCount} rejected)`)
 
       return validDeliverables
@@ -2418,7 +2418,7 @@ Requirements:
       logger.info('[EXTRACTION-SCOPE] Starting extraction')
 
       const documentContext = this.buildDocumentContext(documents)
-      
+
       const prompt = `Analyze the following project documents and extract ALL scope items (both in-scope and out-of-scope).
 
 ${documentContext}
@@ -2467,7 +2467,7 @@ Requirements:
       // Resolve source_document_id for each scope item (STRICT: reject if missing)
       const validScopeItems: ScopeItem[] = []
       let rejectedCount = 0
-      
+
       scopeItems.forEach((item: any) => {
         const isValid = this.resolveSourceDocumentIdStrict(
           item,
@@ -2476,7 +2476,7 @@ Requirements:
           'SCOPE-ITEMS',
           item.title || item.item_name || 'Unnamed Scope Item'
         )
-        
+
         if (isValid) {
           validScopeItems.push(item)
         } else {
@@ -2487,7 +2487,7 @@ Requirements:
       if (rejectedCount > 0) {
         logger.warn(`[EXTRACTION-SCOPE-ITEMS] REJECTED ${rejectedCount} scope items without valid source_document_id (out of ${scopeItems.length} total)`)
       }
-      
+
       logger.info(`[EXTRACTION-SCOPE-ITEMS] Extracted ${validScopeItems.length} scope items with valid source_document_id (${rejectedCount} rejected)`)
 
       return validScopeItems
@@ -2513,7 +2513,7 @@ Requirements:
       logger.info('[EXTRACTION-ACTIVITIES] Starting extraction')
 
       const documentContext = this.buildDocumentContext(documents)
-      
+
       const prompt = `Analyze the following project documents and extract ALL activities, tasks, and work packages mentioned.
 
 ${documentContext}
@@ -2572,7 +2572,7 @@ Requirements:
       // Resolve source_document_id for each activity (STRICT: reject if missing)
       const validActivities: Activity[] = []
       let rejectedCount = 0
-      
+
       activities.forEach((activity: any) => {
         const isValid = this.resolveSourceDocumentIdStrict(
           activity,
@@ -2581,7 +2581,7 @@ Requirements:
           'ACTIVITIES',
           activity.name || 'Unnamed Activity'
         )
-        
+
         if (isValid) {
           validActivities.push(activity)
         } else {
@@ -2592,7 +2592,7 @@ Requirements:
       if (rejectedCount > 0) {
         logger.warn(`[EXTRACTION-ACTIVITIES] REJECTED ${rejectedCount} activities without valid source_document_id (out of ${activities.length} total)`)
       }
-      
+
       logger.info(`[EXTRACTION-ACTIVITIES] Extracted ${validActivities.length} activities with valid source_document_id (${rejectedCount} rejected)`)
 
       return validActivities
@@ -2676,7 +2676,7 @@ Rules:
       // Resolve source_document_id for each team agreement (STRICT: reject if missing)
       const validAgreements: TeamAgreement[] = []
       let rejectedCount = 0
-      
+
       agreements.forEach((agreement: any) => {
         const isValid = this.resolveSourceDocumentIdStrict(
           agreement,
@@ -2685,7 +2685,7 @@ Rules:
           'TEAM-AGREEMENTS',
           agreement.title || 'Unnamed Team Agreement'
         )
-        
+
         if (isValid) {
           validAgreements.push(agreement)
         } else {
@@ -2696,7 +2696,7 @@ Rules:
       if (rejectedCount > 0) {
         logger.warn(`[EXTRACTION-TEAM-AGREEMENTS] REJECTED ${rejectedCount} team agreements without valid source_document_id (out of ${agreements.length} total)`)
       }
-      
+
       logger.info(`[EXTRACTION-TEAM-AGREEMENTS] Extracted ${validAgreements.length} team agreements with valid source_document_id (${rejectedCount} rejected)`)
 
       return validAgreements
@@ -2821,12 +2821,12 @@ Return JSON object only. Return null if no methodology information found.`
         usage: response.usage
       }
       this.validateAIResponse(standardResponse, 'development_approach', options)
-      
+
       // Log which provider was actually used
       logger.info(`[EXTRACTION-DEVELOPMENT-APPROACH] Used provider: ${(response as any).providerUsed || options.aiProvider || 'unknown'}`)
 
       const parsed = this.parseAIResponse(response.content)
-      
+
       // Log parsing result
       logger.info('[EXTRACTION-DEVELOPMENT-APPROACH] Parsing result', {
         parsedType: typeof parsed,
@@ -2834,7 +2834,7 @@ Return JSON object only. Return null if no methodology information found.`
         parsedKeys: parsed && typeof parsed === 'object' ? Object.keys(parsed) : [],
         parsedPreview: parsed ? JSON.stringify(parsed).substring(0, 500) : 'null'
       })
-      
+
       // Log if parsing returned empty object
       if (!parsed || Object.keys(parsed).length === 0 || parsed === null) {
         logger.warn('[EXTRACTION-DEVELOPMENT-APPROACH] AI response parsed to empty object or null', {
@@ -2843,7 +2843,7 @@ Return JSON object only. Return null if no methodology information found.`
         })
         return []
       }
-      
+
       // Handle both single object and array responses (for backward compatibility)
       let approach: any
       if (Array.isArray(parsed.development_approaches)) {
@@ -2991,7 +2991,7 @@ Rules:
       // Resolve source_document_id for each iteration (STRICT: reject if missing)
       const validIterations: ProjectIteration[] = []
       let rejectedCount = 0
-      
+
       iterations.forEach((iteration: any) => {
         const isValid = this.resolveSourceDocumentIdStrict(
           iteration,
@@ -3000,7 +3000,7 @@ Rules:
           'PROJECT-ITERATIONS',
           iteration.name || 'Unnamed Iteration'
         )
-        
+
         if (isValid) {
           validIterations.push(iteration)
         } else {
@@ -3011,7 +3011,7 @@ Rules:
       if (rejectedCount > 0) {
         logger.warn(`[EXTRACTION-PROJECT-ITERATIONS] REJECTED ${rejectedCount} iterations without valid source_document_id (out of ${iterations.length} total)`)
       }
-      
+
       logger.info(`[EXTRACTION-PROJECT-ITERATIONS] Extracted ${validIterations.length} iterations with valid source_document_id (${rejectedCount} rejected)`)
 
       return validIterations
@@ -3110,7 +3110,7 @@ Guidelines:
       // Resolve source_document_id for each work item (STRICT: reject if missing)
       const validWorkItems: WorkItemRecord[] = []
       let rejectedCount = 0
-      
+
       workItems.forEach((item: any) => {
         const isValid = this.resolveSourceDocumentIdStrict(
           item,
@@ -3119,7 +3119,7 @@ Guidelines:
           'WORK-ITEMS',
           item.name || 'Unnamed Work Item'
         )
-        
+
         if (isValid) {
           validWorkItems.push(item)
         } else {
@@ -3130,7 +3130,7 @@ Guidelines:
       if (rejectedCount > 0) {
         logger.warn(`[EXTRACTION-WORK-ITEMS] REJECTED ${rejectedCount} work items without valid source_document_id (out of ${workItems.length} total)`)
       }
-      
+
       logger.info(`[EXTRACTION-WORK-ITEMS] Extracted ${validWorkItems.length} work items with valid source_document_id (${rejectedCount} rejected)`)
 
       return validWorkItems
@@ -3209,7 +3209,7 @@ Rules:
       // Resolve source_document_id for each capacity plan (STRICT: reject if missing)
       const validCapacityPlans: CapacityPlan[] = []
       let rejectedCount = 0
-      
+
       capacityPlans.forEach((plan: any) => {
         const isValid = this.resolveSourceDocumentIdStrict(
           plan,
@@ -3218,7 +3218,7 @@ Rules:
           'CAPACITY-PLANS',
           plan.team_member || 'Unnamed Capacity Plan'
         )
-        
+
         if (isValid) {
           validCapacityPlans.push(plan)
         } else {
@@ -3229,7 +3229,7 @@ Rules:
       if (rejectedCount > 0) {
         logger.warn(`[EXTRACTION-CAPACITY-PLANS] REJECTED ${rejectedCount} capacity plans without valid source_document_id (out of ${capacityPlans.length} total)`)
       }
-      
+
       logger.info(`[EXTRACTION-CAPACITY-PLANS] Extracted ${validCapacityPlans.length} capacity plans with valid source_document_id (${rejectedCount} rejected)`)
 
       return validCapacityPlans
@@ -3303,11 +3303,11 @@ Guidelines:
       // Check if response was truncated (common with large extractions)
       const responseContent = response.content || ''
       const isTruncated = responseContent.length > 0 && (
-        !responseContent.trim().endsWith('}') && 
+        !responseContent.trim().endsWith('}') &&
         !responseContent.trim().endsWith(']') &&
         !responseContent.includes('```') // If it's in a code block, check for closing marker
       )
-      
+
       if (isTruncated) {
         logger.warn('[EXTRACTION-PERFORMANCE-MEASUREMENTS] Response appears truncated - may have incomplete data', {
           responseLength: responseContent.length,
@@ -3327,7 +3327,7 @@ Guidelines:
       // Resolve source_document_id for each measurement (STRICT: reject if missing)
       const validMeasurements: PerformanceMeasurement[] = []
       let rejectedCount = 0
-      
+
       measurements.forEach((measurement: any) => {
         const isValid = this.resolveSourceDocumentIdStrict(
           measurement,
@@ -3336,7 +3336,7 @@ Guidelines:
           'PERFORMANCE-MEASUREMENTS',
           measurement.success_criterion_name || 'Unnamed Measurement'
         )
-        
+
         if (isValid) {
           validMeasurements.push(measurement)
         } else {
@@ -3347,7 +3347,7 @@ Guidelines:
       if (rejectedCount > 0) {
         logger.warn(`[EXTRACTION-PERFORMANCE-MEASUREMENTS] REJECTED ${rejectedCount} measurements without valid source_document_id (out of ${measurements.length} total)`)
       }
-      
+
       logger.info(`[EXTRACTION-PERFORMANCE-MEASUREMENTS] Extracted ${validMeasurements.length} measurements with valid source_document_id (${rejectedCount} rejected)`)
 
       return validMeasurements
@@ -3433,7 +3433,7 @@ Rules:
       // Resolve source_document_id for each EVM metric (STRICT: reject if missing)
       const validEVM: EarnedValueMetric[] = []
       let rejectedCount = 0
-      
+
       evm.forEach((metric: any) => {
         const isValid = this.resolveSourceDocumentIdStrict(
           metric,
@@ -3442,7 +3442,7 @@ Rules:
           'EARNED-VALUE-METRICS',
           `EVM Metric ${metric.measurement_date || 'Unknown Date'}`
         )
-        
+
         if (isValid) {
           validEVM.push(metric)
         } else {
@@ -3453,7 +3453,7 @@ Rules:
       if (rejectedCount > 0) {
         logger.warn(`[EXTRACTION-EARNED-VALUE-METRICS] REJECTED ${rejectedCount} EVM metrics without valid source_document_id (out of ${evm.length} total)`)
       }
-      
+
       logger.info(`[EXTRACTION-EARNED-VALUE-METRICS] Extracted ${validEVM.length} EVM metrics with valid source_document_id (${rejectedCount} rejected)`)
 
       return validEVM
@@ -3531,7 +3531,7 @@ Rules:
       // Resolve source_document_id for each opportunity (STRICT: reject if missing)
       const validOpportunities: OpportunityRecord[] = []
       let rejectedCount = 0
-      
+
       opportunities.forEach((opportunity: any) => {
         const isValid = this.resolveSourceDocumentIdStrict(
           opportunity,
@@ -3540,7 +3540,7 @@ Rules:
           'OPPORTUNITIES',
           opportunity.title || opportunity.name || 'Unnamed Opportunity'
         )
-        
+
         if (isValid) {
           validOpportunities.push(opportunity)
         } else {
@@ -3551,7 +3551,7 @@ Rules:
       if (rejectedCount > 0) {
         logger.warn(`[EXTRACTION-OPPORTUNITIES] REJECTED ${rejectedCount} opportunities without valid source_document_id (out of ${opportunities.length} total)`)
       }
-      
+
       logger.info(`[EXTRACTION-OPPORTUNITIES] Extracted ${validOpportunities.length} opportunities with valid source_document_id (${rejectedCount} rejected)`)
 
       return validOpportunities
@@ -3627,7 +3627,7 @@ Guidelines:
       // Resolve source_document_id for each risk response (STRICT: reject if missing)
       const validResponses: RiskResponseRecord[] = []
       let rejectedCount = 0
-      
+
       responses.forEach((response: any) => {
         const isValid = this.resolveSourceDocumentIdStrict(
           response,
@@ -3636,7 +3636,7 @@ Guidelines:
           'RISK-RESPONSES',
           response.risk_title || 'Unnamed Risk Response'
         )
-        
+
         if (isValid) {
           validResponses.push(response)
         } else {
@@ -3647,7 +3647,7 @@ Guidelines:
       if (rejectedCount > 0) {
         logger.warn(`[EXTRACTION-RISK-RESPONSES] REJECTED ${rejectedCount} risk responses without valid source_document_id (out of ${responses.length} total)`)
       }
-      
+
       logger.info(`[EXTRACTION-RISK-RESPONSES] Extracted ${validResponses.length} risk responses with valid source_document_id (${rejectedCount} rejected)`)
 
       return validResponses
@@ -3766,7 +3766,7 @@ Output valid JSON object with "performance_actuals" array only.`
       // Resolve source_document_id for each performance actual (STRICT: reject if missing)
       const validActuals: PerformanceActual[] = []
       let rejectedCount = 0
-      
+
       actuals.forEach((actual: any) => {
         const isValid = this.resolveSourceDocumentIdStrict(
           actual,
@@ -3775,7 +3775,7 @@ Output valid JSON object with "performance_actuals" array only.`
           'PERFORMANCE-ACTUALS',
           actual.entity_name || `Performance Actual ${actual.entity_type || 'Unknown'}`
         )
-        
+
         if (isValid) {
           validActuals.push(actual)
         } else {
@@ -3829,23 +3829,23 @@ Output valid JSON object with "performance_actuals" array only.`
    */
   private deduplicateStakeholdersBatch(stakeholders: Stakeholder[]): Stakeholder[] {
     const seen = new Map<string, Stakeholder>()
-    
+
     stakeholders.forEach(stakeholder => {
       // Normalize name: lowercase, trim, remove parenthetical suffixes
       const normalized = this.normalizeStakeholderName(stakeholder.name)
-      
+
       if (!seen.has(normalized)) {
         // First occurrence - keep it
         seen.set(normalized, stakeholder)
       } else {
         // Duplicate found - merge information
         const existing = seen.get(normalized)!
-        
+
         // Keep the more detailed name (longer = more info)
         if (stakeholder.name.length > existing.name.length) {
           existing.name = stakeholder.name
         }
-        
+
         // Merge expectations and concerns
         if (stakeholder.expectations && !existing.expectations) {
           existing.expectations = stakeholder.expectations
@@ -3853,15 +3853,15 @@ Output valid JSON object with "performance_actuals" array only.`
         if (stakeholder.concerns && !existing.concerns) {
           existing.concerns = stakeholder.concerns
         }
-        
+
         // Use higher interest/influence levels
         if (stakeholder.interest_level === 'high') existing.interest_level = 'high'
         if (stakeholder.influence_level === 'high') existing.influence_level = 'high'
-        
+
         logger.debug(`[DEDUP-BATCH] Merged "${stakeholder.name}" into "${existing.name}"`)
       }
     })
-    
+
     return Array.from(seen.values())
   }
 
@@ -3872,15 +3872,15 @@ Output valid JSON object with "performance_actuals" array only.`
     documents: Array<{ id: string; title: string; content: string; template_name?: string }>
   ): string {
     const sections: string[] = []
-    
+
     // Filter out documents with no content
     const validDocuments = documents.filter(doc => doc.content && doc.content.trim().length > 0)
-    
+
     if (validDocuments.length === 0) {
       logger.warn('[EXTRACTION] No documents with valid content found')
       return '[No document content available for extraction]'
     }
-    
+
     if (validDocuments.length < documents.length) {
       logger.warn(`[EXTRACTION] Filtered out ${documents.length - validDocuments.length} documents with empty content`)
     }
@@ -3891,7 +3891,7 @@ Output valid JSON object with "performance_actuals" array only.`
       sections.push('')
       // Truncate very long documents to fit in token budget
       // Increased limit: 50K chars per doc (supports ~6,000 word documents fully)
-      const content = doc.content.length > 50000 
+      const content = doc.content.length > 50000
         ? doc.content.substring(0, 50000) + '\n\n[Document truncated for length]'
         : doc.content
       sections.push(content)
@@ -4077,7 +4077,7 @@ Output valid JSON object with "performance_actuals" array only.`
     documents.forEach(doc => {
       // Use title, fallback to template_name, fallback to document ID prefix
       const displayTitle = doc.title || doc.template_name || `Document ${doc.id.substring(0, 8)}`
-      
+
       if (displayTitle && doc.id) {
         // Exact match (normalized)
         documentMap.set(displayTitle.toLowerCase().trim(), doc.id)
@@ -4086,7 +4086,7 @@ Output valid JSON object with "performance_actuals" array only.`
         if (normalizedTitle !== displayTitle.toLowerCase().trim()) {
           documentMap.set(normalizedTitle, doc.id)
         }
-        
+
         // Also add template_name if different from title (for better matching)
         if (doc.template_name && doc.template_name !== displayTitle) {
           const normalizedTemplate = doc.template_name.toLowerCase().trim()
@@ -4106,14 +4106,14 @@ Output valid JSON object with "performance_actuals" array only.`
     documentMap: Map<string, string>
   ): string | undefined {
     if (!sourceDocument) return undefined
-    
+
     const docTitle = sourceDocument.trim()
     if (!docTitle) return undefined
-    
+
     // Try exact match first
-    let sourceDocumentId = documentMap.get(docTitle.toLowerCase()) || 
-                          documentMap.get(docTitle.toLowerCase().replace(/[^\w\s]/g, ''))
-    
+    let sourceDocumentId = documentMap.get(docTitle.toLowerCase()) ||
+      documentMap.get(docTitle.toLowerCase().replace(/[^\w\s]/g, ''))
+
     // If not found, try fuzzy matching
     if (!sourceDocumentId) {
       for (const [title, id] of documentMap.entries()) {
@@ -4124,11 +4124,11 @@ Output valid JSON object with "performance_actuals" array only.`
         }
       }
     }
-    
+
     if (!sourceDocumentId) {
       logger.warn(`[EXTRACTION] Could not resolve source_document_id for "${docTitle}"`)
     }
-    
+
     return sourceDocumentId
   }
 
@@ -4149,7 +4149,7 @@ Output valid JSON object with "performance_actuals" array only.`
     // Try to resolve from AI-provided source_document
     if (entity.source_document) {
       entity.source_document_id = this.resolveSourceDocumentId(entity.source_document, documentMap)
-      
+
       if (entity.source_document_id) {
         logger.debug(`[EXTRACTION-${entityType.toUpperCase()}] ✅ Resolved source_document_id for "${entityName}" from "${entity.source_document}" → ${entity.source_document_id}`)
         return true
@@ -4160,7 +4160,7 @@ Output valid JSON object with "performance_actuals" array only.`
     } else {
       logger.debug(`[EXTRACTION-${entityType.toUpperCase()}] Entity "${entityName}" has no source_document field - using fallback to first document`)
     }
-    
+
     // Fallback: Use first document if available
     if (documents.length > 0 && documents[0].id) {
       entity.source_document_id = documents[0].id
@@ -4168,7 +4168,7 @@ Output valid JSON object with "performance_actuals" array only.`
       logger.info(`[EXTRACTION-${entityType.toUpperCase()}] ✅ Applied fallback source_document_id for "${entityName}" → ${entity.source_document_id} (${entity.source_document})`)
       return true
     }
-    
+
     // No documents available - reject entity
     logger.error(`[EXTRACTION-${entityType.toUpperCase()}] REJECTED: Entity "${entityName}" - no source_document provided and no documents available for fallback`)
     return false
@@ -4206,14 +4206,14 @@ Output valid JSON object with "performance_actuals" array only.`
       options.aiProvider,
       options.aiModel
     )
-    
+
     if (cached) {
       return cached as T[]
     }
-    
+
     // Cache miss - perform AI extraction
     const result = await extractFn()
-    
+
     // Cache the result (only if extraction succeeded with data)
     if (result.length > 0) {
       await aiCacheService.set(
@@ -4225,7 +4225,7 @@ Output valid JSON object with "performance_actuals" array only.`
         options.aiModel
       )
     }
-    
+
     return result
   }
 
@@ -4278,9 +4278,9 @@ Output valid JSON object with "performance_actuals" array only.`
 
       // Extract the main numeric value (handles comparison operators and currency symbols)
       // Match: <10%, >50%, ±5%, ≤20%, ≥30%, €3.1M, $2.5M, or just 50%
-      let numericStr = trimmed.match(/(?:[<>≤≥±€$£¥]|less than|greater than|approximately|about|around)\s*([\d.,]+)/i)?.[1] 
-                    || trimmed.match(/(?:[€$£¥]\s*)?([\d.,]+)/i)?.[1]
-      
+      let numericStr = trimmed.match(/(?:[<>≤≥±€$£¥]|less than|greater than|approximately|about|around)\s*([\d.,]+)/i)?.[1]
+        || trimmed.match(/(?:[€$£¥]\s*)?([\d.,]+)/i)?.[1]
+
       if (!numericStr) return undefined
 
       // Remove thousand separators (commas)
@@ -4562,18 +4562,18 @@ Output valid JSON object with "performance_actuals" array only.`
     successCriteriaMap: Map<string, string>
   ): string | null {
     if (!criterionName) return null
-    
+
     const normalized = criterionName.toLowerCase().trim()
-    
+
     // Try exact match first
     let criterionId = successCriteriaMap.get(normalized)
     if (criterionId) return criterionId
-    
+
     // Try cleaned version (remove special chars)
     const cleaned = normalized.replace(/[^\w\s]/g, '').replace(/\s+/g, ' ')
     criterionId = successCriteriaMap.get(cleaned)
     if (criterionId) return criterionId
-    
+
     // Try partial matching using key words
     const words = cleaned.split(/\s+/).filter(w => w.length > 3)
     for (const word of words) {
@@ -4583,7 +4583,7 @@ Output valid JSON object with "performance_actuals" array only.`
         return criterionId
       }
     }
-    
+
     // Try substring matching (criterion name contains or is contained by map key)
     for (const [key, id] of successCriteriaMap.entries()) {
       if (key.startsWith('partial:')) continue // Skip partial keys
@@ -4592,7 +4592,7 @@ Output valid JSON object with "performance_actuals" array only.`
         return id
       }
     }
-    
+
     return null
   }
 
@@ -4618,25 +4618,25 @@ Output valid JSON object with "performance_actuals" array only.`
     let openBrackets = 0
     let inString = false
     let escapeNext = false
-    
+
     for (let i = 0; i < content.length; i++) {
       const char = content[i]
-      
+
       if (escapeNext) {
         escapeNext = false
         continue
       }
-      
+
       if (char === '\\') {
         escapeNext = true
         continue
       }
-      
+
       if (char === '"') {
         inString = !inString
         continue
       }
-      
+
       if (!inString) {
         if (char === '{') openBraces++
         if (char === '}') openBraces--
@@ -4644,7 +4644,7 @@ Output valid JSON object with "performance_actuals" array only.`
         if (char === ']') openBrackets--
       }
     }
-    
+
     // Add missing closing brackets/braces
     let result = ''
     if (openBrackets > 0) {
@@ -4653,7 +4653,7 @@ Output valid JSON object with "performance_actuals" array only.`
     if (openBraces > 0) {
       result += '}'.repeat(openBraces)
     }
-    
+
     return result
   }
 
@@ -4669,9 +4669,9 @@ Output valid JSON object with "performance_actuals" array only.`
       startsWithBrace: content.trim().startsWith('{'),
       startsWithBracket: content.trim().startsWith('[')
     })
-    
+
     let cleanedContent = content.trim()
-    
+
     // Remove markdown code blocks if present
     if (cleanedContent.includes('```')) {
       logger.debug('[EXTRACTION-PARSE] Detected markdown code blocks, extracting JSON')
@@ -4682,16 +4682,16 @@ Output valid JSON object with "performance_actuals" array only.`
         // Find the end of the opening marker (```json or just ```)
         let codeBlockStart = firstCodeBlockStart + 3 // Skip opening ```
         // Skip optional language identifier (json, etc.)
-        while (codeBlockStart < cleanedContent.length && 
-               cleanedContent[codeBlockStart] !== '\n' && 
-               cleanedContent[codeBlockStart] !== '`') {
+        while (codeBlockStart < cleanedContent.length &&
+          cleanedContent[codeBlockStart] !== '\n' &&
+          cleanedContent[codeBlockStart] !== '`') {
           codeBlockStart++
         }
         // Skip newline if present
         if (codeBlockStart < cleanedContent.length && cleanedContent[codeBlockStart] === '\n') {
           codeBlockStart++
         }
-        
+
         // Find the LAST closing ``` (in case there are multiple code blocks or escaped backticks)
         let codeBlockEnd = cleanedContent.lastIndexOf('```')
         if (codeBlockEnd !== -1 && codeBlockEnd > codeBlockStart) {
@@ -4705,7 +4705,7 @@ Output valid JSON object with "performance_actuals" array only.`
           })
         }
       }
-      
+
       // Try regex as fallback if manual extraction left code blocks
       if (cleanedContent.includes('```')) {
         logger.debug('[EXTRACTION-PARSE] Manual extraction left code blocks, trying regex fallback')
@@ -4714,14 +4714,14 @@ Output valid JSON object with "performance_actuals" array only.`
           cleanedContent = codeBlockMatch[1].trim()
         }
       }
-      
+
       // Final cleanup: remove any remaining markdown artifacts
       cleanedContent = cleanedContent
         .replace(/^```json\s*/i, '')
         .replace(/^```\s*/, '')
         .replace(/```\s*$/, '')
         .trim()
-      
+
       // Log extracted content for debugging (first 200 chars)
       if (cleanedContent.length > 0) {
         logger.debug('[EXTRACTION-PARSE] Extracted from code block', {
@@ -4732,14 +4732,14 @@ Output valid JSON object with "performance_actuals" array only.`
         })
       }
     }
-    
+
     logger.debug('[EXTRACTION-PARSE] Attempting direct JSON parse', {
       cleanedLength: cleanedContent.length,
       cleanedPreview: cleanedContent.substring(0, 300),
       firstChar: cleanedContent[0],
       lastChar: cleanedContent[cleanedContent.length - 1]
     })
-    
+
     // Try direct JSON parse first
     try {
       const parsed = JSON.parse(cleanedContent)
@@ -4756,19 +4756,19 @@ Output valid JSON object with "performance_actuals" array only.`
       const contextStart = errorPosition ? Math.max(0, errorPosition - 100) : 0
       const contextEnd = errorPosition ? Math.min(cleanedContent.length, errorPosition + 100) : 500
       const errorContext = errorPosition ? cleanedContent.substring(contextStart, contextEnd) : cleanedContent.substring(0, 500)
-      
+
       // Log the error for debugging
       logger.debug('[EXTRACTION-PARSE] JSON parse error, attempting fixes', {
         error: parseError.message,
         errorPosition: errorPosition?.toString(),
         contentLength: cleanedContent.length
       })
-      
+
       // Try to fix common JSON issues
       try {
         // Check if error is about control characters
         const isControlCharError = parseError.message.includes('control character')
-        
+
         // Ensure code block is extracted first (in case it wasn't caught earlier)
         let fixed = cleanedContent
         if (fixed.includes('```')) {
@@ -4780,7 +4780,7 @@ Output valid JSON object with "performance_actuals" array only.`
               start++
             }
             if (fixed[start] === '\n') start++
-            
+
             const codeBlockEnd = fixed.indexOf('```', start)
             if (codeBlockEnd !== -1) {
               fixed = fixed.substring(start, codeBlockEnd).trim()
@@ -4791,17 +4791,17 @@ Output valid JSON object with "performance_actuals" array only.`
             fixed = fixed.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim()
           }
         }
-        
+
         // Fix trailing commas in arrays and objects
         fixed = fixed
           .replace(/,(\s*[}\]])/g, '$1') // Remove trailing commas before } or ]
           .replace(/,(\s*,)/g, ',') // Remove duplicate commas
-        
+
         // Check if error is about unescaped quotes
-        const isUnescapedQuoteError = parseError.message.includes("Expected ',' or '}' after property value") || 
-                                      parseError.message.includes("Unterminated string") ||
-                                      parseError.message.includes("Unexpected token")
-        
+        const isUnescapedQuoteError = parseError.message.includes("Expected ',' or '}' after property value") ||
+          parseError.message.includes("Unterminated string") ||
+          parseError.message.includes("Unexpected token")
+
         // If control character error OR unescaped quote error, fix both in a single pass
         if (isControlCharError || isUnescapedQuoteError) {
           logger.debug('[EXTRACTION-PARSE] Fixing control characters and/or unescaped quotes in JSON', {
@@ -4809,17 +4809,17 @@ Output valid JSON object with "performance_actuals" array only.`
             isControlCharError,
             isUnescapedQuoteError
           })
-          
+
           // Use a state machine to properly escape control characters only within string literals
           let result = ''
           let inString = false
           let escapeNext = false
           let lastChar = ''
-          
+
           for (let i = 0; i < fixed.length; i++) {
             const char = fixed[i]
             const charCode = char.charCodeAt(0)
-            
+
             // Handle escape sequences
             if (escapeNext) {
               result += char
@@ -4827,7 +4827,7 @@ Output valid JSON object with "performance_actuals" array only.`
               lastChar = char
               continue
             }
-            
+
             // Check for backslash (start of escape sequence)
             if (char === '\\') {
               result += char
@@ -4835,7 +4835,7 @@ Output valid JSON object with "performance_actuals" array only.`
               lastChar = char
               continue
             }
-            
+
             // Check for quote (start/end of string)
             if (char === '"') {
               if (inString) {
@@ -4849,18 +4849,18 @@ Output valid JSON object with "performance_actuals" array only.`
                   // Be conservative: only treat as delimiter if clearly followed by JSON structure markers
                   let isStringEnd = false
                   let lookAheadPos = i + 1
-                  
+
                   // Skip whitespace
                   while (lookAheadPos < fixed.length && /\s/.test(fixed[lookAheadPos])) {
                     lookAheadPos++
                   }
-                  
+
                   if (lookAheadPos < fixed.length) {
                     const nextNonWhitespace = fixed[lookAheadPos]
                     // Only treat as delimiter if followed by clear JSON structure markers
-                    if (nextNonWhitespace === ':' || nextNonWhitespace === ',' || 
-                        nextNonWhitespace === '}' || nextNonWhitespace === ']' ||
-                        nextNonWhitespace === '\n') {
+                    if (nextNonWhitespace === ':' || nextNonWhitespace === ',' ||
+                      nextNonWhitespace === '}' || nextNonWhitespace === ']' ||
+                      nextNonWhitespace === '\n') {
                       isStringEnd = true
                     }
                     // If followed by a quote (double quote), it's likely a delimiter
@@ -4878,7 +4878,7 @@ Output valid JSON object with "performance_actuals" array only.`
                     // End of string - this is the closing quote
                     isStringEnd = true
                   }
-                  
+
                   if (isStringEnd) {
                     // This is the string delimiter - don't escape it
                     inString = false
@@ -4896,7 +4896,7 @@ Output valid JSON object with "performance_actuals" array only.`
               lastChar = char
               continue
             }
-            
+
             // If we're inside a string literal, escape control characters and unescaped quotes
             if (inString) {
               // Check for control characters (0x00-0x1F) except already escaped ones
@@ -4922,24 +4922,24 @@ Output valid JSON object with "performance_actuals" array only.`
             } else {
               result += char
             }
-            
+
             lastChar = char
           }
-          
+
           fixed = result
-          
+
           logger.debug('[EXTRACTION-PARSE] Fixed control characters and/or quotes', {
             originalLength: cleanedContent.length,
             fixedLength: fixed.length,
             lengthChange: fixed.length - cleanedContent.length
           })
         }
-        
+
         logger.debug('[EXTRACTION-PARSE] Attempting parse after fixes', {
           fixedLength: fixed.length,
           fixedPreview: fixed.substring(0, 300)
         })
-        
+
         // Try parsing fixed version
         try {
           const parsed = JSON.parse(fixed)
@@ -4951,40 +4951,40 @@ Output valid JSON object with "performance_actuals" array only.`
           return parsed
         } catch (parseAfterFixError: any) {
           // Check if the new error is about unescaped quotes (might not have been caught in first pass)
-          const isNewUnescapedQuoteError = parseAfterFixError.message.includes("Expected ',' or '}' after property value") || 
-                                           parseAfterFixError.message.includes("Unterminated string") ||
-                                           parseAfterFixError.message.includes("Unexpected token")
-          
+          const isNewUnescapedQuoteError = parseAfterFixError.message.includes("Expected ',' or '}' after property value") ||
+            parseAfterFixError.message.includes("Unterminated string") ||
+            parseAfterFixError.message.includes("Unexpected token")
+
           // If we fixed control chars but now have quote error, apply quote fix
           if (isControlCharError && isNewUnescapedQuoteError && !isUnescapedQuoteError) {
             logger.debug('[EXTRACTION-PARSE] Applying quote fix after control character fix', {
               originalError: parseError.message,
               newError: parseAfterFixError.message
             })
-            
+
             // Apply quote fix to the already-fixed string
             let result = ''
             let inString = false
             let escapeNext = false
             let lastChar = ''
-            
+
             for (let i = 0; i < fixed.length; i++) {
               const char = fixed[i]
-              
+
               if (escapeNext) {
                 result += char
                 escapeNext = false
                 lastChar = char
                 continue
               }
-              
+
               if (char === '\\') {
                 result += char
                 escapeNext = true
                 lastChar = char
                 continue
               }
-              
+
               if (char === '"') {
                 if (inString) {
                   if (lastChar === '\\') {
@@ -4997,9 +4997,9 @@ Output valid JSON object with "performance_actuals" array only.`
                     }
                     if (lookAheadPos < fixed.length) {
                       const nextNonWhitespace = fixed[lookAheadPos]
-                      if (nextNonWhitespace === ':' || nextNonWhitespace === ',' || 
-                          nextNonWhitespace === '}' || nextNonWhitespace === ']' ||
-                          nextNonWhitespace === '\n') {
+                      if (nextNonWhitespace === ':' || nextNonWhitespace === ',' ||
+                        nextNonWhitespace === '}' || nextNonWhitespace === ']' ||
+                        nextNonWhitespace === '\n') {
                         isStringEnd = true
                       } else if (nextNonWhitespace === '"' && lookAheadPos < fixed.length - 1) {
                         let nextNextPos = lookAheadPos + 1
@@ -5013,7 +5013,7 @@ Output valid JSON object with "performance_actuals" array only.`
                     } else {
                       isStringEnd = true
                     }
-                    
+
                     if (isStringEnd) {
                       inString = false
                       result += char
@@ -5028,13 +5028,13 @@ Output valid JSON object with "performance_actuals" array only.`
                 lastChar = char
                 continue
               }
-              
+
               result += char
               lastChar = char
             }
-            
+
             fixed = result
-            
+
             // Try parsing again
             try {
               return JSON.parse(fixed)
@@ -5045,21 +5045,21 @@ Output valid JSON object with "performance_actuals" array only.`
               throw retryError
             }
           }
-          
+
           // Check if error is "Unterminated string" at the end - might be incomplete JSON (truncated response)
           const errorPosMatch = parseAfterFixError.message.match(/position (\d+)/)
           const errorPosition = errorPosMatch ? parseInt(errorPosMatch[1]) : null
           const isUnterminatedAtEnd = parseAfterFixError.message.includes('Unterminated string') &&
-                                      errorPosition !== null &&
-                                      errorPosition >= fixed.length - 50 // Within last 50 chars
-          
+            errorPosition !== null &&
+            errorPosition >= fixed.length - 50 // Within last 50 chars
+
           if (isUnterminatedAtEnd) {
             logger.debug('[EXTRACTION-PARSE] Detected incomplete JSON (unterminated string at end) - attempting to close', {
               error: parseAfterFixError.message,
               errorPosition,
               fixedLength: fixed.length
             })
-            
+
             // Try to salvage partial data by closing the incomplete string and array/object
             let salvaged = fixed
             // Find the last incomplete string (starts with " but doesn't end with ")
@@ -5094,11 +5094,11 @@ Output valid JSON object with "performance_actuals" array only.`
                   salvaged += '}'
                   openBraces--
                 }
-                
+
                 logger.debug('[EXTRACTION-PARSE] Attempting to parse salvaged JSON', {
                   salvagedLength: salvaged.length
                 })
-                
+
                 try {
                   const salvagedParsed = JSON.parse(salvaged)
                   logger.debug('[EXTRACTION-PARSE] Successfully parsed salvaged JSON - some data may be incomplete', {
@@ -5112,7 +5112,7 @@ Output valid JSON object with "performance_actuals" array only.`
                 }
               }
             }
-            
+
             // Fallback: Use the existing closeIncompleteJsonObject method
             let closedJson = fixed
             // If we detected an incomplete string, close it first
@@ -5128,7 +5128,7 @@ Output valid JSON object with "performance_actuals" array only.`
               }
             }
             closedJson += this.closeIncompleteJsonObject(closedJson)
-            
+
             try {
               const parsed = JSON.parse(closedJson)
               logger.debug('[EXTRACTION-PARSE] Successfully closed incomplete JSON', {
@@ -5142,7 +5142,7 @@ Output valid JSON object with "performance_actuals" array only.`
               })
             }
           }
-          
+
           // If still failing, log and try alternative approach
           logger.debug('[EXTRACTION-PARSE] JSON still invalid after control character/quote fix', {
             error: parseAfterFixError.message,
@@ -5158,7 +5158,7 @@ Output valid JSON object with "performance_actuals" array only.`
           if (firstBrace !== -1) {
             let braceCount = 0
             let endPos = firstBrace
-            
+
             for (let i = firstBrace; i < cleanedContent.length; i++) {
               if (cleanedContent[i] === '{') braceCount++
               if (cleanedContent[i] === '}') braceCount--
@@ -5167,39 +5167,39 @@ Output valid JSON object with "performance_actuals" array only.`
                 break
               }
             }
-            
+
             if (braceCount === 0) {
               let extracted = cleanedContent.substring(firstBrace, endPos)
-              
+
               // Apply control character and quote fix to extracted JSON
               const needsFix = parseError.message.includes('control character') ||
-                              parseError.message.includes("Expected ',' or '}' after property value") ||
-                              parseError.message.includes("Unterminated string") ||
-                              parseError.message.includes("Unexpected token")
+                parseError.message.includes("Expected ',' or '}' after property value") ||
+                parseError.message.includes("Unterminated string") ||
+                parseError.message.includes("Unexpected token")
               if (needsFix) {
                 let result = ''
                 let inString = false
                 let escapeNext = false
                 let lastChar = ''
-                
+
                 for (let i = 0; i < extracted.length; i++) {
                   const char = extracted[i]
                   const charCode = char.charCodeAt(0)
-                  
+
                   if (escapeNext) {
                     result += char
                     escapeNext = false
                     lastChar = char
                     continue
                   }
-                  
+
                   if (char === '\\') {
                     result += char
                     escapeNext = true
                     lastChar = char
                     continue
                   }
-                  
+
                   if (char === '"') {
                     if (inString) {
                       // We're inside a string - check if this quote is a delimiter or content
@@ -5212,18 +5212,18 @@ Output valid JSON object with "performance_actuals" array only.`
                         // Be conservative: only treat as delimiter if clearly followed by JSON structure markers
                         let isStringEnd = false
                         let lookAheadPos = i + 1
-                        
+
                         // Skip whitespace
                         while (lookAheadPos < extracted.length && /\s/.test(extracted[lookAheadPos])) {
                           lookAheadPos++
                         }
-                        
+
                         if (lookAheadPos < extracted.length) {
                           const nextNonWhitespace = extracted[lookAheadPos]
                           // Only treat as delimiter if followed by clear JSON structure markers
-                          if (nextNonWhitespace === ':' || nextNonWhitespace === ',' || 
-                              nextNonWhitespace === '}' || nextNonWhitespace === ']' ||
-                              nextNonWhitespace === '\n') {
+                          if (nextNonWhitespace === ':' || nextNonWhitespace === ',' ||
+                            nextNonWhitespace === '}' || nextNonWhitespace === ']' ||
+                            nextNonWhitespace === '\n') {
                             isStringEnd = true
                           }
                           // If followed by a quote (double quote), it's likely a delimiter
@@ -5241,7 +5241,7 @@ Output valid JSON object with "performance_actuals" array only.`
                           // End of string - this is the closing quote
                           isStringEnd = true
                         }
-                        
+
                         if (isStringEnd) {
                           // This is the string delimiter - don't escape it
                           inString = false
@@ -5259,7 +5259,7 @@ Output valid JSON object with "performance_actuals" array only.`
                     lastChar = char
                     continue
                   }
-                  
+
                   if (inString && charCode >= 0x00 && charCode <= 0x1F) {
                     if (char === '\n') {
                       result += '\\n'
@@ -5277,13 +5277,13 @@ Output valid JSON object with "performance_actuals" array only.`
                   } else {
                     result += char
                   }
-                  
+
                   lastChar = char
                 }
-                
+
                 extracted = result
               }
-              
+
               return JSON.parse(extracted)
             }
           }
@@ -5296,14 +5296,14 @@ Output valid JSON object with "performance_actuals" array only.`
             contentLength: cleanedContent.length,
             contentSample: cleanedContent.substring(0, 1000)
           })
-          
+
           // Return empty object to prevent complete failure
           // The extraction method will handle empty response
           return {}
         }
       }
     }
-    
+
     // Fallback: return empty object
     logger.debug('[EXTRACTION-PARSE] Failed to parse AI response as JSON, returning empty object')
     return {}
@@ -5332,9 +5332,9 @@ Output valid JSON object with "performance_actuals" array only.`
         `SELECT name FROM stakeholders WHERE project_id = $1`,
         [projectId]
       )
-      
+
       const existingStakeholders = existingStakeholdersResult.rows
-      
+
       if (existingStakeholders.length > 0) {
         // Create a set of normalized existing stakeholder names
         const existingNormalized = new Set<string>()
@@ -5342,14 +5342,14 @@ Output valid JSON object with "performance_actuals" array only.`
           const normalized = this.normalizeStakeholderName(existing.name)
           existingNormalized.add(normalized)
         })
-        
+
         // Filter out stakeholders that match existing ones
         const newStakeholders: Stakeholder[] = []
         let skippedCount = 0
-        
+
         stakeholders.forEach(stakeholder => {
           const normalized = this.normalizeStakeholderName(stakeholder.name)
-          
+
           if (existingNormalized.has(normalized)) {
             // Match found - skip this stakeholder (already exists)
             skippedCount++
@@ -5359,11 +5359,11 @@ Output valid JSON object with "performance_actuals" array only.`
             newStakeholders.push(stakeholder)
           }
         })
-        
+
         if (skippedCount > 0) {
           logger.info(`[DEDUP-DB] Skipped ${skippedCount} stakeholders that already exist in database (normalized name match)`)
         }
-        
+
         stakeholdersToSave = newStakeholders
       }
     } catch (error) {
@@ -5384,13 +5384,13 @@ Output valid JSON object with "performance_actuals" array only.`
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10})`
       )
-      
+
       // Truncate fields to match database constraints
       const name = s.name?.substring(0, 255) || 'Unnamed Stakeholder'
       const role = s.role?.substring(0, 100) || 'Stakeholder'
       // Email is NOT NULL in database, use placeholder if missing
       const email = s.email?.substring(0, 255) || `${name.toLowerCase().replace(/\s+/g, '.')}@placeholder.local`
-      
+
       // Normalize influence_level and interest_level to valid enum values
       const normalizeLevel = (level: string | undefined): 'high' | 'medium' | 'low' => {
         if (!level) return 'medium'
@@ -5402,13 +5402,13 @@ Output valid JSON object with "performance_actuals" array only.`
         logger.debug(`[EXTRACTION] Invalid level "${level}", defaulting to medium`)
         return 'medium'
       }
-      
+
       const interestLevel = normalizeLevel(s.interest_level)
       const influenceLevel = normalizeLevel(s.influence_level)
-      
+
       // Resolve source_document_id if available
       const sourceDocumentId = (s as any).source_document_id || null
-      
+
       // Log if truncation occurred
       if (s.name && s.name.length > 255) {
         logger.warn(`[EXTRACTION] Stakeholder name truncated from ${s.name.length} to 255 chars: "${s.name.substring(0, 50)}..."`)
@@ -5416,7 +5416,7 @@ Output valid JSON object with "performance_actuals" array only.`
       if (s.role && s.role.length > 100) {
         logger.warn(`[EXTRACTION] Stakeholder role truncated from ${s.role.length} to 100 chars: "${s.role.substring(0, 50)}..."`)
       }
-      
+
       values.push(
         projectId,
         name,
@@ -5467,10 +5467,10 @@ Output valid JSON object with "performance_actuals" array only.`
 
     // Deduplicate requirements by title (AI sometimes extracts same requirement multiple times)
     const deduplicatedMap = new Map<string, Requirement>()
-    
+
     requirements.forEach(req => {
       const normalizedTitle = req.title.trim().toLowerCase()
-      
+
       if (!deduplicatedMap.has(normalizedTitle)) {
         deduplicatedMap.set(normalizedTitle, req)
       } else {
@@ -5489,9 +5489,9 @@ Output valid JSON object with "performance_actuals" array only.`
         logger.debug(`[EXTRACTION-REQUIREMENTS] Merged duplicate requirement: "${req.title}"`)
       }
     })
-    
+
     const uniqueRequirements = Array.from(deduplicatedMap.values())
-    
+
     if (uniqueRequirements.length < requirements.length) {
       logger.info(`[EXTRACTION-REQUIREMENTS] Deduplicated ${requirements.length} → ${uniqueRequirements.length} requirements`)
     }
@@ -5504,16 +5504,16 @@ Output valid JSON object with "performance_actuals" array only.`
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10})`
       )
-      
+
       // Convert acceptance_criteria string to array if it exists
       let acceptanceCriteria = null
       if (r.acceptance_criteria) {
         // If it's already an array, use it; otherwise split by newlines or commas
-        acceptanceCriteria = Array.isArray(r.acceptance_criteria) 
-          ? r.acceptance_criteria 
+        acceptanceCriteria = Array.isArray(r.acceptance_criteria)
+          ? r.acceptance_criteria
           : [r.acceptance_criteria]
       }
-      
+
       // Map AI status values to database CHECK constraint values
       // DB allows: draft, approved, implemented, verified
       // AI returns: proposed, approved, in_progress, completed, deferred
@@ -5525,7 +5525,7 @@ Output valid JSON object with "performance_actuals" array only.`
         'deferred': 'draft'
       }
       const mappedStatus = statusMap[r.status] || 'draft'
-      
+
       // Map AI priority values to database CHECK constraint values
       // DB allows: high, medium, low
       // AI returns: critical, high, medium, low
@@ -5538,7 +5538,7 @@ Output valid JSON object with "performance_actuals" array only.`
         'very_low': 'low'
       }
       const mappedPriority = priorityMap[(r.priority || 'medium').toLowerCase()] || 'medium'
-      
+
       // Map AI type values (hyphen to underscore)
       // DB allows: functional, non_functional, business, technical
       const typeMap: Record<string, string> = {
@@ -5549,10 +5549,10 @@ Output valid JSON object with "performance_actuals" array only.`
         'technical': 'technical'
       }
       const mappedType = typeMap[(r.type || 'functional').toLowerCase()] || 'functional'
-      
+
       // Resolve source_document_id
       const sourceDocumentId = (r as any).source_document_id || null
-      
+
       values.push(
         projectId,
         r.title,        // For title column
@@ -5603,10 +5603,10 @@ Output valid JSON object with "performance_actuals" array only.`
 
     // Deduplicate risks by title (AI sometimes extracts same risk multiple times)
     const deduplicatedMap = new Map<string, Risk>()
-    
+
     risks.forEach(risk => {
       const normalizedTitle = risk.title.trim().toLowerCase()
-      
+
       if (!deduplicatedMap.has(normalizedTitle)) {
         // First occurrence - add to map
         deduplicatedMap.set(normalizedTitle, risk)
@@ -5626,9 +5626,9 @@ Output valid JSON object with "performance_actuals" array only.`
         logger.debug(`[EXTRACTION-RISKS] Merged duplicate risk: "${risk.title}"`)
       }
     })
-    
+
     const uniqueRisks = Array.from(deduplicatedMap.values())
-    
+
     if (uniqueRisks.length < risks.length) {
       logger.info(`[EXTRACTION-RISKS] Deduplicated ${risks.length} → ${uniqueRisks.length} risks`)
     }
@@ -5636,16 +5636,16 @@ Output valid JSON object with "performance_actuals" array only.`
     const values: any[] = []
     const placeholders: string[] = []
 
-      uniqueRisks.forEach((r, index) => {
+    uniqueRisks.forEach((r, index) => {
       const offset = index * 14  // Updated to 14 values per risk
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14})`
       )
-      
+
       // Validate placeholder count matches expected values count
       const expectedValuesPerRisk = 14  // Updated: project_id, name, description, category, probability, impact, risk_level, mitigation_strategy, contingency_plan, owner, status, title, created_by, source_document_id
       const expectedTotalValues = (index + 1) * expectedValuesPerRisk
-      
+
       // Map AI impact values to database CHECK constraint values
       // DB allows: high, medium, low (exact match required, case-sensitive)
       // AI returns: critical, very_high, high, medium, low
@@ -5659,7 +5659,7 @@ Output valid JSON object with "performance_actuals" array only.`
         'very_low': 'low'
       }
       const rawImpact = String(r.impact || 'medium').toLowerCase().trim()
-      
+
       // Check if impact looks like it might be mitigation_strategy or other text (too long)
       let mappedImpact = 'medium' // Default
       if (rawImpact.length <= 10 && impactMap[rawImpact]) {
@@ -5671,7 +5671,7 @@ Output valid JSON object with "performance_actuals" array only.`
           impactLength: rawImpact.length
         })
       }
-      
+
       // Map AI probability values to database CHECK constraint values
       // DB allows: high, medium, low (exact match required, case-sensitive)
       // AI returns: critical, very_high, high, medium, low
@@ -5685,7 +5685,7 @@ Output valid JSON object with "performance_actuals" array only.`
         'very_low': 'low'
       }
       const rawProbability = String(r.probability || 'medium').toLowerCase().trim()
-      
+
       // Check if probability looks like it might be mitigation_strategy or other text (too long)
       let mappedProbability = 'medium' // Default
       if (rawProbability.length <= 10 && probabilityMap[rawProbability]) {
@@ -5697,15 +5697,15 @@ Output valid JSON object with "performance_actuals" array only.`
           probabilityLength: rawProbability.length
         })
       }
-      
+
       // IMPORTANT: risk_level is organizational level ('project', 'program', 'portfolio', 'systemic'), NOT severity
       // For extracted risks from documents, risk_level should always be 'project'
       // Severity is calculated separately and stored in the 'severity' column (if it exists)
       const riskLevel = 'project' // Extracted risks are always project-level
-      
+
       // Resolve source_document_id
       const sourceDocumentId = (r as any).source_document_id || null
-      
+
       // Log final values for debugging
       logger.debug(`[EXTRACTION-RISKS] Final risk values`, {
         title: r.title,
@@ -5714,18 +5714,18 @@ Output valid JSON object with "performance_actuals" array only.`
         risk_level: riskLevel, // Always 'project' for extracted risks
         severity: 'calculated separately' // Severity is different from risk_level
       })
-      
+
       // CRITICAL: Final validation before pushing to values array
       // Ensure probability and impact are valid
       const cleanProbability = String(mappedProbability || 'medium').toLowerCase().trim()
       const cleanImpact = String(mappedImpact || 'medium').toLowerCase().trim()
-      
+
       const finalProbability = (['very_high', 'high', 'medium', 'low', 'very_low'].includes(cleanProbability)) ? cleanProbability : 'medium'
       const finalImpact = (['very_high', 'high', 'medium', 'low', 'very_low'].includes(cleanImpact)) ? cleanImpact : 'medium'
-      
+
       // Ensure risk_level is valid organizational level
       const finalRiskLevel = 'project' // Always 'project' for extracted risks
-      
+
       values.push(
         projectId,
         r.title || '',        // name column (required, comes first)
@@ -5752,17 +5752,17 @@ Output valid JSON object with "performance_actuals" array only.`
     const validRiskLevels = ['project', 'program', 'portfolio', 'systemic']
     const validProbabilities = ['very_high', 'high', 'medium', 'low', 'very_low']
     const validImpacts = ['very_high', 'high', 'medium', 'low', 'very_low']
-    
+
     for (let i = 0; i < uniqueRisks.length; i++) {
       const probabilityIndex = i * 14 + 4  // Updated index: 0=projectId, 1=name, 2=description, 3=category, 4=probability
       const impactIndex = i * 14 + 5       // Updated index: 5=impact
       const riskLevelIndex = i * 14 + 6    // Updated index: 6=risk_level
-      
+
       if (probabilityIndex < values.length && impactIndex < values.length && riskLevelIndex < values.length) {
         const prob = String(values[probabilityIndex] || '').toLowerCase().trim()
         const impact = String(values[impactIndex] || '').toLowerCase().trim()
         const riskLevel = String(values[riskLevelIndex] || '').toLowerCase().trim()
-        
+
         // Fix any invalid probability values
         if (!validProbabilities.includes(prob)) {
           logger.error(`[EXTRACTION-RISKS] Invalid probability value in values array: "${prob}", fixing to 'medium'`, {
@@ -5772,7 +5772,7 @@ Output valid JSON object with "performance_actuals" array only.`
           })
           values[probabilityIndex] = 'medium'
         }
-        
+
         // Fix any invalid impact values
         if (!validImpacts.includes(impact)) {
           logger.error(`[EXTRACTION-RISKS] Invalid impact value in values array: "${impact}", fixing to 'medium'`, {
@@ -5782,7 +5782,7 @@ Output valid JSON object with "performance_actuals" array only.`
           })
           values[impactIndex] = 'medium'
         }
-        
+
         // Fix risk_level - must be organizational level, not severity
         // Always normalize risk_level value (trim and lowercase) before inserting
         // For extracted risks, always use 'project' level
@@ -5841,10 +5841,10 @@ Output valid JSON object with "performance_actuals" array only.`
 
     // Deduplicate milestones by name (AI sometimes extracts same milestone multiple times)
     const deduplicatedMap = new Map<string, Milestone>()
-    
+
     milestones.forEach(milestone => {
       const normalizedName = milestone.name.trim().toLowerCase()
-      
+
       if (!deduplicatedMap.has(normalizedName)) {
         deduplicatedMap.set(normalizedName, milestone)
       } else {
@@ -5862,9 +5862,9 @@ Output valid JSON object with "performance_actuals" array only.`
         logger.debug(`[EXTRACTION-MILESTONES] Merged duplicate milestone: "${milestone.name}"`)
       }
     })
-    
+
     const uniqueMilestones = Array.from(deduplicatedMap.values())
-    
+
     if (uniqueMilestones.length < milestones.length) {
       logger.info(`[EXTRACTION-MILESTONES] Deduplicated ${milestones.length} → ${uniqueMilestones.length} milestones`)
     }
@@ -5877,7 +5877,7 @@ Output valid JSON object with "performance_actuals" array only.`
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7})`
       )
-      
+
       // Convert quarter dates like '2025-Q4' to actual dates using utility function
       // due_date is NOT NULL, so provide a default date if missing (1 year from now)
       let dueDate = this.normalizeDate(m.due_date)
@@ -5890,7 +5890,7 @@ Output valid JSON object with "performance_actuals" array only.`
           logger.warn(`[EXTRACTION] Milestone "${m.name}" has invalid due_date: ${m.due_date}, using default (1 year from now)`)
         }
       }
-      
+
       // Map AI status values to database CHECK constraint values
       // DB allows: planned, in_progress, completed, delayed
       const statusMap: Record<string, string> = {
@@ -5905,10 +5905,10 @@ Output valid JSON object with "performance_actuals" array only.`
         'overdue': 'delayed'
       }
       const mappedStatus = statusMap[(m.status || 'planned').toLowerCase()] || 'planned'
-      
+
       // Resolve source_document_id
       const sourceDocumentId = (m as any).source_document_id || null
-      
+
       values.push(
         projectId,
         m.name,
@@ -5954,7 +5954,7 @@ Output valid JSON object with "performance_actuals" array only.`
     const uniqueConstraints = Array.from(
       new Map(constraints.map(c => [(c.title || '').toLowerCase().trim(), c])).values()
     )
-    
+
     if (uniqueConstraints.length < constraints.length) {
       logger.warn(`[EXTRACTION] Deduplicated constraints: ${constraints.length} → ${uniqueConstraints.length}`)
     }
@@ -5967,7 +5967,7 @@ Output valid JSON object with "performance_actuals" array only.`
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7})`
       )
-      
+
       // Map AI type values to database CHECK constraint values
       // DB allows: budget, time, resource, technical, regulatory, business
       const typeMap: Record<string, string> = {
@@ -5985,10 +5985,10 @@ Output valid JSON object with "performance_actuals" array only.`
         'business': 'business'
       }
       const mappedType = typeMap[(c.type || 'business').toLowerCase()] || 'business'
-      
+
       // Resolve source_document_id
       const sourceDocumentId = (c as any).source_document_id || null
-      
+
       values.push(
         projectId,
         c.title,        // For title column
@@ -6034,7 +6034,7 @@ Output valid JSON object with "performance_actuals" array only.`
     const uniqueCriteria = Array.from(
       new Map(successCriteria.map(sc => [(sc.title || '').toLowerCase().trim(), sc])).values()
     )
-    
+
     if (uniqueCriteria.length < successCriteria.length) {
       logger.warn(`[EXTRACTION] Deduplicated success_criteria: ${successCriteria.length} → ${uniqueCriteria.length}`)
     }
@@ -6047,12 +6047,12 @@ Output valid JSON object with "performance_actuals" array only.`
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9})`
       )
-      
+
       // Extract numeric value using improved safeNumber logic
       const extractNumeric = (value: string | number | null | undefined): number | null => {
         if (typeof value === 'number') return Number.isFinite(value) ? value : null
         if (!value) return null
-        
+
         const extracted = this.safeNumber(value)
         if (extracted === undefined) {
           logger.debug(`[EXTRACTION] Could not extract numeric from: ${value}, setting to null`)
@@ -6060,12 +6060,12 @@ Output valid JSON object with "performance_actuals" array only.`
         }
         return extracted
       }
-      
+
       const targetValue = extractNumeric(sc.target_value)
-      
+
       // Resolve source_document_id
       const sourceDocumentId = (sc as any).source_document_id || null
-      
+
       values.push(
         projectId,
         sc.title,        // For title column
@@ -6113,10 +6113,10 @@ Output valid JSON object with "performance_actuals" array only.`
 
     // Deduplicate best practices by title (AI sometimes extracts same practice multiple times)
     const deduplicatedMap = new Map<string, BestPractice>()
-    
+
     bestPractices.forEach(bp => {
       const normalizedTitle = bp.title.trim().toLowerCase()
-      
+
       if (!deduplicatedMap.has(normalizedTitle)) {
         // First occurrence - add to map
         deduplicatedMap.set(normalizedTitle, bp)
@@ -6132,9 +6132,9 @@ Output valid JSON object with "performance_actuals" array only.`
         logger.debug(`[EXTRACTION-BEST_PRACTICES] Merged duplicate: "${bp.title}"`)
       }
     })
-    
+
     const uniqueBestPractices = Array.from(deduplicatedMap.values())
-    
+
     if (uniqueBestPractices.length < bestPractices.length) {
       logger.info(`[EXTRACTION-BEST_PRACTICES] Deduplicated ${bestPractices.length} → ${uniqueBestPractices.length} best practices`)
     }
@@ -6147,10 +6147,10 @@ Output valid JSON object with "performance_actuals" array only.`
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6})`
       )
-      
+
       // Resolve source_document_id
       const sourceDocumentId = (bp as any).source_document_id || null
-      
+
       values.push(
         projectId,
         bp.title,
@@ -6192,10 +6192,10 @@ Output valid JSON object with "performance_actuals" array only.`
 
     // Deduplicate phases by name (AI sometimes extracts same phase multiple times)
     const deduplicatedMap = new Map<string, Phase>()
-    
+
     phases.forEach(phase => {
       const normalizedName = phase.name.trim().toLowerCase()
-      
+
       if (!deduplicatedMap.has(normalizedName)) {
         deduplicatedMap.set(normalizedName, phase)
       } else {
@@ -6212,9 +6212,9 @@ Output valid JSON object with "performance_actuals" array only.`
         logger.debug(`[EXTRACTION-PHASES] Merged duplicate phase: "${phase.name}"`)
       }
     })
-    
+
     const uniquePhases = Array.from(deduplicatedMap.values())
-    
+
     if (uniquePhases.length < phases.length) {
       logger.info(`[EXTRACTION-PHASES] Deduplicated ${phases.length} → ${uniquePhases.length} phases`)
     }
@@ -6227,28 +6227,28 @@ Output valid JSON object with "performance_actuals" array only.`
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8})`
       )
-      
+
       // Validate and sanitize dates using utility functions
       // Use normalizeDate to extract dates from strings like "Prior to 2025-11-15"
       let startDate = this.normalizeDate(p.start_date)
       let endDate = this.normalizeDate(p.end_date)
-      
+
       // start_date is NOT NULL in database - provide default if missing
       if (!startDate) {
         startDate = getCurrentDate()
         logger.warn(`[EXTRACTION] Phase "${p.name}" missing start_date, defaulting to ${startDate}`)
       }
-      
+
       // end_date is NOT NULL in database - provide default if missing
       if (!endDate) {
         // Default: 30 days after start_date
         endDate = addDays(startDate, 30)
         logger.warn(`[EXTRACTION] Phase "${p.name}" missing end_date, defaulting to ${endDate}`)
       }
-      
+
       // Resolve source_document_id
       const sourceDocumentId = (p as any).source_document_id || null
-      
+
       values.push(
         projectId,
         p.name,
@@ -6296,7 +6296,7 @@ Output valid JSON object with "performance_actuals" array only.`
     const uniqueResources = Array.from(
       new Map(resources.map(r => [r.name.toLowerCase().trim(), r])).values()
     )
-    
+
     if (uniqueResources.length < resources.length) {
       logger.warn(`[EXTRACTION] Deduplicated resources: ${resources.length} → ${uniqueResources.length}`)
     }
@@ -6309,7 +6309,7 @@ Output valid JSON object with "performance_actuals" array only.`
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14}, $${offset + 15})`
       )
-      
+
       // Map AI resource types to database CHECK constraint values
       // DB allows: human, equipment, material, software, facility, budget
       // AI returns: financial, human, equipment, material, software, facility
@@ -6337,10 +6337,10 @@ Output valid JSON object with "performance_actuals" array only.`
       const performanceRatingRaw = this.safeNumber(r.performance_rating)
       const performanceRating =
         performanceRatingRaw === undefined ? null : Math.max(0, Math.min(10, performanceRatingRaw))
-      
+
       // Resolve source_document_id
       const sourceDocumentId = (r as any).source_document_id || null
-      
+
       values.push(
         projectId,
         r.name,
@@ -6405,7 +6405,7 @@ Output valid JSON object with "performance_actuals" array only.`
     const uniqueTechnologies = Array.from(
       new Map(technologies.map(t => [t.name.toLowerCase().trim(), t])).values()
     )
-    
+
     if (uniqueTechnologies.length < technologies.length) {
       logger.warn(`[EXTRACTION] Deduplicated technologies: ${technologies.length} → ${uniqueTechnologies.length}`)
     }
@@ -6418,10 +6418,10 @@ Output valid JSON object with "performance_actuals" array only.`
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10})`
       )
-      
+
       // Resolve source_document_id
       const sourceDocumentId = (t as any).source_document_id || null
-      
+
       values.push(
         projectId,
         t.name,
@@ -6471,10 +6471,10 @@ Output valid JSON object with "performance_actuals" array only.`
 
     // Deduplicate quality standards by title (AI sometimes extracts same standard multiple times)
     const deduplicatedMap = new Map<string, QualityStandard>()
-    
+
     qualityStandards.forEach(qs => {
       const normalizedTitle = qs.title.trim().toLowerCase()
-      
+
       if (!deduplicatedMap.has(normalizedTitle)) {
         deduplicatedMap.set(normalizedTitle, qs)
       } else {
@@ -6490,9 +6490,9 @@ Output valid JSON object with "performance_actuals" array only.`
         logger.debug(`[EXTRACTION-QUALITY_STANDARDS] Merged duplicate standard: "${qs.title}"`)
       }
     })
-    
+
     const uniqueQualityStandards = Array.from(deduplicatedMap.values())
-    
+
     if (uniqueQualityStandards.length < qualityStandards.length) {
       logger.info(`[EXTRACTION-QUALITY_STANDARDS] Deduplicated ${qualityStandards.length} → ${uniqueQualityStandards.length} quality standards`)
     }
@@ -6505,10 +6505,10 @@ Output valid JSON object with "performance_actuals" array only.`
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8})`
       )
-      
+
       // Resolve source_document_id
       const sourceDocumentId = (qs as any).source_document_id || null
-      
+
       values.push(
         projectId,
         qs.title,        // For title column
@@ -6555,15 +6555,15 @@ Output valid JSON object with "performance_actuals" array only.`
 
     // Deduplicate by title (AI sometimes extracts same requirement multiple times)
     const deduplicatedMap = new Map<string, ComplianceSecurity>()
-    
+
     complianceSecurityItems.forEach(item => {
       const normalizedTitle = (item.title || '').trim().toLowerCase()
-      
+
       if (!normalizedTitle) {
         // Skip items without titles
         return
       }
-      
+
       if (!deduplicatedMap.has(normalizedTitle)) {
         deduplicatedMap.set(normalizedTitle, item)
       } else {
@@ -6587,9 +6587,9 @@ Output valid JSON object with "performance_actuals" array only.`
         logger.debug(`[EXTRACTION-COMPLIANCE-SECURITY] Merged duplicate item: "${item.title}"`)
       }
     })
-    
+
     const uniqueItems = Array.from(deduplicatedMap.values())
-    
+
     if (uniqueItems.length < complianceSecurityItems.length) {
       logger.info(`[EXTRACTION-COMPLIANCE-SECURITY] Deduplicated ${complianceSecurityItems.length} → ${uniqueItems.length} items`)
     }
@@ -6602,10 +6602,10 @@ Output valid JSON object with "performance_actuals" array only.`
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14}, $${offset + 15}, $${offset + 16}, $${offset + 17}, $${offset + 18}, $${offset + 19}, $${offset + 20}, $${offset + 21}, $${offset + 22}, $${offset + 23}, $${offset + 24}, $${offset + 25}, $${offset + 26}, $${offset + 27}, $${offset + 28}, $${offset + 29}, $${offset + 30}, $${offset + 31}, $${offset + 32}, $${offset + 33}, $${offset + 34}, $${offset + 35}, $${offset + 36}, $${offset + 37}, $${offset + 38}, $${offset + 39}, $${offset + 40}, $${offset + 41}, $${offset + 42}, $${offset + 43}, $${offset + 44}, $${offset + 45}, $${offset + 46}, $${offset + 47}, $${offset + 48}, $${offset + 49}, $${offset + 50}, $${offset + 51}, $${offset + 52}, $${offset + 53}, $${offset + 54}, $${offset + 55}, $${offset + 56}, $${offset + 57}, $${offset + 58}, $${offset + 59}, $${offset + 60}, $${offset + 61}, $${offset + 62}, $${offset + 63}, $${offset + 64}, $${offset + 65}, $${offset + 66}, $${offset + 67}, $${offset + 68}, $${offset + 69}, $${offset + 70}, $${offset + 71}, $${offset + 72})`
       )
-      
+
       // Resolve source_document_id
       const sourceDocumentId = (item as any).source_document_id || null
-      
+
       // Parse latest_breach date if provided as string
       let latestBreachDate: Date | null = null
       if (item.latest_breach) {
@@ -6614,25 +6614,25 @@ Output valid JSON object with "performance_actuals" array only.`
           latestBreachDate = parsed
         }
       }
-      
+
       // Ensure scores are within valid range
-      const securityScore = item.security_score !== undefined 
-        ? Math.max(0, Math.min(10, item.security_score)) 
+      const securityScore = item.security_score !== undefined
+        ? Math.max(0, Math.min(10, item.security_score))
         : null
-      const complianceScore = item.compliance_score !== undefined 
-        ? Math.max(0, Math.min(10, item.compliance_score)) 
+      const complianceScore = item.compliance_score !== undefined
+        ? Math.max(0, Math.min(10, item.compliance_score))
         : null
-      
+
       // Ensure category is valid
       const category = ['compliance', 'security', 'legal', 'standard'].includes(item.category)
         ? item.category
         : 'standard'
-      
+
       // Ensure status is valid
       const status = ['applicable', 'not_applicable', 'partial', 'compliant', 'non_compliant'].includes(item.status || '')
         ? (item.status || 'applicable')
         : 'applicable'
-      
+
       values.push(
         projectId,
         item.title,
@@ -6823,10 +6823,10 @@ Output valid JSON object with "performance_actuals" array only.`
 
     // Deduplicate deliverables by name (AI sometimes extracts same deliverable multiple times)
     const deduplicatedMap = new Map<string, Deliverable>()
-    
+
     deliverables.forEach(deliverable => {
       const normalizedName = deliverable.name.trim().toLowerCase()
-      
+
       if (!deduplicatedMap.has(normalizedName)) {
         deduplicatedMap.set(normalizedName, deliverable)
       } else {
@@ -6844,9 +6844,9 @@ Output valid JSON object with "performance_actuals" array only.`
         logger.debug(`[EXTRACTION-DELIVERABLES] Merged duplicate deliverable: "${deliverable.name}"`)
       }
     })
-    
+
     const uniqueDeliverables = Array.from(deduplicatedMap.values())
-    
+
     if (uniqueDeliverables.length < deliverables.length) {
       logger.info(`[EXTRACTION-DELIVERABLES] Deduplicated ${deliverables.length} → ${uniqueDeliverables.length} deliverables`)
     }
@@ -6859,7 +6859,7 @@ Output valid JSON object with "performance_actuals" array only.`
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9})`
       )
-      
+
       // Map AI status values to database CHECK constraint values
       // DB allows: not_started, in_progress, review, completed, delivered
       // AI returns: planned, in_progress, review, completed, delivered
@@ -6876,18 +6876,18 @@ Output valid JSON object with "performance_actuals" array only.`
         'delivered': 'delivered'
       }
       const mappedStatus = statusMap[(d.status || 'not_started').toLowerCase()] || 'not_started'
-      
+
       // Validate and parse due_date using the enhanced normalizeDate function
       // This handles formats like "Mar 15, 2026 (prototype approval)", "Jan 2026", etc.
       let parsedDueDate = this.normalizeDate(d.due_date)
-      
+
       // Double-check: ensure parsed date is valid YYYY-MM-DD format before database insertion
       // This prevents invalid strings like "2026" from being passed to PostgreSQL
       if (parsedDueDate && !isValidDate(parsedDueDate)) {
         logger.warn(`[EXTRACTION] Deliverable "${d.name}" has invalid parsed due_date: ${parsedDueDate} (original: ${d.due_date}), setting to null`)
         parsedDueDate = null
       }
-      
+
       if (d.due_date && !parsedDueDate) {
         logger.warn(`[EXTRACTION] Deliverable "${d.name}" has invalid due_date: ${d.due_date}, setting to null`)
       }
@@ -6943,10 +6943,10 @@ Output valid JSON object with "performance_actuals" array only.`
 
     // Deduplicate scope items by title (AI sometimes extracts same scope item multiple times)
     const deduplicatedMap = new Map<string, ScopeItem>()
-    
+
     scopeItems.forEach(scopeItem => {
       const normalizedTitle = scopeItem.title.trim().toLowerCase()
-      
+
       if (!deduplicatedMap.has(normalizedTitle)) {
         deduplicatedMap.set(normalizedTitle, scopeItem)
       } else {
@@ -6962,9 +6962,9 @@ Output valid JSON object with "performance_actuals" array only.`
         logger.debug(`[EXTRACTION-SCOPE_ITEMS] Merged duplicate scope item: "${scopeItem.title}"`)
       }
     })
-    
+
     const uniqueScopeItems = Array.from(deduplicatedMap.values())
-    
+
     if (uniqueScopeItems.length < scopeItems.length) {
       logger.info(`[EXTRACTION-SCOPE_ITEMS] Deduplicated ${scopeItems.length} → ${uniqueScopeItems.length} scope items`)
     }
@@ -6979,10 +6979,10 @@ Output valid JSON object with "performance_actuals" array only.`
       )
       // Map is_in_scope boolean to inclusion_status text
       const inclusionStatus = si.is_in_scope ? 'in_scope' : 'out_of_scope'
-      
+
       // Resolve source_document_id
       const sourceDocumentId = (si as any).source_document_id || null
-      
+
       values.push(
         projectId,
         si.title,        // For title column
@@ -7029,10 +7029,10 @@ Output valid JSON object with "performance_actuals" array only.`
     // DEDUPLICATE activities by name before database insert
     // AI sometimes extracts the same activity multiple times
     const deduplicatedMap = new Map<string, Activity>()
-    
+
     activities.forEach(activity => {
       const normalizedName = activity.name.trim().toLowerCase()
-      
+
       if (!deduplicatedMap.has(normalizedName)) {
         // First occurrence - add to map
         deduplicatedMap.set(normalizedName, activity)
@@ -7065,7 +7065,7 @@ Output valid JSON object with "performance_actuals" array only.`
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11})`
       )
-      
+
       // assigned_to must be UUID, not a name string
       // Validate it's a UUID format, otherwise set to null
       const isValidUuid = (str: string | undefined): boolean => {
@@ -7073,12 +7073,12 @@ Output valid JSON object with "performance_actuals" array only.`
         const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
         return uuidRegex.test(str)
       }
-      
+
       const assignedTo = isValidUuid(a.assigned_to) ? a.assigned_to : null
       if (a.assigned_to && !assignedTo) {
         logger.warn(`[EXTRACTION] Activity "${a.name}" has invalid assigned_to UUID: ${a.assigned_to}, setting to null`)
       }
-      
+
       // Map AI status values to database CHECK constraint values
       // DB allows: not_started, in_progress, completed, blocked, cancelled
       // AI returns: planned, not_started, in_progress, completed, blocked, cancelled
@@ -7096,11 +7096,11 @@ Output valid JSON object with "performance_actuals" array only.`
         'canceled': 'cancelled'
       }
       const mappedStatus = statusMap[(a.status || 'not_started').toLowerCase()] || 'not_started'
-      
+
       // Parse and validate dates (handle quarter formats like "Q1 2026")
       let startDate = a.start_date ? this.normalizeDate(a.start_date) : null
       let endDate = a.end_date ? this.normalizeDate(a.end_date) : null
-      
+
       // Validate parsed dates - ensure they're valid YYYY-MM-DD format
       if (startDate && !isValidDate(startDate)) {
         logger.warn(`[EXTRACTION] Activity "${a.name}" has invalid start_date: ${startDate} (original: ${a.start_date}), setting to null`)
@@ -7110,10 +7110,10 @@ Output valid JSON object with "performance_actuals" array only.`
         logger.warn(`[EXTRACTION] Activity "${a.name}" has invalid end_date: ${endDate} (original: ${a.end_date}), setting to null`)
         endDate = null
       }
-      
+
       // Resolve source_document_id
       const sourceDocumentId = (a as any).source_document_id || null
-      
+
       values.push(
         projectId,
         a.name,          // For name column
@@ -7166,15 +7166,15 @@ Output valid JSON object with "performance_actuals" array only.`
 
     // Deduplicate team agreements by title (AI sometimes extracts same agreement multiple times)
     const deduplicatedMap = new Map<string, TeamAgreement>()
-    
+
     teamAgreements.forEach(agreement => {
       const normalizedTitle = (agreement.title || '').trim().toLowerCase()
-      
+
       if (!normalizedTitle) {
         // Skip agreements without titles
         return
       }
-      
+
       if (!deduplicatedMap.has(normalizedTitle)) {
         deduplicatedMap.set(normalizedTitle, agreement)
       } else {
@@ -7199,9 +7199,9 @@ Output valid JSON object with "performance_actuals" array only.`
         logger.debug(`[EXTRACTION-TEAM_AGREEMENTS] Merged duplicate agreement: "${agreement.title}"`)
       }
     })
-    
+
     const uniqueTeamAgreements = Array.from(deduplicatedMap.values())
-    
+
     if (uniqueTeamAgreements.length < teamAgreements.length) {
       logger.info(`[EXTRACTION-TEAM_AGREEMENTS] Deduplicated ${teamAgreements.length} → ${uniqueTeamAgreements.length} team agreements`)
     }
@@ -7267,7 +7267,7 @@ Output valid JSON object with "performance_actuals" array only.`
       // Resolve source_document_id
       // UUID validation regex
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-      
+
       // Validate source_document_id - must be a valid UUID or null
       const rawSourceDocId = (agreement as any).source_document_id
       let sourceDocumentId: string | null = null
@@ -7285,11 +7285,11 @@ Output valid JSON object with "performance_actuals" array only.`
       // CRITICAL: agreed_by must contain user IDs (UUIDs), not names
       // Filter out any non-UUID values (AI sometimes extracts names instead of IDs)
       const rawAgreedBy = this.ensureStringArray(agreement.agreed_by || [])
-      
+
       if (rawAgreedBy.length > 0) {
         logger.debug(`[EXTRACTION-TEAM_AGREEMENTS] Processing agreed_by array with ${rawAgreedBy.length} items:`, rawAgreedBy)
       }
-      
+
       const agreedByArray = rawAgreedBy
         .map(item => {
           const trimmed = item.trim()
@@ -7302,11 +7302,11 @@ Output valid JSON object with "performance_actuals" array only.`
           }
         })
         .filter((item): item is string => item !== null) // Remove nulls
-      
+
       if (rawAgreedBy.length > 0 && agreedByArray.length === 0) {
         logger.warn(`[EXTRACTION-TEAM_AGREEMENTS] All agreed_by values were filtered out (no valid UUIDs found) for agreement: "${agreement.title}"`)
       }
-      
+
       // Pass as array, not stringified - pg library will convert to JSONB
       const agreedByJson = agreedByArray.length > 0 ? agreedByArray : []
 
@@ -7317,7 +7317,7 @@ Output valid JSON object with "performance_actuals" array only.`
       // If it's not a valid UUID, set to NULL
       const rawFacilitatedBy = agreement.facilitated_by
       let facilitatedBy: string | null = null
-      
+
       if (rawFacilitatedBy && typeof rawFacilitatedBy === 'string') {
         const trimmed = rawFacilitatedBy.trim()
         if (uuidRegex.test(trimmed)) {
@@ -7588,14 +7588,14 @@ Output valid JSON object with "performance_actuals" array only.`
 
     // Deduplicate project iterations by name (AI sometimes extracts same iteration multiple times)
     const deduplicatedMap = new Map<string, ProjectIteration>()
-    
+
     projectIterations.forEach(iteration => {
       const normalizedName = (iteration.name || '').trim().toLowerCase()
-      
+
       if (!normalizedName) {
         return
       }
-      
+
       if (!deduplicatedMap.has(normalizedName)) {
         deduplicatedMap.set(normalizedName, iteration)
       } else {
@@ -7619,9 +7619,9 @@ Output valid JSON object with "performance_actuals" array only.`
         logger.debug(`[EXTRACTION-PROJECT_ITERATIONS] Merged duplicate iteration: "${iteration.name}"`)
       }
     })
-    
+
     const uniqueProjectIterations = Array.from(deduplicatedMap.values())
-    
+
     if (uniqueProjectIterations.length < projectIterations.length) {
       logger.info(`[EXTRACTION-PROJECT_ITERATIONS] Deduplicated ${projectIterations.length} → ${uniqueProjectIterations.length} project iterations`)
     }
@@ -7726,14 +7726,14 @@ Output valid JSON object with "performance_actuals" array only.`
 
     // Deduplicate work items by name (AI sometimes extracts same work item multiple times)
     const deduplicatedMap = new Map<string, WorkItemRecord>()
-    
+
     workItems.forEach(item => {
       const normalizedName = (item.name || '').trim().toLowerCase()
-      
+
       if (!normalizedName) {
         return
       }
-      
+
       if (!deduplicatedMap.has(normalizedName)) {
         deduplicatedMap.set(normalizedName, item)
       } else {
@@ -7755,9 +7755,9 @@ Output valid JSON object with "performance_actuals" array only.`
         logger.debug(`[EXTRACTION-WORK_ITEMS] Merged duplicate work item: "${item.name}"`)
       }
     })
-    
+
     const uniqueWorkItems = Array.from(deduplicatedMap.values())
-    
+
     if (uniqueWorkItems.length < workItems.length) {
       logger.info(`[EXTRACTION-WORK_ITEMS] Deduplicated ${workItems.length} → ${uniqueWorkItems.length} work items`)
     }
@@ -7847,17 +7847,17 @@ Output valid JSON object with "performance_actuals" array only.`
 
     // Deduplicate capacity plans by team_member + period (AI sometimes extracts same plan multiple times)
     const deduplicatedMap = new Map<string, CapacityPlan>()
-    
+
     capacityPlans.forEach(plan => {
       const periodStart = this.normalizeDate(plan.period_start)
       const periodEnd = this.normalizeDate(plan.period_end)
-      
+
       if (!periodStart || !periodEnd || !plan.team_member) {
         return
       }
-      
+
       const key = `${plan.team_member.toLowerCase().trim()}:${periodStart}:${periodEnd}`
-      
+
       if (!deduplicatedMap.has(key)) {
         deduplicatedMap.set(key, plan)
       } else {
@@ -7875,9 +7875,9 @@ Output valid JSON object with "performance_actuals" array only.`
         logger.debug(`[EXTRACTION-CAPACITY_PLANS] Merged duplicate capacity plan: "${plan.team_member}" (${periodStart} - ${periodEnd})`)
       }
     })
-    
+
     const uniqueCapacityPlans = Array.from(deduplicatedMap.values())
-    
+
     if (uniqueCapacityPlans.length < capacityPlans.length) {
       logger.info(`[EXTRACTION-CAPACITY_PLANS] Deduplicated ${capacityPlans.length} → ${uniqueCapacityPlans.length} capacity plans`)
     }
@@ -7968,7 +7968,7 @@ Output valid JSON object with "performance_actuals" array only.`
     }
 
     const successCriteriaMap = await this.getSuccessCriterionIdMap(client, projectId)
-    
+
     // Build document title-to-ID map for source document resolution
     const documentResult = await client.query<{ id: string; title: string }>(
       `SELECT id, title FROM documents WHERE project_id = $1`,
@@ -7985,7 +7985,7 @@ Output valid JSON object with "performance_actuals" array only.`
         }
       }
     })
-    
+
     const statusMap: Record<string, string> = {
       on_track: 'on_track',
       'on track': 'on_track',
@@ -8001,22 +8001,22 @@ Output valid JSON object with "performance_actuals" array only.`
 
     // Deduplicate performance measurements by criterion_name + measurement_date (AI sometimes extracts same measurement multiple times)
     const deduplicatedMap = new Map<string, PerformanceMeasurement>()
-    
+
     performanceMeasurements.forEach(measurement => {
       const criterionName = measurement.success_criterion_name?.trim()
-      
+
       if (!criterionName) {
         return
       }
-      
+
       // Use provided date, or fallback to current date if missing
       let measurementDate = this.normalizeDate(measurement.measurement_date)
       if (!measurementDate) {
         measurementDate = new Date().toISOString().split('T')[0]
       }
-      
+
       const key = `${criterionName.toLowerCase()}:${measurementDate}`
-      
+
       if (!deduplicatedMap.has(key)) {
         deduplicatedMap.set(key, measurement)
       } else {
@@ -8037,16 +8037,16 @@ Output valid JSON object with "performance_actuals" array only.`
         logger.debug(`[EXTRACTION-PERFORMANCE_MEASUREMENTS] Merged duplicate measurement: "${criterionName}" (${measurementDate})`)
       }
     })
-    
+
     const uniquePerformanceMeasurements = Array.from(deduplicatedMap.values())
-    
+
     if (uniquePerformanceMeasurements.length < performanceMeasurements.length) {
       logger.info(`[EXTRACTION-PERFORMANCE_MEASUREMENTS] Deduplicated ${performanceMeasurements.length} → ${uniquePerformanceMeasurements.length} performance measurements`)
     }
 
     uniquePerformanceMeasurements.forEach(measurement => {
       const criterionName = measurement.success_criterion_name?.trim()
-      
+
       if (!criterionName) {
         logger.warn(
           `[EXTRACTION] Skipping measurement due to missing criterion name (${measurement.success_criterion_name})`
@@ -8078,7 +8078,7 @@ Output valid JSON object with "performance_actuals" array only.`
       } else {
         logger.debug(`[EXTRACTION] Matched criterion "${criterionName}" to ID ${criterionId}`)
       }
-      
+
       // Resolve source_document_id
       let sourceDocumentId: string | null = null
       if (measurement.source_document_id) {
@@ -8087,9 +8087,9 @@ Output valid JSON object with "performance_actuals" array only.`
       } else if (measurement.source_document) {
         // Try to resolve from document title
         const docTitle = measurement.source_document.trim()
-        sourceDocumentId = documentMap.get(docTitle.toLowerCase()) || 
-                          documentMap.get(docTitle.toLowerCase().replace(/[^\w\s]/g, '')) || null
-        
+        sourceDocumentId = documentMap.get(docTitle.toLowerCase()) ||
+          documentMap.get(docTitle.toLowerCase().replace(/[^\w\s]/g, '')) || null
+
         // Try fuzzy matching if exact match failed
         if (!sourceDocumentId) {
           for (const [title, id] of documentMap.entries()) {
@@ -8100,7 +8100,7 @@ Output valid JSON object with "performance_actuals" array only.`
             }
           }
         }
-        
+
         if (!sourceDocumentId) {
           logger.warn(`[EXTRACTION] Could not resolve source_document_id for "${docTitle}"`)
         }
@@ -8189,15 +8189,15 @@ Output valid JSON object with "performance_actuals" array only.`
 
     // Deduplicate EVM metrics by measurement_date (AI sometimes extracts same metric multiple times)
     const deduplicatedMap = new Map<string, EarnedValueMetric>()
-    
+
     earnedValueMetrics.forEach(metric => {
       const measurementDate = this.normalizeDate(metric.measurement_date)
       if (!measurementDate) {
         return
       }
-      
+
       const key = measurementDate
-      
+
       if (!deduplicatedMap.has(key)) {
         deduplicatedMap.set(key, metric)
       } else {
@@ -8220,9 +8220,9 @@ Output valid JSON object with "performance_actuals" array only.`
         logger.debug(`[EXTRACTION-EARNED_VALUE_METRICS] Merged duplicate EVM metric: ${measurementDate}`)
       }
     })
-    
+
     const uniqueEarnedValueMetrics = Array.from(deduplicatedMap.values())
-    
+
     if (uniqueEarnedValueMetrics.length < earnedValueMetrics.length) {
       logger.info(`[EXTRACTION-EARNED_VALUE_METRICS] Deduplicated ${earnedValueMetrics.length} → ${uniqueEarnedValueMetrics.length} EVM metrics`)
     }
@@ -8344,14 +8344,14 @@ Output valid JSON object with "performance_actuals" array only.`
 
     // Deduplicate opportunities by title (AI sometimes extracts same opportunity multiple times)
     const deduplicatedMap = new Map<string, OpportunityRecord>()
-    
+
     opportunities.forEach(opportunity => {
       const normalizedTitle = (opportunity.title || '').trim().toLowerCase()
-      
+
       if (!normalizedTitle) {
         return
       }
-      
+
       if (!deduplicatedMap.has(normalizedTitle)) {
         deduplicatedMap.set(normalizedTitle, opportunity)
       } else {
@@ -8373,9 +8373,9 @@ Output valid JSON object with "performance_actuals" array only.`
         logger.debug(`[EXTRACTION-OPPORTUNITIES] Merged duplicate opportunity: "${opportunity.title}"`)
       }
     })
-    
+
     const uniqueOpportunities = Array.from(deduplicatedMap.values())
-    
+
     if (uniqueOpportunities.length < opportunities.length) {
       logger.info(`[EXTRACTION-OPPORTUNITIES] Deduplicated ${opportunities.length} → ${uniqueOpportunities.length} opportunities`)
     }
@@ -8483,17 +8483,17 @@ Output valid JSON object with "performance_actuals" array only.`
 
     // Deduplicate risk responses by risk_title + response_date (AI sometimes extracts same response multiple times)
     const deduplicatedMap = new Map<string, RiskResponseRecord>()
-    
+
     riskResponses.forEach(response => {
       const normalizedRiskTitle = (response.risk_title || '').trim().toLowerCase()
       const responseDate = this.normalizeDate(response.response_date)
-      
+
       if (!normalizedRiskTitle || !responseDate) {
         return
       }
-      
+
       const key = `${normalizedRiskTitle}:${responseDate}`
-      
+
       if (!deduplicatedMap.has(key)) {
         deduplicatedMap.set(key, response)
       } else {
@@ -8512,9 +8512,9 @@ Output valid JSON object with "performance_actuals" array only.`
         logger.debug(`[EXTRACTION-RISK_RESPONSES] Merged duplicate risk response: "${response.risk_title}" (${responseDate})`)
       }
     })
-    
+
     const uniqueRiskResponses = Array.from(deduplicatedMap.values())
-    
+
     if (uniqueRiskResponses.length < riskResponses.length) {
       logger.info(`[EXTRACTION-RISK_RESPONSES] Deduplicated ${riskResponses.length} → ${uniqueRiskResponses.length} risk responses`)
     }
@@ -8622,18 +8622,18 @@ Output valid JSON object with "performance_actuals" array only.`
 
     // Deduplicate performance actuals by entity_type + entity_name + measurement_date (AI sometimes extracts same actual multiple times)
     const deduplicatedMap = new Map<string, PerformanceActual>()
-    
+
     performanceActuals.forEach(actual => {
       const entityType = validEntityTypes.has(actual.entity_type) ? actual.entity_type : 'milestone'
       const measurementDate = actual.actual_end_date || actual.actual_start_date || new Date().toISOString().split('T')[0]
       const normalizedMeasurementDate = this.normalizeDate(measurementDate)
-      
+
       if (!normalizedMeasurementDate || !actual.entity_name || actual.entity_name.trim().length === 0) {
         return
       }
-      
+
       const key = `${entityType}:${actual.entity_name.trim().toLowerCase()}:${normalizedMeasurementDate}`
-      
+
       if (!deduplicatedMap.has(key)) {
         deduplicatedMap.set(key, actual)
       } else {
@@ -8659,9 +8659,9 @@ Output valid JSON object with "performance_actuals" array only.`
         logger.debug(`[EXTRACTION-PERFORMANCE_ACTUALS] Merged duplicate performance actual: "${actual.entity_name}" (${entityType}, ${normalizedMeasurementDate})`)
       }
     })
-    
+
     const uniquePerformanceActuals = Array.from(deduplicatedMap.values())
-    
+
     if (uniquePerformanceActuals.length < performanceActuals.length) {
       logger.info(`[EXTRACTION-PERFORMANCE_ACTUALS] Deduplicated ${performanceActuals.length} → ${uniquePerformanceActuals.length} performance actuals`)
     }
@@ -8673,11 +8673,11 @@ Output valid JSON object with "performance_actuals" array only.`
     uniquePerformanceActuals.forEach((actual) => {
       // Validate entity_type
       const entityType = validEntityTypes.has(actual.entity_type) ? actual.entity_type : 'milestone'
-      
+
       // Use current date as measurement_date if not provided
       const measurementDate = actual.actual_end_date || actual.actual_start_date || new Date().toISOString().split('T')[0]
       const normalizedMeasurementDate = this.normalizeDate(measurementDate)
-      
+
       if (!normalizedMeasurementDate) {
         logger.warn(`[EXTRACTION] Skipping performance actual due to invalid measurement date: ${measurementDate}`)
         return
@@ -8759,7 +8759,7 @@ Output valid JSON object with "performance_actuals" array only.`
         measurement_date, measurement_method, measured_by, notes
       )
       VALUES ${placeholders.join(', ')}
-      ON CONFLICT (project_id, entity_type, entity_id, entity_name, measurement_date) DO UPDATE SET
+      ON CONFLICT (project_id, entity_type, entity_name, measurement_date) DO UPDATE SET
         planned_start_date = COALESCE(EXCLUDED.planned_start_date, performance_actuals.planned_start_date),
         actual_start_date = COALESCE(EXCLUDED.actual_start_date, performance_actuals.actual_start_date),
         planned_end_date = COALESCE(EXCLUDED.planned_end_date, performance_actuals.planned_end_date),
@@ -8798,16 +8798,16 @@ Output valid JSON object with "performance_actuals" array only.`
       options.aiProvider,
       options.aiModel
     )
-    
+
     // Override options with best provider/model
     const extractionOptions = {
       ...options,
       aiProvider: bestProvider,
       aiModel: bestModel
     }
-    
+
     const documents = await this.getProjectDocuments(projectId, options.documentIds)
-    
+
     // Log document retrieval for debugging
     logger.info(`[EXTRACTION-${entityType.toUpperCase()}] Retrieved ${documents.length} documents for extraction`, {
       projectId,
@@ -8818,7 +8818,7 @@ Output valid JSON object with "performance_actuals" array only.`
       provider: bestProvider,
       model: bestModel
     })
-    
+
     if (documents.length === 0) {
       logger.warn(`[EXTRACTION-${entityType.toUpperCase()}] No documents found - cannot extract entities`)
       return []
@@ -8826,7 +8826,7 @@ Output valid JSON object with "performance_actuals" array only.`
 
     // Build document context and check cache
     const documentContext = this.buildDocumentContext(documents)
-    
+
     const cached = await aiCacheService.get(
       projectId,
       documentContext,
@@ -8834,7 +8834,7 @@ Output valid JSON object with "performance_actuals" array only.`
       bestProvider,
       bestModel
     )
-    
+
     if (cached) {
       logger.info(`[EXTRACTION-${entityType.toUpperCase()}] ✅ Using cached result (${cached.length} entities)`)
       return cached
@@ -8847,13 +8847,13 @@ Output valid JSON object with "performance_actuals" array only.`
       documentCount: documents.length,
       totalContentChars: documents.reduce((sum, d) => sum + (d.content?.length || 0), 0)
     })
-    
+
     // Build documentMap and documentList for source document traceability
     const documentMap = this.buildDocumentMap(documents)
     const documentList = this.buildDocumentList(documents)
-    
+
     let entities: any[]
-    
+
     try {
       // Check if entity type is registered in extraction registry first
       try {
@@ -8875,168 +8875,168 @@ Output valid JSON object with "performance_actuals" array only.`
 
       // Map entity type to extraction method - pass documents array, extractionOptions, documentMap, and documentList
       switch (entityType) {
-      case 'stakeholders':
-        entities = await this.extractStakeholders(documents, projectId, extractionOptions, documentMap, documentList)
-        break
-      case 'requirements':
-        entities = await this.extractRequirements(documents, projectId, extractionOptions, documentMap, documentList)
-        break
-      case 'risks':
-        entities = await this.extractRisks(documents, projectId, extractionOptions, documentMap, documentList)
-        break
-      case 'milestones':
-        entities = await this.extractMilestones(documents, projectId, extractionOptions, documentMap, documentList)
-        break
-      case 'constraints':
-        entities = await this.extractConstraints(documents, projectId, extractionOptions, documentMap, documentList)
-        break
-      case 'success_criteria':
-        entities = await this.extractSuccessCriteria(documents, projectId, extractionOptions, documentMap, documentList)
-        break
-      case 'best_practices':
-        entities = await this.extractBestPractices(documents, projectId, extractionOptions, documentMap, documentList)
-        break
-      case 'phases':
-        entities = await this.extractPhases(documents, projectId, extractionOptions, documentMap, documentList)
-        break
-      case 'resources':
-        entities = await this.extractResources(documents, projectId, extractionOptions, documentMap, documentList)
-        break
-      case 'technologies':
-        entities = await this.extractTechnologies(documents, projectId, extractionOptions, documentMap, documentList)
-        break
-      case 'quality_standards':
-        entities = await this.extractQualityStandards(documents, projectId, extractionOptions, documentMap, documentList)
-        break
-      case 'compliance_security':
-        entities = await this.extractComplianceSecurity(documents, projectId, extractionOptions, documentMap, documentList)
-        break
-      case 'deliverables':
-        entities = await this.extractDeliverables(documents, projectId, extractionOptions, documentMap, documentList)
-        break
-      case 'scope_items':
-        entities = await this.extractScopeItems(documents, projectId, extractionOptions, documentMap, documentList)
-        break
-      case 'activities':
-        entities = await this.extractActivities(documents, projectId, extractionOptions, documentMap, documentList)
-        break
-      case 'team_agreements':
-        entities = await this.extractTeamAgreements(documents, projectId, extractionOptions, documentMap, documentList)
-        break
-      case 'development_approaches':
-        entities = await this.extractDevelopmentApproaches(documents, projectId, extractionOptions, documentMap, documentList)
-        break
-      case 'project_iterations':
-        entities = await this.extractProjectIterations(documents, projectId, extractionOptions, documentMap, documentList)
-        break
-      case 'work_items':
-        entities = await this.extractWorkItems(documents, projectId, extractionOptions, documentMap, documentList)
-        break
-      case 'capacity_plans':
-        entities = await this.extractCapacityPlans(documents, projectId, extractionOptions, documentMap, documentList)
-        break
-      case 'performance_measurements':
-        entities = await this.extractPerformanceMeasurements(documents, projectId, extractionOptions, documentMap, documentList)
-        break
-      case 'earned_value_metrics':
-        entities = await this.extractEarnedValueMetrics(documents, projectId, extractionOptions, documentMap, documentList)
-        break
-      case 'opportunities':
-        entities = await this.extractOpportunities(documents, projectId, extractionOptions, documentMap, documentList)
-        break
-      case 'risk_responses':
-        entities = await this.extractRiskResponses(documents, projectId, extractionOptions, documentMap, documentList)
-        break
-      case 'performance_actuals':
-        entities = await this.extractPerformanceActuals(documents, projectId, extractionOptions, documentMap, documentList)
-        break
-      // ===========================================================================
-      // PMBOK 8 Knowledge Area Domain entity types (Tier 2)
-      // These use the extraction modules when available
-      // ===========================================================================
-      // Governance Domain
-      case 'governance_decisions':
-      case 'approval_workflows':
-      case 'steering_committees':
-      case 'change_control_boards':
-      case 'policy_compliance':
-      // Scope Domain  
-      case 'scope_baseline':
-      case 'scope_baselines':
-      case 'wbs_nodes':
-      case 'scope_change_requests':
-      case 'requirements_traceability':
-      case 'scope_verification':
-      case 'dt_assets':
-      // Schedule Domain
-      case 'schedule_baseline':
-      case 'schedule_baselines':
-      case 'schedule_activities':
-      case 'critical_path_activities':
-      case 'critical_path':
-      case 'schedule_variances':
-      case 'schedule_forecasts':
-      // Finance Domain
-      case 'budget_baseline':
-      case 'budget_baselines':
-      case 'cost_actuals':
-      case 'cost_estimates':
-      case 'funding_tranches':
-      case 'financial_variances':
-      case 'procurement_costs':
-      // Resources Domain
-      case 'resource_assignments':
-      case 'resource_pool':
-      case 'capacity_forecasts':
-      case 'utilization_records':
-      case 'resource_conflicts':
-      case 'onboarding_offboarding':
-      // Risk Domain
-      case 'risk_assessments':
-      case 'risk_response_plans':
-      case 'risk_triggers':
-      case 'risk_reviews':
-      case 'contingency_reserves':
-      case 'risk_metrics':
-      // Stakeholders Ops Domain
-      case 'engagement_actions':
-      case 'communication_logs':
-      case 'satisfaction_surveys':
-      case 'stakeholder_issues':
-      case 'relationship_health': {
-        const resolved = await this.resolveEntityModule(entityType)
-        if (resolved?.extractor) {
-          if (resolved.aliasApplied) {
-            logger.debug('[EXTRACTION] Normalized entity type alias', {
-              entityType,
-              normalizedType: resolved.normalizedType
-            })
+        case 'stakeholders':
+          entities = await this.extractStakeholders(documents, projectId, extractionOptions, documentMap, documentList)
+          break
+        case 'requirements':
+          entities = await this.extractRequirements(documents, projectId, extractionOptions, documentMap, documentList)
+          break
+        case 'risks':
+          entities = await this.extractRisks(documents, projectId, extractionOptions, documentMap, documentList)
+          break
+        case 'milestones':
+          entities = await this.extractMilestones(documents, projectId, extractionOptions, documentMap, documentList)
+          break
+        case 'constraints':
+          entities = await this.extractConstraints(documents, projectId, extractionOptions, documentMap, documentList)
+          break
+        case 'success_criteria':
+          entities = await this.extractSuccessCriteria(documents, projectId, extractionOptions, documentMap, documentList)
+          break
+        case 'best_practices':
+          entities = await this.extractBestPractices(documents, projectId, extractionOptions, documentMap, documentList)
+          break
+        case 'phases':
+          entities = await this.extractPhases(documents, projectId, extractionOptions, documentMap, documentList)
+          break
+        case 'resources':
+          entities = await this.extractResources(documents, projectId, extractionOptions, documentMap, documentList)
+          break
+        case 'technologies':
+          entities = await this.extractTechnologies(documents, projectId, extractionOptions, documentMap, documentList)
+          break
+        case 'quality_standards':
+          entities = await this.extractQualityStandards(documents, projectId, extractionOptions, documentMap, documentList)
+          break
+        case 'compliance_security':
+          entities = await this.extractComplianceSecurity(documents, projectId, extractionOptions, documentMap, documentList)
+          break
+        case 'deliverables':
+          entities = await this.extractDeliverables(documents, projectId, extractionOptions, documentMap, documentList)
+          break
+        case 'scope_items':
+          entities = await this.extractScopeItems(documents, projectId, extractionOptions, documentMap, documentList)
+          break
+        case 'activities':
+          entities = await this.extractActivities(documents, projectId, extractionOptions, documentMap, documentList)
+          break
+        case 'team_agreements':
+          entities = await this.extractTeamAgreements(documents, projectId, extractionOptions, documentMap, documentList)
+          break
+        case 'development_approaches':
+          entities = await this.extractDevelopmentApproaches(documents, projectId, extractionOptions, documentMap, documentList)
+          break
+        case 'project_iterations':
+          entities = await this.extractProjectIterations(documents, projectId, extractionOptions, documentMap, documentList)
+          break
+        case 'work_items':
+          entities = await this.extractWorkItems(documents, projectId, extractionOptions, documentMap, documentList)
+          break
+        case 'capacity_plans':
+          entities = await this.extractCapacityPlans(documents, projectId, extractionOptions, documentMap, documentList)
+          break
+        case 'performance_measurements':
+          entities = await this.extractPerformanceMeasurements(documents, projectId, extractionOptions, documentMap, documentList)
+          break
+        case 'earned_value_metrics':
+          entities = await this.extractEarnedValueMetrics(documents, projectId, extractionOptions, documentMap, documentList)
+          break
+        case 'opportunities':
+          entities = await this.extractOpportunities(documents, projectId, extractionOptions, documentMap, documentList)
+          break
+        case 'risk_responses':
+          entities = await this.extractRiskResponses(documents, projectId, extractionOptions, documentMap, documentList)
+          break
+        case 'performance_actuals':
+          entities = await this.extractPerformanceActuals(documents, projectId, extractionOptions, documentMap, documentList)
+          break
+        // ===========================================================================
+        // PMBOK 8 Knowledge Area Domain entity types (Tier 2)
+        // These use the extraction modules when available
+        // ===========================================================================
+        // Governance Domain
+        case 'governance_decisions':
+        case 'approval_workflows':
+        case 'steering_committees':
+        case 'change_control_boards':
+        case 'policy_compliance':
+        // Scope Domain  
+        case 'scope_baseline':
+        case 'scope_baselines':
+        case 'wbs_nodes':
+        case 'scope_change_requests':
+        case 'requirements_traceability':
+        case 'scope_verification':
+        case 'dt_assets':
+        // Schedule Domain
+        case 'schedule_baseline':
+        case 'schedule_baselines':
+        case 'schedule_activities':
+        case 'critical_path_activities':
+        case 'critical_path':
+        case 'schedule_variances':
+        case 'schedule_forecasts':
+        // Finance Domain
+        case 'budget_baseline':
+        case 'budget_baselines':
+        case 'cost_actuals':
+        case 'cost_estimates':
+        case 'funding_tranches':
+        case 'financial_variances':
+        case 'procurement_costs':
+        // Resources Domain
+        case 'resource_assignments':
+        case 'resource_pool':
+        case 'capacity_forecasts':
+        case 'utilization_records':
+        case 'resource_conflicts':
+        case 'onboarding_offboarding':
+        // Risk Domain
+        case 'risk_assessments':
+        case 'risk_response_plans':
+        case 'risk_triggers':
+        case 'risk_reviews':
+        case 'contingency_reserves':
+        case 'risk_metrics':
+        // Stakeholders Ops Domain
+        case 'engagement_actions':
+        case 'communication_logs':
+        case 'satisfaction_surveys':
+        case 'stakeholder_issues':
+        case 'relationship_health': {
+          const resolved = await this.resolveEntityModule(entityType)
+          if (resolved?.extractor) {
+            if (resolved.aliasApplied) {
+              logger.debug('[EXTRACTION] Normalized entity type alias', {
+                entityType,
+                normalizedType: resolved.normalizedType
+              })
+            }
+
+            const context = new ExtractionContext(
+              projectId,
+              userId,
+              documents as ExtractionDocument[],
+              extractionOptions
+            )
+            const result = await resolved.extractor(context)
+            entities = result.entities
+            break
           }
 
-          const context = new ExtractionContext(
-            projectId,
-            userId,
-            documents as ExtractionDocument[],
-            extractionOptions
+          logger.warn(
+            `[EXTRACTION-${entityType.toUpperCase()}] Knowledge Area Domain entity type not yet implemented, returning empty array`,
+            {
+              entityType,
+              projectId,
+              domain: this.getKnowledgeDomainForEntityType(entityType)
+            }
           )
-          const result = await resolved.extractor(context)
-          entities = result.entities
+          entities = []
           break
         }
-
-        logger.warn(
-          `[EXTRACTION-${entityType.toUpperCase()}] Knowledge Area Domain entity type not yet implemented, returning empty array`,
-          {
-            entityType,
-            projectId,
-            domain: this.getKnowledgeDomainForEntityType(entityType)
-          }
-        )
-        entities = []
-        break
-      }
-      default:
-        throw new Error(`Unknown entity type: ${entityType}`)
+        default:
+          throw new Error(`Unknown entity type: ${entityType}`)
       }
     } catch (extractionError: any) {
       const errorMessage = extractionError?.message || String(extractionError)
@@ -9054,7 +9054,7 @@ Output valid JSON object with "performance_actuals" array only.`
       // Re-throw with more context so Bull can retry
       throw new Error(`Failed to extract ${entityType}: ${errorMessage}`)
     }
-    
+
     // Cache the result for future extractions (only if successful)
     if (entities && entities.length > 0) {
       try {
@@ -9072,7 +9072,7 @@ Output valid JSON object with "performance_actuals" array only.`
         logger.warn(`[EXTRACTION-${entityType.toUpperCase()}] Failed to cache results: ${cacheError?.message || cacheError}`)
       }
     }
-    
+
     return entities || []
   }
 
@@ -9102,12 +9102,12 @@ Output valid JSON object with "performance_actuals" array only.`
       const { connectDatabase } = await import('@/database/connection')
       await connectDatabase()
     }
-    
+
     if (!pool) {
       throw new Error('Database pool not initialized after connection attempt')
     }
     const client = await pool.connect()
-    
+
     try {
       await client.query('BEGIN')
 
@@ -9276,7 +9276,7 @@ Output valid JSON object with "performance_actuals" array only.`
 
       await client.query('COMMIT')
       logger.info(`[EXTRACTION] Successfully saved ${entities.length} ${entityType}`)
-      
+
     } catch (error: any) {
       await client.query('ROLLBACK')
       const errorMessage = error instanceof Error ? error.message : String(error)

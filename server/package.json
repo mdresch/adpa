@@ -30,6 +30,8 @@
     "migrate:031": "node scripts/migrate-031-system-metrics.js",
     "migrate:058": "node scripts/run-migration-058.js",
     "migrate:356": "node scripts/migrate-single.js 356",
+    "migrate:357": "node scripts/migrate-single.js 357",
+    "migrate:358": "node scripts/migrate-single.js 358",
     "migrate:361": "node scripts/run-migration-361.ts",
     "migrate:362": "node scripts/migrate-single.js 362",
     "migrate:363": "node scripts/migrate-single.js 363",

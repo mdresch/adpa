@@ -10,7 +10,14 @@ import { validateDocumentGeneration, validateGenerationId, validateTemplateDataV
 
 const router = Router()
 
-// Apply authentication middleware to all routes
+/**
+ * @route GET /api/document-generator/download/:filename
+ * @desc Download generated document
+ * @access Public (protected by UUID)
+ */
+router.get('/download/:filename', documentGeneratorController.downloadDocument)
+
+// Apply authentication middleware to all routes (except download)
 router.use(authenticateToken)
 
 /**
@@ -34,12 +41,7 @@ router.get('/generation/:id/status', validateGenerationId, documentGeneratorCont
  */
 router.get('/generation/stats', documentGeneratorController.getGenerationStats)
 
-/**
- * @route GET /api/document-generator/download/:filename
- * @desc Download generated document
- * @access Private
- */
-router.get('/download/:filename', documentGeneratorController.downloadDocument)
+
 
 /**
  * @route GET /api/document-generator/formats

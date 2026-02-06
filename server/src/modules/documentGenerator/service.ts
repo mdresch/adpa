@@ -221,9 +221,17 @@ export class DocumentGeneratorService {
       this.registerHandlebarsHelpers()
 
       // Compile template - use content directly, not JSON.stringify
-      const templateContent = typeof template.content === 'string' 
-        ? template.content 
-        : JSON.stringify(template.content)
+      // Compile template - check for wrapped template string first
+      let templateContent: string
+      if (typeof template.content === 'string') {
+        templateContent = template.content
+      } else if (template.content && typeof template.content === 'object' && 'template' in template.content) {
+        // Unwrap template string from content object (e.g. Playbooks)
+        templateContent = String(template.content.template)
+      } else {
+        // Fallback for other objects
+        templateContent = JSON.stringify(template.content)
+      }
       const compiledTemplate = Handlebars.compile(templateContent)
 
       // Resolve variables
@@ -318,7 +326,7 @@ export class DocumentGeneratorService {
     if (options?.use_adobe_pdf) {
       try {
         logger.info(`Using Adobe PDF Services for premium PDF generation: ${filename}`)
-        
+
         const adobeOptions = {
           quality: options.adobe_quality || 'high',
           compress: options.adobe_compress || false,
@@ -355,7 +363,7 @@ export class DocumentGeneratorService {
 
     // Use Puppeteer for standard PDF generation
     logger.info(`Using Puppeteer for standard PDF generation: ${filename}`)
-    
+
     const browser = await puppeteer.launch({
       headless: true,
       args: ['--no-sandbox', '--disable-setuid-sandbox']
@@ -485,7 +493,7 @@ export class DocumentGeneratorService {
       if (line.startsWith('#')) {
         const level = line.match(/^#+/)?.[0].length || 1
         const text = line.replace(/^#+\s*/, '')
-        
+
         paragraphs.push(new Paragraph({
           children: [new TextRun({ text, bold: true, size: Math.max(24 - level * 2, 12) * 2 })],
           heading: this.getHeadingLevel(level)
@@ -568,13 +576,13 @@ export class DocumentGeneratorService {
       if (!tableOfContents || !tableOfContents.sections) {
         return ''
       }
-      
+
       let toc = ''
       tableOfContents.sections.forEach((section: any) => {
         const indent = '  '.repeat(section.level - 1)
         toc += `${indent}- [${section.title}](#${section.title.toLowerCase().replace(/\s+/g, '-')})\n`
       })
-      
+
       return toc.trim()
     })
   }
@@ -731,7 +739,7 @@ export class DocumentGeneratorService {
       for (const file of files) {
         const filePath = path.join(this.config.output_directory, file)
         const stats = await fs.stat(filePath)
-        
+
         if (stats.mtime.getTime() < cutoffTime) {
           await fs.unlink(filePath)
           logger.info(`Cleaned up old file: ${file}`)
@@ -762,7 +770,7 @@ export class DocumentGeneratorService {
       // Check if project has Confluence mapping
       const { getByProjectId } = await import('../../database/projectIntegrations')
       const mapping = await getByProjectId(projectId)
-      
+
       if (!mapping || !mapping.confluence_space_key) {
         logger.debug(`No Confluence mapping for project ${projectId}, skipping publishing`)
         return
@@ -776,7 +784,7 @@ export class DocumentGeneratorService {
 
       // Read the generated markdown content
       const markdownContent = await fs.readFile(response.file_path, 'utf-8')
-      
+
       // Generate document title from template name and timestamp
       const templateName = response.metadata.template_name || 'Generated Document'
       const timestamp = new Date().toISOString().split('T')[0] // YYYY-MM-DD format

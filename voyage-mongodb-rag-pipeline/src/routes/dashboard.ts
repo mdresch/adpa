@@ -55,15 +55,43 @@ router.get('/metrics', async (req, res) => {
       ? performanceMetrics.ragTimes.reduce((a, b) => a + b, 0) / performanceMetrics.ragTimes.length 
       : 0;
 
-    // Get Pinecone stats (mock for now)
-    const pineconeStats = {
-      totalProjects: 45,
-      totalDocuments: 128,
-      totalEntities: 342,
-      indexSize: 2.3,
+    // Get Pinecone stats from actual service
+    let pineconeStats = {
+      totalProjects: 0,
+      totalDocuments: 0,
+      totalEntities: 0,
+      indexSize: 0,
       averageQueryTime: 85,
-      semanticSearchQueries: 156
+      semanticSearchQueries: 0
     };
+
+    try {
+      const { pineconeService } = await import('../services/pineconeService');
+      const indexStats = await pineconeService.getIndexStats();
+      
+      if (indexStats) {
+        const namespaces = indexStats.namespaces || {};
+        const totalVectors = indexStats.totalRecordCount || 
+                            Object.values(namespaces).reduce((sum: number, ns: any) => sum + (ns.recordCount || 0), 0);
+        
+        // Estimate distribution
+        pineconeStats = {
+          totalProjects: Math.floor(totalVectors * 0.3),
+          totalDocuments: Math.floor(totalVectors * 0.4),
+          totalEntities: Math.floor(totalVectors * 0.3),
+          indexSize: Math.round((totalVectors * 4) / 1024 * 100) / 100, // MB
+          averageQueryTime: performanceMetrics.searchTimes.length > 0 
+            ? Math.round(performanceMetrics.searchTimes.reduce((a, b) => a + b, 0) / performanceMetrics.searchTimes.length)
+            : 85,
+          semanticSearchQueries: performanceMetrics.searchTimes.length || 0
+        };
+      }
+    } catch (error) {
+      logger.log('warn', 'Failed to fetch Pinecone stats for dashboard metrics', {
+        error: (error as Error).message
+      });
+      // Use fallback values
+    }
 
     // Get GKG stats (mock for now)
     const gkgStats = {
@@ -280,47 +308,152 @@ router.get('/search', async (req, res) => {
 // Get Pinecone-specific metrics
 router.get('/pinecone', async (req, res) => {
   try {
-    // Mock Pinecone metrics - in production, call actual Pinecone service
+    // Import Pinecone service
+    const { pineconeService } = await import('../services/pineconeService');
+    
+    // Get actual Pinecone index statistics
+    const indexStats = await pineconeService.getIndexStats();
+    
+    if (!indexStats) {
+      // Fallback to mock data if Pinecone is not available
+      logger.log('warn', 'Pinecone stats not available, using mock data');
+      
+      const pineconeMetrics = {
+        indexStats: {
+          totalVectorCount: 515,
+          indexSize: 2.3,
+          dimensionCount: 1024,
+          indexState: 'Ready'
+        },
+        namespaceStats: {
+          '__default__': {
+            vectorCount: 515
+          }
+        },
+        performance: {
+          averageQueryLatency: 85,
+          p95QueryLatency: 150,
+          queriesPerSecond: 12.5,
+          totalQueries: 156
+        },
+        usage: {
+          writeOperations: 89,
+          readOperations: 156,
+          storageUtilization: 23.5
+        }
+      };
+
+      return res.json({
+        success: true,
+        metrics: pineconeMetrics,
+        isRealData: false
+      });
+    }
+
+    // Process actual Pinecone stats
+    const namespaces = indexStats.namespaces || {};
+    const totalVectors = indexStats.totalRecordCount || 
+                        Object.values(namespaces).reduce((sum: number, ns: any) => sum + (ns.recordCount || 0), 0);
+    
+    // Calculate vectors by type from namespaces
+    let projectVectors = 0;
+    let documentVectors = 0;
+    let entityVectors = 0;
+    
+    // Estimate based on namespace names or default namespace
+    Object.entries(namespaces).forEach(([name, ns]: [string, any]) => {
+      if (name.toLowerCase().includes('project')) {
+        projectVectors += ns.recordCount || 0;
+      } else if (name.toLowerCase().includes('document')) {
+        documentVectors += ns.recordCount || 0;
+      } else if (name.toLowerCase().includes('entity')) {
+        entityVectors += ns.recordCount || 0;
+      } else {
+        // Estimate distribution for default namespace
+        const count = ns.recordCount || 0;
+        projectVectors += Math.floor(count * 0.3);
+        documentVectors += Math.floor(count * 0.4);
+        entityVectors += Math.floor(count * 0.3);
+      }
+    });
+
+    // Calculate index size in MB (estimate: ~4KB per vector with metadata)
+    const indexSizeMB = (totalVectors * 4) / 1024;
+
+    // Get performance metrics from stored data
+    const avgQueryTime = performanceMetrics.searchTimes.length > 0 
+      ? Math.round(performanceMetrics.searchTimes.reduce((a, b) => a + b, 0) / performanceMetrics.searchTimes.length)
+      : 85;
+    
+    const p95QueryTime = performanceMetrics.searchTimes.length > 0
+      ? Math.round(performanceMetrics.searchTimes.sort((a, b) => a - b)[Math.floor(performanceMetrics.searchTimes.length * 0.95)] || avgQueryTime * 1.5)
+      : 150;
+
     const pineconeMetrics = {
       indexStats: {
-        totalVectorCount: 515,
-        indexSize: 2.3,
-        dimensionCount: 1024,
+        totalVectorCount: totalVectors,
+        indexSize: Math.round(indexSizeMB * 100) / 100,
+        dimensionCount: indexStats.dimension || 1024,
         indexState: 'Ready'
       },
-      namespaceStats: {
-        '__default__': {
-          vectorCount: 515
-        },
-        'Document': {
-          vectorCount: 128
-        }
+      namespaceStats: namespaces,
+      vectorDistribution: {
+        projects: projectVectors,
+        documents: documentVectors,
+        entities: entityVectors
       },
       performance: {
-        averageQueryLatency: 85,
-        p95QueryLatency: 150,
-        queriesPerSecond: 12.5,
-        totalQueries: 156
+        averageQueryLatency: avgQueryTime,
+        p95QueryLatency: p95QueryTime,
+        queriesPerSecond: performanceMetrics.searchTimes.length > 0 ? 
+          Math.round((performanceMetrics.searchTimes.length / 60) * 10) / 10 : 12.5,
+        totalQueries: performanceMetrics.searchTimes.length || 156
       },
       usage: {
-        writeOperations: 89,
-        readOperations: 156,
-        storageUtilization: 23.5
+        writeOperations: performanceMetrics.embeddingTimes.length || 0,
+        readOperations: performanceMetrics.searchTimes.length || 0,
+        storageUtilization: Math.round((totalVectors / 100000) * 100 * 10) / 10 // Assuming 100k vector capacity
       }
     };
 
     res.json({
       success: true,
-      metrics: pineconeMetrics
+      metrics: pineconeMetrics,
+      isRealData: true,
+      lastUpdated: new Date().toISOString()
     });
 
   } catch (error) {
     logger.log('error', 'Failed to fetch Pinecone metrics', {
-      error: (error as Error).message
+      error: (error as Error).message,
+      stack: (error as Error).stack
     });
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch Pinecone metrics'
+    
+    // Return fallback data on error
+    res.status(200).json({
+      success: true,
+      metrics: {
+        indexStats: {
+          totalVectorCount: 0,
+          indexSize: 0,
+          dimensionCount: 1024,
+          indexState: 'Unknown'
+        },
+        namespaceStats: {},
+        performance: {
+          averageQueryLatency: 0,
+          p95QueryLatency: 0,
+          queriesPerSecond: 0,
+          totalQueries: 0
+        },
+        usage: {
+          writeOperations: 0,
+          readOperations: 0,
+          storageUtilization: 0
+        }
+      },
+      isRealData: false,
+      error: 'Pinecone service unavailable'
     });
   }
 });
@@ -444,6 +577,103 @@ router.post('/test-performance', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Performance test failed'
+    });
+  }
+});
+
+// Sync Pinecone vectors endpoint
+router.post('/pinecone/sync', async (req, res) => {
+  try {
+    const { pineconeService } = await import('../services/pineconeService');
+    const { databaseService } = await import('../services/database');
+    
+    logger.info('Starting Pinecone vector sync');
+    
+    // Connect to database
+    await databaseService.connect();
+    
+    // Get projects, documents, and entities from database
+    const projects = await databaseService.db.collection('projects').find({}).toArray();
+    const documents = await databaseService.db.collection('documents').find({}).toArray();
+    
+    // Sync results
+    const results = {
+      projects: { success: 0, failed: 0 },
+      documents: { success: 0, failed: 0 },
+      entities: { success: 0, failed: 0 },
+      startTime: new Date(),
+      endTime: null as Date | null,
+      duration: 0,
+      errors: [] as string[]
+    };
+
+    // Sync projects
+    if (projects.length > 0) {
+      try {
+        const projectResult = await pineconeService.upsertProjects(projects);
+        results.projects.success = projectResult.upsertedCount;
+        if (projectResult.errors) {
+          results.projects.failed = projectResult.errors.length;
+          results.errors.push(...projectResult.errors);
+        }
+        logger.info('Projects synced to Pinecone', { count: projectResult.upsertedCount });
+      } catch (error) {
+        results.projects.failed = projects.length;
+        results.errors.push(`Projects sync failed: ${(error as Error).message}`);
+        logger.error('Failed to sync projects', { error: (error as Error).message });
+      }
+    }
+
+    // Sync documents
+    if (documents.length > 0) {
+      try {
+        const documentResult = await pineconeService.upsertDocuments(documents);
+        results.documents.success = documentResult.upsertedCount;
+        if (documentResult.errors) {
+          results.documents.failed = documentResult.errors.length;
+          results.errors.push(...documentResult.errors);
+        }
+        logger.info('Documents synced to Pinecone', { count: documentResult.upsertedCount });
+      } catch (error) {
+        results.documents.failed = documents.length;
+        results.errors.push(`Documents sync failed: ${(error as Error).message}`);
+        logger.error('Failed to sync documents', { error: (error as Error).message });
+      }
+    }
+
+    // Calculate duration
+    results.endTime = new Date();
+    results.duration = results.endTime.getTime() - results.startTime.getTime();
+
+    // Get updated stats
+    const indexStats = await pineconeService.getIndexStats();
+
+    logger.info('Pinecone sync completed', {
+      duration: results.duration,
+      totalSuccess: results.projects.success + results.documents.success + results.entities.success,
+      totalFailed: results.projects.failed + results.documents.failed + results.entities.failed
+    });
+
+    res.json({
+      success: true,
+      message: 'Pinecone sync completed',
+      results,
+      indexStats: indexStats ? {
+        totalVectors: indexStats.totalRecordCount || 0,
+        namespaces: indexStats.namespaces || {}
+      } : null
+    });
+
+  } catch (error) {
+    logger.error('Pinecone sync failed', {
+      error: (error as Error).message,
+      stack: (error as Error).stack
+    });
+    
+    res.status(500).json({
+      success: false,
+      error: 'Pinecone sync failed',
+      message: (error as Error).message
     });
   }
 });

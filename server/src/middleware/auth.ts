@@ -14,21 +14,21 @@ interface AuthRequest extends Request {
 
 export const authenticateToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
   const authHeader = req.headers["authorization"]
-  
-  if (!authHeader) {
-    return res.status(401).json({ error: "Access token required" })
+
+  let token: string | undefined
+
+  // Check header first
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    token = authHeader.split(" ")[1]?.trim()
   }
 
-  // Extract token from "Bearer <token>" format
-  const parts = authHeader.split(" ")
-  if (parts.length !== 2 || parts[0] !== "Bearer") {
-    return res.status(401).json({ error: "Invalid authorization header format. Expected: Bearer <token>" })
+  // Fallback to query param (useful for downloads/WebSockets)
+  if (!token && req.query && typeof req.query.token === 'string') {
+    token = req.query.token
   }
-
-  const token = parts[1]?.trim()
 
   if (!token || token.length === 0) {
-    return res.status(401).json({ error: "Access token is empty" })
+    return res.status(401).json({ error: "Access token required" })
   }
 
   // Basic JWT format validation (should have 3 parts separated by dots)
@@ -107,7 +107,7 @@ export const requireRole = (roles: string[]) => {
     // Case-insensitive role comparison
     const userRole = req.user.role?.toLowerCase()
     const normalizedRoles = roles.map(r => r.toLowerCase())
-    
+
     if (!userRole || !normalizedRoles.includes(userRole)) {
       return res.status(403).json({ error: "Insufficient permissions" })
     }

@@ -871,35 +871,28 @@ class AIService {
           const genAI = new GoogleGenerativeAI(directApiKey)
 
           // Map deprecated/unavailable models to current working ones
-          // Note: gemini-1.5-flash and gemini-1.5-pro are NOT available in v1beta API
-          // Use gemini-2.0-flash-exp or gemini-2.5-flash which are confirmed working
+          // Note: gemini-1.5-flash and gemini-1.5-pro are stable and confirmed working
           const modelMap: Record<string, string> = {
-            'gemini-pro': 'gemini-2.0-flash-exp',
-            'gemini-pro-vision': 'gemini-2.0-flash-exp',
-            'gemini-1.0-pro': 'gemini-2.0-flash-exp',
-            'gemini-1.0-pro-vision': 'gemini-2.0-flash-exp',
-            'gemini-1.5-flash': 'gemini-2.0-flash-exp', // Not available in v1beta
-            'gemini-1.5-pro': 'gemini-2.0-flash-exp', // Not available in v1beta
+            'gemini-pro': 'gemini-1.5-flash',
+            'gemini-pro-vision': 'gemini-1.5-flash',
+            'gemini-1.0-pro': 'gemini-1.5-flash',
+            'gemini-1.0-pro-vision': 'gemini-1.5-flash',
+            'gemini-2.0-flash-exp': 'gemini-2.0-flash',
+            'gemini-2.5-flash': 'gemini-2.0-flash',
+            'gemini-2.5-pro': 'gemini-2.0-flash',
           }
 
-          // Use mapped model or fallback to current default (gemini-2.0-flash-exp works in v1beta)
-          const requestedModel = request.model || 'gemini-2.0-flash-exp'
+          // Use mapped model or fallback to current default (gemini-2.0-flash)
+          const requestedModel = request.model || 'gemini-2.0-flash'
           const modelName = modelMap[requestedModel] || requestedModel
 
           // Validate model name (ensure it's a current model that works in v1beta API)
-          // Only include models confirmed to work in v1beta API
-          const validModels = ['gemini-2.0-flash-exp', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.5-flash-lite']
-          const finalModel = validModels.includes(modelName) ? modelName : 'gemini-2.0-flash-exp'
+          const validModels = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash', 'gemini-2.0-flash-exp']
+          const finalModel = validModels.includes(modelName) ? modelName : 'gemini-2.0-flash'
 
           // Log model mapping for debugging
           if (requestedModel !== finalModel) {
-            logger.info(`[AI-SERVICE] Model mapping: ${requestedModel} → ${finalModel}`, {
-              requestedModel,
-              mappedModel: modelName,
-              finalModel,
-              wasDeprecated: modelMap[requestedModel] !== undefined,
-              wasInvalid: !validModels.includes(modelName)
-            })
+            logger.info(`[AI-SERVICE] Model mapping (Direct): ${requestedModel} → ${finalModel}`)
           } else {
             logger.debug(`[AI-SERVICE] Using model: ${finalModel}`)
           }
@@ -1256,6 +1249,10 @@ class AIService {
               },
             }
           } catch (ollamaError: any) {
+            if (ollamaError.cause?.code === 'ECONNREFUSED') {
+              logger.warn('⚠️ [AI-SERVICE] Ollama connection refused - ensure Ollama is running locally')
+              throw new Error('Ollama service unavailable (ECONNREFUSED)')
+            }
             logger.error('[AI-SERVICE] Ollama native API failed:', ollamaError)
             throw new Error(`Ollama generation failed: ${ollamaError.message}`)
           }
@@ -1265,10 +1262,12 @@ class AIService {
         if (providerType === 'openai') {
           logger.info('🔄 [AI-SERVICE] Falling back to direct OpenAI...')
 
-          // Get direct API key from provider configuration
-          const directApiKey = providerResult.rows[0].configuration?.apiKey
+          // Get direct API key - be robust about lookup
+          const config = providerResult.rows[0].configuration || {}
+          const directApiKey = config.apiKey || config.api_key || this.decryptApiKey(providerResult.rows[0].api_key_encrypted)
+
           if (!directApiKey) {
-            throw new Error('Direct OpenAI API key not found in provider configuration')
+            throw new Error('Direct OpenAI API key not found in provider configuration or database')
           }
 
           logger.debug('[AI-SERVICE] Using direct OpenAI')
@@ -1413,7 +1412,7 @@ class AIService {
   private async buildGatewayModelId(providerType: string, model?: string): Promise<string> {
     const defaultModels: Record<string, string> = {
       'openai': 'gpt-4o',
-      'google': 'gemini-2.0-flash', // Use stable flash model
+      'google': 'gemini-2.5-flash', // Use stable flash model
       'groq': 'llama-3.3-70b-versatile',
       'mistral': 'mistral-large-latest',
       'anthropic': 'claude-3-5-sonnet-latest',
@@ -1441,12 +1440,14 @@ class AIService {
     // Model mapping for deprecated/unavailable models (centralized validation)
     const modelMaps: Record<string, Record<string, string>> = {
       'google': {
-        'gemini-pro': 'gemini-2.0-flash',
-        'gemini-pro-vision': 'gemini-2.0-flash',
-        'gemini-1.0-pro': 'gemini-2.0-flash',
-        'gemini-1.0-pro-vision': 'gemini-2.0-flash',
-        'gemini-1.5-flash': 'gemini-2.0-flash',
-        'gemini-1.5-pro': 'gemini-2.0-flash',
+        'gemini-pro': 'gemini-1.5-flash',
+        'gemini-pro-vision': 'gemini-1.5-flash',
+        'gemini-1.0-pro': 'gemini-1.5-flash',
+        'gemini-1.0-pro-vision': 'gemini-1.5-flash',
+        'gemini-1.5-flash': 'gemini-1.5-flash',
+        'gemini-1.5-pro': 'gemini-1.5-pro',
+        'gemini-2.0-flash-exp': 'gemini-1.5-flash',
+        'gemini-2.5-flash': 'gemini-1.5-flash',
       }
     }
 
@@ -1466,10 +1467,10 @@ class AIService {
 
     // Validate model against valid models list for Google (v1beta API compatibility)
     if (providerType === 'google') {
-      const validModels = ['gemini-2.0-flash-exp', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.5-flash-lite']
+      const validModels = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-exp']
       if (!validModels.includes(modelId)) {
-        logger.warn(`[AI-SERVICE] Invalid Google model ${modelId}, using default: gemini-2.0-flash-exp`)
-        modelId = 'gemini-2.0-flash-exp'
+        logger.warn(`[AI-SERVICE] Invalid Google model ${modelId}, using default: gemini-1.5-flash`)
+        modelId = 'gemini-1.5-flash'
       }
     }
 
@@ -1581,9 +1582,8 @@ class AIService {
       case "openai":
         return ["gpt-4o", "gpt-4-turbo", "gpt-4", "gpt-3.5-turbo", "gpt-5"]
       case "google":
-        // Note: gemini-1.5-flash and gemini-1.5-pro are NOT available in v1beta API
         // Only include models confirmed to work in v1beta API
-        return ["gemini-2.0-flash-exp", "gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.5-flash-lite"]
+        return ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"]
       case "azure":
         return ["gpt-4", "gpt-35-turbo", "gpt-4-32k"]
       case "groq":
@@ -1641,31 +1641,18 @@ class AIService {
     documentId?: string
   ) {
     try {
-      // Get provider details (first try by name)
+      // Get provider details (try by name or provider_type in one query)
       const providerResult = await pool.query(
-        'SELECT id, provider_type, name FROM ai_providers WHERE name = $1 LIMIT 1',
+        'SELECT id, provider_type, name FROM ai_providers WHERE (name = $1 OR provider_type = $1) AND is_active = true LIMIT 1',
         [providerName]
       )
 
-      let provider = null
       if (providerResult.rows.length === 0) {
-        // fallback: try lookup by provider_type (some callers pass provider_type)
-        logger.warn(`📊 [ANALYTICS] Provider ${providerName} not found by name, trying provider_type fallback`)
-        const fallback = await pool.query(
-          'SELECT id, provider_type, name FROM ai_providers WHERE provider_type = $1 LIMIT 1',
-          [providerName]
-        )
-
-        if (fallback.rows.length === 0) {
-          logger.warn(`📊 [ANALYTICS] Provider ${providerName} not found (by name or type), skipping tracking`)
-          return
-        }
-
-        provider = fallback.rows[0]
-        logger.info(`📊 [ANALYTICS] Using provider record ${provider.name} via provider_type fallback`)
-      } else {
-        provider = providerResult.rows[0]
+        logger.warn(`📊 [ANALYTICS] Provider ${providerName} not found (by name or type), skipping tracking`)
+        return
       }
+
+      const provider = providerResult.rows[0]
 
       // Calculate estimated cost
       const estimatedCost = this.calculateCost(provider.provider_type, usage.total_tokens)

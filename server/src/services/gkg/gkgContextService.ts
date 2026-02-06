@@ -156,7 +156,7 @@ async function queryByProject(
     ${docStatusWith}
     WITH u
     ORDER BY u.adpa_id
-    LIMIT $maxUnits
+    LIMIT toInteger($maxUnits)
     RETURN u.adpa_entity_type AS entityType,
            u.summary AS summary,
            u.payload AS payload
@@ -164,7 +164,7 @@ async function queryByProject(
   const result = await session.run(q, {
     projectId,
     entityTypes: entityTypes.length ? entityTypes : null,
-    maxUnits: Math.floor(maxUnits),
+    maxUnits: parseInt(String(maxUnits), 10), // Ensure integer
     approvedStatuses: approvedOnly ? APPROVED_PUBLISHED_STATUSES : null,
   })
   return result.records.map((r) => ({
@@ -199,18 +199,18 @@ async function queryByTopDocs(
     WHERE 1=1 ${entityFilter}
     WITH d, count(u) AS uc
     ORDER BY uc DESC
-    LIMIT $maxDocuments
+    LIMIT toInteger($maxDocuments)
     MATCH (u2:SemanticUnit)-[:EXTRACTED_FROM]->(d)
     WHERE 1=1 ${entityFilter}
     WITH u2
-    LIMIT $maxUnits
+    LIMIT toInteger($maxUnits)
     RETURN u2.adpa_entity_type AS entityType, u2.summary AS summary, u2.payload AS payload
   `
   const result = await session.run(q, {
     projectId,
     entityTypes: entityTypes.length ? entityTypes : null,
-    maxDocuments: Math.floor(Number(maxDocuments)), // Ensure integer
-    maxUnits: Math.floor(maxUnits),
+    maxDocuments: parseInt(String(maxDocuments), 10), // Ensure integer
+    maxUnits: parseInt(String(maxUnits), 10), // Ensure integer
     approvedStatuses: approvedOnly ? APPROVED_PUBLISHED_STATUSES : null,
   })
   return result.records.map((r) => ({
@@ -251,13 +251,13 @@ async function queryByDependentProjects(
     WHERE proj.adpa_id = pid ${entityFilter} ${traceable}
     ${docStatusMatch}
     WITH u
-    LIMIT $maxUnits
+    LIMIT toInteger($maxUnits)
     RETURN u.adpa_entity_type AS entityType, u.summary AS summary, u.payload AS payload
   `
   const result = await session.run(q, {
     projectId,
     entityTypes: entityTypes.length ? entityTypes : null,
-    maxUnits: Math.floor(maxUnits),
+    maxUnits: parseInt(String(maxUnits), 10), // Ensure integer
     approvedStatuses: approvedOnly ? APPROVED_PUBLISHED_STATUSES : null,
   })
   return result.records.map((r) => ({
@@ -293,13 +293,13 @@ async function queryByProjectIds(
     WHERE p.adpa_id = pid ${entityFilter} ${traceable}
     ${docStatusMatch}
     WITH u
-    LIMIT $maxUnits
+    LIMIT toInteger($maxUnits)
     RETURN u.adpa_entity_type AS entityType, u.summary AS summary, u.payload AS payload
   `
   const result = await session.run(q, {
     projectIds,
     entityTypes: entityTypes.length ? entityTypes : null,
-    maxUnits: Math.floor(maxUnits),
+    maxUnits: parseInt(String(maxUnits), 10), // Ensure integer
     approvedStatuses: approvedOnly ? APPROVED_PUBLISHED_STATUSES : null,
   })
   return result.records.map((r) => ({

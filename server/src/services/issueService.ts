@@ -7,8 +7,9 @@
 
 import { pool } from '../database/connection'
 import { logger } from '../utils/logger'
-import { getMitigationPlans } from './mitigationPlanService'
+import { getMitigationPlans, updateMitigationPlan } from './mitigationPlanService'
 import * as playbookService from './playbookService'
+import { aiService } from './aiService'
 
 export interface Issue {
   id: string
@@ -917,20 +918,20 @@ export async function escalateRiskToIssue(
       '',
       'ROOT CAUSE ANALYSIS:',
       escalationInput.root_cause_hypothesis ? `Hypothesis: ${escalationInput.root_cause_hypothesis}` : 'No hypothesis provided',
-      escalationInput.contributing_factors && escalationInput.contributing_factors.length > 0 
-        ? `Contributing Factors:\n${escalationInput.contributing_factors.map((factor, i) => `  ${i + 1}. ${factor}`).join('\n')}` 
+      escalationInput.contributing_factors && escalationInput.contributing_factors.length > 0
+        ? `Contributing Factors:\n${escalationInput.contributing_factors.map((factor, i) => `  ${i + 1}. ${factor}`).join('\n')}`
         : 'No contributing factors identified',
-      escalationInput.evidence_collected && escalationInput.evidence_collected.length > 0 
-        ? `Evidence Collected:\n${escalationInput.evidence_collected.map((evidence, i) => `  ${i + 1}. ${evidence}`).join('\n')}` 
+      escalationInput.evidence_collected && escalationInput.evidence_collected.length > 0
+        ? `Evidence Collected:\n${escalationInput.evidence_collected.map((evidence, i) => `  ${i + 1}. ${evidence}`).join('\n')}`
         : 'No evidence collected',
       '',
       'IMPACT ASSESSMENT:',
       escalationInput.actual_impact ? `Actual Impact: ${escalationInput.actual_impact}` : 'No actual impact documented',
-      escalationInput.affected_areas && escalationInput.affected_areas.length > 0 
-        ? `Affected Areas:\n${escalationInput.affected_areas.map((area, i) => `  ${i + 1}. ${area}`).join('\n')}` 
+      escalationInput.affected_areas && escalationInput.affected_areas.length > 0
+        ? `Affected Areas:\n${escalationInput.affected_areas.map((area, i) => `  ${i + 1}. ${area}`).join('\n')}`
         : 'No affected areas specified',
-      escalationInput.affected_stakeholders && escalationInput.affected_stakeholders.length > 0 
-        ? `Affected Stakeholders:\n${escalationInput.affected_stakeholders.map((stakeholder, i) => `  ${i + 1}. ${stakeholder}`).join('\n')}` 
+      escalationInput.affected_stakeholders && escalationInput.affected_stakeholders.length > 0
+        ? `Affected Stakeholders:\n${escalationInput.affected_stakeholders.map((stakeholder, i) => `  ${i + 1}. ${stakeholder}`).join('\n')}`
         : 'No affected stakeholders specified',
       '',
       'IMMEDIATE ACTIONS:',
@@ -949,7 +950,7 @@ export async function escalateRiskToIssue(
 
     // Combine all notes and update the issue
     const allNotes = [...escalationNotes]
-    
+
     if (mitigationPlans.length > 0) {
       const mitigationPlanNotes = [
         '=== MITIGATION PLANS FOR PLAYBOOK INITIATION ===',
@@ -981,7 +982,7 @@ export async function escalateRiskToIssue(
           )
           .map(plan => `- ${plan.title} (${plan.action_type}, ${plan.priority} priority)`)
       ].join('\n')
-      
+
       allNotes.push(mitigationPlanNotes)
     }
 
@@ -1002,6 +1003,22 @@ export async function escalateRiskToIssue(
         (p.action_type === 'contingency' || p.action_type === 'mitigation')
       ).length
     })
+
+    // Link mitigation plans to the new issue
+    if (mitigationPlans.length > 0) {
+      try {
+        await Promise.all(mitigationPlans.map(plan =>
+          updateMitigationPlan(plan.id, { issue_id: issue.id }, userId)
+        ))
+        logger.info('[ISSUE-SERVICE] Linked mitigation plans to issue', {
+          issueId: issue.id,
+          count: mitigationPlans.length
+        })
+      } catch (err) {
+        logger.error('[ISSUE-SERVICE] Failed to link mitigation plans to issue', { error: err })
+        // Don't fail the escalation if linking fails, just log it
+      }
+    }
 
     // Update risk status to 'materialized'
     try {
@@ -1110,26 +1127,26 @@ export function suggestRootCauseAnalysis(
  */
 export async function getResolutionRecommendations(issueId: string): Promise<playbookService.Playbook[]> {
   const log = logger.child({ service: 'issueService', method: 'getResolutionRecommendations' })
-  
+
   try {
     log.info('[ISSUES] Starting resolution recommendations', { issueId })
-    
+
     const result = await pool.query("SELECT project_id, category, priority FROM issues WHERE id = $1", [issueId])
-    
-    log.info('[ISSUES] Database query result', { 
-      issueId, 
+
+    log.info('[ISSUES] Database query result', {
+      issueId,
       rowsFound: result.rows.length,
       hasResult: !!result,
       hasRows: !!(result && result.rows)
     })
-    
+
     if (result.rows.length === 0) {
       log.warn('[ISSUES] Issue not found for resolution recommendations', { issueId })
       return []
     }
 
     const issue = result.rows[0]
-    
+
     // Log the issue data for debugging
     log.info('[ISSUES] Getting resolution recommendations for issue', {
       issueId,
@@ -1143,7 +1160,7 @@ export async function getResolutionRecommendations(issueId: string): Promise<pla
       risk_category: issue.category,
       priority_level: issue.priority
     })
-    
+
     log.info('[ISSUES] Playbook matching completed', {
       issueId,
       playbooksFound: playbooks.length,
@@ -1177,5 +1194,100 @@ export async function getResolutionMetrics(projectId: string): Promise<any> {
   } catch (error) {
     logger.error('[ISSUES] Error getting resolution metrics:', error)
     return null
+  }
+}
+
+/**
+ * AI-powered Root Cause Analysis (RCA) for an existing issue
+ */
+export async function analyzeIssueRootCauseWithAI(
+  issueId: string,
+  userId?: string
+): Promise<{
+  suggestedHypotheses: string[];
+  suggestedContributingFactors: string[];
+  analysisQuestions: string[];
+  suggestedResolution?: string;
+  confidenceScore: number;
+}> {
+  try {
+    // 1. Fetch issue details
+    const result = await pool.query(
+      'SELECT * FROM issues WHERE id = $1',
+      [issueId]
+    )
+
+    if (result.rows.length === 0) {
+      throw new Error(`Issue not found: ${issueId}`)
+    }
+
+    const issue = result.rows[0] as Issue
+
+    // 2. Prepare prompt
+    const prompt = `
+      Conduct a professional Root Cause Analysis (RCA) for the following project issue:
+      
+      TITLE: ${issue.title}
+      DESCRIPTION: ${issue.description}
+      CATEGORY: ${issue.category}
+      PRIORITY: ${issue.priority}
+      IMPACT: ${issue.impact || 'Not specified'}
+      STATUS: ${issue.status}
+      
+      Please provide:
+      1. A list of likely hypotheses for the root cause (using methodologies like 5 Whys or Fishbone where applicable).
+      2. A list of potential contributing factors.
+      3. Precise questions that should be asked to further investigate.
+      4. A concise suggested resolution or mitigation strategy.
+      5. A confidence score (0.0 to 1.0) for this analysis.
+      
+      Format your response strictly as a JSON object with the following keys:
+      {
+        "suggestedHypotheses": ["hypothesis 1", "hypothesis 2", ...],
+        "suggestedContributingFactors": ["factor 1", "factor 2", ...],
+        "analysisQuestions": ["question 1", "question 2", ...],
+        "suggestedResolution": "A concise resolution recommendation string",
+        "confidenceScore": 0.85
+      }
+    `
+
+    // 3. Call AI service with fallback support
+    logger.info('[ISSUES] Requesting AI RCA analysis', { issueId, category: issue.category })
+
+    const aiResponse = await aiService.generateWithFallback({
+      prompt,
+      provider: 'google', // Default to Google but will fallback if needed
+      system_prompt: 'You are an expert project manager and systems analyst specializing in Root Cause Analysis (RCA) for complex enterprise projects.',
+      userId,
+      projectId: issue.project_id
+    })
+
+    // 4. Parse response
+    // Sometimes AI wraps JSON in backticks, let's clean it
+    let cleanContent = aiResponse.content.trim()
+    if (cleanContent.startsWith('```json')) {
+      cleanContent = cleanContent.substring(7, cleanContent.length - 3).trim()
+    } else if (cleanContent.startsWith('```')) {
+      cleanContent = cleanContent.substring(3, cleanContent.length - 3).trim()
+    }
+
+    const analysis = JSON.parse(cleanContent)
+
+    logger.info('[ISSUES] AI RCA analysis completed', {
+      issueId,
+      confidence: analysis.confidenceScore,
+      hypotheses: analysis.suggestedHypotheses?.length
+    })
+
+    return {
+      suggestedHypotheses: analysis.suggestedHypotheses || [],
+      suggestedContributingFactors: analysis.suggestedContributingFactors || [],
+      analysisQuestions: analysis.analysisQuestions || [],
+      suggestedResolution: analysis.suggestedResolution,
+      confidenceScore: analysis.confidenceScore || 0
+    }
+  } catch (err: any) {
+    logger.error('[ISSUES] AI RCA analysis failed:', err)
+    throw new Error(`AI RCA analysis failed: ${err.message}`)
   }
 }

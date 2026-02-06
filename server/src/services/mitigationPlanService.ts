@@ -11,6 +11,7 @@ import { logger } from '../utils/logger'
 export interface MitigationPlan {
   id: string
   risk_id: string
+  issue_id?: string
   title: string
   description?: string
   action_type: 'mitigation' | 'contingency' | 'avoidance' | 'transfer' | 'acceptance'
@@ -41,6 +42,7 @@ export interface MitigationPlan {
 
 export interface CreateMitigationPlanInput {
   risk_id: string
+  issue_id?: string
   title: string
   description?: string
   action_type?: 'mitigation' | 'contingency' | 'avoidance' | 'transfer' | 'acceptance'
@@ -59,6 +61,7 @@ export interface CreateMitigationPlanInput {
 
 export interface UpdateMitigationPlanInput {
   title?: string
+  issue_id?: string
   description?: string
   action_type?: 'mitigation' | 'contingency' | 'avoidance' | 'transfer' | 'acceptance'
   owner_id?: string
@@ -83,6 +86,7 @@ export interface UpdateMitigationPlanInput {
 
 export interface MitigationPlanFilters {
   risk_id?: string
+  issue_id?: string
   status?: string[]
   owner_id?: string
   assigned_to?: string
@@ -91,6 +95,15 @@ export interface MitigationPlanFilters {
   overdue?: boolean
   due_before?: string
 }
+
+
+
+
+
+
+
+
+
 
 export interface MitigationPlanStats {
   total: number
@@ -123,58 +136,64 @@ export async function getMitigationPlans(
       LEFT JOIN users u4 ON mp.completed_by = u4.id
       WHERE 1=1
     `
-    
+
     const params: any[] = []
     let paramCount = 0
-    
+
     if (filters.risk_id) {
       paramCount++
       query += ` AND mp.risk_id = $${paramCount}`
       params.push(filters.risk_id)
     }
-    
+
+    if (filters.issue_id) {
+      paramCount++
+      query += ` AND mp.issue_id = $${paramCount}`
+      params.push(filters.issue_id)
+    }
+
     if (filters.status && filters.status.length > 0) {
       paramCount++
       query += ` AND mp.status = ANY($${paramCount}::text[])`
       params.push(filters.status)
     }
-    
+
     if (filters.owner_id) {
       paramCount++
       query += ` AND mp.owner_id = $${paramCount}`
       params.push(filters.owner_id)
     }
-    
+
     if (filters.assigned_to) {
       paramCount++
       query += ` AND mp.assigned_to = $${paramCount}`
       params.push(filters.assigned_to)
     }
-    
+
     if (filters.priority && filters.priority.length > 0) {
       paramCount++
       query += ` AND mp.priority = ANY($${paramCount}::text[])`
       params.push(filters.priority)
     }
-    
+
     if (filters.action_type && filters.action_type.length > 0) {
       paramCount++
       query += ` AND mp.action_type = ANY($${paramCount}::text[])`
       params.push(filters.action_type)
     }
-    
+
     if (filters.overdue) {
       query += ` AND mp.due_date < CURRENT_DATE AND mp.status NOT IN ('completed', 'cancelled')`
     }
-    
+
     if (filters.due_before) {
       paramCount++
       query += ` AND mp.due_date <= $${paramCount}`
       params.push(filters.due_before)
     }
-    
+
     query += ` ORDER BY mp.priority DESC, mp.due_date ASC NULLS LAST, mp.created_at DESC`
-    
+
     const result = await pool.query(query, params)
 
     if (!result || !Array.isArray(result.rows)) {
@@ -185,6 +204,7 @@ export async function getMitigationPlans(
     return result.rows.map(row => ({
       id: row.id,
       risk_id: row.risk_id,
+      issue_id: row.issue_id,
       title: row.title,
       description: row.description,
       action_type: row.action_type,
@@ -238,15 +258,16 @@ export async function getMitigationPlanById(planId: string): Promise<MitigationP
       WHERE mp.id = $1`,
       [planId]
     )
-    
+
     if (result.rows.length === 0) {
       return null
     }
-    
+
     const row = result.rows[0]
     return {
       id: row.id,
       risk_id: row.risk_id,
+      issue_id: row.issue_id,
       title: row.title,
       description: row.description,
       action_type: row.action_type,
@@ -290,14 +311,15 @@ export async function createMitigationPlan(
   try {
     const result = await pool.query(
       `INSERT INTO mitigation_plans (
-        risk_id, title, description, action_type, owner_id, assigned_to,
+        risk_id, issue_id, title, description, action_type, owner_id, assigned_to,
         owner_name, assigned_to_name,
         planned_start_date, planned_completion_date, due_date, priority,
         expected_effectiveness, cost_estimate, metadata, created_by
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
       RETURNING *`,
       [
         input.risk_id,
+        input.issue_id || null,
         input.title,
         input.description || null,
         input.action_type || 'mitigation',
@@ -315,7 +337,7 @@ export async function createMitigationPlan(
         userId
       ]
     )
-    
+
     const row = result.rows[0]
     return await getMitigationPlanById(row.id) as MitigationPlan
   } catch (error: any) {
@@ -336,65 +358,71 @@ export async function updateMitigationPlan(
     const updates: string[] = []
     const params: any[] = []
     let paramCount = 0
-    
+
     if (input.title !== undefined) {
       paramCount++
       updates.push(`title = $${paramCount}`)
       params.push(input.title)
     }
-    
+
+    if (input.issue_id !== undefined) {
+      paramCount++
+      updates.push(`issue_id = $${paramCount}`)
+      params.push(input.issue_id || null)
+    }
+
     if (input.description !== undefined) {
       paramCount++
       updates.push(`description = $${paramCount}`)
       params.push(input.description)
     }
-    
+
     if (input.action_type !== undefined) {
       paramCount++
       updates.push(`action_type = $${paramCount}`)
       params.push(input.action_type)
     }
-    
+
     if (input.owner_id !== undefined) {
       paramCount++
       updates.push(`owner_id = $${paramCount}`)
       params.push(input.owner_id)
     }
-    
+
     if (input.assigned_to !== undefined) {
       paramCount++
       updates.push(`assigned_to = $${paramCount}`)
       params.push(input.assigned_to)
     }
-    
+
     if (input.owner_name !== undefined) {
       paramCount++
       updates.push(`owner_name = $${paramCount}`)
       params.push(input.owner_name || null)
     }
-    
+
     if (input.assigned_to_name !== undefined) {
       paramCount++
       updates.push(`assigned_to_name = $${paramCount}`)
       params.push(input.assigned_to_name || null)
     }
-    
+
     // Get current plan to check status change
     const currentPlan = await getMitigationPlanById(planId)
     const isStatusChangingToCompleted = input.status === 'completed' && currentPlan?.status !== 'completed'
     const isStatusChangingFromCompleted = input.status !== undefined && input.status !== 'completed' && currentPlan?.status === 'completed'
-    
+
     if (input.status !== undefined) {
       paramCount++
       updates.push(`status = $${paramCount}`)
       params.push(input.status)
-      
+
       // Auto-set actual_start_date when status changes to in_progress
       if (input.status === 'in_progress') {
         paramCount++
         updates.push(`actual_start_date = COALESCE(actual_start_date, CURRENT_DATE)`)
       }
-      
+
       // Auto-set completion fields when status changes to completed
       if (isStatusChangingToCompleted) {
         // Set completion_percentage to 100 if not already set
@@ -403,15 +431,15 @@ export async function updateMitigationPlan(
           updates.push(`completion_percentage = $${paramCount}`)
           params.push(100)
         }
-        
+
         // Set actual_completion_date if not already set
         if (input.actual_completion_date === undefined) {
           updates.push(`actual_completion_date = COALESCE(actual_completion_date, CURRENT_DATE)`)
         }
-        
+
         // Set completed_at if not already set
         updates.push(`completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP)`)
-        
+
         // Set completed_by if not already set (use COALESCE to preserve existing value)
         // We need to check current plan's completed_by to avoid overwriting
         if (!currentPlan?.completed_by) {
@@ -420,7 +448,7 @@ export async function updateMitigationPlan(
           params.push(userId)
         }
       }
-      
+
       // Reset completion fields if status changes from completed
       if (isStatusChangingFromCompleted) {
         updates.push(`completed_at = NULL`)
@@ -428,98 +456,98 @@ export async function updateMitigationPlan(
         updates.push(`actual_completion_date = NULL`)
       }
     }
-    
+
     if (input.completion_percentage !== undefined) {
       paramCount++
       updates.push(`completion_percentage = $${paramCount}`)
       params.push(input.completion_percentage)
     }
-    
+
     if (input.planned_start_date !== undefined) {
       paramCount++
       updates.push(`planned_start_date = $${paramCount}`)
       params.push(input.planned_start_date)
     }
-    
+
     if (input.planned_completion_date !== undefined) {
       paramCount++
       updates.push(`planned_completion_date = $${paramCount}`)
       params.push(input.planned_completion_date)
     }
-    
+
     if (input.actual_start_date !== undefined) {
       paramCount++
       updates.push(`actual_start_date = $${paramCount}`)
       params.push(input.actual_start_date)
     }
-    
+
     if (input.actual_completion_date !== undefined) {
       paramCount++
       updates.push(`actual_completion_date = $${paramCount}`)
       params.push(input.actual_completion_date)
     }
-    
+
     if (input.due_date !== undefined) {
       paramCount++
       updates.push(`due_date = $${paramCount}`)
       params.push(input.due_date)
     }
-    
+
     if (input.progress_notes !== undefined) {
       paramCount++
       updates.push(`progress_notes = $${paramCount}`)
       params.push(input.progress_notes)
     }
-    
+
     if (input.completion_notes !== undefined) {
       paramCount++
       updates.push(`completion_notes = $${paramCount}`)
       params.push(input.completion_notes)
     }
-    
+
     if (input.completion_evidence !== undefined) {
       paramCount++
       updates.push(`completion_evidence = $${paramCount}`)
       params.push(JSON.stringify(input.completion_evidence))
     }
-    
+
     if (input.priority !== undefined) {
       paramCount++
       updates.push(`priority = $${paramCount}`)
       params.push(input.priority)
     }
-    
+
     if (input.expected_effectiveness !== undefined) {
       paramCount++
       updates.push(`expected_effectiveness = $${paramCount}`)
       params.push(input.expected_effectiveness)
     }
-    
+
     if (input.cost_estimate !== undefined) {
       paramCount++
       updates.push(`cost_estimate = $${paramCount}`)
       params.push(input.cost_estimate)
     }
-    
+
     if (input.metadata !== undefined) {
       paramCount++
       updates.push(`metadata = $${paramCount}`)
       params.push(JSON.stringify(input.metadata))
     }
-    
+
     if (updates.length === 0) {
       return await getMitigationPlanById(planId) as MitigationPlan
     }
-    
+
     paramCount++
     updates.push(`updated_at = CURRENT_TIMESTAMP`)
     params.push(planId)
-    
+
     await pool.query(
       `UPDATE mitigation_plans SET ${updates.join(', ')} WHERE id = $${paramCount}`,
       params
     )
-    
+
     return await getMitigationPlanById(planId) as MitigationPlan
   } catch (error: any) {
     logger.error('[MITIGATION-PLANS] Failed to update mitigation plan:', error)
@@ -536,7 +564,7 @@ export async function deleteMitigationPlan(planId: string): Promise<boolean> {
       `DELETE FROM mitigation_plans WHERE id = $1`,
       [planId]
     )
-    
+
     return result.rowCount !== null && result.rowCount > 0
   } catch (error: any) {
     logger.error('[MITIGATION-PLANS] Failed to delete mitigation plan:', error)
@@ -568,29 +596,29 @@ export async function getMitigationPlanStats(
       FROM mitigation_plans
       WHERE 1=1
     `
-    
+
     const params: any[] = []
     let paramCount = 0
-    
+
     if (filters.risk_id) {
       paramCount++
       query += ` AND risk_id = $${paramCount}`
       params.push(filters.risk_id)
     }
-    
+
     if (filters.status && filters.status.length > 0) {
       paramCount++
       query += ` AND status = ANY($${paramCount}::text[])`
       params.push(filters.status)
     }
-    
+
     const result = await pool.query(query, params)
     const row = result.rows[0]
-    
+
     const total = parseInt(row.total) || 0
     const completed = parseInt(row.completed) || 0
     const completion_rate = total > 0 ? (completed / total) * 100 : 0
-    
+
     return {
       total,
       by_status: {
@@ -625,7 +653,7 @@ export async function getRiskMitigationCompletion(riskId: string): Promise<numbe
       `SELECT calculate_risk_mitigation_completion($1) as completion`,
       [riskId]
     )
-    
+
     return parseInt(result.rows[0].completion) || 0
   } catch (error: any) {
     logger.error('[MITIGATION-PLANS] Failed to get risk mitigation completion:', error)

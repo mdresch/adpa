@@ -16,7 +16,7 @@ import { Header } from "@/components/header"
 import { PageTransition } from "@/components/page-transition"
 import { AnimatedLayout, AnimatedCard } from "@/components/animated-layout"
 import { motion } from "framer-motion"
-import { 
+import {
   trackPageEngagement,
   trackEntityHighlighting,
   trackDocumentExport,
@@ -157,6 +157,8 @@ export default function ProjectDocumentViewer() {
     entityTypes: string[]
     strategy?: Record<string, unknown>
   } | null>(null)
+  const [isExportingPdf, setIsExportingPdf] = useState(false)
+  const [isExportingWord, setIsExportingWord] = useState(false)
 
   // Entity highlighting state
   const [entityHighlight, setEntityHighlight] = useState<{
@@ -611,28 +613,28 @@ The ADPA system represents a significant advancement in document processing auto
   useEffect(() => {
     // Ensure we're in a browser environment
     if (typeof window === 'undefined' || typeof document === 'undefined') return
-    
+
     fetchDocument()
-    
+
     // Track page engagement for document viewer
     const startTime = Date.now()
     let interactionCount = 0
-    
+
     const handleInteraction = () => {
       interactionCount++
     }
-    
+
     // Add null check for document
     if (document) {
       document.addEventListener('click', handleInteraction)
       document.addEventListener('scroll', handleInteraction)
     }
-    
+
     return () => {
       // Calculate engagement when page unloads
       const timeSpent = Math.floor((Date.now() - startTime) / 1000)
       trackPageEngagement(`/projects/${projectId}/documents/${documentId}/view`, timeSpent, interactionCount)
-      
+
       // Remove event listeners if document exists
       if (document) {
         document.removeEventListener('click', handleInteraction)
@@ -645,7 +647,7 @@ The ADPA system represents a significant advancement in document processing auto
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search)
-      
+
       const entityName = urlParams.get('entityName')
       const entityType = urlParams.get('entityType')
       const highlightStart = urlParams.get('highlightStart')
@@ -654,11 +656,11 @@ The ADPA system represents a significant advancement in document processing auto
       const highlightLineEnd = urlParams.get('highlightLineEnd')
       const highlightSnippet = urlParams.get('highlightSnippet')
       const highlightTag = urlParams.get('highlightTag')
-      
+
       if (entityName && entityType) {
         const decodedEntityName = decodeURIComponent(entityName)
         const decodedEntityType = decodeURIComponent(entityType)
-        
+
         setEntityHighlight({
           entityName: decodedEntityName,
           entityType: decodedEntityType,
@@ -669,10 +671,10 @@ The ADPA system represents a significant advancement in document processing auto
           highlightSnippet: highlightSnippet ? decodeURIComponent(highlightSnippet) : undefined,
           highlightTag: highlightTag ? decodeURIComponent(highlightTag) : undefined
         })
-        
+
         // Track entity highlighting when parameters are detected
         trackEntityHighlighting('scrolled')
-        
+
         // Track feature usage with metadata
         trackFeatureUsage('entity_highlighting', 'active', {
           entity_type: decodedEntityType,
@@ -680,7 +682,7 @@ The ADPA system represents a significant advancement in document processing auto
           has_location_data: (highlightStart || highlightLineStart) ? 'true' : 'false',
           highlighting_method: highlightStart ? 'character' : highlightLineStart ? 'line' : highlightSnippet ? 'snippet' : 'tag'
         })
-        
+
         // Show notification about entity highlighting
         setTimeout(() => {
           toast.info(`Highlighting "${decodedEntityName}" from ${decodedEntityType}`)
@@ -839,7 +841,7 @@ The ADPA system represents a significant advancement in document processing auto
 
     const handleScroll = () => {
       if (!window || !window.document) return
-      
+
       const scrollPosition = window.scrollY + 150
 
       for (let i = tableOfContents.length - 1; i >= 0; i--) {
@@ -876,10 +878,10 @@ The ADPA system represents a significant advancement in document processing auto
         const r = (resp as any).data
         const hint = r.reason === 'space_not_configured' ? 'No project mapping or integration target space is set.'
           : r.reason === 'space_not_found' ? 'Space not found. Check Project Settings → Confluence Space Key or Integration Target Space Key.'
-          : r.reason === 'not_authorized' ? 'Confluence rejected the request. Check API token permissions.'
-          : r.reason === 'title_conflict' ? 'A page with this title already exists. Updated the existing page if found.'
-          : 'See server logs.'
-        
+            : r.reason === 'not_authorized' ? 'Confluence rejected the request. Check API token permissions.'
+              : r.reason === 'title_conflict' ? 'A page with this title already exists. Updated the existing page if found.'
+                : 'See server logs.'
+
         // Extract error message safely
         let errorMsg = 'Unknown error'
         if (typeof r.error === 'string') {
@@ -891,7 +893,7 @@ The ADPA system represents a significant advancement in document processing auto
         } else if (typeof r.error === 'object') {
           errorMsg = JSON.stringify(r.error)
         }
-        
+
         toast.error(`Failed to publish to Confluence: ${errorMsg}. ${hint}`)
         return
       }
@@ -917,7 +919,7 @@ The ADPA system represents a significant advancement in document processing auto
       } else if (e?.message) {
         errorMsg = e.message
       }
-      
+
       toast.error(`Failed to publish to Confluence: ${errorMsg}`)
     }
   }
@@ -931,9 +933,9 @@ The ADPA system represents a significant advancement in document processing auto
         issueDescription: `Document: ${document?.name || document?.title}\n\nProject: ${projectId}\nDocument ID: ${documentId}`,
         confluenceUrl: (document as any)?.confluence_page_url || undefined
       })
-      
+
       toast.dismiss(loadingToast)
-      
+
       if (resp.issueKey && resp.issueUrl) {
         toast.success(resp.created ? 'Jira issue created successfully' : 'Document linked to existing Jira issue')
         setJiraLinkage({
@@ -961,13 +963,13 @@ The ADPA system represents a significant advancement in document processing auto
           errorMsg = JSON.stringify(errorData)
         }
       } else if (e?.response?.data?.details) {
-        errorMsg = typeof e.response.data.details === 'string' 
-          ? e.response.data.details 
+        errorMsg = typeof e.response.data.details === 'string'
+          ? e.response.data.details
           : JSON.stringify(e.response.data.details)
       } else if (e?.message) {
         errorMsg = e.message
       }
-      
+
       toast.error(`Failed to publish to Jira: ${errorMsg}`)
     }
   }
@@ -978,11 +980,12 @@ The ADPA system represents a significant advancement in document processing auto
     try {
       // Track export start
       trackDocumentExport('pdf', false)
+      setIsExportingPdf(true)
       const startTime = Date.now()
-      
+
       const loadingToast = toast.loading("Generating PDF...")
       const blob = await apiClient.exportDocumentPdf(documentId)
-      
+
       // Create download link
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
@@ -994,10 +997,10 @@ The ADPA system represents a significant advancement in document processing auto
       window.URL.revokeObjectURL(url)
 
       const duration = Date.now() - startTime
-      
+
       toast.dismiss(loadingToast)
       toast.success("Document exported to PDF")
-      
+
       // Track successful export
       trackDocumentExport('pdf', true)
       trackPerformance('pdf_export_time', duration, 'ms')
@@ -1005,17 +1008,17 @@ The ADPA system represents a significant advancement in document processing auto
         document_id: documentId,
         export_duration_ms: duration.toString()
       })
-      
+
     } catch (error: any) {
       console.error("PDF export error:", error)
-      
+
       // Track failed export
       trackDocumentExport('pdf', false)
       trackFeatureUsage('document_export', 'pdf_failed', {
         document_id: documentId,
         error_type: error?.response?.status?.toString() || 'unknown'
       })
-      
+
       // Extract error message safely
       let errorMessage = "Failed to export PDF"
       if (error?.response?.data?.error) {
@@ -1032,8 +1035,10 @@ The ADPA system represents a significant advancement in document processing auto
       } else if (error?.message) {
         errorMessage = error.message
       }
-      
+
       toast.error(`Failed to export PDF: ${errorMessage}`)
+    } finally {
+      setIsExportingPdf(false)
     }
   }
 
@@ -1041,9 +1046,10 @@ The ADPA system represents a significant advancement in document processing auto
     if (!document) return
 
     try {
+      setIsExportingWord(true)
       const loadingToast = toast.loading("Generating Word document...")
       const blob = await apiClient.exportDocumentDocx(documentId)
-      
+
       // Create download link
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
@@ -1058,7 +1064,7 @@ The ADPA system represents a significant advancement in document processing auto
       toast.success("Document exported to Word")
     } catch (error: any) {
       console.error("Word export error:", error)
-      
+
       // Extract error message safely
       let errorMessage = "Failed to export Word document"
       if (error?.response?.data?.error) {
@@ -1075,8 +1081,10 @@ The ADPA system represents a significant advancement in document processing auto
       } else if (error?.message) {
         errorMessage = error.message
       }
-      
+
       toast.error(`Failed to export Word document: ${errorMessage}`)
+    } finally {
+      setIsExportingWord(false)
     }
   }
 
@@ -1150,7 +1158,7 @@ The ADPA system represents a significant advancement in document processing auto
     `)
     printWindow.document.close()
     printWindow.focus()
-    
+
     // Wait for content to load, then print
     setTimeout(() => {
       printWindow.print()
@@ -1234,18 +1242,18 @@ The ADPA system represents a significant advancement in document processing auto
       })
 
       toast.success('Drift accepted successfully')
-      
+
       // Refresh drifts list
       const driftResponse = await apiClient.request<{ drifts: any[] }>(
         `/projects/${projectId}/drift-detections?limit=100`,
         { suppressNotFoundError: true } as Record<string, unknown>
       ).catch(() => ({ drifts: [] }))
-      
+
       const documentDrifts = (driftResponse.drifts || []).filter((d: any) => d.source_document_id === documentId && d.status !== 'resolved' && d.status !== 'false_positive')
       setDrifts(documentDrifts)
     } catch (error: any) {
       console.error('Failed to accept drift:', error)
-      
+
       // Extract error message safely
       let errorMessage = 'Unknown error'
       if (error?.error) {
@@ -1273,7 +1281,7 @@ The ADPA system represents a significant advancement in document processing auto
       } else if (error?.message) {
         errorMessage = error.message
       }
-      
+
       toast.error(`Failed to accept drift: ${errorMessage}`)
     }
   }
@@ -1297,18 +1305,18 @@ The ADPA system represents a significant advancement in document processing auto
       })
 
       toast.success('Drift removed successfully')
-      
+
       // Refresh drifts list
       const driftResponse = await apiClient.request<{ drifts: any[] }>(
         `/projects/${projectId}/drift-detections?limit=100`,
         { suppressNotFoundError: true } as Record<string, unknown>
       ).catch(() => ({ drifts: [] }))
-      
+
       const documentDrifts = (driftResponse.drifts || []).filter((d: any) => d.source_document_id === documentId && d.status !== 'resolved' && d.status !== 'false_positive')
       setDrifts(documentDrifts)
     } catch (error: any) {
       console.error('Failed to remove drift:', error)
-      
+
       // Extract error message safely
       let errorMessage = 'Unknown error'
       if (error?.error) {
@@ -1336,7 +1344,7 @@ The ADPA system represents a significant advancement in document processing auto
       } else if (error?.message) {
         errorMessage = error.message
       }
-      
+
       toast.error(`Failed to remove drift: ${errorMessage}`)
     }
   }
@@ -2438,13 +2446,31 @@ The ADPA system represents a significant advancement in document processing auto
                           </Button>
                         )}
 
-                        <Button variant="outline" className="w-full justify-start" onClick={exportToPDF}>
-                          <Download className="h-4 w-4 mr-2" />
-                          Export as PDF
+                        <Button
+                          variant="outline"
+                          className="w-full justify-start"
+                          onClick={exportToPDF}
+                          disabled={isExportingPdf}
+                        >
+                          {isExportingPdf ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <Download className="h-4 w-4 mr-2" />
+                          )}
+                          {isExportingPdf ? "Exporting PDF..." : "Export as PDF"}
                         </Button>
-                        <Button variant="outline" className="w-full justify-start" onClick={exportToWord}>
-                          <Download className="h-4 w-4 mr-2" />
-                          Export as Word
+                        <Button
+                          variant="outline"
+                          className="w-full justify-start"
+                          onClick={exportToWord}
+                          disabled={isExportingWord}
+                        >
+                          {isExportingWord ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <Download className="h-4 w-4 mr-2" />
+                          )}
+                          {isExportingWord ? "Exporting Word..." : "Export as Word"}
                         </Button>
                         <Button variant="outline" className="w-full justify-start" onClick={exportToMarkdown}>
                           <Download className="h-4 w-4 mr-2" />
@@ -2467,13 +2493,13 @@ The ADPA system represents a significant advancement in document processing auto
                         ? metaStats
                         : gkg
                           ? {
-                              total_documents_available: gkg.documentsCount ?? 0,
-                              documents_used_as_context: gkg.documentsCount ?? 0,
-                              stakeholders_available: 0,
-                              custom_settings_count: 0,
-                              custom_metadata_count: 0,
-                              estimated_context_tokens: typeof gkg.markdown === 'string' ? Math.ceil(gkg.markdown.length / 4) : undefined,
-                            }
+                            total_documents_available: gkg.documentsCount ?? 0,
+                            documents_used_as_context: gkg.documentsCount ?? 0,
+                            stakeholders_available: 0,
+                            custom_settings_count: 0,
+                            custom_metadata_count: 0,
+                            estimated_context_tokens: typeof gkg.markdown === 'string' ? Math.ceil(gkg.markdown.length / 4) : undefined,
+                          }
                           : null
                       return contextStats ? (
                         <AnimatedCard>

@@ -40,7 +40,10 @@ import {
   CheckCircle,
   X,
   Loader2,
+  LayoutDashboard,
+  List,
 } from "@/components/ui/icons-shim"
+import { IssueKanbanBoard } from "./IssueKanbanBoard"
 import {
   BarChart,
   Bar,
@@ -135,6 +138,8 @@ export function ProjectIssuesTab({ projectId }: ProjectIssuesTabProps) {
   const [workflowVisibleForId, setWorkflowVisibleForId] = useState<string | null>(null)
   const [aiSuggestions, setAiSuggestions] = useState<any[]>([])
   const [loadingSuggestions, setLoadingSuggestions] = useState(false)
+  const [analyzingRCA, setAnalyzingRCA] = useState(false)
+  const [viewMode, setViewMode] = useState<'list' | 'board'>('list')
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -152,6 +157,7 @@ export function ProjectIssuesTab({ projectId }: ProjectIssuesTabProps) {
     impact: "",
     assigned_to: "",
     target_resolution_date: "",
+    root_cause: "",
     tags: [] as string[],
   })
 
@@ -226,6 +232,7 @@ export function ProjectIssuesTab({ projectId }: ProjectIssuesTabProps) {
         impact: "",
         assigned_to: "",
         target_resolution_date: "",
+        root_cause: "",
         tags: [],
       })
       fetchIssues()
@@ -259,6 +266,18 @@ export function ProjectIssuesTab({ projectId }: ProjectIssuesTabProps) {
     }
   }
 
+  // Handle status change (D&D from Kanban)
+  const handleStatusChange = async (issueId: string, newStatus: string) => {
+    try {
+      await apiClient.put(`/issues/${issueId}`, { status: newStatus })
+      toast.success(`Issue status updated to ${newStatus.replace('_', ' ')}`)
+      fetchIssues()
+      fetchStats()
+    } catch (error: any) {
+      toast.error(getErrorMessage(error, "Failed to update status"))
+    }
+  }
+
   // Delete issue
   const handleDeleteIssue = async (issueId: string) => {
     if (!confirm("Are you sure you want to delete this issue?")) return
@@ -285,6 +304,39 @@ export function ProjectIssuesTab({ projectId }: ProjectIssuesTabProps) {
       setSuggestionsDialogOpen(false)
     } finally {
       setLoadingSuggestions(false)
+    }
+  }
+
+  // Handle AI Root Cause Analysis
+  const handleAnalyzeRCA = async (issueId: string) => {
+    try {
+      setAnalyzingRCA(true)
+      const response: any = await apiClient.post(`/issues/${issueId}/analyze-rca`)
+      const analysis = response?.data
+
+      if (analysis) {
+        // Build a formatted RCA text from AI results
+        const formattedRCA = `AI Analysis (Confidence: ${Math.round(analysis.confidenceScore * 100)}%):
+
+Hypotheses:
+${analysis.suggestedHypotheses.map((h: string) => `- ${h}`).join('\n')}
+
+Contributing Factors:
+${analysis.suggestedContributingFactors.map((f: string) => `- ${f}`).join('\n')}
+
+Analysis Questions:
+${analysis.analysisQuestions.map((q: string) => `- ${q}`).join('\n')}
+
+Suggested Resolution:
+${analysis.suggestedResolution}`
+
+        setFormData(prev => ({ ...prev, root_cause: formattedRCA }))
+        toast.success("AI Analysis completed. Review and refine below.")
+      }
+    } catch (error: any) {
+      toast.error(getErrorMessage(error, "Failed to analyze root cause"))
+    } finally {
+      setAnalyzingRCA(false)
     }
   }
 
@@ -327,107 +379,130 @@ export function ProjectIssuesTab({ projectId }: ProjectIssuesTabProps) {
             Track current problems, blockers, and impediments for this project
           </p>
         </div>
-        <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              New Issue
+        <div className="flex items-center gap-2">
+          <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                New Issue
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Create New Issue</DialogTitle>
+                <DialogDescription>
+                  Report a current problem or blocker that needs resolution
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <Label>Title *</Label>
+                  <Input
+                    value={formData.title}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, title: e.target.value })}
+                    placeholder="Brief summary of the issue"
+                  />
+                </div>
+                <div>
+                  <Label>Description *</Label>
+                  <Textarea
+                    value={formData.description}
+                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setFormData({ ...formData, description: e.target.value })}
+                    placeholder="Full description of the problem"
+                    rows={4}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Category *</Label>
+                    <Select
+                      value={formData.category}
+                      onValueChange={(value: string) => setFormData({ ...formData, category: value as Issue['category'] })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="technical">Technical</SelectItem>
+                        <SelectItem value="resource">Resource</SelectItem>
+                        <SelectItem value="schedule">Schedule</SelectItem>
+                        <SelectItem value="communication">Communication</SelectItem>
+                        <SelectItem value="quality">Quality</SelectItem>
+                        <SelectItem value="external">External</SelectItem>
+                        <SelectItem value="scope">Scope</SelectItem>
+                        <SelectItem value="budget">Budget</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Priority *</Label>
+                    <Select
+                      value={formData.priority}
+                      onValueChange={(value: string) => setFormData({ ...formData, priority: value as Issue['priority'] })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="critical">Critical</SelectItem>
+                        <SelectItem value="high">High</SelectItem>
+                        <SelectItem value="medium">Medium</SelectItem>
+                        <SelectItem value="low">Low</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div>
+                  <Label>Impact</Label>
+                  <Textarea
+                    value={formData.impact}
+                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setFormData({ ...formData, impact: e.target.value })}
+                    placeholder="Describe the impact of this issue"
+                    rows={2}
+                  />
+                </div>
+                <div>
+                  <Label>Target Resolution Date</Label>
+                  <Input
+                    type="date"
+                    value={formData.target_resolution_date}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, target_resolution_date: e.target.value })}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleCreateIssue} disabled={!formData.title || !formData.description}>
+                  Create Issue
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <div className="flex bg-muted p-1 rounded-md border">
+            <Button
+              variant={viewMode === 'list' ? 'secondary' : 'ghost'}
+              size="sm"
+              onClick={() => setViewMode('list')}
+              className="h-8 px-2"
+            >
+              <List className="h-4 w-4 mr-2" />
+              List
             </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Create New Issue</DialogTitle>
-              <DialogDescription>
-                Report a current problem or blocker that needs resolution
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label>Title *</Label>
-                <Input
-                  value={formData.title}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, title: e.target.value })}
-                  placeholder="Brief summary of the issue"
-                />
-              </div>
-              <div>
-                <Label>Description *</Label>
-                <Textarea
-                  value={formData.description}
-                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Full description of the problem"
-                  rows={4}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Category *</Label>
-                  <Select
-                    value={formData.category}
-                    onValueChange={(value: string) => setFormData({ ...formData, category: value as Issue['category'] })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="technical">Technical</SelectItem>
-                      <SelectItem value="resource">Resource</SelectItem>
-                      <SelectItem value="schedule">Schedule</SelectItem>
-                      <SelectItem value="communication">Communication</SelectItem>
-                      <SelectItem value="quality">Quality</SelectItem>
-                      <SelectItem value="external">External</SelectItem>
-                      <SelectItem value="scope">Scope</SelectItem>
-                      <SelectItem value="budget">Budget</SelectItem>
-                      <SelectItem value="other">Other</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Priority *</Label>
-                  <Select
-                    value={formData.priority}
-                    onValueChange={(value: string) => setFormData({ ...formData, priority: value as Issue['priority'] })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="critical">Critical</SelectItem>
-                      <SelectItem value="high">High</SelectItem>
-                      <SelectItem value="medium">Medium</SelectItem>
-                      <SelectItem value="low">Low</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div>
-                <Label>Impact</Label>
-                <Textarea
-                  value={formData.impact}
-                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setFormData({ ...formData, impact: e.target.value })}
-                  placeholder="Describe the impact of this issue"
-                  rows={2}
-                />
-              </div>
-              <div>
-                <Label>Target Resolution Date</Label>
-                <Input
-                  type="date"
-                  value={formData.target_resolution_date}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, target_resolution_date: e.target.value })}
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleCreateIssue} disabled={!formData.title || !formData.description}>
-                Create Issue
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+            <Button
+              variant={viewMode === 'board' ? 'secondary' : 'ghost'}
+              size="sm"
+              onClick={() => setViewMode('board')}
+              className="h-8 px-2"
+            >
+              <LayoutDashboard className="h-4 w-4 mr-2" />
+              Board
+            </Button>
+          </div>
+        </div>
       </div>
 
       {/* Statistics */}
@@ -593,162 +668,190 @@ export function ProjectIssuesTab({ projectId }: ProjectIssuesTabProps) {
         </CardContent>
       </Card>
 
-      {/* Issues List */}
-      <Card>
-        <CardContent className="pt-6">
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin" />
-            </div>
-          ) : filteredIssues.length === 0 ? (
-            <div className="text-center py-12">
-              <CheckCircle2 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-              <p className="text-muted-foreground">No issues found</p>
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Title</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead>Priority</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Raised</TableHead>
-                  <TableHead>Target Date</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredIssues.map((issue) => (
-                  <React.Fragment key={issue.id}>
-                    <TableRow className={workflowVisibleForId === issue.id ? "bg-muted/30" : ""}>
-                      <TableCell className="font-medium">
-                        <div className="flex flex-col gap-1">
-                          <div className="flex items-center gap-2">
-                            <span>{issue.title}</span>
-                            {issue.related_risk_id && (
-                              <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-300">
-                                <AlertTriangle className="h-3 w-3 mr-1" />
-                                From Risk
-                              </Badge>
-                            )}
-                            {issue.playbook_execution_id && (
-                              <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-300">
-                                <Sparkles className="h-3 w-3 mr-1" />
-                                Playbook Active
-                              </Badge>
+      {/* Issues Content */}
+      {viewMode === 'list' ? (
+        <Card>
+          <CardContent className="pt-6">
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin" />
+              </div>
+            ) : filteredIssues.length === 0 ? (
+              <div className="text-center py-12">
+                <CheckCircle2 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                <p className="text-muted-foreground">No issues found</p>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Title</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead>Priority</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Raised</TableHead>
+                    <TableHead>Target Date</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredIssues.map((issue) => (
+                    <React.Fragment key={issue.id}>
+                      <TableRow className={workflowVisibleForId === issue.id ? "bg-muted/30" : ""}>
+                        <TableCell className="font-medium">
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2">
+                              <span>{issue.title}</span>
+                              {issue.related_risk_id && (
+                                <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-300">
+                                  <AlertTriangle className="h-3 w-3 mr-1" />
+                                  From Risk
+                                </Badge>
+                              )}
+                              {issue.playbook_execution_id && (
+                                <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-300">
+                                  <Sparkles className="h-3 w-3 mr-1" />
+                                  Playbook Active
+                                </Badge>
+                              )}
+                            </div>
+                            {issue.description && (
+                              <span className="text-xs text-muted-foreground line-clamp-1">
+                                {issue.description}
+                              </span>
                             )}
                           </div>
-                          {issue.description && (
-                            <span className="text-xs text-muted-foreground line-clamp-1">
-                              {issue.description}
-                            </span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{issue.category}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          style={{
-                            backgroundColor: PRIORITY_COLORS[issue.priority] + '20',
-                            color: PRIORITY_COLORS[issue.priority],
-                          }}
-                        >
-                          {issue.priority}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col gap-1">
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{issue.category}</Badge>
+                        </TableCell>
+                        <TableCell>
                           <Badge
                             style={{
-                              backgroundColor: STATUS_COLORS[issue.status] + '20',
-                              color: STATUS_COLORS[issue.status],
+                              backgroundColor: PRIORITY_COLORS[issue.priority as keyof typeof PRIORITY_COLORS] + '20',
+                              color: PRIORITY_COLORS[issue.priority as keyof typeof PRIORITY_COLORS],
                             }}
                           >
-                            {issue.status.replace('_', ' ')}
+                            {issue.priority}
                           </Badge>
-                          {issue.playbook_execution_id && (
-                            <span className="text-[10px] text-muted-foreground flex items-center">
-                              <TrendingUp className="h-2 w-2 mr-1" />
-                              Auto-resolving
-                            </span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {format(new Date(issue.date_raised), 'MMM dd, yyyy')}
-                      </TableCell>
-                      <TableCell>
-                        {issue.target_resolution_date ? (
-                          format(new Date(issue.target_resolution_date), 'MMM dd, yyyy')
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-2">
-                          <Button
-                            variant={workflowVisibleForId === issue.id ? "secondary" : "ghost"}
-                            size="sm"
-                            onClick={() => setWorkflowVisibleForId(workflowVisibleForId === issue.id ? null : issue.id)}
-                            className={issue.playbook_execution_id ? "text-primary" : ""}
-                          >
-                            <Sparkles className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setSelectedIssue(issue)
-                              setFormData({
-                                title: issue.title,
-                                description: issue.description,
-                                category: issue.category,
-                                priority: issue.priority,
-                                impact: issue.impact || "",
-                                assigned_to: issue.assigned_to || "",
-                                target_resolution_date: issue.target_resolution_date || "",
-                                tags: issue.tags || [],
-                              })
-                              setEditDialogOpen(true)
-                            }}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDeleteIssue(issue.id)}
-                          >
-                            <Trash2 className="h-4 w-4 text-red-600" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                    {workflowVisibleForId === issue.id && (
-                      <TableRow>
-                        <TableCell colSpan={7} className="p-4 bg-muted/20">
-                          <div className="max-w-3xl mx-auto">
-                            <ResolutionWorkflowCard
-                              issue={issue}
-                              onUpdate={() => {
-                                fetchIssues()
-                                fetchStats()
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col gap-1">
+                            <Badge
+                              style={{
+                                backgroundColor: STATUS_COLORS[issue.status as keyof typeof STATUS_COLORS] + '20',
+                                color: STATUS_COLORS[issue.status as keyof typeof STATUS_COLORS],
                               }}
-                            />
+                            >
+                              {issue.status.replace('_', ' ')}
+                            </Badge>
+                            {issue.playbook_execution_id && (
+                              <span className="text-[10px] text-muted-foreground flex items-center">
+                                <TrendingUp className="h-2 w-2 mr-1" />
+                                Auto-resolving
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {format(new Date(issue.date_raised), 'MMM dd, yyyy')}
+                        </TableCell>
+                        <TableCell>
+                          {issue.target_resolution_date ? (
+                            format(new Date(issue.target_resolution_date), 'MMM dd, yyyy')
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-2">
+                            <Button
+                              variant={workflowVisibleForId === issue.id ? "secondary" : "ghost"}
+                              size="sm"
+                              onClick={() => setWorkflowVisibleForId(workflowVisibleForId === issue.id ? null : issue.id)}
+                              className={issue.playbook_execution_id ? "text-primary" : ""}
+                            >
+                              <Sparkles className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedIssue(issue)
+                                setFormData({
+                                  title: issue.title,
+                                  description: issue.description,
+                                  category: issue.category,
+                                  priority: issue.priority,
+                                  impact: issue.impact || "",
+                                  assigned_to: issue.assigned_to || "",
+                                  target_resolution_date: issue.target_resolution_date || "",
+                                  root_cause: issue.root_cause || "",
+                                  tags: issue.tags || [],
+                                })
+                                setEditDialogOpen(true)
+                              }}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteIssue(issue.id)}
+                            >
+                              <Trash2 className="h-4 w-4 text-red-600" />
+                            </Button>
                           </div>
                         </TableCell>
                       </TableRow>
-                    )}
-                  </React.Fragment>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+                      {workflowVisibleForId === issue.id && (
+                        <TableRow>
+                          <TableCell colSpan={7} className="p-4 bg-muted/20">
+                            <div className="max-w-3xl mx-auto">
+                              <ResolutionWorkflowCard
+                                issue={issue}
+                                onUpdate={() => {
+                                  fetchIssues()
+                                  fetchStats()
+                                }}
+                              />
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
+        <IssueKanbanBoard
+          issues={filteredIssues}
+          onViewIssue={(id) => setWorkflowVisibleForId(id)}
+          onEditIssue={(id) => {
+            const issue = issues.find(i => i.id === id)
+            if (issue) {
+              setSelectedIssue(issue)
+              setFormData({
+                title: issue.title,
+                description: issue.description,
+                category: issue.category,
+                priority: issue.priority,
+                impact: issue.impact || "",
+                assigned_to: issue.assigned_to || "",
+                target_resolution_date: issue.target_resolution_date || "",
+                root_cause: issue.root_cause || "",
+                tags: issue.tags || [],
+              })
+              setEditDialogOpen(true)
+            }
+          }}
+          onDeleteIssue={handleDeleteIssue}
+          onStatusChange={handleStatusChange}
+        />
+      )}
 
       {/* Edit Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
@@ -815,6 +918,32 @@ export function ProjectIssuesTab({ projectId }: ProjectIssuesTabProps) {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <Label>Root Cause Analysis</Label>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => selectedIssue && handleAnalyzeRCA(selectedIssue.id)}
+                  disabled={analyzingRCA}
+                  className="h-8 py-0"
+                >
+                  {analyzingRCA ? (
+                    <Loader2 className="h-3 w-3 mr-2 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-3 w-3 mr-2 text-primary" />
+                  )}
+                  Analyze with AI
+                </Button>
+              </div>
+              <Textarea
+                value={formData.root_cause}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setFormData({ ...formData, root_cause: e.target.value })}
+                placeholder="Identify the underlying cause of this issue..."
+                rows={6}
+                className="font-mono text-xs"
+              />
             </div>
           </div>
           <DialogFooter>

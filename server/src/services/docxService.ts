@@ -7,9 +7,11 @@ import {
     HeadingLevel,
     AlignmentType,
     UnderlineType,
-    convertInchesToTwip
+    convertInchesToTwip,
+    ImageRun
 } from 'docx';
 import { marked } from 'marked';
+import axios from 'axios';
 
 export class DocxService {
     /**
@@ -24,7 +26,7 @@ export class DocxService {
         const tokens = marked.lexer(markdownContent);
 
         // 2. Create Document sections
-        const children: (Paragraph)[] = [];
+        const children: Paragraph[] = [];
 
         // Add Title
         children.push(
@@ -65,7 +67,7 @@ export class DocxService {
 
         // 3. Process Tokens
         for (const token of tokens) {
-            const paragraph = this.processToken(token);
+            const paragraph = await this.processToken(token);
             if (paragraph) {
                 if (Array.isArray(paragraph)) {
                     children.push(...paragraph);
@@ -105,7 +107,7 @@ export class DocxService {
         return await Packer.toBuffer(doc);
     }
 
-    private static processToken(token: any): Paragraph | Paragraph[] | null {
+    private static async processToken(token: any): Promise<Paragraph | Paragraph[] | null> {
         switch (token.type) {
             case 'heading':
                 return new Paragraph({
@@ -119,21 +121,21 @@ export class DocxService {
 
             case 'paragraph':
                 return new Paragraph({
-                    children: this.parseInlineText(token.tokens || []),
+                    children: await this.parseInlineText(token.tokens || []),
                 });
 
             case 'list':
                 const listItems: Paragraph[] = [];
-                token.items.forEach((item: any) => {
+                for (const item of token.items) {
                     listItems.push(
                         new Paragraph({
-                            children: this.parseInlineText(item.tokens || []),
+                            children: await this.parseInlineText(item.tokens || []),
                             bullet: {
                                 level: 0,
                             },
                         })
                     );
-                });
+                }
                 return listItems;
 
             case 'space':
@@ -146,6 +148,30 @@ export class DocxService {
                     spacing: { before: 200, after: 200 }
                 });
 
+            case 'image':
+                try {
+                    // Handle standalone image block if usage occurs, though markdown usually wraps in p
+                    // But if it is a block token:
+                    const imageBuffer = await this.fetchImage(token.href);
+                    if (imageBuffer) {
+                        return new Paragraph({
+                            children: [
+                                new ImageRun({
+                                    data: imageBuffer,
+                                    transformation: {
+                                        width: 500,
+                                        height: 300,
+                                    },
+                                    type: 'png', // Default to png to satisfy typing, actual format is determined by buffer usually
+                                }),
+                            ],
+                        });
+                    }
+                    return new Paragraph({ text: `[Image: ${token.text}]` });
+                } catch (e) {
+                    return new Paragraph({ text: `[Image: ${token.text} - Failed to load]` });
+                }
+
             default:
                 // Fallback for unsupported tokens: just render text if available
                 if (token.text) {
@@ -157,7 +183,7 @@ export class DocxService {
         }
     }
 
-    private static getHeadingLevel(depth: number): HeadingLevel {
+    private static getHeadingLevel(depth: number) {
         switch (depth) {
             case 1: return HeadingLevel.HEADING_1;
             case 2: return HeadingLevel.HEADING_2;
@@ -168,8 +194,8 @@ export class DocxService {
         }
     }
 
-    private static parseInlineText(tokens: any[]): TextRun[] {
-        const runs: TextRun[] = [];
+    private static async parseInlineText(tokens: any[]): Promise<(TextRun | ImageRun)[]> {
+        const runs: (TextRun | ImageRun)[] = [];
 
         if (!tokens) return runs;
 
@@ -201,7 +227,7 @@ export class DocxService {
                         text: token.text,
                         font: 'Courier New',
                         color: '333333',
-                        highlight: 'f5f5f5', // Basic highlight simulation
+                        highlight: 'lightGray', // Use valid color
                     }));
                     break;
 
@@ -216,6 +242,28 @@ export class DocxService {
                     }));
                     break;
 
+                case 'image':
+                    try {
+                        const imageBuffer = await this.fetchImage(token.href);
+                        if (imageBuffer) {
+                            runs.push(
+                                new ImageRun({
+                                    data: imageBuffer,
+                                    transformation: {
+                                        width: 200, // Small inline image
+                                        height: 200,
+                                    },
+                                    type: 'png',
+                                })
+                            );
+                        } else {
+                            runs.push(new TextRun({ text: `[Image: ${token.text}]` }));
+                        }
+                    } catch (e) {
+                        runs.push(new TextRun({ text: `[Image: ${token.text}]` }));
+                    }
+                    break;
+
                 default:
                     if (token.text) {
                         runs.push(new TextRun({
@@ -226,5 +274,15 @@ export class DocxService {
             }
         }
         return runs;
+    }
+
+    private static async fetchImage(url: string): Promise<Buffer | null> {
+        try {
+            const response = await axios.get(url, { responseType: 'arraybuffer' });
+            return Buffer.from(response.data);
+        } catch (error) {
+            console.error(`Failed to fetch image from ${url}`, error);
+            return null;
+        }
     }
 }

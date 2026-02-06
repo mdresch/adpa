@@ -20,6 +20,9 @@ interface LessonItem {
   category: string
   impact: 'low' | 'medium' | 'high' | 'critical'
   positive_or_negative: boolean
+  status: 'identified' | 'documented' | 'shared' | 'applied' | 'archived'
+  severity: 'low' | 'medium' | 'high' | 'critical'
+  phase?: string
   created_at: string
 }
 
@@ -34,7 +37,7 @@ export default function LessonsTab({ projectId }: LessonsTabProps) {
     try {
       setLoading(true)
       setError(null)
-      
+
       // Fetch lessons from the correct API endpoint
       const resp = await apiClient.get<{ success: boolean; data: LessonItem[] }>(`lessons/projects/${projectId}/lessons`)
 
@@ -107,7 +110,13 @@ export default function LessonsTab({ projectId }: LessonsTabProps) {
             <Card key={lesson.id} className="border">
               <CardHeader>
                 <div className="flex items-start justify-between">
-                  <CardTitle className="text-lg">{lesson.title}</CardTitle>
+                  <div className="space-y-1">
+                    <CardTitle className="text-lg">{lesson.title}</CardTitle>
+                    <div className="flex gap-2">
+                      <Badge variant="outline">{lesson.status}</Badge>
+                      {lesson.phase && <Badge variant="secondary" className="text-xs">{lesson.phase}</Badge>}
+                    </div>
+                  </div>
                   <Badge variant={lesson.positive_or_negative ? 'default' : 'destructive'}>
                     {lesson.positive_or_negative ? 'Positive' : 'Negative'}
                   </Badge>
@@ -115,13 +124,15 @@ export default function LessonsTab({ projectId }: LessonsTabProps) {
                 <CardDescription>{new Date(lesson.created_at).toLocaleDateString()}</CardDescription>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-muted-foreground mb-4">{lesson.description}</p>
-                <div className="flex items-center justify-between">
-                  <Badge variant="secondary">{lesson.category}</Badge>
-                  <span className="text-sm font-medium capitalize">Impact: {lesson.impact}</span>
-                </div>
-                <div className="mt-4 flex justify-end">
-                  <Button variant="outline" size="sm" onClick={() => handleEdit(lesson)}>Edit</Button>
+                <p className="text-sm text-muted-foreground mb-4 line-clamp-3">{lesson.description}</p>
+                <div className="flex items-center justify-between mt-auto pt-4 border-t">
+                  <div className="flex gap-2">
+                    <Badge variant="secondary">{lesson.category}</Badge>
+                    <Badge variant={lesson.severity === 'critical' ? 'destructive' : 'outline'}>
+                      {lesson.severity}
+                    </Badge>
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={() => handleEdit(lesson)}>Edit</Button>
                 </div>
               </CardContent>
             </Card>

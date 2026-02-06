@@ -200,76 +200,7 @@ export async function saveRiskAssessments(
     )
     const columnSet = new Set(columnResult.rows.map(row => row.column_name))
 
-<<<<<<< HEAD
-    const pick = (opts: string[]) => opts.find(c => columnSet.has(c)) ?? null
-
-    const assessmentDateCol = pick(['assessment_date', 'assessed_at'])
-    const probabilityCol = pick(['probability'])
-    const impactCol = pick(['impact'])
-    const assessorCol = pick(['assessor'])
-    const riskIdCol = pick(['risk_id'])
-    const riskScoreCol = pick(['risk_score'])
-    const detectabilityCol = pick(['detectability'])
-    const rpnCol = pick(['rpn'])
-    const riskLevelCol = pick(['risk_level'])
-    const methodologyCol = pick(['assessment_methodology', 'methodology', 'notes'])
-    const assumptionsCol = pick(['assumptions'])
-    const sourceDocCol = pick(['source_document_id'])
-    const createdByCol = pick(['created_by'])
-
-    const columnOrder: Array<{ name: string; value: (e: RiskAssessment) => unknown }> = [
-      { name: 'project_id', value: () => projectId }
-    ]
-    if (assessmentDateCol) {
-      columnOrder.push({
-        name: assessmentDateCol,
-        value: (e) => e.assessment_date || new Date().toISOString().split('T')[0]
-      })
-    }
-    if (probabilityCol) {
-      columnOrder.push({
-        name: probabilityCol,
-        value: (e) => normalizeProbImpact(e.probability) ?? 'medium'
-      })
-    }
-    if (impactCol) {
-      columnOrder.push({
-        name: impactCol,
-        value: (e) => normalizeProbImpact(e.impact) ?? 'medium'
-      })
-    }
-    if (assessorCol) columnOrder.push({ name: assessorCol, value: (e) => e.assessor || null })
-    if (riskIdCol) {
-      columnOrder.push({
-        name: riskIdCol,
-        value: (e) => {
-          const v = e.risk_id
-          if (!v) return null
-          const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-          return typeof v === 'string' && uuid.test(v) ? v : null
-        }
-      })
-    }
-    if (riskScoreCol) columnOrder.push({ name: riskScoreCol, value: (e) => e.rpn ?? null })
-    if (detectabilityCol) {
-      columnOrder.push({
-        name: detectabilityCol,
-        value: (e) => {
-          if (typeof e.detectability === 'number') return null
-          return normalizeProbImpact(e.detectability as string) ?? null
-        }
-      })
-    }
-    if (rpnCol) columnOrder.push({ name: rpnCol, value: (e) => (typeof e.rpn === 'number' ? e.rpn : null) })
-    if (riskLevelCol) columnOrder.push({ name: riskLevelCol, value: () => null })
-    if (methodologyCol) columnOrder.push({ name: methodologyCol, value: (e) => e.notes || null })
-    if (assumptionsCol) columnOrder.push({ name: assumptionsCol, value: () => [] })
-    if (sourceDocCol) columnOrder.push({ name: sourceDocCol, value: (e) => e.source_document_id || null })
-    if (createdByCol) columnOrder.push({ name: createdByCol, value: () => userId })
-
-    if (columnOrder.length <= 1) {
-=======
-    const pickColumn = (options: string[]): string | null => {
+const pickColumn = (options: string[]): string | null => {
       for (const option of options) {
         if (columnSet.has(option)) {
           return option
@@ -329,7 +260,6 @@ export async function saveRiskAssessments(
     }
 
     if (columnOrder.length === 0) {
->>>>>>> 349abf3391101e9126a8b665d7784e535c158240
       throw new Error('risk_assessments table has no writable columns')
     }
 
@@ -340,17 +270,6 @@ export async function saveRiskAssessments(
 
     entities.forEach((e, index) => {
       const offset = index * columnOrder.length
-<<<<<<< HEAD
-      placeholders.push(
-        columnOrder.map((_, i) => `$${offset + i + 1}`).join(', ')
-      )
-      columnOrder.forEach(col => values.push(col.value(e)))
-    })
-
-    await client.query(
-      `INSERT INTO risk_assessments (${columnOrder.map(c => c.name).join(', ')})
-       VALUES ${placeholders.map(p => `(${p})`).join(', ')}`,
-=======
       const rowPlaceholders = columnOrder.map((_, columnIndex) => `$${offset + columnIndex + 1}`)
       placeholders.push(`(${rowPlaceholders.join(', ')})`)
       columnOrder.forEach(column => {
@@ -361,7 +280,6 @@ export async function saveRiskAssessments(
     await client.query(
       `INSERT INTO risk_assessments (${columnOrder.map(col => col.name).join(', ')})
       VALUES ${placeholders.join(', ')}`,
->>>>>>> 349abf3391101e9126a8b665d7784e535c158240
       values
     )
 
