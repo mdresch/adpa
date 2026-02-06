@@ -1,168 +1,1398 @@
 # 📚 ADPA Documentation Index
 
-**Last Updated:** November 4, 2025  
-**Version:** 2.0.0
+**Last Updated:** February 6, 2026
+**Total Files:** 1149 files
 
 ---
 
-## 🎯 **Quick Navigation**
+## 📂 **Full File Listing**
 
-### **🚀 Getting Started**
-→ [`docs/01-getting-started/`](./01-getting-started/)
-- Quick start guide
-- Login credentials
-- User permissions
+### **ROOT**
 
-### **⚙️ Setup & Configuration**
-→ [`docs/02-setup-configuration/`](./02-setup-configuration/)
-- Database setup (Supabase, Vercel Postgres)
-- Redis setup (Vercel KV)
-- Azure SharePoint integration
+- [Benefits_Realization_Plan_Modular_EMBA_Business_IT.md](./Benefits_Realization_Plan_Modular_EMBA_Business_IT.md)
+- [BRM_Strategy_Analysis_Plan.md](./BRM_Strategy_Analysis_Plan.md)
+- [cbaazurelight150x150.png](./cbaazurelight150x150.png)
+- [CIRCULAR_STRUCTURE_FIX_SUMMARY.md](./CIRCULAR_STRUCTURE_FIX_SUMMARY.md)
+- [CLARITY_IMPLEMENTATION_PROGRESS.md](./CLARITY_IMPLEMENTATION_PROGRESS.md)
+- [CORE_ENTITIES_APPWRITE_EXPERIMENT.md](./CORE_ENTITIES_APPWRITE_EXPERIMENT.md)
+- [DASHBOARD_AUTHENTICATED_REVIEW.md](./DASHBOARD_AUTHENTICATED_REVIEW.md)
+- [docs_list.txt](./docs_list.txt)
+- [ENTITY_EXTRACTION_ANALYTICS.md](./ENTITY_EXTRACTION_ANALYTICS.md)
+- [ENTITY_EXTRACTION_OPTIMIZATION.md](./ENTITY_EXTRACTION_OPTIMIZATION.md)
+- [JIRA_VERIFICATION_GUIDE.md](./JIRA_VERIFICATION_GUIDE.md)
+- [LESSONS_LEARNED_FINAL_STATUS.md](./LESSONS_LEARNED_FINAL_STATUS.md)
+- [LESSONS_LEARNED_IMPLEMENTATION_COMPLETE.md](./LESSONS_LEARNED_IMPLEMENTATION_COMPLETE.md)
+- [LESSONS_LEARNED_TEST_RESULTS.md](./LESSONS_LEARNED_TEST_RESULTS.md)
+- [MICROSOFT_CLARITY_ANALYTICS.md](./MICROSOFT_CLARITY_ANALYTICS.md)
+- [PLAYBOOK_GENERATION_TRAINING.md](./PLAYBOOK_GENERATION_TRAINING.md)
+- [PLAYBOOK_GENERATION_USER_GUIDE.md](./PLAYBOOK_GENERATION_USER_GUIDE.md)
+- [PROJECT_CONTEXT_FEATURE_TEST_PLAN.md](./PROJECT_CONTEXT_FEATURE_TEST_PLAN.md)
+- [PROJECT_CONTEXT_QUICK_TEST.md](./PROJECT_CONTEXT_QUICK_TEST.md)
+- [PROJECT_INTEGRATION_SETTINGS.md](./PROJECT_INTEGRATION_SETTINGS.md)
+- [PROJECT_OVERVIEW_DEMO_DATA_REVIEW.md](./PROJECT_OVERVIEW_DEMO_DATA_REVIEW.md)
+- [Project_Summary_BRM_Framework_Implementation.md](./Project_Summary_BRM_Framework_Implementation.md)
+- [Project-Summary-Healthcare-Digital-Transformation.md](./Project-Summary-Healthcare-Digital-Transformation.md)
+- [README.md](./README.md)
+- [risk-issue-escalation-playbook.md](./risk-issue-escalation-playbook.md)
+- [Solution_Evaluation_Plan_BRM_Framework_Implementation.md](./Solution_Evaluation_Plan_BRM_Framework_Implementation.md)
+- [Solution_Evaluation_Plan_Modular_Executive_MBA_Business_IT.md](./Solution_Evaluation_Plan_Modular_Executive_MBA_Business_IT.md)
+- [SUMMARY.md](./SUMMARY.md)
+- [TEMPLATE_GENERATION_ANALYTICS.md](./TEMPLATE_GENERATION_ANALYTICS.md)
+- [TRACE_DOCUMENT_GENERATION_COMPLETE_FLOW.md](./TRACE_DOCUMENT_GENERATION_COMPLETE_FLOW.md)
+- [TRACE_DOCUMENT_GENERATION_FLOW.md](./TRACE_DOCUMENT_GENERATION_FLOW.md)
+- [user-personas-motivation-assessment.md](./user-personas-motivation-assessment.md)
+- [user-personas-technology-comfort.md](./user-personas-technology-comfort.md)
+- [WA-96_ENHANCEMENTS_COMPLETE.md](./WA-96_ENHANCEMENTS_COMPLETE.md)
+- [WA-96_IMPLEMENTATION_STATUS.md](./WA-96_IMPLEMENTATION_STATUS.md)
+- [WA-96_VERIFICATION_REPORT.md](./WA-96_VERIFICATION_REPORT.md)
 
-### **💻 Development**
-→ [`docs/03-development/`](./03-development/)
-- Local development guide
-- Docker setup
-- Quick restart commands
+### **📂 01-getting-started**
 
-### **🚢 Deployment**
-→ [`docs/04-deployment/`](./04-deployment/)
-- Production deployment guides
-- Railway setup
-- Vercel deployment
+- [LOGIN_CREDENTIALS.md](./01-getting-started/LOGIN_CREDENTIALS.md)
+- [QUICK_START.md](./01-getting-started/QUICK_START.md)
+- [USER_PERMISSIONS.md](./01-getting-started/USER_PERMISSIONS.md)
+- [user-rules-preferences.md](./01-getting-started/user-rules-preferences.md)
 
-### **🔌 Integrations**
-→ [`docs/05-integrations/`](./05-integrations/)
-- AI providers (OpenAI, Google AI, Adobe PDF)
-- Confluence, SharePoint, GitHub
-- Third-party services
+### **📂 02-setup-configuration**
 
-### **✨ Features**
-→ [`docs/06-features/`](./06-features/)
-- Feature documentation (122 docs)
-- Refactoring case studies
-- Component architecture
+- [AZURE_SHAREPOINT_SETUP_GUIDE.md](./02-setup-configuration/AZURE_SHAREPOINT_SETUP_GUIDE.md)
+- [CUSTOM_DOMAIN_SETUP.md](./02-setup-configuration/CUSTOM_DOMAIN_SETUP.md)
+- [REDIS_SETUP_GUIDE.md](./02-setup-configuration/REDIS_SETUP_GUIDE.md)
+- [SUPABASE_DATABASE_SETUP.md](./02-setup-configuration/SUPABASE_DATABASE_SETUP.md)
+- [VERCEL_AND_RAILWAY_ENV_VARS.md](./02-setup-configuration/VERCEL_AND_RAILWAY_ENV_VARS.md)
+- [VERCEL_KV_SETUP_SUMMARY.md](./02-setup-configuration/VERCEL_KV_SETUP_SUMMARY.md)
+- [VERCEL_KV_SETUP.md](./02-setup-configuration/VERCEL_KV_SETUP.md)
+- [VERCEL_POSTGRES_SETUP.md](./02-setup-configuration/VERCEL_POSTGRES_SETUP.md)
+- [VERCEL_REDIS_SETUP.md](./02-setup-configuration/VERCEL_REDIS_SETUP.md)
+- [vercel-postgres-setup.md](./02-setup-configuration/vercel-postgres-setup.md)
 
-### **🏗️ Architecture**
-→ [`docs/07-architecture/`](./07-architecture/)
-- System architecture (45 docs)
-- **Bull Queues**: [Complete Guide](./07-architecture/BULL_QUEUES_COMPLETE_GUIDE.md) | [Quick Reference](./07-architecture/BULL_QUEUES_QUICK_REFERENCE.md)
-- Authentication strategies
-- Database design
+### **📂 03-development**
 
-### **🧪 Testing**
-→ [`docs/08-testing/`](./08-testing/)
-- E2E testing guide
-- Validation checklists
-- Testing strategies
+- [APPROVAL_WORKFLOW_API.md](./03-development/APPROVAL_WORKFLOW_API.md)
+- [BRANCH_PROTECTION_NEXT_STEPS.md](./03-development/BRANCH_PROTECTION_NEXT_STEPS.md)
+- [DOCKER_DEVELOPMENT_GUIDE.md](./03-development/DOCKER_DEVELOPMENT_GUIDE.md)
+- [DOCKER_MAINTENANCE.md](./03-development/DOCKER_MAINTENANCE.md)
+- [DOCKER_README.md](./03-development/DOCKER_README.md)
+- [DOCKER_SETUP_SUMMARY.md](./03-development/DOCKER_SETUP_SUMMARY.md)
+- [INTERPRETING_CONTEXT_SOURCES.md](./03-development/INTERPRETING_CONTEXT_SOURCES.md)
+- [LOCAL_DEVELOPMENT_SUCCESS.md](./03-development/LOCAL_DEVELOPMENT_SUCCESS.md)
+- [manual-migration-guide.md](./03-development/manual-migration-guide.md)
+- [mdx-frontmatter-spec.md](./03-development/mdx-frontmatter-spec.md)
+- [PORTFOLIO_DASHBOARD_PROMPT.md](./03-development/PORTFOLIO_DASHBOARD_PROMPT.md)
+- [QUICK_RESTART_GUIDE.md](./03-development/QUICK_RESTART_GUIDE.md)
+- [release-checklist.md](./03-development/release-checklist.md)
+- [TEMPLATE_CONFIGURATION_GUIDE.md](./03-development/TEMPLATE_CONFIGURATION_GUIDE.md)
+- [V0_DASHBOARDS_INTEGRATION.md](./03-development/V0_DASHBOARDS_INTEGRATION.md)
 
-### **📋 Releases**
-→ [`docs/09-releases/`](./09-releases/)
-- Release notes (19 docs)
-- Session summaries
-- Milestones and victories
+### **📂 03-development/migrations**
 
-### **🔧 Troubleshooting**
-→ [`docs/10-troubleshooting/`](./10-troubleshooting/)
-- Common issues and fixes
-- Production error guides
-- Quick fixes (permission grants, etc.)
+- [MIGRATE_208_GUIDE.md](./03-development/migrations/MIGRATE_208_GUIDE.md)
+- [MIGRATION_208_COMPLETE.md](./03-development/migrations/MIGRATION_208_COMPLETE.md)
 
-### **📖 User Guides & Training**
-→ [`docs/11-user-guides/`](./11-user-guides/)
-- NEW: Epic-Focused Guides
-  - [Governance – Drift Detection & Resolution](./11-user-guides/GOVERNANCE_DRIFT_DETECTION_AND_RESOLUTION_GUIDE.md)
-  - [Digital Signing & Compliance (Documenso)](./11-user-guides/DIGITAL_SIGNING_AND_COMPLIANCE_DOCUMENSO_GUIDE.md)
-  - [Executive Analytics & Dashboards](./11-user-guides/EXECUTIVE_ANALYTICS_AND_DASHBOARDS_GUIDE.md)
-- **Training Materials Index** - Complete guide to all training resources
-- **End User Training** - 2-hour course for template authors (with certification)
-- **Administrator Training** - 4-hour course for system admins (with certification)
-- **Developer Training** - 3-hour course for API integrators (with certification)
-- **Quick Reference Guide** - Cheat sheets and common tasks
-- Feature walkthroughs and user documentation
+### **📂 04-deployment**
 
-### **🔐 Security**
-→ [`docs/12-security/`](./12-security/)
-- Security audits
-- Credential management
-- Access control
+- [CLEAN_DEPLOYMENT.md](./04-deployment/CLEAN_DEPLOYMENT.md)
+- [COMPLETE_DEPLOYMENT_GUIDE.md](./04-deployment/COMPLETE_DEPLOYMENT_GUIDE.md)
+- [DEPLOY_COMMANDS.md](./04-deployment/DEPLOY_COMMANDS.md)
+- [DEPLOYMENT_COMPLETE_v2.0.0.md](./04-deployment/DEPLOYMENT_COMPLETE_v2.0.0.md)
+- [DEPLOYMENT_COMPLETE.md](./04-deployment/DEPLOYMENT_COMPLETE.md)
+- [DEPLOYMENT_FINAL_CHECKLIST.md](./04-deployment/DEPLOYMENT_FINAL_CHECKLIST.md)
+- [DEPLOYMENT_SUCCESS_CHECKLIST.md](./04-deployment/DEPLOYMENT_SUCCESS_CHECKLIST.md)
+- [DEPLOYMENT_SUCCESS_FINAL.md](./04-deployment/DEPLOYMENT_SUCCESS_FINAL.md)
+- [DEPLOYMENT_SUCCESS_v2.0.0.md](./04-deployment/DEPLOYMENT_SUCCESS_v2.0.0.md)
+- [DEPLOYMENT-MIGRATION-GUIDE.md](./04-deployment/DEPLOYMENT-MIGRATION-GUIDE.md)
+- [FINAL_RAILWAY_SETUP.md](./04-deployment/FINAL_RAILWAY_SETUP.md)
+- [FULL_STACK_DEPLOYMENT_SUCCESS.md](./04-deployment/FULL_STACK_DEPLOYMENT_SUCCESS.md)
+- [GET_SUPABASE_SERVICE_ROLE_KEY.md](./04-deployment/GET_SUPABASE_SERVICE_ROLE_KEY.md)
+- [RAILWAY_DATABASE_FIX.md](./04-deployment/RAILWAY_DATABASE_FIX.md)
+- [RAILWAY_DEPLOYMENT_EXPLAINED.md](./04-deployment/RAILWAY_DEPLOYMENT_EXPLAINED.md)
+- [RAILWAY_DEPLOYMENT_STATUS.md](./04-deployment/RAILWAY_DEPLOYMENT_STATUS.md)
+- [RAILWAY_DOMAINS_EXPLAINED.md](./04-deployment/RAILWAY_DOMAINS_EXPLAINED.md)
+- [RAILWAY_ENV_FIX_URGENT.md](./04-deployment/RAILWAY_ENV_FIX_URGENT.md)
+- [RAILWAY_EXISTING_PROJECT.md](./04-deployment/RAILWAY_EXISTING_PROJECT.md)
+- [RAILWAY_REDIS_SETUP.md](./04-deployment/RAILWAY_REDIS_SETUP.md)
+- [RAILWAY_SUPABASE_IPV4_FIX.md](./04-deployment/RAILWAY_SUPABASE_IPV4_FIX.md)
+- [VERCEL_DEPLOYMENT.md](./04-deployment/VERCEL_DEPLOYMENT.md)
+- [VERCEL_ENV_SETUP_LATEST.md](./04-deployment/VERCEL_ENV_SETUP_LATEST.md)
+- [VERCEL_ENV_SETUP.md](./04-deployment/VERCEL_ENV_SETUP.md)
+- [VERCEL_MISSING_ENV_VARS.md](./04-deployment/VERCEL_MISSING_ENV_VARS.md)
+- [VERCEL_SETUP_COMPLETE.md](./04-deployment/VERCEL_SETUP_COMPLETE.md)
 
-### **🗺️ Roadmap**
-→ [`docs/roadmap/`](./roadmap/)
-- Future features (51 docs)
-- Multi-level access control
-- Planned enhancements
+### **📂 04-deployment/railway**
 
-### **🎯 Beacons (Session Handoffs)**
-→ [`docs/beacons/`](./beacons/)
-- Session handoff documents
-- "Start here" guides for next sessions
-- Tomorrow's action plans
+- [RAILWAY_BACKEND_STATUS.md](./04-deployment/railway/RAILWAY_BACKEND_STATUS.md)
+- [RAILWAY_CONFIGURATION.md](./04-deployment/railway/RAILWAY_CONFIGURATION.md)
+- [RAILWAY_TROUBLESHOOTING.md](./04-deployment/railway/RAILWAY_TROUBLESHOOTING.md)
+- [VERCEL_ENVIRONMENT_VARIABLES.md](./04-deployment/railway/VERCEL_ENVIRONMENT_VARIABLES.md)
 
-### **📦 Archive**
-→ [`docs/archive/`](./archive/)
-- Historical documents
-- Deprecated guides
-- Past challenges and solutions
+### **📂 05-integrations**
 
----
+- [ADOBE_PDF_INTEGRATION_SUMMARY.md](./05-integrations/ADOBE_PDF_INTEGRATION_SUMMARY.md)
+- [adobe-pdf-integration.md](./05-integrations/adobe-pdf-integration.md)
+- [AI_PROVIDER_DATABASE_DRIVEN_MODELS.md](./05-integrations/AI_PROVIDER_DATABASE_DRIVEN_MODELS.md)
+- [AI_PROVIDER_FALLBACK_COMPLETE.md](./05-integrations/AI_PROVIDER_FALLBACK_COMPLETE.md)
+- [AI_PROVIDER_GRACEFUL_BACKOFF.md](./05-integrations/AI_PROVIDER_GRACEFUL_BACKOFF.md)
+- [AI_PROVIDER_SETUP_GUIDE.md](./05-integrations/AI_PROVIDER_SETUP_GUIDE.md)
+- [ANTHROPIC_MODEL_NAMES_FIX.md](./05-integrations/ANTHROPIC_MODEL_NAMES_FIX.md)
+- [ANTHROPIC_NATIVE_SDK_FIX.md](./05-integrations/ANTHROPIC_NATIVE_SDK_FIX.md)
+- [CONFLUENCE_INTEGRATION_COMPLETE.md](./05-integrations/CONFLUENCE_INTEGRATION_COMPLETE.md)
+- [CONFLUENCE_TROUBLESHOOTING.md](./05-integrations/CONFLUENCE_TROUBLESHOOTING.md)
+- [DEEPSEEK_MOONSHOT_COMPLETE.md](./05-integrations/DEEPSEEK_MOONSHOT_COMPLETE.md)
+- [DEEPSEEK_MOONSHOT_FIX.md](./05-integrations/DEEPSEEK_MOONSHOT_FIX.md)
+- [DOCUMENSO_API_ENDPOINTS_SUMMARY.md](./05-integrations/DOCUMENSO_API_ENDPOINTS_SUMMARY.md)
+- [DOCUMENSO_API_ROUTES.md](./05-integrations/DOCUMENSO_API_ROUTES.md)
+- [DOCUMENSO_API_TESTING.md](./05-integrations/DOCUMENSO_API_TESTING.md)
+- [DOCUMENSO_DEPENDENCIES_INSTALLED.md](./05-integrations/DOCUMENSO_DEPENDENCIES_INSTALLED.md)
+- [DOCUMENSO_EXTRACTION_COMPLETE.md](./05-integrations/DOCUMENSO_EXTRACTION_COMPLETE.md)
+- [DOCUMENSO_EXTRACTION_PLAN.md](./05-integrations/DOCUMENSO_EXTRACTION_PLAN.md)
+- [DOCUMENSO_FORK_SETUP.md](./05-integrations/DOCUMENSO_FORK_SETUP.md)
+- [DOCUMENSO_FRONTEND_COMPLETE.md](./05-integrations/DOCUMENSO_FRONTEND_COMPLETE.md)
+- [DOCUMENSO_INTEGRATION_ANALYSIS.md](./05-integrations/DOCUMENSO_INTEGRATION_ANALYSIS.md)
+- [DOCUMENSO_INTEGRATION_STATUS.md](./05-integrations/DOCUMENSO_INTEGRATION_STATUS.md)
+- [DOCUMENSO_MIGRATION_335.md](./05-integrations/DOCUMENSO_MIGRATION_335.md)
+- [DOCUMENSO_QUICK_START.md](./05-integrations/DOCUMENSO_QUICK_START.md)
+- [DOCUMENSO_TESTING_TROUBLESHOOTING.md](./05-integrations/DOCUMENSO_TESTING_TROUBLESHOOTING.md)
+- [DYNAMICS_365_GUIDES_INTEGRATION.md](./05-integrations/DYNAMICS_365_GUIDES_INTEGRATION.md)
+- [GENERATION_FIX_COMPLETE.md](./05-integrations/GENERATION_FIX_COMPLETE.md)
+- [github.md](./05-integrations/github.md)
+- [google-ai-integration.md](./05-integrations/google-ai-integration.md)
+- [MOONSHOT_FIX_V2.md](./05-integrations/MOONSHOT_FIX_V2.md)
+- [MOONSHOT_NATIVE_SDK_FIX.md](./05-integrations/MOONSHOT_NATIVE_SDK_FIX.md)
+- [MOONSHOT_OFFICIAL_FIX_FINAL.md](./05-integrations/MOONSHOT_OFFICIAL_FIX_FINAL.md)
+- [openai-integration.md](./05-integrations/openai-integration.md)
+- [openai-quick-start.md](./05-integrations/openai-quick-start.md)
+- [SHAREPOINT_INTEGRATION_FIXES.md](./05-integrations/SHAREPOINT_INTEGRATION_FIXES.md)
+- [SHAREPOINT_INTEGRATION_README.md](./05-integrations/SHAREPOINT_INTEGRATION_README.md)
+- [SHAREPOINT_TESTING_GUIDE.md](./05-integrations/SHAREPOINT_TESTING_GUIDE.md)
 
-## 🔍 **Finding What You Need**
+### **📂 05-ui-ux**
 
-### **I want to...**
+- [design-system-setup-status.md](./05-ui-ux/design-system-setup-status.md)
+- [design-tokens.md](./05-ui-ux/design-tokens.md)
+- [HOMEPAGE_REVIEW_AND_ENHANCEMENTS.md](./05-ui-ux/HOMEPAGE_REVIEW_AND_ENHANCEMENTS.md)
+- [sitemap-week1.md](./05-ui-ux/sitemap-week1.md)
+- [wireframes-portal-assessment-week1.md](./05-ui-ux/wireframes-portal-assessment-week1.md)
 
-- **Get started quickly** → [`01-getting-started/QUICK_START.md`](./01-getting-started/QUICK_START.md)
-- **Set up locally** → [`03-development/LOCAL_DEVELOPMENT_SUCCESS.md`](./03-development/LOCAL_DEVELOPMENT_SUCCESS.md)
-- **Deploy to production** → [`04-deployment/COMPLETE_DEPLOYMENT_GUIDE.md`](./04-deployment/COMPLETE_DEPLOYMENT_GUIDE.md)
-- **Integrate AI providers** → [`05-integrations/openai-integration.md`](./05-integrations/openai-integration.md)
-- **Understand architecture** → [`07-architecture/`](./07-architecture/)
-- **Fix an issue** → [`10-troubleshooting/`](./10-troubleshooting/)
-- **See what's planned** → [`roadmap/`](./roadmap/)
-- **Continue from last session** → [`beacons/TOMORROW_START_HERE_SAFE_REFACTORING.md`](./beacons/TOMORROW_START_HERE_SAFE_REFACTORING.md)
+### **📂 06-features**
 
----
+- [10_DIMENSION_QUALITY_SYSTEM.md](./06-features/10_DIMENSION_QUALITY_SYSTEM.md)
+- [ABSOLUTE_FINAL_ALL_7_LOCATIONS_COMPLETE.md](./06-features/ABSOLUTE_FINAL_ALL_7_LOCATIONS_COMPLETE.md)
+- [ACTIVITIES_VS_WORK_ITEMS.md](./06-features/ACTIVITIES_VS_WORK_ITEMS.md)
+- [AGENT_REVIEW_AI_ANALYTICS_ENHANCEMENT.md](./06-features/AGENT_REVIEW_AI_ANALYTICS_ENHANCEMENT.md)
+- [AGENT_REVIEW_PHASE_1_2A.md](./06-features/AGENT_REVIEW_PHASE_1_2A.md)
+- [AI_ANALYTICS_ENHANCEMENT.md](./06-features/AI_ANALYTICS_ENHANCEMENT.md)
+- [AI_ANALYTICS_FEATURE_COMPLETE_SUMMARY.md](./06-features/AI_ANALYTICS_FEATURE_COMPLETE_SUMMARY.md)
+- [AI_GATEWAY_CONFIGURATION_SETUP.md](./06-features/AI_GATEWAY_CONFIGURATION_SETUP.md)
+- [AI_GATEWAY_IMPLEMENTATION.md](./06-features/AI_GATEWAY_IMPLEMENTATION.md)
+- [AI_PAGE_SAVE_TO_PROJECT_IMPLEMENTED.md](./06-features/AI_PAGE_SAVE_TO_PROJECT_IMPLEMENTED.md)
+- [AI_PAGE_SAVE_TO_PROJECT.md](./06-features/AI_PAGE_SAVE_TO_PROJECT.md)
+- [AI_PROJECT_MANAGER_SKILLS_ASSESSMENT.md](./06-features/AI_PROJECT_MANAGER_SKILLS_ASSESSMENT.md)
+- [AI_PROVIDER_ANALYTICS_ENHANCEMENT.md](./06-features/AI_PROVIDER_ANALYTICS_ENHANCEMENT.md)
+- [AI_PROVIDER_ANALYTICS_IMPLEMENTATION_COMPLETE.md](./06-features/AI_PROVIDER_ANALYTICS_IMPLEMENTATION_COMPLETE.md)
+- [AI_PROVIDER_CLI_IMPLEMENTATION.md](./06-features/AI_PROVIDER_CLI_IMPLEMENTATION.md)
+- [AI_PROVIDER_METRICS_FIX.md](./06-features/AI_PROVIDER_METRICS_FIX.md)
+- [AI_PROVIDERS_PAGE_COMPLETE.md](./06-features/AI_PROVIDERS_PAGE_COMPLETE.md)
+- [AI_PROVIDERS_ROUTE_FIX.md](./06-features/AI_PROVIDERS_ROUTE_FIX.md)
+- [AI_READINESS_ASSESSMENT.md](./06-features/AI_READINESS_ASSESSMENT.md)
+- [AI_TEMPLATE_REQUEST_FLOW_GUIDE.md](./06-features/AI_TEMPLATE_REQUEST_FLOW_GUIDE.md)
+- [ALL_DOCUMENT_GENERATION_DIALOGS_COMPLETE.md](./06-features/ALL_DOCUMENT_GENERATION_DIALOGS_COMPLETE.md)
+- [ALL_REQUIREMENTS_COMPLETED.md](./06-features/ALL_REQUIREMENTS_COMPLETED.md)
+- [ANALYTICS_COMPLETE_READY_TO_PUSH.md](./06-features/ANALYTICS_COMPLETE_READY_TO_PUSH.md)
+- [ANALYTICS_IMPLEMENTATION_STATUS.md](./06-features/ANALYTICS_IMPLEMENTATION_STATUS.md)
+- [ANALYTICS_PHASE1_IMPLEMENTATION.md](./06-features/ANALYTICS_PHASE1_IMPLEMENTATION.md)
+- [ANALYTICS_REAL_DATA_IMPLEMENTATION.md](./06-features/ANALYTICS_REAL_DATA_IMPLEMENTATION.md)
+- [ANALYTICS_TAB_ENHANCEMENT.md](./06-features/ANALYTICS_TAB_ENHANCEMENT.md)
+- [ANALYTICS_TRACKING_IMPLEMENTATION.md](./06-features/ANALYTICS_TRACKING_IMPLEMENTATION.md)
+- [APPROVAL_WORKFLOW_GUIDE.md](./06-features/APPROVAL_WORKFLOW_GUIDE.md)
+- [APPROVAL_WORKFLOW_IMPLEMENTATION.md](./06-features/APPROVAL_WORKFLOW_IMPLEMENTATION.md)
+- [ARCHIVE_TAB_RENAME.md](./06-features/ARCHIVE_TAB_RENAME.md)
+- [ATLASSIAN_AI_ENTITY_EXTRACTION_SPEC.md](./06-features/ATLASSIAN_AI_ENTITY_EXTRACTION_SPEC.md)
+- [ATLASSIAN_AI_POC_ROADMAP.md](./06-features/ATLASSIAN_AI_POC_ROADMAP.md)
+- [AZURE_STYLE_NOTIFICATIONS.md](./06-features/AZURE_STYLE_NOTIFICATIONS.md)
+- [BACKEND_RESTART_FOR_STATUS_BADGES.md](./06-features/BACKEND_RESTART_FOR_STATUS_BADGES.md)
+- [BACKGROUND_WORKERS_SUMMARY.md](./06-features/BACKGROUND_WORKERS_SUMMARY.md)
+- [BASELINE_APPROVAL_WORKFLOW.md](./06-features/BASELINE_APPROVAL_WORKFLOW.md)
+- [BASELINE_DRIFT_DETECTION_TEST_PLAN.md](./06-features/BASELINE_DRIFT_DETECTION_TEST_PLAN.md)
+- [BASELINE_EXTRACTION_TESTING_GUIDE.md](./06-features/BASELINE_EXTRACTION_TESTING_GUIDE.md)
+- [BASELINE_PMBOK_PROCESS_GROUPS.md](./06-features/BASELINE_PMBOK_PROCESS_GROUPS.md)
+- [BASELINE_RECOMMENDATIONS_BY_KNOWLEDGE_AREA.md](./06-features/BASELINE_RECOMMENDATIONS_BY_KNOWLEDGE_AREA.md)
+- [BASELINE_UPDATE_ON_CR_APPROVAL.md](./06-features/BASELINE_UPDATE_ON_CR_APPROVAL.md)
+- [board-report-templates.md](./06-features/board-report-templates.md)
+- [BUSINESS_CASE_TO_PROJECT_WORKFLOW.md](./06-features/BUSINESS_CASE_TO_PROJECT_WORKFLOW.md)
+- [CCB_APPROVAL_ROUTING.md](./06-features/CCB_APPROVAL_ROUTING.md)
+- [CCB_ROUTING_SUMMARY.md](./06-features/CCB_ROUTING_SUMMARY.md)
+- [COMPLETE_PLATFORM_STATUS_BADGES_FINAL.md](./06-features/COMPLETE_PLATFORM_STATUS_BADGES_FINAL.md)
+- [COMPLETE_SESSION_ACHIEVEMENTS.md](./06-features/COMPLETE_SESSION_ACHIEVEMENTS.md)
+- [COMPLEX_DOCUMENT_DEPENDENCIES.md](./06-features/COMPLEX_DOCUMENT_DEPENDENCIES.md)
+- [COMPLIANCE_REVIEW_STAGE_PROPOSAL.md](./06-features/COMPLIANCE_REVIEW_STAGE_PROPOSAL.md)
+- [COMPREHENSIVE_JOB_TYPES.md](./06-features/COMPREHENSIVE_JOB_TYPES.md)
+- [COMPREHENSIVE_STATS_IMPLEMENTATION.md](./06-features/COMPREHENSIVE_STATS_IMPLEMENTATION.md)
+- [CONFLUENCE_PUBLISHING_HOOK.md](./06-features/CONFLUENCE_PUBLISHING_HOOK.md)
+- [CONTEXT_PROCESSING_FLOW_DIAGRAM.md](./06-features/CONTEXT_PROCESSING_FLOW_DIAGRAM.md)
+- [CR_TEMPLATE_CRITICAL_FIX.md](./06-features/CR_TEMPLATE_CRITICAL_FIX.md)
+- [CR-2026-001_PHASE1_IMPLEMENTATION_COMPLETE.md](./06-features/CR-2026-001_PHASE1_IMPLEMENTATION_COMPLETE.md)
+- [DASHBOARD_ENHANCEMENT.md](./06-features/DASHBOARD_ENHANCEMENT.md)
+- [DEPENDENCY_MAP_VISUALIZATION.md](./06-features/DEPENDENCY_MAP_VISUALIZATION.md)
+- [DETAILED_IDEATION_PROJECT_HEALTH_DASHBOARD.md](./06-features/DETAILED_IDEATION_PROJECT_HEALTH_DASHBOARD.md)
+- [DEVELOPER_API_OPENAPI.yaml](./06-features/DEVELOPER_API_OPENAPI.yaml)
+- [DEVELOPER_API_REFERENCE.md](./06-features/DEVELOPER_API_REFERENCE.md)
+- [DOCUMENT_CONTEXT_DIMENSIONS_AND_STRATEGIES.md](./06-features/DOCUMENT_CONTEXT_DIMENSIONS_AND_STRATEGIES.md)
+- [DOCUMENT_CONTEXT_ENHANCEMENT_COMPLETE.md](./06-features/DOCUMENT_CONTEXT_ENHANCEMENT_COMPLETE.md)
+- [DOCUMENT_CONTEXT_FLOW_DIAGRAM.md](./06-features/DOCUMENT_CONTEXT_FLOW_DIAGRAM.md)
+- [DOCUMENT_GENERATION_METHODS.md](./06-features/DOCUMENT_GENERATION_METHODS.md)
+- [DOCUMENT_LIBRARY_TREASURE_CHEST.md](./06-features/DOCUMENT_LIBRARY_TREASURE_CHEST.md)
+- [DOCUMENT_LIFECYCLE_ORDER_SYSTEM.md](./06-features/DOCUMENT_LIFECYCLE_ORDER_SYSTEM.md)
+- [DOCUMENT_LIFECYCLE_WORKING_PERFECTLY.md](./06-features/DOCUMENT_LIFECYCLE_WORKING_PERFECTLY.md)
+- [DOCUMENT_METADATA_COMPLETE_VISUAL.md](./06-features/DOCUMENT_METADATA_COMPLETE_VISUAL.md)
+- [DOCUMENT_NAMING_AND_METADATA.md](./06-features/DOCUMENT_NAMING_AND_METADATA.md)
+- [DOCUMENT_REVIEW_WORKFLOW.md](./06-features/DOCUMENT_REVIEW_WORKFLOW.md)
+- [DOCUMENT_STATUS_SYSTEM_COMPLETE.md](./06-features/DOCUMENT_STATUS_SYSTEM_COMPLETE.md)
+- [DOCUMENT_STORAGE_FORMAT.md](./06-features/DOCUMENT_STORAGE_FORMAT.md)
+- [DOCUMENT_TEMPLATE_ENHANCEMENT_PLAN.md](./06-features/DOCUMENT_TEMPLATE_ENHANCEMENT_PLAN.md)
+- [DOCUMENT_VERSION_CONTROL_SYSTEM.md](./06-features/DOCUMENT_VERSION_CONTROL_SYSTEM.md)
+- [DOCUMENT_VIEWER_ENHANCEMENT.md](./06-features/DOCUMENT_VIEWER_ENHANCEMENT.md)
+- [DOCUMENT_VIEWER_IMPROVEMENTS.md](./06-features/DOCUMENT_VIEWER_IMPROVEMENTS.md)
+- [DOCUMENT_VIEWS_WITH_METADATA.md](./06-features/DOCUMENT_VIEWS_WITH_METADATA.md)
+- [DRIFT_AUTO_RESOLUTION_IMPLEMENTATION.md](./06-features/DRIFT_AUTO_RESOLUTION_IMPLEMENTATION.md)
+- [ENHANCED_CONTEXT_GATHERING_AND_INJECTION.md](./06-features/ENHANCED_CONTEXT_GATHERING_AND_INJECTION.md)
+- [ENHANCED_DOCUMENT_VIEWS_SUMMARY.md](./06-features/ENHANCED_DOCUMENT_VIEWS_SUMMARY.md)
+- [ENTITY_EXTRACTION_IMPLEMENTATION.md](./06-features/ENTITY_EXTRACTION_IMPLEMENTATION.md)
+- [EXTRACTION_UI_GUIDE.md](./06-features/EXTRACTION_UI_GUIDE.md)
+- [FINANCIAL_DASHBOARD_USER_GUIDE.md](./06-features/FINANCIAL_DASHBOARD_USER_GUIDE.md)
+- [FINANCIAL_MANAGEMENT_COMPLETE.md](./06-features/FINANCIAL_MANAGEMENT_COMPLETE.md)
+- [FINANCIAL_MANAGEMENT_EVM_IMPLEMENTATION.md](./06-features/FINANCIAL_MANAGEMENT_EVM_IMPLEMENTATION.md)
+- [FINANCIAL_MANAGEMENT_TEST_SCENARIOS.md](./06-features/FINANCIAL_MANAGEMENT_TEST_SCENARIOS.md)
+- [FRAMEWORK_QUALITY_SCORES.md](./06-features/FRAMEWORK_QUALITY_SCORES.md)
+- [GKG_CONTEXT_INJECTION_AND_VIEW_SUMMARY.md](./06-features/GKG_CONTEXT_INJECTION_AND_VIEW_SUMMARY.md)
+- [Granular Cloud Compliance Intelligence Platform.md](./06-features/Granular Cloud Compliance Intelligence Platform.md)
+- [IMPLEMENT_PROVIDER_ANALYTICS_SIMPLE.md](./06-features/IMPLEMENT_PROVIDER_ANALYTICS_SIMPLE.md)
+- [IMPLEMENTATION_COMPLETE.md](./06-features/IMPLEMENTATION_COMPLETE.md)
+- [INTELLIGENT_DOCUMENT_CONTEXT_SYSTEM.md](./06-features/INTELLIGENT_DOCUMENT_CONTEXT_SYSTEM.md)
+- [JIRA_ISSUE_LINKAGE.md](./06-features/JIRA_ISSUE_LINKAGE.md)
+- [JOB_MONITOR_IMPLEMENTATION_COMPLETE.md](./06-features/JOB_MONITOR_IMPLEMENTATION_COMPLETE.md)
+- [JOB_MONITOR_READY_FOR_TESTING.md](./06-features/JOB_MONITOR_READY_FOR_TESTING.md)
+- [JOB_QUEUE_STRATEGY.md](./06-features/JOB_QUEUE_STRATEGY.md)
+- [KISS_ARCHITECTURE_IMPLEMENTATION.md](./06-features/KISS_ARCHITECTURE_IMPLEMENTATION.md)
+- [KNOWLEDGE_BASE_INTEGRATION.md](./06-features/KNOWLEDGE_BASE_INTEGRATION.md)
+- [knowledge-domains-entity-allocation-fix-summary.md](./06-features/knowledge-domains-entity-allocation-fix-summary.md)
+- [LIFECYCLE_QUICK_REFERENCE.md](./06-features/LIFECYCLE_QUICK_REFERENCE.md)
+- [LLM_PROJECT_CONTEXT_REFERENCE.md](./06-features/LLM_PROJECT_CONTEXT_REFERENCE.md)
+- [METADATA_DISPLAY_COMPLETE.md](./06-features/METADATA_DISPLAY_COMPLETE.md)
+- [METADATA_DISPLAY_FIX.md](./06-features/METADATA_DISPLAY_FIX.md)
+- [MINIMAL_IDEATION_PROJECT_HEALTH_DASHBOARD.md](./06-features/MINIMAL_IDEATION_PROJECT_HEALTH_DASHBOARD.md)
+- [MOBILE_DEVICE_HANDLING.md](./06-features/MOBILE_DEVICE_HANDLING.md)
+- [MODEL_ANALYTICS_BACKEND_COMPLETE.md](./06-features/MODEL_ANALYTICS_BACKEND_COMPLETE.md)
+- [MODEL_ANALYTICS_UI_COMPLETE.md](./06-features/MODEL_ANALYTICS_UI_COMPLETE.md)
+- [MODEL_NAVIGATION_UPDATE.md](./06-features/MODEL_NAVIGATION_UPDATE.md)
+- [MODEL_PAGE_CLEANUP.md](./06-features/MODEL_PAGE_CLEANUP.md)
+- [MODEL_PAGE_REFACTORING_PLAN.md](./06-features/MODEL_PAGE_REFACTORING_PLAN.md)
+- [MODEL_PAGE_STRUCTURE_ANALYSIS.md](./06-features/MODEL_PAGE_STRUCTURE_ANALYSIS.md)
+- [NEW_LIFECYCLE_IMPLEMENTATION_SUMMARY.md](./06-features/NEW_LIFECYCLE_IMPLEMENTATION_SUMMARY.md)
+- [PHASE_1_COMPLETE_SUMMARY.md](./06-features/PHASE_1_COMPLETE_SUMMARY.md)
+- [PHASE_2A_WBS_TASKS_PROGRESS.md](./06-features/PHASE_2A_WBS_TASKS_PROGRESS.md)
+- [PMBOK7_PROJECT_EXAMPLES.md](./06-features/PMBOK7_PROJECT_EXAMPLES.md)
+- [PMBOK7_TEMPLATE_CREATED.md](./06-features/PMBOK7_TEMPLATE_CREATED.md)
+- [PMBOK7_V2_UPGRADE.md](./06-features/PMBOK7_V2_UPGRADE.md)
+- [PMBOK8_DASHBOARD_SHOWCASE.md](./06-features/PMBOK8_DASHBOARD_SHOWCASE.md)
+- [pmbok8-domain-dashboard.md](./06-features/pmbok8-domain-dashboard.md)
+- [PR_REVIEW_IMPROVEMENTS_SUMMARY.md](./06-features/PR_REVIEW_IMPROVEMENTS_SUMMARY.md)
+- [PROCESS_FLOW_COMPLETE_FIX.md](./06-features/PROCESS_FLOW_COMPLETE_FIX.md)
+- [PROCESS_FLOW_DOCUMENT_SUMMARIZATION_PROGRESS.md](./06-features/PROCESS_FLOW_DOCUMENT_SUMMARIZATION_PROGRESS.md)
+- [PROCESS_FLOW_IMPLEMENTATION_PLAN.md](./06-features/PROCESS_FLOW_IMPLEMENTATION_PLAN.md)
+- [PROCESS_FLOW_TECHNICAL_SPECS.md](./06-features/PROCESS_FLOW_TECHNICAL_SPECS.md)
+- [PROCESS_FLOW_TEMPLATE_TOKEN_FIX.md](./06-features/PROCESS_FLOW_TEMPLATE_TOKEN_FIX.md)
+- [PROCESS_FLOW_VISUAL_PROGRESS.md](./06-features/PROCESS_FLOW_VISUAL_PROGRESS.md)
+- [PRODUCTION_TEMPLATES_PROMOTED.md](./06-features/PRODUCTION_TEMPLATES_PROMOTED.md)
+- [PROGRAM_MANAGEMENT_IMPLEMENTATION.md](./06-features/PROGRAM_MANAGEMENT_IMPLEMENTATION.md)
+- [PROJECT_DOCUMENT_GENERATION_CONTEXT.md](./06-features/PROJECT_DOCUMENT_GENERATION_CONTEXT.md)
+- [PROJECT_DOCUMENT_GENERATION_STATUS_BADGES.md](./06-features/PROJECT_DOCUMENT_GENERATION_STATUS_BADGES.md)
+- [PROJECT_HEALTH_DASHBOARD_SCOPE_CLARIFICATION.md](./06-features/PROJECT_HEALTH_DASHBOARD_SCOPE_CLARIFICATION.md)
+- [PROJECT_PAGE_ENHANCEMENT.md](./06-features/PROJECT_PAGE_ENHANCEMENT.md)
+- [PROJECT_VARIABLES_TAB_FEATURE.md](./06-features/PROJECT_VARIABLES_TAB_FEATURE.md)
+- [QUICK_BASELINE_APPROVAL_GUIDE.md](./06-features/QUICK_BASELINE_APPROVAL_GUIDE.md)
+- [QUICK_START_TEMPLATE_GUIDE.md](./06-features/QUICK_START_TEMPLATE_GUIDE.md)
+- [QUICK-REFERENCE-entity-allocation-changes.md](./06-features/QUICK-REFERENCE-entity-allocation-changes.md)
+- [RAG_INTEGRATION_IMPLEMENTATION_SUMMARY.md](./06-features/RAG_INTEGRATION_IMPLEMENTATION_SUMMARY.md)
+- [RESEARCH_COMPLEXITY_TRACKING.md](./06-features/RESEARCH_COMPLEXITY_TRACKING.md)
+- [REVIEW_SCHEDULING_WORKFLOW.md](./06-features/REVIEW_SCHEDULING_WORKFLOW.md)
+- [SESSION_SUMMARY_BUSINESS_CASE_TEMPLATE.md](./06-features/SESSION_SUMMARY_BUSINESS_CASE_TEMPLATE.md)
+- [SIMPLE_BACKEND_TEST.md](./06-features/SIMPLE_BACKEND_TEST.md)
+- [SKILLS_COMPETENCIES_SEED_DATA.md](./06-features/SKILLS_COMPETENCIES_SEED_DATA.md)
+- [SKILLS_VS_COMPETENCIES_GUIDE.md](./06-features/SKILLS_VS_COMPETENCIES_GUIDE.md)
+- [SMART_CONTEXT_QUICK_START.md](./06-features/SMART_CONTEXT_QUICK_START.md)
+- [SMART_DOCUMENT_VERSIONING_INTEGRATION.md](./06-features/SMART_DOCUMENT_VERSIONING_INTEGRATION.md)
+- [SMART_VERSIONING_IMPLEMENTATION_SUMMARY.md](./06-features/SMART_VERSIONING_IMPLEMENTATION_SUMMARY.md)
+- [SMART_VERSIONING_TESTING_GUIDE.md](./06-features/SMART_VERSIONING_TESTING_GUIDE.md)
+- [SMART_VERSIONING_VISUAL_GUIDE.md](./06-features/SMART_VERSIONING_VISUAL_GUIDE.md)
+- [SOFT_DELETE_IMPLEMENTATION.md](./06-features/SOFT_DELETE_IMPLEMENTATION.md)
+- [SOURCE_DOCUMENT_BACKFILL.md](./06-features/SOURCE_DOCUMENT_BACKFILL.md)
+- [SOURCE_DOCUMENTS_TRACKING.md](./06-features/SOURCE_DOCUMENTS_TRACKING.md)
+- [SOURCE_DOCUMENTS_VISUAL_GUIDE.md](./06-features/SOURCE_DOCUMENTS_VISUAL_GUIDE.md)
+- [STAGE_DETAILS_DIALOG_FEATURE.md](./06-features/STAGE_DETAILS_DIALOG_FEATURE.md)
+- [STATUS_BADGES_IMPLEMENTATION_COMPLETE.md](./06-features/STATUS_BADGES_IMPLEMENTATION_COMPLETE.md)
+- [task-list-and-resource-assignment-plan.md](./06-features/task-list-and-resource-assignment-plan.md)
+- [TEMPLATE_ANALYTICS_API_REFERENCE.md](./06-features/TEMPLATE_ANALYTICS_API_REFERENCE.md)
+- [TEMPLATE_ANALYTICS_COMPLETE.md](./06-features/TEMPLATE_ANALYTICS_COMPLETE.md)
+- [TEMPLATE_ANALYTICS_IMPLEMENTATION_COMPLETE.md](./06-features/TEMPLATE_ANALYTICS_IMPLEMENTATION_COMPLETE.md)
+- [TEMPLATE_ANALYTICS_OPERATIONAL_RUNBOOK.md](./06-features/TEMPLATE_ANALYTICS_OPERATIONAL_RUNBOOK.md)
+- [TEMPLATE_ANALYTICS_QUICK_START.md](./06-features/TEMPLATE_ANALYTICS_QUICK_START.md)
+- [TEMPLATE_ANALYTICS_TROUBLESHOOTING.md](./06-features/TEMPLATE_ANALYTICS_TROUBLESHOOTING.md)
+- [TEMPLATE_COMPLIANCE_WORKFLOW.md](./06-features/TEMPLATE_COMPLIANCE_WORKFLOW.md)
+- [TEMPLATE_CONTENT_CLARIFICATION.md](./06-features/TEMPLATE_CONTENT_CLARIFICATION.md)
+- [TEMPLATE_CONTENT_STRUCTURE.md](./06-features/TEMPLATE_CONTENT_STRUCTURE.md)
+- [TEMPLATE_EDIT_PAGE_FIXED.md](./06-features/TEMPLATE_EDIT_PAGE_FIXED.md)
+- [TEMPLATE_EDIT_PAGE.md](./06-features/TEMPLATE_EDIT_PAGE.md)
+- [TEMPLATE_ENHANCEMENT_SUMMARY.md](./06-features/TEMPLATE_ENHANCEMENT_SUMMARY.md)
+- [TEMPLATE_IMPROVEMENTS_SUMMARY.md](./06-features/TEMPLATE_IMPROVEMENTS_SUMMARY.md)
+- [TEMPLATE_LIFECYCLE_FINAL.md](./06-features/TEMPLATE_LIFECYCLE_FINAL.md)
+- [TEMPLATE_LIFECYCLE_PAGE_COMPLETE.md](./06-features/TEMPLATE_LIFECYCLE_PAGE_COMPLETE.md)
+- [TEMPLATE_LIFECYCLE_TEST_RESULTS.md](./06-features/TEMPLATE_LIFECYCLE_TEST_RESULTS.md)
+- [TEMPLATE_METADATA_TRACKING_SUMMARY.md](./06-features/TEMPLATE_METADATA_TRACKING_SUMMARY.md)
+- [TEMPLATE_PROMOTION_SUCCESS.md](./06-features/TEMPLATE_PROMOTION_SUCCESS.md)
+- [TEMPLATE_SHARING_WORKFLOW.md](./06-features/TEMPLATE_SHARING_WORKFLOW.md)
+- [TEMPLATE_STATS_CLARIFICATION.md](./06-features/TEMPLATE_STATS_CLARIFICATION.md)
+- [TEMPLATE_STATUS_BADGES_COMPLETE_VISUAL_MAP.md](./06-features/TEMPLATE_STATUS_BADGES_COMPLETE_VISUAL_MAP.md)
+- [TEMPLATE_STATUS_BADGES_UI.md](./06-features/TEMPLATE_STATUS_BADGES_UI.md)
+- [TEMPLATE_STATUS_ENABLED.md](./06-features/TEMPLATE_STATUS_ENABLED.md)
+- [TEMPLATE_TO_LLM_VISUAL_GUIDE.md](./06-features/TEMPLATE_TO_LLM_VISUAL_GUIDE.md)
+- [TEMPLATE_VALIDATION_CACHE_FIX.md](./06-features/TEMPLATE_VALIDATION_CACHE_FIX.md)
+- [TEMPLATE_VALIDATION_SAFEGUARDS.md](./06-features/TEMPLATE_VALIDATION_SAFEGUARDS.md)
+- [template-analytics-plan.md](./06-features/template-analytics-plan.md)
+- [TEST_MODEL_ANALYTICS_BACKEND.md](./06-features/TEST_MODEL_ANALYTICS_BACKEND.md)
+- [THREE-TIER-WEIGHTED-ALLOCATION-COMPLETE.md](./06-features/THREE-TIER-WEIGHTED-ALLOCATION-COMPLETE.md)
+- [TRUSTWORTHY_AI_FRAMEWORK_ASSESSMENT.md](./06-features/TRUSTWORTHY_AI_FRAMEWORK_ASSESSMENT.md)
+- [ULTIMATE_COMPLETE_STATUS_BADGES_ALL_6_LOCATIONS.md](./06-features/ULTIMATE_COMPLETE_STATUS_BADGES_ALL_6_LOCATIONS.md)
+- [ULTIMATE_FINAL_ALL_8_LOCATIONS.md](./06-features/ULTIMATE_FINAL_ALL_8_LOCATIONS.md)
+- [UPLOADED_DOCUMENTS_STATUS.md](./06-features/UPLOADED_DOCUMENTS_STATUS.md)
+- [UPLOADED_STATUS_COMPLETE.md](./06-features/UPLOADED_STATUS_COMPLETE.md)
+- [WBS_IMPORT_QUICK_START.md](./06-features/WBS_IMPORT_QUICK_START.md)
+- [weighted-entity-allocation-implementation-plan.md](./06-features/weighted-entity-allocation-implementation-plan.md)
 
-## 📊 **Documentation Statistics**
+### **📂 06-features/legacy**
 
-- **Total Folders:** 14
-- **Total Documents:** ~350+ markdown files
-- **Latest Session:** October 26, 2025
-- **Coverage:** Complete (all aspects documented)
+- [AI_PROJECT_DATA_EXTRACTION.md](./06-features/legacy/AI_PROJECT_DATA_EXTRACTION.md)
+- [BASELINE_UPDATE_ON_APPROVAL.md](./06-features/legacy/BASELINE_UPDATE_ON_APPROVAL.md)
+- [BASELINE_UPDATE_UPON_APPROVAL.md](./06-features/legacy/BASELINE_UPDATE_UPON_APPROVAL.md)
+- [BASELINE_VARIABLE_DISCOVERY_SYSTEM.md](./06-features/legacy/BASELINE_VARIABLE_DISCOVERY_SYSTEM.md)
+- [BASELINE_VARIABLES_AND_METRICS.md](./06-features/legacy/BASELINE_VARIABLES_AND_METRICS.md)
+- [DRIFT_DETECTION_TECHNICAL_GUIDE.md](./06-features/legacy/DRIFT_DETECTION_TECHNICAL_GUIDE.md)
+- [DRIFT_DETECTION_USER_GUIDE.md](./06-features/legacy/DRIFT_DETECTION_USER_GUIDE.md)
+- [DRIFT_DETECTION_VERIFICATION.md](./06-features/legacy/DRIFT_DETECTION_VERIFICATION.md)
+- [DRIFT_HIGHLIGHTING_SYSTEM.md](./06-features/legacy/DRIFT_HIGHLIGHTING_SYSTEM.md)
+- [DRIFT_RESOLUTION_PERFORMANCE.md](./06-features/legacy/DRIFT_RESOLUTION_PERFORMANCE.md)
+- [DRIFT_RESOLUTION_PREVIEW_FEATURE.md](./06-features/legacy/DRIFT_RESOLUTION_PREVIEW_FEATURE.md)
+- [DRIFT_RESOLUTION_UI_GUIDE.md](./06-features/legacy/DRIFT_RESOLUTION_UI_GUIDE.md)
+- [EMAIL_NOTIFICATION_SYSTEM.md](./06-features/legacy/EMAIL_NOTIFICATION_SYSTEM.md)
+- [EMERGENCY_MEETING_AUTO_SCHEDULING.md](./06-features/legacy/EMERGENCY_MEETING_AUTO_SCHEDULING.md)
+- [ESCALATION_FLOW_DIAGRAM.md](./06-features/legacy/ESCALATION_FLOW_DIAGRAM.md)
+- [ESCALATION_MATRIX_IMPLEMENTATION.md](./06-features/legacy/ESCALATION_MATRIX_IMPLEMENTATION.md)
+- [EXECUTIVE_DASHBOARD_INTEGRATION.md](./06-features/legacy/EXECUTIVE_DASHBOARD_INTEGRATION.md)
+- [META_INSIGHT_BASELINE_DOGFOODING.md](./06-features/legacy/META_INSIGHT_BASELINE_DOGFOODING.md)
+- [POSITIVE_DRIFT_AUTO_CR.md](./06-features/legacy/POSITIVE_DRIFT_AUTO_CR.md)
+- [PROJECT_SIMILARITY_REPLICATION.md](./06-features/legacy/PROJECT_SIMILARITY_REPLICATION.md)
+- [SOCIAL_MONITORING_BRP_EXAMPLE.md](./06-features/legacy/SOCIAL_MONITORING_BRP_EXAMPLE.md)
+- [WEBSOCKET_DRIFT_NOTIFICATION_FLOW.md](./06-features/legacy/WEBSOCKET_DRIFT_NOTIFICATION_FLOW.md)
+- [WEBSOCKET_DRIFT_NOTIFICATIONS.md](./06-features/legacy/WEBSOCKET_DRIFT_NOTIFICATIONS.md)
 
----
+### **📂 06-features/pmbok**
 
-## 🎯 **For New Developers**
+- [PMBOK8_IMPLEMENTATION_STATUS.md](./06-features/pmbok/PMBOK8_IMPLEMENTATION_STATUS.md)
+- [pmbok8-alignment.md](./06-features/pmbok/pmbok8-alignment.md)
 
-**Start Here:**
-1. [`README.md`](../README.md) - Project overview
-2. [`01-getting-started/QUICK_START.md`](./01-getting-started/QUICK_START.md)
-3. [`03-development/LOCAL_DEVELOPMENT_SUCCESS.md`](./03-development/LOCAL_DEVELOPMENT_SUCCESS.md)
-4. [`06-features/`](./06-features/) - Feature documentation
+### **📂 06-features/portfolio-financial**
 
----
+- [PORTFOLIO_FINANCIAL_CHECKLIST.md](./06-features/portfolio-financial/PORTFOLIO_FINANCIAL_CHECKLIST.md)
+- [PORTFOLIO_FINANCIAL_DELIVERY.md](./06-features/portfolio-financial/PORTFOLIO_FINANCIAL_DELIVERY.md)
+- [PORTFOLIO_FINANCIAL_IMPLEMENTATION.md](./06-features/portfolio-financial/PORTFOLIO_FINANCIAL_IMPLEMENTATION.md)
+- [PORTFOLIO_FINANCIAL_QUICKSTART.md](./06-features/portfolio-financial/PORTFOLIO_FINANCIAL_QUICKSTART.md)
 
-## 🔄 **For Returning to Work**
+### **📂 06-features/project-task-management**
 
-**Check beacons folder:**
-→ [`docs/beacons/`](./beacons/)
+- [ProjectTasksManagementImplementationPlan.md](./06-features/project-task-management/ProjectTasksManagementImplementationPlan.md)
 
-Latest handoff: **TOMORROW_START_HERE_SAFE_REFACTORING.md**
+### **📂 06-features/refactoring**
 
----
+- [FILE3_COMPLETE_VALIDATION.md](./06-features/refactoring/FILE3_COMPLETE_VALIDATION.md)
+- [FILE3_EXTRACTION_COMPLETE.md](./06-features/refactoring/FILE3_EXTRACTION_COMPLETE.md)
+- [FILE4_REFACTORING_COMPLETE_VICTORY.md](./06-features/refactoring/FILE4_REFACTORING_COMPLETE_VICTORY.md)
+- [FILE4_STARTED_CHECKPOINT.md](./06-features/refactoring/FILE4_STARTED_CHECKPOINT.md)
+- [REFACTORING_CASE_STUDY_EXCELLENCE.md](./06-features/refactoring/REFACTORING_CASE_STUDY_EXCELLENCE.md)
+- [REFACTORING_PROGRESS_OCT26.md](./06-features/refactoring/REFACTORING_PROGRESS_OCT26.md)
+- [REFACTORING_READY_FOR_APPROVAL.md](./06-features/refactoring/REFACTORING_READY_FOR_APPROVAL.md)
+- [REFACTORING_SESSION_FINAL_ACHIEVEMENT.md](./06-features/refactoring/REFACTORING_SESSION_FINAL_ACHIEVEMENT.md)
+- [REFACTORING_VALIDATION_SUCCESS.md](./06-features/refactoring/REFACTORING_VALIDATION_SUCCESS.md)
 
-## 📞 **Document Organization**
+### **📂 06-features/task-costing**
 
-All root-level markdown files have been organized into appropriate subdirectories:
-- ✅ Session summaries → `09-releases/sessions/2025-10-26/`
-- ✅ Refactoring docs → `06-features/refactoring/`
-- ✅ Roadmap features → `roadmap/`
-- ✅ Troubleshooting → `10-troubleshooting/`
-- ✅ Architecture → `07-architecture/`
-- ✅ Security → `12-security/`
-- ✅ Handoffs → `beacons/`
-- ✅ Archive → `archive/`
+- [TASK_COST_IMPLEMENTATION.md](./06-features/task-costing/TASK_COST_IMPLEMENTATION.md)
+- [TASK_COST_SUMMARY.md](./06-features/task-costing/TASK_COST_SUMMARY.md)
+- [TASK_COST_SYSTEM.md](./06-features/task-costing/TASK_COST_SYSTEM.md)
 
----
+### **📂 06-features/task-details-modal-fix**
 
-**Root directory is now clean and organized!** ✨
+- [CODE_CHANGES_EXACT_DIFF.md](./06-features/task-details-modal-fix/CODE_CHANGES_EXACT_DIFF.md)
+- [COMPLETION_REPORT_2025-11-05.md](./06-features/task-details-modal-fix/COMPLETION_REPORT_2025-11-05.md)
+- [FIX_VISUAL_EXPLANATION.md](./06-features/task-details-modal-fix/FIX_VISUAL_EXPLANATION.md)
+- [GIT_CHANGES_SUMMARY.md](./06-features/task-details-modal-fix/GIT_CHANGES_SUMMARY.md)
+- [QUICK_REFERENCE_TASK_FIX.md](./06-features/task-details-modal-fix/QUICK_REFERENCE_TASK_FIX.md)
+- [SESSION_SUMMARY_2025-11-05.md](./06-features/task-details-modal-fix/SESSION_SUMMARY_2025-11-05.md)
+- [TASK_DETAILS_FIX_CHECKLIST.md](./06-features/task-details-modal-fix/TASK_DETAILS_FIX_CHECKLIST.md)
+- [TASK_DETAILS_FIX_SUMMARY.md](./06-features/task-details-modal-fix/TASK_DETAILS_FIX_SUMMARY.md)
+
+### **📂 07-architecture**
+
+- [AI_AGENT_PROMPT_PROCESS_FLOW_COMPLETION.md](./07-architecture/AI_AGENT_PROMPT_PROCESS_FLOW_COMPLETION.md)
+- [AI_ANALYTICS_DATA_FLOW.md](./07-architecture/AI_ANALYTICS_DATA_FLOW.md)
+- [AI_PARALLEL_PROCESSING_CURRENT_STATE.md](./07-architecture/AI_PARALLEL_PROCESSING_CURRENT_STATE.md)
+- [AI_QUALITY_GATEKEEPER_DESIGN.md](./07-architecture/AI_QUALITY_GATEKEEPER_DESIGN.md)
+- [ai-extraction-caching.md](./07-architecture/ai-extraction-caching.md)
+- [ANALYTICS_GAP_ANALYSIS.md](./07-architecture/ANALYTICS_GAP_ANALYSIS.md)
+- [ANALYTICS_IMPLEMENTATION_STATUS.md](./07-architecture/ANALYTICS_IMPLEMENTATION_STATUS.md)
+- [ARCHITECTURE_OVERVIEW_WITH_PERSONAS.md](./07-architecture/ARCHITECTURE_OVERVIEW_WITH_PERSONAS.md)
+- [AUTH_DECISION_DEFERRED.md](./07-architecture/AUTH_DECISION_DEFERRED.md)
+- [AUTHENTICATION_STRATEGY_ANALYSIS.md](./07-architecture/AUTHENTICATION_STRATEGY_ANALYSIS.md)
+- [BACKEND_URL_EXPLANATION.md](./07-architecture/BACKEND_URL_EXPLANATION.md)
+- [BULL_QUEUES_COMPLETE_GUIDE.md](./07-architecture/BULL_QUEUES_COMPLETE_GUIDE.md)
+- [BULL_QUEUES_QUICK_REFERENCE.md](./07-architecture/BULL_QUEUES_QUICK_REFERENCE.md)
+- [CODE_SIZE_ANALYSIS_REFACTORING_PLAN.md](./07-architecture/CODE_SIZE_ANALYSIS_REFACTORING_PLAN.md)
+- [CONTEXT_BUNDLE_IMPLEMENTATION_SUMMARY.md](./07-architecture/CONTEXT_BUNDLE_IMPLEMENTATION_SUMMARY.md)
+- [CONTEXT_FRESHNESS_MANAGEMENT_IMPLEMENTATION_SUMMARY.md](./07-architecture/CONTEXT_FRESHNESS_MANAGEMENT_IMPLEMENTATION_SUMMARY.md)
+- [CONTEXT_INJECTION_FRAMEWORK_SUMMARY.md](./07-architecture/CONTEXT_INJECTION_FRAMEWORK_SUMMARY.md)
+- [CONTEXT_INJECTION_IMPLEMENTATION_SUMMARY.md](./07-architecture/CONTEXT_INJECTION_IMPLEMENTATION_SUMMARY.md)
+- [CONTEXT_REPOSITORY_IMPLEMENTATION_SUMMARY.md](./07-architecture/CONTEXT_REPOSITORY_IMPLEMENTATION_SUMMARY.md)
+- [CONTEXT_RETRIEVAL_SERVICE_IMPLEMENTATION_SUMMARY.md](./07-architecture/CONTEXT_RETRIEVAL_SERVICE_IMPLEMENTATION_SUMMARY.md)
+- [CORE_PIPELINE_READY.md](./07-architecture/CORE_PIPELINE_READY.md)
+- [CR-2026-001_VALIDATION_VIA_REAL_COMPLIANCE_REVIEW.md](./07-architecture/CR-2026-001_VALIDATION_VIA_REAL_COMPLIANCE_REVIEW.md)
+- [CRITICAL_NON_COMPLIANCE_ADPA_BUDGET.md](./07-architecture/CRITICAL_NON_COMPLIANCE_ADPA_BUDGET.md)
+- [DATABASE_CLEANUP_SUMMARY.md](./07-architecture/DATABASE_CLEANUP_SUMMARY.md)
+- [DATABASE_SCHEMA_OVERVIEW.md](./07-architecture/DATABASE_SCHEMA_OVERVIEW.md)
+- [database-optimization-plan.md](./07-architecture/database-optimization-plan.md)
+- [database-schema-audit.md](./07-architecture/database-schema-audit.md)
+- [deduplication-strategies.md](./07-architecture/deduplication-strategies.md)
+- [DEPLOYMENT_ARCHITECTURE.md](./07-architecture/DEPLOYMENT_ARCHITECTURE.md)
+- [DRIFT_RESOLUTION_PERFORMANCE_OPTIMIZATION.md](./07-architecture/DRIFT_RESOLUTION_PERFORMANCE_OPTIMIZATION.md)
+- [ENHANCED_QUALITY_ASSURANCE_STAGE_IMPLEMENTATION_SUMMARY.md](./07-architecture/ENHANCED_QUALITY_ASSURANCE_STAGE_IMPLEMENTATION_SUMMARY.md)
+- [ENTERPRISE_AUTH_ENTRA_ID_STRATEGY.md](./07-architecture/ENTERPRISE_AUTH_ENTRA_ID_STRATEGY.md)
+- [ENTITY_DEFINITIONS.md](./07-architecture/ENTITY_DEFINITIONS.md)
+- [FRONTEND_BACKEND_INTEGRATION_COMPLETE.md](./07-architecture/FRONTEND_BACKEND_INTEGRATION_COMPLETE.md)
+- [GKG_CONTEXT_STRATEGY.md](./07-architecture/GKG_CONTEXT_STRATEGY.md)
+- [GKG_INGESTION_DESIGN.md](./07-architecture/GKG_INGESTION_DESIGN.md)
+- [GKG_SCHEMA_CYPHER.md](./07-architecture/GKG_SCHEMA_CYPHER.md)
+- [GKG_SCHEMA.md](./07-architecture/GKG_SCHEMA.md)
+- [GUEST_USER_ARCHITECTURE.md](./07-architecture/GUEST_USER_ARCHITECTURE.md)
+- [HISTORICAL_ANALYSIS_IMPLEMENTATION_SUMMARY.md](./07-architecture/HISTORICAL_ANALYSIS_IMPLEMENTATION_SUMMARY.md)
+- [information-architecture-week1.md](./07-architecture/information-architecture-week1.md)
+- [LARGE_FILES_QUICK_REFERENCE.md](./07-architecture/LARGE_FILES_QUICK_REFERENCE.md)
+- [MULTI_PROVIDER_PARALLEL_SYSTEM_DISCOVERED.md](./07-architecture/MULTI_PROVIDER_PARALLEL_SYSTEM_DISCOVERED.md)
+- [MULTI_STAGE_DOCUMENT_PROCESSOR_IMPLEMENTATION_SUMMARY.md](./07-architecture/MULTI_STAGE_DOCUMENT_PROCESSOR_IMPLEMENTATION_SUMMARY.md)
+- [NEO4J_GKG_STATUS.md](./07-architecture/NEO4J_GKG_STATUS.md)
+- [PARALLEL_AI_ORCHESTRATION_VISION.md](./07-architecture/PARALLEL_AI_ORCHESTRATION_VISION.md)
+- [PENDING_JOBS_DIAGNOSTIC.md](./07-architecture/PENDING_JOBS_DIAGNOSTIC.md)
+- [PHASE_3_AND_4_COMPLETE.md](./07-architecture/PHASE_3_AND_4_COMPLETE.md)
+- [PHASE5_COMPLETE.md](./07-architecture/PHASE5_COMPLETE.md)
+- [PHASE5_IMPLEMENTATION_REVIEW.md](./07-architecture/PHASE5_IMPLEMENTATION_REVIEW.md)
+- [PHASE5_OPTIONAL_ENHANCEMENTS.md](./07-architecture/PHASE5_OPTIONAL_ENHANCEMENTS.md)
+- [PHASE5_PERFORMANCE_MONITORING.md](./07-architecture/PHASE5_PERFORMANCE_MONITORING.md)
+- [PHASE5_TEST_FIXES.md](./07-architecture/PHASE5_TEST_FIXES.md)
+- [PHASE5_TESTING_GUIDE.md](./07-architecture/PHASE5_TESTING_GUIDE.md)
+- [PIPELINE_AUTH_FIX.md](./07-architecture/PIPELINE_AUTH_FIX.md)
+- [PIPELINE_DOCUMENT_METADATA_COMPLETE.md](./07-architecture/PIPELINE_DOCUMENT_METADATA_COMPLETE.md)
+- [PIPELINE_DOCUMENT_SAVE_FIX.md](./07-architecture/PIPELINE_DOCUMENT_SAVE_FIX.md)
+- [PIPELINE_INTEGRATION_COMPLETE.md](./07-architecture/PIPELINE_INTEGRATION_COMPLETE.md)
+- [PIPELINE_STATUS_VERIFIED.md](./07-architecture/PIPELINE_STATUS_VERIFIED.md)
+- [PIPELINE_TROUBLESHOOTING.md](./07-architecture/PIPELINE_TROUBLESHOOTING.md)
+- [QDRANT_INTEGRATION.md](./07-architecture/QDRANT_INTEGRATION.md)
+- [QUALITY_CONTROL_GATE_DESIGN.md](./07-architecture/QUALITY_CONTROL_GATE_DESIGN.md)
+- [QUEUE_FIXES_APPLIED.md](./07-architecture/QUEUE_FIXES_APPLIED.md)
+- [QUEUE_IMPLEMENTATION_REVIEW.md](./07-architecture/QUEUE_IMPLEMENTATION_REVIEW.md)
+- [QUEUE_REFACTORING_PHASE_STATUS.md](./07-architecture/QUEUE_REFACTORING_PHASE_STATUS.md)
+- [REFACTORING_SESSION_OCT26.md](./07-architecture/REFACTORING_SESSION_OCT26.md)
+- [ROLE_BASED_ACCESS_CONTROL_IMPLEMENTATION_SUMMARY.md](./07-architecture/ROLE_BASED_ACCESS_CONTROL_IMPLEMENTATION_SUMMARY.md)
+- [SAMPLE_AI_TEMPLATES_SUMMARY.md](./07-architecture/SAMPLE_AI_TEMPLATES_SUMMARY.md)
+- [SEMANTIC_SEARCH_INTEGRATION_SUMMARY.md](./07-architecture/SEMANTIC_SEARCH_INTEGRATION_SUMMARY.md)
+- [SESSION_SUMMARY_ANALYTICS_DATABASE.md](./07-architecture/SESSION_SUMMARY_ANALYTICS_DATABASE.md)
+- [STAGE2_TEMPLATE_PROCESSING_IMPLEMENTATION.md](./07-architecture/STAGE2_TEMPLATE_PROCESSING_IMPLEMENTATION.md)
+- [STAGE3_AI_GENERATION_IMPLEMENTATION.md](./07-architecture/STAGE3_AI_GENERATION_IMPLEMENTATION.md)
+- [STAGE4_CONTEXT_INJECTION_IMPLEMENTATION.md](./07-architecture/STAGE4_CONTEXT_INJECTION_IMPLEMENTATION.md)
+- [STAGE5_QUALITY_ASSURANCE_IMPLEMENTATION.md](./07-architecture/STAGE5_QUALITY_ASSURANCE_IMPLEMENTATION.md)
+- [STAGE6_OUTPUT_FORMATTING_IMPLEMENTATION.md](./07-architecture/STAGE6_OUTPUT_FORMATTING_IMPLEMENTATION.md)
+- [SYSTEM_PROMPT_INTEGRATION_SUMMARY.md](./07-architecture/SYSTEM_PROMPT_INTEGRATION_SUMMARY.md)
+- [TEMPLATE_STAGES_TECHNICAL_SPECS.md](./07-architecture/TEMPLATE_STAGES_TECHNICAL_SPECS.md)
+- [USER_ACCESS_CONFIGURATION.md](./07-architecture/USER_ACCESS_CONFIGURATION.md)
+- [VALIDATION_FUNCTIONS_IMPLEMENTATION_SUMMARY.md](./07-architecture/VALIDATION_FUNCTIONS_IMPLEMENTATION_SUMMARY.md)
+- [VARIABLE_RESOLUTION_ENGINE_IMPLEMENTATION_SUMMARY.md](./07-architecture/VARIABLE_RESOLUTION_ENGINE_IMPLEMENTATION_SUMMARY.md)
+- [VERCEL_ASYNC_TASK_BREAKDOWN.md](./07-architecture/VERCEL_ASYNC_TASK_BREAKDOWN.md)
+- [VERCEL_DATABASE_IMPLEMENTATION_PLAN.md](./07-architecture/VERCEL_DATABASE_IMPLEMENTATION_PLAN.md)
+- [VISUAL_PIPELINE_IMPLEMENTATION_SUMMARY.md](./07-architecture/VISUAL_PIPELINE_IMPLEMENTATION_SUMMARY.md)
+
+### **📂 08-testing**
+
+- [BASELINE_TESTING_FOCUSED.md](./08-testing/BASELINE_TESTING_FOCUSED.md)
+- [DRIFT_RESOLUTION_VERIFICATION.md](./08-testing/DRIFT_RESOLUTION_VERIFICATION.md)
+- [E2E_TESTING_GUIDE.md](./08-testing/E2E_TESTING_GUIDE.md)
+- [E2E_TESTING_IMPLEMENTATION_SUMMARY.md](./08-testing/E2E_TESTING_IMPLEMENTATION_SUMMARY.md)
+- [FOUR_VALIDATION_SUCCESS.md](./08-testing/FOUR_VALIDATION_SUCCESS.md)
+- [LOCAL_TESTING_GUIDE.md](./08-testing/LOCAL_TESTING_GUIDE.md)
+- [PLAYWRIGHT_CAPABILITIES.md](./08-testing/PLAYWRIGHT_CAPABILITIES.md)
+- [PLAYWRIGHT_WORKFLOW_GUIDE.md](./08-testing/PLAYWRIGHT_WORKFLOW_GUIDE.md)
+- [pmbok8-dashboard-testing.md](./08-testing/pmbok8-dashboard-testing.md)
+- [PRODUCTION_VALIDATION_SUCCESS.md](./08-testing/PRODUCTION_VALIDATION_SUCCESS.md)
+- [project_charter_requirements_management_platform.md](./08-testing/project_charter_requirements_management_platform.md)
+- [READY_TO_TEST_2025-10-20.md](./08-testing/READY_TO_TEST_2025-10-20.md)
+- [SECOND_VALIDATION_SUCCESS.md](./08-testing/SECOND_VALIDATION_SUCCESS.md)
+- [STAKEHOLDER_TESTING_CHECKLIST.md](./08-testing/STAKEHOLDER_TESTING_CHECKLIST.md)
+- [TASK_732_DRIFT_RECORD_MARKED_RESOLVED.md](./08-testing/TASK_732_DRIFT_RECORD_MARKED_RESOLVED.md)
+- [TEMPLATE_TOKEN_VERIFICATION.md](./08-testing/TEMPLATE_TOKEN_VERIFICATION.md)
+- [TESTING_CHECKLIST_2025-10-20.md](./08-testing/TESTING_CHECKLIST_2025-10-20.md)
+- [TESTING_CHECKLIST_v2.0.0.md](./08-testing/TESTING_CHECKLIST_v2.0.0.md)
+
+### **📂 08-testing/drift-and-validation**
+
+- [BEGINNER_GUIDE_BROWSER_CONSOLE.md](./08-testing/drift-and-validation/BEGINNER_GUIDE_BROWSER_CONSOLE.md)
+- [DRIFT_DETECTION_FIX_VERIFICATION.md](./08-testing/drift-and-validation/DRIFT_DETECTION_FIX_VERIFICATION.md)
+- [DRIFT_RESOLUTION_TESTING_GUIDE.md](./08-testing/drift-and-validation/DRIFT_RESOLUTION_TESTING_GUIDE.md)
+- [DRIFT_RESOLUTION_VERIFICATION.md](./08-testing/drift-and-validation/DRIFT_RESOLUTION_VERIFICATION.md)
+- [ENTITY_TYPES_TEST_COVERAGE.md](./08-testing/drift-and-validation/ENTITY_TYPES_TEST_COVERAGE.md)
+- [ENTITY_TYPES_TESTING_PLAN.md](./08-testing/drift-and-validation/ENTITY_TYPES_TESTING_PLAN.md)
+- [QUICK_START_DRIFT_TESTING.md](./08-testing/drift-and-validation/QUICK_START_DRIFT_TESTING.md)
+- [QUICK_START_EXTRACTION.md](./08-testing/drift-and-validation/QUICK_START_EXTRACTION.md)
+- [QUICK_VALIDATION_GUIDE.md](./08-testing/drift-and-validation/QUICK_VALIDATION_GUIDE.md)
+- [READY_FOR_TESTING.md](./08-testing/drift-and-validation/READY_FOR_TESTING.md)
+- [READY_FOR_USER_TESTING_AI_ANALYTICS.md](./08-testing/drift-and-validation/READY_FOR_USER_TESTING_AI_ANALYTICS.md)
+- [TASK_716_IMPLEMENTATION_SUMMARY.md](./08-testing/drift-and-validation/TASK_716_IMPLEMENTATION_SUMMARY.md)
+- [TASK_722_IMPLEMENTATION_SUMMARY.md](./08-testing/drift-and-validation/TASK_722_IMPLEMENTATION_SUMMARY.md)
+- [TASK-722-COMPLETION-REPORT.md](./08-testing/drift-and-validation/TASK-722-COMPLETION-REPORT.md)
+- [TASK-722-IMPLEMENTATION-SUMMARY.md](./08-testing/drift-and-validation/TASK-722-IMPLEMENTATION-SUMMARY.md)
+- [TESTING_INSTRUCTIONS_AI_ANALYTICS.md](./08-testing/drift-and-validation/TESTING_INSTRUCTIONS_AI_ANALYTICS.md)
+- [TESTING_INSTRUCTIONS.md](./08-testing/drift-and-validation/TESTING_INSTRUCTIONS.md)
+- [VALIDATION_CHECKLIST.md](./08-testing/drift-and-validation/VALIDATION_CHECKLIST.md)
+
+### **📂 09-releases**
+
+- [ADPA_ONE_PAGER_NL_A4.md](./09-releases/ADPA_ONE_PAGER_NL_A4.md)
+- [ADPA_PRESENTATIE_NIET_TECHNISCH_NL.md](./09-releases/ADPA_PRESENTATIE_NIET_TECHNISCH_NL.md)
+- [ADPA_PROJECT_SUMMARY_ONE_PAGER.md](./09-releases/ADPA_PROJECT_SUMMARY_ONE_PAGER.md)
+- [ADPA_STATEMENT_OF_WORK_v2.1.md](./09-releases/ADPA_STATEMENT_OF_WORK_v2.1.md)
+- [ADPA_WERKVERKLARING_NIET_TECHNISCH_v2.1.md](./09-releases/ADPA_WERKVERKLARING_NIET_TECHNISCH_v2.1.md)
+- [ALL_CHECKS_PASSED_VICTORY.md](./09-releases/ALL_CHECKS_PASSED_VICTORY.md)
+- [CELEBRATION_50_COMMITS.md](./09-releases/CELEBRATION_50_COMMITS.md)
+- [CHANGELOG_UPDATE_SINCE_OCTOBER_2025.md](./09-releases/CHANGELOG_UPDATE_SINCE_OCTOBER_2025.md)
+- [CHANGELOG.md](./09-releases/CHANGELOG.md)
+- [COMPLETE_v2.0.0_RELEASE.md](./09-releases/COMPLETE_v2.0.0_RELEASE.md)
+- [FINAL_RELEASE_STATUS_v2.0.0.md](./09-releases/FINAL_RELEASE_STATUS_v2.0.0.md)
+- [FINAL_VICTORY_84_COMMITS.md](./09-releases/FINAL_VICTORY_84_COMMITS.md)
+- [LEGENDARY_SESSION_86_COMMITS.md](./09-releases/LEGENDARY_SESSION_86_COMMITS.md)
+- [PR_MERGED_LEGENDARY_COMPLETE.md](./09-releases/PR_MERGED_LEGENDARY_COMPLETE.md)
+- [RAG_INTEGRATION_RELEASE_NOTES.md](./09-releases/RAG_INTEGRATION_RELEASE_NOTES.md)
+- [READY_TO_PUSH_v2.0.0.md](./09-releases/READY_TO_PUSH_v2.0.0.md)
+- [RELEASE_EXECUTION_SUMMARY.md](./09-releases/RELEASE_EXECUTION_SUMMARY.md)
+- [RELEASE_NOTES_v2.0.0.md](./09-releases/RELEASE_NOTES_v2.0.0.md)
+- [RELEASE_READY_v2.0.0.md](./09-releases/RELEASE_READY_v2.0.0.md)
+- [RELEASE_SUMMARY_v2.0.0.md](./09-releases/RELEASE_SUMMARY_v2.0.0.md)
+- [RELEASE_SUMMARY_v2.1.0.md](./09-releases/RELEASE_SUMMARY_v2.1.0.md)
+- [SESSION_SUMMARY_v2.0.0.md](./09-releases/SESSION_SUMMARY_v2.0.0.md)
+- [SOURCE_DOCUMENT_TRACEABILITY_RELEASE_NOTES.md](./09-releases/SOURCE_DOCUMENT_TRACEABILITY_RELEASE_NOTES.md)
+- [TIME_PROTECTION_RESPONSE_TEMPLATES.md](./09-releases/TIME_PROTECTION_RESPONSE_TEMPLATES.md)
+- [ULTIMATE_SESSION_COMPLETE_OCT26.md](./09-releases/ULTIMATE_SESSION_COMPLETE_OCT26.md)
+- [WHATS_NEW_v2.0.0.md](./09-releases/WHATS_NEW_v2.0.0.md)
+- [WHATS_NEW_v2.1.0.md](./09-releases/WHATS_NEW_v2.1.0.md)
+
+### **📂 09-releases/session-notes**
+
+- [README.md](./09-releases/session-notes/README.md)
+- [SESSION_SUMMARY_2025-10-17.md](./09-releases/session-notes/SESSION_SUMMARY_2025-10-17.md)
+- [SESSION_SUMMARY_2025-10-18.md](./09-releases/session-notes/SESSION_SUMMARY_2025-10-18.md)
+
+### **📂 09-releases/sessions**
+
+- [2025-10-30-extraction-implementation.md](./09-releases/sessions/2025-10-30-extraction-implementation.md)
+- [2025-12-02-weighted-allocation-and-template-analytics.md](./09-releases/sessions/2025-12-02-weighted-allocation-and-template-analytics.md)
+- [IMPLEMENTATION_SESSION_SUMMARY.md](./09-releases/sessions/IMPLEMENTATION_SESSION_SUMMARY.md)
+- [SESSION_HANDOVER_2025-11-03.md](./09-releases/sessions/SESSION_HANDOVER_2025-11-03.md)
+- [SESSION_STATUS_MODEL_ANALYTICS.md](./09-releases/sessions/SESSION_STATUS_MODEL_ANALYTICS.md)
+- [SESSION_SUCCESS_AI_ANALYTICS_COMPLETE.md](./09-releases/sessions/SESSION_SUCCESS_AI_ANALYTICS_COMPLETE.md)
+- [SESSION_SUMMARY_2025-10-28_AI_Provider_Integration.md](./09-releases/sessions/SESSION_SUMMARY_2025-10-28_AI_Provider_Integration.md)
+- [SESSION_SUMMARY_2025-10-29_RAG_AND_EXTRACTION.md](./09-releases/sessions/SESSION_SUMMARY_2025-10-29_RAG_AND_EXTRACTION.md)
+- [SESSION_SUMMARY_2025-11-02_AI_PROVIDERS_COMPLETE.md](./09-releases/sessions/SESSION_SUMMARY_2025-11-02_AI_PROVIDERS_COMPLETE.md)
+- [SESSION_SUMMARY_2025-11-03_QUALITY_GATE_COMPLETE.md](./09-releases/sessions/SESSION_SUMMARY_2025-11-03_QUALITY_GATE_COMPLETE.md)
+
+### **📂 09-releases/sessions/2025-10-26**
+
+- [DINNER_STATUS_ALL_HANDLED.md](./09-releases/sessions/2025-10-26/DINNER_STATUS_ALL_HANDLED.md)
+- [SESSION_COMPLETE_OCT26_2025.md](./09-releases/sessions/2025-10-26/SESSION_COMPLETE_OCT26_2025.md)
+- [SESSION_COMPLETE_OCT26_FINAL.md](./09-releases/sessions/2025-10-26/SESSION_COMPLETE_OCT26_FINAL.md)
+- [SESSION_STATUS_OCT26_EVENING.md](./09-releases/sessions/2025-10-26/SESSION_STATUS_OCT26_EVENING.md)
+- [SESSION_SUMMARY_OCT26_FINAL.md](./09-releases/sessions/2025-10-26/SESSION_SUMMARY_OCT26_FINAL.md)
+- [TONIGHT_SESSION_SUMMARY_WINS.md](./09-releases/sessions/2025-10-26/TONIGHT_SESSION_SUMMARY_WINS.md)
+- [WHILE_YOU_ATE_DINNER_SUMMARY.md](./09-releases/sessions/2025-10-26/WHILE_YOU_ATE_DINNER_SUMMARY.md)
+
+### **📂 10-troubleshooting**
+
+- [BROWSER_REFRESH_NEEDED.md](./10-troubleshooting/BROWSER_REFRESH_NEEDED.md)
+- [GOOGLE_AI_CONNECTIVITY_FIX.md](./10-troubleshooting/GOOGLE_AI_CONNECTIVITY_FIX.md)
+- [GRANT-MENNO-ACCESS-NOW.md](./10-troubleshooting/GRANT-MENNO-ACCESS-NOW.md)
+- [PRODUCTION_ERROR_TROUBLESHOOTING.md](./10-troubleshooting/PRODUCTION_ERROR_TROUBLESHOOTING.md)
+- [PRODUCTION_FIX.md](./10-troubleshooting/PRODUCTION_FIX.md)
+- [PRODUCTION_LOGIN_FIXED.md](./10-troubleshooting/PRODUCTION_LOGIN_FIXED.md)
+- [PRODUCTION_LOGIN_RESOLVED.md](./10-troubleshooting/PRODUCTION_LOGIN_RESOLVED.md)
+- [PRODUCTION_LOGIN_STATUS.md](./10-troubleshooting/PRODUCTION_LOGIN_STATUS.md)
+- [RESTART_BACKEND_REQUIRED.md](./10-troubleshooting/RESTART_BACKEND_REQUIRED.md)
+- [STAKEHOLDER_ISSUE_RESOLUTION.md](./10-troubleshooting/STAKEHOLDER_ISSUE_RESOLUTION.md)
+- [URGENT_FIX_DOCUMENT_ACCESS.md](./10-troubleshooting/URGENT_FIX_DOCUMENT_ACCESS.md)
+
+### **📂 10-troubleshooting/field-reports**
+
+- [BUGFIX_AI_ANALYTICS_NUMBER_DISPLAY.md](./10-troubleshooting/field-reports/BUGFIX_AI_ANALYTICS_NUMBER_DISPLAY.md)
+- [BUGFIX_TEMPLATE_USAGE_COUNTERS.md](./10-troubleshooting/field-reports/BUGFIX_TEMPLATE_USAGE_COUNTERS.md)
+- [EXTRACTION_FIXES_SUMMARY.md](./10-troubleshooting/field-reports/EXTRACTION_FIXES_SUMMARY.md)
+- [production-deployment-fixes-2025-10-28.md](./10-troubleshooting/field-reports/production-deployment-fixes-2025-10-28.md)
+- [TEMPLATE_USAGE_STUCK_AT_20.md](./10-troubleshooting/field-reports/TEMPLATE_USAGE_STUCK_AT_20.md)
+
+### **📂 10-troubleshooting/react-console-warning-fix**
+
+- [COMMIT_CONFIRMATION_2025-11-21.md](./10-troubleshooting/react-console-warning-fix/COMMIT_CONFIRMATION_2025-11-21.md)
+- [CONSOLE_WARNING_FIX_SUMMARY.md](./10-troubleshooting/react-console-warning-fix/CONSOLE_WARNING_FIX_SUMMARY.md)
+- [CONSOLE_WARNING_VERIFICATION.md](./10-troubleshooting/react-console-warning-fix/CONSOLE_WARNING_VERIFICATION.md)
+- [DOCUMENTATION_INDEX_CONSOLE_FIX.md](./10-troubleshooting/react-console-warning-fix/DOCUMENTATION_INDEX_CONSOLE_FIX.md)
+- [FIX_COMPLETE.md](./10-troubleshooting/react-console-warning-fix/FIX_COMPLETE.md)
+- [FIX_VISUAL_DIAGRAM.md](./10-troubleshooting/react-console-warning-fix/FIX_VISUAL_DIAGRAM.md)
+- [GIT_COMMIT_INFO.md](./10-troubleshooting/react-console-warning-fix/GIT_COMMIT_INFO.md)
+- [QUICK_FIX_REFERENCE.md](./10-troubleshooting/react-console-warning-fix/QUICK_FIX_REFERENCE.md)
+- [REACT_KEY_WARNING_FIX.md](./10-troubleshooting/react-console-warning-fix/REACT_KEY_WARNING_FIX.md)
+- [SESSION_SUMMARY_2025-11-21.md](./10-troubleshooting/react-console-warning-fix/SESSION_SUMMARY_2025-11-21.md)
+
+### **📂 11-user-guides**
+
+- [ADMINISTRATOR_GUIDE.md](./11-user-guides/ADMINISTRATOR_GUIDE.md)
+- [ADMINISTRATOR_TRAINING_GUIDE.md](./11-user-guides/ADMINISTRATOR_TRAINING_GUIDE.md)
+- [BETA_INVITATION_SHORT.md](./11-user-guides/BETA_INVITATION_SHORT.md)
+- [BETA_TESTER_INVITATION.md](./11-user-guides/BETA_TESTER_INVITATION.md)
+- [CONFLICT_RESOLUTION_GUIDE.md](./11-user-guides/CONFLICT_RESOLUTION_GUIDE.md)
+- [CONFLUENCE_CROSSLINK_UPDATE_GUIDE.md](./11-user-guides/CONFLUENCE_CROSSLINK_UPDATE_GUIDE.md)
+- [DEVELOPER_TRAINING_GUIDE.md](./11-user-guides/DEVELOPER_TRAINING_GUIDE.md)
+- [DIGITAL_SIGNING_AND_COMPLIANCE_DOCUMENSO_GUIDE.md](./11-user-guides/DIGITAL_SIGNING_AND_COMPLIANCE_DOCUMENSO_GUIDE.md)
+- [END_USER_TRAINING_GUIDE.md](./11-user-guides/END_USER_TRAINING_GUIDE.md)
+- [EXECUTIVE_ANALYTICS_AND_DASHBOARDS_GUIDE.md](./11-user-guides/EXECUTIVE_ANALYTICS_AND_DASHBOARDS_GUIDE.md)
+- [GETTING_STARTED_GUIDE.md](./11-user-guides/GETTING_STARTED_GUIDE.md)
+- [GOVERNANCE_DRIFT_DETECTION_AND_RESOLUTION_GUIDE.md](./11-user-guides/GOVERNANCE_DRIFT_DETECTION_AND_RESOLUTION_GUIDE.md)
+- [PERSONAS_ARCHITECTURE_CROSSLINKS.md](./11-user-guides/PERSONAS_ARCHITECTURE_CROSSLINKS.md)
+- [PORTFOLIO_PRIORITIZATION_MATRIX_GUIDE.md](./11-user-guides/PORTFOLIO_PRIORITIZATION_MATRIX_GUIDE.md)
+- [PR_DESCRIPTION_CR_FRAMEWORK.md](./11-user-guides/PR_DESCRIPTION_CR_FRAMEWORK.md)
+- [QUICK_REFERENCE_GUIDE.md](./11-user-guides/QUICK_REFERENCE_GUIDE.md)
+- [README.md](./11-user-guides/README.md)
+- [SOCIAL_MEDIA_BETA_POSTS.md](./11-user-guides/SOCIAL_MEDIA_BETA_POSTS.md)
+- [STAKEHOLDER_ANNOUNCEMENT_v2.0.0.md](./11-user-guides/STAKEHOLDER_ANNOUNCEMENT_v2.0.0.md)
+- [STAKEHOLDER_DEMO_READY.md](./11-user-guides/STAKEHOLDER_DEMO_READY.md)
+- [TEAMS_STAKEHOLDER_INVITATION.md](./11-user-guides/TEAMS_STAKEHOLDER_INVITATION.md)
+- [UPLOAD_CHANGE_REQUESTS_GUIDE.md](./11-user-guides/UPLOAD_CHANGE_REQUESTS_GUIDE.md)
+- [USER_GUIDE_APPROVAL_WORKFLOW.md](./11-user-guides/USER_GUIDE_APPROVAL_WORKFLOW.md)
+- [WORKFLOW_GUIDE.md](./11-user-guides/WORKFLOW_GUIDE.md)
+- [YAMMER_POST_ADPA.md](./11-user-guides/YAMMER_POST_ADPA.md)
+
+### **📂 12-security**
+
+- [CREDENTIAL_CLEANUP_PLAN.md](./12-security/CREDENTIAL_CLEANUP_PLAN.md)
+- [SECURITY_AUDIT_FINDINGS.md](./12-security/SECURITY_AUDIT_FINDINGS.md)
+- [SECURITY_CLEANUP_SUMMARY.md](./12-security/SECURITY_CLEANUP_SUMMARY.md)
+- [SECURITY_VULNERABILITY_REMEDIATION.md](./12-security/SECURITY_VULNERABILITY_REMEDIATION.md)
+- [SECURITY.md](./12-security/SECURITY.md)
+
+### **📂 12-security/operations**
+
+- [AI_CODE_REVIEW_SUMMARY.md](./12-security/operations/AI_CODE_REVIEW_SUMMARY.md)
+- [CURSOR_BUGBOT_SECURITY_FIXES.md](./12-security/operations/CURSOR_BUGBOT_SECURITY_FIXES.md)
+- [KNOWLEDGE_BASE_SECURITY_SUMMARY.md](./12-security/operations/KNOWLEDGE_BASE_SECURITY_SUMMARY.md)
+- [TODAYS_EPIC_SECURITY_JOURNEY.md](./12-security/operations/TODAYS_EPIC_SECURITY_JOURNEY.md)
+
+### **📂 99-root-archive**
+
+- [ACTION_PLAN.md](./99-root-archive/ACTION_PLAN.md)
+- [ADPA Client Onboarding Assessment System - Project - UniCorn COAS.docx](./99-root-archive/ADPA Client Onboarding Assessment System - Project - UniCorn COAS.docx)
+- [AGENT_1_AND_4_COMPLETE_SUCCESS.md](./99-root-archive/AGENT_1_AND_4_COMPLETE_SUCCESS.md)
+- [AGENT_1_BRIEFING_CLIENT_ONBOARDING.md](./99-root-archive/AGENT_1_BRIEFING_CLIENT_ONBOARDING.md)
+- [AGENT_1_COMPLETION_SUMMARY.md](./99-root-archive/AGENT_1_COMPLETION_SUMMARY.md)
+- [AGENT_1_FINAL_DELIVERY_REPORT.md](./99-root-archive/AGENT_1_FINAL_DELIVERY_REPORT.md)
+- [AGENT_2_BRIEFING_TASK_MANAGEMENT.md](./99-root-archive/AGENT_2_BRIEFING_TASK_MANAGEMENT.md)
+- [AGENT_3_BRIEFING_TEMPLATE_OPTIMIZATION.md](./99-root-archive/AGENT_3_BRIEFING_TEMPLATE_OPTIMIZATION.md)
+- [AGENT_3_COMPLETE.md](./99-root-archive/AGENT_3_COMPLETE.md)
+- [AGENT_3_GITHUB_ISSUE.md](./99-root-archive/AGENT_3_GITHUB_ISSUE.md)
+- [AGENT_3_IMPLEMENTATION_SUMMARY.md](./99-root-archive/AGENT_3_IMPLEMENTATION_SUMMARY.md)
+- [AGENT_3_VERIFICATION.md](./99-root-archive/AGENT_3_VERIFICATION.md)
+- [AGENT_4_BRIEFING_INTRODUCTION_TO_GITHUB_ISSUES.md](./99-root-archive/AGENT_4_BRIEFING_INTRODUCTION_TO_GITHUB_ISSUES.md)
+- [AGENT_PROGRESS_TRACKER.md](./99-root-archive/AGENT_PROGRESS_TRACKER.md)
+- [AGENT_STATUS_UPDATE_2025-11-03.md](./99-root-archive/AGENT_STATUS_UPDATE_2025-11-03.md)
+- [AGENT_STATUS_UPDATE_2025-11-04.md](./99-root-archive/AGENT_STATUS_UPDATE_2025-11-04.md)
+- [AGENTS_READY_TO_PROCEED.md](./99-root-archive/AGENTS_READY_TO_PROCEED.md)
+- [AUTOMATION_GUIDE.md](./99-root-archive/AUTOMATION_GUIDE.md)
+- [AUTOMATION_SYSTEM_COMPLETE.md](./99-root-archive/AUTOMATION_SYSTEM_COMPLETE.md)
+- [BLOCKER_LOG_2025-11-03.md](./99-root-archive/BLOCKER_LOG_2025-11-03.md)
+- [CHALLENGE_COMPLETE_AMAZON_Q_VS_CURSOR.md](./99-root-archive/CHALLENGE_COMPLETE_AMAZON_Q_VS_CURSOR.md)
+- [CODE_REVIEW_REPORT.md](./99-root-archive/CODE_REVIEW_REPORT.md)
+- [CODE_REVIEW_SUMMARY.md](./99-root-archive/CODE_REVIEW_SUMMARY.md)
+- [COMMIT_MESSAGE_AGENT_3.md](./99-root-archive/COMMIT_MESSAGE_AGENT_3.md)
+- [COORDINATOR_QUICK_REFERENCE.md](./99-root-archive/COORDINATOR_QUICK_REFERENCE.md)
+- [DAILY_STANDUP_TEMPLATE.md](./99-root-archive/DAILY_STANDUP_TEMPLATE.md)
+- [DOCS_STRUCTURE.txt](./99-root-archive/DOCS_STRUCTURE.txt)
+- [DOCUMENT_UPLOAD_FIX_COMPLETE.md](./99-root-archive/DOCUMENT_UPLOAD_FIX_COMPLETE.md)
+- [DUAL_VALIDATION_SUCCESS.md](./99-root-archive/DUAL_VALIDATION_SUCCESS.md)
+- [EMERGENCY_MEETING_FEATURE_COMPLETE.md](./99-root-archive/EMERGENCY_MEETING_FEATURE_COMPLETE.md)
+- [GETTING_STARTED_AUTOMATION.md](./99-root-archive/GETTING_STARTED_AUTOMATION.md)
+- [HANDOVER_DOCUMENT.md](./99-root-archive/HANDOVER_DOCUMENT.md)
+- [IDEATION_DOCUMENT_ANALYSIS.md](./99-root-archive/IDEATION_DOCUMENT_ANALYSIS.md)
+- [IMPLEMENTATION_SUMMARY_CLIENT_ONBOARDING.md](./99-root-archive/IMPLEMENTATION_SUMMARY_CLIENT_ONBOARDING.md)
+- [IMPLEMENTATION_SUMMARY.md](./99-root-archive/IMPLEMENTATION_SUMMARY.md)
+- [INTEGRATION_PROGRESS_CHECKPOINT.md](./99-root-archive/INTEGRATION_PROGRESS_CHECKPOINT.md)
+- [KNOWLEDGE_BASE_IMPLEMENTATION.md](./99-root-archive/KNOWLEDGE_BASE_IMPLEMENTATION.md)
+- [ONBOARDING_ASSESSMENT_COMPLETE.md](./99-root-archive/ONBOARDING_ASSESSMENT_COMPLETE.md)
+- [ONBOARDING_SYSTEM_READY_CHECKLIST.md](./99-root-archive/ONBOARDING_SYSTEM_READY_CHECKLIST.md)
+- [PARALLEL_AGENTS_SUMMARY.md](./99-root-archive/PARALLEL_AGENTS_SUMMARY.md)
+- [PERFORMANCE_OPTIMIZATION_SUMMARY.md](./99-root-archive/PERFORMANCE_OPTIMIZATION_SUMMARY.md)
+- [PHASE_1_AND_2_COMPLETE.md](./99-root-archive/PHASE_1_AND_2_COMPLETE.md)
+- [QUICK_START_ONBOARDING.md](./99-root-archive/QUICK_START_ONBOARDING.md)
+- [README_DEPLOYMENT_COMPLETE.md](./99-root-archive/README_DEPLOYMENT_COMPLETE.md)
+- [RESTART_BACKEND_NOW.md](./99-root-archive/RESTART_BACKEND_NOW.md)
+- [REVIEW_README.md](./99-root-archive/REVIEW_README.md)
+- [Roadmap copy.md](./99-root-archive/Roadmap copy.md)
+- [ROADMAP_IMPLEMENTATION_ANALYSIS copy.md](./99-root-archive/ROADMAP_IMPLEMENTATION_ANALYSIS copy.md)
+- [ROLE_BASED_ACCESS_CONTROL_IMPLEMENTATION_SUMMARY copy.md](./99-root-archive/ROLE_BASED_ACCESS_CONTROL_IMPLEMENTATION_SUMMARY copy.md)
+- [SAMPLE_AI_TEMPLATES_SUMMARY copy.md](./99-root-archive/SAMPLE_AI_TEMPLATES_SUMMARY copy.md)
+- [SECURITY_FIXES_SUMMARY.md](./99-root-archive/SECURITY_FIXES_SUMMARY.md)
+- [SEMANTIC_SEARCH_INTEGRATION_SUMMARY copy.md](./99-root-archive/SEMANTIC_SEARCH_INTEGRATION_SUMMARY copy.md)
+- [SESSION_SUMMARY_2025-10-20.md](./99-root-archive/SESSION_SUMMARY_2025-10-20.md)
+- [SESSION_SUMMARY_2025-11-04.md](./99-root-archive/SESSION_SUMMARY_2025-11-04.md)
+- [SHAREPOINT_INTEGRATION_FIXES copy.md](./99-root-archive/SHAREPOINT_INTEGRATION_FIXES copy.md)
+- [SHAREPOINT_INTEGRATION_README copy.md](./99-root-archive/SHAREPOINT_INTEGRATION_README copy.md)
+- [SHAREPOINT_TESTING_GUIDE copy.md](./99-root-archive/SHAREPOINT_TESTING_GUIDE copy.md)
+- [STANDUP_2025-11-04_EXAMPLE.md](./99-root-archive/STANDUP_2025-11-04_EXAMPLE.md)
+- [SYSTEM_PROMPT_INTEGRATION_SUMMARY copy.md](./99-root-archive/SYSTEM_PROMPT_INTEGRATION_SUMMARY copy.md)
+- [TEMPLATE_ENHANCEMENT_SUMMARY copy.md](./99-root-archive/TEMPLATE_ENHANCEMENT_SUMMARY copy.md)
+- [TEMPLATE_STAGES_TECHNICAL_SPECS copy.md](./99-root-archive/TEMPLATE_STAGES_TECHNICAL_SPECS copy.md)
+- [TROUBLESHOOTING_UPLOAD.md](./99-root-archive/TROUBLESHOOTING_UPLOAD.md)
+- [WELCOME_BACK.md](./99-root-archive/WELCOME_BACK.md)
+- [WORK_COMPLETE_SUMMARY_2025-11-04.md](./99-root-archive/WORK_COMPLETE_SUMMARY_2025-11-04.md)
+- [WORKFLOW_FIXED_SUMMARY.md](./99-root-archive/WORKFLOW_FIXED_SUMMARY.md)
+
+### **📂 99-root-archive/roadmap-completed**
+
+- [COMPLETED_FEATURES_READY_FOR_ARCHIVE.md](./99-root-archive/roadmap-completed/COMPLETED_FEATURES_READY_FOR_ARCHIVE.md)
+- [DATABASE_TIMESTAMP_MIGRATION_COMPLETE.md](./99-root-archive/roadmap-completed/DATABASE_TIMESTAMP_MIGRATION_COMPLETE.md)
+- [DATABASE_TIMESTAMP_VERIFICATION_RESULTS.md](./99-root-archive/roadmap-completed/DATABASE_TIMESTAMP_VERIFICATION_RESULTS.md)
+- [DATE_FORMAT_PREFERENCE_COMPLETE.md](./99-root-archive/roadmap-completed/DATE_FORMAT_PREFERENCE_COMPLETE.md)
+- [OCTOBER_31_2025_COMPLETE_SESSION_SUMMARY.md](./99-root-archive/roadmap-completed/OCTOBER_31_2025_COMPLETE_SESSION_SUMMARY.md)
+- [phase1-backend-architecture.md](./99-root-archive/roadmap-completed/phase1-backend-architecture.md)
+- [phase1-implementation-plan.md](./99-root-archive/roadmap-completed/phase1-implementation-plan.md)
+- [PHASE2_COMPLETION_SUMMARY.md](./99-root-archive/roadmap-completed/PHASE2_COMPLETION_SUMMARY.md)
+- [phase2-advanced-features.md](./99-root-archive/roadmap-completed/phase2-advanced-features.md)
+- [phase2-integration-specs.md](./99-root-archive/roadmap-completed/phase2-integration-specs.md)
+- [phase3-compliance-framework.md](./99-root-archive/roadmap-completed/phase3-compliance-framework.md)
+- [phase3-enterprise-features.md](./99-root-archive/roadmap-completed/phase3-enterprise-features.md)
+- [phase4-ai-enhancement.md](./99-root-archive/roadmap-completed/phase4-ai-enhancement.md)
+- [phase4-automation-engine.md](./99-root-archive/roadmap-completed/phase4-automation-engine.md)
+- [PIPELINE_COMPLETION_UPDATE.md](./99-root-archive/roadmap-completed/PIPELINE_COMPLETION_UPDATE.md)
+- [PMBOK6_API_AND_FRONTEND_COMPLETE.md](./99-root-archive/roadmap-completed/PMBOK6_API_AND_FRONTEND_COMPLETE.md)
+- [PMBOK6_SEED_FILE_COMPLETE.md](./99-root-archive/roadmap-completed/PMBOK6_SEED_FILE_COMPLETE.md)
+- [PMBOK8_COMPLETE_ROADMAP.md](./99-root-archive/roadmap-completed/PMBOK8_COMPLETE_ROADMAP.md)
+- [PMI_COMPLETE_DOMAIN_MAPPING.md](./99-root-archive/roadmap-completed/PMI_COMPLETE_DOMAIN_MAPPING.md)
+- [PORTFOLIO_MANAGEMENT_COMPLETE.md](./99-root-archive/roadmap-completed/PORTFOLIO_MANAGEMENT_COMPLETE.md)
+- [PROGRAM_ACTIVITIES_COMPLETE_IMPLEMENTATION.md](./99-root-archive/roadmap-completed/PROGRAM_ACTIVITIES_COMPLETE_IMPLEMENTATION.md)
+- [PROGRAMS_FEATURE_COMPLETION.md](./99-root-archive/roadmap-completed/PROGRAMS_FEATURE_COMPLETION.md)
+- [PROJECT_PROGRESS_ANALYSIS.md](./99-root-archive/roadmap-completed/PROJECT_PROGRESS_ANALYSIS.md)
+- [ROADMAP_PROGRESS_2025-10-20.md](./99-root-archive/roadmap-completed/ROADMAP_PROGRESS_2025-10-20.md)
+- [ROADMAP_SESSION_SUMMARY_2025-10-31.md](./99-root-archive/roadmap-completed/ROADMAP_SESSION_SUMMARY_2025-10-31.md)
+- [SEARCH_ANALYTICS_IMPLEMENTATION_COMPLETE.md](./99-root-archive/roadmap-completed/SEARCH_ANALYTICS_IMPLEMENTATION_COMPLETE.md)
+- [SEARCH_SUGGESTIONS_AUTOCOMPLETE_COMPLETE.md](./99-root-archive/roadmap-completed/SEARCH_SUGGESTIONS_AUTOCOMPLETE_COMPLETE.md)
+- [SESSION_SUMMARY_PORTFOLIO_PROGRAM_MANAGEMENT.md](./99-root-archive/roadmap-completed/SESSION_SUMMARY_PORTFOLIO_PROGRAM_MANAGEMENT.md)
+- [STAKEHOLDER_DEMO_PREPARATION.md](./99-root-archive/roadmap-completed/STAKEHOLDER_DEMO_PREPARATION.md)
+- [UI_PIPELINE_IMPLEMENTATION.md](./99-root-archive/roadmap-completed/UI_PIPELINE_IMPLEMENTATION.md)
+- [UNIVERSAL_SEMANTIC_SEARCH_PHASE1_COMPLETE.md](./99-root-archive/roadmap-completed/UNIVERSAL_SEMANTIC_SEARCH_PHASE1_COMPLETE.md)
+- [USER_TIMEZONE_PREFERENCE_COMPLETE.md](./99-root-archive/roadmap-completed/USER_TIMEZONE_PREFERENCE_COMPLETE.md)
+- [V0_DASHBOARDS_COMPLETE.md](./99-root-archive/roadmap-completed/V0_DASHBOARDS_COMPLETE.md)
+
+### **📂 99-root-archive/roadmap-completed/2025**
+
+- [BACKGROUND_JOB_QUEUE_COMPLETED.md](./99-root-archive/roadmap-completed/2025/BACKGROUND_JOB_QUEUE_COMPLETED.md)
+- [RAG_INTEGRATION_COMPLETED.md](./99-root-archive/roadmap-completed/2025/RAG_INTEGRATION_COMPLETED.md)
+- [TEMPLATE_BUILDER_MVP_COMPLETED.md](./99-root-archive/roadmap-completed/2025/TEMPLATE_BUILDER_MVP_COMPLETED.md)
+
+### **📂 analysis**
+
+- [ICT_GOVERNANCE_FRAMEWORK_ADPA_INTEGRATION.md](./analysis/ICT_GOVERNANCE_FRAMEWORK_ADPA_INTEGRATION.md)
+- [knowledge-domains-entity-allocation-review.md](./analysis/knowledge-domains-entity-allocation-review.md)
+- [MARKET_ANALYSIS_MULTI_CLOUD_GOVERNANCE_SELF_SERVICE.md](./analysis/MARKET_ANALYSIS_MULTI_CLOUD_GOVERNANCE_SELF_SERVICE.md)
+- [Market_Competitive_Analysis_SES_O3b_mPower.md](./analysis/Market_Competitive_Analysis_SES_O3b_mPower.md)
+
+### **📂 beacons**
+
+- [AI_ANALYTICS_DATA_STATUS.md](./beacons/AI_ANALYTICS_DATA_STATUS.md)
+- [AI_ANALYTICS_INTEGRATION_COMPLETE.md](./beacons/AI_ANALYTICS_INTEGRATION_COMPLETE.md)
+- [AI_TESTING_SUITE_FIXED.md](./beacons/AI_TESTING_SUITE_FIXED.md)
+- [AI_TRACKING_GAP_ANALYSIS.md](./beacons/AI_TRACKING_GAP_ANALYSIS.md)
+- [BEACON_7.1_COMPLETE.md](./beacons/BEACON_7.1_COMPLETE.md)
+- [beacon-1.1-programs-table.md](./beacons/beacon-1.1-programs-table.md)
+- [beacon-1.3-project-program-linking.md](./beacons/beacon-1.3-project-program-linking.md)
+- [beacon-1.4-program-metrics.md](./beacons/beacon-1.4-program-metrics.md)
+- [beacon-2.1-program-list-ui.md](./beacons/beacon-2.1-program-list-ui.md)
+- [beacon-2.2-program-detail-page.md](./beacons/beacon-2.2-program-detail-page.md)
+- [beacon-2.3-rag-status-widget.md](./beacons/beacon-2.3-rag-status-widget.md)
+- [beacon-2.4-metrics-dashboard.md](./beacons/beacon-2.4-metrics-dashboard.md)
+- [beacon-6.1-ibabs-oauth.md](./beacons/beacon-6.1-ibabs-oauth.md)
+- [beacon-6.2-board-report-upload.md](./beacons/beacon-6.2-board-report-upload.md)
+- [beacon-7.1-board-report-templates.md](./beacons/beacon-7.1-board-report-templates.md)
+- [CONTEXT_OPTIMIZATION_NEEDED.md](./beacons/CONTEXT_OPTIMIZATION_NEEDED.md)
+- [HANDOFF_FILE4_READY.md](./beacons/HANDOFF_FILE4_READY.md)
+- [LOGGING_OPTIMIZATION.md](./beacons/LOGGING_OPTIMIZATION.md)
+- [NEW_SESSION_START_HERE.md](./beacons/NEW_SESSION_START_HERE.md)
+- [PLAYWRIGHT_E2E_SETUP_COMPLETE.md](./beacons/PLAYWRIGHT_E2E_SETUP_COMPLETE.md)
+- [REFACTORING_PLAN_500_LINE_OPTIMIZATION.md](./beacons/REFACTORING_PLAN_500_LINE_OPTIMIZATION.md)
+- [SESSION_SUMMARY_2025-10-27.md](./beacons/SESSION_SUMMARY_2025-10-27.md)
+- [TODAYS_ACCOMPLISHMENTS_2025-10-27.md](./beacons/TODAYS_ACCOMPLISHMENTS_2025-10-27.md)
+- [TOMORROW_START_HERE_SAFE_REFACTORING.md](./beacons/TOMORROW_START_HERE_SAFE_REFACTORING.md)
+
+### **📂 community**
+
+- [README.md](./community/README.md)
+
+### **📂 compliance**
+
+- [COMPLIANCE_METRICS_DRILL_DOWN.md](./compliance/COMPLIANCE_METRICS_DRILL_DOWN.md)
+- [COMPLIANCE_METRICS_STORAGE_FIX.md](./compliance/COMPLIANCE_METRICS_STORAGE_FIX.md)
+- [COMPLIANCE_SCORING_SYSTEM.md](./compliance/COMPLIANCE_SCORING_SYSTEM.md)
+- [EU_AI_ACT_COMPLIANCE.md](./compliance/EU_AI_ACT_COMPLIANCE.md)
+- [EU_AI_ACT_QUALITY_GATE_INTEGRATION.md](./compliance/EU_AI_ACT_QUALITY_GATE_INTEGRATION.md)
+- [EU_AI_ACT_SCORING_MATRIX_DISPLAY.md](./compliance/EU_AI_ACT_SCORING_MATRIX_DISPLAY.md)
+- [PMBOK7_COMPLIANCE_REVIEW.md](./compliance/PMBOK7_COMPLIANCE_REVIEW.md)
+- [PMBOK7_IMPLEMENTATION_SUMMARY.md](./compliance/PMBOK7_IMPLEMENTATION_SUMMARY.md)
+- [PMBOK7_QUICK_REFERENCE.md](./compliance/PMBOK7_QUICK_REFERENCE.md)
+- [QUALITY_DIMENSIONS_DRILL_DOWN.md](./compliance/QUALITY_DIMENSIONS_DRILL_DOWN.md)
+
+### **📂 context-management**
+
+- [EXTENDING_PROVIDERS.md](./context-management/EXTENDING_PROVIDERS.md)
+
+### **📂 design**
+
+- [ASSET_SELECTION_STRATEGY.md](./design/ASSET_SELECTION_STRATEGY.md)
+
+### **📂 examples**
+
+- [PMP_Data_Analytics_Platform_GEMINI.md](./examples/PMP_Data_Analytics_Platform_GEMINI.md)
+
+### **📂 generated-documents**
+
+- [ADPA-Dev-Environment-Checklist.md](./generated-documents/ADPA-Dev-Environment-Checklist.md)
+- [ADPA-Implementation-Plan.md](./generated-documents/ADPA-Implementation-Plan.md)
+- [compliance-report.md](./generated-documents/compliance-report.md)
+- [prompt-adjustment-report.txt](./generated-documents/prompt-adjustment-report.txt)
+- [README.md](./generated-documents/README.md)
+- [user-personas-utilization.md](./generated-documents/user-personas-utilization.md)
+
+### **📂 generated-documents/babok**
+
+- [business-analysis-planning-and-monitoring.md](./generated-documents/babok/business-analysis-planning-and-monitoring.md)
+- [elicitation-and-collaboration.md](./generated-documents/babok/elicitation-and-collaboration.md)
+- [INTRODUCTION BUSINESS ANALYSIS BODY OF KNOWLEDGE.md](./generated-documents/babok/INTRODUCTION BUSINESS ANALYSIS BODY OF KNOWLEDGE.md)
+- [perspectives.md](./generated-documents/babok/perspectives.md)
+- [requirements-analysis-and-design-definition.md](./generated-documents/babok/requirements-analysis-and-design-definition.md)
+- [requirements-life-cycle-management.md](./generated-documents/babok/requirements-life-cycle-management.md)
+- [solution-evaluation.md](./generated-documents/babok/solution-evaluation.md)
+- [strategy-analysis.md](./generated-documents/babok/strategy-analysis.md)
+- [underlying-competencies.md](./generated-documents/babok/underlying-competencies.md)
+
+### **📂 generated-documents/basic-docs**
+
+- [business-case.md](./generated-documents/basic-docs/business-case.md)
+- [common-challenges-user-personas.md](./generated-documents/basic-docs/common-challenges-user-personas.md)
+- [common-goals-user-personas.md](./generated-documents/basic-docs/common-goals-user-personas.md)
+- [core-values.md](./generated-documents/basic-docs/core-values.md)
+- [develop-schedule-input.md](./generated-documents/basic-docs/develop-schedule-input.md)
+- [key-roles-and-needs.md](./generated-documents/basic-docs/key-roles-and-needs.md)
+- [market-competitive-analysis.md](./generated-documents/basic-docs/market-competitive-analysis.md)
+- [persona-utilize-app.md](./generated-documents/basic-docs/persona-utilize-app.md)
+- [personas-assess-motivations.md](./generated-documents/basic-docs/personas-assess-motivations.md)
+- [project-statement-of-work.md](./generated-documents/basic-docs/project-statement-of-work.md)
+- [project-summary.md](./generated-documents/basic-docs/project-summary.md)
+- [summary-and-goals.md](./generated-documents/basic-docs/summary-and-goals.md)
+- [technology-comfort-user-personas.md](./generated-documents/basic-docs/technology-comfort-user-personas.md)
+- [user-personas.md](./generated-documents/basic-docs/user-personas.md)
+- [user-stories.md](./generated-documents/basic-docs/user-stories.md)
+
+### **📂 generated-documents/business-case**
+
+- [Microsoft_D365_Billing_Hub_Business_Case.md](./generated-documents/business-case/Microsoft_D365_Billing_Hub_Business_Case.md)
+- [Microsoft_D365_PMA_to_Integrated_Migration_Business_Case.md](./generated-documents/business-case/Microsoft_D365_PMA_to_Integrated_Migration_Business_Case.md)
+- [UK_Banking_AI_Copilot_Business_Case.md](./generated-documents/business-case/UK_Banking_AI_Copilot_Business_Case.md)
+
+### **📂 generated-documents/CBA**
+
+- [cba-bok-project-charter.md](./generated-documents/CBA/cba-bok-project-charter.md)
+
+### **📂 generated-documents/dmbok**
+
+- [business-intelligence-strategy.md](./generated-documents/dmbok/business-intelligence-strategy.md)
+- [data-architecture-modeling-guide.md](./generated-documents/dmbok/data-architecture-modeling-guide.md)
+- [data-architecture-quality.md](./generated-documents/dmbok/data-architecture-quality.md)
+- [data-governance-framework.md](./generated-documents/dmbok/data-governance-framework.md)
+- [data-governance-plan.md](./generated-documents/dmbok/data-governance-plan.md)
+- [data-integration-interoperability-strategy.md](./generated-documents/dmbok/data-integration-interoperability-strategy.md)
+- [data-lifecycle-management-policy.md](./generated-documents/dmbok/data-lifecycle-management-policy.md)
+- [data-management-strategy.md](./generated-documents/dmbok/data-management-strategy.md)
+- [data-modeling-standards.md](./generated-documents/dmbok/data-modeling-standards.md)
+- [data-quality-management-plan.md](./generated-documents/dmbok/data-quality-management-plan.md)
+- [data-security-privacy-plan.md](./generated-documents/dmbok/data-security-privacy-plan.md)
+- [data-stewardship-roles-responsibilities.md](./generated-documents/dmbok/data-stewardship-roles-responsibilities.md)
+- [data-storage-operations-handbook.md](./generated-documents/dmbok/data-storage-operations-handbook.md)
+- [document-content-management-framework.md](./generated-documents/dmbok/document-content-management-framework.md)
+- [enterprise-data-dictionary.md](./generated-documents/dmbok/enterprise-data-dictionary.md)
+- [INTRODUCTION DATA MANAGEMENT BODY OF KNOWLEDGE.md](./generated-documents/dmbok/INTRODUCTION DATA MANAGEMENT BODY OF KNOWLEDGE.md)
+- [master-data-management-strategy.md](./generated-documents/dmbok/master-data-management-strategy.md)
+- [metadata-management-framework.md](./generated-documents/dmbok/metadata-management-framework.md)
+- [reference-data-management-plan.md](./generated-documents/dmbok/reference-data-management-plan.md)
+
+### **📂 generated-documents/enterprise-architecture**
+
+- [dodaf-framework-guide.md](./generated-documents/enterprise-architecture/dodaf-framework-guide.md)
+- [feaf-framework-guide.md](./generated-documents/enterprise-architecture/feaf-framework-guide.md)
+- [modaf-framework-guide.md](./generated-documents/enterprise-architecture/modaf-framework-guide.md)
+- [modaf-implementation-guide.md](./generated-documents/enterprise-architecture/modaf-implementation-guide.md)
+- [README.md](./generated-documents/enterprise-architecture/README.md)
+- [togaf-framework-guide.md](./generated-documents/enterprise-architecture/togaf-framework-guide.md)
+- [zachman-framework-guide.md](./generated-documents/enterprise-architecture/zachman-framework-guide.md)
+
+### **📂 generated-documents/management-plans**
+
+- [close-project-or-phase.md](./generated-documents/management-plans/close-project-or-phase.md)
+- [collect-requirements.md](./generated-documents/management-plans/collect-requirements.md)
+- [communication-management-plan.md](./generated-documents/management-plans/communication-management-plan.md)
+- [cost-management-plan.md](./generated-documents/management-plans/cost-management-plan.md)
+- [create-wbs.md](./generated-documents/management-plans/create-wbs.md)
+- [direct-and-manage-project-work.md](./generated-documents/management-plans/direct-and-manage-project-work.md)
+- [perform-integrated-change-control.md](./generated-documents/management-plans/perform-integrated-change-control.md)
+- [procurement-management-plan.md](./generated-documents/management-plans/procurement-management-plan.md)
+- [quality-management-plan.md](./generated-documents/management-plans/quality-management-plan.md)
+- [requirements-documentation.md](./generated-documents/management-plans/requirements-documentation.md)
+- [requirements-management-plan.md](./generated-documents/management-plans/requirements-management-plan.md)
+- [requirements-traceability-matrix.md](./generated-documents/management-plans/requirements-traceability-matrix.md)
+- [resource-management-plan.md](./generated-documents/management-plans/resource-management-plan.md)
+- [risk-management-plan.md](./generated-documents/management-plans/risk-management-plan.md)
+
+### **📂 generated-documents/planning**
+
+- [activity-duration-estimates.md](./generated-documents/planning/activity-duration-estimates.md)
+- [activity-list.md](./generated-documents/planning/activity-list.md)
+- [activity-resource-estimates.md](./generated-documents/planning/activity-resource-estimates.md)
+- [milestone-list.md](./generated-documents/planning/milestone-list.md)
+- [Project-KickOff-Preprations-CheckList.md](./generated-documents/planning/Project-KickOff-Preprations-CheckList.md)
+- [quality-management-plsn.md](./generated-documents/planning/quality-management-plsn.md)
+- [schedule-development-input.md](./generated-documents/planning/schedule-development-input.md)
+- [schedule-management-plan.md](./generated-documents/planning/schedule-management-plan.md)
+- [schedule-network-diagram.md](./generated-documents/planning/schedule-network-diagram.md)
+- [wbs-dictionary.md](./generated-documents/planning/wbs-dictionary.md)
+- [work-breakdown-structure.md](./generated-documents/planning/work-breakdown-structure.md)
+
+### **📂 generated-documents/pmbok**
+
+- [close-project-phase-process.md](./generated-documents/pmbok/close-project-phase-process.md)
+- [control-scope-process.md](./generated-documents/pmbok/control-scope-process.md)
+- [develop-project-charter.md](./generated-documents/pmbok/develop-project-charter.md)
+- [EcoTrack_Communications_Management_Plan_v1.0.1_Drift_Removed.md](./generated-documents/pmbok/EcoTrack_Communications_Management_Plan_v1.0.1_Drift_Removed.md)
+- [monitor-and-control-project-work.md](./generated-documents/pmbok/monitor-and-control-project-work.md)
+- [perform-integration-change-control-process.md](./generated-documents/pmbok/perform-integration-change-control-process.md)
+- [validate-scope-process.md](./generated-documents/pmbok/validate-scope-process.md)
+
+### **📂 generated-documents/project-charter**
+
+- [project-charter-complete.md](./generated-documents/project-charter/project-charter-complete.md)
+- [project-charter.md](./generated-documents/project-charter/project-charter.md)
+- [project-management-plan.md](./generated-documents/project-charter/project-management-plan.md)
+
+### **📂 generated-documents/quality-assurance**
+
+- [bug-report.md](./generated-documents/quality-assurance/bug-report.md)
+- [code-review.md](./generated-documents/quality-assurance/code-review.md)
+- [performance-test-plan.md](./generated-documents/quality-assurance/performance-test-plan.md)
+- [quality-metrics.md](./generated-documents/quality-assurance/quality-metrics.md)
+- [security-testing.md](./generated-documents/quality-assurance/security-testing.md)
+- [tech-acceptance-criteria.md](./generated-documents/quality-assurance/tech-acceptance-criteria.md)
+- [test-cases.md](./generated-documents/quality-assurance/test-cases.md)
+- [test-environment.md](./generated-documents/quality-assurance/test-environment.md)
+- [test-plan.md](./generated-documents/quality-assurance/test-plan.md)
+- [test-strategy.md](./generated-documents/quality-assurance/test-strategy.md)
+
+### **📂 generated-documents/quality-audits**
+
+- [CR-2026-005_Quality_Audit_Report.md](./generated-documents/quality-audits/CR-2026-005_Quality_Audit_Report.md)
+
+### **📂 generated-documents/requirements**
+
+- [collect-requirements-process.md](./generated-documents/requirements/collect-requirements-process.md)
+- [key-rbacroles.md](./generated-documents/requirements/key-rbacroles.md)
+
+### **📂 generated-documents/risk-management**
+
+- [risk-register.md](./generated-documents/risk-management/risk-register.md)
+
+### **📂 generated-documents/scope-management**
+
+- [control-scope.md](./generated-documents/scope-management/control-scope.md)
+- [define-scope.md](./generated-documents/scope-management/define-scope.md)
+- [plan-scope-management.md](./generated-documents/scope-management/plan-scope-management.md)
+- [project-scope-statement.md](./generated-documents/scope-management/project-scope-statement.md)
+- [scope-baseline.md](./generated-documents/scope-management/scope-baseline.md)
+- [scope-management-plan.md](./generated-documents/scope-management/scope-management-plan.md)
+- [scope-statement.md](./generated-documents/scope-management/scope-statement.md)
+- [validate-scope.md](./generated-documents/scope-management/validate-scope.md)
+- [work-performance-information-scope.md](./generated-documents/scope-management/work-performance-information-scope.md)
+
+### **📂 generated-documents/security-frameworks**
+
+- [sabsa-framework.md](./generated-documents/security-frameworks/sabsa-framework.md)
+- [sabsa-implementation-guide.md](./generated-documents/security-frameworks/sabsa-implementation-guide.md)
+- [sabsa-templates-checklist.md](./generated-documents/security-frameworks/sabsa-templates-checklist.md)
+
+### **📂 generated-documents/stakeholder-management**
+
+- [stakeholder-analysis.md](./generated-documents/stakeholder-management/stakeholder-analysis.md)
+- [stakeholder-engagement-plan.md](./generated-documents/stakeholder-management/stakeholder-engagement-plan.md)
+- [stakeholder-register.md](./generated-documents/stakeholder-management/stakeholder-register.md)
+
+### **📂 generated-documents/strategic-statements**
+
+- [company-values.md](./generated-documents/strategic-statements/company-values.md)
+- [mission-vision-core-values.md](./generated-documents/strategic-statements/mission-vision-core-values.md)
+- [project-purpose.md](./generated-documents/strategic-statements/project-purpose.md)
+- [purpose-statement.md](./generated-documents/strategic-statements/purpose-statement.md)
+- [strategic-business-case.md](./generated-documents/strategic-statements/strategic-business-case.md)
+
+### **📂 generated-documents/technical-analysis**
+
+- [acceptance-criteria.md](./generated-documents/technical-analysis/acceptance-criteria.md)
+- [compliance-considerations.md](./generated-documents/technical-analysis/compliance-considerations.md)
+- [data-model-suggestions-v2.md](./generated-documents/technical-analysis/data-model-suggestions-v2.md)
+- [data-model-suggestions.md](./generated-documents/technical-analysis/data-model-suggestions.md)
+- [risk-analysis.md](./generated-documents/technical-analysis/risk-analysis.md)
+- [tech-stack-analysis.md](./generated-documents/technical-analysis/tech-stack-analysis.md)
+- [ui-ux-considerations.md](./generated-documents/technical-analysis/ui-ux-considerations.md)
+
+### **📂 generated-documents/technical-design**
+
+- [apidocumentation.md](./generated-documents/technical-design/apidocumentation.md)
+- [architecture-design.md](./generated-documents/technical-design/architecture-design.md)
+- [database-schema.md](./generated-documents/technical-design/database-schema.md)
+- [deployment-architecture.md](./generated-documents/technical-design/deployment-architecture.md)
+- [error-handling.md](./generated-documents/technical-design/error-handling.md)
+- [integration-design.md](./generated-documents/technical-design/integration-design.md)
+- [performance-requirements.md](./generated-documents/technical-design/performance-requirements.md)
+- [security-design.md](./generated-documents/technical-design/security-design.md)
+- [system-design.md](./generated-documents/technical-design/system-design.md)
+- [technical-stack.md](./generated-documents/technical-design/technical-stack.md)
+
+### **📂 marketing**
+
+- [ADPA_PROJECT_POSITIONING_STATEMENT.md](./marketing/ADPA_PROJECT_POSITIONING_STATEMENT.md)
+- [blog-post.md](./marketing/blog-post.md)
+- [content-strategy-week1.md](./marketing/content-strategy-week1.md)
+- [facebook-post.md](./marketing/facebook-post.md)
+- [GITBOOK_ADPA_DEVELOPERS_SITE_INTRO.md](./marketing/GITBOOK_ADPA_DEVELOPERS_SITE_INTRO.md)
+- [GITBOOK_ADPA_SYSTEM_LANDING_PAGE.md](./marketing/GITBOOK_ADPA_SYSTEM_LANDING_PAGE.md)
+- [GITBOOK_MIGRATION_GUIDE.md](./marketing/GITBOOK_MIGRATION_GUIDE.md)
+- [instagram-post.md](./marketing/instagram-post.md)
+- [linkedin-article.md](./marketing/linkedin-article.md)
+- [linkedin-community-post.md](./marketing/linkedin-community-post.md)
+- [linkedin-post.md](./marketing/linkedin-post.md)
+- [MICROSOFT_PARTNERSHIP_EMAIL_FINAL.md](./marketing/MICROSOFT_PARTNERSHIP_EMAIL_FINAL.md)
+- [PLATFORM_STRATEGY.md](./marketing/PLATFORM_STRATEGY.md)
+- [QUICK_START_GUIDE.md](./marketing/QUICK_START_GUIDE.md)
+- [README.md](./marketing/README.md)
+- [REVENUE_OPPORTUNITIES.md](./marketing/REVENUE_OPPORTUNITIES.md)
+- [search-strategy-week1.md](./marketing/search-strategy-week1.md)
+- [START_HERE.md](./marketing/START_HERE.md)
+- [USAGE_GUIDE.md](./marketing/USAGE_GUIDE.md)
+
+### **📂 projects**
+
+- [microsoft-experience-centers-amsterdam-project-summary.md](./projects/microsoft-experience-centers-amsterdam-project-summary.md)
+- [quality-audit-improvement-plan.md](./projects/quality-audit-improvement-plan.md)
+- [workshop-participation-breakdown.md](./projects/workshop-participation-breakdown.md)
+- [workshop-room-capacity-review.md](./projects/workshop-room-capacity-review.md)
+
+### **📂 projects/adpa-playbook**
+
+- [01-ideation-template.md](./projects/adpa-playbook/01-ideation-template.md)
+- [02-business-case.md](./projects/adpa-playbook/02-business-case.md)
+- [03-stakeholder-register.md](./projects/adpa-playbook/03-stakeholder-register.md)
+- [04-user-stories.md](./projects/adpa-playbook/04-user-stories.md)
+- [05-user-personas.md](./projects/adpa-playbook/05-user-personas.md)
+- [06-communications-management-plan.md](./projects/adpa-playbook/06-communications-management-plan.md)
+- [07-integration-management-plan.md](./projects/adpa-playbook/07-integration-management-plan.md)
+- [README.md](./projects/adpa-playbook/README.md)
+
+### **📂 projects/ai-risk-management**
+
+- [01-ideation-template.md](./projects/ai-risk-management/01-ideation-template.md)
+- [02-business-case.md](./projects/ai-risk-management/02-business-case.md)
+- [03-project-charter.md](./projects/ai-risk-management/03-project-charter.md)
+- [04-stakeholder-register.md](./projects/ai-risk-management/04-stakeholder-register.md)
+- [05-market-competitive-analysis.md](./projects/ai-risk-management/05-market-competitive-analysis.md)
+- [06-business-value-proposition.md](./projects/ai-risk-management/06-business-value-proposition.md)
+- [07-business-requirements-document.md](./projects/ai-risk-management/07-business-requirements-document.md)
+- [08-solution-evaluation-plan.md](./projects/ai-risk-management/08-solution-evaluation-plan.md)
+- [09-strategy-analysis-plan.md](./projects/ai-risk-management/09-strategy-analysis-plan.md)
+- [10-requirements-analysis-design-definition.md](./projects/ai-risk-management/10-requirements-analysis-design-definition.md)
+- [11-business-analysis-planning-monitoring.md](./projects/ai-risk-management/11-business-analysis-planning-monitoring.md)
+- [12-benefits-realization-plan.md](./projects/ai-risk-management/12-benefits-realization-plan.md)
+- [13-requirements-lifecycle-management.md](./projects/ai-risk-management/13-requirements-lifecycle-management.md)
+- [14-communications-management-plan.md](./projects/ai-risk-management/14-communications-management-plan.md)
+- [15-integration-management-plan.md](./projects/ai-risk-management/15-integration-management-plan.md)
+- [16-scope-management-plan.md](./projects/ai-risk-management/16-scope-management-plan.md)
+- [17-risk-management-plan.md](./projects/ai-risk-management/17-risk-management-plan.md)
+- [18-cost-management-plan.md](./projects/ai-risk-management/18-cost-management-plan.md)
+- [19-resource-management-plan.md](./projects/ai-risk-management/19-resource-management-plan.md)
+- [20-system-changes-specification.md](./projects/ai-risk-management/20-system-changes-specification.md)
+- [21-project-roadmap.md](./projects/ai-risk-management/21-project-roadmap.md)
+- [22-implementation-plan.md](./projects/ai-risk-management/22-implementation-plan.md)
+- [README.md](./projects/ai-risk-management/README.md)
+
+### **📂 projects/ai-risk-management/ai-risk-management**
+
+- [data-readiness-assessment.md](./projects/ai-risk-management/ai-risk-management/data-readiness-assessment.md)
+- [phase1-plan.md](./projects/ai-risk-management/ai-risk-management/phase1-plan.md)
+- [risk-register-template.md](./projects/ai-risk-management/ai-risk-management/risk-register-template.md)
+- [use-case-inventory.md](./projects/ai-risk-management/ai-risk-management/use-case-inventory.md)
+- [vendor-due-diligence-questionnaire.md](./projects/ai-risk-management/ai-risk-management/vendor-due-diligence-questionnaire.md)
+
+### **📂 projects/digital-twins-itwin**
+
+- [01-ideation-template.md](./projects/digital-twins-itwin/01-ideation-template.md)
+- [02-business-case.md](./projects/digital-twins-itwin/02-business-case.md)
+- [03-stakeholder-register.md](./projects/digital-twins-itwin/03-stakeholder-register.md)
+- [04-project-charter.md](./projects/digital-twins-itwin/04-project-charter.md)
+- [05-business-value-proposition.md](./projects/digital-twins-itwin/05-business-value-proposition.md)
+- [06-market-competitive-analysis.md](./projects/digital-twins-itwin/06-market-competitive-analysis.md)
+- [07-project-summary.md](./projects/digital-twins-itwin/07-project-summary.md)
+- [08-core-values-team-agreements.md](./projects/digital-twins-itwin/08-core-values-team-agreements.md)
+- [09-benefits-realization-plan.md](./projects/digital-twins-itwin/09-benefits-realization-plan.md)
+- [10-integration-management-plan.md](./projects/digital-twins-itwin/10-integration-management-plan.md)
+- [11-data-architecture-plan.md](./projects/digital-twins-itwin/11-data-architecture-plan.md)
+- [12-strategy-analysis-plan.md](./projects/digital-twins-itwin/12-strategy-analysis-plan.md)
+- [13-comprehensive-digital-twin-analysis.md](./projects/digital-twins-itwin/13-comprehensive-digital-twin-analysis.md)
+- [14-ar-vr-extension-analysis.md](./projects/digital-twins-itwin/14-ar-vr-extension-analysis.md)
+- [README.md](./projects/digital-twins-itwin/README.md)
+
+### **📂 projects/pmma**
+
+- [01-ideation-template.md](./projects/pmma/01-ideation-template.md)
+- [02-business-case.md](./projects/pmma/02-business-case.md)
+- [03-stakeholder-register.md](./projects/pmma/03-stakeholder-register.md)
+- [04-project-charter.md](./projects/pmma/04-project-charter.md)
+- [05-user-stories.md](./projects/pmma/05-user-stories.md)
+- [06-user-personas.md](./projects/pmma/06-user-personas.md)
+- [07-communications-management-plan.md](./projects/pmma/07-communications-management-plan.md)
+- [08-integration-management-plan.md](./projects/pmma/08-integration-management-plan.md)
+- [09-cost-management-plan.md](./projects/pmma/09-cost-management-plan.md)
+- [10-market-competitive-analysis.md](./projects/pmma/10-market-competitive-analysis.md)
+- [11-scope-management-plan.md](./projects/pmma/11-scope-management-plan.md)
+- [12-risk-management-plan.md](./projects/pmma/12-risk-management-plan.md)
+- [13-resource-management-plan.md](./projects/pmma/13-resource-management-plan.md)
+- [14-schedule-management-plan.md](./projects/pmma/14-schedule-management-plan.md)
+- [15-quality-management-plan.md](./projects/pmma/15-quality-management-plan.md)
+- [16-procurement-management-plan.md](./projects/pmma/16-procurement-management-plan.md)
+- [17-activity-list.md](./projects/pmma/17-activity-list.md)
+- [README.md](./projects/pmma/README.md)
+
+### **📂 projects/retail-shop-franchise**
+
+- [01-project-ideation.md](./projects/retail-shop-franchise/01-project-ideation.md)
+- [02-business-case.md](./projects/retail-shop-franchise/02-business-case.md)
+- [03-shop-layout-customer-flow-sensors.md](./projects/retail-shop-franchise/03-shop-layout-customer-flow-sensors.md)
+- [04-adpa-construction-project-and-dt-mapping.md](./projects/retail-shop-franchise/04-adpa-construction-project-and-dt-mapping.md)
+- [README.md](./projects/retail-shop-franchise/README.md)
+
+### **📂 reviews**
+
+- [ASSESSMENT_PAGE_REVIEW.md](./reviews/ASSESSMENT_PAGE_REVIEW.md)
+- [ONBOARDING_ASSESSMENTS_LIST_REVIEW.md](./reviews/ONBOARDING_ASSESSMENTS_LIST_REVIEW.md)
+- [ONBOARDING_LANDING_PAGE_REVIEW.md](./reviews/ONBOARDING_LANDING_PAGE_REVIEW.md)
+- [ONBOARDING_PAGES_REVIEW_SUMMARY.md](./reviews/ONBOARDING_PAGES_REVIEW_SUMMARY.md)
+- [ONBOARDING_SAMPLE_RESULTS_REVIEW.md](./reviews/ONBOARDING_SAMPLE_RESULTS_REVIEW.md)
+- [ONBOARDING_UPLOAD_PAGE_REVIEW.md](./reviews/ONBOARDING_UPLOAD_PAGE_REVIEW.md)
+- [TASK_STAKEHOLDER_ASSIGNMENT_REVIEW.md](./reviews/TASK_STAKEHOLDER_ASSIGNMENT_REVIEW.md)
+- [TECHNICAL_REVIEW_CR-2025-001_RAG_INTEGRATION.md](./reviews/TECHNICAL_REVIEW_CR-2025-001_RAG_INTEGRATION.md)
+- [TYPE_ERRORS_REVIEW_ASSESSMENT_PAGE.md](./reviews/TYPE_ERRORS_REVIEW_ASSESSMENT_PAGE.md)
+
+### **📂 roadmap**
+
+- [ADPA_CASCADE_FORMAT_ROADMAP.md](./roadmap/ADPA_CASCADE_FORMAT_ROADMAP.md)
+- [ADPA_PRODUCT_EXPANSION_IDEATION.md](./roadmap/ADPA_PRODUCT_EXPANSION_IDEATION.md)
+- [AI_EXTRACTION_UNLIMITED_DOCUMENTS.md](./roadmap/AI_EXTRACTION_UNLIMITED_DOCUMENTS.md)
+- [BACKGROUND_DOCUMENT_GENERATION.md](./roadmap/BACKGROUND_DOCUMENT_GENERATION.md)
+- [BALANCED_ROADMAP_Q4_2025.md](./roadmap/BALANCED_ROADMAP_Q4_2025.md)
+- [BENTLEY_ITWIN_LEARNING_RESOURCES.md](./roadmap/BENTLEY_ITWIN_LEARNING_RESOURCES.md)
+- [CANONICAL_ENTITY_CATALOG.md](./roadmap/CANONICAL_ENTITY_CATALOG.md)
+- [CASCADE_APP_INTEGRATION_OPPORTUNITY.md](./roadmap/CASCADE_APP_INTEGRATION_OPPORTUNITY.md)
+- [CLIENT_ONBOARDING_ASSESSMENT.md](./roadmap/CLIENT_ONBOARDING_ASSESSMENT.md)
+- [CORE_FEATURES_PRIORITY.md](./roadmap/CORE_FEATURES_PRIORITY.md)
+- [CR-2025-001_RAG_INTEGRATION.md](./roadmap/CR-2025-001_RAG_INTEGRATION.md)
+- [CR-2025-002_PRODUCTION_READINESS_AND_POLISH.md](./roadmap/CR-2025-002_PRODUCTION_READINESS_AND_POLISH.md)
+- [create-ai-search-issues.sh](./roadmap/create-ai-search-issues.sh)
+- [create-critical-high-issues.sh](./roadmap/create-critical-high-issues.sh)
+- [create-entity-type-issues.sh](./roadmap/create-entity-type-issues.sh)
+- [create-portfolio-issues.sh](./roadmap/create-portfolio-issues.sh)
+- [create-sprint-1-issues.sh](./roadmap/create-sprint-1-issues.sh)
+- [DATE_TIMEZONE_ARCHITECTURE.md](./roadmap/DATE_TIMEZONE_ARCHITECTURE.md)
+- [DIGITAL_TWIN_AS_TEST_STRATEGY.md](./roadmap/DIGITAL_TWIN_AS_TEST_STRATEGY.md)
+- [DIGITAL_TWIN_IMPLEMENTATION_STATUS.md](./roadmap/DIGITAL_TWIN_IMPLEMENTATION_STATUS.md)
+- [DIGITAL_TWIN_INTEGRATION_ROADMAP.md](./roadmap/DIGITAL_TWIN_INTEGRATION_ROADMAP.md)
+- [DIGITAL_TWIN_POC_DESIGN.md](./roadmap/DIGITAL_TWIN_POC_DESIGN.md)
+- [DOCUMENT_DATE_FIX_ANALYSIS.md](./roadmap/DOCUMENT_DATE_FIX_ANALYSIS.md)
+- [DRIFT_TO_CHANGE_REQUEST_WORKFLOW.md](./roadmap/DRIFT_TO_CHANGE_REQUEST_WORKFLOW.md)
+- [ENTITY_TYPE_DEVELOPMENT_APPROACH.md](./roadmap/ENTITY_TYPE_DEVELOPMENT_APPROACH.md)
+- [ENTITY_TYPE_ISSUES_LOG.md](./roadmap/ENTITY_TYPE_ISSUES_LOG.md)
+- [ENTITY_TYPE_LESSONS_LEARNED.md](./roadmap/ENTITY_TYPE_LESSONS_LEARNED.md)
+- [entity-baseline-integration.md](./roadmap/entity-baseline-integration.md)
+- [FUTURE_FEATURES_IDEATION_PROMPT.md](./roadmap/FUTURE_FEATURES_IDEATION_PROMPT.md)
+- [FUTURE_IMPROVEMENTS.md](./roadmap/FUTURE_IMPROVEMENTS.md)
+- [GITHUB_ISSUES_GENERATION_GUIDE.md](./roadmap/GITHUB_ISSUES_GENERATION_GUIDE.md)
+- [HYBRID_ASSET_SELECTION_IMPLEMENTATION.md](./roadmap/HYBRID_ASSET_SELECTION_IMPLEMENTATION.md)
+- [IMPLEMENTATION_TODOS_BY_PHASE.md](./roadmap/IMPLEMENTATION_TODOS_BY_PHASE.md)
+- [IMPORT_GUIDE.md](./roadmap/IMPORT_GUIDE.md)
+- [INTEGRATION_DELIVERABLES.md](./roadmap/INTEGRATION_DELIVERABLES.md)
+- [ITWIN_MODELS_IMPLEMENTATION_ROADMAP.md](./roadmap/ITWIN_MODELS_IMPLEMENTATION_ROADMAP.md)
+- [ITWIN_VIEWER_SETUP.md](./roadmap/ITWIN_VIEWER_SETUP.md)
+- [MARKET_READINESS_2026.md](./roadmap/MARKET_READINESS_2026.md)
+- [MASTER_STRATEGIC_PLAN_2026.md](./roadmap/MASTER_STRATEGIC_PLAN_2026.md)
+- [MICROSOFT_IGNITE_2025_INNOVATIONS_ANALYSIS.md](./roadmap/MICROSOFT_IGNITE_2025_INNOVATIONS_ANALYSIS.md)
+- [MICROSOFT_PPM_COMPETITIVE_ANALYSIS.md](./roadmap/MICROSOFT_PPM_COMPETITIVE_ANALYSIS.md)
+- [MOCK_VS_REAL_DATA_ANALYSIS.md](./roadmap/MOCK_VS_REAL_DATA_ANALYSIS.md)
+- [MVP_STAKEHOLDER_DEMO.md](./roadmap/MVP_STAKEHOLDER_DEMO.md)
+- [phase1-foundation-deliverables.md](./roadmap/phase1-foundation-deliverables.md)
+- [PMBOK_EDITION_DECISION.md](./roadmap/PMBOK_EDITION_DECISION.md)
+- [pmbok-8-domain-extraction.md](./roadmap/pmbok-8-domain-extraction.md)
+- [PMBOK6_PROCESSES_CAPTURE_PLAN.md](./roadmap/PMBOK6_PROCESSES_CAPTURE_PLAN.md)
+- [PMBOK6_PROCESSES_EXTRACTION_TEMPLATE.md](./roadmap/PMBOK6_PROCESSES_EXTRACTION_TEMPLATE.md)
+- [PMBOK8_EXTRACTION_COVERAGE_ANALYSIS.md](./roadmap/PMBOK8_EXTRACTION_COVERAGE_ANALYSIS.md)
+- [PORTFOLIO_OKR_INTEGRATION_ARCHITECTURE.md](./roadmap/PORTFOLIO_OKR_INTEGRATION_ARCHITECTURE.md)
+- [PORTFOLIO_PRIORITIZATION_SYSTEM.md](./roadmap/PORTFOLIO_PRIORITIZATION_SYSTEM.md)
+- [PORTFOLIO_STRATEGIC_FRAMEWORKS.md](./roadmap/PORTFOLIO_STRATEGIC_FRAMEWORKS.md)
+- [PORTFOLIO_TASKS_IMPLEMENTATION_MATRIX.md](./roadmap/PORTFOLIO_TASKS_IMPLEMENTATION_MATRIX.md)
+- [PROGRAM_ARCHIVE_FEATURE.md](./roadmap/PROGRAM_ARCHIVE_FEATURE.md)
+- [PROGRAM_RESOURCE_COST_MANAGEMENT.md](./roadmap/PROGRAM_RESOURCE_COST_MANAGEMENT.md)
+- [PROGRAMMATIC_IMPORT_DELIVERY.md](./roadmap/PROGRAMMATIC_IMPORT_DELIVERY.md)
+- [PROGRAMMATIC_IMPORT_EXAMPLES.md](./roadmap/PROGRAMMATIC_IMPORT_EXAMPLES.md)
+- [PROGRAMMATIC_IMPORT_GUIDE.md](./roadmap/PROGRAMMATIC_IMPORT_GUIDE.md)
+- [PROGRAMS_PHASE2_IMPLEMENTATION.md](./roadmap/PROGRAMS_PHASE2_IMPLEMENTATION.md)
+- [PROJECT_SUMMARY.md](./roadmap/PROJECT_SUMMARY.md)
+- [QUICK_REFERENCE_IMPORT.md](./roadmap/QUICK_REFERENCE_IMPORT.md)
+- [README.md](./roadmap/README.md)
+- [REMAINING_IMPLEMENTATION_PLAN.md](./roadmap/REMAINING_IMPLEMENTATION_PLAN.md)
+- [RESOURCE_ALLOCATION_SCOPE.md](./roadmap/RESOURCE_ALLOCATION_SCOPE.md)
+- [RISK_MANAGEMENT_ENHANCEMENT_DESIGN.md](./roadmap/RISK_MANAGEMENT_ENHANCEMENT_DESIGN.md)
+- [ROADMAP_COMPLETION_ANALYSIS.md](./roadmap/ROADMAP_COMPLETION_ANALYSIS.md)
+- [ROADMAP_IMPLEMENTATION_ANALYSIS.md](./roadmap/ROADMAP_IMPLEMENTATION_ANALYSIS.md)
+- [ROADMAP_MULTI_LEVEL_ACCESS_CONTROL.md](./roadmap/ROADMAP_MULTI_LEVEL_ACCESS_CONTROL.md)
+- [ROADMAP_TASKS_EXTRACTED.json](./roadmap/ROADMAP_TASKS_EXTRACTED.json)
+- [ROADMAP_TASKS_IMPORT.csv](./roadmap/ROADMAP_TASKS_IMPORT.csv)
+- [ROADMAP_TASKS_SUMMARY.md](./roadmap/ROADMAP_TASKS_SUMMARY.md)
+- [ROADMAP_v2.1.0.md](./roadmap/ROADMAP_v2.1.0.md)
+- [Roadmap.md](./roadmap/Roadmap.md)
+- [SEARCH_DIALOG_IMPLEMENTATION.md](./roadmap/SEARCH_DIALOG_IMPLEMENTATION.md)
+- [SEARCH_DIALOG_QUICK_START.md](./roadmap/SEARCH_DIALOG_QUICK_START.md)
+- [SMART_DOCUMENT_VERSIONING.md](./roadmap/SMART_DOCUMENT_VERSIONING.md)
+- [SPRINT_1_COMPLETION_STATUS.md](./roadmap/SPRINT_1_COMPLETION_STATUS.md)
+- [SPRINT_2_IMPLEMENTATION_PLAN.md](./roadmap/SPRINT_2_IMPLEMENTATION_PLAN.md)
+- [STAKEHOLDER_ENGAGEMENT_MOMENTUM.md](./roadmap/STAKEHOLDER_ENGAGEMENT_MOMENTUM.md)
+- [STAKEHOLDER_FOLLOWUP_EMAIL.md](./roadmap/STAKEHOLDER_FOLLOWUP_EMAIL.md)
+- [TASK_MANAGEMENT_HIERARCHY_DESIGN.md](./roadmap/TASK_MANAGEMENT_HIERARCHY_DESIGN.md)
+- [TEMPLATE_VERSION_CONTROL_IMPLEMENTATION.md](./roadmap/TEMPLATE_VERSION_CONTROL_IMPLEMENTATION.md)
+- [UNIVERSAL_SEMANTIC_SEARCH_ENHANCEMENTS.md](./roadmap/UNIVERSAL_SEMANTIC_SEARCH_ENHANCEMENTS.md)
+
+### **📂 roadmap/archive/2025**
+
+- [JOB_MONITOR_IMPLEMENTATION_PLAN.md](./roadmap/archive/2025/JOB_MONITOR_IMPLEMENTATION_PLAN.md)
+- [JOB_MONITOR_QUICK_START.md](./roadmap/archive/2025/JOB_MONITOR_QUICK_START.md)
+- [JOB_MONITOR_VISUAL_SUMMARY.md](./roadmap/archive/2025/JOB_MONITOR_VISUAL_SUMMARY.md)
+- [JOB_MONITOR_WORKER_QUEUE_ENHANCEMENT.md](./roadmap/archive/2025/JOB_MONITOR_WORKER_QUEUE_ENHANCEMENT.md)
+- [RAG_INTEGRATION_PLAN_COMPLETED.md](./roadmap/archive/2025/RAG_INTEGRATION_PLAN_COMPLETED.md)
+- [ROADMAP_README_COMPLETE_2025.md](./roadmap/archive/2025/ROADMAP_README_COMPLETE_2025.md)
+- [UNIVERSAL_SEMANTIC_SEARCH_COMPLETED.md](./roadmap/archive/2025/UNIVERSAL_SEMANTIC_SEARCH_COMPLETED.md)
+
+### **📂 roadmap/archive/2026**
+
+- [ARCHIVE_SUMMARY_2026.md](./roadmap/archive/2026/ARCHIVE_SUMMARY_2026.md)
+- [DRIFT_AUTO_RESOLUTION_FEATURE_COMPLETED.md](./roadmap/archive/2026/DRIFT_AUTO_RESOLUTION_FEATURE_COMPLETED.md)
+- [ENTITY_TYPE_PERFORMANCE_ACTUALS_COMPLETED.md](./roadmap/archive/2026/ENTITY_TYPE_PERFORMANCE_ACTUALS_COMPLETED.md)
+- [ENTITY_TYPE_TEAM_AGREEMENTS_COMPLETED.md](./roadmap/archive/2026/ENTITY_TYPE_TEAM_AGREEMENTS_COMPLETED.md)
+
+### **📂 roadmap/change-requests**
+
+- [CHANGE_REQUESTS_Q1_2025.md](./roadmap/change-requests/CHANGE_REQUESTS_Q1_2025.md)
+- [CR_TEMPLATE.md](./roadmap/change-requests/CR_TEMPLATE.md)
+- [CR-2025-006_Document_Impact_Analysis.md](./roadmap/change-requests/CR-2025-006_Document_Impact_Analysis.md)
+- [CR-2026-001_Baseline_Drift_Detection.md](./roadmap/change-requests/CR-2026-001_Baseline_Drift_Detection.md)
+- [CR-2026-002_Feedback_Intelligence.md](./roadmap/change-requests/CR-2026-002_Feedback_Intelligence.md)
+- [CR-2026-003_Hierarchical_PM.md](./roadmap/change-requests/CR-2026-003_Hierarchical_PM.md)
+- [CR-2026-004_ADPA_BUDGET_RESOURCES.md](./roadmap/change-requests/CR-2026-004_ADPA_BUDGET_RESOURCES.md)
+- [CR-2026-005_REMOVE_OCR_SCOPE.md](./roadmap/change-requests/CR-2026-005_REMOVE_OCR_SCOPE.md)
+- [CR-2026-005_Supabase_Realtime_Migration.md](./roadmap/change-requests/CR-2026-005_Supabase_Realtime_Migration.md)
+- [CR-2027-001_Resource_Allocation.md](./roadmap/change-requests/CR-2027-001_Resource_Allocation.md)
+- [CR-2027-002_Template_Version_Control.md](./roadmap/change-requests/CR-2027-002_Template_Version_Control.md)
+
+### **📂 roadmap/future-enhancements**
+
+- [DOCUMENT_DRIFT_VERIFICATION_METADATA.md](./roadmap/future-enhancements/DOCUMENT_DRIFT_VERIFICATION_METADATA.md)
+- [SUPABASE_REALTIME_MIGRATION.md](./roadmap/future-enhancements/SUPABASE_REALTIME_MIGRATION.md)
+
+### **📂 roadmap/github-issues**
+
+- [issue-task-123.md](./roadmap/github-issues/issue-task-123.md)
+- [issue-task-124.md](./roadmap/github-issues/issue-task-124.md)
+- [issue-task-125.md](./roadmap/github-issues/issue-task-125.md)
+
+### **📂 strategic**
+
+- [ADPA_STRATEGIC_POSITIONING.md](./strategic/ADPA_STRATEGIC_POSITIONING.md)
+- [Benefits Realization Proposal.md](./strategic/Benefits Realization Proposal.md)
+- [Business Case Momentum.md](./strategic/Business Case Momentum.md)
+- [CLIENT_ONBOARDING_INITIATIVE.md](./strategic/CLIENT_ONBOARDING_INITIATIVE.md)
+- [IDEATION_CLIENT_ONBOARDING_ASSESSMENT.md](./strategic/IDEATION_CLIENT_ONBOARDING_ASSESSMENT.md)
+- [IMMEDIATE_ACTIONS.md](./strategic/IMMEDIATE_ACTIONS.md)
+- [IP_OPPORTUNITIES.md](./strategic/IP_OPPORTUNITIES.md)
+- [MARKET_COMPETITIVE_ANALYSIS.md](./strategic/MARKET_COMPETITIVE_ANALYSIS.md)
+- [MOMENTUM_DIGITAL_TRANSFORMATION_IDEATION.md](./strategic/MOMENTUM_DIGITAL_TRANSFORMATION_IDEATION.md)
+- [MOMENTUM_PROJECT_PLAN_AND_STRATEGY.md](./strategic/MOMENTUM_PROJECT_PLAN_AND_STRATEGY.md)
+- [PM_MATURITY_PORTAL_VISION.md](./strategic/PM_MATURITY_PORTAL_VISION.md)
+- [PM_PORTAL_IMPLEMENTATION_PLAN.md](./strategic/PM_PORTAL_IMPLEMENTATION_PLAN.md)
+- [project momentum maturity levels.md](./strategic/project momentum maturity levels.md)
+
+### **📂 tasks**
+
+- [IMPLEMENTATION_VERIFICATION_TASK-746.md](./tasks/IMPLEMENTATION_VERIFICATION_TASK-746.md)
+- [TASK-1119-OKR-KPI-LINKING-STATUS.md](./tasks/TASK-1119-OKR-KPI-LINKING-STATUS.md)
+- [TASK-1129-REGULAR-REVIEW-CADENCE-STATUS.md](./tasks/TASK-1129-REGULAR-REVIEW-CADENCE-STATUS.md)
+- [TASK-1131-PORTFOLIO-RISK-REGISTER-STATUS.md](./tasks/TASK-1131-PORTFOLIO-RISK-REGISTER-STATUS.md)
+- [TASK-1135-MITIGATION-PLANS-TRACKING-STATUS.md](./tasks/TASK-1135-MITIGATION-PLANS-TRACKING-STATUS.md)
+- [TASK-1141-RESOURCE-MANAGEMENT-STATUS.md](./tasks/TASK-1141-RESOURCE-MANAGEMENT-STATUS.md)
+- [TASK-1281-OKR-SCHEMA-COMPLETION.md](./tasks/TASK-1281-OKR-SCHEMA-COMPLETION.md)
+- [TASK-1282-OKR-API-COMPLETION.md](./tasks/TASK-1282-OKR-API-COMPLETION.md)
+- [TASK-1283-OKR-DASHBOARD-UI-COMPLETION.md](./tasks/TASK-1283-OKR-DASHBOARD-UI-COMPLETION.md)
+- [TASK-1311-PROGRAMS-PAGE-DATABASE-COMPLETION.md](./tasks/TASK-1311-PROGRAMS-PAGE-DATABASE-COMPLETION.md)
+- [TASK-1315-PROGRAM-NAVIGATION-COMPLETION.md](./tasks/TASK-1315-PROGRAM-NAVIGATION-COMPLETION.md)
+- [TASK-132-PERFORMANCE-DASHBOARD-SPI-CPI-COMPLETION.md](./tasks/TASK-132-PERFORMANCE-DASHBOARD-SPI-CPI-COMPLETION.md)
+- [TASK-327-COMPLETION-SUMMARY.md](./tasks/TASK-327-COMPLETION-SUMMARY.md)
+- [TASK-328-COMPLETION-SUMMARY.md](./tasks/TASK-328-COMPLETION-SUMMARY.md)
+- [TASK-328-FRONTEND-COMPLETION.md](./tasks/TASK-328-FRONTEND-COMPLETION.md)
+- [TASK-717-IMPLEMENTATION.md](./tasks/TASK-717-IMPLEMENTATION.md)
+- [TASK-AUTO-ENTITY-EXTRACTION.md](./tasks/TASK-AUTO-ENTITY-EXTRACTION.md)
+- [TASK-SOURCE-DOCUMENT-TRACEABILITY.md](./tasks/TASK-SOURCE-DOCUMENT-TRACEABILITY.md)
+
+### **📂 templates**
+
+- [PMP_8TH_EDITION_REVISED.md](./templates/PMP_8TH_EDITION_REVISED.md)
+- [stakeholder-register-template.md](./templates/stakeholder-register-template.md)
+- [technical-architecture-baseline-guide.md](./templates/technical-architecture-baseline-guide.md)
+- [USER_PERSONAS_UTILIZATION_TEMPLATE.md](./templates/USER_PERSONAS_UTILIZATION_TEMPLATE.md)
+
+### **📂 troubleshooting**
+
+- [IMODEL_VIEWER_DISABLED.md](./troubleshooting/IMODEL_VIEWER_DISABLED.md)
+- [QUALITY_AUDIT_BUTTON_FIX.md](./troubleshooting/QUALITY_AUDIT_BUTTON_FIX.md)
 
