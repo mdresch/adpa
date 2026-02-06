@@ -8,6 +8,7 @@ import { logger } from '../utils/logger'
 import { baselineService, BaselineComparison } from './baselineService'
 import { entityExtractionService, ExtractedEntity } from './entityExtractionService'
 import { v4 as uuidv4 } from 'uuid'
+import { escalationService } from './escalationService'
 
 // Normalized drift point with snake_case fields from storage plus camelCase helpers used by
 // downstream resolution/notification services.
@@ -136,9 +137,61 @@ export class DriftDetectionService {
     return { id, drift_severity: params.severity }
   }
 
-  async checkAndTriggerEscalation(_driftRecord: { id: string }, _driftPoints: DriftPoint[]): Promise<void> {
-    // Placeholder for escalation matrix; no-op but keeps API stable
-    return
+  /**
+   * Check and trigger escalation if drift breaches thresholds (TASK-742)
+   */
+  async checkAndTriggerEscalation(driftRecord: { id: string }, driftPoints: DriftPoint[]): Promise<void> {
+    try {
+      logger.info('[DRIFT] Checking and triggering escalation for drift record:', driftRecord.id)
+
+      // 1. Fetch the full drift record from database
+      const result = await pool.query(
+        `SELECT project_id, source_document_id, drift_severity, ai_processing_metadata 
+         FROM baseline_drift_detection 
+         WHERE id = $1`,
+        [driftRecord.id]
+      )
+
+      if (result.rows.length === 0) {
+        logger.warn('[DRIFT] Drift record not found for escalation check:', driftRecord.id)
+        return
+      }
+
+      const drift = result.rows[0]
+      const driftData = drift.ai_processing_metadata || {}
+
+      // Ensure source_document_id is available in metadata for the escalation service
+      driftData.source_document_id = drift.source_document_id
+
+      // 2. Identify unique drift types in this record
+      const driftTypes = [...new Set(driftPoints.map(dp => dp.drift_type || dp.driftType).filter(Boolean))]
+
+      if (driftTypes.length === 0) {
+        logger.info('[DRIFT] No specific drift types found, defaulting to "other" for evaluation')
+        driftTypes.push('other')
+      }
+
+      // 3. Trigger escalation evaluation for each drift type
+      for (const type of driftTypes) {
+        logger.info(`[DRIFT] Triggering escalation evaluation for type: ${type}`, {
+          driftId: driftRecord.id,
+          projectId: drift.project_id
+        })
+
+        await escalationService.processDriftEscalation(
+          driftRecord.id,
+          drift.project_id,
+          type!,
+          drift.drift_severity,
+          driftData
+        )
+      }
+
+      logger.info('[DRIFT] Escalation orchestration completed', { driftId: driftRecord.id })
+    } catch (error) {
+      logger.error('[DRIFT] Error in checkAndTriggerEscalation flow:', error)
+      // We don't throw here to avoid failing the high-level drift detection job
+    }
   }
   /**
    * Detect drift for a project
@@ -157,7 +210,7 @@ export class DriftDetectionService {
           status: 'active',
           baselineType: 'project'
         })
-        
+
         if (baselines.length === 0) {
           logger.warn('⚠️ No active baseline found for project', { projectId })
           return []
@@ -271,7 +324,7 @@ export class DriftDetectionService {
         baselineId,
         baselineId
       )
-      drifts.push(...modifiedDrifts.filter(d => 
+      drifts.push(...modifiedDrifts.filter(d =>
         !options.minSeverity || this.isSeverityAbove(d.severity, options.minSeverity)
       ))
     }
@@ -457,7 +510,7 @@ export class DriftDetectionService {
     comparisonId?: string
   ): Omit<DriftDetection, 'id' | 'detected_at' | 'updated_at'> | null {
     const timelineRule = rules.find(r => r.rule_type === 'timeline' && r.is_active)
-    
+
     let severity: DriftSeverity = 'info'
     let delayDays = 0
 
@@ -517,7 +570,7 @@ export class DriftDetectionService {
     baselineId: string,
     comparisonId?: string
   ): Omit<DriftDetection, 'id' | 'detected_at' | 'updated_at'> | null {
-    const riskIncreased = 
+    const riskIncreased =
       (changes.probability && this.isRiskLevelHigher(changes.probability.new, changes.probability.old)) ||
       (changes.impact && this.isRiskLevelHigher(changes.impact.new, changes.impact.old))
 
@@ -678,9 +731,9 @@ export class DriftDetectionService {
          WHERE id = $5
         `,
         [
-          resolutionAction === 'accept' ? 'accepted' : 
-          resolutionAction === 'revert' ? 'reverted' :
-          resolutionAction === 'ignore' ? 'false_positive' : 'resolved',
+          resolutionAction === 'accept' ? 'accepted' :
+            resolutionAction === 'revert' ? 'reverted' :
+              resolutionAction === 'ignore' ? 'false_positive' : 'resolved',
           resolutionAction,
           resolutionNotes || null,
           userId,
@@ -717,8 +770,8 @@ export class DriftDetectionService {
         organization_id: row.organization_id,
         rule_name: row.rule_name,
         rule_type: row.rule_type,
-        rule_config: typeof row.rule_config === 'string' 
-          ? JSON.parse(row.rule_config) 
+        rule_config: typeof row.rule_config === 'string'
+          ? JSON.parse(row.rule_config)
           : row.rule_config,
         threshold_config: typeof row.threshold_config === 'string'
           ? JSON.parse(row.threshold_config)
@@ -745,7 +798,7 @@ export class DriftDetectionService {
     try {
       // Import Jira linkage service
       const { jiraLinkageService } = await import('./jiraLinkageService')
-      
+
       const issueDescription = `${drift.description}\n\nDrift Type: ${drift.drift_type}\nSeverity: ${drift.severity}\nAffected Entities: ${drift.affected_entity_ids.length}`
 
       const result = await jiraLinkageService.linkDocumentToJira(
@@ -787,7 +840,7 @@ export class DriftDetectionService {
   private isRiskLevelHigher(newLevel: string, oldLevel: string): boolean {
     const levels = { low: 1, medium: 2, high: 3 }
     return (levels[newLevel.toLowerCase() as keyof typeof levels] || 0) >
-           (levels[oldLevel.toLowerCase() as keyof typeof levels] || 0)
+      (levels[oldLevel.toLowerCase() as keyof typeof levels] || 0)
   }
 
   /**

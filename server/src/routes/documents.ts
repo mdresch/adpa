@@ -13,6 +13,7 @@ import { extractionQueue } from "../services/queueService"
 import { markdownToPdf } from "../utils/pdfGenerator"
 import { PdfService } from "../services/pdf-service"
 import { DocxService } from "../services/docxService"
+import { storageArchivalService } from "../services/storageArchivalService"
 import {
   Document,
   Packer,
@@ -1105,10 +1106,10 @@ router.get("/:id", authenticateToken, validateParams(Joi.object({ id: schemas.uu
 
     // 🔍 DEBUG: Log what we're sending
     const sourceDocs = document.generation_metadata?.source_documents || []
-    const projectContextDoc = Array.isArray(sourceDocs) 
+    const projectContextDoc = Array.isArray(sourceDocs)
       ? sourceDocs.find((doc: any) => doc.is_project_context || (doc.id && doc.id.startsWith('project_context:')))
       : null
-    
+
     log.info('📤 [GET-DOC] Sending to frontend:', {
       id: document.id,
       has_generation_metadata: !!document.generation_metadata,
@@ -1126,7 +1127,7 @@ router.get("/:id", authenticateToken, validateParams(Joi.object({ id: schemas.uu
       } : null,
       all_source_document_ids: Array.isArray(sourceDocs) ? sourceDocs.map((doc: any) => doc.id) : []
     })
-    
+
     // Also log the full source_documents array for debugging
     if (Array.isArray(sourceDocs) && sourceDocs.length > 0) {
       log.info('📋 [GET-DOC] Full source_documents array:', JSON.stringify(sourceDocs, null, 2))
@@ -1626,7 +1627,7 @@ router.post("/project/:projectId",
                 // Use queue service for async processing
                 const { getQueueService } = await import('../services/queueService')
                 const auditJobId = uuidv4()
-                
+
                 await getQueueService().addJob('quality-audit', {
                   jobId: auditJobId,
                   documentId: id,
@@ -1939,6 +1940,20 @@ router.post("/project/:projectId",
             error: err?.message || 'Unknown error',
             stack: err?.stack
           })
+        })
+      })
+
+      // 🚀 Storage Archival Orchestration (Phase 10)
+      // This runs asynchronously after creation if configured in project settings
+      setImmediate(() => {
+        storageArchivalService.archiveDocument({
+          projectId,
+          documentId: id,
+          fileName: name,
+          content: contentString,
+          mimeType: 'text/markdown'
+        }).catch(err => {
+          log.error(`[ARCHIVAL-ERROR] Failed to archive document ${id} to configured platforms:`, err)
         })
       })
 
@@ -2874,7 +2889,7 @@ router.post(
   "/bulk-export/pdf",
   authenticateToken,
   requirePermission("documents.read"),
-    validate(
+  validate(
     Joi.object({
       document_ids: Joi.array().items(schemas.uuid).min(1).max(100).required(),
     })

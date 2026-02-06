@@ -1,6 +1,7 @@
 import { pool } from '../database/connection'
 import { logger } from '../utils/logger'
 import { v4 as uuidv4 } from 'uuid'
+import { evaluateTriggerRules } from './digitalTwinTriggerService'
 
 export interface DigitalTwinAssetInput {
   project_id: string
@@ -57,7 +58,7 @@ export const digitalTwinAssetService = {
            RETURNING *`,
           [name, description, asset_type, location, JSON.stringify(metadata || {}), id]
         )
-        return updateRes.rows[0]
+        return { asset: updateRes.rows[0], isNew: false }
       } else {
         // Create new
         const insertRes = await pool.query(
@@ -67,7 +68,7 @@ export const digitalTwinAssetService = {
            RETURNING *`,
           [project_id, company_id, external_id, platform_type, platform_instance_url, name, description, asset_type, location, JSON.stringify(metadata || {}), source_document_id, source_entity_id]
         )
-        return insertRes.rows[0]
+        return { asset: insertRes.rows[0], isNew: true }
       }
     } catch (error) {
       logger.error('digitalTwinAssetService.registerAsset error', { error })
@@ -143,6 +144,24 @@ export const digitalTwinAssetService = {
       }
 
       await client.query('COMMIT')
+
+      // Trigger rule evaluation (fire and forget or await depending on requirements)
+      // We await it here to ensure it's logged, but wrapped in try/catch to not fail the request
+      try {
+        await evaluateTriggerRules(
+          asset_id,
+          newState.id,
+          source_event_id || null,
+          'state_change'
+        )
+      } catch (triggerError) {
+        logger.error('Failed to evaluate triggers for new state', {
+          assetId: asset_id,
+          stateId: newState.id,
+          error: triggerError
+        })
+      }
+
       return newState
 
     } catch (error) {

@@ -153,14 +153,14 @@ export const visioIngestionService = {
                         source_document_id: sourceDocumentId
                     }
 
-                    const asset = await digitalTwinAssetService.registerAsset(assetInput)
+                    const { asset, isNew } = await digitalTwinAssetService.registerAsset(assetInput)
 
-                    // Log creation event
+                    // Log creation or update event
                     await digitalTwinEventService.ingestEvent({
                         asset_id: asset.id,
-                        event_type: 'creation',
+                        event_type: isNew ? 'creation' : 'attribute_change',
                         event_payload: assetInput,
-                        event_summary: `Imported via Visio Bridge`,
+                        event_summary: isNew ? `Imported via Visio Bridge` : `Updated via Visio Bridge`,
                         platform_type: 'Visio',
                         event_timestamp: new Date()
                     })

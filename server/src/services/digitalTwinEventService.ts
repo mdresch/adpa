@@ -31,7 +31,21 @@ export const digitalTwinEventService = {
          RETURNING *`,
         [asset_id, event_type, JSON.stringify(event_payload), event_summary, platform_event_id, platform_type, event_timestamp, processing_status]
       )
-      return res.rows[0]
+      
+      const event = res.rows[0]
+
+      // Trigger Rule Evaluation
+      // We process asynchronously so we don't block the ingestion response
+      try {
+        const { evaluateTriggerRules } = await import('./digitalTwinTriggerService')
+        // Fire and forget (or could await if critical)
+        evaluateTriggerRules(event.asset_id, event.asset_id, event.id, event.event_type)
+          .catch(err => logger.error('Failed to evaluate triggers', { error: err.message, eventId: event.id }))
+      } catch (err) {
+         logger.error('Failed to import digitalTwinTriggerService', { error: err })
+      }
+
+      return event
     } catch (error) {
       logger.error('digitalTwinEventService.ingestEvent error', { error })
       throw error

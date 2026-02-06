@@ -671,7 +671,7 @@ router.post("/",
   async (req, res) => {
     const log = childLogger({ requestId: (req as any).requestId })
     try {
-      const { name, description, framework, category, content, variables, is_public, template_scope = 'user', company_id, system_prompt, template_paragraphs } = req.body
+      const { name, description, framework, category, content, variables, is_public, template_scope = 'user', company_id, system_prompt, prompt_build_up, template_paragraphs } = req.body
 
       // Only super admins can create standard templates
       if (template_scope === 'standard' && req.user?.role !== 'super_admin') {
@@ -707,8 +707,8 @@ router.post("/",
 
       const result = await pool.query(
         `
-        INSERT INTO templates (id, name, description, framework, category, content, variables, is_public, template_scope, company_id, is_read_only, created_by, system_prompt, template_paragraphs)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        INSERT INTO templates (id, name, description, framework, category, content, variables, is_public, template_scope, company_id, is_read_only, created_by, system_prompt, prompt_build_up, template_paragraphs)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
         RETURNING *
       `,
         [
@@ -725,6 +725,7 @@ router.post("/",
           is_read_only,
           req.user?.id,
           system_prompt || null,
+          prompt_build_up ? JSON.stringify(prompt_build_up) : null,
           template_paragraphs ? JSON.stringify(template_paragraphs) : null,
         ]
       )

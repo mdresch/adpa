@@ -9,6 +9,7 @@ import { DocumentRegenerationService } from "../services/documentRegenerationSer
 import { pool } from "../database/connection"
 import { getQueueService } from "../services/queueService"
 import { semanticVersionService } from "../services/semanticVersionService"
+import { storageArchivalService } from "../services/storageArchivalService"
 
 const router = express.Router()
 
@@ -224,7 +225,7 @@ router.post("/generate",
       // Always initialize source documents array (project context is always included)
       let sourceDocuments: any[] = []
       let contextStats: any = null
-      
+
       // 🆕 Always add project context as a source document (project context is always used)
       // Project context is ALWAYS used in document generation, so it should ALWAYS be in source documents
       try {
@@ -232,7 +233,7 @@ router.post("/generate",
           `SELECT name, description, framework FROM projects WHERE id = $1`,
           [projectId]
         )
-        
+
         if (projectResult.rows.length > 0) {
           const project = projectResult.rows[0]
           // Project context is ALWAYS used - even if project has no name/description/framework,
@@ -303,7 +304,7 @@ router.post("/generate",
         }
         sourceDocuments.push(projectContextEntry)
       }
-      
+
       // Fetch other source documents if includeDocuments is true
       if (includeDocuments) {
         try {
@@ -321,9 +322,9 @@ router.post("/generate",
              LIMIT 10`,
             [projectId]
           )
-          
+
           const relevantDocs = documentsResult.rows || []
-          
+
           // Build source documents metadata (append to existing project context)
           const otherDocuments = relevantDocs.map((doc: any, index: number) => {
             // Determine lifecycle phase for this document
@@ -335,7 +336,7 @@ router.post("/generate",
               'resource': 9, 'quality': 10, 'risk': 11, 'communication': 12,
               'procurement': 13, 'integration': 14, 'closeout': 15, 'lessons': 16
             }
-            
+
             let phase = 99
             let phaseName = 'Other'
             for (const [key, phaseNum] of Object.entries(lifecycleOrder)) {
@@ -346,12 +347,12 @@ router.post("/generate",
                 }
               }
             }
-            
+
             // Calculate reading metrics for this document
             const charCount = doc.character_count || (typeof doc.content === 'string' ? doc.content.length : 0)
             const wordCount = doc.word_count || Math.round(charCount / 5) // Estimate if not available
             const readingTimeMinutes = Math.round((wordCount / 250) * 10) / 10 // 250 words/min
-            
+
             return {
               id: doc.id,
               title: doc.name,
@@ -367,7 +368,7 @@ router.post("/generate",
               reading_time_minutes: readingTimeMinutes
             }
           })
-          
+
           // Append other documents to the existing sourceDocuments array (which already has project context)
           sourceDocuments.push(...otherDocuments)
 
@@ -378,7 +379,7 @@ router.post("/generate",
             [projectId]
           )
           const totalDocuments = parseInt(totalDocsResult.rows[0]?.count || '0', 10)
-          
+
           // Get stakeholder count if includeStakeholders is true
           let stakeholderCount = 0
           if (includeStakeholders) {
@@ -388,10 +389,10 @@ router.post("/generate",
             )
             stakeholderCount = parseInt(stakeholdersResult.rows[0]?.count || '0', 10)
           }
-          
+
           // Estimate context tokens from prompt length (rough estimate)
           const estimatedContextTokens = Math.round((userPrompt.length + (result.content?.length || 0)) / 4)
-          
+
           contextStats = {
             total_documents: totalDocuments,
             documents_used: relevantDocs.length,
@@ -401,7 +402,7 @@ router.post("/generate",
             stakeholders_available: stakeholderCount,
             estimated_context_tokens: estimatedContextTokens
           }
-          
+
           log.info('[DOC-GEN] Source documents fetched', {
             projectId,
             sourceDocumentsCount: sourceDocuments.length,
@@ -426,7 +427,7 @@ router.post("/generate",
           stakeholders_available: 0,
           estimated_context_tokens: Math.round((userPrompt.length + (result.content?.length || 0)) / 4)
         }
-        
+
         log.info('[DOC-GEN] Project context added (no other documents)', {
           projectId,
           sourceDocumentsCount: sourceDocuments.length,
@@ -492,7 +493,7 @@ router.post("/generate",
         // Injected GKG context (when template has gkg_context_strategy and Generate Document used it)
         ...(result.gkg_context_snapshot && { gkg_context_snapshot: result.gkg_context_snapshot })
       }
-      
+
       // 🔍 CRITICAL: Verify project context was added before saving
       if (sourceDocuments.length === 0) {
         log.error('[DOC-GEN] ⚠️ CRITICAL: sourceDocuments is empty! Adding project context as fallback', { projectId })
@@ -514,7 +515,7 @@ router.post("/generate",
         }
         sourceDocuments.push(emergencyProjectContext)
       }
-      
+
       // 🔍 DEBUG: Log what we're saving
       log.info('[DOC-GEN] Generation metadata being saved:', {
         hasSourceDocuments: sourceDocuments.length > 0,
@@ -583,7 +584,7 @@ router.post("/generate",
               // Use queue service for async processing
               const { getQueueService } = await import('../services/queueService')
               const auditJobId = uuidv4()
-              
+
               await getQueueService().addJob('quality-audit', {
                 jobId: auditJobId,
                 documentId,
@@ -641,157 +642,157 @@ router.post("/generate",
             )
 
             if (projectSettingsResult.rows.length > 0) {
-            const settings = projectSettingsResult.rows[0]
+              const settings = projectSettingsResult.rows[0]
 
-            // Auto-publish to Confluence if enabled
-            if (settings.confluence_enabled === true && settings.confluence_auto_publish === true) {
-              try {
-                log.info('🔗 [AUTO-INTEGRATION] Auto-publishing generated document to Confluence', {
-                  documentId,
-                  documentName: name,
-                  projectId
-                })
+              // Auto-publish to Confluence if enabled
+              if (settings.confluence_enabled === true && settings.confluence_auto_publish === true) {
+                try {
+                  log.info('🔗 [AUTO-INTEGRATION] Auto-publishing generated document to Confluence', {
+                    documentId,
+                    documentName: name,
+                    projectId
+                  })
 
-                // Get latest active Confluence integration
-                const integrationResult = await pool.query(
-                  `SELECT * FROM integrations WHERE type = 'confluence' AND is_active = true ORDER BY updated_at DESC LIMIT 1`
-                )
+                  // Get latest active Confluence integration
+                  const integrationResult = await pool.query(
+                    `SELECT * FROM integrations WHERE type = 'confluence' AND is_active = true ORDER BY updated_at DESC LIMIT 1`
+                  )
 
-                if (integrationResult.rows.length > 0) {
-                  const integration = integrationResult.rows[0]
-                  
-                  // Parse configuration (JSONB might be string or object)
-                  const config = typeof integration.configuration === 'string' 
-                    ? JSON.parse(integration.configuration) 
-                    : integration.configuration || {}
-                  
-                  // Decrypt credentials
-                  let credentials: any = {}
-                  try {
-                    if (integration.credentials_encrypted) {
-                      const decryptedData = Buffer.from(integration.credentials_encrypted, "base64").toString("utf-8")
-                      credentials = JSON.parse(decryptedData)
+                  if (integrationResult.rows.length > 0) {
+                    const integration = integrationResult.rows[0]
+
+                    // Parse configuration (JSONB might be string or object)
+                    const config = typeof integration.configuration === 'string'
+                      ? JSON.parse(integration.configuration)
+                      : integration.configuration || {}
+
+                    // Decrypt credentials
+                    let credentials: any = {}
+                    try {
+                      if (integration.credentials_encrypted) {
+                        const decryptedData = Buffer.from(integration.credentials_encrypted, "base64").toString("utf-8")
+                        credentials = JSON.parse(decryptedData)
+                      }
+                    } catch (e) {
+                      log.warn('Failed to decrypt Confluence credentials for auto-publish', e)
+                      throw new Error('Invalid credentials')
                     }
-                  } catch (e) {
-                    log.warn('Failed to decrypt Confluence credentials for auto-publish', e)
-                    throw new Error('Invalid credentials')
+
+                    const { ConfluenceIntegration } = await import('../integrations/confluence')
+                    const confluenceIntegration = new ConfluenceIntegration(
+                      {
+                        baseUrl: config.base_url || config.baseUrl || credentials.baseUrl,
+                        username: credentials.username,
+                        apiToken: credentials.api_token,
+                        cloudId: config.cloud_id || config.cloudId
+                      },
+                      integration.id
+                    )
+
+                    const projectSettings = {
+                      confluence_enabled: settings.confluence_enabled,
+                      confluence_space_key_override: settings.confluence_space_key_override,
+                      confluence_parent_page_id_override: settings.confluence_parent_page_id_override
+                    }
+
+                    confluenceUrl = await confluenceIntegration.uploadDocument({
+                      id: documentId,
+                      title: name,
+                      content: result.content,
+                      project_id: projectId,
+                      framework: undefined,
+                      status: 'draft',
+                    }, projectSettings)
+
+                    // Update document with Confluence URL
+                    await pool.query(
+                      `UPDATE documents SET confluence_page_url = $1 WHERE id = $2`,
+                      [confluenceUrl, documentId]
+                    )
+
+                    log.info('✅ [AUTO-INTEGRATION] Generated document auto-published to Confluence', {
+                      documentId,
+                      confluenceUrl
+                    })
+                  } else {
+                    log.warn('⚠️ [AUTO-INTEGRATION] No active Confluence integration found for auto-publish')
                   }
-
-                  const { ConfluenceIntegration } = await import('../integrations/confluence')
-                  const confluenceIntegration = new ConfluenceIntegration(
-                    {
-                      baseUrl: config.base_url || config.baseUrl || credentials.baseUrl,
-                      username: credentials.username,
-                      apiToken: credentials.api_token,
-                      cloudId: config.cloud_id || config.cloudId
-                    },
-                    integration.id
-                  )
-
-                  const projectSettings = {
-                    confluence_enabled: settings.confluence_enabled,
-                    confluence_space_key_override: settings.confluence_space_key_override,
-                    confluence_parent_page_id_override: settings.confluence_parent_page_id_override
-                  }
-
-                  confluenceUrl = await confluenceIntegration.uploadDocument({
-                    id: documentId,
-                    title: name,
-                    content: result.content,
-                    project_id: projectId,
-                    framework: undefined,
-                    status: 'draft',
-                  }, projectSettings)
-
-                  // Update document with Confluence URL
-                  await pool.query(
-                    `UPDATE documents SET confluence_page_url = $1 WHERE id = $2`,
-                    [confluenceUrl, documentId]
-                  )
-
-                  log.info('✅ [AUTO-INTEGRATION] Generated document auto-published to Confluence', {
+                } catch (confluenceError: any) {
+                  // Don't fail document generation if auto-publish fails
+                  log.error('❌ [AUTO-INTEGRATION] Failed to auto-publish to Confluence', {
                     documentId,
-                    confluenceUrl
+                    error: confluenceError.message,
+                    stack: confluenceError.stack
                   })
-                } else {
-                  log.warn('⚠️ [AUTO-INTEGRATION] No active Confluence integration found for auto-publish')
                 }
-              } catch (confluenceError: any) {
-                // Don't fail document generation if auto-publish fails
-                log.error('❌ [AUTO-INTEGRATION] Failed to auto-publish to Confluence', {
-                  documentId,
-                  error: confluenceError.message,
-                  stack: confluenceError.stack
-                })
               }
-            }
 
-            // Auto-create Jira issue if enabled
-            if (settings.jira_enabled === true && settings.jira_auto_create === true) {
+              // Auto-create Jira issue if enabled
+              if (settings.jira_enabled === true && settings.jira_auto_create === true) {
+                try {
+                  log.info('🔗 [AUTO-INTEGRATION] Auto-creating Jira issue for generated document', {
+                    documentId,
+                    documentName: name,
+                    projectId
+                  })
+
+                  const { jiraLinkageService } = await import('../services/jiraLinkageService')
+                  jiraLinkage = await jiraLinkageService.linkDocumentToJira(
+                    documentId,
+                    name,
+                    projectId,
+                    confluenceUrl || undefined,
+                    `Document: ${name}\n\nProject: ${projectId}\nDocument ID: ${documentId}`,
+                    settings.jira_issue_type_override || undefined,
+                    settings.jira_priority_override || undefined
+                  )
+
+                  if (jiraLinkage) {
+                    log.info('✅ [AUTO-INTEGRATION] Jira issue auto-created for generated document', {
+                      documentId,
+                      issueKey: jiraLinkage.issueKey,
+                      issueUrl: jiraLinkage.issueUrl,
+                      created: jiraLinkage.created
+                    })
+                  } else {
+                    log.warn('⚠️ [AUTO-INTEGRATION] Jira linkage service returned null (may be disabled or misconfigured)')
+                  }
+                } catch (jiraError: any) {
+                  // Don't fail document generation if auto-create fails
+                  log.error('❌ [AUTO-INTEGRATION] Failed to auto-create Jira issue', {
+                    documentId,
+                    error: jiraError.message,
+                    stack: jiraError.stack
+                  })
+                }
+              }
+            } else {
+              // Fallback: Try legacy Jira linkage if no project settings (for backward compatibility)
               try {
-                log.info('🔗 [AUTO-INTEGRATION] Auto-creating Jira issue for generated document', {
-                  documentId,
-                  documentName: name,
-                  projectId
-                })
-
-                const { jiraLinkageService } = await import('../services/jiraLinkageService')
-                jiraLinkage = await jiraLinkageService.linkDocumentToJira(
-                  documentId,
-                  name,
-                  projectId,
-                  confluenceUrl || undefined,
-                  `Document: ${name}\n\nProject: ${projectId}\nDocument ID: ${documentId}`,
-                  settings.jira_issue_type_override || undefined,
-                  settings.jira_priority_override || undefined
-                )
-
-                if (jiraLinkage) {
-                  log.info('✅ [AUTO-INTEGRATION] Jira issue auto-created for generated document', {
+                const jiraLinkageModule = await import('../services/jiraLinkageService')
+                if (jiraLinkageModule.jiraLinkageService) {
+                  jiraLinkage = await jiraLinkageModule.jiraLinkageService.linkDocumentToJira(
                     documentId,
-                    issueKey: jiraLinkage.issueKey,
-                    issueUrl: jiraLinkage.issueUrl,
-                    created: jiraLinkage.created
-                  })
-                } else {
-                  log.warn('⚠️ [AUTO-INTEGRATION] Jira linkage service returned null (may be disabled or misconfigured)')
+                    name,
+                    projectId
+                  )
+                  if (jiraLinkage) {
+                    log.info(`Document linked to Jira issue: ${jiraLinkage.issueKey}`)
+                  }
                 }
-              } catch (jiraError: any) {
-                // Don't fail document generation if auto-create fails
-                log.error('❌ [AUTO-INTEGRATION] Failed to auto-create Jira issue', {
-                  documentId,
-                  error: jiraError.message,
-                  stack: jiraError.stack
-                })
+              } catch (jiraError) {
+                log.warn('Failed to link document to Jira (non-blocking):', jiraError)
               }
             }
-          } else {
-            // Fallback: Try legacy Jira linkage if no project settings (for backward compatibility)
-            try {
-              const jiraLinkageModule = await import('../services/jiraLinkageService')
-              if (jiraLinkageModule.jiraLinkageService) {
-                jiraLinkage = await jiraLinkageModule.jiraLinkageService.linkDocumentToJira(
-                  documentId,
-                  name,
-                  projectId
-                )
-                if (jiraLinkage) {
-                  log.info(`Document linked to Jira issue: ${jiraLinkage.issueKey}`)
-                }
-              }
-            } catch (jiraError) {
-              log.warn('Failed to link document to Jira (non-blocking):', jiraError)
-            }
+          } catch (integrationError: any) {
+            // Don't fail document generation if integration check fails
+            log.error('❌ [AUTO-INTEGRATION] Error checking project integration settings', {
+              documentId,
+              projectId,
+              error: integrationError.message,
+              stack: integrationError.stack
+            })
           }
-        } catch (integrationError: any) {
-          // Don't fail document generation if integration check fails
-          log.error('❌ [AUTO-INTEGRATION] Error checking project integration settings', {
-            documentId,
-            projectId,
-            error: integrationError.message,
-            stack: integrationError.stack
-          })
-        }
         })().catch((err: any) => {
           // Catch any unhandled promise rejections
           log.error('❌ [AUTO-INTEGRATION] Unhandled error in auto-integration', {
@@ -801,6 +802,33 @@ router.post("/generate",
             stack: err?.stack
           })
         })
+      })
+
+      // 💾 Storage Archival: Push to ProjectWise and SharePoint if enabled
+      setImmediate(() => {
+        (async () => {
+          try {
+            log.info('💾 [STORAGE-ARCHIVAL] Starting multi-platform archival for generated document', {
+              documentId,
+              projectId
+            })
+
+            await storageArchivalService.archiveDocument({
+              projectId,
+              documentId,
+              fileName: name,
+              content: result.content,
+              mimeType: 'text/markdown'
+            })
+
+            log.info('✅ [STORAGE-ARCHIVAL] Multi-platform archival orchestration completed for document', { documentId })
+          } catch (archivalError: any) {
+            log.error('❌ [STORAGE-ARCHIVAL] Failed to orchestrate storage archival', {
+              documentId,
+              error: archivalError.message
+            })
+          }
+        })()
       })
 
       res.status(201).json({

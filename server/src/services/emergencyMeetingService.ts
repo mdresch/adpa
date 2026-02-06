@@ -8,6 +8,7 @@
 
 import { pool } from '../database/connection'
 import { logger } from '../utils/logger'
+import { teamsService } from './teamsService'
 import { v4 as uuidv4 } from 'uuid'
 
 export interface BudgetDriftData {
@@ -81,7 +82,7 @@ export class EmergencyMeetingService {
       const title = this.generateMeetingTitle(driftData, severity)
       const triggerReason = this.generateTriggerReason(driftData, severity)
       const agenda = this.generateAgenda(driftData, severity)
-      
+
       // Determine attendees based on severity
       const attendees = await this.determineAttendees(
         driftData.projectId,
@@ -175,7 +176,7 @@ export class EmergencyMeetingService {
    */
   private async generateMeetingId(): Promise<string> {
     const year = new Date().getFullYear()
-    
+
     // Get count of meetings this year for sequential numbering
     const result = await pool.query(
       `SELECT COUNT(*) as count 
@@ -183,7 +184,7 @@ export class EmergencyMeetingService {
        WHERE meeting_id LIKE $1`,
       [`EMRG-${year}-%`]
     )
-    
+
     const count = parseInt(result.rows[0]?.count || '0') + 1
     return `EMRG-${year}-${count.toString().padStart(3, '0')}`
   }
@@ -230,12 +231,12 @@ ${driftData.rootCause || 'To be determined in meeting'}
 
 ## Urgency
 
-${severity === 'emergency' 
-  ? 'This is a **critical emergency** requiring immediate executive attention. Project exceeding budget by 25%+ may impact quarterly results and other strategic initiatives.'
-  : severity === 'critical'
-  ? 'This is a **critical situation** requiring urgent senior management decision. Project significantly over budget and requires immediate corrective action.'
-  : 'Budget variance detected requiring management review and corrective action planning.'
-}
+${severity === 'emergency'
+        ? 'This is a **critical emergency** requiring immediate executive attention. Project exceeding budget by 25%+ may impact quarterly results and other strategic initiatives.'
+        : severity === 'critical'
+          ? 'This is a **critical situation** requiring urgent senior management decision. Project significantly over budget and requires immediate corrective action.'
+          : 'Budget variance detected requiring management review and corrective action planning.'
+      }
 
 ## Required Action
 
@@ -361,7 +362,7 @@ Decision required on corrective action options within ${severity === 'emergency'
    */
   private calculateMeetingTime(severity: 'warning' | 'critical' | 'emergency'): Date {
     const now = new Date()
-    
+
     switch (severity) {
       case 'emergency':
         // Schedule within 6-12 hours (next business day morning if after hours)
@@ -531,7 +532,9 @@ Decision required on corrective action options within ${severity === 'emergency'
 
       // In a real implementation, this would:
       // 1. Send emails to all attendees
-      // 2. Send Slack notifications
+      // 2. Send Teams notifications
+      await this.sendTeamsMeetingNotification(meeting, attendees)
+
       // 3. Send SMS for emergency severity
       // 4. Create dashboard alerts
 
@@ -563,6 +566,65 @@ Decision required on corrective action options within ${severity === 'emergency'
     } catch (error) {
       logger.error('[EMERGENCY-MEETING] Failed to send notifications:', error)
       return false
+    }
+  }
+
+  /**
+   * Send Teams notification for an emergency meeting
+   */
+  private async sendTeamsMeetingNotification(meeting: EmergencyMeeting, attendees: MeetingAttendee[]): Promise<void> {
+    try {
+      // Get integration for Teams
+      const integrationResult = await pool.query(
+        "SELECT configuration, credentials_encrypted FROM integrations WHERE type = 'teams' AND is_active = true LIMIT 1"
+      )
+
+      if (integrationResult.rows.length === 0) {
+        logger.warn('[EMERGENCY-MEETING] No active Teams integration found, skipping notification')
+        return
+      }
+
+      const credentials = JSON.parse(
+        Buffer.from(integrationResult.rows[0].credentials_encrypted, 'base64').toString('utf-8')
+      )
+      const webhookUrl = credentials.webhookUrl || credentials.webhook_url
+
+      if (!webhookUrl) {
+        logger.warn('[EMERGENCY-MEETING] Teams webhook URL not found in credentials')
+        return
+      }
+
+      // Prepare message facts
+      const facts = teamsService.formatFacts({
+        meeting_id: meeting.meetingId,
+        severity: meeting.severity,
+        scheduled_for: meeting.scheduledDate.toLocaleString(),
+        project: meeting.projectId,
+        overrun: meeting.overrunPercentage ? `${meeting.overrunPercentage.toFixed(1)}%` : 'N/A'
+      })
+
+      await teamsService.sendNotification({
+        webhookUrl,
+        title: `🗓️ MEETING SCHEDULED: ${meeting.title}`,
+        summary: `Emergency meeting scheduled for ${meeting.scheduledDate.toLocaleString()}`,
+        text: `An emergency meeting has been auto-scheduled to address critical issues.`,
+        severity: meeting.severity as any,
+        sections: facts,
+        actions: [
+          {
+            "@type": "OpenUri",
+            "name": "View Meeting Details",
+            "targets": [{ "os": "default", "uri": `${process.env.FRONTEND_URL}/meetings/${meeting.meetingId}` }]
+          },
+          {
+            "@type": "OpenUri",
+            "name": "Join Meeting (Teams)",
+            "targets": [{ "os": "default", "uri": "https://teams.microsoft.com/l/meeting/..." }] // Placeholder for real meeting link
+          }
+        ]
+      })
+    } catch (error) {
+      logger.error('[EMERGENCY-MEETING] Failed to send Teams meeting notification:', error)
     }
   }
 

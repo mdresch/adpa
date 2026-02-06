@@ -1,4 +1,4 @@
-;(async function(){ try{ await (require('../lib/db')).initDb() } catch(e){} })();
+; (async function () { try { await (require('../lib/db')).initDb() } catch (e) { } })();
 /**
  * Approval Workflow Service
  * TASK-745: Approval workflow integration
@@ -12,6 +12,7 @@ import { logger } from '../utils/logger'
 import { emailNotificationService } from './emailNotificationService'
 import { v4 as uuidv4 } from 'uuid'
 import { PoolClient } from 'pg'
+import { baselineUpdateService } from './baselineUpdateService'
 
 // ============================================================================
 // TYPES
@@ -144,7 +145,7 @@ export class ApprovalWorkflowService {
 
       // 1. Find appropriate workflow
       const workflow = await this.findWorkflow(client, params.request_type)
-      
+
       if (!workflow) {
         throw new Error(`No active workflow found for type: ${params.request_type}`)
       }
@@ -200,7 +201,7 @@ export class ApprovalWorkflowService {
       await this.sendApprovalNotifications(client, requestId, 'approval_requested')
 
       // 6. Create audit log entry
-      await this.createAuditLog(client, requestId, null, 'request_created', 
+      await this.createAuditLog(client, requestId, null, 'request_created',
         'Approval request created', params.requested_by, false)
 
       await client.query('COMMIT')
@@ -340,6 +341,33 @@ export class ApprovalWorkflowService {
                  WHERE id = $2`,
                 [params.approver_user_id, request.change_request_id]
               )
+
+              // ⭐ NEW HOOK: Automatically update the project baseline
+              // Based on Phase 3: Workflow Automation from DRIFT_TO_CHANGE_REQUEST_WORKFLOW.md
+              logger.info('[APPROVAL-WORKFLOW] Final CR approval detected - triggering baseline update', {
+                changeRequestId: request.change_request_id,
+                projectId: request.project_id
+              })
+
+              // We run this asynchronously to not block the main approval transaction
+              baselineUpdateService.updateBaselineFromChangeRequest(
+                request.change_request_id,
+                params.approver_user_id
+              ).then(result => {
+                if (result.success) {
+                  logger.info('[APPROVAL-WORKFLOW] Baseline updated successfully after approval', {
+                    changeRequestId: request.change_request_id,
+                    newVersion: result.baselineVersion
+                  })
+                } else {
+                  logger.warn('[APPROVAL-WORKFLOW] Baseline update skipped or failed', {
+                    changeRequestId: request.change_request_id,
+                    message: result.message
+                  })
+                }
+              }).catch(err => {
+                logger.error('[APPROVAL-WORKFLOW] Critical error during automatic baseline update:', err)
+              })
             }
           }
         }
@@ -576,7 +604,7 @@ export class ApprovalWorkflowService {
     )
 
     const stats = result.rows[0]
-    
+
     // All required steps must be approved
     return parseInt(stats.required_approved) === parseInt(stats.required)
   }

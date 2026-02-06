@@ -10,7 +10,7 @@ import { NotionIntegration } from "../integrations/notion"
 const router = express.Router()
 
 // Get integrations
-router.get("/", 
+router.get("/",
   authenticateToken,
   validateQuery(Joi.object({
     page: Joi.number().integer().min(1).default(1),
@@ -95,7 +95,7 @@ router.get("/",
 )
 
 // Get integration by ID
-router.get("/:id", 
+router.get("/:id",
   authenticateToken,
   validateParams(Joi.object({ id: Joi.string().uuid().required() })),
   async (req, res) => {
@@ -134,8 +134,8 @@ router.get("/:id",
 )
 
 // Create integration (admin only)
-router.post("/", 
-  authenticateToken, 
+router.post("/",
+  authenticateToken,
   requirePermission("integrations.create"),
   validate(Joi.object({
     name: Joi.string().min(2).max(100).required(),
@@ -186,7 +186,7 @@ router.post("/",
         }
       }
 
-  log.info(`Integration created: ${name} (${type}) by ${req.user?.email}`)
+      log.info(`Integration created: ${name} (${type}) by ${req.user?.email}`)
 
       res.status(201).json({
         message: "Integration created successfully",
@@ -200,8 +200,8 @@ router.post("/",
 )
 
 // Update integration (admin only)
-router.put("/:id", 
-  authenticateToken, 
+router.put("/:id",
+  authenticateToken,
   requirePermission("integrations.update"),
   validateParams(Joi.object({ id: Joi.string().uuid().required() })),
   validate(Joi.object({
@@ -292,7 +292,7 @@ router.put("/:id",
         }
       }
 
-    log.info(`Integration updated: ${id} by ${req.user?.email}`)
+      log.info(`Integration updated: ${id} by ${req.user?.email}`)
 
       res.json({
         message: "Integration updated successfully",
@@ -306,8 +306,8 @@ router.put("/:id",
 )
 
 // Delete integration (admin only)
-router.delete("/:id", 
-  authenticateToken, 
+router.delete("/:id",
+  authenticateToken,
   requirePermission("integrations.delete"),
   validateParams(Joi.object({ id: Joi.string().uuid().required() })),
   async (req, res) => {
@@ -324,7 +324,7 @@ router.delete("/:id",
         return res.status(404).json({ error: "Integration not found" })
       }
 
-    log.info(`Integration deleted: ${id} by ${req.user?.email}`)
+      log.info(`Integration deleted: ${id} by ${req.user?.email}`)
 
       res.json({ message: "Integration deleted successfully" })
     } catch (error) {
@@ -346,7 +346,7 @@ router.post("/notion/test",
     try {
       const { integrationToken } = req.body
 
-      log.info("Testing Notion connection...", { 
+      log.info("Testing Notion connection...", {
         tokenLength: integrationToken?.length,
         tokenPrefix: integrationToken?.substring(0, 10) + "..."
       })
@@ -361,14 +361,14 @@ router.post("/notion/test",
 
       const { NotionClient } = await import("../integrations/notion")
       const client = new NotionClient({ apiKey: integrationToken.trim() })
-      
+
       // Test connection by getting current user
       const testResult = await client.testConnection()
-      
+
       if (testResult) {
         // Try to search for pages to verify access
         const searchResult = await client.search("", undefined, 1)
-        
+
         res.json({
           success: true,
           message: "Notion connection successful",
@@ -394,8 +394,8 @@ router.post("/notion/test",
 )
 
 // Test integration connection
-router.post("/:id/test", 
-  authenticateToken, 
+router.post("/:id/test",
+  authenticateToken,
   requirePermission("integrations.test"),
   validateParams(Joi.object({ id: Joi.string().uuid().required() })),
   async (req, res) => {
@@ -435,7 +435,7 @@ router.post("/:id/test",
         [testResult.success ? "connected" : "error", id]
       )
 
-  log.info(`Integration test: ${id} - ${testResult.success ? "success" : "failed"}`)
+      log.info(`Integration test: ${id} - ${testResult.success ? "success" : "failed"}`)
 
       res.json({
         success: testResult.success,
@@ -450,8 +450,8 @@ router.post("/:id/test",
 )
 
 // Sync integration data
-router.post("/:id/sync", 
-  authenticateToken, 
+router.post("/:id/sync",
+  authenticateToken,
   requirePermission("integrations.sync"),
   validateParams(Joi.object({ id: Joi.string().uuid().required() })),
   async (req, res) => {
@@ -497,7 +497,7 @@ router.post("/:id/sync",
         [syncResult.success ? "completed" : "error", id]
       )
 
-    log.info(`Integration sync: ${id} - ${syncResult.success ? "success" : "failed"}`)
+      log.info(`Integration sync: ${id} - ${syncResult.success ? "success" : "failed"}`)
 
       res.json({
         message: "Sync completed",
@@ -505,12 +505,12 @@ router.post("/:id/sync",
         details: syncResult.details,
       })
     } catch (error: any) {
-      log.error("Sync integration error:", { 
-        error: error.message, 
+      log.error("Sync integration error:", {
+        error: error.message,
         stack: error.stack,
-        integrationId: req.params.id 
+        integrationId: req.params.id
       })
-      
+
       // Update sync status to error
       try {
         await pool.query(
@@ -521,12 +521,12 @@ router.post("/:id/sync",
         log.error("Failed to update sync status:", updateError)
       }
 
-      res.status(500).json({ 
-        error: "Internal server error", 
+      res.status(500).json({
+        error: "Internal server error",
         message: error.message,
-        success: false 
+        success: false
       })
-  }
+    }
   }
 )
 
@@ -613,6 +613,22 @@ async function testIntegrationConnection(type: string, configuration: any, crede
           details: { type, tested_at: new Date().toISOString(), error: error.message },
         }
       }
+    case "teams":
+      try {
+        const { teamsService } = await import("../services/teamsService")
+        const connected = await teamsService.testConnection(credentials.webhookUrl || credentials.webhook_url)
+        return {
+          success: connected,
+          message: connected ? "Teams connection successful" : "Teams connection failed",
+          details: { type, tested_at: new Date().toISOString() },
+        }
+      } catch (error: any) {
+        return {
+          success: false,
+          message: `Teams connection test failed: ${error.message}`,
+          details: { type, tested_at: new Date().toISOString(), error: error.message },
+        }
+      }
     case "jira":
       try {
         const { JiraService } = await import("../services/jiraService")
@@ -622,7 +638,7 @@ async function testIntegrationConnection(type: string, configuration: any, crede
           apiToken: credentials.apiToken
         })
         const connected = await jiraService.testConnection()
-        
+
         // Also test project access if configured
         let projectAccess = null
         if (configuration.defaultProjectKey) {
@@ -633,12 +649,12 @@ async function testIntegrationConnection(type: string, configuration: any, crede
             logger.warn(`Cannot access Jira project ${configuration.defaultProjectKey}:`, projectError)
           }
         }
-        
+
         return {
           success: connected,
           message: connected ? "Jira connection successful" : "Jira connection failed",
-          details: { 
-            type, 
+          details: {
+            type,
             tested_at: new Date().toISOString(),
             projectAccess: projectAccess
           },
@@ -684,10 +700,10 @@ async function performIntegrationSync(integration: any, syncOptions: SyncOptions
             authorId: syncOptions.authorId || undefined
           }
         )
-        
+
         // Perform full sync
         const documents = await notionIntegration.syncDocuments()
-        
+
         return {
           success: true,
           details: {

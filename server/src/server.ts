@@ -110,6 +110,7 @@ import performanceActualsRoutes from "./routes/performanceActuals"
 import prioritizationRoutes from "./routes/prioritizationRoutes"
 import teamAgreementsRoutes from "./routes/teamAgreementsRoutes"
 import okrRoutes from "./routes/okrRoutes"
+import promptAssistantRoutes from "./routes/promptAssistantRoutes"
 import signatureRoutes from "./routes/signatures"
 import searchRoutes from "./routes/search"
 import mitigationPlanRoutes from "./routes/mitigationPlanRoutes"
@@ -130,6 +131,8 @@ import digitalTwinEventsRoutes from "./routes/digital-twin-events"
 import digitalTwinTriggersRoutes from "./routes/digital-twin-triggers"
 import digitalTwinIngestionRoutes from "./routes/digital-twin-ingestion"
 import digitalTwinExportRoutes from "./routes/digital-twin-export"
+import digitalTwinAnalyticsRoutes from "./routes/digital-twin-analytics"
+import digitalTwinConnectorsRoutes from "./routes/digital-twin-connectors"
 
 const app = express()
 const server = createServer(app)
@@ -323,6 +326,8 @@ app.use("/api/digital-twin/events", digitalTwinEventsRoutes)
 app.use("/api/digital-twin/triggers", digitalTwinTriggersRoutes)
 app.use("/api/digital-twin/ingestion", digitalTwinIngestionRoutes)
 app.use("/api/digital-twin/export", digitalTwinExportRoutes)
+app.use("/api/digital-twin/analytics", digitalTwinAnalyticsRoutes)
+app.use("/api/digital-twin-connectors", digitalTwinConnectorsRoutes)
 app.use("/api/entities", entityBaselineRoutes)
 app.use("/api/emergency-meetings", emergencyMeetingsRoutes)
 app.use("/api/baseline-updates", baselineUpdatesRoutes)
@@ -345,6 +350,7 @@ app.use("/api/performance-actuals", performanceActualsRoutes)
 app.use("/api/prioritization", prioritizationRoutes)
 app.use("/api/team-agreements", teamAgreementsRoutes)
 app.use("/api/okrs", okrRoutes)
+app.use("/api/prompt-assistant", promptAssistantRoutes)
 app.use("/api/signatures", signatureRoutes)
 app.use("/api/search", searchRoutes)
 app.use("/api/mitigation-plans", mitigationPlanRoutes)

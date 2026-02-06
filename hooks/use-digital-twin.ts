@@ -9,6 +9,8 @@ export function useDigitalTwin() {
     const [assets, setAssets] = useState<DigitalTwinAsset[]>([])
     const [events, setEvents] = useState<DigitalTwinEvent[]>([])
 
+    const [rules, setRules] = useState<any[]>([]) // Using any[] for now or import DigitalTwinTriggerRule
+
     const fetchAssets = useCallback(async (projectId: string) => {
         setLoading(true)
         try {
@@ -31,6 +33,40 @@ export function useDigitalTwin() {
             toast.error('Failed to fetch asset history')
         }
     }, [])
+
+    const fetchRules = useCallback(async (projectId: string) => {
+        try {
+            const data = await api.get<any[]>(`/digital-twin/triggers?projectId=${projectId}`)
+            setRules(data)
+        } catch (error) {
+            console.error('Failed to fetch rules:', error)
+            toast.error('Failed to fetch automation rules')
+        }
+    }, [])
+
+    const createRule = useCallback(async (projectId: string, rule: any) => {
+        try {
+            await api.post('/digital-twin/triggers', { projectId, ...rule })
+            toast.success('Rule created successfully')
+            await fetchRules(projectId)
+            return true
+        } catch (error) {
+            console.error('Failed to create rule:', error)
+            toast.error('Failed to create automation rule')
+            return false
+        }
+    }, [fetchRules])
+
+    const deleteRule = useCallback(async (projectId: string, ruleId: string) => {
+        try {
+            await api.delete(`/digital-twin/triggers/${ruleId}`)
+            toast.success('Rule deleted successfully')
+            await fetchRules(projectId)
+        } catch (error) {
+            console.error('Failed to delete rule:', error)
+            toast.error('Failed to delete automation rule')
+        }
+    }, [fetchRules])
 
     const uploadVisio = useCallback(async (projectId: string, file: File, sourceDocumentId?: string) => {
         setUploading(true)
@@ -82,8 +118,12 @@ export function useDigitalTwin() {
         uploading,
         assets,
         events,
+        rules,
         fetchAssets,
         fetchEvents,
+        fetchRules,
+        createRule,
+        deleteRule,
         uploadVisio
     }
 }

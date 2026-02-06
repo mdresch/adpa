@@ -9,8 +9,11 @@
 import { pool } from '../database/connection'
 import { logger } from '../utils/logger'
 import { emailNotificationService, BudgetOverrunEmailData, ScopeCreepEmailData } from './emailNotificationService'
+import { teamsService } from './teamsService'
 import { emergencyMeetingService } from './emergencyMeetingService'
 import * as playbookService from './playbookService'
+import { driftResolutionService } from './driftResolutionService'
+import { positiveDriftChangeRequestService } from './positiveDriftChangeRequestService'
 
 export interface EscalationRule {
   id: string
@@ -122,6 +125,46 @@ export class EscalationService {
       logger.error('[ESCALATION] Error evaluating drift:', error)
       throw error
     }
+  }
+
+  /**
+   * Main entry point for processing drift escalation.
+   * Orchestrates evaluation, alert creation, notifications, and automated actions.
+   */
+  async processDriftEscalation(
+    driftDetectionId: string,
+    projectId: string,
+    driftType: string,
+    driftSeverity: string,
+    driftData: any
+  ): Promise<DriftEvaluationResult> {
+    const evaluation = await this.evaluateDrift(driftDetectionId, projectId, driftType, driftSeverity, driftData)
+
+    if (evaluation.shouldEscalate && evaluation.matchedRule) {
+      // 1. Create alert
+      const alert = await this.createAlert(
+        driftDetectionId,
+        projectId,
+        evaluation.matchedRule,
+        evaluation.variancePercentage,
+        driftData
+      )
+
+      // 2. Send notifications via configured channels (Email, Teams, etc.)
+      await this.sendNotifications(alert, evaluation.matchedRule)
+
+      // 3. Auto-create change request if rule is configured for it
+      if (evaluation.matchedRule.auto_create_cr) {
+        await this.createChangeRequest(alert, evaluation.matchedRule, driftData)
+      }
+
+      // 4. Schedule meeting if required by the rule (TASK-743)
+      if (evaluation.matchedRule.require_meeting) {
+        await this.scheduleMeeting(alert, evaluation.matchedRule)
+      }
+    }
+
+    return evaluation
   }
 
   /**
@@ -413,15 +456,15 @@ export class EscalationService {
       }
     }
 
-    // Slack notification
-    if (channels.includes('slack')) {
+    // Teams notification
+    if (channels.includes('teams')) {
       try {
-        await this.sendSlackNotification(alert, rule)
-        updates.slack_sent = true
-        updates.slack_sent_at = new Date()
-        logger.info('[ESCALATION] Slack notification sent', { alertId: alert.id })
+        await this.sendTeamsNotification(alert, rule)
+        updates.teams_sent = true
+        updates.teams_sent_at = new Date()
+        logger.info('[ESCALATION] Teams notification sent', { alertId: alert.id })
       } catch (error) {
-        logger.error('[ESCALATION] Error sending Slack message:', error)
+        logger.error('[ESCALATION] Error sending Teams message:', error)
       }
     }
 
@@ -563,11 +606,69 @@ export class EscalationService {
   }
 
   /**
-   * Send Slack notification (placeholder - integrate with Slack API)
+   * Send Teams notification using Teams service
    */
-  private async sendSlackNotification(alert: EscalationAlert, rule: EscalationRule): Promise<void> {
-    // TODO: Integrate with Slack API
-    logger.info('[ESCALATION] Slack notification would be sent to:', rule.escalate_to)
+  private async sendTeamsNotification(alert: EscalationAlert, rule: EscalationRule): Promise<void> {
+    try {
+      // Get integration for Teams
+      const integrationResult = await pool.query(
+        "SELECT configuration, credentials_encrypted FROM integrations WHERE type = 'teams' AND is_active = true LIMIT 1"
+      )
+
+      if (integrationResult.rows.length === 0) {
+        logger.warn('[ESCALATION] No active Teams integration found')
+        return
+      }
+
+      const credentials = JSON.parse(
+        Buffer.from(integrationResult.rows[0].credentials_encrypted, 'base64').toString('utf-8')
+      )
+      const webhookUrl = credentials.webhookUrl || credentials.webhook_url
+
+      if (!webhookUrl) {
+        logger.warn('[ESCALATION] Teams webhook URL not found in credentials')
+        return
+      }
+
+      const driftData = alert.alert_details || {}
+
+      // Prepare message facts
+      const facts = teamsService.formatFacts({
+        alert_type: rule.drift_type,
+        severity: rule.severity_level,
+        variance: alert.variance_percentage ? `${alert.variance_percentage.toFixed(1)}%` : 'N/A',
+        deadline: alert.deadline.toLocaleString()
+      })
+
+      if (driftData.approved_budget) {
+        facts.push({ name: 'Approved Budget', value: `$${driftData.approved_budget.toLocaleString()}` })
+        facts.push({ name: 'Projected Cost', value: `$${driftData.projected_cost.toLocaleString()}` })
+      }
+
+      await teamsService.sendNotification({
+        webhookUrl,
+        title: `🚨 ${rule.severity_level.toUpperCase()}: ${rule.rule_name}`,
+        summary: alert.alert_summary,
+        text: alert.alert_summary,
+        severity: rule.severity_level as any,
+        sections: facts,
+        actions: [
+          {
+            "@type": "OpenUri",
+            "name": "View Project",
+            "targets": [{ "os": "default", "uri": `${process.env.FRONTEND_URL}/projects/${alert.project_id}` }]
+          },
+          {
+            "@type": "OpenUri",
+            "name": "Acknowledge Alert",
+            "targets": [{ "os": "default", "uri": `${process.env.FRONTEND_URL}/alerts/${alert.id}/acknowledge` }]
+          }
+        ]
+      })
+    } catch (error) {
+      logger.error('[ESCALATION] Failed to send Teams notification:', error)
+      throw error
+    }
   }
 
   /**
@@ -579,29 +680,82 @@ export class EscalationService {
   }
 
   /**
-   * Auto-create change request (placeholder - integrate with CR system)
-   */
+  * Auto-create change request based on drift detected
+  */
   private async createChangeRequest(
     alert: EscalationAlert,
     rule: EscalationRule,
     driftData: any
   ): Promise<void> {
-    // TODO: Integrate with change request system
-    logger.info('[ESCALATION] Change request would be auto-created for alert:', alert.id)
+    try {
+      logger.info('[ESCALATION] Auto-creating change request for alert:', alert.id)
 
-    await pool.query(
-      `UPDATE escalation_alerts 
-       SET change_request_created = true, updated_at = NOW() 
-       WHERE id = $1`,
-      [alert.id]
-    )
+      const driftPoints = driftData.drift_points || []
+      let changeRequestId: string | undefined
 
-    await this.logAlertHistory(
-      alert.id,
-      'created',
-      'Change request auto-created',
-      null
-    )
+      // Check if this is positive drift (opportunity)
+      const isPositiveDrift = rule.drift_type === ('positive_drift' as any) ||
+        (driftData.positive_drift && Object.keys(driftData.positive_drift).length > 0)
+
+      if (isPositiveDrift) {
+        // Use PositiveDriftChangeRequestService for opportunities
+        const result = await positiveDriftChangeRequestService.generateOpportunityCR(
+          alert.project_id,
+          driftData.source_document_id || '',
+          alert.drift_detection_id,
+          driftPoints,
+          driftData.positive_drift,
+          'SYSTEM' // System-created
+        )
+        changeRequestId = result.changeRequestId
+      } else {
+        // Use DriftResolutionService for corrective actions/major changes
+        // First, get the resolution content and identify major changes
+        const resolution = await driftResolutionService.resolveDrift(
+          driftData.source_document_id || '',
+          alert.drift_detection_id,
+          'SYSTEM',
+          'balanced'
+        )
+
+        // Then apply the resolution, which will create a Change Request if major changes are detected
+        const applyResult = await driftResolutionService.applyResolution(
+          driftData.source_document_id || '',
+          resolution.resolvedContent,
+          alert.drift_detection_id,
+          'SYSTEM',
+          resolution.majorChanges
+        )
+
+        changeRequestId = applyResult.changeRequestId
+      }
+
+      if (changeRequestId) {
+        await pool.query(
+          `UPDATE escalation_alerts 
+           SET change_request_created = true, 
+               metadata = jsonb_set(COALESCE(metadata, '{}'::jsonb), '{change_request_id}', $1),
+               updated_at = NOW() 
+           WHERE id = $2`,
+          [JSON.stringify(changeRequestId), alert.id]
+        )
+
+        await this.logAlertHistory(
+          alert.id,
+          'created',
+          `Change request auto-created: ${changeRequestId}`,
+          null
+        )
+
+        logger.info('[ESCALATION] Change request auto-created successfully', {
+          alertId: alert.id,
+          changeRequestId
+        })
+      }
+    } catch (error) {
+      logger.error('[ESCALATION] Failed to auto-create change request:', error)
+      // Don't throw, we don't want to break the escalation flow if CR creation fails
+    }
   }
 
   /**

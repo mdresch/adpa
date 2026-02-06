@@ -194,6 +194,7 @@ export const schemas = {
     template_scope: Joi.string().valid("standard", "company", "user").default("user"),
     company_id: Joi.string().uuid().allow(null, '').optional(),
     system_prompt: Joi.string().max(5000).optional(),
+    prompt_build_up: Joi.object().unknown(true).optional(),
     template_paragraphs: Joi.array().items(Joi.object({
       section_name: Joi.string().required(),
       section_type: Joi.string().valid("header", "paragraph", "list", "table", "code_block", "summary", "conclusion").required(),

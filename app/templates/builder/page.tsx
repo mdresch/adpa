@@ -46,6 +46,7 @@ import { useAuth } from "@/contexts/AuthContext"
 import { useWebSocket } from "@/contexts/WebSocketContext"
 import { apiClient } from "@/lib/api"
 import { toast } from '@/lib/notify'
+import PromptAssistantPanel from "../components/PromptAssistantPanel"
 import {
   Alert,
   AlertDescription,
@@ -824,6 +825,20 @@ OUTPUT FOCUS: Real data from THIS specific project only.`}
                               className="font-mono text-sm"
                             />
                           </div>
+
+                          {/* AI Prompt Assistant */}
+                          <PromptAssistantPanel
+                            currentPrompt={systemPrompt}
+                            onPromptChange={setSystemPrompt}
+                            templateType={templateCategory}
+                            methodology={templateFramework}
+                            context={{
+                              projectType: "general",
+                              industry: "technology",
+                              documentPurpose: "project documentation",
+                              targetAudience: "project stakeholders"
+                            }}
+                          />
 
                           {/* Context Requirements */}
                           <div className="space-y-3">

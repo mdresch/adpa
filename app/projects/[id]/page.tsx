@@ -30,6 +30,7 @@ import { ProjectRisksTab } from "@/components/project/ProjectRisksTab"
 import { ProjectIssuesTab } from "@/components/project/ProjectIssuesTab"
 import { ComplianceSecurityTab } from "./components/ComplianceSecurityTab"
 import { IntegrationsTab } from "./components/IntegrationsTab"
+import { DigitalTwinAnalyticsTab } from "./components/DigitalTwinAnalyticsTab"
 import { TemplateConflictDialog } from "@/components/document/TemplateConflictDialog"
 import { apiClient, Project, Template } from "@/lib/api"
 import { useAuth } from "@/contexts/AuthContext"
@@ -423,7 +424,7 @@ export default function ProjectDetail() {
         limit: 1000, // High limit to get all documents
       }
       const documentsData = await apiClient.getProjectDocuments(projectId, params)
-      
+
       // Extract unique template IDs
       const usedTemplates = new Set<string>()
       if (documentsData.documents && Array.isArray(documentsData.documents)) {
@@ -3564,6 +3565,10 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                   <Layers className="h-4 w-4 mr-2" />
                   Digital Twins
                 </TabsTrigger>
+                <TabsTrigger value="analytics-drift">
+                  <BarChart3 className="h-4 w-4 mr-2" />
+                  Drift & Innovation
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="documents" className="space-y-4">
@@ -3692,6 +3697,10 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                     </Button>
                   </CardContent>
                 </Card>
+              </TabsContent>
+
+              <TabsContent value="analytics-drift" className="space-y-4">
+                <DigitalTwinAnalyticsTab projectId={projectId} />
               </TabsContent>
             </Tabs>
           </div>

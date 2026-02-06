@@ -13,6 +13,7 @@ import { convertQuarterDate, isValidDate, addDays, getCurrentDate } from '@/util
 import { aiService } from './aiService'
 import { aiCacheService } from './aiCacheService'
 import { analytics } from '@/utils/analytics'
+import { domainSpecificExtractionService } from './domainSpecificExtractionService'
 import { ExtractionContext } from './extraction/base/ExtractionContext'
 import type { ExtractionDocument, ExtractionResult as ModuleExtractionResult } from './extraction/base/ExtractionResult'
 import type { PersistenceResult } from './extraction/base/Persistence'
@@ -55,6 +56,8 @@ interface ExtractionResult {
   opportunities: OpportunityRecord[]
   risk_responses: RiskResponseRecord[]
   performance_actuals: PerformanceActual[]
+  infrastructure_data: any[]
+  supply_chain_data: any[]
 }
 
 interface Stakeholder {
@@ -634,7 +637,8 @@ export class ProjectDataExtractionService {
         earnedValueMetrics,
         opportunities,
         riskResponses,
-        performanceActuals
+        performanceActuals,
+        domainData
       ] = await Promise.all([
         this.extractStakeholders(documents, projectId, extractionOptions, documentMap, documentList),
         this.extractRequirements(documents, projectId, extractionOptions, documentMap, documentList),
@@ -659,8 +663,12 @@ export class ProjectDataExtractionService {
         this.extractEarnedValueMetrics(documents, projectId, extractionOptions, documentMap, documentList),
         this.extractOpportunities(documents, projectId, extractionOptions, documentMap, documentList),
         this.extractRiskResponses(documents, projectId, extractionOptions, documentMap, documentList),
-        this.extractPerformanceActuals(documents, projectId, extractionOptions, documentMap, documentList)
+        this.extractPerformanceActuals(documents, projectId, extractionOptions, documentMap, documentList),
+        this.extractDomainData(documents, projectId, extractionOptions, documentMap, documentList)
       ])
+
+      const infrastructure_data = domainData.infrastructure_data || []
+      const supply_chain_data = domainData.supply_chain_data || []
 
       const duration = Date.now() - startTime
 
@@ -733,7 +741,9 @@ export class ProjectDataExtractionService {
         earned_value_metrics: earnedValueMetrics,
         opportunities,
         risk_responses: riskResponses,
-        performance_actuals: performanceActuals
+        performance_actuals: performanceActuals,
+        infrastructure_data,
+        supply_chain_data
       }
     } catch (error: unknown) {
       const duration = Date.now() - startTime
@@ -894,6 +904,14 @@ export class ProjectDataExtractionService {
       // Save performance actuals
       if (entities.performance_actuals.length > 0) {
         await this.savePerformanceActuals(client, projectId, userId, entities.performance_actuals)
+      }
+
+      // Save domain-specific entities (Phase 8)
+      if (entities.infrastructure_data.length > 0) {
+        await this.saveDomainEntities(client, projectId, 'infrastructure', entities.infrastructure_data)
+      }
+      if (entities.supply_chain_data.length > 0) {
+        await this.saveDomainEntities(client, projectId, 'supply_chain', entities.supply_chain_data)
       }
 
       await client.query('COMMIT')
@@ -9294,6 +9312,111 @@ Output valid JSON object with "performance_actuals" array only.`
       throw new Error(`Failed to save ${entityType} (${entities.length} entities): ${errorMessage}`)
     } finally {
       client.release()
+    }
+  }
+
+  /**
+   * Extract domain-specific data using domainSpecificExtractionService
+   */
+  private async extractDomainData(
+    documents: Array<{ id: string; title: string; content: string; template_name?: string }>,
+    projectId: string,
+    options: { aiProvider?: string; aiModel?: string },
+    documentMap: Map<string, string>,
+    documentList: string
+  ): Promise<{ infrastructure_data: any[]; supply_chain_data: any[] }> {
+    try {
+      logger.info('[EXTRACTION-DOMAIN] Starting domain-specific extraction using specialized service')
+
+      const result = await domainSpecificExtractionService.extractDomainDataWithLocations(
+        documents,
+        projectId,
+        options
+      )
+
+      // Resolve source_document_id for infrastructure data
+      const infrastructure_data = result.infrastructure_data.map(item => {
+        const isValid = this.resolveSourceDocumentIdStrict(
+          item,
+          documentMap,
+          documents,
+          'INFRASTRUCTURE',
+          item.title || 'Unnamed Infrastructure Item'
+        )
+        return isValid ? item : null
+      }).filter(Boolean)
+
+      // Resolve source_document_id for supply chain data
+      const supply_chain_data = result.supply_chain_data.map(item => {
+        const isValid = this.resolveSourceDocumentIdStrict(
+          item,
+          documentMap,
+          documents,
+          'SUPPLY_CHAIN',
+          item.title || 'Unnamed Supply Chain Item'
+        )
+        return isValid ? item : null
+      }).filter(Boolean)
+
+      return { infrastructure_data, supply_chain_data }
+    } catch (error) {
+      logger.error('[EXTRACTION-DOMAIN] Domain extraction failed', {
+        error: error instanceof Error ? error.message : String(error)
+      })
+      return { infrastructure_data: [], supply_chain_data: [] }
+    }
+  }
+
+  /**
+   * Save domain-specific entities to domain_entities table
+   */
+  private async saveDomainEntities(
+    client: PoolClient,
+    projectId: string,
+    domain: 'infrastructure' | 'supply_chain',
+    entities: any[]
+  ): Promise<void> {
+    try {
+      logger.info(`[SAVE-DOMAIN] Saving ${entities.length} ${domain} entities`)
+
+      for (const entity of entities) {
+        // Prepare details JSONB
+        const details = {
+          compliance_status: entity.compliance_status,
+          impact_level: entity.impact_level,
+          carbon_data: entity.entity_type === 'sustainability_esg' || entity.entity_type === 'environmental_impact'
+            ? { estimate: entity.carbon_footprint_estimate || entity.carbon_emissions }
+            : undefined,
+          metric_value: entity.metric_value,
+          unit: entity.unit,
+          status: entity.status
+        }
+
+        await client.query(`
+          INSERT INTO domain_entities (
+            project_id, domain, entity_type, title, description, 
+            details, impact_level, compliance_status, 
+            source_document_id, source_line_start, source_snippet
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        `, [
+          projectId,
+          domain,
+          entity.entity_type,
+          entity.title,
+          entity.description,
+          JSON.stringify(details),
+          entity.impact_level,
+          entity.compliance_status,
+          entity.source_document_id,
+          entity.source_line_start,
+          entity.source_snippet
+        ])
+      }
+    } catch (error) {
+      logger.error(`[SAVE-DOMAIN] Failed to save ${domain} entities`, {
+        error: error instanceof Error ? error.message : String(error)
+      })
+      throw error
     }
   }
 }
