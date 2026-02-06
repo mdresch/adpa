@@ -1,0 +1,531 @@
+openapi: 3.0.3
+info:
+  title: ADPA Developer Platform API
+  description: REST API for the ADPA backend (Express + TypeScript). Document content is stored as Markdown; PDF/DOCX export on demand.
+  version: 1.0.0
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:5000
+    description: Local development
+  - url: https://{backendHost}
+    description: Deployed backend
+    variables:
+      backendHost:
+        default: api.example.com
+
+tags:
+  - name: Health
+    description: Health and readiness
+  - name: Auth
+    description: Registration, login, token
+  - name: Projects
+    description: Projects and project-scoped resources
+  - name: Documents
+    description: Document CRUD and export
+  - name: Document generation
+    description: AI document generation
+  - name: Templates
+    description: Document templates
+  - name: Jobs
+    description: Async job queue
+  - name: GKG
+    description: Governance Knowledge Graph (Neo4j)
+  - name: Context injection
+    description: Template context injection
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      operationId: getHealth
+      tags: [Health]
+      security: []
+      responses:
+        '200':
+          description: API health
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: OK }
+                  timestamp: { type: string, format: date-time }
+                  version: { type: string }
+
+  /api/auth/register:
+    post:
+      summary: Register
+      operationId: register
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, name]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, format: password }
+                name: { type: string }
+                companyName: { type: string }
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  user: { $ref: '#/components/schemas/UserSummary' }
+                  token: { type: string }
+                  company: { type: object, nullable: true }
+        '400':
+          description: User already exists or validation error
+        '500':
+          description: Internal error
+
+  /api/auth/login:
+    post:
+      summary: Login
+      operationId: login
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user: { $ref: '#/components/schemas/UserSummary' }
+                  token: { type: string }
+        '401':
+          description: Invalid credentials
+        '500':
+          description: Internal error
+
+  /api/projects:
+    get:
+      summary: List projects
+      operationId: listProjects
+      tags: [Projects]
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 10 }
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: framework
+          in: query
+          schema: { type: string }
+        - name: search
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Paginated projects
+        '401':
+          description: Unauthorized
+    post:
+      summary: Create project
+      operationId: createProject
+      tags: [Projects]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+                status: { type: string }
+                framework: { type: string }
+      responses:
+        '201':
+          description: Project created
+        '403':
+          description: Forbidden (permission projects.create)
+        '401':
+          description: Unauthorized
+
+  /api/projects/{id}:
+    get:
+      summary: Get project
+      operationId: getProject
+      tags: [Projects]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Project
+        '404':
+          description: Not found
+        '401':
+          description: Unauthorized
+    put:
+      summary: Update project
+      operationId: updateProject
+      tags: [Projects]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+                status: { type: string }
+      responses:
+        '200':
+          description: Updated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+    delete:
+      summary: Delete project
+      operationId: deleteProject
+      tags: [Projects]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Deleted
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+
+  /api/projects/{projectId}/documents/{documentId}:
+    get:
+      summary: Get document
+      operationId: getProjectDocument
+      tags: [Documents]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: documentId
+          in: path
+          required: true
+          schema: { type: string }
+          description: May be URL-encoded
+      responses:
+        '200':
+          description: Document (Markdown content in JSONB)
+        '404':
+          description: Not found
+        '401':
+          description: Unauthorized
+
+  /api/documents/{id}:
+    get:
+      summary: Get document by ID
+      operationId: getDocument
+      tags: [Documents]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Document
+        '404':
+          description: Not found
+        '401':
+          description: Unauthorized
+
+  /api/document-generation/check-template:
+    post:
+      summary: Check template conflict
+      operationId: checkTemplate
+      tags: [Document generation]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [projectId, templateId]
+              properties:
+                projectId: { type: string, format: uuid }
+                templateId: { type: string, format: uuid }
+      responses:
+        '200':
+          description: No conflict; template available
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  conflict: { type: boolean, example: false }
+                  message: { type: string }
+        '409':
+          description: Template already used (TEMPLATE_ALREADY_USED)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { type: string, example: TEMPLATE_ALREADY_USED }
+                  existing: { type: object }
+                  options: { type: object }
+        '401':
+          description: Unauthorized
+
+  /api/document-generation/generate:
+    post:
+      summary: Generate document with AI
+      operationId: generateDocument
+      tags: [Document generation]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [projectId, name, userPrompt, provider]
+              properties:
+                projectId: { type: string, format: uuid }
+                name: { type: string }
+                description: { type: string }
+                templateId: { type: string, format: uuid }
+                userPrompt: { type: string }
+                provider: { type: string }
+                model: { type: string }
+                temperature: { type: number, minimum: 0, maximum: 2 }
+                includeStakeholders: { type: boolean }
+                includeDocuments: { type: boolean }
+                customContext: { type: string }
+      responses:
+        '200':
+          description: Generation started or document created
+        '403':
+          description: Access denied to project
+        '401':
+          description: Unauthorized
+
+  /api/templates:
+    get:
+      summary: List templates
+      operationId: listTemplates
+      tags: [Templates]
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 100 }
+        - name: framework
+          in: query
+          schema: { type: string }
+        - name: category
+          in: query
+          schema: { type: string }
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: template_scope
+          in: query
+          schema: { type: string, enum: [standard, company, user, all] }
+      responses:
+        '200':
+          description: Paginated templates
+        '401':
+          description: Unauthorized
+    post:
+      summary: Create template
+      operationId: createTemplate
+      tags: [Templates]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+                framework: { type: string }
+                content: { type: string }
+      responses:
+        '201':
+          description: Template created
+        '401':
+          description: Unauthorized
+
+  /api/templates/{id}:
+    get:
+      summary: Get template
+      operationId: getTemplate
+      tags: [Templates]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Template
+        '404':
+          description: Not found
+        '401':
+          description: Unauthorized
+
+  /api/jobs:
+    get:
+      summary: List jobs
+      operationId: listJobs
+      tags: [Jobs]
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 10 }
+        - name: status
+          in: query
+          schema: { type: string, enum: [pending, processing, completed, failed, cancelled] }
+        - name: type
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Paginated jobs for current user
+        '401':
+          description: Unauthorized
+
+  /api/gkg/sync:
+    post:
+      summary: Enqueue GKG sync
+      operationId: gkgSync
+      tags: [GKG]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                bootstrap: { type: boolean }
+                projectId: { type: string, format: uuid }
+                documentId: { type: string }
+              description: Provide one of bootstrap, projectId, documentId
+      responses:
+        '200':
+          description: Job enqueued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobId: { type: string }
+                  status: { type: string, example: enqueued }
+                  type: { type: string }
+                  projectId: { type: string }
+                  documentId: { type: string }
+        '400':
+          description: Missing required body (bootstrap/projectId/documentId)
+        '503':
+          description: Neo4j not configured
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden (projects.view)
+
+  /api/gkg/summary:
+    get:
+      summary: GKG dashboard summary
+      operationId: gkgSummary
+      tags: [GKG]
+      responses:
+        '200':
+          description: Counts (programs, projects, documents, tasks, semantic units), top projects
+        '503':
+          description: Neo4j not configured or unavailable
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+
+  /api/context-injection/inject:
+    post:
+      summary: Inject context into template
+      operationId: contextInject
+      tags: [Context injection]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [templateContent, projectId, config]
+              properties:
+                templateContent: { type: string }
+                projectId: { type: string }
+                config: { type: object }
+      responses:
+        '200':
+          description: Injected result (variablesResolved, crossReferencesAdded, etc.)
+        '404':
+          description: Project not found
+        '401':
+          description: Unauthorized
+        '500':
+          description: Context injection failed
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT from login or register
+
+  schemas:
+    UserSummary:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        name: { type: string }
+        role: { type: string }
+        permissions: { type: object }
+        company_id: { type: string, nullable: true }
+        metadata: { type: object, nullable: true }
+
+security:
+  - bearerAuth: []
