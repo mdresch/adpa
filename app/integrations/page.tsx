@@ -32,6 +32,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { MongoDBSyncDialog } from "./MongoDBSyncDialog"
+import { Database } from "@/components/ui/icons-shim"
+import { MongoDBDashboard } from "./MongoDBDashboard"
+import { PineconeDashboard } from "./PineconeDashboard"
+import { SupabaseDashboard } from "./SupabaseDashboard"
 
 export default function Integrations() {
   const { user } = useAuth()
@@ -121,6 +126,10 @@ export default function Integrations() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [creatingIntegration, setCreatingIntegration] = useState(false)
 
+  // MongoDB Sync Dialog State
+  const [mongoSyncDialogOpen, setMongoSyncDialogOpen] = useState(false)
+  const [mongoIntegrationToSync, setMongoIntegrationToSync] = useState<string | null>(null)
+
   // Handle new integration form field changes
   const handleNewIntegrationChange = (field: string, value: any) => {
     setNewIntegration(prev => ({
@@ -153,7 +162,7 @@ export default function Integrations() {
   // Handle form submission for new integration
   const handleCreateIntegration = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     // Validation
     if (!newIntegration.type) {
       toast.error("Please select an integration type")
@@ -279,13 +288,13 @@ export default function Integrations() {
 
       // Create the integration
       const response = await apiClient.createIntegration(configData)
-      
+
       toast.success(`Integration "${newIntegration.name}" created successfully! ✅`)
-      
+
       // Close dialog and reset form
       setIsDialogOpen(false)
       resetNewIntegrationForm()
-      
+
       // Reload integrations list
       await loadExistingIntegrations()
 
@@ -411,6 +420,18 @@ export default function Integrations() {
           lastSync: "Never",
           documentsPublished: 0,
           authType: "Azure AD",
+          sites: [],
+        },
+        {
+          id: "mongodb-default",
+          name: "MongoDB Vector Store",
+          type: "mongodb",
+          status: "not_configured",
+          enabled: false,
+          baseUrl: "",
+          lastSync: "Never",
+          documentsPublished: 0,
+          authType: "API Key",
           sites: [],
         },
       ]
@@ -639,10 +660,10 @@ export default function Integrations() {
       }
 
       const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
-      
+
       // Check if we have an existing integration to test with stored credentials
       const jiraIntegrationToTest = existingJiraIntegration || realIntegrations.find((i: any) => i.type === "jira")
-      
+
       if (jiraIntegrationToTest) {
         // Test using stored integration credentials
         console.log("Testing Jira connection with stored integration:", jiraIntegrationToTest.id)
@@ -682,7 +703,7 @@ export default function Integrations() {
     try {
       // Check if a Jira integration already exists (by type or name)
       let jiraIntegrationToUpdate = existingJiraIntegration
-      
+
       // If not found in state, check in realIntegrations
       if (!jiraIntegrationToUpdate) {
         jiraIntegrationToUpdate = realIntegrations.find((i: any) => i.type === "jira")
@@ -723,10 +744,10 @@ export default function Integrations() {
           if (createError?.message?.includes("name already exists") || createError?.response?.data?.error?.includes("name already exists")) {
             // Try to find existing integration by name
             const allIntegrations = await apiClient.getIntegrations()
-            const existingByName = Array.isArray(allIntegrations) 
+            const existingByName = Array.isArray(allIntegrations)
               ? allIntegrations.find((i: any) => i.name === "Jira" || i.type === "jira")
               : (allIntegrations as any)?.integrations?.find((i: any) => i.name === "Jira" || i.type === "jira")
-            
+
             if (existingByName) {
               console.log("Found existing integration by name, updating:", existingByName.id)
               response = await apiClient.updateIntegration(existingByName.id, configData)
@@ -841,7 +862,7 @@ export default function Integrations() {
       // Ensure API client has the token
       if (!(apiClient as any).token) {
         console.log("Setting token in API client...")
-        ;(apiClient as any).setToken(token)
+          ; (apiClient as any).setToken(token)
       }
       const configData = {
         name: "SharePoint",
@@ -926,7 +947,7 @@ export default function Integrations() {
       }
 
       const existingNotionIntegration = realIntegrations.find(i => i.type === "notion")
-      
+
       // Check if we have a valid NEW token entered (must start with ntn_ or secret_ and be long enough)
       const enteredToken = notionConfig.integrationToken?.trim() || ""
       const isValidNewToken = enteredToken.length >= 40 && (enteredToken.startsWith("ntn_") || enteredToken.startsWith("secret_"))
@@ -955,7 +976,7 @@ export default function Integrations() {
           toast.error(`Notion connection failed: ${errorMessage}`)
           console.error("Notion connection test failed:", resp)
         }
-      } 
+      }
       // Priority 2: No stored integration but user entered a valid new token
       else if (isValidNewToken) {
         console.log("Testing with newly entered token...")
@@ -973,7 +994,7 @@ export default function Integrations() {
           toast.error(`Notion connection failed: ${errorMessage}`)
           console.error("Notion connection test failed:", resp)
         }
-      } 
+      }
       // No stored integration and no valid token
       else {
         toast.error("Please enter a valid Notion Integration Token (starts with 'ntn_' or 'secret_')")
@@ -997,11 +1018,11 @@ export default function Integrations() {
       }
 
       const existingNotionIntegration = realIntegrations.find(i => i.type === "notion")
-      
+
       // For new integrations, a valid token is required
       const enteredToken = notionConfig.integrationToken?.trim() || ""
       const isValidToken = enteredToken.length >= 40 && (enteredToken.startsWith("ntn_") || enteredToken.startsWith("secret_"))
-      
+
       if (!existingNotionIntegration && !isValidToken) {
         toast.error("A valid Integration Token is required for new Notion integrations (must start with 'ntn_' or 'secret_')")
         setSaving(false)
@@ -1080,7 +1101,7 @@ export default function Integrations() {
 
   const handleSyncIntegration = async (integration: any) => {
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('auth_token') || localStorage.getItem('token')
       if (!token) {
         toast.error("Please login first")
         return
@@ -1116,6 +1137,10 @@ export default function Integrations() {
       } else if (integration.type === "notion") {
         // Use the dedicated Notion sync function with project selection
         await handleNotionSync()
+      } else if (integration.type === "mongodb") {
+        // Open MongoDB Sync Dialog
+        setMongoIntegrationToSync(integration.id)
+        setMongoSyncDialogOpen(true)
       } else {
         toast.info(`Sync for ${integration.name} not yet implemented`)
       }
@@ -1147,7 +1172,7 @@ export default function Integrations() {
       const targetProjectId = projectId || selectedProjectId
 
       // Get token from auth_token (where apiClient stores it)
-      const token = localStorage.getItem('auth_token')
+      const token = localStorage.getItem('auth_token') || localStorage.getItem('token')
       if (!token) {
         toast.error("Session expired - please login again")
         return
@@ -1175,10 +1200,10 @@ export default function Integrations() {
       } catch (parseError) {
         throw new Error(`Server error: ${response.status} - ${responseText || response.statusText}`)
       }
-      
+
       if (data.success) {
         const count = data.details?.synced_items || 0
-        const projectName = targetProjectId 
+        const projectName = targetProjectId
           ? projects.find(p => p.id === targetProjectId)?.name || "selected project"
           : "no project (unassigned)"
         toast.success(`Imported ${count} documents from Notion into ${projectName}`)
@@ -1213,6 +1238,26 @@ export default function Integrations() {
   const handleToggleIntegration = async (integration: any, enabled: boolean) => {
     console.log("Toggling integration:", integration.name, "to", enabled)
     try {
+      // Handle MongoDB default integration auto-creation
+      if (integration.id === "mongodb-default" && enabled) {
+        try {
+          await apiClient.createIntegration({
+            name: "MongoDB Vector Store",
+            type: "mongodb",
+            configuration: {},
+            credentials: {}, // No credentials needed for server-side configured mongo
+            is_active: true,
+          })
+          toast.success("MongoDB integration enabled")
+          await loadExistingIntegrations()
+          return
+        } catch (error: any) {
+          console.error("Failed to enable MongoDB integration:", error)
+          toast.error(`Failed to enable: ${error.message || "Unknown error"}`)
+          return
+        }
+      }
+
       const realIntegration = realIntegrations.find(i => i.id === integration.id)
       console.log("Real integration found:", realIntegration?.id || "none")
 
@@ -1296,9 +1341,9 @@ export default function Integrations() {
                         <Label htmlFor="name" className="text-right">
                           Name <span className="text-red-500">*</span>
                         </Label>
-                        <Input 
-                          id="name" 
-                          placeholder="Integration name" 
+                        <Input
+                          id="name"
+                          placeholder="Integration name"
                           className="col-span-3"
                           value={newIntegration.name}
                           onChange={(e) => handleNewIntegrationChange("name", e.target.value)}
@@ -1312,9 +1357,9 @@ export default function Integrations() {
                           <Label htmlFor="base-url" className="text-right">
                             Base URL <span className="text-red-500">*</span>
                           </Label>
-                          <Input 
-                            id="base-url" 
-                            placeholder="https://your-domain.atlassian.net" 
+                          <Input
+                            id="base-url"
+                            placeholder="https://your-domain.atlassian.net"
                             className="col-span-3"
                             value={newIntegration.baseUrl}
                             onChange={(e) => handleNewIntegrationChange("baseUrl", e.target.value)}
@@ -1330,10 +1375,10 @@ export default function Integrations() {
                             <Label htmlFor="jira-email" className="text-right">
                               Email <span className="text-red-500">*</span>
                             </Label>
-                            <Input 
-                              id="jira-email" 
+                            <Input
+                              id="jira-email"
                               type="email"
-                              placeholder="your-email@company.com" 
+                              placeholder="your-email@company.com"
                               className="col-span-3"
                               value={newIntegration.email}
                               onChange={(e) => handleNewIntegrationChange("email", e.target.value)}
@@ -1344,10 +1389,10 @@ export default function Integrations() {
                             <Label htmlFor="jira-api-token" className="text-right">
                               API Token <span className="text-red-500">*</span>
                             </Label>
-                            <Input 
-                              id="jira-api-token" 
+                            <Input
+                              id="jira-api-token"
                               type="password"
-                              placeholder="Your Jira API token" 
+                              placeholder="Your Jira API token"
                               className="col-span-3"
                               value={newIntegration.apiToken}
                               onChange={(e) => handleNewIntegrationChange("apiToken", e.target.value)}
@@ -1358,9 +1403,9 @@ export default function Integrations() {
                             <Label htmlFor="jira-project-key" className="text-right">
                               Project Key
                             </Label>
-                            <Input 
-                              id="jira-project-key" 
-                              placeholder="PROJ" 
+                            <Input
+                              id="jira-project-key"
+                              placeholder="PROJ"
                               className="col-span-3"
                               value={newIntegration.defaultProjectKey}
                               onChange={(e) => handleNewIntegrationChange("defaultProjectKey", e.target.value)}
@@ -1408,6 +1453,20 @@ export default function Integrations() {
                         </>
                       )}
 
+                      {/* MongoDB-specific fields */}
+                      {newIntegration.type === "mongodb" && (
+                        <div className="flex flex-col gap-4 text-center py-4">
+                          <Database className="h-12 w-12 mx-auto text-muted-foreground" />
+                          <p className="text-sm text-muted-foreground">
+                            MongoDB integration uses the server configuration.
+                            <br />
+                            No additional credentials required here.
+                            <br />
+                            Just give it a name to enable synchronization.
+                          </p>
+                        </div>
+                      )}
+
                       {/* Confluence-specific fields */}
                       {newIntegration.type === "confluence" && (
                         <>
@@ -1415,9 +1474,9 @@ export default function Integrations() {
                             <Label htmlFor="confluence-username" className="text-right">
                               Username <span className="text-red-500">*</span>
                             </Label>
-                            <Input 
-                              id="confluence-username" 
-                              placeholder="your-email@company.com" 
+                            <Input
+                              id="confluence-username"
+                              placeholder="your-email@company.com"
                               className="col-span-3"
                               value={newIntegration.username}
                               onChange={(e) => handleNewIntegrationChange("username", e.target.value)}
@@ -1428,13 +1487,12 @@ export default function Integrations() {
                             <Label htmlFor="confluence-api-token" className="text-right">
                               API Token <span className="text-red-500">*</span>
                             </Label>
-                            <Input 
-                              id="confluence-api-token" 
+                            <Input
+                              id="confluence-api-token"
                               type="password"
-                              placeholder="Your Confluence API token" 
-                              className="col-span-3"
+                              placeholder="Your Confluence API token"
                               value={newIntegration.apiTokenConfluence}
-                              onChange={(e) => handleNewIntegrationChange("apiTokenConfluence", e.target.value)}
+                              onChange={(e: any) => handleNewIntegrationChange("apiTokenConfluence", e.target.value)}
                               required
                             />
                           </div>
@@ -1442,9 +1500,9 @@ export default function Integrations() {
                             <Label htmlFor="confluence-space" className="text-right">
                               Default Space
                             </Label>
-                            <Input 
-                              id="confluence-space" 
-                              placeholder="DOCS" 
+                            <Input
+                              id="confluence-space"
+                              placeholder="DOCS"
                               className="col-span-3"
                               value={newIntegration.defaultSpace}
                               onChange={(e) => handleNewIntegrationChange("defaultSpace", e.target.value)}
@@ -1460,9 +1518,9 @@ export default function Integrations() {
                             <Label htmlFor="sharepoint-tenant" className="text-right">
                               Tenant ID <span className="text-red-500">*</span>
                             </Label>
-                            <Input 
-                              id="sharepoint-tenant" 
-                              placeholder="your-tenant-id" 
+                            <Input
+                              id="sharepoint-tenant"
+                              placeholder="your-tenant-id"
                               className="col-span-3"
                               value={newIntegration.tenantId}
                               onChange={(e) => handleNewIntegrationChange("tenantId", e.target.value)}
@@ -1473,9 +1531,9 @@ export default function Integrations() {
                             <Label htmlFor="sharepoint-client-id" className="text-right">
                               Client ID <span className="text-red-500">*</span>
                             </Label>
-                            <Input 
-                              id="sharepoint-client-id" 
-                              placeholder="Your Azure AD Client ID" 
+                            <Input
+                              id="sharepoint-client-id"
+                              placeholder="Your Azure AD Client ID"
                               className="col-span-3"
                               value={newIntegration.clientId}
                               onChange={(e) => handleNewIntegrationChange("clientId", e.target.value)}
@@ -1486,10 +1544,10 @@ export default function Integrations() {
                             <Label htmlFor="sharepoint-client-secret" className="text-right">
                               Client Secret <span className="text-red-500">*</span>
                             </Label>
-                            <Input 
-                              id="sharepoint-client-secret" 
+                            <Input
+                              id="sharepoint-client-secret"
                               type="password"
-                              placeholder="Your Azure AD Client Secret" 
+                              placeholder="Your Azure AD Client Secret"
                               className="col-span-3"
                               value={newIntegration.clientSecret}
                               onChange={(e) => handleNewIntegrationChange("clientSecret", e.target.value)}
@@ -1505,10 +1563,10 @@ export default function Integrations() {
                           <Label htmlFor="notion-token" className="text-right">
                             Integration Token <span className="text-red-500">*</span>
                           </Label>
-                          <Input 
-                            id="notion-token" 
+                          <Input
+                            id="notion-token"
                             type="password"
-                            placeholder="secret_..." 
+                            placeholder="secret_..."
                             className="col-span-3"
                             value={newIntegration.integrationToken}
                             onChange={(e) => handleNewIntegrationChange("integrationToken", e.target.value)}
@@ -1518,9 +1576,9 @@ export default function Integrations() {
                       )}
                     </div>
                     <DialogFooter>
-                      <Button 
-                        type="button" 
-                        variant="outline" 
+                      <Button
+                        type="button"
+                        variant="outline"
                         onClick={() => {
                           setIsDialogOpen(false)
                           resetNewIntegrationForm()
@@ -1554,6 +1612,9 @@ export default function Integrations() {
                 <TabsTrigger value="notion">Notion</TabsTrigger>
                 <TabsTrigger value="adobe">Adobe</TabsTrigger>
                 <TabsTrigger value="vcs">Version Control</TabsTrigger>
+                <TabsTrigger value="mongodb-analysis">MongoDB Analysis</TabsTrigger>
+                <TabsTrigger value="pinecone-analysis">Pinecone Analysis</TabsTrigger>
+                <TabsTrigger value="supabase-management">Supabase</TabsTrigger>
               </TabsList>
 
               <TabsContent value="overview" className="space-y-4">
@@ -1707,180 +1768,180 @@ export default function Integrations() {
                       </div>
                     ) : (
                       <>
-                    {/* Basic Configuration */}
-                    <div className="space-y-4">
-                      <h4 className="text-sm font-medium text-muted-foreground">Basic Configuration</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="confluence-url">Confluence Base URL</Label>
-                          <Input
-                            id="confluence-url"
-                            placeholder="https://your-domain.atlassian.net"
-                            value={confluenceConfig.baseUrl}
-                            onChange={(e) => handleConfluenceConfigChange('baseUrl', e.target.value)}
-                          />
+                        {/* Basic Configuration */}
+                        <div className="space-y-4">
+                          <h4 className="text-sm font-medium text-muted-foreground">Basic Configuration</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="confluence-url">Confluence Base URL</Label>
+                              <Input
+                                id="confluence-url"
+                                placeholder="https://your-domain.atlassian.net"
+                                value={confluenceConfig.baseUrl}
+                                onChange={(e) => handleConfluenceConfigChange('baseUrl', e.target.value)}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="confluence-space">Default Space Key</Label>
+                              <Input
+                                id="confluence-space"
+                                placeholder="DOCS"
+                                value={confluenceConfig.defaultSpace}
+                                onChange={(e) => handleConfluenceConfigChange('defaultSpace', e.target.value)}
+                              />
+                            </div>
+                          </div>
                         </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="confluence-space">Default Space Key</Label>
-                          <Input
-                            id="confluence-space"
-                            placeholder="DOCS"
-                            value={confluenceConfig.defaultSpace}
-                            onChange={(e) => handleConfluenceConfigChange('defaultSpace', e.target.value)}
-                          />
-                        </div>
-                      </div>
-                    </div>
 
-                    {/* Authentication */}
-                    <div className="space-y-4">
-                      <h4 className="text-sm font-medium text-muted-foreground">Authentication</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="confluence-username">Username/Email</Label>
-                          <Input
-                            id="confluence-username"
-                            placeholder="your-email@company.com"
-                            type="email"
-                            value={confluenceConfig.username}
-                            onChange={(e) => handleConfluenceConfigChange('username', e.target.value)}
-                          />
+                        {/* Authentication */}
+                        <div className="space-y-4">
+                          <h4 className="text-sm font-medium text-muted-foreground">Authentication</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="confluence-username">Username/Email</Label>
+                              <Input
+                                id="confluence-username"
+                                placeholder="your-email@company.com"
+                                type="email"
+                                value={confluenceConfig.username}
+                                onChange={(e) => handleConfluenceConfigChange('username', e.target.value)}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="confluence-token">API Token</Label>
+                              <Input
+                                id="confluence-token"
+                                type="password"
+                                placeholder="Your Confluence API token"
+                                value={confluenceConfig.apiToken}
+                                onChange={(e) => handleConfluenceConfigChange('apiToken', e.target.value)}
+                              />
+                            </div>
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            Generate an API token from your Atlassian account settings.
+                            <a href="https://id.atlassian.com/manage-profile/security/api-tokens" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline ml-1">
+                              Learn more
+                            </a>
+                          </div>
                         </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="confluence-token">API Token</Label>
-                          <Input
-                            id="confluence-token"
-                            type="password"
-                            placeholder="Your Confluence API token"
-                            value={confluenceConfig.apiToken}
-                            onChange={(e) => handleConfluenceConfigChange('apiToken', e.target.value)}
-                          />
-                        </div>
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        Generate an API token from your Atlassian account settings.
-                        <a href="https://id.atlassian.com/manage-profile/security/api-tokens" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline ml-1">
-                          Learn more
-                        </a>
-                      </div>
-                    </div>
 
-                    {/* OAuth2 Configuration (Alternative) */}
-                    <div className="space-y-4">
-                      <h4 className="text-sm font-medium text-muted-foreground">OAuth2 Configuration (Alternative)</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="oauth-client-id">Client ID</Label>
-                          <Input
-                            id="oauth-client-id"
-                            placeholder="OAuth2 Client ID"
-                            value={confluenceConfig.oauthClientId}
-                            onChange={(e) => handleConfluenceConfigChange('oauthClientId', e.target.value)}
-                          />
+                        {/* OAuth2 Configuration (Alternative) */}
+                        <div className="space-y-4">
+                          <h4 className="text-sm font-medium text-muted-foreground">OAuth2 Configuration (Alternative)</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="oauth-client-id">Client ID</Label>
+                              <Input
+                                id="oauth-client-id"
+                                placeholder="OAuth2 Client ID"
+                                value={confluenceConfig.oauthClientId}
+                                onChange={(e) => handleConfluenceConfigChange('oauthClientId', e.target.value)}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="oauth-client-secret">Client Secret</Label>
+                              <Input
+                                id="oauth-client-secret"
+                                type="password"
+                                placeholder="OAuth2 Client Secret"
+                                value={confluenceConfig.oauthClientSecret}
+                                onChange={(e) => handleConfluenceConfigChange('oauthClientSecret', e.target.value)}
+                              />
+                            </div>
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            OAuth2 is recommended for production environments. Use API tokens for development and testing.
+                          </div>
                         </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="oauth-client-secret">Client Secret</Label>
-                          <Input
-                            id="oauth-client-secret"
-                            type="password"
-                            placeholder="OAuth2 Client Secret"
-                            value={confluenceConfig.oauthClientSecret}
-                            onChange={(e) => handleConfluenceConfigChange('oauthClientSecret', e.target.value)}
-                          />
+
+                        {/* Publishing Options */}
+                        <div className="space-y-4">
+                          <h4 className="text-sm font-medium text-muted-foreground">Publishing Options</h4>
+
+                          <div className="flex items-center justify-between p-4 border rounded-lg">
+                            <div className="space-y-1">
+                              <Label className="text-base font-medium">Auto-publish Documents</Label>
+                              <p className="text-sm text-muted-foreground">
+                                Automatically publish generated documents to Confluence when created
+                              </p>
+                            </div>
+                            <Switch
+                              checked={confluenceConfig.autoPublish}
+                              onCheckedChange={(checked: boolean) => handleConfluenceConfigChange('autoPublish', checked)}
+                            />
+                          </div>
+
+                          <div className="flex items-center justify-between p-4 border rounded-lg">
+                            <div className="space-y-1">
+                              <Label className="text-base font-medium">Sync on Document Update</Label>
+                              <p className="text-sm text-muted-foreground">
+                                Automatically sync changes back to Confluence when documents are modified
+                              </p>
+                            </div>
+                            <Switch
+                              checked={confluenceConfig.syncOnUpdate}
+                              onCheckedChange={(checked: boolean) => handleConfluenceConfigChange('syncOnUpdate', checked)}
+                            />
+                          </div>
+
+                          <div className="flex items-center justify-between p-4 border rounded-lg">
+                            <div className="space-y-1">
+                              <Label className="text-base font-medium">Create Projects for Spaces</Label>
+                              <p className="text-sm text-muted-foreground">
+                                Automatically create ADPA projects for each Confluence space during sync
+                              </p>
+                            </div>
+                            <Switch
+                              checked={confluenceConfig.createProjectsForSpaces}
+                              onCheckedChange={(checked: boolean) => handleConfluenceConfigChange('createProjectsForSpaces', checked)}
+                            />
+                          </div>
                         </div>
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        OAuth2 is recommended for production environments. Use API tokens for development and testing.
-                      </div>
-                    </div>
 
-                    {/* Publishing Options */}
-                    <div className="space-y-4">
-                      <h4 className="text-sm font-medium text-muted-foreground">Publishing Options</h4>
-
-                      <div className="flex items-center justify-between p-4 border rounded-lg">
-                        <div className="space-y-1">
-                          <Label className="text-base font-medium">Auto-publish Documents</Label>
-                          <p className="text-sm text-muted-foreground">
-                            Automatically publish generated documents to Confluence when created
-                          </p>
+                        {/* Action Buttons */}
+                        <div className="flex gap-2 pt-4 border-t">
+                          <Button
+                            variant="outline"
+                            onClick={testConfluenceConnection}
+                            disabled={testing || !confluenceConfig.baseUrl || !confluenceConfig.username || !confluenceConfig.apiToken}
+                          >
+                            {testing ? (
+                              <>
+                                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                Testing...
+                              </>
+                            ) : (
+                              <>
+                                <TestTube className="h-4 w-4 mr-2" />
+                                Test Connection
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            onClick={saveConfluenceConfiguration}
+                            disabled={saving || !confluenceConfig.baseUrl}
+                          >
+                            {saving ? (
+                              <>
+                                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                Saving...
+                              </>
+                            ) : (
+                              <>
+                                <Settings className="h-4 w-4 mr-2" />
+                                Save Configuration
+                              </>
+                            )}
+                          </Button>
+                          <Button variant="outline" asChild>
+                            <Link href="/integrations/confluence">
+                              <ExternalLink className="h-4 w-4 mr-2" />
+                              Advanced Settings
+                            </Link>
+                          </Button>
                         </div>
-                        <Switch
-                          checked={confluenceConfig.autoPublish}
-                          onCheckedChange={(checked: boolean) => handleConfluenceConfigChange('autoPublish', checked)}
-                        />
-                      </div>
-
-                      <div className="flex items-center justify-between p-4 border rounded-lg">
-                        <div className="space-y-1">
-                          <Label className="text-base font-medium">Sync on Document Update</Label>
-                          <p className="text-sm text-muted-foreground">
-                            Automatically sync changes back to Confluence when documents are modified
-                          </p>
-                        </div>
-                        <Switch
-                          checked={confluenceConfig.syncOnUpdate}
-                          onCheckedChange={(checked: boolean) => handleConfluenceConfigChange('syncOnUpdate', checked)}
-                        />
-                      </div>
-
-                      <div className="flex items-center justify-between p-4 border rounded-lg">
-                        <div className="space-y-1">
-                          <Label className="text-base font-medium">Create Projects for Spaces</Label>
-                          <p className="text-sm text-muted-foreground">
-                            Automatically create ADPA projects for each Confluence space during sync
-                          </p>
-                        </div>
-                        <Switch
-                          checked={confluenceConfig.createProjectsForSpaces}
-                          onCheckedChange={(checked: boolean) => handleConfluenceConfigChange('createProjectsForSpaces', checked)}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div className="flex gap-2 pt-4 border-t">
-                      <Button
-                        variant="outline"
-                        onClick={testConfluenceConnection}
-                        disabled={testing || !confluenceConfig.baseUrl || !confluenceConfig.username || !confluenceConfig.apiToken}
-                      >
-                        {testing ? (
-                          <>
-                            <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                            Testing...
-                          </>
-                        ) : (
-                          <>
-                            <TestTube className="h-4 w-4 mr-2" />
-                            Test Connection
-                          </>
-                        )}
-                      </Button>
-                      <Button
-                        onClick={saveConfluenceConfiguration}
-                        disabled={saving || !confluenceConfig.baseUrl}
-                      >
-                        {saving ? (
-                          <>
-                            <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                            Saving...
-                          </>
-                        ) : (
-                          <>
-                            <Settings className="h-4 w-4 mr-2" />
-                            Save Configuration
-                          </>
-                        )}
-                      </Button>
-                      <Button variant="outline" asChild>
-                        <Link href="/integrations/confluence">
-                          <ExternalLink className="h-4 w-4 mr-2" />
-                          Advanced Settings
-                        </Link>
-                      </Button>
-                    </div>
-                    </>
+                      </>
                     )}
                   </CardContent>
                 </Card>
@@ -2445,7 +2506,7 @@ export default function Integrations() {
                           >
                             {testing ? (
                               <>
-                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
                                 Testing...
                               </>
                             ) : (
@@ -2457,11 +2518,11 @@ export default function Integrations() {
                           </Button>
                           <Button
                             onClick={saveNotionConfiguration}
-                            disabled={saving || !notionConfig.integrationToken}
+                            disabled={saving}
                           >
                             {saving ? (
                               <>
-                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
                                 Saving...
                               </>
                             ) : (
@@ -2470,12 +2531,6 @@ export default function Integrations() {
                                 Save Configuration
                               </>
                             )}
-                          </Button>
-                          <Button variant="outline" asChild>
-                            <Link href="/integrations/notion">
-                              <ExternalLink className="h-4 w-4 mr-2" />
-                              Advanced Settings
-                            </Link>
                           </Button>
                         </div>
                       </>
@@ -2527,7 +2582,7 @@ export default function Integrations() {
                         </SelectContent>
                       </Select>
                       <p className="text-xs text-muted-foreground">
-                        {selectedProjectId 
+                        {selectedProjectId
                           ? `Documents will be added to the selected project.`
                           : `Documents will be imported without a project. You can assign them later.`}
                       </p>
@@ -2552,7 +2607,7 @@ export default function Integrations() {
 
                     {/* Import Button */}
                     <div className="pt-2">
-                      <Button 
+                      <Button
                         onClick={() => handleNotionSync()}
                         disabled={syncing || !realIntegrations.find(i => i.type === "notion")}
                         className="w-full"
@@ -2643,7 +2698,7 @@ export default function Integrations() {
                     </div>
                   </CardContent>
                 </Card>
-              </TabsContent>
+              </TabsContent >
 
               <TabsContent value="adobe" className="space-y-4">
                 <Card>
@@ -2735,10 +2790,36 @@ export default function Integrations() {
                   </CardContent>
                 </Card>
               </TabsContent>
-            </Tabs>
-          </div>
-        </main>
-      </div>
-    </div>
+              <TabsContent value="mongodb-analysis" className="space-y-4">
+                <MongoDBDashboard
+                  integrationId={realIntegrations.find(i => i.type === "mongodb")?.id || null}
+                />
+              </TabsContent>
+              <TabsContent value="pinecone-analysis" className="space-y-4">
+                <PineconeDashboard
+                  integrationId={realIntegrations.find(i => i.type === "pinecone")?.id || null}
+                />
+              </TabsContent>
+
+              <TabsContent value="supabase-management" className="space-y-4">
+                <SupabaseDashboard
+                  integrationId={realIntegrations.find(i => i.type === "supabase")?.id || null}
+                />
+              </TabsContent>
+            </Tabs >
+          </div >
+        </main >
+      </div >
+      <MongoDBSyncDialog
+        open={mongoSyncDialogOpen}
+        onOpenChange={setMongoSyncDialogOpen}
+        projects={projects}
+        integrationId={mongoIntegrationToSync}
+        onSyncComplete={() => {
+          loadExistingIntegrations()
+          toast.success("MongoDB sync completed successfully")
+        }}
+      />
+    </div >
   )
 }

@@ -64,7 +64,7 @@ const createPool = (host: string) => {
       connectionTimeoutMillis: 10000,
     })
   }
-  
+
   // Otherwise use individual connection parameters
   return new Pool({
     host: host,
@@ -109,25 +109,26 @@ function attachPoolErrorHandler(p: Pool) {
 function patchPoolQuery(p: Pool) {
   try {
     const orig = (p as any).query.bind(p)
-    ;(p as any).query = async (text: any, params?: any) => {
-      // If circuit is open, short-circuit and return null so callers can handle service-unavailable
-      if (dbBreaker.isOpen()) {
-        logger.warn('[DB-GUARD] Database circuit open - short-circuiting query', { sql: text, params })
-        return null
-      }
+      ; (p as any).query = async (text: any, params?: any) => {
+        // If circuit is open, short-circuit and return null so callers can handle service-unavailable
+        if (dbBreaker.isOpen()) {
+          logger.warn('[DB-GUARD] Database circuit open - short-circuiting query', { sql: text, params })
+          return null
+        }
 
-      try {
-        const res = await orig(text, params)
-        // record success on any successful query
-        dbBreaker.recordSuccess()
-        return res
-      } catch (err: any) {
-        logger.error('[DB-GUARD] Unhandled pool.query error', { sql: text, params, message: err?.message })
-        // record failure and possibly open circuit
-        dbBreaker.recordFailure()
-        return null
+        try {
+          const res = await orig(text, params)
+          // record success on any successful query
+          dbBreaker.recordSuccess()
+          return res
+        } catch (err: any) {
+          console.error('[DB-GUARD] Unhandled pool.query error:', JSON.stringify(err, Object.getOwnPropertyNames(err)));
+          logger.error('[DB-GUARD] Unhandled pool.query error', { sql: text, params, message: err?.message, stack: err?.stack })
+          // record failure and possibly open circuit
+          dbBreaker.recordFailure()
+          return null
+        }
       }
-    }
   } catch (err) {
     // ignore
   }
@@ -143,11 +144,11 @@ export function getDatabasePool(): Pool {
 export async function connectDatabase() {
   const maxRetriesPerMethod = 1 // Reduced retries for Railway timeout
   const retryDelay = 3000 // Reduced to 3 seconds
-  
+
   // If DATABASE_URL is provided, try it first
   if (databaseUrl) {
     console.log(`🔌 Trying database connection via DATABASE_URL`)
-    
+
     // Parse connection string to extract components
     // This allows us to force IPv4 by explicitly setting the family option
     let poolConfig: PoolConfig & { family?: number } = {
@@ -156,29 +157,29 @@ export async function connectDatabase() {
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 30000,
     }
-    
+
     // Parse URL and handle IPv4/IPv6 resolution
     try {
       const dbUrl = new URL(databaseUrl)
-      
+
       // For Supabase, prefer connection pooler (port 6543) which has better IPv4 support
       // If using direct connection (port 5432), try to resolve to IPv4 first
       const isDirectConnection = dbUrl.port === '5432' || !dbUrl.port
-      const isPoolerConnection = 
-        dbUrl.port === '6543' || 
+      const isPoolerConnection =
+        dbUrl.port === '6543' ||
         dbUrl.searchParams.has('pgbouncer') ||
         dbUrl.hostname.includes('pooler.supabase.com')
-      
+
       if (isDirectConnection) {
         // Try to resolve to IPv4 for direct connections
         try {
           console.log(`🔧 Resolving ${dbUrl.hostname} to IPv4 address (A records only)...`)
           const addresses = await dnsResolve4(dbUrl.hostname)
-          
+
           if (addresses && addresses.length > 0) {
             const ipv4Address = addresses[0]
             console.log(`✅ Resolved to IPv4: ${ipv4Address}`)
-            
+
             poolConfig = {
               ...poolConfig,
               host: ipv4Address, // Use resolved IPv4 address instead of hostname
@@ -195,7 +196,7 @@ export async function connectDatabase() {
           console.warn('⚠️  Could not resolve hostname to IPv4:', ipv4Error?.message || ipv4Error)
           console.warn('💡 TIP: Use connection pooler (port 6543) for better IPv4 compatibility')
           console.warn('   Example: postgresql://postgres:password@host:6543/db?pgbouncer=true')
-          
+
           // Fall through to use hostname (might resolve to IPv6)
           throw ipv4Error
         }
@@ -237,13 +238,13 @@ export async function connectDatabase() {
         poolConfig.connectionString = databaseUrl
       }
     }
-    
+
     const testPool = new Pool(poolConfig)
-    
+
     // Increase max listeners to prevent MaxListenersExceededWarning
     // This can happen when multiple connection attempts are made
     testPool.setMaxListeners(20)
-    
+
     try {
       const client = await Promise.race([
         testPool.connect(),
@@ -254,11 +255,11 @@ export async function connectDatabase() {
         new Promise((_, reject) => setTimeout(() => reject(new Error('Database query timeout')), 15000)) // Increased to 15s
       ])
       client.release()
-      
+
       pool = testPool
       // Patch pool.query to avoid unhandled promise rejections from direct calls
-      try { patchPoolQuery(pool) } catch (e) {}
-      try { attachPoolErrorHandler(pool) } catch (e) {}
+      try { patchPoolQuery(pool) } catch (e) { }
+      try { attachPoolErrorHandler(pool) } catch (e) { }
       logger.info(`✅ Database connected successfully via DATABASE_URL`)
 
       // Diagnostic: estimate expected queue concurrency by scanning queueService.ts
@@ -303,7 +304,7 @@ export async function connectDatabase() {
       return
     } catch (error) {
       console.error(`❌ DATABASE_URL connection error:`, error)
-      logger.error(`Database connection via DATABASE_URL failed:`, { 
+      logger.error(`Database connection via DATABASE_URL failed:`, {
         error: error.message,
         code: error.code,
         detail: error.detail,
@@ -332,30 +333,30 @@ export async function connectDatabase() {
           client.release()
 
           pool = insecurePool
-          try { patchPoolQuery(pool) } catch (e) {}
-          try { attachPoolErrorHandler(pool) } catch (e) {}
+          try { patchPoolQuery(pool) } catch (e) { }
+          try { attachPoolErrorHandler(pool) } catch (e) { }
           logger.info('✅ Database connected successfully via DATABASE_URL (insecure TLS)')
           return
         } catch (insecureErr) {
           logger.error('Retry with insecure TLS failed:', insecureErr?.message || insecureErr)
-          try { await insecureErr?.end?.() } catch (e) {}
+          try { await insecureErr?.end?.() } catch (e) { }
         }
       }
 
-      await testPool.end().catch(() => {})
+      await testPool.end().catch(() => { })
     }
   }
-  
+
   // Try each connection method as fallback
   for (const method of connectionMethods) {
     console.log(`🔌 Trying database connection via ${method.description}: ${method.host}`)
-    
+
     // Create a new pool for this connection method
     const testPool = createPool(method.host)
-    
+
     // Increase max listeners to prevent MaxListenersExceededWarning
     testPool.setMaxListeners(20)
-    
+
     for (let attempt = 1; attempt <= maxRetriesPerMethod; attempt++) {
       try {
         logger.info(`Attempting to connect to database (attempt ${attempt}/${maxRetriesPerMethod}) via ${method.description}...`, {
@@ -365,7 +366,7 @@ export async function connectDatabase() {
           user: process.env.DB_USER || "postgres",
           timeout: "30 seconds"
         })
-        
+
         const client = await Promise.race([
           testPool.connect(),
           new Promise((_, reject) => setTimeout(() => reject(new Error('Database connection timeout')), 10000))
@@ -376,11 +377,11 @@ export async function connectDatabase() {
           new Promise((_, reject) => setTimeout(() => reject(new Error('Database query timeout')), 5000))
         ])
         client.release()
-        
+
         // If successful, update the global pool and return
         pool = testPool
-        try { patchPoolQuery(pool) } catch (e) {}
-        try { attachPoolErrorHandler(pool) } catch (e) {}
+        try { patchPoolQuery(pool) } catch (e) { }
+        try { attachPoolErrorHandler(pool) } catch (e) { }
         logger.info(`Database connection established successfully via ${method.description}`)
         return
       } catch (error) {
@@ -390,18 +391,18 @@ export async function connectDatabase() {
           errno: error.errno,
           syscall: error.syscall
         })
-        
+
         if (attempt < maxRetriesPerMethod) {
           logger.info(`Retrying database connection in ${retryDelay}ms...`)
           await new Promise(resolve => setTimeout(resolve, retryDelay))
         }
       }
     }
-    
+
     // Clean up the test pool
-    await testPool.end().catch(() => {})
+    await testPool.end().catch(() => { })
   }
-  
+
   // If all methods failed
   logger.error("All database connection methods failed")
   throw new Error("Unable to connect to database using any available method")

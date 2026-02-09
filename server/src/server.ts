@@ -22,6 +22,7 @@ import { aiService } from "./services/aiService"
 import jwt from "jsonwebtoken"
 import { pool } from "./database/connection"
 import { safeQuery, safeUpdate } from './services/jobs/dbGuards'
+import { mongoVectorStore } from "./services/mongoVectorStore"
 
 // Routes
 import authRoutes from "./routes/auth"
@@ -97,6 +98,7 @@ import escalationRoutes from "./routes/escalation"
 import qualityAuditRoutes from "./routes/qualityAuditRoutes"
 import documentUploadRoutes from "./routes/documentUploadRoutes"
 import adminRoutes from "./routes/adminRoutes"
+import ragRoutes from "./routes/ragRoutes"
 
 import assessmentExportRoutes from "./routes/assessmentExportRoutes"
 import portfolioAssessmentRoutes from "./routes/portfolioAssessmentRoutes"
@@ -338,6 +340,8 @@ app.use("/api/onboarding", documentUploadRoutes)
 app.use("/api/assessment", assessmentExportRoutes)
 app.use("/api/portfolio-assessment", portfolioAssessmentRoutes)
 app.use("/api/executive-dashboard", executiveDashboardRoutes)
+app.use("/api/rag", ragRoutes)
+app.use("/api/analytics", analyticsRoutes)
 app.use("/api/projects", projectSimilarityRoutes)
 app.use("/api/projects", developmentApproachRoutes)
 app.use("/api/development-approach", developmentApproachModuleRoutes)
@@ -645,6 +649,15 @@ async function startServer() {
           ? (workerError as { message?: string }).message
           : workerError
       )
+    }
+
+    // Initialize MongoDB Vector Store
+    try {
+      console.log("🍃 Connecting to MongoDB Atlas...")
+      await mongoVectorStore.connect()
+      console.log("✅ MongoDB Atlas connected")
+    } catch (mongoError) {
+      console.warn("⚠️ MongoDB connection failed:", (mongoError as any).message)
     }
 
     // Initialize AI providers

@@ -6,6 +6,7 @@ import { validate, validateParams, validateQuery } from "../middleware/validatio
 import { logger, childLogger } from "../utils/logger"
 import { v4 as uuidv4 } from "uuid"
 import { NotionIntegration } from "../integrations/notion"
+import { cache } from "../utils/redis"
 
 const router = express.Router()
 
@@ -139,7 +140,7 @@ router.post("/",
   requirePermission("integrations.create"),
   validate(Joi.object({
     name: Joi.string().min(2).max(100).required(),
-    type: Joi.string().valid("confluence", "sharepoint", "github", "slack", "teams", "adobe", "jira", "notion").required(),
+    type: Joi.string().valid("confluence", "sharepoint", "github", "slack", "teams", "adobe", "jira", "notion", "mongodb").required(),
     configuration: Joi.object().required(),
     credentials: Joi.object().required(),
     is_active: Joi.boolean().default(true),
@@ -206,7 +207,7 @@ router.put("/:id",
   validateParams(Joi.object({ id: Joi.string().uuid().required() })),
   validate(Joi.object({
     name: Joi.string().min(2).max(100).optional(),
-    type: Joi.string().valid("confluence", "sharepoint", "github", "slack", "teams", "adobe", "jira", "notion").optional(),
+    type: Joi.string().valid("confluence", "sharepoint", "github", "slack", "teams", "adobe", "jira", "notion", "mongodb").optional(),
     configuration: Joi.object().optional(),
     credentials: Joi.object().optional(),
     is_active: Joi.boolean().optional(),
@@ -449,6 +450,251 @@ router.post("/:id/test",
   }
 )
 
+// Get sync status
+router.get("/:id/sync/status",
+  authenticateToken,
+  validateParams(Joi.object({ id: Joi.string().uuid().required() })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { id } = req.params
+
+      // Get status from Redis
+      const status = await cache.get(`sync:progress:${id}`)
+
+      if (!status) {
+        // If not in Redis, check DB for last known status
+        const integration = await pool.query(
+          "SELECT sync_status, last_sync, updated_at FROM integrations WHERE id = $1",
+          [id]
+        )
+
+        if (integration.rows.length === 0) {
+          return res.status(404).json({ error: "Integration not found" })
+        }
+
+        return res.json({
+          status: integration.rows[0].sync_status,
+          progress: integration.rows[0].sync_status === 'completed' ? 100 : 0,
+          details: {
+            last_sync: integration.rows[0].last_sync
+          }
+        })
+      }
+
+      res.json(status)
+    } catch (error) {
+      log.error("Get sync status error:", error)
+      res.status(500).json({ error: "Internal server error" })
+    }
+  }
+)
+
+// Get MongoDB stats
+router.get("/:id/mongodb/stats",
+  authenticateToken,
+  validateParams(Joi.object({ id: Joi.string().uuid().required() })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { id } = req.params
+
+      // Check if integration is mongodb
+      const result = await pool.query(
+        "SELECT type FROM integrations WHERE id = $1",
+        [id]
+      )
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: "Integration not found" })
+      }
+
+      if (result.rows[0].type !== 'mongodb') {
+        return res.status(400).json({ error: "Integration is not MongoDB type" })
+      }
+
+      const { mongoVectorStore } = await import('../services/mongoVectorStore')
+
+      // Ensure connected
+      await mongoVectorStore.connect()
+      const stats = await mongoVectorStore.getStats()
+
+      res.json(stats)
+    } catch (error: any) {
+      log.error("Get MongoDB stats error:", error)
+      res.status(500).json({ error: "Internal server error", message: error.message })
+    }
+  }
+)
+
+// Get Pinecone stats
+router.get("/:id/pinecone/stats",
+  authenticateToken,
+  validateParams(Joi.object({ id: Joi.string().uuid().required() })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { id } = req.params
+
+      // Check if integration is pinecone
+      const result = await pool.query(
+        "SELECT type FROM integrations WHERE id = $1",
+        [id]
+      )
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: "Integration not found" })
+      }
+
+      if (result.rows[0].type !== 'pinecone') {
+        return res.status(400).json({ error: "Integration is not Pinecone type" })
+      }
+
+      const { pineconeService } = await import('../services/pineconeService')
+
+      // Get index stats
+      const indexStats = await pineconeService.getIndexStats()
+
+      if (!indexStats) {
+        return res.status(500).json({ error: "Failed to retrieve Pinecone stats" })
+      }
+
+      res.json({
+        indexStats,
+        indexName: process.env.PINECONE_INDEX_NAME || 'adpa-rag-index',
+        environment: process.env.PINECONE_ENVIRONMENT || 'us-west1-gcp'
+      })
+    } catch (error: any) {
+      log.error("Get Pinecone stats error:", error)
+      res.status(500).json({ error: "Internal server error", message: error.message })
+    }
+  }
+)
+
+// Get Supabase projects
+router.get("/:id/supabase/projects",
+  authenticateToken,
+  requirePermission("integrations.read"),
+  validateParams(Joi.object({ id: Joi.string().uuid().required() })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { id } = req.params
+
+      const result = await pool.query(
+        "SELECT type FROM integrations WHERE id = $1",
+        [id]
+      )
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: "Integration not found" })
+      }
+
+      if (result.rows[0].type !== 'supabase') {
+        return res.status(400).json({ error: "Integration is not Supabase type" })
+      }
+
+      // Note: MCP calls need to be made from the client side
+      // This endpoint will be used by the frontend to trigger MCP operations
+      res.json({
+        message: "Use MCP client to list projects",
+        mcpTool: "mcp_supabase-mcp-server_list_projects"
+      })
+    } catch (error: any) {
+      log.error("Get Supabase projects error:", error)
+      res.status(500).json({ error: "Internal server error", message: error.message })
+    }
+  }
+)
+
+// Get Supabase edge functions
+router.get("/:id/supabase/functions",
+  authenticateToken,
+  requirePermission("integrations.read"),
+  validateParams(Joi.object({ id: Joi.string().uuid().required() })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { id } = req.params
+      const { projectId } = req.query
+
+      const result = await pool.query(
+        "SELECT type, configuration FROM integrations WHERE id = $1",
+        [id]
+      )
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: "Integration not found" })
+      }
+
+      if (result.rows[0].type !== 'supabase') {
+        return res.status(400).json({ error: "Integration is not Supabase type" })
+      }
+
+      res.json({
+        message: "Use MCP client to list edge functions",
+        mcpTool: "mcp_supabase-mcp-server_list_edge_functions",
+        params: { project_id: projectId }
+      })
+    } catch (error: any) {
+      log.error("Get Supabase functions error:", error)
+      res.status(500).json({ error: "Internal server error", message: error.message })
+    }
+  }
+)
+
+// Get Supabase database stats
+router.get("/:id/supabase/stats",
+  authenticateToken,
+  requirePermission("integrations.read"),
+  validateParams(Joi.object({ id: Joi.string().uuid().required() })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { id } = req.params
+
+      const result = await pool.query(
+        "SELECT type, configuration FROM integrations WHERE id = $1",
+        [id]
+      )
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: "Integration not found" })
+      }
+
+      if (result.rows[0].type !== 'supabase') {
+        return res.status(400).json({ error: "Integration is not Supabase type" })
+      }
+
+      // Import supabaseService
+      const { supabaseService } = require('../services/supabaseService');
+
+      // Get database stats
+      const dbStats = await supabaseService.getDatabaseStats(id);
+
+      // Get Edge Function stats
+      const functionStats = await supabaseService.getEdgeFunctionStats();
+
+      res.json({
+        message: 'Supabase stats retrieved successfully',
+        database: dbStats,
+        edgeFunctions: functionStats,
+        mcpTools: {
+          list_projects: 'mcp_supabase-mcp-server_list_projects',
+          list_edge_functions: 'mcp_supabase-mcp-server_list_edge_functions',
+          list_tables: 'mcp_supabase-mcp-server_list_tables',
+          get_advisors: 'mcp_supabase-mcp-server_get_advisors',
+          execute_sql: 'mcp_supabase-mcp-server_execute_sql',
+          apply_migration: 'mcp_supabase-mcp-server_apply_migration'
+        }
+      })
+    } catch (error: any) {
+      log.error("Get Supabase stats error:", error)
+      res.status(500).json({ error: "Internal server error", message: error.message })
+    }
+  }
+)
+
 // Sync integration data
 router.post("/:id/sync",
   authenticateToken,
@@ -583,6 +829,24 @@ router.get("/types/available", authenticateToken, async (req, res) => {
         description: "Full sync of pages and databases from Notion workspaces",
         features: ["document_sync", "database_sync", "markdown_conversion", "full_sync"],
       },
+      {
+        type: "mongodb",
+        name: "MongoDB Vector Store",
+        description: "Sync project documents to MongoDB Atlas for RAG",
+        features: ["vector_search", "full_sync"],
+      },
+      {
+        type: "pinecone",
+        name: "Pinecone Vector Database",
+        description: "Sync embeddings to Pinecone for vector search and RAG",
+        features: ["vector_search", "embedding_sync", "namespace_management"],
+      },
+      {
+        type: "supabase",
+        name: "Supabase",
+        description: "Manage Supabase projects, edge functions, and database operations",
+        features: ["project_management", "edge_functions", "migrations", "database_operations"],
+      },
     ]
 
     res.json({ types })
@@ -666,6 +930,23 @@ async function testIntegrationConnection(type: string, configuration: any, crede
           details: { type, tested_at: new Date().toISOString(), error: error.message },
         }
       }
+    case "mongodb":
+      try {
+        const { mongoVectorStore } = await import('../services/mongoVectorStore')
+        // Ensure connected checks the connection
+        await mongoVectorStore.connect()
+        return {
+          success: true,
+          message: "MongoDB connection successful",
+          details: { type, tested_at: new Date().toISOString() },
+        }
+      } catch (error: any) {
+        return {
+          success: false,
+          message: `MongoDB connection test failed: ${error.message}`,
+          details: { type, tested_at: new Date().toISOString(), error: error.message },
+        }
+      }
     default:
       return {
         success: true,
@@ -725,12 +1006,86 @@ async function performIntegrationSync(integration: any, syncOptions: SyncOptions
           },
         }
       }
+    case "mongodb":
+      try {
+        const { mongoDBSyncService } = await import('../services/mongoDBSyncService')
+        const projectId = syncOptions.projectId || null
+
+        // Setup progress callback
+        const onProgress = async (progress: any) => {
+          await cache.set(`sync:progress:${integration.id}`, {
+            ...progress,
+            timestamp: new Date().toISOString(),
+            projectId: projectId || 'all'
+          }, 3600) // 1 hour TTL
+        }
+
+        const result = await mongoDBSyncService.syncProjectDocuments(
+          projectId,
+          undefined, // no limit
+          onProgress
+        )
+
+        return {
+          success: result.success,
+          details: {
+            ...result.details,
+            sync_duration: "variable",
+            last_sync: new Date().toISOString(),
+          }
+        }
+      } catch (error: any) {
+        logger.error("MongoDB sync error:", error)
+        return {
+          success: false,
+          details: {
+            synced_items: 0,
+            error: error.message,
+            last_sync: new Date().toISOString(),
+          },
+        }
+      }
+    case "pinecone":
+      try {
+        const { pineconeService } = await import('../services/pineconeService')
+        const projectId = syncOptions.projectId || undefined
+
+        // Setup progress callback
+        const onProgress = async (progress: any) => {
+          await cache.set(`sync:progress:${integration.id}`, {
+            ...progress,
+            timestamp: new Date().toISOString(),
+            projectId: projectId || 'all'
+          }, 3600) // 1 hour TTL
+        }
+
+        const result = await pineconeService.syncAll(projectId, onProgress)
+
+        return {
+          success: result.success,
+          details: {
+            ...result.details,
+            sync_duration: "variable",
+            last_sync: new Date().toISOString(),
+          }
+        }
+      } catch (error: any) {
+        logger.error("Pinecone sync error:", error)
+        return {
+          success: false,
+          details: {
+            synced_items: 0,
+            error: error.message,
+            last_sync: new Date().toISOString(),
+          },
+        }
+      }
     default:
       return {
-        success: true,
+        success: false,
         details: {
           synced_items: 0,
-          sync_duration: "0.5s",
+          error: `Sync not implemented for integration type: ${integration.type}`,
           last_sync: new Date().toISOString(),
         },
       }

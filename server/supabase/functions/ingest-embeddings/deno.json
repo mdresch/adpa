@@ -1,0 +1,8 @@
+{
+    "tasks": {
+        "start": "deno run --allow-net --allow-env index.ts"
+    },
+    "imports": {
+        "npm:voyageai": "npm:voyageai@^0.1.0"
+    }
+}

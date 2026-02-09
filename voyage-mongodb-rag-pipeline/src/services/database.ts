@@ -5,8 +5,13 @@ import { Document, DocumentChunk, VectorSearchIndex } from '../types';
 
 export class DatabaseService {
   private client: MongoClient;
-  private db!: Db;
+  private _db!: Db;
   private isConnected: boolean = false;
+
+  get db(): Db {
+    this.ensureConnected();
+    return this._db;
+  }
 
   constructor() {
     this.client = new MongoClient(config.database.uri);
@@ -15,9 +20,9 @@ export class DatabaseService {
   async connect(): Promise<void> {
     try {
       await this.client.connect();
-      this.db = this.client.db(config.database.database);
+      this._db = this.client.db(config.database.database);
       this.isConnected = true;
-      
+
       logger.info('Connected to MongoDB', {
         database: config.database.database,
         uri: config.database.uri.includes('mongodb+srv') ? 'mongodb+srv' : 'mongodb'
@@ -52,18 +57,18 @@ export class DatabaseService {
   // Document operations
   get documentsCollection(): Collection<Document> {
     this.ensureConnected();
-    return this.db.collection(config.database.collections.documents);
+    return this._db.collection(config.database.collections.documents);
   }
 
   get chunksCollection(): Collection<DocumentChunk> {
     this.ensureConnected();
-    return this.db.collection(config.database.collections.chunks);
+    return this._db.collection(config.database.collections.chunks);
   }
 
   // Document management
   async createDocument(document: Omit<Document, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
     this.ensureConnected();
-    
+
     const now = new Date();
     const docWithTimestamps: Document = {
       ...document,
@@ -73,7 +78,7 @@ export class DatabaseService {
     };
 
     const result = await this.documentsCollection.insertOne(docWithTimestamps as any);
-    
+
     logger.info('Document created', {
       documentId: docWithTimestamps.id,
       title: document.title,
@@ -95,14 +100,14 @@ export class DatabaseService {
 
   async updateDocument(id: string, updates: Partial<Document>): Promise<boolean> {
     this.ensureConnected();
-    
+
     const result = await this.documentsCollection.updateOne(
       { id },
-      { 
-        $set: { 
-          ...updates, 
-          updatedAt: new Date() 
-        } 
+      {
+        $set: {
+          ...updates,
+          updatedAt: new Date()
+        }
       }
     );
 
@@ -115,7 +120,7 @@ export class DatabaseService {
 
   async deleteDocument(id: string): Promise<boolean> {
     this.ensureConnected();
-    
+
     // Delete document and its chunks
     const [docResult, chunkResult] = await Promise.all([
       this.documentsCollection.deleteOne({ id }),
@@ -135,7 +140,7 @@ export class DatabaseService {
   // Chunk operations
   async createChunks(chunks: Omit<DocumentChunk, 'id' | 'createdAt'>[]): Promise<string[]> {
     this.ensureConnected();
-    
+
     const now = new Date();
     const chunksWithTimestamps = chunks.map(chunk => ({
       ...chunk,
@@ -144,7 +149,7 @@ export class DatabaseService {
     }));
 
     const result = await this.chunksCollection.insertMany(chunksWithTimestamps as any);
-    
+
     logger.info('Chunks created', {
       count: chunks.length,
       documentId: chunks[0]?.documentId
@@ -160,9 +165,9 @@ export class DatabaseService {
 
   async deleteChunks(documentId: string): Promise<boolean> {
     this.ensureConnected();
-    
+
     const result = await this.chunksCollection.deleteMany({ documentId });
-    
+
     if (result.deletedCount > 0) {
       logger.info('Chunks deleted', {
         documentId,
@@ -176,26 +181,26 @@ export class DatabaseService {
   // Vector search operations
   async initializeCollections(): Promise<void> {
     this.ensureConnected();
-    
+
     try {
       // Create collections if they don't exist
-      const collections = await this.db.listCollections().toArray();
+      const collections = await this._db.listCollections().toArray();
       const collectionNames = collections.map(c => c.name);
-      
+
       if (!collectionNames.includes(config.database.collections.documents)) {
-        await this.db.createCollection(config.database.collections.documents);
-        logger.info('Created documents collection', { 
-          collection: config.database.collections.documents 
+        await this._db.createCollection(config.database.collections.documents);
+        logger.info('Created documents collection', {
+          collection: config.database.collections.documents
         });
       }
-      
+
       if (!collectionNames.includes(config.database.collections.chunks)) {
-        await this.db.createCollection(config.database.collections.chunks);
-        logger.info('Created chunks collection', { 
-          collection: config.database.collections.chunks 
+        await this._db.createCollection(config.database.collections.chunks);
+        logger.info('Created chunks collection', {
+          collection: config.database.collections.chunks
         });
       }
-      
+
       logger.info('Collections initialized successfully');
     } catch (error) {
       logger.log('error', 'Failed to initialize collections', {
@@ -207,7 +212,7 @@ export class DatabaseService {
 
   async createVectorSearchIndex(): Promise<void> {
     this.ensureConnected();
-    
+
     const indexDefinition = {
       name: 'vector_search_index',
       type: 'vectorSearch',
@@ -224,7 +229,7 @@ export class DatabaseService {
             path: 'documentId'
           },
           {
-            type: 'filter', 
+            type: 'filter',
             path: 'metadata.project'
           },
           {
@@ -236,7 +241,7 @@ export class DatabaseService {
     };
 
     try {
-      await this.db.command({
+      await this._db.command({
         createSearchIndexes: config.database.collections.chunks,
         indexes: [{
           name: indexDefinition.name,
@@ -261,7 +266,7 @@ export class DatabaseService {
 
   async vectorSearch(queryVector: number[], limit: number = 10, filters?: any): Promise<any[]> {
     this.ensureConnected();
-    
+
     const searchStage: any = {
       index: 'vector_search_index',
       knnBeta: {
@@ -275,7 +280,7 @@ export class DatabaseService {
     if (filters && Object.keys(filters).length > 0) {
       searchStage.knnBeta.filter = filters;
     }
-    
+
     const pipeline: any[] = [
       {
         $search: searchStage
@@ -301,7 +306,7 @@ export class DatabaseService {
 
   async getStats(): Promise<any> {
     this.ensureConnected();
-    
+
     const [docCount, chunkCount] = await Promise.all([
       this.documentsCollection.countDocuments(),
       this.chunksCollection.countDocuments()
@@ -310,7 +315,7 @@ export class DatabaseService {
     return {
       documents: docCount,
       chunks: chunkCount,
-      collections: await this.db.listCollections().toArray()
+      collections: await this._db.listCollections().toArray()
     };
   }
 }
