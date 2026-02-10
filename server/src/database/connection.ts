@@ -1,8 +1,5 @@
 import dotenv from "dotenv"
 // Only load .env if not in production (Railway injects env vars directly)
-if (process.env.NODE_ENV !== "production") {
-  dotenv.config()
-}
 
 import { Pool } from "pg"
 import type { PoolConfig } from "pg"

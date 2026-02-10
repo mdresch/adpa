@@ -1,8 +1,8 @@
 // IMPORTANT: Tracing must be initialized BEFORE any other imports
-import "./tracing"
-
 import dotenv from "dotenv"
 dotenv.config()
+
+import "./tracing"
 
 import express from "express"
 import cors from "cors"
@@ -77,6 +77,7 @@ try {
 import processFlowRoutes from "./routes/process-flow"
 import aiModelsRoutes from "./routes/ai-models"
 import aiAnalyticsRoutes from "./routes/ai-analytics"
+import extractionAnalyticsRoutes from "./routes/extraction-analytics"
 import stakeholderRoutes from "./routes/stakeholders"
 import skillsRoutes from "./routes/skills"
 import competenciesRoutes from "./routes/competencies"
@@ -311,6 +312,7 @@ if (aiProviderTestingRoutes) {
 app.use("/api/process-flow", processFlowRoutes)
 app.use("/api/ai-models", aiModelsRoutes)
 app.use("/api/ai-analytics", aiAnalyticsRoutes)
+app.use("/api/extraction-analytics", extractionAnalyticsRoutes)
 app.use("/api/stakeholders", stakeholderRoutes)
 app.use("/api/skills", skillsRoutes)
 app.use("/api/competencies", competenciesRoutes)
@@ -681,9 +683,13 @@ async function startServer() {
       console.log("🔗 SharePoint test endpoint available at /api/integrations/sharepoint/test")
 
       // Initialize weekly template analysis job
-      const { initializeTemplateAnalysisJob } = require('./jobs/templateAnalysisJob')
-      initializeTemplateAnalysisJob()
-      console.log("✅ Template analysis job scheduled (Mondays at 2:00 AM)")
+      if (!process.env.SKIP_JOBS && !process.env.VERCEL) {
+        const { initializeTemplateAnalysisJob } = require('./jobs/templateAnalysisJob')
+        initializeTemplateAnalysisJob()
+        console.log("✅ Template analysis job scheduled (Mondays at 2:00 AM)")
+      } else {
+        console.log("⏭️  Skipping in-memory template analysis job (handled by Vercel Cron)")
+      }
 
       // Start stuck-job health monitor
       try {

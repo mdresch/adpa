@@ -18,7 +18,7 @@ import {
     Layers,
     Activity,
     User
-} from "@/components/ui/icons-shim"
+} from "lucide-react"
 import { toast } from "sonner"
 import { RAGIngestionChart } from "./RAGIngestionChart"
 import { PerformanceMetricsCard } from "./PerformanceMetricsCard"
@@ -358,6 +358,8 @@ export function SupabaseDashboard({ integrationId }: SupabaseDashboardProps) {
                     </div>
                 </TabsContent>
 
+
+
                 <TabsContent value="rag" className="space-y-4">
                     <div className="grid gap-4 md:grid-cols-2">
                         <Card>
@@ -448,6 +450,8 @@ export function SupabaseDashboard({ integrationId }: SupabaseDashboardProps) {
                         </CardContent>
                     </Card>
 
+                    <EntityList integrationId={integrationId} />
+
                     <Card>
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2">
@@ -516,6 +520,82 @@ export function SupabaseDashboard({ integrationId }: SupabaseDashboardProps) {
                     <RAGSearchPanel />
                 </TabsContent>
             </Tabs>
-        </div>
+        </div >
+    )
+}
+
+
+interface Entity {
+    id?: string
+    document_id: string
+    document_title?: string
+    entity: string
+    type: string
+    score: number
+    created_at: string
+}
+
+function EntityList({ integrationId }: { integrationId: string | null }) {
+    const [entities, setEntities] = useState<Entity[]>([])
+    const [loading, setLoading] = useState(false)
+
+    useEffect(() => {
+        if (!integrationId) return;
+
+        const fetchEntities = async () => {
+            setLoading(true)
+            try {
+                const token = localStorage.getItem('auth_token') || localStorage.getItem('token')
+                const response = await fetch(`/api/integrations/${integrationId}/supabase/entities?limit=20`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                })
+
+                if (response.ok) {
+                    const data = await response.json()
+                    setEntities(data.entities || [])
+                }
+            } catch (error: any) {
+                console.error("Failed to fetch entities", error)
+            } finally {
+                setLoading(false)
+            }
+        }
+
+        fetchEntities()
+    }, [integrationId])
+
+    if (loading) {
+        return <div className="p-4 text-center text-muted-foreground">Loading recent entities...</div>
+    }
+
+    if (entities.length === 0) {
+        return null
+    }
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle className="text-base">Recent Extractions</CardTitle>
+            </CardHeader>
+            <CardContent>
+                <div className="space-y-4">
+                    {entities.map((entity: Entity, i: number) => (
+                        <div key={entity.id || i} className="flex items-center justify-between p-3 border rounded-lg">
+                            <div>
+                                <div className="font-medium">{entity.entity}</div>
+                                <div className="text-xs text-muted-foreground flex gap-2">
+                                    <Badge variant="outline" className="text-[10px] h-5">{entity.type}</Badge>
+                                    <span>Doc: {entity.document_title || 'Unknown'}</span>
+                                    <span>Score: {entity.score}</span>
+                                </div>
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                                {new Date(entity.created_at).toLocaleDateString()}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </CardContent>
+        </Card>
     )
 }

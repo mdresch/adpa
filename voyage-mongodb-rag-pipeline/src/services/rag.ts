@@ -6,7 +6,7 @@ import { logger, logSearchPerformance, logRAGPerformance } from '../utils/logger
 import { RAGRequest, RAGResponse, SearchResult, Document, DocumentChunk } from '../types';
 import OpenAI from 'openai';
 import { Anthropic } from '@anthropic-ai/sdk';
-import Mistral from '@mistralai/mistralai';
+import type Mistral from '@mistralai/mistralai';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export class RAGService {
@@ -22,7 +22,13 @@ export class RAGService {
     } else if (config.llm.provider === 'anthropic' && config.llm.apiKey) {
       this.anthropic = new Anthropic({ apiKey: config.llm.apiKey });
     } else if (config.llm.provider === 'mistral' && config.llm.apiKey) {
-      this.mistral = new Mistral(config.llm.apiKey);
+      // Use dynamic import for ESM module
+      import('@mistralai/mistralai').then(m => {
+        const MistralClient = m.default || m;
+        this.mistral = new (MistralClient as any)(config.llm.apiKey);
+      }).catch(err => {
+        logger.error('Failed to load Mistral SDK', { error: err.message });
+      });
     } else if (config.llm.provider === 'google' && config.llm.apiKey) {
       this.googleAI = new GoogleGenerativeAI(config.llm.apiKey);
     }
@@ -49,7 +55,7 @@ export class RAGService {
       // Step 1: Generate query embedding using MongoDB Atlas
       const embeddingStart = Date.now();
       const embeddings = await mongoDBEmbeddingService.generateEmbeddings(
-        [request.query], 
+        [request.query],
         'query'
       );
       const queryEmbedding = embeddings[0];
@@ -68,7 +74,7 @@ export class RAGService {
       let rerankedResults = searchResults;
       if (request.includeReranking && searchResults.length > 1) {
         const rerankStart = Date.now();
-        
+
         // Skip reranking for now - MongoDB Atlas doesn't have reranking
         // const documents = searchResults.map(result => result.content);
         // const reranked = await voyageAIService.rerankDocuments(
@@ -157,7 +163,7 @@ export class RAGService {
       // }
 
       const formattedResults = await this.formatSearchResults(finalResults);
-      
+
       logSearchPerformance(query, formattedResults.length, Date.now() - startTime);
       return formattedResults;
 
@@ -181,7 +187,7 @@ export class RAGService {
     // Prepare context from search results
     const context = searchResults
       .slice(0, 5) // Use top 5 results for context
-      .map((result, index) => 
+      .map((result, index) =>
         `[Source ${index + 1}]: ${result.content}`
       )
       .join('\n\n');
@@ -255,7 +261,7 @@ Please provide a comprehensive answer based on the provided context.`;
       }
 
       if (this.googleAI && config.llm.provider === 'google') {
-        const model = this.googleAI.getGenerativeModel({ 
+        const model = this.googleAI.getGenerativeModel({
           model: config.llm.model,
           generationConfig: {
             maxOutputTokens: config.llm.maxTokens,
@@ -286,7 +292,7 @@ Please provide a comprehensive answer based on the provided context.`;
     for (const result of searchResults) {
       // Get full document information
       const document = await databaseService.getDocument(result.documentId);
-      
+
       if (document) {
         formattedResults.push({
           chunk: {
@@ -325,7 +331,7 @@ Please provide a comprehensive answer based on the provided context.`;
 
       // Use the first chunk's embedding for similarity search
       const queryEmbedding = chunks[0].embedding;
-      
+
       // Search for similar chunks (excluding chunks from the same document)
       const similarChunks = await databaseService.vectorSearch(
         queryEmbedding,

@@ -28,7 +28,7 @@ class RabbitQueueJob<T = any> implements IQueueJob<T> {
     private readonly channel: ChannelWrapper,
     private readonly queueName: string,
     private readonly payload: InternalMessage<T>,
-  ) {}
+  ) { }
 
   get id(): string | number {
     return this.payload.jobId
@@ -108,15 +108,44 @@ export class RabbitQueueAdapter extends EventEmitter implements IQueue {
     this.channel = this.connection.createChannel({
       json: true,
       setup: async (channel: ConfirmChannel) => {
-        const mainOptions: { durable: boolean; arguments?: Record<string, number> } = { durable: true }
-        if (this.maxLength != null && this.maxLength > 0) {
-          mainOptions.arguments = { 'x-max-length': this.maxLength }
+        try {
+          const mainOptions: { durable: boolean; arguments?: Record<string, number> } = { durable: true }
+          if (this.maxLength != null && this.maxLength > 0) {
+            mainOptions.arguments = { 'x-max-length': this.maxLength }
+          }
+          await this.assertQueueSafe(channel, this.queueName, mainOptions)
+          await this.assertQueueSafe(channel, this.getDlqName(), this.getDlqAssertOptions())
+          await channel.prefetch(this.prefetch)
+        } catch (err) {
+          console.error(`❌ [RABBIT] Setup failed for queue ${this.queueName}:`, err instanceof Error ? err.message : err)
+          // Non-fatal: amqp-connection-manager will retry setup
+          throw err // Still throw to let the wrapper handle it
         }
-        await channel.assertQueue(this.queueName, mainOptions)
-        await channel.assertQueue(this.getDlqName(), this.getDlqAssertOptions())
-        await channel.prefetch(this.prefetch)
       },
     })
+
+    const channelAny = this.channel as any
+    if (channelAny.on) {
+      channelAny.on('error', (err: Error) => {
+        console.error(`❌ [RABBIT] Channel error for ${this.queueName}:`, err.message)
+      })
+
+      channelAny.on('close', () => {
+        console.warn(`⚠️ [RABBIT] Channel closed for ${this.queueName}`)
+      })
+    }
+  }
+
+  private async assertQueueSafe(channel: ConfirmChannel, queue: string, options?: any): Promise<any> {
+    try {
+      return await channel.assertQueue(queue, options)
+    } catch (err: any) {
+      if (err.code === 406 || (err.message && err.message.includes('PRECONDITION_FAILED'))) {
+        console.warn(`⚠️ [RABBIT] Queue ${queue} configuration mismatch (PRECONDITION_FAILED). Using existing queue configuration.`)
+        return await channel.checkQueue(queue)
+      }
+      throw err
+    }
   }
 
   private getDlqName(): string {
@@ -138,15 +167,20 @@ export class RabbitQueueAdapter extends EventEmitter implements IQueue {
   private async ensureDelayQueue(delayMs: number): Promise<void> {
     const dlqName = this.getDlqName()
     await this.channel.addSetup(async (channel: ConfirmChannel) => {
-      await channel.assertQueue(dlqName, this.getDlqAssertOptions())
-      await channel.assertQueue(this.getDelayQueueName(delayMs), {
-        durable: true,
-        arguments: {
-          'x-message-ttl': delayMs,
-          'x-dead-letter-exchange': '',
-          'x-dead-letter-routing-key': this.queueName,
-        },
-      })
+      try {
+        await this.assertQueueSafe(channel, dlqName, this.getDlqAssertOptions())
+        await channel.assertQueue(this.getDelayQueueName(delayMs), {
+          durable: true,
+          arguments: {
+            'x-message-ttl': delayMs,
+            'x-dead-letter-exchange': '',
+            'x-dead-letter-routing-key': this.queueName,
+          },
+        })
+      } catch (err) {
+        console.error(`❌ [RABBIT] Delay queue setup failed for ${this.queueName} (${delayMs}ms):`, err instanceof Error ? err.message : err)
+        throw err
+      }
     })
   }
 
@@ -206,98 +240,104 @@ export class RabbitQueueAdapter extends EventEmitter implements IQueue {
       // Pre-fetch is already configured; concurrency hint can increase prefetch
       const effectivePrefetch = Math.max(this.prefetch, concurrency)
       this.channel.addSetup(async (channel: ConfirmChannel) => {
-        await channel.prefetch(effectivePrefetch)
-        if (this.queueName === 'gkg-sync') {
-          console.log('[RABBIT] Consumer attached for queue gkg-sync')
-        }
-        const consume = await channel.consume(this.queueName, async (msg) => {
-          if (!msg) return
-          const headers = msg.properties.headers || {}
-          const payload = this.safeParse<InternalMessage>(msg.content)
-          const jobType = headers.jobType || payload?.type
-          const attemptsUsed = (headers.attemptsUsed ?? 0) as number
-          const maxAttempts = (headers.maxAttempts ?? this.defaultAttempts) as number
-          const backoffDelay = (headers.backoffDelay ?? this.defaultBackoffMs) as number
-          const backoffType = headers.backoffType ?? 'exponential'
-
+        try {
+          await channel.prefetch(effectivePrefetch)
           if (this.queueName === 'gkg-sync') {
-            console.log('[RABBIT] Message received on gkg-sync', { jobType: jobType ?? 'missing' })
+            console.log('[RABBIT] Consumer attached for queue gkg-sync')
           }
+          const consume = await channel.consume(this.queueName, async (msg) => {
+            // ... existing message handling logic ...
+            if (!msg) return
+            const headers = msg.properties.headers || {}
+            const payload = this.safeParse<InternalMessage>(msg.content)
+            const jobType = headers.jobType || payload?.type
+            const attemptsUsed = (headers.attemptsUsed ?? 0) as number
+            const maxAttempts = (headers.maxAttempts ?? this.defaultAttempts) as number
+            const backoffDelay = (headers.backoffDelay ?? this.defaultBackoffMs) as number
+            const backoffType = headers.backoffType ?? 'exponential'
 
-          if (!payload || !jobType) {
-            try {
-              channel.ack(msg)
-            } catch (ackErr) {
-              console.error('[RABBIT] Failed to ack message (channel closed):', ackErr)
+            if (this.queueName === 'gkg-sync') {
+              console.log('[RABBIT] Message received on gkg-sync', { jobType: jobType ?? 'missing' })
             }
-            return
-          }
 
-          const queueJob = new RabbitQueueJob(msg, this.channel, this.queueName, payload)
-          this.emit('active', queueJob)
-
-          const runHandler = this.handlers.get(jobType)
-          if (!runHandler) {
-            console.warn('[RABBIT] No handler for jobType', jobType, 'on queue', this.queueName)
-            try {
-              channel.ack(msg)
-            } catch (ackErr) {
-              console.error('[RABBIT] Failed to ack message (channel closed):', ackErr)
-            }
-            return
-          }
-
-          try {
-            await runHandler(queueJob as any)
-            try {
-              channel.ack(msg)
-            } catch (ackErr) {
-              console.error('[RABBIT] Failed to ack message (channel closed):', ackErr)
-            }
-            this.emit('completed', queueJob)
-          } catch (err) {
-            const nextAttempt = attemptsUsed + 1
-            if (nextAttempt >= maxAttempts) {
-              // Send to DLQ
+            if (!payload || !jobType) {
               try {
-                await this.channel.sendToQueue(this.getDlqName(), payload, {
+                channel.ack(msg)
+              } catch (ackErr) {
+                console.error('[RABBIT] Failed to ack message (channel closed):', ackErr)
+              }
+              return
+            }
+
+            const queueJob = new RabbitQueueJob(msg, this.channel, this.queueName, payload)
+            this.emit('active', queueJob)
+
+            const runHandler = this.handlers.get(jobType)
+            if (!runHandler) {
+              console.warn('[RABBIT] No handler for jobType', jobType, 'on queue', this.queueName)
+              try {
+                channel.ack(msg)
+              } catch (ackErr) {
+                console.error('[RABBIT] Failed to ack message (channel closed):', ackErr)
+              }
+              return
+            }
+
+            try {
+              await runHandler(queueJob as any)
+              try {
+                channel.ack(msg)
+              } catch (ackErr) {
+                console.error('[RABBIT] Failed to ack message (channel closed):', ackErr)
+              }
+              this.emit('completed', queueJob)
+            } catch (err) {
+              const nextAttempt = attemptsUsed + 1
+              if (nextAttempt >= maxAttempts) {
+                // Send to DLQ
+                try {
+                  await this.channel.sendToQueue(this.getDlqName(), payload, {
+                    persistent: true,
+                    headers: {
+                      ...headers,
+                      attemptsUsed: nextAttempt,
+                    },
+                  } as Options.Publish)
+                  channel.ack(msg)
+                } catch (dlqErr) {
+                  console.error('[RABBIT] Failed to send to DLQ or ack (channel closed):', dlqErr)
+                }
+                this.emit('failed', queueJob, err)
+                return
+              }
+
+              // Calculate next delay
+              const nextDelay = backoffType === 'exponential'
+                ? backoffDelay * Math.pow(2, attemptsUsed)
+                : backoffDelay
+
+              try {
+                await this.ensureDelayQueue(nextDelay)
+                await this.channel.sendToQueue(this.getDelayQueueName(nextDelay), payload, {
                   persistent: true,
                   headers: {
                     ...headers,
                     attemptsUsed: nextAttempt,
+                    backoffDelay: nextDelay,
                   },
                 } as Options.Publish)
                 channel.ack(msg)
-              } catch (dlqErr) {
-                console.error('[RABBIT] Failed to send to DLQ or ack (channel closed):', dlqErr)
+              } catch (retryErr) {
+                console.error('[RABBIT] Failed to requeue or ack (channel closed):', retryErr)
               }
               this.emit('failed', queueJob, err)
-              return
             }
-
-            // Calculate next delay
-            const nextDelay = backoffType === 'exponential'
-              ? backoffDelay * Math.pow(2, attemptsUsed)
-              : backoffDelay
-
-            try {
-              await this.ensureDelayQueue(nextDelay)
-              await this.channel.sendToQueue(this.getDelayQueueName(nextDelay), payload, {
-                persistent: true,
-                headers: {
-                  ...headers,
-                  attemptsUsed: nextAttempt,
-                  backoffDelay: nextDelay,
-                },
-              } as Options.Publish)
-              channel.ack(msg)
-            } catch (retryErr) {
-              console.error('[RABBIT] Failed to requeue or ack (channel closed):', retryErr)
-            }
-            this.emit('failed', queueJob, err)
-          }
-        })
-        this.consumerTag = consume.consumerTag
+          })
+          this.consumerTag = consume.consumerTag
+        } catch (err) {
+          console.error(`❌ [RABBIT] Failed to setup consumer for ${this.queueName}:`, err instanceof Error ? err.message : err)
+          // Non-fatal because setup is retried
+        }
       })
     }
   }
@@ -339,16 +379,22 @@ export class RabbitQueueAdapter extends EventEmitter implements IQueue {
       if (this.consumerTag) {
         await this.channel.cancel(this.consumerTag)
       }
-    } catch (_err) {}
+    } catch (_err) { }
     await this.channel.close()
   }
 
   async getStats(): Promise<{ waiting: number; active: number; completed: number; failed: number; delayed: number }> {
     try {
-      const info = await this.channel.addSetup((ch: ConfirmChannel) => ch.checkQueue(this.queueName)) as any
-      const waiting = info?.messageCount ?? 0
+      // Use a one-off setup to check queue status
+      let messageCount = 0
+      await this.channel.addSetup(async (ch: ConfirmChannel) => {
+        const info = await ch.checkQueue(this.queueName)
+        messageCount = info.messageCount
+      })
+      // Delay slightly to allow the setup to run if it's the first time
+      // This is a bit hacky for RabbitMQ stats in this adapter
       return {
-        waiting,
+        waiting: messageCount,
         active: 0,
         completed: 0,
         failed: 0,
@@ -382,8 +428,14 @@ export class RabbitQueueAdapter extends EventEmitter implements IQueue {
 }
 
 export function createRabbitConnection(url: string): AmqpConnectionManager {
-  return connect([url], {
+  const connection = connect([url], {
     heartbeatIntervalInSeconds: 15,
     reconnectTimeInSeconds: 5,
   })
+
+  connection.on('connect', () => console.log('✅ [RABBIT] Connected to RabbitMQ'))
+  connection.on('disconnect', err => console.warn('⚠️ [RABBIT] Disconnected from RabbitMQ:', err?.err?.message || err))
+  connection.on('connectFailed', err => console.error('❌ [RABBIT] RabbitMQ connection failed:', err?.err?.message || err))
+
+  return connection
 }

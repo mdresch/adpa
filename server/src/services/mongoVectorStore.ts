@@ -131,37 +131,68 @@ export class MongoVectorStore {
     }
 
     // Vector Search
-    async vectorSearch(queryVector: number[], limit: number = 10, filters?: any): Promise<DocumentChunk[]> {
+    async vectorSearch(
+        queryVector: number[],
+        limit: number = 10,
+        filters?: any,
+        indexName: string = 'vector_search_index',
+        numCandidates?: number
+    ): Promise<DocumentChunk[]> {
         this.ensureConnected();
 
-        const searchStage: any = {
-            index: 'vector_search_index',
-            knnBeta: {
-                vector: queryVector,
-                path: 'embedding',
-                k: limit
-            }
+        const pipeline: any[] = [];
+
+        logger.info('Preparing vector search', {
+            queryVectorDimensions: queryVector.length,
+            limit,
+            indexName,
+            numCandidates: numCandidates || limit * 20
+        });
+
+        // Build $vectorSearch stage
+        const vectorSearchStage: any = {
+            index: indexName,
+            path: 'embedding',
+            queryVector: queryVector,
+            numCandidates: numCandidates || limit * 20, // Recommended to be 10-20x the limit
+            limit: limit
         };
 
         if (filters && Object.keys(filters).length > 0) {
-            searchStage.knnBeta.filter = filters;
+            vectorSearchStage.filter = filters;
         }
 
-        const pipeline = [
-            { $search: searchStage },
-            {
-                $project: {
-                    score: { $meta: 'searchScore' },
-                    content: 1,
-                    documentId: 1,
-                    metadata: 1,
-                    createdAt: 1,
-                    embedding: 0 // Exclude embedding from result to save bandwidth
-                }
-            }
-        ];
+        pipeline.push({ $vectorSearch: vectorSearchStage });
 
-        return await this.chunksCollection.aggregate(pipeline).toArray() as DocumentChunk[];
+        // Project fields
+        // Note: In MongoDB, you can't mix inclusion and exclusion (except for _id).
+        // Since we are including specific fields, 'embedding' will be excluded by default.
+        pipeline.push({
+            $project: {
+                content: 1,
+                documentId: 1,
+                metadata: 1,
+                createdAt: 1,
+                score: { $meta: 'vectorSearchScore' } // Standard score field for $vectorSearch
+            }
+        });
+
+        logger.info('Executing vector search', {
+            limit,
+            filterCount: filters ? Object.keys(filters).length : 0
+        });
+
+        try {
+            const results = await this.chunksCollection.aggregate(pipeline).toArray();
+            logger.info('Vector search completed', { resultCount: results.length });
+            return results as DocumentChunk[];
+        } catch (error) {
+            logger.error('Vector search failed', {
+                error: (error as Error).message,
+                pipeline: JSON.stringify(pipeline)
+            });
+            return [];
+        }
     }
 
     async getStats(): Promise<any> {

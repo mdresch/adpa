@@ -321,6 +321,50 @@ export class SupabaseService {
             throw error;
         }
     }
+
+    /**
+     * List extracted entities
+     */
+    async listEntities(limit: number = 50): Promise<any[]> {
+        try {
+            logger.info('Listing extracted entities', { limit });
+
+            const { Pool } = require('pg');
+            const pool = new Pool({
+                connectionString: process.env.DATABASE_URL,
+                ssl: { rejectUnauthorized: false }
+            });
+
+            try {
+                const query = `
+                    SELECT 
+                        de.id,
+                        de.document_id,
+                        d.title as document_title,
+                        de.entity,
+                        de.type,
+                        de.score,
+                        de.created_at
+                    FROM document_entities de
+                    LEFT JOIN documents d ON de.document_id = d.id
+                    ORDER BY de.created_at DESC
+                    LIMIT $1
+                `;
+                const result = await pool.query(query, [limit]);
+                await pool.end();
+
+                return result.rows;
+            } catch (dbError) {
+                logger.error('Database query error in listEntities', { error: (dbError as Error).message });
+                throw dbError;
+            }
+        } catch (error) {
+            logger.error('Failed to list extracted entities', {
+                error: (error as Error).message
+            });
+            throw error;
+        }
+    }
 }
 
 // Export singleton instance

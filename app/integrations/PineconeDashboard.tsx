@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import React from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
@@ -33,9 +33,13 @@ interface PineconeDashboardProps {
 }
 
 export function PineconeDashboard({ integrationId }: PineconeDashboardProps) {
-  const [stats, setStats] = useState<PineconeStats | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [syncing, setSyncing] = useState(false)
+  const [stats, setStats] = React.useState<PineconeStats | null>(null)
+  const [loading, setLoading] = React.useState(false)
+  const [syncing, setSyncing] = React.useState(false)
+  const [searchQuery, setSearchQuery] = React.useState("")
+  const [searchNamespace, setSearchNamespace] = React.useState("all")
+  const [searchResults, setSearchResults] = React.useState<any[]>([])
+  const [searching, setSearching] = React.useState(false)
 
   const fetchStats = async () => {
     if (!integrationId) return
@@ -61,6 +65,42 @@ export function PineconeDashboard({ integrationId }: PineconeDashboardProps) {
     }
   }
 
+  const handleSearch = async () => {
+    if (!integrationId || !searchQuery.trim()) return
+
+    setSearching(true)
+    try {
+      const token = localStorage.getItem('auth_token') || localStorage.getItem('token')
+      const response = await fetch(`/api/integrations/${integrationId}/pinecone/search`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          query: searchQuery,
+          namespace: searchNamespace === "all" ? "" : searchNamespace,
+          topK: 5
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error("Search failed")
+      }
+
+      const data = await response.json()
+      setSearchResults(data.matches || [])
+      if (data.matches?.length === 0) {
+        toast.info("No matches found")
+      }
+    } catch (error) {
+      console.error("Search error:", error)
+      toast.error("Failed to perform vector search")
+    } finally {
+      setSearching(false)
+    }
+  }
+
   const handleSync = async () => {
     if (!integrationId) return
 
@@ -83,7 +123,8 @@ export function PineconeDashboard({ integrationId }: PineconeDashboardProps) {
       const result = await response.json()
 
       if (result.success) {
-        toast.success(`Sync completed! ${result.details?.synced_items || 0} vectors synced`)
+        const syncedCount = result.details?.synced_items || 0
+        toast.success(`Sync completed! ${syncedCount} vectors synced`)
         // Refresh stats after sync
         await fetchStats()
       } else {
@@ -97,7 +138,7 @@ export function PineconeDashboard({ integrationId }: PineconeDashboardProps) {
     }
   }
 
-  useEffect(() => {
+  React.useEffect(() => {
     fetchStats()
   }, [integrationId])
 
@@ -221,55 +262,129 @@ export function PineconeDashboard({ integrationId }: PineconeDashboardProps) {
             </Card>
           </div>
 
-          {/* Index Fullness Progress */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium">Storage Utilization</span>
-              <span className="text-sm font-bold">{(indexFullness * 100).toFixed(1)}%</span>
-            </div>
-            <Progress value={indexFullness * 100} className="h-2" />
-            <p className="text-xs text-muted-foreground mt-1">
-              {totalVectors.toLocaleString()} vectors stored
-            </p>
-          </div>
-
           {/* Namespace Details */}
-          {Object.keys(namespaces).length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <h4 className="text-sm font-semibold mb-3">Namespace Distribution</h4>
               <div className="space-y-2">
-                {Object.entries(namespaces).map(([namespace, data]) => (
-                  <div key={namespace} className="flex items-center justify-between p-2 bg-muted rounded-lg">
-                    <span className="text-sm font-mono">{namespace || '(default)'}</span>
-                    <Badge variant="secondary">
-                      {data.vectorCount?.toLocaleString() || 0} vectors
-                    </Badge>
+                {Object.keys(namespaces).length > 0 ? (
+                  Object.entries(namespaces).map(([namespace, data]: [string, any]) => (
+                    <div key={namespace} className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                      <div className="flex flex-col">
+                        <span className="text-sm font-mono font-bold capitalize">{namespace || '(default)'}</span>
+                        <span className="text-xs text-muted-foreground">Type: {namespace === 'chunks' ? 'Document Chunks' : namespace}</span>
+                      </div>
+                      <Badge variant="secondary" className="px-3 py-1 text-sm bg-background border-none shadow-sm">
+                        {data.vectorCount?.toLocaleString() || 0} vectors
+                      </Badge>
+                    </div>
+                  ))
+                ) : (
+                  <div className="p-4 text-center border rounded-lg bg-muted/30">
+                    <p className="text-sm text-muted-foreground">No namespaced data yet</p>
                   </div>
-                ))}
+                )}
               </div>
             </div>
-          )}
+
+            <div>
+              <h4 className="text-sm font-semibold mb-3">Storage Health</h4>
+              <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-medium">Capacity Used</span>
+                    <span className="text-xs font-bold">{(indexFullness * 100).toFixed(1)}%</span>
+                  </div>
+                  <Progress value={indexFullness * 100} className="h-2" />
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="p-2 border rounded bg-background">
+                    <p className="text-muted-foreground">Total Vectors</p>
+                    <p className="font-bold">{totalVectors.toLocaleString()}</p>
+                  </div>
+                  <div className="p-2 border rounded bg-background">
+                    <p className="text-muted-foreground">Dimensions</p>
+                    <p className="font-bold">{dimensions}D</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <hr className="border-muted" />
+
+          {/* Search sandbox */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold flex items-center gap-2">
+              <Activity className="h-5 w-5 text-blue-600" />
+              Search Sandbox
+            </h3>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                className="flex-1 h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                placeholder="Enter query to test vector search..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+              />
+              <select
+                className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={searchNamespace}
+                onChange={(e) => setSearchNamespace(e.target.value)}
+              >
+                <option value="all">All Namespaces</option>
+                {Object.keys(namespaces).map(ns => (
+                  <option key={ns} value={ns}>{ns}</option>
+                ))}
+              </select>
+              <Button size="sm" onClick={handleSearch} disabled={searching}>
+                {searching ? <RefreshCw className="h-4 w-4 animate-spin" /> : 'Search'}
+              </Button>
+            </div>
+
+            {searchResults.length > 0 && (
+              <div className="space-y-2 mt-4">
+                <h4 className="text-xs font-semibold uppercase text-muted-foreground">Top Matches</h4>
+                <div className="grid grid-cols-1 gap-2">
+                  {searchResults.map((match: any, idx: number) => (
+                    <div key={idx} className="p-3 border rounded-lg text-sm hover:bg-muted/50 transition-colors">
+                      <div className="flex justify-between items-start mb-1">
+                        <span className="font-semibold text-blue-600">Score: {(match.score * 100).toFixed(1)}%</span>
+                        <Badge variant="outline" className="text-[10px]">{match.metadata?.type || 'unknown'}</Badge>
+                      </div>
+                      <p className="font-medium">{match.metadata?.title || match.metadata?.name || match.id}</p>
+                      {match.metadata?.text && (
+                        <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{match.metadata.text}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Deployment Details */}
-          <Card className="bg-muted/50">
-            <CardContent className="pt-6">
-              <h4 className="text-sm font-semibold mb-3">Deployment Details</h4>
-              <div className="grid grid-cols-2 gap-4 text-sm">
+          <Card className="bg-muted/20 border-dashed">
+            <CardContent className="pt-4 pb-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-[10px] uppercase tracking-wider font-medium text-muted-foreground">
                 <div>
-                  <span className="text-muted-foreground">Index Name:</span>
-                  <p className="font-mono font-medium">{stats?.indexName}</p>
+                  <span>Index:</span>
+                  <p className="font-mono text-foreground mt-0.5">{stats?.indexName}</p>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Environment:</span>
-                  <p className="font-medium">{stats?.environment}</p>
+                  <span>Env:</span>
+                  <p className="text-foreground mt-0.5">{stats?.environment}</p>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Vector Dimensions:</span>
-                  <p className="font-medium">{dimensions}D</p>
+                  <span>Provider:</span>
+                  <p className="text-foreground mt-0.5">Serverless (AWS/GCP)</p>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Total Vectors:</span>
-                  <p className="font-medium">{totalVectors.toLocaleString()}</p>
+                  <span>Status:</span>
+                  <p className="text-green-600 mt-0.5 flex items-center gap-1">
+                    <CheckCircle2 className="h-3 w-3" /> Healthy
+                  </p>
                 </div>
               </div>
             </CardContent>
@@ -279,3 +394,4 @@ export function PineconeDashboard({ integrationId }: PineconeDashboardProps) {
     </div>
   )
 }
+

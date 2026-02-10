@@ -183,6 +183,115 @@ export function MongoDBDashboard({ integrationId }: MongoDBDashboardProps) {
                     </div>
                 </CardContent>
             </Card>
+
+            <div className="space-y-4">
+                <h3 className="text-lg font-semibold">Semantic Search</h3>
+                <VectorSearch integrationId={integrationId} />
+            </div>
+        </div>
+    )
+}
+
+function VectorSearch({ integrationId }: { integrationId: string }) {
+    const [query, setQuery] = useState("")
+    const [results, setResults] = useState<any[]>([])
+    const [searching, setSearching] = useState(false)
+
+    const handleSearch = async (e: React.FormEvent) => {
+        e.preventDefault()
+        if (!query.trim()) return
+
+        setSearching(true)
+        try {
+            const token = localStorage.getItem('auth_token') || localStorage.getItem('token')
+            const response = await fetch(`/api/integrations/${integrationId}/mongodb/search`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ query, topK: 5 })
+            })
+
+            const data = await response.json()
+            if (data.success) {
+                setResults(data.matches || [])
+                if (data.matches?.length === 0) {
+                    toast.info("No matching documents found")
+                }
+            } else {
+                toast.error(data.message || "Search failed")
+            }
+        } catch (error) {
+            console.error("Search error:", error)
+            toast.error("Failed to perform search")
+        } finally {
+            setSearching(false)
+        }
+    }
+
+    return (
+        <div className="space-y-6">
+            <Card>
+                <CardHeader>
+                    <CardTitle className="text-base">Test Vector Search</CardTitle>
+                    <CardDescription>
+                        Enter a query to search existing embeddings using vector similarity.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <form onSubmit={handleSearch} className="flex gap-2">
+                        <input
+                            type="text"
+                            value={query}
+                            onChange={(e) => setQuery(e.target.value)}
+                            placeholder="e.g., 'What are the project requirements?'"
+                            className="flex-1 px-3 py-2 border rounded-md text-sm bg-background"
+                        />
+                        <Button type="submit" disabled={searching}>
+                            {searching ? (
+                                <>
+                                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                                    Searching...
+                                </>
+                            ) : (
+                                'Search'
+                            )}
+                        </Button>
+                    </form>
+                </CardContent>
+            </Card>
+
+            {results.length > 0 && (
+                <div className="grid gap-4">
+                    {results.map((result, i) => (
+                        <Card key={i} className="overflow-hidden">
+                            <CardHeader className="py-3 bg-muted/20">
+                                <div className="flex justify-between items-start">
+                                    <div className="text-sm font-medium text-muted-foreground">
+                                        Score: {(result.score * 100).toFixed(1)}%
+                                    </div>
+                                    <Badge variant="outline" className="text-xs">
+                                        Chunk {i + 1}
+                                    </Badge>
+                                </div>
+                            </CardHeader>
+                            <CardContent className="py-4">
+                                <p className="text-sm whitespace-pre-wrap">{result.content}</p>
+                                {result.metadata && (
+                                    <div className="mt-2 pt-2 border-t text-xs text-muted-foreground grid grid-cols-2 gap-2">
+                                        {Object.entries(result.metadata).map(([key, value]) => (
+                                            <div key={key}>
+                                                <span className="font-semibold">{key}:</span> {String(value)}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    ))}
+                </div>
+            )}
         </div>
     )
 }

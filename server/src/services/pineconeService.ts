@@ -1,10 +1,8 @@
 import { Pinecone, PineconeRecord } from '@pinecone-database/pinecone';
 import { logger } from '../utils/logger';
-import { config } from '../config';
 
 interface PineconeConfig {
   apiKey: string;
-  environment?: string;
 }
 
 interface UpsertResult {
@@ -66,28 +64,44 @@ export class PineconeService {
   private index: any;
   private indexName: string;
 
-  constructor() {
-    const pineconeConfig: PineconeConfig = {
-      apiKey: process.env.PINECONE_API_KEY || '',
-      environment: process.env.PINECONE_ENVIRONMENT || 'us-west1-gcp'
-    };
+  constructor(config?: { apiKey?: string; indexName?: string; indexHost?: string }) {
+    const apiKey = config?.apiKey || process.env.PINECONE_API_KEY;
 
-    if (!pineconeConfig.apiKey) {
+    // Basic verification of API key existence
+    if (!apiKey) {
       logger.warn('Pinecone API key not configured');
-      throw new Error('Pinecone API key is required');
+      // If we're initializing the singleton and there's no key, we might wrap this in a try-catch 
+      // or just allow it to fail when methods are called. 
+      // For now, keep the error but make it more descriptive.
+      if (!config) {
+        logger.info('Pinecone service initialized without API key (waiting for dynamic config or ENV)');
+      } else {
+        throw new Error('Pinecone API key is required');
+      }
     }
 
+    // Initialize with providing key (can be undefined if we want to defer initialization)
     this.pc = new Pinecone({
-      apiKey: pineconeConfig.apiKey
+      apiKey: apiKey || 'placeholder' // SDK requires a string
     });
 
-    this.indexName = process.env.PINECONE_INDEX_NAME || 'adpa-rag-index';
-    this.index = this.pc.index(this.indexName);
+    this.indexName = config?.indexName || process.env.PINECONE_INDEX_NAME || 'adpa-rag-index';
 
-    logger.info('Pinecone service initialized', {
-      indexName: this.indexName,
-      environment: pineconeConfig.environment
-    });
+    // Explicitly use the index host if provided. This is crucial for serverless indexes 
+    // where the SDK might default to the wrong endpoint or fail to resolve it.
+    const host = config?.indexHost || process.env.PINECONE_INDEX_HOST;
+    if (host) {
+      this.index = this.pc.index(this.indexName, host);
+    } else {
+      this.index = this.pc.index(this.indexName);
+    }
+
+    if (apiKey) {
+      logger.info('Pinecone service initialized', {
+        indexName: this.indexName,
+        host: host || 'auto'
+      });
+    }
   }
 
   /**
@@ -141,12 +155,12 @@ export class PineconeService {
         } : null
       });
 
-      // Use upsert_records method with integrated embedding
-      const result = await this.index.upsertRecords({
+      // Use upsert_records method with integrated embedding in the 'projects' namespace
+      const result = await this.index.namespace('projects').upsertRecords({
         records: records
       });
 
-      logger.info('Projects upserted to Pinecone with integrated embedding', {
+      logger.info('Projects upserted to Pinecone namespace "projects"', {
         count: projects.length,
         result: result || 'No result returned'
       });
@@ -198,12 +212,12 @@ export class PineconeService {
         } : null
       });
 
-      // Use upsert_records method with integrated embedding
-      const result = await this.index.upsertRecords({
+      // Use upsert_records method with integrated embedding in the 'documents' namespace
+      const result = await this.index.namespace('documents').upsertRecords({
         records: records
       });
 
-      logger.info('Documents upserted to Pinecone with integrated embedding', {
+      logger.info('Documents upserted to Pinecone namespace "documents"', {
         count: documents.length,
         result: result || 'No result returned'
       });
@@ -244,12 +258,12 @@ export class PineconeService {
         created_at: entity.created_at || new Date().toISOString()
       }));
 
-      // Use upsert_records method with integrated embedding
-      const result = await this.index.upsertRecords({
+      // Use upsert_records method with integrated embedding in the 'entities' namespace
+      const result = await this.index.namespace('entities').upsertRecords({
         records: records
       });
 
-      logger.info('Entities upserted to Pinecone with integrated embedding', {
+      logger.info('Entities upserted to Pinecone namespace "entities"', {
         count: entities.length,
         result: result || 'No result returned'
       });
@@ -368,7 +382,7 @@ export class PineconeService {
   /**
    * Search for similar items in Pinecone
    */
-  async search(query: string, topK: number = 10, filter?: any): Promise<any[]> {
+  async search(query: string, topK: number = 10, filter?: any, namespace?: string): Promise<any[]> {
     try {
       const queryVector = this.textToEmbedding(query.toLowerCase());
 
@@ -382,11 +396,13 @@ export class PineconeService {
         searchRequest.filter = filter;
       }
 
-      const results = await this.index.query(searchRequest);
+      const indexTarget = namespace ? this.index.namespace(namespace) : this.index;
+      const results = await indexTarget.query(searchRequest);
 
       logger.info('Pinecone search completed', {
         query,
         topK,
+        namespace,
         resultsCount: results.matches?.length || 0
       });
 
@@ -394,7 +410,8 @@ export class PineconeService {
     } catch (error) {
       logger.error('Pinecone search failed', {
         error: (error as Error).message,
-        query
+        query,
+        namespace
       });
       return [];
     }
@@ -507,7 +524,7 @@ export class PineconeService {
           }));
 
           try {
-            const result = await this.index.upsertRecords({ records });
+            const result = await this.index.namespace('projects').upsertRecords({ records });
             const synced = result?.upsertedCount || records.length;
             stats.projects.synced += synced;
 
@@ -516,7 +533,7 @@ export class PineconeService {
                 stage: 'projects',
                 current: stats.projects.synced,
                 total: stats.projects.total,
-                message: `Synced ${stats.projects.synced}/${stats.projects.total} projects`
+                message: `Synced ${stats.projects.synced}/${stats.projects.total} projects to namespace "projects"`
               });
             }
           } catch (error) {
@@ -574,7 +591,7 @@ export class PineconeService {
           }));
 
           try {
-            const result = await this.index.upsertRecords({ records });
+            const result = await this.index.namespace('documents').upsertRecords({ records });
             const synced = result?.upsertedCount || records.length;
             stats.documents.synced += synced;
 
@@ -583,7 +600,7 @@ export class PineconeService {
                 stage: 'documents',
                 current: stats.documents.synced,
                 total: stats.documents.total,
-                message: `Synced ${stats.documents.synced}/${stats.documents.total} documents`
+                message: `Synced ${stats.documents.synced}/${stats.documents.total} documents to namespace "documents"`
               });
             }
           } catch (error) {
@@ -641,7 +658,7 @@ export class PineconeService {
               }));
 
               try {
-                await this.index.upsert(vectors);
+                await this.index.namespace('chunks').upsert(vectors);
                 stats.chunks.synced += vectors.length;
 
                 if (onProgress) {
@@ -649,7 +666,7 @@ export class PineconeService {
                     stage: 'chunks',
                     current: stats.chunks.synced,
                     total: stats.chunks.total,
-                    message: `Synced ${stats.chunks.synced}/${stats.chunks.total} chunks`
+                    message: `Synced ${stats.chunks.synced}/${stats.chunks.total} chunks to namespace "chunks"`
                   });
                 }
               } catch (error) {

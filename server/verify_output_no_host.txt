@@ -1,0 +1,11 @@
+npm warn Unknown project config "PUPPETEER_SKIP_DOWNLOAD". This will stop working in the next major version of npm.
+Verifying Pinecone Configuration (Without explicitly set Host)...
+PINECONE_API_KEY Configured: true
+PINECONE_INDEX_NAME: adpa-rag-index
+Initializing PineconeService...
+Testing connection...
+(node:34748) Warning: Setting the NODE_TLS_REJECT_UNAUTHORIZED environment variable to '0' makes TLS connections and HTTPS requests insecure by disabling certificate verification.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[31merror[39m: Pinecone connection failed {"error":"A call to https://api.pinecone.io/indexes/adpa-rag-index returned HTTP status 404.","service":"adpa-backend","timestamp":"2026-02-10T13:13:44.265Z"}
+FAILURE: Pinecone connection failed via service (Auto-discovery).
+This likely means the API Key is invalid.

@@ -1698,6 +1698,27 @@ class ApiClient {
     return response
   }
 
+  /**
+   * Get extraction analytics overview
+   */
+  async getExtractionOverview(period: string = '30d'): Promise<any> {
+    return this.get<any>(`/extraction-analytics/overview?period=${period}`)
+  }
+
+  /**
+   * Get extraction distribution by entity type
+   */
+  async getExtractionDistribution(period: string = '30d'): Promise<any> {
+    return this.get<any>(`/extraction-analytics/distribution?period=${period}`)
+  }
+
+  /**
+   * Get extraction trends over time
+   */
+  async getExtractionTrends(period: string = '30d'): Promise<any> {
+    return this.get<any>(`/extraction-analytics/trends?period=${period}`)
+  }
+
   // AI Analytics API
   async getAIModelAnalytics(period: string = "30d"): Promise<any> {
     const response = await this.request<any>(`/ai-analytics/models?period=${period}`)

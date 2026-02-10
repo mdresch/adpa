@@ -89,7 +89,8 @@
     "fix-stakeholders": "node scripts/run-stakeholders-fix.ts",
     "clear-failed-jobs": "node scripts/clean-stuck-database-jobs.ts",
     "init-qdrant": "ts-node -r tsconfig-paths/register scripts/init-qdrant-collection.ts",
-    "init-gkg-schema": "ts-node -r tsconfig-paths/register scripts/init-gkg-schema.ts"
+    "init-gkg-schema": "ts-node -r tsconfig-paths/register scripts/init-gkg-schema.ts",
+    "generate-embeddings": "ts-node -r tsconfig-paths/register scripts/generate-embeddings.ts"
   },
   "keywords": [],
   "author": "Menno Drescher",
@@ -105,6 +106,7 @@
     "@documenso/pdf-sign": "^0.1.0",
     "@github/copilot-sdk": "^0.1.15",
     "@google/generative-ai": "^0.24.1",
+    "@influxdata/influxdb3-client": "^2.0.0",
     "@opentelemetry/auto-instrumentations-node": "^0.67.3",
     "@opentelemetry/exporter-trace-otlp-http": "^0.208.0",
     "@opentelemetry/sdk-node": "^0.208.0",

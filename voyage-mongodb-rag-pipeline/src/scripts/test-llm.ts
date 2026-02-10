@@ -1,6 +1,6 @@
 import { config } from '../config';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import Mistral from '@mistralai/mistralai';
+import type Mistral from '@mistralai/mistralai';
 import OpenAI from 'openai';
 import { Anthropic } from '@anthropic-ai/sdk';
 import { logger } from '../utils/logger';
@@ -18,7 +18,7 @@ async function testLLMOnly(): Promise<void> {
 
     if (config.llm.provider === 'google' && config.llm.apiKey) {
       const googleAI = new GoogleGenerativeAI(config.llm.apiKey);
-      const model = googleAI.getGenerativeModel({ 
+      const model = googleAI.getGenerativeModel({
         model: config.llm.model,
         generationConfig: {
           maxOutputTokens: config.llm.maxTokens,
@@ -30,7 +30,9 @@ async function testLLMOnly(): Promise<void> {
       answer = response.response.text();
 
     } else if (config.llm.provider === 'mistral' && config.llm.apiKey) {
-      const mistral = new Mistral(config.llm.apiKey);
+      const m = await import('@mistralai/mistralai');
+      const MistralClient = m.default || m;
+      const mistral = new (MistralClient as any)(config.llm.apiKey);
       const response = await mistral.chat({
         model: config.llm.model,
         messages: [
@@ -87,11 +89,11 @@ async function testLLMOnly(): Promise<void> {
     console.log(answer);
     console.log('─'.repeat(50));
 
-    logger.info('LLM test successful', { 
+    logger.info('LLM test successful', {
       provider: config.llm.provider,
       model: config.llm.model,
       queryLength: testQuery.length,
-      responseLength: answer.length 
+      responseLength: answer.length
     });
 
   } catch (error) {

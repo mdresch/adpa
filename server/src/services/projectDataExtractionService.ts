@@ -580,6 +580,7 @@ export class ProjectDataExtractionService {
       aiModel: bestModel
     }
 
+    const startTime = Date.now()
     try {
       logger.info('[EXTRACTION] Starting project entity extraction', {
         projectId,
@@ -587,8 +588,6 @@ export class ProjectDataExtractionService {
         provider: bestProvider,
         model: bestModel
       })
-
-      const startTime = Date.now()
 
       // Step 1: Gather project documents
       const documents = await this.getProjectDocuments(projectId, options.documentIds)
@@ -908,10 +907,10 @@ export class ProjectDataExtractionService {
 
       // Save domain-specific entities (Phase 8)
       if (entities.infrastructure_data.length > 0) {
-        await this.saveDomainEntities(client, projectId, 'infrastructure', entities.infrastructure_data)
+        await this.saveDomainEntities(client, projectId, userId, 'infrastructure', entities.infrastructure_data)
       }
       if (entities.supply_chain_data.length > 0) {
-        await this.saveDomainEntities(client, projectId, 'supply_chain', entities.supply_chain_data)
+        await this.saveDomainEntities(client, projectId, userId, 'supply_chain', entities.supply_chain_data)
       }
 
       await client.query('COMMIT')
@@ -5467,6 +5466,16 @@ Output valid JSON object with "performance_actuals" array only.`
     `, values)
 
     logger.info(`[EXTRACTION] Saved ${stakeholdersToSave.length} stakeholders (${stakeholders.length - stakeholdersToSave.length} duplicates skipped)`)
+
+    // Track entity persistence
+    await analytics.trackEntityPersistence(
+      projectId,
+      userId,
+      'stakeholders',
+      'create',
+      stakeholdersToSave.length,
+      { source: 'extraction' }
+    )
   }
 
   /**
@@ -5603,6 +5612,16 @@ Output valid JSON object with "performance_actuals" array only.`
     `, values)
 
     logger.info(`[EXTRACTION] Saved ${uniqueRequirements.length} requirements (deduplicated from ${requirements.length})`)
+
+    // Track entity persistence
+    await analytics.trackEntityPersistence(
+      projectId,
+      userId,
+      'requirements',
+      'create',
+      uniqueRequirements.length,
+      { source: 'extraction' }
+    )
   }
 
   /**
@@ -5841,6 +5860,16 @@ Output valid JSON object with "performance_actuals" array only.`
     `, values)
 
     logger.info(`[EXTRACTION] Saved ${risks.length} risks`)
+
+    // Track entity persistence
+    await analytics.trackEntityPersistence(
+      projectId,
+      userId,
+      'risks',
+      'create',
+      risks.length,
+      { source: 'extraction' }
+    )
   }
 
   /**
@@ -5952,6 +5981,16 @@ Output valid JSON object with "performance_actuals" array only.`
     `, values)
 
     logger.info(`[EXTRACTION] Saved ${uniqueMilestones.length} milestones (deduplicated from ${milestones.length})`)
+
+    // Track entity persistence
+    await analytics.trackEntityPersistence(
+      projectId,
+      userId,
+      'milestones',
+      'create',
+      uniqueMilestones.length,
+      { source: 'extraction' }
+    )
   }
 
   /**
@@ -6032,6 +6071,16 @@ Output valid JSON object with "performance_actuals" array only.`
     `, values)
 
     logger.info(`[EXTRACTION] Saved ${uniqueConstraints.length} constraints`)
+
+    // Track entity persistence
+    await analytics.trackEntityPersistence(
+      projectId,
+      userId,
+      'constraints',
+      'create',
+      uniqueConstraints.length,
+      { source: 'extraction' }
+    )
   }
 
   /**
@@ -6113,6 +6162,16 @@ Output valid JSON object with "performance_actuals" array only.`
     `, values)
 
     logger.info(`[EXTRACTION] Saved ${uniqueCriteria.length} success criteria`)
+
+    // Track entity persistence
+    await analytics.trackEntityPersistence(
+      projectId,
+      userId,
+      'success_criteria',
+      'create',
+      uniqueCriteria.length,
+      { source: 'extraction' }
+    )
   }
 
   /**
@@ -6192,6 +6251,16 @@ Output valid JSON object with "performance_actuals" array only.`
     `, values)
 
     logger.info(`[EXTRACTION] Saved ${bestPractices.length} best practices`)
+
+    // Track entity persistence
+    await analytics.trackEntityPersistence(
+      projectId,
+      userId,
+      'best_practices',
+      'create',
+      bestPractices.length,
+      { source: 'extraction' }
+    )
   }
 
   /**
@@ -6294,6 +6363,16 @@ Output valid JSON object with "performance_actuals" array only.`
     `, values)
 
     logger.info(`[EXTRACTION] Saved ${uniquePhases.length} phases (deduplicated from ${phases.length})`)
+
+    // Track entity persistence
+    await analytics.trackEntityPersistence(
+      projectId,
+      userId,
+      'phases',
+      'create',
+      uniquePhases.length,
+      { source: 'extraction' }
+    )
   }
 
   /**
@@ -6403,6 +6482,16 @@ Output valid JSON object with "performance_actuals" array only.`
     `, values)
 
     logger.info(`[EXTRACTION] Saved ${uniqueResources.length} resources`)
+
+    // Track entity persistence
+    await analytics.trackEntityPersistence(
+      projectId,
+      userId,
+      'resources',
+      'create',
+      uniqueResources.length,
+      { source: 'extraction' }
+    )
   }
 
   /**
@@ -6471,6 +6560,16 @@ Output valid JSON object with "performance_actuals" array only.`
     `, values)
 
     logger.info(`[EXTRACTION] Saved ${uniqueTechnologies.length} technologies`)
+
+    // Track entity persistence
+    await analytics.trackEntityPersistence(
+      projectId,
+      userId,
+      'technologies',
+      'create',
+      uniqueTechnologies.length,
+      { source: 'extraction' }
+    )
   }
 
   /**
@@ -6555,6 +6654,16 @@ Output valid JSON object with "performance_actuals" array only.`
     `, values)
 
     logger.info(`[EXTRACTION] Saved ${uniqueQualityStandards.length} quality standards (deduplicated from ${qualityStandards.length})`)
+
+    // Track entity persistence
+    await analytics.trackEntityPersistence(
+      projectId,
+      userId,
+      'quality_standards',
+      'create',
+      uniqueQualityStandards.length,
+      { source: 'extraction' }
+    )
   }
 
   /**
@@ -6823,6 +6932,16 @@ Output valid JSON object with "performance_actuals" array only.`
     `, values)
 
     logger.info(`[EXTRACTION] Saved ${uniqueItems.length} compliance/security items (deduplicated from ${complianceSecurityItems.length})`)
+
+    // Track entity persistence
+    await analytics.trackEntityPersistence(
+      projectId,
+      userId,
+      'compliance_security',
+      'create',
+      uniqueItems.length,
+      { source: 'extraction' }
+    )
   }
 
   /**
@@ -6943,6 +7062,16 @@ Output valid JSON object with "performance_actuals" array only.`
     `, values)
 
     logger.info(`[EXTRACTION] Saved ${uniqueDeliverables.length} deliverables (deduplicated from ${deliverables.length})`)
+
+    // Track entity persistence
+    await analytics.trackEntityPersistence(
+      projectId,
+      userId,
+      'deliverables',
+      'create',
+      uniqueDeliverables.length,
+      { source: 'extraction' }
+    )
   }
 
   /**
@@ -7028,6 +7157,16 @@ Output valid JSON object with "performance_actuals" array only.`
     `, values)
 
     logger.info(`[EXTRACTION] Saved ${uniqueScopeItems.length} scope items (deduplicated from ${scopeItems.length})`)
+
+    // Track entity persistence
+    await analytics.trackEntityPersistence(
+      projectId,
+      userId,
+      'scope_items',
+      'create',
+      uniqueScopeItems.length,
+      { source: 'extraction' }
+    )
   }
 
   /**
@@ -7166,6 +7305,16 @@ Output valid JSON object with "performance_actuals" array only.`
     `, values)
 
     logger.info(`[EXTRACTION] Saved ${uniqueActivities.length} activities (deduplicated from ${activities.length})`)
+
+    // Track entity persistence
+    await analytics.trackEntityPersistence(
+      projectId,
+      userId,
+      'activities',
+      'create',
+      uniqueActivities.length,
+      { source: 'extraction' }
+    )
   }
 
   /**
@@ -7396,6 +7545,16 @@ Output valid JSON object with "performance_actuals" array only.`
     )
 
     logger.info(`[EXTRACTION] Saved ${uniqueTeamAgreements.length} team agreements (deduplicated from ${teamAgreements.length})`)
+
+    // Track entity persistence
+    await analytics.trackEntityPersistence(
+      projectId,
+      userId,
+      'team_agreements',
+      'create',
+      uniqueTeamAgreements.length,
+      { source: 'extraction' }
+    )
   }
 
   /**
@@ -7564,6 +7723,16 @@ Output valid JSON object with "performance_actuals" array only.`
     )
 
     logger.info(`[EXTRACTION] Saved development approach: ${normalizedApproach} (${normalizedMethodology || 'N/A'}) for project ${projectId}`)
+
+    // Track entity persistence
+    await analytics.trackEntityPersistence(
+      projectId,
+      userId,
+      'development_approach',
+      'create',
+      1,
+      { source: 'extraction' }
+    )
   }
 
   /**
@@ -7704,6 +7873,16 @@ Output valid JSON object with "performance_actuals" array only.`
     )
 
     logger.info(`[EXTRACTION] Saved ${uniqueProjectIterations.length} project iterations (deduplicated from ${projectIterations.length})`)
+
+    // Track entity persistence
+    await analytics.trackEntityPersistence(
+      projectId,
+      userId,
+      'project_iterations',
+      'create',
+      uniqueProjectIterations.length,
+      { source: 'extraction' }
+    )
   }
 
   /**
@@ -7844,6 +8023,16 @@ Output valid JSON object with "performance_actuals" array only.`
     )
 
     logger.info(`[EXTRACTION] Saved ${uniqueWorkItems.length} work items (deduplicated from ${workItems.length})`)
+
+    // Track entity persistence
+    await analytics.trackEntityPersistence(
+      projectId,
+      userId,
+      'work_items',
+      'create',
+      uniqueWorkItems.length,
+      { source: 'extraction' }
+    )
   }
 
   /**
@@ -7969,6 +8158,16 @@ Output valid JSON object with "performance_actuals" array only.`
     )
 
     logger.info(`[EXTRACTION] Saved ${uniqueCapacityPlans.length} capacity plan records (deduplicated from ${capacityPlans.length})`)
+
+    // Track entity persistence
+    await analytics.trackEntityPersistence(
+      projectId,
+      userId,
+      'capacity_plans',
+      'create',
+      uniqueCapacityPlans.length,
+      { source: 'extraction' }
+    )
   }
 
   /**
@@ -8189,6 +8388,16 @@ Output valid JSON object with "performance_actuals" array only.`
     )
 
     logger.info(`[EXTRACTION] Saved ${uniquePerformanceMeasurements.length} performance measurements (deduplicated from ${performanceMeasurements.length})`)
+
+    // Track entity persistence
+    await analytics.trackEntityPersistence(
+      projectId,
+      userId,
+      'performance_measurements',
+      'create',
+      uniquePerformanceMeasurements.length,
+      { source: 'extraction' }
+    )
   }
 
   /**
@@ -8321,6 +8530,16 @@ Output valid JSON object with "performance_actuals" array only.`
     )
 
     logger.info(`[EXTRACTION] Saved ${uniqueEarnedValueMetrics.length} earned value metric snapshots (deduplicated from ${earnedValueMetrics.length})`)
+
+    // Track entity persistence
+    await analytics.trackEntityPersistence(
+      projectId,
+      userId,
+      'earned_value_metrics',
+      'create',
+      uniqueEarnedValueMetrics.length,
+      { source: 'extraction' }
+    )
   }
 
   /**
@@ -8460,6 +8679,16 @@ Output valid JSON object with "performance_actuals" array only.`
     )
 
     logger.info(`[EXTRACTION] Saved ${uniqueOpportunities.length} opportunities (deduplicated from ${opportunities.length})`)
+
+    // Track entity persistence
+    await analytics.trackEntityPersistence(
+      projectId,
+      userId,
+      'opportunities',
+      'create',
+      uniqueOpportunities.length,
+      { source: 'extraction' }
+    )
   }
 
   /**
@@ -8618,6 +8847,16 @@ Output valid JSON object with "performance_actuals" array only.`
     )
 
     logger.info(`[EXTRACTION] Saved ${uniqueRiskResponses.length} risk responses (deduplicated from ${riskResponses.length})`)
+
+    // Track entity persistence
+    await analytics.trackEntityPersistence(
+      projectId,
+      userId,
+      'risk_responses',
+      'create',
+      uniqueRiskResponses.length,
+      { source: 'extraction' }
+    )
   }
 
   /**
@@ -8796,6 +9035,16 @@ Output valid JSON object with "performance_actuals" array only.`
     )
 
     logger.info(`[EXTRACTION] Saved ${uniquePerformanceActuals.length} performance actuals (deduplicated from ${performanceActuals.length})`)
+
+    // Track entity persistence
+    await analytics.trackEntityPersistence(
+      projectId,
+      userId,
+      'performance_actuals',
+      'create',
+      uniquePerformanceActuals.length,
+      { source: 'extraction' }
+    )
   }
 
   /**
@@ -9373,6 +9622,7 @@ Output valid JSON object with "performance_actuals" array only.`
   private async saveDomainEntities(
     client: PoolClient,
     projectId: string,
+    userId: string,
     domain: 'infrastructure' | 'supply_chain',
     entities: any[]
   ): Promise<void> {
@@ -9412,6 +9662,16 @@ Output valid JSON object with "performance_actuals" array only.`
           entity.source_snippet
         ])
       }
+
+      // Track entity persistence
+      await analytics.trackEntityPersistence(
+        projectId,
+        userId,
+        `domain_entities_${domain}`,
+        'create',
+        entities.length,
+        { source: 'extraction' }
+      )
     } catch (error) {
       logger.error(`[SAVE-DOMAIN] Failed to save ${domain} entities`, {
         error: error instanceof Error ? error.message : String(error)

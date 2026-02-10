@@ -4,6 +4,7 @@
  */
 
 import { logger } from './logger'
+import InfluxDBService from '@/services/influxdbService'
 
 interface AnalyticsEvent {
   event: string
@@ -123,7 +124,7 @@ class AnalyticsService {
   /**
    * Track specific entity type extraction
    */
-  trackEntityTypeExtraction(
+  async trackEntityTypeExtraction(
     projectId: string,
     userId: string,
     entityType: string,
@@ -131,7 +132,7 @@ class AnalyticsService {
     duration: number,
     success: boolean,
     error?: string
-  ): void {
+  ): Promise<void> {
     this.track({
       event: 'entity_type_extraction',
       properties: {
@@ -144,6 +145,85 @@ class AnalyticsService {
       userId,
       projectId,
     })
+
+    // Log to InfluxDB
+    await InfluxDBService.recordEntityOperation(
+      entityType,
+      'extract',
+      count,
+      {
+        project_id: projectId,
+        user_id: userId,
+        success: String(success)
+      }
+    )
+  }
+
+  /**
+   * Track entity persistence (Create/Update/Delete)
+   */
+  async trackEntityPersistence(
+    projectId: string,
+    userId: string,
+    entityType: string,
+    operation: 'create' | 'update' | 'delete',
+    count: number,
+    metadata?: Record<string, string>
+  ): Promise<void> {
+    this.track({
+      event: 'entity_persistence',
+      properties: {
+        entity_type: entityType,
+        operation,
+        count,
+        ...metadata
+      },
+      userId,
+      projectId,
+    })
+
+    // Log to InfluxDB
+    await InfluxDBService.recordEntityOperation(
+      entityType,
+      operation,
+      count,
+      {
+        project_id: projectId,
+        user_id: userId,
+        ...metadata
+      }
+    )
+  }
+
+  /**
+   * Track entity viewing
+   */
+  async trackEntityView(
+    projectId: string,
+    userId: string,
+    entityType: string,
+    count: number = 1
+  ): Promise<void> {
+    this.track({
+      event: 'entity_view',
+      properties: {
+        entity_type: entityType,
+        count
+      },
+      userId,
+      projectId,
+    })
+
+    // Log to InfluxDB
+    await InfluxDBService.recordEntityOperation(
+      entityType,
+      'view',
+      count,
+      {
+        project_id: projectId,
+        user_id: userId
+      }
+    )
   }
 
   /**

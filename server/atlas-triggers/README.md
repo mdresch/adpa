@@ -101,9 +101,9 @@ Expected result:
 ```javascript
 {
   _id: ObjectId("..."),
-  embedding: [0.123, -0.456, ...], // Array of 1024 floats
-  embedding_model: "voyage-2",
-  embedding_generated_at: ISODate("2026-02-07T01:21:00.000Z")
+  embedding: [0.123, -0.456, ...], // Array of 2048 floats
+  embedding_model: "voyage-4-large",
+  embedding_generated_at: ISODate("2026-02-10T10:23:00.000Z")
 }
 ```
 
@@ -119,16 +119,19 @@ Expected result:
 
 The trigger only processes **new** chunks. To embed your existing 44,566 chunks, you have two options:
 
-### Option A: Re-insert Chunks (Recommended)
-Create a script to copy chunks to a temporary collection and re-insert them:
+### Option A: Batch Processing (Recommended)
+Use the `generate-embeddings.ts` script to process existing chunks in batches:
 
 ```bash
-cd server/scripts
-npm run backfill-embeddings
+cd server
+pnpm generate-embeddings
+
+# Or with limits for testing:
+MAX_CHUNKS=10 DRY_RUN=true pnpm generate-embeddings
 ```
 
-### Option B: Manual Batch Processing
-Use the `generate-embeddings.ts` script to process existing chunks in batches.
+### Option B: Re-insert Chunks
+Create a script to copy chunks to a temporary collection and re-insert them to trigger the Atlas Trigger.
 
 ## Troubleshooting
 
@@ -171,11 +174,11 @@ VoyageAI has rate limits. If you're processing many chunks:
 
 ## Cost Considerations
 
-**VoyageAI Pricing (voyage-2 model):**
-- ~$0.10 per 1M tokens
+**VoyageAI Pricing (voyage-4-large model):**
+- ~$0.12 per 1M tokens (check current pricing at voyageai.com)
 - Average chunk: ~500 tokens
 - 44,566 chunks × 500 tokens = ~22M tokens
-- **Estimated cost**: ~$2.20 for full backfill
+- **Estimated cost**: ~$2.64 for full backfill
 
 **MongoDB Atlas:**
 - Triggers are included in your cluster tier

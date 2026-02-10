@@ -44,21 +44,23 @@ export class VoyageAIService {
 
     async generateEmbeddings(
         texts: string[],
-        inputType: 'document' | 'query' = 'document'
+        inputType: 'document' | 'query' = 'document',
+        model?: string
     ): Promise<EmbeddingResult> {
         const startTime = Date.now();
         const client = this.ensureClient();
+        const modelToUse = model || EMBEDDING_MODEL;
 
         try {
             logger.info('Generating embeddings', {
                 textCount: texts.length,
-                model: EMBEDDING_MODEL,
+                model: modelToUse,
                 inputType
             });
 
             const result = await client.embed({
                 input: texts,
-                model: EMBEDDING_MODEL,
+                model: modelToUse,
                 inputType
             });
 
@@ -77,7 +79,7 @@ export class VoyageAIService {
         } catch (error) {
             logger.error('Failed to generate embeddings', {
                 textCount: texts.length,
-                model: EMBEDDING_MODEL,
+                model: modelToUse,
                 error: (error as Error).message
             });
             throw error;
@@ -86,9 +88,10 @@ export class VoyageAIService {
 
     async generateEmbedding(
         text: string,
-        inputType: 'document' | 'query' = 'document'
+        inputType: 'document' | 'query' = 'document',
+        model?: string
     ): Promise<number[]> {
-        const result = await this.generateEmbeddings([text], inputType);
+        const result = await this.generateEmbeddings([text], inputType, model);
         return result.embeddings[0];
     }
 

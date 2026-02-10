@@ -109,8 +109,8 @@ exports = async function (changeEvent) {
             },
             body: JSON.stringify({
                 input: [fullDocument.content],
-                model: "voyage-2", // 1024 dimensions
-                input_type: "document"
+                model: "voyage-4-large", // 2048 dimensions (updated to match application service)
+                inputType: "document"
             })
         });
 
@@ -136,7 +136,7 @@ exports = async function (changeEvent) {
             {
                 $set: {
                     embedding: embedding,
-                    embedding_model: "voyage-2",
+                    embedding_model: "voyage-4-large",
                     embedding_dimensions: embedding.length,
                     embedding_generated_at: new Date()
                 }

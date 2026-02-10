@@ -527,6 +527,64 @@ router.get("/:id/mongodb/stats",
   }
 )
 
+// Search MongoDB vector store
+router.post("/:id/mongodb/search",
+  authenticateToken,
+  validateParams(Joi.object({ id: Joi.string().uuid().required() })),
+  validate(Joi.object({
+    query: Joi.string().required(),
+    topK: Joi.number().integer().min(1).max(100).default(10),
+    indexName: Joi.string().optional(),
+    numCandidates: Joi.number().integer().min(1).optional()
+  })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { id } = req.params
+      const { query, topK, indexName, numCandidates } = req.body
+
+      // Check if integration is mongodb
+      const result = await pool.query(
+        "SELECT type FROM integrations WHERE id = $1",
+        [id]
+      )
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: "Integration not found" })
+      }
+
+      if (result.rows[0].type !== 'mongodb') {
+        return res.status(400).json({ error: "Integration is not MongoDB type" })
+      }
+
+      const { mongoVectorStore } = await import('../services/mongoVectorStore')
+      const { voyageAIService } = await import('../services/voyageAIService')
+
+      // Ensure connected
+      await mongoVectorStore.connect()
+
+      // Generate embedding for query
+      // Force voyage-2 (1024 dims) to match existing backfilled data
+      // TODO: Update to voyage-4-large when all data is re-embedded
+      log.info("Generating embedding for query", { query: query.substring(0, 50) })
+      const queryEmbedding = await voyageAIService.generateEmbedding(query, 'query', 'voyage-2')
+
+      // Perform vector search
+      const matches = await mongoVectorStore.vectorSearch(queryEmbedding, topK, undefined, indexName, numCandidates)
+
+      res.json({
+        success: true,
+        matches,
+        query,
+        resultsCount: matches.length
+      })
+    } catch (error: any) {
+      log.error("MongoDB vector search error:", error)
+      res.status(500).json({ error: "Internal server error", message: error.message })
+    }
+  }
+)
+
 // Get Pinecone stats
 router.get("/:id/pinecone/stats",
   authenticateToken,
@@ -538,7 +596,7 @@ router.get("/:id/pinecone/stats",
 
       // Check if integration is pinecone
       const result = await pool.query(
-        "SELECT type FROM integrations WHERE id = $1",
+        "SELECT type, configuration, credentials_encrypted FROM integrations WHERE id = $1",
         [id]
       )
 
@@ -550,7 +608,23 @@ router.get("/:id/pinecone/stats",
         return res.status(400).json({ error: "Integration is not Pinecone type" })
       }
 
-      const { pineconeService } = await import('../services/pineconeService')
+      const { PineconeService } = await import('../services/pineconeService')
+
+      const integration = result.rows[0]
+      const configuration = typeof integration.configuration === 'string'
+        ? JSON.parse(integration.configuration)
+        : integration.configuration
+
+      const credentials = JSON.parse(
+        Buffer.from(integration.credentials_encrypted, "base64").toString("utf-8")
+      )
+
+      // Instantiate service with credentials from DB
+      const pineconeService = new PineconeService({
+        apiKey: credentials.apiKey || credentials.api_key,
+        indexName: configuration.indexName || configuration.index_name,
+        indexHost: configuration.indexHost || configuration.index_host
+      })
 
       // Get index stats
       const indexStats = await pineconeService.getIndexStats()
@@ -566,6 +640,69 @@ router.get("/:id/pinecone/stats",
       })
     } catch (error: any) {
       log.error("Get Pinecone stats error:", error)
+      res.status(500).json({ error: "Internal server error", message: error.message })
+    }
+  }
+)
+
+// Search Pinecone index
+router.post("/:id/pinecone/search",
+  authenticateToken,
+  validateParams(Joi.object({ id: Joi.string().uuid().required() })),
+  validate(Joi.object({
+    query: Joi.string().required(),
+    topK: Joi.number().integer().min(1).max(100).default(10),
+    namespace: Joi.string().optional().allow('')
+  })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { id } = req.params
+      const { query, topK, namespace } = req.body
+
+      // Check if integration is pinecone
+      const result = await pool.query(
+        "SELECT type, configuration, credentials_encrypted FROM integrations WHERE id = $1",
+        [id]
+      )
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: "Integration not found" })
+      }
+
+      if (result.rows[0].type !== 'pinecone') {
+        return res.status(400).json({ error: "Integration is not Pinecone type" })
+      }
+
+      const { PineconeService } = await import('../services/pineconeService')
+
+      const integration = result.rows[0]
+      const configuration = typeof integration.configuration === 'string'
+        ? JSON.parse(integration.configuration)
+        : integration.configuration
+
+      const credentials = JSON.parse(
+        Buffer.from(integration.credentials_encrypted, "base64").toString("utf-8")
+      )
+
+      // Instantiate service with credentials from DB
+      const pineconeService = new PineconeService({
+        apiKey: credentials.apiKey || credentials.api_key,
+        indexName: configuration.indexName || configuration.index_name,
+        indexHost: configuration.indexHost || configuration.index_host
+      })
+
+      // Perform search
+      const matches = await pineconeService.search(query, topK, undefined, namespace)
+
+      res.json({
+        success: true,
+        matches,
+        query,
+        namespace: namespace || 'all'
+      })
+    } catch (error: any) {
+      log.error("Pinecone search error:", error)
       res.status(500).json({ error: "Internal server error", message: error.message })
     }
   }
@@ -947,6 +1084,27 @@ async function testIntegrationConnection(type: string, configuration: any, crede
           details: { type, tested_at: new Date().toISOString(), error: error.message },
         }
       }
+    case "pinecone":
+      try {
+        const { PineconeService } = await import("../services/pineconeService")
+        const pineconeService = new PineconeService({
+          apiKey: credentials.apiKey || credentials.api_key,
+          indexName: configuration.indexName || configuration.index_name,
+          indexHost: configuration.indexHost || configuration.index_host
+        })
+        const connected = await pineconeService.testConnection()
+        return {
+          success: connected,
+          message: connected ? "Pinecone connection successful" : "Pinecone connection failed",
+          details: { type, tested_at: new Date().toISOString() },
+        }
+      } catch (error: any) {
+        return {
+          success: false,
+          message: `Pinecone connection test failed: ${error.message}`,
+          details: { type, tested_at: new Date().toISOString(), error: error.message },
+        }
+      }
     default:
       return {
         success: true,
@@ -963,10 +1121,22 @@ interface SyncOptions {
 }
 
 async function performIntegrationSync(integration: any, syncOptions: SyncOptions = {}) {
+  // Guard clause for missing credentials
+  if (!integration.credentials_encrypted) {
+    console.warn(`[SYNC] Skipping sync for integration ${integration.id} (${integration.type}): Missing encrypted credentials`)
+    return
+  }
+
   // Decrypt credentials
-  const credentials = JSON.parse(
-    Buffer.from(integration.credentials_encrypted, "base64").toString("utf-8")
-  )
+  let credentials
+  try {
+    credentials = JSON.parse(
+      Buffer.from(integration.credentials_encrypted, "base64").toString("utf-8")
+    )
+  } catch (err: any) {
+    console.error(`[SYNC] Failed to decrypt credentials for integration ${integration.id}:`, err.message)
+    return
+  }
 
   // Implement actual sync logic for each integration type
   switch (integration.type) {
@@ -1047,7 +1217,7 @@ async function performIntegrationSync(integration: any, syncOptions: SyncOptions
       }
     case "pinecone":
       try {
-        const { pineconeService } = await import('../services/pineconeService')
+        const { PineconeService } = await import('../services/pineconeService')
         const projectId = syncOptions.projectId || undefined
 
         // Setup progress callback
@@ -1058,6 +1228,17 @@ async function performIntegrationSync(integration: any, syncOptions: SyncOptions
             projectId: projectId || 'all'
           }, 3600) // 1 hour TTL
         }
+
+        const config = typeof integration.configuration === 'string'
+          ? JSON.parse(integration.configuration)
+          : integration.configuration
+
+        // Instantiate service with credentials
+        const pineconeService = new PineconeService({
+          apiKey: credentials.apiKey || credentials.api_key,
+          indexName: config?.indexName || config?.index_name,
+          indexHost: config?.indexHost || config?.index_host
+        })
 
         const result = await pineconeService.syncAll(projectId, onProgress)
 
@@ -1091,5 +1272,49 @@ async function performIntegrationSync(integration: any, syncOptions: SyncOptions
       }
   }
 }
+
+// Get Supabase extracted entities
+router.get("/:id/supabase/entities",
+  authenticateToken,
+  requirePermission("integrations.read"),
+  validateParams(Joi.object({ id: Joi.string().uuid().required() })),
+  validateQuery(Joi.object({
+    limit: Joi.number().integer().min(1).max(100).default(50)
+  })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { id } = req.params
+      const { limit = 50 } = req.query
+
+      const result = await pool.query(
+        "SELECT type FROM integrations WHERE id = $1",
+        [id]
+      )
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: "Integration not found" })
+      }
+
+      if (result.rows[0].type !== 'supabase') {
+        return res.status(400).json({ error: "Integration is not Supabase type" })
+      }
+
+      // Import supabaseService
+      const { supabaseService } = require('../services/supabaseService');
+
+      // Get entities
+      const entities = await supabaseService.listEntities(Number(limit));
+
+      res.json({
+        entities,
+        count: entities.length
+      })
+    } catch (error: any) {
+      log.error("Get Supabase entities error:", error)
+      res.status(500).json({ error: "Internal server error", message: error.message })
+    }
+  }
+)
 
 export default router
