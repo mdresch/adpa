@@ -304,7 +304,7 @@ export function DigitalTwinAnalyticsTab({ projectId }: DigitalTwinAnalyticsTabPr
                                     onClick={() => simulateEvent('azure/inventory', { capacityPercent: 12 })}
                                     className="text-xs py-2 px-3 bg-white border border-blue-200 hover:bg-blue-50 rounded shadow-sm text-left transition-colors"
                                 >
-                                    🔴 Low Inventory Alert (<20%)
+                                    🔴 Low Inventory Alert (&lt;20%)
                                 </button>
                                 <button
                                     onClick={() => simulateEvent('azure/logistics', { delayHours: 48 })}
@@ -327,7 +327,7 @@ export function DigitalTwinAnalyticsTab({ projectId }: DigitalTwinAnalyticsTabPr
                     </div>
                 </CardContent>
             </Card>
-        </div>
+        </div >
     )
 
     async function simulateEvent(type: string, payload: any) {

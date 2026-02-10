@@ -90,4 +90,85 @@ router.post('/sync-all', async (req, res) => {
     }
 })
 
+// POST /api/rag/extract-entities/batch
+router.post('/extract-entities/batch', async (req, res) => {
+    try {
+        const { pool } = require('../database/connection')
+
+        // Get all documents that need extraction
+        const result = await pool.query('SELECT id, title FROM documents ORDER BY created_at DESC')
+        const documents = result.rows
+
+        logger.info(`Starting batch entity extraction for ${documents.length} documents`)
+
+        // Return immediately to not block the UI
+        res.json({
+            message: `Started batch extraction for ${documents.length} documents`,
+            total: documents.length
+        })
+
+            // Process in background
+            ; (async () => {
+                const results = {
+                    total: documents.length,
+                    triggered: 0,
+                    failed: 0,
+                    errors: [] as any[]
+                }
+
+                const BATCH_DELAY = 2000; // 2 seconds between calls to avoid rate limits
+
+                // Get Edge Function URL and Key from env or DB settings would be better, 
+                // but for now we'll use the public URL knowing the trigger handles auth securely usually,
+                // or we can use the anon public key if RLS allows.
+                // Actually, the best way is to trigger the function via HTTP request essentially mocking what the DB trigger does,
+                // OR simpler: just update a timestamp in the row to fire the trigger?
+                // "UPDATE documents SET updated_at = NOW() WHERE id = ..." -> This might fire update triggers? 
+                // Our start trigger was ON INSERT.
+
+                // Let's call the Edge Function directly using fetch
+                const EDGE_FUNCTION_URL = 'https://blxzjbxczpmmgiwbtmdo.supabase.co/functions/v1/entity-extractor';
+                const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+                if (!SERVICE_KEY) {
+                    logger.error('Missing SUPABASE_SERVICE_ROLE_KEY for batch extraction');
+                    return;
+                }
+
+                for (let i = 0; i < documents.length; i++) {
+                    const doc = documents[i]
+                    try {
+                        await fetch(EDGE_FUNCTION_URL, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${SERVICE_KEY}`
+                            },
+                            body: JSON.stringify({ document_id: doc.id })
+                        });
+
+                        results.triggered++
+                        logger.info(`Triggered extraction for doc ${i + 1}/${documents.length}: ${doc.title}`)
+                    } catch (error: any) {
+                        results.failed++
+                        results.errors.push({ id: doc.id, title: doc.title, error: error.message })
+                        logger.error(`Failed to trigger extraction for ${doc.title}: ${error.message}`)
+                    }
+
+                    if (i < documents.length - 1) {
+                        await new Promise(resolve => setTimeout(resolve, BATCH_DELAY))
+                    }
+                }
+
+                logger.info(`Batch extraction complete: ${results.triggered} triggered`)
+            })()
+
+    } catch (error: any) {
+        logger.error(`Error in /api/rag/extract-entities/batch: ${error.message}`)
+        if (!res.headersSent) {
+            res.status(500).json({ error: error.message })
+        }
+    }
+})
+
 export default router

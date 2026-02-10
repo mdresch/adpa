@@ -447,6 +447,45 @@ export function SupabaseDashboard({ integrationId }: SupabaseDashboardProps) {
                             </div>
                         </CardContent>
                     </Card>
+
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <RefreshCw className="h-5 w-5 text-purple-600" />
+                                Batch Operations
+                            </CardTitle>
+                            <CardDescription>
+                                Trigger bulk processing for existing documents
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <Button
+                                onClick={async () => {
+                                    const toastId = toast.loading("Starting batch extraction...");
+                                    try {
+                                        const token = localStorage.getItem('auth_token') || localStorage.getItem('token');
+                                        const res = await fetch('/api/rag/extract-entities/batch', {
+                                            method: 'POST',
+                                            headers: { 'Authorization': `Bearer ${token}` }
+                                        });
+                                        const data = await res.json();
+                                        if (res.ok) {
+                                            toast.success(data.message, { id: toastId });
+                                        } else {
+                                            toast.error(data.error || "Failed to start batch extraction", { id: toastId });
+                                        }
+                                    } catch (err: any) {
+                                        toast.error(err.message, { id: toastId });
+                                    }
+                                }}
+                                variant="outline"
+                                className="w-full gap-2"
+                            >
+                                <User className="h-4 w-4" />
+                                Extract Entities for All Documents
+                            </Button>
+                        </CardContent>
+                    </Card>
                 </TabsContent>
 
                 <TabsContent value="analytics" className="space-y-4">
