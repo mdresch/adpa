@@ -48,6 +48,20 @@ const tiptapImage = TiptapImage.extend({
       }),
     ];
   },
+  addStorage() {
+    return {
+      markdown: {
+        serialize(state: any, node: any) {
+          state.write(`![${state.esc(node.attrs.alt || '')}](${state.esc(node.attrs.src)})`);
+        },
+        parse: {
+          setup(markdownit: any) {
+            markdownit.set({ html: true });
+          },
+        },
+      },
+    };
+  },
 }).configure({
   allowBase64: true,
   HTMLAttributes: {

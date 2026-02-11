@@ -172,7 +172,9 @@ const io = new SocketIOServer(server, {
 const PORT = parseInt(process.env.PORT || "5000", 10)
 
 // Middleware
-app.use(helmet())
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+}))
 
 // CORS Configuration - Allow Vercel deployments
 const allowedOrigins = [
