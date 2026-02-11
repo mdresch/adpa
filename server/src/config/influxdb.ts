@@ -5,7 +5,7 @@ const host = process.env.INFLUXDB_URL || 'https://eu-central-1-1.aws.cloud2.infl
 
 export const influxDBClient = new InfluxDBClient({
     host,
-    token,
+    token: token || 'dummy-token', // Fallback to dummy token if not set, to prevent crash
     database: process.env.INFLUXDB_DATABASE
 })
 
