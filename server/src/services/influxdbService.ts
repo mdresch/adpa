@@ -11,8 +11,8 @@ export class InfluxDBService {
         fields: Record<string, any>,
         tags: Record<string, string> = {}
     ): Promise<void> {
-        if (!INFLUXDB_DATABASE) {
-            logger.warn('[INFLUXDB] Skipping write - INFLUXDB_DATABASE not configured')
+        if (!influxDBClient || !INFLUXDB_DATABASE) {
+            logger.warn('[INFLUXDB] Skipping write - InfluxDB not configured')
             return
         }
 
@@ -69,8 +69,8 @@ export class InfluxDBService {
      * Query InfluxDB using SQL
      */
     static async query(sql: string): Promise<any[]> {
-        if (!INFLUXDB_DATABASE) {
-            logger.warn('[INFLUXDB] Skipping query - INFLUXDB_DATABASE not configured')
+        if (!influxDBClient || !INFLUXDB_DATABASE) {
+            logger.warn('[INFLUXDB] Skipping query - InfluxDB not configured')
             return []
         }
 
@@ -94,6 +94,9 @@ export class InfluxDBService {
      * Close the InfluxDB client
      */
     static close(): void {
+        if (!influxDBClient) {
+            return
+        }
         influxDBClient.close()
     }
 }

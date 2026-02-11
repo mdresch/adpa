@@ -1,16 +1,15 @@
-'use client'
-
 import Link from 'next/link'
 import ProjectDashboardV0 from '@/components/project/ProjectDashboardV0'
 import { Button } from '@/components/ui/button'
 
 interface ProjectDashboardPageProps {
-  params: { id: string }
+  params: Promise<{ id: string }>
 }
 
-export default function ProjectDashboardPage({ params }: ProjectDashboardPageProps) {
-  const projectId = params?.id
-  if (!projectId || projectId === 'undefined') {
+export default async function ProjectDashboardPage({ params }: ProjectDashboardPageProps) {
+  const { id } = await params
+
+  if (!id || id === 'undefined') {
     return (
       <div className="flex flex-col items-center justify-center min-h-[40vh] gap-4">
         <p className="text-muted-foreground">Invalid project.</p>
@@ -20,6 +19,7 @@ export default function ProjectDashboardPage({ params }: ProjectDashboardPagePro
       </div>
     )
   }
-  return <ProjectDashboardV0 projectId={projectId} />
+
+  return <ProjectDashboardV0 projectId={id} />
 }
 

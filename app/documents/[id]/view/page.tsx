@@ -6,6 +6,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { PageTransition } from "@/components/page-transition"
@@ -42,6 +48,7 @@ import { useDriftDetection } from "@/hooks/use-drift-detection"
 import { DriftAlertBanner } from "@/components/drift/DriftAlertBanner"
 import { DriftResolutionDialog } from "@/components/drift/DriftResolutionDialog"
 import { GenerateUXDocumentationDialog } from "@/app/documents/components/GenerateUXDocumentationDialog"
+import NovelEditor from "@/components/editor/novel-editor"
 // @ts-ignore
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
 // @ts-ignore
@@ -113,8 +120,12 @@ export default function DocumentViewerPage() {
   const [document, setDocument] = useState<DocumentData | null>(null)
   const [versions, setVersions] = useState<DocumentVersion[]>([])
   const [loading, setLoading] = useState(true)
-  const [isEditing, setIsEditing] = useState(false)
+
   const [editedContent, setEditedContent] = useState("")
+  const [editorStartContent, setEditorStartContent] = useState("")
+
+
+
   const [showMetadata, setShowMetadata] = useState(true)
   const [showVersions, setShowVersions] = useState(false)
   const [isBookmarked, setIsBookmarked] = useState(false)
@@ -230,6 +241,7 @@ export default function DocumentViewerPage() {
       if (response.document) {
         setDocument(response.document)
         setEditedContent(response.document.content)
+        setEditorStartContent(response.document.content)
         // Fetch versions using the project ID from the document
         if (response.document.project_id) {
           fetchVersions(response.document.project_id)
@@ -326,6 +338,7 @@ This security architecture provides a comprehensive framework for protecting our
         }
         setDocument(mockDocument)
         setEditedContent(mockDocument.content)
+        setEditorStartContent(mockDocument.content)
       }
     } catch (error) {
       console.error("Failed to fetch document:", error)
@@ -370,28 +383,7 @@ This security architecture provides a comprehensive framework for protecting our
     }
   }
 
-  const handleSave = async () => {
-    if (!document || !documentId || !editedContent) return
 
-    try {
-      const response = await apiClient.request(`/documents/${documentId}`, {
-        method: 'PUT',
-        body: JSON.stringify({
-          content: editedContent,
-          changes_summary: "Updated document content"
-        })
-      })
-
-      if ((response as any).message) {
-        setDocument(prev => prev ? { ...prev, content: editedContent, updated_at: new Date().toISOString() } : null)
-        setIsEditing(false)
-        toast.success("Document saved successfully")
-      }
-    } catch (error) {
-      console.error("Failed to save document:", error)
-      toast.error("Failed to save document")
-    }
-  }
 
   const handleExport = async (format: 'pdf' | 'docx' | 'md') => {
     if (!document || !document.content) {
@@ -611,7 +603,7 @@ ${doc.content}
 
   // Auto-save effect
   useEffect(() => {
-    if (!autoSaveEnabled || !isEditing || !editedContent || !document) return
+    if (!autoSaveEnabled || !editedContent || !document) return
 
     const timer = setTimeout(async () => {
       if (editedContent !== document.content) {
@@ -620,7 +612,7 @@ ${doc.content}
     }, 3000) // Auto-save after 3 seconds of inactivity
 
     return () => clearTimeout(timer)
-  }, [editedContent, isEditing, autoSaveEnabled, document])
+  }, [editedContent, autoSaveEnabled, document])
 
   const handleAutoSave = async () => {
     if (!document || !documentId || isSaving || !editedContent) return
@@ -756,133 +748,113 @@ ${doc.content}
                   </div>
 
                   <div className="flex items-center space-x-2">
-                    {/* Reading Mode Controls */}
-                    <div className="flex items-center space-x-1 border rounded-md p-1">
-                      <Button
-                        variant={readingMode === 'normal' ? 'default' : 'ghost'}
-                        size="sm"
-                        onClick={() => setReadingMode('normal')}
-                        className="h-8 px-2"
-                      >
-                        Normal
-                      </Button>
-                      <Button
-                        variant={readingMode === 'focus' ? 'default' : 'ghost'}
-                        size="sm"
-                        onClick={() => setReadingMode('focus')}
-                        className="h-8 px-2"
-                      >
-                        Focus
-                      </Button>
-                      <Button
-                        variant={readingMode === 'print' ? 'default' : 'ghost'}
-                        size="sm"
-                        onClick={() => setReadingMode('print')}
-                        className="h-8 px-2"
-                      >
-                        Print
-                      </Button>
-                    </div>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setShowTableOfContents(!showTableOfContents)}
+                          >
+                            <FileText className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Table of Contents</p>
+                        </TooltipContent>
+                      </Tooltip>
 
-                    {/* Font Size Controls */}
-                    <div className="flex items-center space-x-1 border rounded-md p-1">
-                      <Button
-                        variant={fontSize === 'sm' ? 'default' : 'ghost'}
-                        size="sm"
-                        onClick={() => setFontSize('sm')}
-                        className="h-8 px-2 text-xs"
-                      >
-                        A
-                      </Button>
-                      <Button
-                        variant={fontSize === 'base' ? 'default' : 'ghost'}
-                        size="sm"
-                        onClick={() => setFontSize('base')}
-                        className="h-8 px-2 text-sm"
-                      >
-                        A
-                      </Button>
-                      <Button
-                        variant={fontSize === 'lg' ? 'default' : 'ghost'}
-                        size="sm"
-                        onClick={() => setFontSize('lg')}
-                        className="h-8 px-2 text-base"
-                      >
-                        A
-                      </Button>
-                      <Button
-                        variant={fontSize === 'xl' ? 'default' : 'ghost'}
-                        size="sm"
-                        onClick={() => setFontSize('xl')}
-                        className="h-8 px-2 text-lg"
-                      >
-                        A
-                      </Button>
-                    </div>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setIsFullScreen(!isFullScreen)}
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Full Screen</p>
+                        </TooltipContent>
+                      </Tooltip>
+
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={toggleBookmark}
+                          >
+                            {isBookmarked ? <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" /> : <Star className="h-4 w-4" />}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>{isBookmarked ? "Remove Bookmark" : "Bookmark Document"}</p>
+                        </TooltipContent>
+                      </Tooltip>
+
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleCopyLink}
+                          >
+                            <Share className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Copy Link</p>
+                        </TooltipContent>
+                      </Tooltip>
+
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handlePrint}
+                          >
+                            <FileDown className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Print</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
 
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setShowTableOfContents(!showTableOfContents)}
+                      onClick={() => setShowRegenerateModal(true)}
+                      disabled={isRegenerating}
                     >
-                      <FileText className="h-4 w-4" />
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      Create new Version
                     </Button>
                     <Button
-                      variant="outline"
+                      variant="default"
                       size="sm"
-                      onClick={() => setIsFullScreen(!isFullScreen)}
+                      onClick={() => setShowGenerateUXDialog(true)}
                     >
-                      <ExternalLink className="h-4 w-4" />
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      Generate UX Documentation
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={toggleBookmark}
-                    >
-                      {isBookmarked ? <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" /> : <Star className="h-4 w-4" />}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleCopyLink}
-                    >
-                      <Share className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handlePrint}
-                    >
-                      <FileDown className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setIsEditing(!isEditing)}
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    <Button
-                     variant="outline"
-                     size="sm"
-                     onClick={() => setShowRegenerateModal(true)}
-                     disabled={isRegenerating}
-                   >
-                     <Sparkles className="h-4 w-4 mr-2" />
-                     Create new Version
-                   </Button>
-                   <Button
-                     variant="default"
-                     size="sm"
-                     onClick={() => setShowGenerateUXDialog(true)}
-                   >
-                     <Sparkles className="h-4 w-4 mr-2" />
-                     Generate UX Documentation
-                   </Button>
-                   <div className="relative group">
-                      <Button variant="outline" size="sm">
-                        <Download className="h-4 w-4" />
-                      </Button>
+                    <div className="relative group">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button variant="outline" size="sm">
+                              <Download className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Export Options</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
                       <div className="absolute right-0 top-full mt-1 bg-white border rounded-md shadow-lg py-1 z-10 hidden group-hover:block">
                         <button
                           onClick={() => handleExport('pdf')}
@@ -1029,94 +1001,15 @@ ${doc.content}
                                 </div>
                               )}
                             </CardTitle>
-                            {isEditing && (
-                              <div className="flex items-center space-x-2">
-                                <label className="flex items-center space-x-2 text-sm">
-                                  <input
-                                    type="checkbox"
-                                    checked={autoSaveEnabled}
-                                    onChange={(e) => setAutoSaveEnabled(e.target.checked)}
-                                    className="rounded"
-                                  />
-                                  <span>Auto-save</span>
-                                </label>
-                                <Button size="sm" onClick={handleSave}>
-                                  Save Changes
-                                </Button>
-                                <Button size="sm" variant="outline" onClick={() => setIsEditing(false)}>
-                                  Cancel
-                                </Button>
-                              </div>
-                            )}
                           </div>
                         </CardHeader>
                         <CardContent>
-                          {isEditing ? (
-                            <textarea
-                              value={editedContent}
-                              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setEditedContent(e.target.value)}
-                              className="w-full h-96 p-4 border rounded-md font-mono text-sm"
-                              placeholder="Edit document content..."
+                          <div className="min-h-[500px] w-full border rounded-md bg-background">
+                            <NovelEditor
+                              initialValue={editorStartContent}
+                              onChange={(json, html, markdown) => setEditedContent(markdown)}
                             />
-                          ) : (
-                            <div className={`prose max-w-none ${readingMode === 'focus' ? 'prose-lg max-w-3xl mx-auto' :
-                              readingMode === 'print' ? 'prose-print' : 'prose-base'
-                              } ${fontSize === 'sm' ? 'prose-sm' :
-                                fontSize === 'lg' ? 'prose-lg' :
-                                  fontSize === 'xl' ? 'prose-xl' : 'prose-base'
-                              } ${lineHeight === 'tight' ? 'prose-tight' :
-                                lineHeight === 'relaxed' ? 'prose-relaxed' : ''
-                              }`}>
-                              <ReactMarkdown
-                                components={{
-                                  code({ node, inline, className, children, ...props }: any) {
-                                    const match = /language-(\w+)/.exec(className || '');
-                                    return !inline && match ? (
-                                      <SyntaxHighlighter
-                                        style={vscDarkPlus}
-                                        language={match[1]}
-                                        PreTag="div"
-                                        showLineNumbers={true}
-                                        customStyle={{ margin: '1rem 0', borderRadius: '8px' }}
-                                        {...props}
-                                      >
-                                        {String(children).replace(/\n$/, '')}
-                                      </SyntaxHighlighter>
-                                    ) : (
-                                      <code className={className} {...props}>
-                                        {children}
-                                      </code>
-                                    );
-                                  },
-                                  table({ children }: any) {
-                                    return (
-                                      <div className="overflow-x-auto">
-                                        <table className="min-w-full border-collapse border border-gray-300">
-                                          {children}
-                                        </table>
-                                      </div>
-                                    );
-                                  },
-                                  th({ children }: any) {
-                                    return (
-                                      <th className="border border-gray-300 px-4 py-2 bg-gray-50 font-semibold">
-                                        {children}
-                                      </th>
-                                    );
-                                  },
-                                  td({ children }: any) {
-                                    return (
-                                      <td className="border border-gray-300 px-4 py-2">
-                                        {children}
-                                      </td>
-                                    );
-                                  },
-                                }}
-                              >
-                                {document.content}
-                              </ReactMarkdown>
-                            </div>
-                          )}
+                          </div>
                         </CardContent>
                       </AnimatedCard>
                     </div>
