@@ -64,7 +64,15 @@ import resourceCapacityRoutes from "./routes/resourceCapacityRoutes"
 // import quantumStabilityRoutes from "./routes/quantum-stability"
 // import speedOfLightRoutes from "./routes/speed-of-light"
 // import monteCarloProofRoutes from "./routes/monte-carlo-proof"
-import aiProviderTestingRoutes from "./routes/ai-provider-testing"
+// Optional: AI Provider Testing routes (skip if module absent)
+let aiProviderTestingRoutes: any | null = null
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const m = require("./routes/ai-provider-testing")
+  aiProviderTestingRoutes = m?.default || m
+} catch (e) {
+  // This is expected if the file is ignored in production
+}
 // import azureAIFoundryRoutes from "./routes/azure-ai-foundry"
 import processFlowRoutes from "./routes/process-flow"
 import aiModelsRoutes from "./routes/ai-models"
