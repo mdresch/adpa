@@ -2,15 +2,24 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import {
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  BarChart, Bar, PieChart, Pie, Cell
+} from 'recharts'
+import { Loader2 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { ArrowLeft, Search, FileText, Download, AlertTriangle, CheckCircle2, Clock, Target, Sparkles } from "lucide-react"
+import { ArrowLeft, Search, FileText, Download, AlertTriangle, CheckCircle2, Clock, Target, Sparkles, Activity, Calendar, DollarSign, ShieldCheck, Users } from "@/components/ui/icons-shim"
 import { toast } from '@/lib/notify'
 import { PMBOK8DomainDashboard } from "./PMBOK8DomainDashboard"
+import { ProjectTeamView } from "./ProjectTeamView"
+import { TaskGanttViewNew } from "./TaskGanttViewNew"
+import { useTasks } from "@/hooks/use-tasks"
+import { cn } from "@/lib/utils"
 
 interface ProjectDashboardV0Props {
   projectId: string
@@ -82,6 +91,39 @@ const ENTITY_TYPE_MAP: Record<string, { label: string; icon: string }> = {
   riskResponses: { label: "Risk Responses", icon: "🛠️" },
   performanceActuals: { label: "Performance Actuals", icon: "⚙️" }
 }
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658', '#8dd1e1', '#a4de6c', '#d0ed57'];
+
+const StatCard = ({ title, value, status, label, subtext, icon: Icon, delay }: any) => (
+  <Card className={cn("hover-lift animate-fade-in-up border-border/50 transition-all duration-300",
+    status === 'green' && "bg-gradient-to-br from-green-50/50 to-transparent dark:from-green-900/10",
+    status === 'amber' && "bg-gradient-to-br from-yellow-50/50 to-transparent dark:from-yellow-900/10",
+    status === 'red' && "bg-gradient-to-br from-red-50/50 to-transparent dark:from-red-900/10"
+  )} style={{ animationDelay: `${delay}ms` }}>
+    <CardContent className="p-6">
+      <div className="flex justify-between items-start mb-4">
+        <div className={`p-2 rounded-lg ${status === 'green' ? 'bg-green-100/50 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+          status === 'amber' ? 'bg-yellow-100/50 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
+            'bg-gray-100/50 text-gray-700 dark:bg-gray-800/50 dark:text-gray-400'
+          }`}>
+          <Icon className="h-5 w-5" />
+        </div>
+        {label && (
+          <Badge variant="outline" className={cn(
+            status === 'green' && "border-green-200 text-green-700 dark:border-green-900 dark:text-green-400",
+            status === 'amber' && "border-yellow-200 text-yellow-700 dark:border-yellow-900 dark:text-yellow-400",
+          )}>
+            {label}
+          </Badge>
+        )}
+      </div>
+      <div>
+        <p className="text-sm font-medium text-muted-foreground mb-1">{title}</p>
+        <h3 className="text-2xl font-bold tracking-tight text-foreground">{value}</h3>
+        {subtext && <p className="text-xs text-muted-foreground mt-1">{subtext}</p>}
+      </div>
+    </CardContent>
+  </Card>
+)
 
 export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Props) {
   const router = useRouter()
@@ -90,6 +132,7 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
   const [baselines, setBaselines] = useState<Baseline[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [activeTab, setActiveTab] = useState("overview")
+  const [entityCounts, setEntityCounts] = useState<Record<string, number> | null>(null)
   const [pmbok8Summary, setPmbok8Summary] = useState<{
     totalEntities: number
     domainCoverage: Record<string, boolean>
@@ -98,8 +141,8 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
   const [isExtracting, setIsExtracting] = useState(false)
   const [extractionProgress, setExtractionProgress] = useState(0)
   const [extractionStatus, setExtractionStatus] = useState<string>("")
-  const [entityCounts, setEntityCounts] = useState<Record<string, number> | null>(null)
   const [loadingEntities, setLoadingEntities] = useState(true)
+  const { tasks, loading: tasksLoading } = useTasks(projectId)
 
   useEffect(() => {
     if (!projectId || projectId === 'undefined') return
@@ -112,14 +155,14 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
   const fetchProjectData = async () => {
     if (!projectId || projectId === 'undefined') return
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/projects/${projectId}`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/projects/${projectId}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         }
       })
-      
+
       if (!response.ok) throw new Error('Failed to fetch project')
-      
+
       const data = await response.json()
       setProject(data.project || data)
     } catch (error) {
@@ -131,14 +174,14 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
   const fetchDocuments = async () => {
     if (!projectId || projectId === 'undefined') return
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/documents/project/${projectId}?limit=100`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/documents/project/${projectId}?limit=100`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         }
       })
-      
+
       if (!response.ok) throw new Error('Failed to fetch documents')
-      
+
       const data = await response.json()
       setDocuments(data.documents || [])
     } catch (error) {
@@ -149,14 +192,14 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
   const fetchBaselines = async () => {
     if (!projectId || projectId === 'undefined') return
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/baselines/project/${projectId}`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/baselines/project/${projectId}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         }
       })
-      
+
       if (!response.ok) throw new Error('Failed to fetch baselines')
-      
+
       const data = await response.json()
       setBaselines(data.baselines || [])
     } catch (error) {
@@ -175,22 +218,22 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
       setExtractionStatus("Starting extraction...")
 
       // Get AI providers to use default provider/model
-      const providersResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/ai-providers`, {
+      const providersResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/ai-providers`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         }
       })
-      
+
       const providers = await providersResponse.json()
-      
+
       // Find active provider with models (check both normalized and raw formats)
       const activeProvider = providers.find((p: any) => {
         const isActive = p.is_active || p.enabled
-        const hasModels = (p.models && p.models.length > 0) || 
-                         (p.configuration?.models && p.configuration.models.length > 0)
+        const hasModels = (p.models && p.models.length > 0) ||
+          (p.configuration?.models && p.configuration.models.length > 0)
         return isActive && hasModels
       })
-      
+
       if (!activeProvider) {
         toast.error('No active AI providers with models configured. Please configure a provider first.')
         setIsExtracting(false)
@@ -226,7 +269,7 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
       // Only include documentIds if it's a valid array (not undefined/null)
       // If undefined, omit it to extract from all documents
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/project-data-extraction/extract`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/project-data-extraction/extract`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -248,12 +291,12 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
       const jobId = data.jobId
       const pollInterval = setInterval(async () => {
         try {
-          const statusResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/project-data-extraction/status/${jobId}`, {
+          const statusResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/project-data-extraction/status/${jobId}`, {
             headers: {
               'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
             }
           })
-          
+
           if (statusResponse.ok) {
             const statusData = await statusResponse.json()
             setExtractionProgress(statusData.progress || 0)
@@ -264,7 +307,7 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
               setIsExtracting(false)
               setExtractionProgress(100)
               toast.success(`Extraction complete! ${statusData.result?.totalEntities || 0} entities extracted.`)
-              
+
               // Refresh data
               void fetchPMBOK8Summary()
             } else if (statusData.status === 'failed') {
@@ -298,7 +341,7 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
     if (!projectId || projectId === 'undefined') return
     try {
       setLoadingEntities(true)
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/project-data-extraction/results/${projectId}`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/project-data-extraction/results/${projectId}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         }
@@ -322,13 +365,50 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
       setLoadingEntities(false)
     }
   }
-  
+
+  const getDocumentActivityData = () => {
+    const activityMap: Record<string, number> = {}
+    // Initialize last 14 days
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date()
+      d.setDate(d.getDate() - i)
+      const dateStr = d.toISOString().split('T')[0]
+      activityMap[dateStr] = 0
+    }
+
+    documents.forEach(doc => {
+      if (doc.updated_at) {
+        const dateStr = new Date(doc.updated_at).toISOString().split('T')[0]
+        if (activityMap[dateStr] !== undefined) {
+          activityMap[dateStr]++
+        }
+      }
+    })
+
+    return Object.entries(activityMap).map(([date, count]) => ({
+      date: new Date(date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+      count
+    }))
+  }
+
+  const getEntityDistributionData = () => {
+    if (!entityCounts) return []
+    return Object.entries(entityCounts)
+      .filter(([key, val]) => val > 0)
+      .map(([key, val]) => ({
+        name: ENTITY_TYPE_MAP[key]?.label || key,
+        value: val
+      }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 10) // Top 10
+  }
+
   // Build extracted entities array from API data
   const getExtractedEntities = () => {
     if (!entityCounts) {
       return []
     }
-    
+
     return Object.entries(entityCounts)
       .filter(([key]) => ENTITY_TYPE_MAP[key])
       .map(([key, count]) => {
@@ -394,27 +474,34 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background/50 animate-fade-in-up">
       {/* Header */}
-      <header className="border-b border-border bg-card">
+      <header className="sticky top-0 z-10 glass border-b border-border/40 backdrop-blur-xl">
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <Button variant="ghost" size="sm" onClick={() => router.back()}>
+              <Button variant="ghost" size="sm" onClick={() => router.back()} className="hover:bg-primary/5">
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Back to Program
               </Button>
-              <div className="h-6 w-px bg-border" />
+              <div className="h-6 w-px bg-border/50" />
               <div>
-                <h1 className="text-2xl font-semibold text-foreground">{project.name}</h1>
-                <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    Status: <Badge className={getStatusColor(project.status || 'green')}>Active</Badge>
+                <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-3">
+                  {project.name}
+                  <Badge variant="secondary" className="font-normal text-sm">
+                    {project.status === 'active' ? <Activity className="h-3 w-3 mr-1 text-green-500" /> : null}
+                    {project.status || 'Active'}
+                  </Badge>
+                </h1>
+                <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
+                  <span className="flex items-center gap-1.5">
+                    <Users className="h-3.5 w-3.5" />
+                    {project.owner_name || 'Unassigned'}
                   </span>
-                  <span>|</span>
-                  <span>Owner: {project.owner_name || 'Unassigned'}</span>
-                  <span>|</span>
-                  <span>{project.progress || 0}% Complete</span>
+                  <span className="flex items-center gap-1.5">
+                    <Target className="h-3.5 w-3.5" />
+                    {project.progress || 0}% Complete
+                  </span>
                 </div>
               </div>
             </div>
@@ -422,63 +509,54 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
         </div>
       </header>
 
-      <div className="container mx-auto px-6 py-8">
+      <div className="container mx-auto px-6 py-8 space-y-8">
         {/* Project Health Scorecard */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Schedule Status</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-foreground mb-2">{health.schedule.value}%</div>
-              <Badge className={getStatusColor(health.schedule.status)}>{health.schedule.label}</Badge>
-              <p className="text-xs text-muted-foreground mt-2">Target: {health.schedule.target}%</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Budget Status</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-foreground mb-2">{health.budget.value}%</div>
-              <Badge className={getStatusColor(health.budget.status)}>{health.budget.label}</Badge>
-              <p className="text-xs text-muted-foreground mt-2">Target: {health.budget.target}%</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Quality Status</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-foreground mb-2">{health.quality.value}%</div>
-              <Badge className={getStatusColor(health.quality.status)}>{health.quality.label}</Badge>
-              <p className="text-xs text-muted-foreground mt-2">Target: {health.quality.target}%</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Risk Status</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-foreground mb-2">{health.risk.level}</div>
-              <Badge className={getStatusColor(health.risk.status)}>Monitor</Badge>
-              <p className="text-xs text-muted-foreground mt-2">{health.risk.highRisks} High Risks</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Team Morale</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-foreground mb-2">{health.teamMorale.value}%</div>
-              <Badge className={getStatusColor(health.teamMorale.status)}>{health.teamMorale.label}</Badge>
-              <p className="text-xs text-muted-foreground mt-2">Target: {health.teamMorale.target}%</p>
-            </CardContent>
-          </Card>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 animate-stagger">
+          <StatCard
+            title="Schedule"
+            value={`${health.schedule.value}%`}
+            status={health.schedule.status}
+            label={health.schedule.label}
+            subtext={`Target: ${health.schedule.target}%`}
+            icon={Calendar}
+            delay={100}
+          />
+          <StatCard
+            title="Budget"
+            value={`${health.budget.value}%`}
+            status={health.budget.status}
+            label={health.budget.label}
+            subtext={`Target: ${health.budget.target}%`}
+            icon={DollarSign}
+            delay={200}
+          />
+          <StatCard
+            title="Quality"
+            value={`${health.quality.value}%`}
+            status={health.quality.status}
+            label={health.quality.label}
+            subtext={`Target: ${health.quality.target}%`}
+            icon={ShieldCheck}
+            delay={300}
+          />
+          <StatCard
+            title="Risks"
+            value={health.risk.level}
+            status={health.risk.status}
+            label={`${health.risk.highRisks} High`}
+            subtext="Risk Level"
+            icon={AlertTriangle}
+            delay={400}
+          />
+          <StatCard
+            title="Team Morale"
+            value={`${health.teamMorale.value}%`}
+            status={health.teamMorale.status}
+            label={health.teamMorale.label}
+            subtext={`Target: ${health.teamMorale.target}%`}
+            icon={Sparkles}
+            delay={500}
+          />
         </div>
 
         {/* Tabs */}
@@ -557,8 +635,8 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
                         {pmbok8Summary.totalEntities} entities across 5 performance domains
                       </CardDescription>
                     </div>
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       size="sm"
                       onClick={() => setActiveTab("pmbok8")}
                     >
@@ -577,13 +655,12 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
                         uncertainty: "Uncertainty"
                       }
                       return (
-                        <div 
+                        <div
                           key={domain}
-                          className={`p-3 rounded-lg border-2 text-center transition-all ${
-                            covered 
-                              ? 'border-green-300 bg-green-50 dark:bg-green-950/20' 
-                              : 'border-gray-200 bg-gray-50 dark:bg-gray-950/20 opacity-50'
-                          }`}
+                          className={`p-3 rounded-lg border-2 text-center transition-all ${covered
+                            ? 'border-green-300 bg-green-50 dark:bg-green-950/20'
+                            : 'border-gray-200 bg-gray-50 dark:bg-gray-950/20 opacity-50'
+                            }`}
                         >
                           <div className={`text-2xl mb-1 ${covered ? '' : 'opacity-30'}`}>
                             {covered ? '✓' : '○'}
@@ -599,8 +676,8 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
                     <span className="text-sm text-muted-foreground">
                       {Object.values(pmbok8Summary.domainCoverage).filter(Boolean).length} of 5 domains covered
                     </span>
-                    <Button 
-                      variant="ghost" 
+                    <Button
+                      variant="ghost"
                       size="sm"
                       onClick={() => setActiveTab("pmbok8")}
                       className="text-purple-600 hover:text-purple-700"
@@ -638,7 +715,7 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
                   <Input
                     placeholder="Search documents..."
                     value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
                     className="pl-10"
                   />
                 </div>
@@ -675,15 +752,15 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
                             </div>
                           </div>
                           <div className="flex gap-2">
-                            <Button 
-                              variant="outline" 
+                            <Button
+                              variant="outline"
                               size="sm"
                               onClick={() => router.push(`/documents/${doc.id}/view`)}
                             >
                               View
                             </Button>
-                            <Button 
-                              variant="outline" 
+                            <Button
+                              variant="outline"
                               size="sm"
                               onClick={() => router.push(`/documents/${doc.id}/edit`)}
                             >
@@ -809,15 +886,15 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
                     <CardDescription>24 entity types extracted from PMBOK 8 standards (14 legacy + 10 Performance Domain entities)</CardDescription>
                   </div>
                   <div className="flex gap-2">
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       size="sm"
                       onClick={() => router.push(`/projects/${projectId}?tab=extraction`)}
                     >
                       📊 View All Entities
                     </Button>
-                    <Button 
-                      size="sm" 
+                    <Button
+                      size="sm"
                       onClick={handleRunFullExtraction}
                       disabled={isExtracting || documents.length === 0}
                     >
@@ -906,44 +983,149 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
 
           {/* Analytics Tab */}
           <TabsContent value="analytics" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Project Analytics</CardTitle>
-                <CardDescription>Performance metrics and trend analysis</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">
-                  Detailed analytics including burndown charts, velocity trends, risk heat maps, and document activity
-                  coming soon...
-                </p>
-              </CardContent>
-            </Card>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Entity Distribution */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Entity Distribution</CardTitle>
+                  <CardDescription>Breakdown of extracted project entities</CardDescription>
+                </CardHeader>
+                <CardContent className="h-[300px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={getEntityDistributionData()}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={80}
+                        paddingAngle={5}
+                        dataKey="value"
+                      >
+                        {getEntityDistributionData().map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        contentStyle={{ backgroundColor: 'var(--background)', borderColor: 'var(--border)' }}
+                        itemStyle={{ color: 'var(--foreground)' }}
+                      />
+                      {/* <Legend /> */}
+                    </PieChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+
+              {/* Document Activity */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Document Activity</CardTitle>
+                  <CardDescription>Document updates over the last 14 days</CardDescription>
+                </CardHeader>
+                <CardContent className="h-[300px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={getDocumentActivityData()}>
+                      <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                      <XAxis dataKey="date" fontSize={12} tickLine={false} axisLine={false} />
+                      <YAxis fontSize={12} tickLine={false} axisLine={false} allowDecimals={false} />
+                      <Tooltip
+                        cursor={{ fill: 'var(--muted)', opacity: 0.2 }}
+                        contentStyle={{ backgroundColor: 'var(--background)', borderColor: 'var(--border)' }}
+                        itemStyle={{ color: 'var(--foreground)' }}
+                      />
+                      <Bar dataKey="count" fill="var(--primary)" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+
+              {/* Burndown Chart (Mock) */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Sprint Burndown</CardTitle>
+                  <CardDescription>Remaining effort vs ideal burndown</CardDescription>
+                </CardHeader>
+                <CardContent className="h-[300px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart
+                      data={[
+                        { day: 'Day 1', ideal: 100, actual: 100 },
+                        { day: 'Day 2', ideal: 90, actual: 95 },
+                        { day: 'Day 3', ideal: 80, actual: 88 },
+                        { day: 'Day 4', ideal: 70, actual: 72 },
+                        { day: 'Day 5', ideal: 60, actual: 65 },
+                        { day: 'Day 6', ideal: 50, actual: 45 },
+                        { day: 'Day 7', ideal: 40, actual: 38 },
+                        { day: 'Day 8', ideal: 30, actual: 30 },
+                        { day: 'Day 9', ideal: 20, actual: 15 },
+                        { day: 'Day 10', ideal: 10, actual: 8 },
+                      ]}
+                    >
+                      <defs>
+                        <linearGradient id="colorActual" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#8884d8" stopOpacity={0.8} />
+                          <stop offset="95%" stopColor="#8884d8" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                      <XAxis dataKey="day" fontSize={12} tickLine={false} axisLine={false} />
+                      <YAxis fontSize={12} tickLine={false} axisLine={false} />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: 'var(--background)', borderColor: 'var(--border)' }}
+                        itemStyle={{ color: 'var(--foreground)' }}
+                      />
+                      <Area type="monotone" dataKey="ideal" stroke="#82ca9d" fillOpacity={0} strokeDasharray="5 5" />
+                      <Area type="monotone" dataKey="actual" stroke="#8884d8" fillOpacity={1} fill="url(#colorActual)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+
+              {/* Risk Heat Map (Mock Grid) */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Risk Heat Map</CardTitle>
+                  <CardDescription>Risk distribution by probability and impact</CardDescription>
+                </CardHeader>
+                <CardContent className="h-[300px] flex items-center justify-center">
+                  <div className="grid grid-cols-3 gap-2 w-full max-w-[300px]">
+                    {/* Row 3 - High Impact */}
+                    <div className="h-20 bg-yellow-200 dark:bg-yellow-900/30 rounded flex items-center justify-center border border-yellow-300">Target</div>
+                    <div className="h-20 bg-orange-200 dark:bg-orange-900/30 rounded flex items-center justify-center border border-orange-300">Schedule</div>
+                    <div className="h-20 bg-red-200 dark:bg-red-900/30 rounded flex items-center justify-center border border-red-300 font-bold">Budget (Critical)</div>
+
+                    {/* Row 2 - Med Impact */}
+                    <div className="h-20 bg-green-200 dark:bg-green-900/30 rounded flex items-center justify-center border border-green-300">Staffing</div>
+                    <div className="h-20 bg-yellow-200 dark:bg-yellow-900/30 rounded flex items-center justify-center border border-yellow-300">Scope</div>
+                    <div className="h-20 bg-orange-200 dark:bg-orange-900/30 rounded flex items-center justify-center border border-orange-300">Quality</div>
+
+                    {/* Row 1 - Low Impact */}
+                    <div className="h-20 bg-green-200 dark:bg-green-900/30 rounded flex items-center justify-center border border-green-300">Technology</div>
+                    <div className="h-20 bg-green-200 dark:bg-green-900/30 rounded flex items-center justify-center border border-green-300">Compliance</div>
+                    <div className="h-20 bg-yellow-200 dark:bg-yellow-900/30 rounded flex items-center justify-center border border-yellow-300">Legal</div>
+                  </div>
+                  <div className="absolute bottom-4 right-8 text-xs text-muted-foreground">
+                    X: Probability | Y: Impact
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
 
           {/* Timeline Tab */}
-          <TabsContent value="timeline" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Project Timeline</CardTitle>
-                <CardDescription>Gantt chart and schedule visualization</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">Interactive timeline and Gantt chart coming soon...</p>
-              </CardContent>
-            </Card>
+          <TabsContent value="timeline" className="space-y-6 h-[calc(100vh-200px)]">
+            {tasksLoading ? (
+              <div className="flex h-full items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <TaskGanttViewNew tasks={tasks} projectId={projectId} />
+            )}
           </TabsContent>
 
           {/* Team Tab */}
           <TabsContent value="team" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Team Management</CardTitle>
-                <CardDescription>Team members, roles, and assignments</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">Team roster and resource allocation coming soon...</p>
-              </CardContent>
-            </Card>
+            <ProjectTeamView projectId={projectId} />
           </TabsContent>
         </Tabs>
       </div>

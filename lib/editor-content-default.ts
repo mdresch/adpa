@@ -1,0 +1,19 @@
+export const defaultEditorContent = {
+  type: "doc",
+  content: [
+    {
+      type: "heading",
+      attrs: { level: 2 },
+      content: [{ type: "text", text: "Welcome to Novel in ADPA" }],
+    },
+    {
+      type: "paragraph",
+      content: [
+        {
+          type: "text",
+          text: "Start writing here. Use '/' for commands and '++' for AI autocomplete.",
+        },
+      ],
+    },
+  ],
+};

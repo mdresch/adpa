@@ -136,6 +136,7 @@ import digitalTwinIngestionRoutes from "./routes/digital-twin-ingestion"
 import digitalTwinExportRoutes from "./routes/digital-twin-export"
 import digitalTwinAnalyticsRoutes from "./routes/digital-twin-analytics"
 import digitalTwinConnectorsRoutes from "./routes/digital-twin-connectors"
+import mediaRoutes from "./routes/mediaRoutes"
 
 const app = express()
 const server = createServer(app)
@@ -171,7 +172,9 @@ const io = new SocketIOServer(server, {
 const PORT = parseInt(process.env.PORT || "5000", 10)
 
 // Middleware
-app.use(helmet())
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+}))
 
 // CORS Configuration - Allow Vercel deployments
 const allowedOrigins = [
@@ -347,6 +350,7 @@ app.use("/api/analytics", analyticsRoutes)
 app.use("/api/projects", projectSimilarityRoutes)
 app.use("/api/projects", developmentApproachRoutes)
 app.use("/api/development-approach", developmentApproachModuleRoutes)
+app.use("/api/media", mediaRoutes)
 console.log("✅ All API routes registered")
 app.use("/api/notifications", notificationsRoutes)
 app.use("/api/email-notifications", emailNotificationsRoutes)

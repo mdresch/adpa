@@ -243,20 +243,36 @@ async function runMigrations() {
       logger.warn("project_integrations migration failed (may already be applied):", error)
     }
 
-        // Run documents.confluence_page_url migration (WA-92)
+    // Run documents.confluence_page_url migration (WA-92)
     try {
       const migPath = join(__dirname, "migrations", "033_documents_confluence_url.sql")
       const migSql = readFileSync(migPath, "utf-8")
-      const migCheck = await pool.query("SELECT id FROM migrations WHERE name = $1", ["033_documents_confluence_url"]) 
+      const migCheck = await pool.query("SELECT id FROM migrations WHERE name = $1", ["033_documents_confluence_url"])
       if (migCheck.rows.length === 0) {
         await pool.query(migSql)
-        await pool.query("INSERT INTO migrations (name) VALUES ($1)", ["033_documents_confluence_url"]) 
+        await pool.query("INSERT INTO migrations (name) VALUES ($1)", ["033_documents_confluence_url"])
         logger.info("documents.confluence_page_url migration completed")
       } else {
         logger.info("documents.confluence_page_url migration already applied")
       }
     } catch (error) {
       logger.warn("documents.confluence_page_url migration failed (may already be applied):", error)
+    }
+
+    // Run file_assets migration
+    try {
+      const migPath = join(__dirname, "migrations", "040_file_assets.sql")
+      const migSql = readFileSync(migPath, "utf-8")
+      const migCheck = await pool.query("SELECT id FROM migrations WHERE name = $1", ["040_file_assets"])
+      if (migCheck.rows.length === 0) {
+        await pool.query(migSql)
+        await pool.query("INSERT INTO migrations (name) VALUES ($1)", ["040_file_assets"])
+        logger.info("file_assets migration completed")
+      } else {
+        logger.info("file_assets migration already applied")
+      }
+    } catch (error) {
+      logger.warn("file_assets migration failed (may already be applied):", error)
     }
 
     logger.info("Database migrations completed successfully")

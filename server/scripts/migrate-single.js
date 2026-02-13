@@ -77,7 +77,8 @@ const migrationMap = {
     '392': { file: '392_add_resource_assignments_columns.sql', description: 'Add Resource Assignments Columns to Project Resource Assignments Table' },
     '393': { file: '393_make_resource_assignments_nullable.sql', description: 'Make Resource Assignments Columns Nullable for Extraction' },
     '394': { file: '394_add_missing_extraction_columns.sql', description: 'Add Missing Columns for Resource Pool, Onboarding Offboarding, and Risk Triggers' },
-    '395': { file: '395_enhance_lessons_learned_schema.sql', description: 'Enhance Lessons Learned Schema' }
+    '395': { file: '395_enhance_lessons_learned_schema.sql', description: 'Enhance Lessons Learned Schema' },
+    '407': { file: '407_create_file_assets.sql', description: 'Create File Assets Table' }
 };
 
 const migration = migrationMap[migrationNumber];

@@ -258,6 +258,17 @@ Security-related documentation, cleanup procedures, and best practices.
 
 - `SECURITY_CLEANUP_SUMMARY.md` - Security cleanup summary
 
+- [SECURITY_CLEANUP_SUMMARY.md](./12-security/SECURITY_CLEANUP_SUMMARY.md)
+
+### 13. Additional Documentation
+**Path:** Root subdirectories
+
+- **Analysis** (`analysis/`): Analysis documents and reports.
+- **Implementation** (`implementation/`): Implementation details and progress.
+- **Plans** (`plans/`): Project plans and strategy documents.
+- **Projects** (`projects/`): Project summaries and specific project docs.
+- **Reviews** (`reviews/`): Review documents and feedback.
+
 ### Roadmap
 **Path:** `roadmap/`
 

@@ -1,6 +1,9 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
+import { useDebouncedCallback } from "use-debounce"
+
+
 import { useRouter } from "next/navigation"
 import { useParams } from "next/navigation"
 import Link from "next/link"
@@ -8,13 +11,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
+import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { PageTransition } from "@/components/page-transition"
 import { AnimatedLayout, AnimatedCard } from "@/components/animated-layout"
+import NovelEditor from "@/components/editor/novel-editor"
 import { motion } from "framer-motion"
 import {
   trackPageEngagement,
@@ -129,8 +136,9 @@ export default function ProjectDocumentViewer() {
   const [document, setDocument] = useState<DocumentData | null>(null)
   const [versions, setVersions] = useState<VersionData[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [isEditing, setIsEditing] = useState(false)
   const [editedContent, setEditedContent] = useState("")
+  const [isSaving, setIsSaving] = useState(false)
+  const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const [showVersions, setShowVersions] = useState(false) // For dialog
   const [showVersionsDialog, setShowVersionsDialog] = useState(false)
   const [showComments, setShowComments] = useState(false)
@@ -159,6 +167,90 @@ export default function ProjectDocumentViewer() {
   } | null>(null)
   const [isExportingPdf, setIsExportingPdf] = useState(false)
   const [isExportingWord, setIsExportingWord] = useState(false)
+
+  // Feedback state
+  const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false)
+  const [feedbackForm, setFeedbackForm] = useState({
+    comment: "",
+    rating: 5,
+    category: "general"
+  })
+
+  // Submit feedback
+  const handleSubmitFeedback = async () => {
+    try {
+      // Validate feedback form
+      if (!feedbackForm.comment.trim()) {
+        toast.error("Please enter a comment");
+        return;
+      }
+
+      if (feedbackForm.rating < 1 || feedbackForm.rating > 5) {
+        toast.error("Please select a valid rating");
+        return;
+      }
+
+      // Test feedback endpoint first
+      console.log("Testing feedback endpoint...");
+      try {
+        await apiClient.testFeedbackEndpoint({
+          comment: feedbackForm.comment.trim(),
+          rating: feedbackForm.rating,
+          category: feedbackForm.category,
+        });
+        console.log("Test endpoint working, proceeding with real submission...");
+      } catch (testError) {
+        console.error("Test endpoint failed:", testError);
+        toast.error("Feedback system is not available. Please try again later.");
+        return;
+      }
+
+      // Submit feedback to backend
+      console.log("Submitting feedback:", {
+        documentId,
+        feedback: {
+          comment: feedbackForm.comment.trim(),
+          rating: feedbackForm.rating,
+          category: feedbackForm.category,
+        },
+      });
+
+      const response = await apiClient.submitDocumentFeedback(documentId, {
+        comment: feedbackForm.comment.trim(),
+        rating: feedbackForm.rating,
+        category: feedbackForm.category,
+      });
+
+      console.log("Feedback response:", response);
+
+      if (response.success) {
+        toast.success("Feedback submitted successfully!");
+        setFeedbackDialogOpen(false);
+        setFeedbackForm({
+          comment: "",
+          rating: 5,
+          category: "general",
+        });
+        // Refresh document to show new feedback in metadata if applicable
+        fetchDocument();
+      } else {
+        toast.error("Failed to submit feedback");
+      }
+    } catch (error: any) {
+      console.error("Failed to submit feedback:", error);
+
+      // Handle specific error cases
+      if (error.response?.status === 400) {
+        toast.error(`Validation error: ${error.response.data?.error || "Invalid feedback data"}`);
+      } else if (error.response?.status === 403) {
+        toast.error("You don't have permission to submit feedback for this document");
+      } else if (error.response?.status === 404) {
+        toast.error("Document not found");
+      } else {
+        toast.error("Failed to submit feedback. Please try again.");
+      }
+    }
+  };
 
   // Entity highlighting state
   const [entityHighlight, setEntityHighlight] = useState<{
@@ -837,7 +929,7 @@ The ADPA system represents a significant advancement in document processing auto
   useEffect(() => {
     // Ensure we're in a browser environment
     if (typeof window === 'undefined' || typeof document === 'undefined') return
-    if (isEditing || tableOfContents.length === 0) return
+    if (tableOfContents.length === 0) return
 
     const handleScroll = () => {
       if (!window || !window.document) return
@@ -866,7 +958,7 @@ The ADPA system represents a significant advancement in document processing auto
         window.removeEventListener('scroll', handleScroll)
       }
     }
-  }, [tableOfContents, isEditing])
+  }, [tableOfContents])
 
   const handlePublishToConfluence = async () => {
     try {
@@ -1194,8 +1286,13 @@ The ADPA system represents a significant advancement in document processing auto
     }
   }
 
-  const saveEdit = async () => {
+  const saveDocument = async (isAutosave = false) => {
     if (!document) return
+
+    // Don't autosave if content hasn't changed from valid document content
+    // (This is a simplified check, rely on debounce mostly)
+
+    if (isAutosave) setIsSaving(true)
 
     // Track document editing collaboration
     trackCollaboration('edit', document.id, 1)
@@ -1208,11 +1305,15 @@ The ADPA system represents a significant advancement in document processing auto
         tags: document.tags || []
       })
 
-      toast.success("Document saved successfully! Refreshing...")
-      setIsEditing(false)
+      if (!isAutosave) {
+        toast.success("Document saved successfully!")
 
-      // 🔄 Reload document data to get new version number and updated metadata
-      await fetchDocument()
+        // 🔄 Reload document data to get new version number and updated metadata
+        // Only do full reload on manual save to avoid jitter
+        await fetchDocument()
+      } else {
+        setLastSaved(new Date())
+      }
 
       // Re-extract TOC from new content
       if (editedContent) {
@@ -1220,15 +1321,17 @@ The ADPA system represents a significant advancement in document processing auto
       }
     } catch (error) {
       console.error("Failed to save document:", error)
-      toast.error("Failed to save document")
+      if (!isAutosave) toast.error("Failed to save document")
+    } finally {
+      if (isAutosave) setIsSaving(false)
     }
   }
 
-  const cancelEdit = () => {
-    if (!document) return
-    setEditedContent(document.content)
-    setIsEditing(false)
-  }
+  const debouncedAutosave = useDebouncedCallback(() => {
+    saveDocument(true)
+  }, 2000)
+
+
 
   // Handle drift actions
   const handleAcceptDrift = async (driftId: string) => {
@@ -1286,13 +1389,7 @@ The ADPA system represents a significant advancement in document processing auto
     }
   }
 
-  const handleEditDocument = () => {
-    if (!document) return
-    setEditedContent(typeof document.content === 'string' ? document.content : JSON.stringify(document.content, null, 2))
-    setIsEditing(true)
-    // Scroll to top of editor
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
+
 
   const handleRemoveDrift = async (driftId: string) => {
     try {
@@ -1711,81 +1808,48 @@ The ADPA system represents a significant advancement in document processing auto
                             )}
                           </CardTitle>
                           <div className="flex items-center space-x-2">
-                            {!isEditing ? (
-                              <>
-                                <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
-                                  <Edit className="h-4 w-4 mr-2" />
-                                  Edit
-                                </Button>
-                                <Button variant="outline" size="sm" onClick={copyToClipboard}>
-                                  <Copy className="h-4 w-4 mr-2" />
-                                  Copy
-                                </Button>
-                                <Button variant="outline" size="sm" onClick={shareDocument}>
-                                  <Share className="h-4 w-4 mr-2" />
-                                  Share
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => setShowRegenerateModal(true)}
-                                  disabled={isRegenerating}
-                                >
-                                  <Sparkles className="h-4 w-4 mr-2" />
-                                  Create new Version
-                                </Button>
-                                <Link href={`/projects/${projectId}/documents/${documentId}`}>
-                                  <Button variant="default" size="sm">
-                                    <ExternalLink className="h-4 w-4 mr-2" />
-                                    View Metadata
-                                  </Button>
-                                </Link>
-                              </>
-                            ) : (
-                              <>
-                                <DocumentEntityEditor
-                                  projectId={projectId}
-                                  documentContent={editedContent}
-                                  onContentChange={setEditedContent}
-                                />
-                                <Button variant="outline" size="sm" onClick={cancelEdit}>
-                                  Cancel
-                                </Button>
-                                <Button size="sm" onClick={saveEdit}>
-                                  Save Changes
-                                </Button>
-                              </>
-                            )}
+                            {isSaving && <span className="text-xs text-muted-foreground animate-pulse">Saving...</span>}
+                            {!isSaving && lastSaved && <span className="text-xs text-muted-foreground mr-2">Saved {lastSaved.toLocaleTimeString()}</span>}
+
+                            <Button variant="outline" size="sm" onClick={copyToClipboard}>
+                              <Copy className="h-4 w-4 mr-2" />
+                              Copy
+                            </Button>
+                            <Button variant="outline" size="sm" onClick={shareDocument}>
+                              <Share className="h-4 w-4 mr-2" />
+                              Share
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setShowRegenerateModal(true)}
+                              disabled={isRegenerating}
+                            >
+                              <Sparkles className="h-4 w-4 mr-2" />
+                              Create new Version
+                            </Button>
+                            <Link href={`/projects/${projectId}/documents/${documentId}`}>
+                              <Button variant="default" size="sm">
+                                <ExternalLink className="h-4 w-4 mr-2" />
+                                View Metadata
+                              </Button>
+                            </Link>
+                            <Button size="sm" onClick={() => saveDocument(false)}>
+                              Save Now
+                            </Button>
                           </div>
                         </div>
                       </CardHeader>
                       <CardContent className="p-8">
-                        {!isEditing ? (
-                          <EntityHighlighter
-                            content={typeof document.content === 'string' ? document.content : JSON.stringify(document.content, null, 2)}
-                            entityHighlight={entityHighlight}
-                          >
-                            {(highlightedContent) => (
-                              <DriftHighlighter
-                                content={highlightedContent}
-                                drifts={drifts}
-                                showHighlights={showDriftHighlights}
-                                onEnhancedContentReady={handleEnhancedContentReady}
-                                onAcceptDrift={handleAcceptDrift}
-                                onEditDocument={handleEditDocument}
-                                onRemoveDrift={handleRemoveDrift}
-                              />
-                            )}
-                          </EntityHighlighter>
-                        ) : (
-                          <textarea
-                            value={editedContent}
-                            onChange={(e) => setEditedContent(e.target.value)}
-                            className="w-full min-h-[600px] max-h-[800px] p-6 border-2 rounded-lg font-mono text-sm resize-y focus:ring-2 focus:ring-primary focus:border-primary transition-all"
-                            placeholder="Edit document content in Markdown format..."
-                            style={{ height: 'calc(100vh - 400px)' }}
-                          />
-                        )}
+                        <NovelEditor
+                          initialValue={document.content}
+                          onChange={(json, html, markdown) => {
+                            setEditedContent(markdown)
+                            debouncedAutosave()
+                          }}
+                          storageKey={`novel-doc-${documentId}`}
+                          onFeedback={() => setFeedbackDialogOpen(true)}
+                        />
                       </CardContent>
                     </AnimatedCard>
                   </div>
@@ -1793,7 +1857,7 @@ The ADPA system represents a significant advancement in document processing auto
                   {/* Sidebar - Sticky */}
                   <div className="space-y-6 sticky top-6 self-start">
                     {/* Table of Contents */}
-                    {!isEditing && tableOfContents.length > 0 && (
+                    {!isSaving && tableOfContents.length > 0 && (
                       <AnimatedCard>
                         <CardHeader>
                           <CardTitle className="flex items-center space-x-2">
@@ -2926,6 +2990,72 @@ The ADPA system represents a significant advancement in document processing auto
               </Tabs>
             )}
           </ScrollArea>
+        </DialogContent>
+      </Dialog>
+
+      {/* Feedback Dialog */}
+      <Dialog open={feedbackDialogOpen} onOpenChange={setFeedbackDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Submit Feedback</DialogTitle>
+            <DialogDescription>
+              Provide feedback for this document to help improve its quality and compliance.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Category</Label>
+              <Select
+                value={feedbackForm.category}
+                onValueChange={(value) => setFeedbackForm({ ...feedbackForm, category: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="general">General</SelectItem>
+                  <SelectItem value="clarity">Clarity & Readability</SelectItem>
+                  <SelectItem value="accuracy">Technical Accuracy</SelectItem>
+                  <SelectItem value="completeness">Completeness</SelectItem>
+                  <SelectItem value="compliance">Compliance</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Rating</Label>
+              <div className="flex items-center space-x-1">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <Button
+                    key={star}
+                    variant="ghost"
+                    size="sm"
+                    className={`p-0 h-8 w-8 ${feedbackForm.rating >= star ? "text-yellow-400" : "text-muted-foreground"}`}
+                    onClick={() => setFeedbackForm({ ...feedbackForm, rating: star })}
+                  >
+                    <Star className="h-6 w-6 fill-current" />
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Comment</Label>
+              <Textarea
+                placeholder="Share your thoughts..."
+                value={feedbackForm.comment}
+                onChange={(e) => setFeedbackForm({ ...feedbackForm, comment: e.target.value })}
+                rows={4}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFeedbackDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSubmitFeedback}>
+              <MessageSquare className="h-4 w-4 mr-2" />
+              Submit Feedback
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

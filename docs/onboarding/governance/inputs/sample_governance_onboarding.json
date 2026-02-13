@@ -1,0 +1,57 @@
+{
+    "project_metadata": {
+        "client_name": "Antigravity Corp",
+        "program_name": "Horizon ERP Expansion",
+        "platform": "SAP S/4HANA",
+        "go_live": "2026-12-01"
+    },
+    "stakeholders": [
+        {
+            "name": "Jane Doe",
+            "role": "Executive Sponsor",
+            "org_level": "CXO",
+            "influence": "High",
+            "interest": "High"
+        },
+        {
+            "name": "John Smith",
+            "role": "Project Manager",
+            "org_level": "Operational",
+            "raci_mapping": "R"
+        }
+    ],
+    "steering_committee": [
+        "Jane Doe (CFO)",
+        "Robert Brown (CIO)",
+        "Alice Green (VP Operations)"
+    ],
+    "objectives": [
+        {
+            "title": "Unify Global Finance",
+            "capability": "Unified CoA",
+            "kpi": "Days to Close"
+        }
+    ],
+    "risks": [
+        {
+            "statement": "Inconsistent master data",
+            "impact": "High",
+            "probability": "Medium",
+            "mitigation": "Data cleansing sprints"
+        }
+    ],
+    "kpis": [
+        {
+            "name": "Schedule Variance",
+            "category": "Project Health",
+            "target": "< 5%"
+        }
+    ],
+    "phase_gates": [
+        "Charter & Funding",
+        "Requirements & Design",
+        "Build",
+        "Test",
+        "Go/No-Go"
+    ]
+}

@@ -110,7 +110,7 @@ function patchPoolQuery(p: Pool) {
         // If circuit is open, short-circuit and return null so callers can handle service-unavailable
         if (dbBreaker.isOpen()) {
           logger.warn('[DB-GUARD] Database circuit open - short-circuiting query', { sql: text, params })
-          return null
+          return { rows: [], rowCount: 0 }
         }
 
         try {
@@ -123,7 +123,7 @@ function patchPoolQuery(p: Pool) {
           logger.error('[DB-GUARD] Unhandled pool.query error', { sql: text, params, message: err?.message, stack: err?.stack })
           // record failure and possibly open circuit
           dbBreaker.recordFailure()
-          return null
+          return { rows: [], rowCount: 0 }
         }
       }
   } catch (err) {

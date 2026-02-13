@@ -687,6 +687,11 @@ class ApiClient {
       ...(options.headers as Record<string, string>),
     }
 
+    // Allow FormData to set its own Content-Type (with boundary)
+    if (typeof FormData !== 'undefined' && options.body instanceof FormData) {
+      delete headers["Content-Type"];
+    }
+
     // Only add authorization header if token exists and is not empty
     if (this.token && typeof this.token === 'string' && this.token.trim().length > 0) {
       headers['authorization'] = `Bearer ${this.token.trim()}`
@@ -768,18 +773,20 @@ class ApiClient {
   }
 
   async post<T>(endpoint: string, body?: unknown, options?: ExtendedRequestOptions): Promise<T> {
+    const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
     return this.request<T>(endpoint, {
       ...options,
       method: 'POST',
-      body: body ? JSON.stringify(body) : undefined
+      body: isFormData ? (body as any) : (body ? JSON.stringify(body) : undefined)
     })
   }
 
   async put<T>(endpoint: string, body?: unknown, options?: ExtendedRequestOptions): Promise<T> {
+    const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
     return this.request<T>(endpoint, {
       ...options,
       method: 'PUT',
-      body: body ? JSON.stringify(body) : undefined
+      body: isFormData ? (body as any) : (body ? JSON.stringify(body) : undefined)
     })
   }
 
@@ -788,10 +795,11 @@ class ApiClient {
   }
 
   async patch<T>(endpoint: string, body?: unknown, options?: ExtendedRequestOptions): Promise<T> {
+    const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
     return this.request<T>(endpoint, {
       ...options,
       method: 'PATCH',
-      body: body ? JSON.stringify(body) : undefined
+      body: isFormData ? (body as any) : (body ? JSON.stringify(body) : undefined)
     })
   }
 

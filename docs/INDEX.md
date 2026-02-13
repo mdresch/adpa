@@ -1,6 +1,6 @@
 # 📚 ADPA Documentation Index
 
-**Last Updated:** February 6, 2026
+**Last Updated:** February 10, 2026
 **Total Files:** 1149 files
 
 ---
@@ -9,42 +9,8 @@
 
 ### **ROOT**
 
-- [Benefits_Realization_Plan_Modular_EMBA_Business_IT.md](./Benefits_Realization_Plan_Modular_EMBA_Business_IT.md)
-- [BRM_Strategy_Analysis_Plan.md](./BRM_Strategy_Analysis_Plan.md)
-- [cbaazurelight150x150.png](./cbaazurelight150x150.png)
-- [CIRCULAR_STRUCTURE_FIX_SUMMARY.md](./CIRCULAR_STRUCTURE_FIX_SUMMARY.md)
-- [CLARITY_IMPLEMENTATION_PROGRESS.md](./CLARITY_IMPLEMENTATION_PROGRESS.md)
-- [CORE_ENTITIES_APPWRITE_EXPERIMENT.md](./CORE_ENTITIES_APPWRITE_EXPERIMENT.md)
-- [DASHBOARD_AUTHENTICATED_REVIEW.md](./DASHBOARD_AUTHENTICATED_REVIEW.md)
-- [docs_list.txt](./docs_list.txt)
-- [ENTITY_EXTRACTION_ANALYTICS.md](./ENTITY_EXTRACTION_ANALYTICS.md)
-- [ENTITY_EXTRACTION_OPTIMIZATION.md](./ENTITY_EXTRACTION_OPTIMIZATION.md)
-- [JIRA_VERIFICATION_GUIDE.md](./JIRA_VERIFICATION_GUIDE.md)
-- [LESSONS_LEARNED_FINAL_STATUS.md](./LESSONS_LEARNED_FINAL_STATUS.md)
-- [LESSONS_LEARNED_IMPLEMENTATION_COMPLETE.md](./LESSONS_LEARNED_IMPLEMENTATION_COMPLETE.md)
-- [LESSONS_LEARNED_TEST_RESULTS.md](./LESSONS_LEARNED_TEST_RESULTS.md)
-- [MICROSOFT_CLARITY_ANALYTICS.md](./MICROSOFT_CLARITY_ANALYTICS.md)
-- [PLAYBOOK_GENERATION_TRAINING.md](./PLAYBOOK_GENERATION_TRAINING.md)
-- [PLAYBOOK_GENERATION_USER_GUIDE.md](./PLAYBOOK_GENERATION_USER_GUIDE.md)
-- [PROJECT_CONTEXT_FEATURE_TEST_PLAN.md](./PROJECT_CONTEXT_FEATURE_TEST_PLAN.md)
-- [PROJECT_CONTEXT_QUICK_TEST.md](./PROJECT_CONTEXT_QUICK_TEST.md)
-- [PROJECT_INTEGRATION_SETTINGS.md](./PROJECT_INTEGRATION_SETTINGS.md)
-- [PROJECT_OVERVIEW_DEMO_DATA_REVIEW.md](./PROJECT_OVERVIEW_DEMO_DATA_REVIEW.md)
-- [Project_Summary_BRM_Framework_Implementation.md](./Project_Summary_BRM_Framework_Implementation.md)
-- [Project-Summary-Healthcare-Digital-Transformation.md](./Project-Summary-Healthcare-Digital-Transformation.md)
 - [README.md](./README.md)
-- [risk-issue-escalation-playbook.md](./risk-issue-escalation-playbook.md)
-- [Solution_Evaluation_Plan_BRM_Framework_Implementation.md](./Solution_Evaluation_Plan_BRM_Framework_Implementation.md)
-- [Solution_Evaluation_Plan_Modular_Executive_MBA_Business_IT.md](./Solution_Evaluation_Plan_Modular_Executive_MBA_Business_IT.md)
 - [SUMMARY.md](./SUMMARY.md)
-- [TEMPLATE_GENERATION_ANALYTICS.md](./TEMPLATE_GENERATION_ANALYTICS.md)
-- [TRACE_DOCUMENT_GENERATION_COMPLETE_FLOW.md](./TRACE_DOCUMENT_GENERATION_COMPLETE_FLOW.md)
-- [TRACE_DOCUMENT_GENERATION_FLOW.md](./TRACE_DOCUMENT_GENERATION_FLOW.md)
-- [user-personas-motivation-assessment.md](./user-personas-motivation-assessment.md)
-- [user-personas-technology-comfort.md](./user-personas-technology-comfort.md)
-- [WA-96_ENHANCEMENTS_COMPLETE.md](./WA-96_ENHANCEMENTS_COMPLETE.md)
-- [WA-96_IMPLEMENTATION_STATUS.md](./WA-96_IMPLEMENTATION_STATUS.md)
-- [WA-96_VERIFICATION_REPORT.md](./WA-96_VERIFICATION_REPORT.md)
 
 ### **📂 01-getting-started**
 
@@ -65,6 +31,7 @@
 - [VERCEL_POSTGRES_SETUP.md](./02-setup-configuration/VERCEL_POSTGRES_SETUP.md)
 - [VERCEL_REDIS_SETUP.md](./02-setup-configuration/VERCEL_REDIS_SETUP.md)
 - [vercel-postgres-setup.md](./02-setup-configuration/vercel-postgres-setup.md)
+- [PROJECT_INTEGRATION_SETTINGS.md](./02-setup-configuration/PROJECT_INTEGRATION_SETTINGS.md)
 
 ### **📂 03-development**
 
@@ -172,6 +139,7 @@
 - [HOMEPAGE_REVIEW_AND_ENHANCEMENTS.md](./05-ui-ux/HOMEPAGE_REVIEW_AND_ENHANCEMENTS.md)
 - [sitemap-week1.md](./05-ui-ux/sitemap-week1.md)
 - [wireframes-portal-assessment-week1.md](./05-ui-ux/wireframes-portal-assessment-week1.md)
+- [cbaazurelight150x150.png](./05-ui-ux/cbaazurelight150x150.png)
 
 ### **📂 06-features**
 
@@ -524,6 +492,10 @@
 - [VERCEL_ASYNC_TASK_BREAKDOWN.md](./07-architecture/VERCEL_ASYNC_TASK_BREAKDOWN.md)
 - [VERCEL_DATABASE_IMPLEMENTATION_PLAN.md](./07-architecture/VERCEL_DATABASE_IMPLEMENTATION_PLAN.md)
 - [VISUAL_PIPELINE_IMPLEMENTATION_SUMMARY.md](./07-architecture/VISUAL_PIPELINE_IMPLEMENTATION_SUMMARY.md)
+- [CORE_ENTITIES_APPWRITE_EXPERIMENT.md](./07-architecture/CORE_ENTITIES_APPWRITE_EXPERIMENT.md)
+- [ENTITY_EXTRACTION_OPTIMIZATION.md](./07-architecture/ENTITY_EXTRACTION_OPTIMIZATION.md)
+- [TRACE_DOCUMENT_GENERATION_COMPLETE_FLOW.md](./07-architecture/TRACE_DOCUMENT_GENERATION_COMPLETE_FLOW.md)
+- [TRACE_DOCUMENT_GENERATION_FLOW.md](./07-architecture/TRACE_DOCUMENT_GENERATION_FLOW.md)
 
 ### **📂 08-testing**
 
@@ -545,6 +517,11 @@
 - [TEMPLATE_TOKEN_VERIFICATION.md](./08-testing/TEMPLATE_TOKEN_VERIFICATION.md)
 - [TESTING_CHECKLIST_2025-10-20.md](./08-testing/TESTING_CHECKLIST_2025-10-20.md)
 - [TESTING_CHECKLIST_v2.0.0.md](./08-testing/TESTING_CHECKLIST_v2.0.0.md)
+- [JIRA_VERIFICATION_GUIDE.md](./08-testing/JIRA_VERIFICATION_GUIDE.md)
+- [LESSONS_LEARNED_TEST_RESULTS.md](./08-testing/LESSONS_LEARNED_TEST_RESULTS.md)
+- [PROJECT_CONTEXT_FEATURE_TEST_PLAN.md](./08-testing/PROJECT_CONTEXT_FEATURE_TEST_PLAN.md)
+- [PROJECT_CONTEXT_QUICK_TEST.md](./08-testing/PROJECT_CONTEXT_QUICK_TEST.md)
+- [WA-96_VERIFICATION_REPORT.md](./08-testing/WA-96_VERIFICATION_REPORT.md)
 
 ### **📂 08-testing/drift-and-validation**
 
@@ -688,6 +665,11 @@
 - [USER_GUIDE_APPROVAL_WORKFLOW.md](./11-user-guides/USER_GUIDE_APPROVAL_WORKFLOW.md)
 - [WORKFLOW_GUIDE.md](./11-user-guides/WORKFLOW_GUIDE.md)
 - [YAMMER_POST_ADPA.md](./11-user-guides/YAMMER_POST_ADPA.md)
+- [PLAYBOOK_GENERATION_TRAINING.md](./11-user-guides/PLAYBOOK_GENERATION_TRAINING.md)
+- [PLAYBOOK_GENERATION_USER_GUIDE.md](./11-user-guides/PLAYBOOK_GENERATION_USER_GUIDE.md)
+- [risk-issue-escalation-playbook.md](./11-user-guides/risk-issue-escalation-playbook.md)
+- [user-personas-motivation-assessment.md](./11-user-guides/user-personas-motivation-assessment.md)
+- [user-personas-technology-comfort.md](./11-user-guides/user-personas-technology-comfort.md)
 
 ### **📂 12-security**
 
@@ -703,6 +685,38 @@
 - [CURSOR_BUGBOT_SECURITY_FIXES.md](./12-security/operations/CURSOR_BUGBOT_SECURITY_FIXES.md)
 - [KNOWLEDGE_BASE_SECURITY_SUMMARY.md](./12-security/operations/KNOWLEDGE_BASE_SECURITY_SUMMARY.md)
 - [TODAYS_EPIC_SECURITY_JOURNEY.md](./12-security/operations/TODAYS_EPIC_SECURITY_JOURNEY.md)
+
+### **📂 analysis**
+
+- [ENTITY_EXTRACTION_ANALYTICS.md](./analysis/ENTITY_EXTRACTION_ANALYTICS.md)
+- [MICROSOFT_CLARITY_ANALYTICS.md](./analysis/MICROSOFT_CLARITY_ANALYTICS.md)
+- [TEMPLATE_GENERATION_ANALYTICS.md](./analysis/TEMPLATE_GENERATION_ANALYTICS.md)
+
+### **📂 implementation**
+
+- [CIRCULAR_STRUCTURE_FIX_SUMMARY.md](./implementation/CIRCULAR_STRUCTURE_FIX_SUMMARY.md)
+- [CLARITY_IMPLEMENTATION_PROGRESS.md](./implementation/CLARITY_IMPLEMENTATION_PROGRESS.md)
+- [LESSONS_LEARNED_FINAL_STATUS.md](./implementation/LESSONS_LEARNED_FINAL_STATUS.md)
+- [LESSONS_LEARNED_IMPLEMENTATION_COMPLETE.md](./implementation/LESSONS_LEARNED_IMPLEMENTATION_COMPLETE.md)
+- [WA-96_ENHANCEMENTS_COMPLETE.md](./implementation/WA-96_ENHANCEMENTS_COMPLETE.md)
+- [WA-96_IMPLEMENTATION_STATUS.md](./implementation/WA-96_IMPLEMENTATION_STATUS.md)
+
+### **📂 plans**
+
+- [Benefits_Realization_Plan_Modular_EMBA_Business_IT.md](./plans/Benefits_Realization_Plan_Modular_EMBA_Business_IT.md)
+- [BRM_Strategy_Analysis_Plan.md](./plans/BRM_Strategy_Analysis_Plan.md)
+- [Solution_Evaluation_Plan_BRM_Framework_Implementation.md](./plans/Solution_Evaluation_Plan_BRM_Framework_Implementation.md)
+- [Solution_Evaluation_Plan_Modular_Executive_MBA_Business_IT.md](./plans/Solution_Evaluation_Plan_Modular_Executive_MBA_Business_IT.md)
+
+### **📂 projects**
+
+- [Project-Summary-Healthcare-Digital-Transformation.md](./projects/Project-Summary-Healthcare-Digital-Transformation.md)
+- [Project_Summary_BRM_Framework_Implementation.md](./projects/Project_Summary_BRM_Framework_Implementation.md)
+
+### **📂 reviews**
+
+- [DASHBOARD_AUTHENTICATED_REVIEW.md](./reviews/DASHBOARD_AUTHENTICATED_REVIEW.md)
+- [PROJECT_OVERVIEW_DEMO_DATA_REVIEW.md](./reviews/PROJECT_OVERVIEW_DEMO_DATA_REVIEW.md)
 
 ### **📂 99-root-archive**
 

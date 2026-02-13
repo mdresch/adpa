@@ -1,11 +1,11 @@
-# New Entity Type: Lessons Learned
+# New Entity Type: Lessons Learned (Archived)
 
-**Status**: 🔵 Planned  
+**Status**: ✅ Completed  
 **Priority**: 🟡 **MEDIUM-HIGH** (P1)  
 **PMBOK 8 Domain**: Project Work Performance Domain  
-**Estimated Effort**: Small-Medium (3 days)  
-**Dependencies**: Current AI Extraction System (✅ Completed)  
-**Target Release**: Q1 2026
+**Target Release**: Q1 2026  
+**Completed**: February 2026  
+**Archive**: See `archive/2026/ENTITY_TYPE_LESSONS_LEARNED_COMPLETED.md`
 
 ---
 
