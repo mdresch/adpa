@@ -3,6 +3,7 @@
  * Manages document processing jobs and stage jobs
  */
 
+import { v4 as uuidv4 } from 'uuid'
 import { logger } from '../../../utils/logger'
 import { pool } from '../../../database/connection'
 import type {
@@ -19,7 +20,7 @@ export class JobManager {
     try {
       logger.info('Creating document processing job', { requestId: request.request_id })
 
-      const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      const jobId = uuidv4()
 
       // Create job record
       await pool.query(
@@ -51,8 +52,8 @@ export class JobManager {
           request.request_id,
           'pending',
           0,
-          JSON.stringify([]),
-          JSON.stringify(['context_gathering', 'template_processing', 'ai_generation', 'context_injection', 'quality_assurance', 'output_formatting'])
+          [],
+          ['context_gathering', 'template_processing', 'ai_generation', 'context_injection', 'quality_assurance', 'output_formatting']
         ]
       )
 
