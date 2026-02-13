@@ -25,24 +25,6 @@
     "paths": {
       "@/*": [
         "./*"
-      ],
-      "@/server/*": [
-        "server/src/*"
-      ],
-      "@/database/*": [
-        "server/src/database/*"
-      ],
-      "@/utils/*": [
-        "server/src/utils/*"
-      ],
-      "@/services/*": [
-        "server/src/services/*"
-      ],
-      "@/modules/*": [
-        "server/src/modules/*"
-      ],
-      "@/types/*": [
-        "server/src/types/*"
       ]
     }
   },
