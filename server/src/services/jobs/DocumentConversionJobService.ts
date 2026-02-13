@@ -11,7 +11,7 @@
 
 import { pool } from '@/database/connection'
 import { logger } from '@/utils/logger'
-import { io } from '../../server'
+import { io } from '@/socket'
 import type { IQueueJob } from './queue/IQueue'
 // Phase 3: Use centralized types
 import type { DocumentConversionJobData, JobStatus, QueueName } from './types'

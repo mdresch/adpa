@@ -43,6 +43,7 @@
         "server/src/modules/*"
       ],
       "@/types/*": [
+        "types/*",
         "server/src/types/*"
       ],
       "@/config/*": [
@@ -56,6 +57,9 @@
       ],
       "@/routes/*": [
         "server/src/routes/*"
+      ],
+      "@/socket": [
+        "server/src/socket"
       ]
     }
   },

@@ -1,4 +1,4 @@
-;(async function(){ try{ await (require('../lib/db')).initDb() } catch(e){} })();
+; (async function () { try { await (require('../lib/db')).initDb() } catch (e) { } })();
 /**
  * Document Upload Service
  * 
@@ -16,7 +16,7 @@ import { pool } from '../database/connection'; // Use shared pool with correct S
 import { documentConversionService, ConversionOptions } from './documentConversionService';
 import { qualityAuditService } from './qualityAuditService';
 import { portfolioAssessmentService } from './portfolioAssessmentService';
-import { io } from '../server'; // WebSocket for real-time updates
+import { io } from '@/socket'; // WebSocket for real-time updates
 import { documentUploadQueue } from './queueService';
 import type { IQueueJob } from './jobs/queue/IQueue';
 
@@ -109,7 +109,7 @@ export async function createUploadBatch(
   });
 
   const client = await pool.connect();
-  
+
   try {
     await client.query('BEGIN');
 
@@ -141,7 +141,7 @@ export async function createUploadBatch(
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING id
     `;
-    
+
     const assessmentId = uuidv4();
     await client.query(assessmentQuery, [
       assessmentId,
@@ -164,7 +164,7 @@ export async function createUploadBatch(
 
     // Enqueue files for processing (parallel)
     const jobs = await Promise.all(
-      files.map((file, index) => 
+      files.map((file, index) =>
         enqueueFileProcessing(batchId, projectId, uploadedBy, file, index)
       )
     );
@@ -210,7 +210,7 @@ export async function addDocumentsToExistingBatch(
   files: Express.Multer.File[]
 ): Promise<UploadBatchResult> {
   const client = await pool.connect();
-  
+
   try {
     await client.query('BEGIN');
 
@@ -249,12 +249,12 @@ export async function addDocumentsToExistingBatch(
 
     // Enqueue new files for processing
     const jobs = await Promise.all(
-      files.map((file, index) => 
+      files.map((file, index) =>
         enqueueFileProcessing(
-          batchId, 
-          projectId, 
-          uploadedBy, 
-          file, 
+          batchId,
+          projectId,
+          uploadedBy,
+          file,
           batch.total_files + index // Continue numbering from existing
         )
       )
@@ -333,7 +333,7 @@ async function enqueueFileProcessing(
   index: number
 ): Promise<IQueueJob<FileProcessingJob>> {
   const fileId = uuidv4();
-  
+
   // Calculate file hash for deduplication
   const fileHash = crypto
     .createHash('sha256')
@@ -372,14 +372,14 @@ async function enqueueFileProcessing(
  */
 function detectFileFormat(file: Express.Multer.File): string {
   const ext = file.originalname.split('.').pop()?.toLowerCase() || '';
-  
+
   if (ext === 'pdf' || file.mimetype === 'application/pdf') return 'pdf';
   if (ext === 'docx' || file.mimetype.includes('wordprocessingml')) return 'docx';
   if (ext === 'txt' || file.mimetype === 'text/plain') return 'txt';
   if (ext === 'md' || ext === 'markdown') return 'md';
   if (ext === 'html' || ext === 'htm') return 'html';
   if (ext === 'rtf') return 'rtf';
-  
+
   throw new Error(`Unsupported file format: ${ext}`);
 }
 
@@ -398,8 +398,8 @@ export async function processUploadedFile(
 
   // CRITICAL FIX: Bull serializes Buffers to Redis as plain objects {type: 'Buffer', data: [...]}
   // We must convert them back to proper Buffer objects
-  const actualBuffer = Buffer.isBuffer(buffer) 
-    ? buffer 
+  const actualBuffer = Buffer.isBuffer(buffer)
+    ? buffer
     : Buffer.from((buffer as any).data || buffer);
 
   logger.info('Processing uploaded file', {
@@ -464,26 +464,26 @@ export async function processUploadedFile(
         markdownType: typeof markdownContent,
         markdownValue: markdownContent
       });
-      
+
       // Extract string from object if it's an object
       if (markdownContent && typeof markdownContent === 'object') {
         markdownContent = markdownContent.text || markdownContent.content || markdownContent.markdown || JSON.stringify(markdownContent);
       } else {
         markdownContent = String(markdownContent || '');
       }
-      
+
       logger.warn('Converted markdown to string', {
         filename,
         finalType: typeof markdownContent,
         length: markdownContent.length
       });
     }
-    
+
     // Validate markdown is not empty
     if (!markdownContent || markdownContent.trim() === '') {
       throw new Error(`PDF conversion resulted in empty Markdown content for file: ${filename}`);
     }
-    
+
     const documentId = await createDocumentRecord(client, {
       projectId,
       uploadedBy,
@@ -526,9 +526,9 @@ export async function processUploadedFile(
     // Step 5: Trigger Drift Detection (if project has approved baseline)
     try {
       const { driftDetectionService } = await import('./driftDetectionService');
-      
+
       logger.info('🚨 [DRIFT] Checking for approved baseline', { projectId, documentId });
-      
+
       // Check if project has an approved baseline
       const baselineCheck = await client.query(
         `SELECT id, version, status FROM project_baselines 
@@ -536,7 +536,7 @@ export async function processUploadedFile(
          ORDER BY approved_at DESC LIMIT 1`,
         [projectId]
       );
-      
+
       if (baselineCheck.rows.length > 0) {
         const baseline = baselineCheck.rows[0];
         logger.info('🚨 [DRIFT] Approved baseline found - triggering drift detection', {
@@ -545,7 +545,7 @@ export async function processUploadedFile(
           documentId,
           filename
         });
-        
+
         // Trigger drift detection asynchronously (don't block the upload)
         driftDetectionService.checkForDrift(projectId, documentId)
           .then(async driftResult => {
@@ -556,7 +556,7 @@ export async function processUploadedFile(
                 severity: driftResult.severity,
                 driftCount: driftResult.driftPoints.length
               });
-              
+
               // Save drift record to database
               try {
                 const driftRecord = await driftDetectionService.createDriftRecord({
@@ -567,13 +567,13 @@ export async function processUploadedFile(
                   severity: driftResult.severity,
                   triggeredBy: uploadedBy
                 });
-                
+
                 logger.info('💾 [DRIFT] Drift record saved', {
                   driftRecordId: driftRecord.id,
                   severity: driftRecord.drift_severity,
                   driftCount: driftResult.driftPoints.length
                 });
-                
+
                 // Trigger escalation check (TASK-742: Escalation matrix)
                 // Always check escalation regardless of severity - the matrix rules decide if escalation is needed
                 try {
@@ -586,7 +586,7 @@ export async function processUploadedFile(
                   });
                   // Don't fail the drift detection if escalation fails
                 }
-                
+
               } catch (saveError: any) {
                 logger.error('❌ [DRIFT] Failed to save drift record', {
                   documentId,
@@ -636,7 +636,7 @@ export async function processUploadedFile(
 
   } catch (error: any) {
     await client.query('ROLLBACK');
-    
+
     logger.error('File processing failed', {
       batchId,
       filename,
@@ -677,7 +677,7 @@ async function detectDocumentType(
 }> {
   // Use AI service with automatic failover instead of hardcoded Google AI
   const { aiService } = await import('./aiService');
-  
+
   try {
     const prompt = `Analyze this document and classify its type.
 
@@ -718,7 +718,7 @@ Respond in JSON format:
       temperature: 0.3,
       max_tokens: 500
     });
-    
+
     // Extract JSON from response
     const jsonMatch = result.content.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
@@ -742,7 +742,7 @@ Respond in JSON format:
     logger.warn('AI document type detection failed, using keyword fallback', {
       error: error.message
     });
-    
+
     return detectDocumentTypeKeywords(markdown, filename);
   }
 }
@@ -789,21 +789,21 @@ function detectDocumentTypeKeywords(
 
   for (const pattern of patterns) {
     let score = 0;
-    
+
     // Check content keywords
     for (const keyword of pattern.keywords) {
       if (lowerContent.includes(keyword)) {
         score += 10;
       }
     }
-    
+
     // Check filename keywords (higher weight)
     for (const keyword of pattern.filenameKeywords) {
       if (lowerFilename.includes(keyword)) {
         score += 20;
       }
     }
-    
+
     if (score > bestMatch.score) {
       bestMatch = { type: pattern.type, score };
     }
@@ -855,7 +855,7 @@ async function createDocumentRecord(
       markdownType: typeof markdownContent,
       markdownValue: markdownContent
     });
-    
+
     // Extract string from object if it's an object
     if (markdownContent && typeof markdownContent === 'object') {
       markdownContent = markdownContent.text || markdownContent.content || markdownContent.markdown || JSON.stringify(markdownContent);
@@ -867,7 +867,7 @@ async function createDocumentRecord(
       markdownContent = String(markdownContent || '');
     }
   }
-  
+
   // Validate markdown is not empty
   if (!markdownContent || markdownContent.trim() === '') {
     throw new Error(`Cannot create document record with empty Markdown content for file: ${data.filename}`);
@@ -892,16 +892,16 @@ async function createDocumentRecord(
     original_format: data.originalFormat,
     file_hash: data.fileHash,
     file_size: data.fileSize,
-    
+
     // Processing info
     format: 'markdown',
     detected_type: data.detectedType,
     detection_confidence: data.detectionConfidence,
     detection_metadata: data.detectionMetadata,
-    
+
     // Conversion info
     conversion_metadata: data.conversionMetadata,
-    
+
     // Batch tracking
     upload_batch_id: data.batchId,
     upload_date: new Date().toISOString()
@@ -947,29 +947,29 @@ async function updateBatchProgress(
       FROM upload_batches
       WHERE id = $1
     `;
-    
+
     const batchResult = await db.query(batchQuery, [batchId]);
     if (batchResult.rows.length === 0) return;
-    
+
     const batch = batchResult.rows[0];
     const metadata = batch.batch_metadata || {};
     const processedFiles = metadata.processed_file_ids || [];
-    
+
     // Check if this file was already counted
     if (fileId && processedFiles.includes(fileId)) {
       logger.debug('File already counted, skipping increment', { batchId, fileId });
       return; // Already counted, skip to prevent retry inflation
     }
-    
+
     // Add fileId to processed list
     if (fileId) {
       processedFiles.push(fileId);
       metadata.processed_file_ids = processedFiles;
     }
-    
+
     // Update batch counters (only increment once per unique file)
     const field = result === 'success' ? 'successful_files' : 'failed_files';
-    
+
     const updateQuery = `
       UPDATE upload_batches
       SET ${field} = ${field} + 1,
@@ -981,15 +981,15 @@ async function updateBatchProgress(
     `;
 
     const result_db = await db.query(updateQuery, [batchId, JSON.stringify(metadata)]);
-    
+
     if (result_db.rows.length > 0) {
       const row = result_db.rows[0];
-      
+
       // Check if batch is complete
       if (row.processed_files >= row.total_files) {
-        const status = row.failed_files === 0 ? 'complete' : 
-                       row.successful_files === 0 ? 'failed' : 'complete';
-        
+        const status = row.failed_files === 0 ? 'complete' :
+          row.successful_files === 0 ? 'failed' : 'complete';
+
         // Get batch info for assessment generation
         const batchInfoQuery = `
           SELECT project_id, uploaded_by, batch_metadata
@@ -997,20 +997,20 @@ async function updateBatchProgress(
           WHERE id = $1
         `;
         const batchInfoResult = await db.query(batchInfoQuery, [batchId]);
-        
+
         if (batchInfoResult.rows.length > 0) {
           const batchInfo = batchInfoResult.rows[0];
           const projectId = batchInfo.project_id;
           const uploadedBy = batchInfo.uploaded_by;
           const industryVertical = batchInfo.batch_metadata?.industryVertical || 'technology';
-          
+
           // Update batch status
           await db.query(`
             UPDATE upload_batches
             SET status = $1, completed_at = NOW()
             WHERE id = $2
           `, [status, batchId]);
-          
+
           logger.info('Upload batch completed', {
             batchId,
             status,
@@ -1018,7 +1018,7 @@ async function updateBatchProgress(
             failed: row.failed_files,
             total: row.total_files
           });
-          
+
           // Generate assessment if batch completed successfully
           if (status === 'complete' && row.successful_files > 0) {
             try {
@@ -1027,14 +1027,14 @@ async function updateBatchProgress(
                 projectId,
                 uploadedBy
               });
-              
+
               // Generate portfolio assessment
               const assessmentResult = await portfolioAssessmentService.assessProjectPortfolio(
                 projectId,
                 industryVertical,
                 uploadedBy
               );
-              
+
               // Prepare gaps array from gap analysis
               const allGaps = [
                 ...(assessmentResult.gap_analysis?.critical_gaps || []).map((g: any) => ({ ...g, priority: 'critical' })),
@@ -1070,7 +1070,7 @@ async function updateBatchProgress(
                 WHERE batch_id = $9
                 RETURNING id
               `;
-              
+
               const assessmentUpdateResult = await db.query(assessmentUpdateQuery, [
                 assessmentResult.portfolio_summary.maturity_level,
                 assessmentResult.portfolio_summary.maturity_label,
@@ -1087,7 +1087,7 @@ async function updateBatchProgress(
                 JSON.stringify(assessmentResult.roi_calculation || {}),
                 batchId
               ]);
-              
+
               if (assessmentUpdateResult.rows.length > 0) {
                 logger.info('Assessment updated successfully', {
                   assessmentId: assessmentUpdateResult.rows[0].id,
@@ -1096,7 +1096,7 @@ async function updateBatchProgress(
                   avgScore: assessmentResult.portfolio_summary.avg_quality_score
                 });
               }
-              
+
             } catch (assessmentError: any) {
               // Log error but don't fail the batch completion
               logger.error('Failed to generate assessment after batch completion', {
@@ -1105,7 +1105,7 @@ async function updateBatchProgress(
                 error: assessmentError.message,
                 stack: assessmentError.stack
               });
-              
+
               // Update assessment status to 'failed' if generation failed
               await db.query(`
                 UPDATE assessments
@@ -1166,7 +1166,7 @@ export async function getBatchStatus(batchId: string): Promise<BatchStatusRespon
   `;
 
   const result = await db.query(batchQuery, [batchId]);
-  
+
   if (result.rows.length === 0) {
     return null;
   }

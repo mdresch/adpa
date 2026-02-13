@@ -11,7 +11,7 @@
 
 import { pool } from '@/database/connection'
 import { logger } from '@/utils/logger'
-import { io } from '../../server'
+import { io } from '@/socket'
 import type { IQueueJob } from './queue/IQueue'
 // Phase 3: Use centralized types
 import type { BaselineExtractionJobData, JobStatus, QueueName } from './types'
@@ -229,13 +229,13 @@ export class BaselineExtractionJobService {
    */
   private static countEntitiesByType(results: any): Record<string, number> {
     const counts: Record<string, number> = {}
-    
+
     Object.entries(results).forEach(([type, entities]: [string, any[]]) => {
       if (Array.isArray(entities)) {
         counts[type] = entities.length
       }
     })
-    
+
     return counts
   }
 
@@ -244,13 +244,13 @@ export class BaselineExtractionJobService {
    */
   private static calculateAverageConfidence(entities: any[]): number {
     if (entities.length === 0) return 0
-    
+
     const confidenceValues = entities
       .map(entity => entity.extraction_confidence || 0)
       .filter(conf => conf > 0)
-    
+
     if (confidenceValues.length === 0) return 0
-    
+
     return confidenceValues.reduce((sum, conf) => sum + conf, 0) / confidenceValues.length
   }
 
