@@ -8,7 +8,7 @@ import express from "express"
 import cors from "cors"
 import helmet from "helmet"
 import { createServer } from "http"
-import { Server as SocketIOServer } from "socket.io"
+import { initSocketIO } from "./socket"
 
 import { errorHandler } from "./middleware/errorHandler"
 import requestIdMiddleware from "./middleware/requestId"
@@ -140,34 +140,7 @@ import mediaRoutes from "./routes/mediaRoutes"
 
 const app = express()
 const server = createServer(app)
-const io = new SocketIOServer(server, {
-  cors: {
-    origin: (origin, callback) => {
-      // Allow requests with no origin (mobile apps, Postman, etc.)
-      if (!origin) return callback(null, true)
-
-      // Check if origin matches any allowed pattern
-      const isAllowed = allowedOrigins.some(allowed => {
-        if (typeof allowed === 'string') {
-          return allowed === origin
-        }
-        if (allowed instanceof RegExp) {
-          return allowed.test(origin)
-        }
-        return false
-      })
-
-      if (isAllowed) {
-        callback(null, true)
-      } else {
-        console.warn(`Socket.IO CORS blocked origin: ${origin}`)
-        callback(new Error(`Origin ${origin} not allowed by CORS`))
-      }
-    },
-    methods: ["GET", "POST"],
-    credentials: true,
-  },
-})
+const io = initSocketIO(server)
 
 const PORT = parseInt(process.env.PORT || "5000", 10)
 
@@ -730,4 +703,4 @@ else if (!process.argv[1] || process.argv[1].includes('server')) {
 }
 
 
-export { app, io }
+export { app }

@@ -14,7 +14,7 @@
 
 import { pool } from '@/database/connection'
 import { logger } from '@/utils/logger'
-import { io } from '../../server'
+import { io } from '../../socket'
 import { PMBOK_DOMAINS } from '@/types/pmbok'
 import type { PmbokDomain } from '@/types/pmbok'
 import type { IQueueJob } from './queue/IQueue'
