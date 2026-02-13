@@ -1,0 +1,133 @@
+/* 
+  ADPA Governance Playbook PDF Export Style
+  Aligned to ADPA Admin Portal Design Language
+*/
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700&display=swap');
+
+:root {
+  --primary: #3b82f6;
+  --primary-dark: #1d4ed8;
+  --accent: #764ba2;
+  --text-main: #1f2937;
+  --text-muted: #6b7280;
+  --border: #e5e7eb;
+  --bg-soft: #f9fafb;
+}
+
+body {
+  font-family: 'Inter', -apple-system, sans-serif;
+  color: var(--text-main);
+  line-height: 1.6;
+  margin: 0;
+  padding: 2cm;
+}
+
+/* Header & Footer for PDF engines like WeasyPrint/Prince */
+@page {
+  margin: 2.5cm 1.5cm;
+  @top-right {
+    content: "ADPA Governance Playbook";
+    font-size: 9pt;
+    color: var(--text-muted);
+  }
+  @bottom-center {
+    content: counter(page);
+    font-size: 9pt;
+  }
+}
+
+/* Front Matter / Cover Page Style */
+.front-matter {
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+  font-size: 0.9rem;
+}
+
+.front-matter h1 {
+  margin-top: 0;
+  color: var(--primary);
+}
+
+/* Typography */
+h1, h2, h3, h4 {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  color: #111827;
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+}
+
+h1 {
+  font-size: 2.5rem;
+  background: linear-gradient(135deg, #3b82f6 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 1rem;
+}
+
+h2 {
+  font-size: 1.75rem;
+  border-bottom: 2px solid var(--primary);
+  padding-bottom: 0.2rem;
+}
+
+h3 {
+  font-size: 1.25rem;
+  color: var(--primary-dark);
+}
+
+/* Tables (RACI, Risk, etc.) */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.5rem 0;
+  font-size: 0.9rem;
+}
+
+th {
+  background-color: var(--primary);
+  color: white;
+  text-align: left;
+  padding: 0.75rem;
+  font-weight: 600;
+}
+
+td {
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+}
+
+tr:nth-child(even) {
+  background-color: var(--bg-soft);
+}
+
+/* Callouts / Blockquotes */
+blockquote {
+  border-left: 4px solid var(--accent);
+  background: #f3f4f6;
+  padding: 1rem;
+  margin: 1.5rem 0;
+  font-style: italic;
+  color: #374151;
+}
+
+/* Status Badges (for tables) */
+.status-open { color: #d97706; font-weight: bold; }
+.status-closed { color: #059669; font-weight: bold; }
+.status-risk { color: #dc2626; font-weight: bold; }
+
+/* Annexes Page Break */
+.annex-section {
+  page-break-before: always;
+}
+
+/* KPI formatting */
+.kpi-category {
+  font-style: italic;
+  color: var(--text-muted);
+  margin-top: 1rem;
+}
