@@ -160,7 +160,6 @@
     "rtf-parser": "latest",
     "neo4j-driver": "latest",
     "@github/copilot-sdk": "latest",
-    "github-copilot-sdk": "latest",
     "amqplib": "latest",
     "amqp-connection-manager": "latest",
     "node-stream-zip": "latest",
