@@ -11,6 +11,18 @@ const nextConfig = {
   // Enable standalone output for Docker containerization
   output: 'standalone',
 
+  // Exclude problematic server-side packages from bundling
+  serverExternalPackages: [
+    '@adobe/pdfservices-node-sdk',
+    '@documenso/pdf-sign',
+    'puppeteer',
+    'winston',
+    'amqplib',
+    'ioredis',
+    'pg',
+    'sequelize'
+  ],
+
   // API Proxy: Forward all /api/* requests to Express backend
   async rewrites() {
     return [
