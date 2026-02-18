@@ -466,3 +466,5 @@
 {"level":"info","message":"AI Service initialized - will fetch AI Gateway key from database","service":"adpa-backend","timestamp":"2026-02-06T17:27:14.074Z"}
 {"level":"info","message":"✅ Database connected successfully via DATABASE_URL","service":"adpa-backend","timestamp":"2026-02-06T17:27:15.240Z"}
 {"level":"info","message":"[DB-CONCURRENCY] Pool max (50) >= estimated queue concurrency (0).","service":"adpa-backend","timestamp":"2026-02-06T17:27:15.244Z"}
+{"level":"warn","message":"[INFLUXDB] Disabled - missing INFLUXDB_TOKEN or INFLUXDB_DATABASE","service":"adpa-backend","timestamp":"2026-02-18T11:03:04.814Z"}
+{"level":"info","message":"AI Service initialized - will fetch AI Gateway key from database","service":"adpa-backend","timestamp":"2026-02-18T11:03:04.829Z"}

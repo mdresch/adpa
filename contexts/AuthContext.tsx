@@ -79,7 +79,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
             setLoading(false)
             return
           }
-          
+
           apiClient.setToken(token)
           setToken(token)
           try {
@@ -107,19 +107,36 @@ export function AuthProvider({ children }: AuthProviderProps) {
     initAuth()
   }, [])
 
+  // Helper to set cookie
+  const setCookie = (name: string, value: string, days: number) => {
+    if (typeof document === 'undefined') return
+    const expires = new Date()
+    expires.setTime(expires.getTime() + days * 24 * 60 * 60 * 1000)
+    document.cookie = `${name}=${value};expires=${expires.toUTCString()};path=/;SameSite=Strict`
+  }
+
+  // Helper to remove cookie
+  const removeCookie = (name: string) => {
+    if (typeof document === 'undefined') return
+    document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`
+  }
+
   // Login function
   const login = async (email: string, password: string, redirect?: string) => {
     try {
       setLoading(true)
       const { user: loggedInUser, token } = await apiClient.login(email, password)
       setUser(loggedInUser)
-  setToken(token)
-      
+      setToken(token)
+
+      // Set auth cookie for server-side access
+      setCookie('auth_token', token, 1) // 1 day expiration
+
       // Connect WebSocket after successful login
       apiClient.connectWebSocket()
-      
+
       toast.success("Login successful!")
-      
+
       // Use provided redirect, or default to home
       const redirectPath = redirect || "/"
       router.push(redirectPath)
@@ -138,18 +155,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setLoading(true)
       const { user: newUser, token, company } = await apiClient.register(userData)
       setUser(newUser)
-  setToken(token)
-      
+      setToken(token)
+
+      // Set auth cookie for server-side access
+      setCookie('auth_token', token, 1) // 1 day expiration
+
       // Connect WebSocket after successful registration
       apiClient.connectWebSocket()
-      
+
       // Show success message with company info if company was created
       if (company) {
         toast.success(`Account and company "${company.name}" created successfully!`)
       } else {
         toast.success("Registration successful!")
       }
-      
+
       // Only redirect if not explicitly disabled
       if (options?.redirect !== false) {
         router.push(options?.redirect || "/")
@@ -168,7 +188,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       await apiClient.logout()
       setUser(null)
-  setToken(null)
+      setToken(null)
+      removeCookie('auth_token')
       toast.success("Logged out successfully")
       router.push("/auth/login")
     } catch (error) {
@@ -176,7 +197,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // Force logout even if API call fails
       setUser(null)
       apiClient.clearToken()
-  setToken(null)
+      setToken(null)
+      removeCookie('auth_token')
       router.push("/auth/login")
     }
   }
@@ -225,7 +247,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     logout,
     refreshUser,
     isAuthenticated,
-  token,
+    token,
     hasPermission,
     hasRole,
   }

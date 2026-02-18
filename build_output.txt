@@ -1,0 +1,1605 @@
+Γû▓ Next.js 16.1.5 (Turbopack)
+- Environments: .env
+
+  Creating an optimized production build ...
+
+> Build error occurred
+Error: Turbopack build failed with 51 errors:
+./components/morphic/chat-panel.tsx:5:1
+Module not found: Can't resolve '@/lib/morphic/utils'
+  3 | import Textarea from 'react-textarea-autosize'
+  4 | import { ArrowUp, MessageCirclePlus, Square, ChevronDown } from 'lucide-react'
+> 5 | import { cn } from '@/lib/morphic/utils'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 | import { Button } from './ui/button'
+  7 | import { SearchModeSelector } from './search-mode-selector'
+  8 | import { KnowledgeToggle } from './knowledge-toggle'
+
+Import map: aliased to relative './lib/morphic/utils' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./components/morphic/chat-panel.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./components/morphic/chat-panel.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./components/morphic/citation-link.tsx:5:1
+Module not found: Can't resolve '@/lib/morphic/utils'
+  3 | import Link from 'next/link'
+  4 | import type { SearchResultItem } from '@/lib/morphic/types'
+> 5 | import { cn } from '@/lib/morphic/utils'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 | import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar'
+  7 | import { Popover, PopoverContent, PopoverTrigger } from './ui/popover'
+  8 |
+
+Import map: aliased to relative './lib/morphic/utils' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./components/morphic/citation-link.tsx [Client Component Browser]
+    ./components/morphic/custom-link.tsx [Client Component Browser]
+    ./components/morphic/markdown-message.tsx [Client Component Browser]
+    ./components/morphic/answer-section.tsx [Client Component Browser]
+    ./components/morphic/render-message.tsx [Client Component Browser]
+    ./components/morphic/chat-messages.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./components/morphic/citation-link.tsx [Client Component SSR]
+    ./components/morphic/custom-link.tsx [Client Component SSR]
+    ./components/morphic/markdown-message.tsx [Client Component SSR]
+    ./components/morphic/answer-section.tsx [Client Component SSR]
+    ./components/morphic/render-message.tsx [Client Component SSR]
+    ./components/morphic/chat-messages.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./components/morphic/collapsible-message.tsx:2:1
+Module not found: Can't resolve '@/lib/morphic/utils'
+  1 | import { ChevronDown } from 'lucide-react'
+> 2 | import { cn } from '@/lib/morphic/utils'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  3 | import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './ui/collapsible'
+  4 | import { IconLogo } from './ui/icons'
+  5 | import { Separator } from './ui/separator'
+
+Import map: aliased to relative './lib/morphic/utils' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./components/morphic/collapsible-message.tsx [Client Component Browser]
+    ./components/morphic/answer-section.tsx [Client Component Browser]
+    ./components/morphic/render-message.tsx [Client Component Browser]
+    ./components/morphic/chat-messages.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./components/morphic/collapsible-message.tsx [Client Component SSR]
+    ./components/morphic/answer-section.tsx [Client Component SSR]
+    ./components/morphic/render-message.tsx [Client Component SSR]
+    ./components/morphic/chat-messages.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./components/morphic/dynamic-tool-display.tsx:11:1
+Module not found: Can't resolve '@/lib/morphic/utils'
+   9 |     )
+  10 | }
+> 11 | import { cn } from '@/lib/morphic/utils'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  12 |
+
+Import map: aliased to relative './lib/morphic/utils' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./components/morphic/dynamic-tool-display.tsx [Client Component Browser]
+    ./components/morphic/render-message.tsx [Client Component Browser]
+    ./components/morphic/chat-messages.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./components/morphic/dynamic-tool-display.tsx [Client Component SSR]
+    ./components/morphic/render-message.tsx [Client Component SSR]
+    ./components/morphic/chat-messages.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./components/morphic/fetch-section.tsx:3:1
+Module not found: Can't resolve '@/lib/morphic/utils'
+  1 | 'use client'
+  2 | import { Check, Globe, ExternalLink } from 'lucide-react'
+> 3 | import { cn } from '@/lib/morphic/utils'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  4 | import ProcessHeader from './process-header'
+  5 |
+  6 | export function FetchSection({ tool, status, borderless }: any) {
+
+Import map: aliased to relative './lib/morphic/utils' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./components/morphic/fetch-section.tsx [Client Component Browser]
+    ./components/morphic/tool-section.tsx [Client Component Browser]
+    ./components/morphic/research-process-section.tsx [Client Component Browser]
+    ./components/morphic/render-message.tsx [Client Component Browser]
+    ./components/morphic/chat-messages.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./components/morphic/fetch-section.tsx [Client Component SSR]
+    ./components/morphic/tool-section.tsx [Client Component SSR]
+    ./components/morphic/research-process-section.tsx [Client Component SSR]
+    ./components/morphic/render-message.tsx [Client Component SSR]
+    ./components/morphic/chat-messages.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./components/morphic/markdown-message.tsx:8:1
+Module not found: Can't resolve '@/lib/morphic/utils'
+   6 | import { Streamdown } from 'streamdown'
+   7 | import type { SearchResultItem } from '@/lib/morphic/types'
+>  8 | import { cn } from '@/lib/morphic/utils'
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import { processCitations } from '@/lib/morphic/utils/citation'
+  10 | import { CitationProvider } from './citation-context'
+  11 | import { Citing } from './custom-link'
+
+Import map: aliased to relative './lib/morphic/utils' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./components/morphic/markdown-message.tsx [Client Component Browser]
+    ./components/morphic/answer-section.tsx [Client Component Browser]
+    ./components/morphic/render-message.tsx [Client Component Browser]
+    ./components/morphic/chat-messages.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./components/morphic/markdown-message.tsx [Client Component SSR]
+    ./components/morphic/answer-section.tsx [Client Component SSR]
+    ./components/morphic/render-message.tsx [Client Component SSR]
+    ./components/morphic/chat-messages.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./components/morphic/message-actions.tsx:6:1
+Module not found: Can't resolve '@/lib/morphic/utils'
+  4 | import { toast } from 'sonner'
+  5 | import type { SearchResultItem } from '@/lib/morphic/types'
+> 6 | import { cn } from '@/lib/morphic/utils'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  7 | import { processCitations } from '@/lib/morphic/utils/citation'
+  8 | import { Button } from './ui/button'
+  9 | import { ChatShare } from './chat-share'
+
+Import map: aliased to relative './lib/morphic/utils' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./components/morphic/message-actions.tsx [Client Component Browser]
+    ./components/morphic/answer-section.tsx [Client Component Browser]
+    ./components/morphic/render-message.tsx [Client Component Browser]
+    ./components/morphic/chat-messages.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./components/morphic/message-actions.tsx [Client Component SSR]
+    ./components/morphic/answer-section.tsx [Client Component SSR]
+    ./components/morphic/render-message.tsx [Client Component SSR]
+    ./components/morphic/chat-messages.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./components/morphic/process-header.tsx:3:1
+Module not found: Can't resolve '@/lib/morphic/utils'
+  1 | 'use client'
+  2 | import type { ReactNode } from 'react'
+> 3 | import { cn } from '@/lib/morphic/utils'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  4 |
+  5 | export type ProcessHeaderProps = {
+  6 |     label: ReactNode
+
+Import map: aliased to relative './lib/morphic/utils' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./components/morphic/process-header.tsx [Client Component Browser]
+    ./components/morphic/reasoning-section.tsx [Client Component Browser]
+    ./components/morphic/research-process-section.tsx [Client Component Browser]
+    ./components/morphic/render-message.tsx [Client Component Browser]
+    ./components/morphic/chat-messages.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./components/morphic/process-header.tsx [Client Component SSR]
+    ./components/morphic/reasoning-section.tsx [Client Component SSR]
+    ./components/morphic/research-process-section.tsx [Client Component SSR]
+    ./components/morphic/render-message.tsx [Client Component SSR]
+    ./components/morphic/chat-messages.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./components/morphic/section.tsx:4:1
+Module not found: Can't resolve '@/lib/morphic/utils'
+  2 | import React from 'react'
+  3 | import { BookCheck, Check, File, FileText, Film, Image, MessageCircleMore, Repeat2, Search } from 'lucide-react'
+> 4 | import { cn } from '@/lib/morphic/utils'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  5 | import { Badge } from './ui/badge'
+  6 | import { Separator } from './ui/separator'
+  7 | import { StatusIndicator } from './ui/status-indicator'
+
+Import map: aliased to relative './lib/morphic/utils' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./components/morphic/section.tsx [Client Component Browser]
+    ./components/morphic/search-section.tsx [Client Component Browser]
+    ./components/morphic/tool-section.tsx [Client Component Browser]
+    ./components/morphic/research-process-section.tsx [Client Component Browser]
+    ./components/morphic/render-message.tsx [Client Component Browser]
+    ./components/morphic/chat-messages.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./components/morphic/section.tsx [Client Component SSR]
+    ./components/morphic/search-section.tsx [Client Component SSR]
+    ./components/morphic/tool-section.tsx [Client Component SSR]
+    ./components/morphic/research-process-section.tsx [Client Component SSR]
+    ./components/morphic/render-message.tsx [Client Component SSR]
+    ./components/morphic/chat-messages.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./components/morphic/source-favicons.tsx:3:1
+Module not found: Can't resolve '@/lib/morphic/utils'
+  1 | import Image from 'next/image'
+  2 | import type { SearchResultItem } from '@/lib/morphic/types'
+> 3 | import { cn } from '@/lib/morphic/utils'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  4 |
+  5 | export function SourceFavicons({ results, maxDisplay = 3, className }: { results: SearchResultItem[]; maxDisplay?: number; className?: string }) {
+  6 |     const uniqueDomains = Array.from(new Set(results.map(r => { try { return new URL(r.url).hostname } catch { return null } }))).filter((d): d is string => d !== null).slice(0, maxDisplay)
+
+Import map: aliased to relative './lib/morphic/utils' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./components/morphic/source-favicons.tsx [Client Component Browser]
+    ./components/morphic/search-section.tsx [Client Component Browser]
+    ./components/morphic/tool-section.tsx [Client Component Browser]
+    ./components/morphic/research-process-section.tsx [Client Component Browser]
+    ./components/morphic/render-message.tsx [Client Component Browser]
+    ./components/morphic/chat-messages.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./components/morphic/source-favicons.tsx [Client Component SSR]
+    ./components/morphic/search-section.tsx [Client Component SSR]
+    ./components/morphic/tool-section.tsx [Client Component SSR]
+    ./components/morphic/research-process-section.tsx [Client Component SSR]
+    ./components/morphic/render-message.tsx [Client Component SSR]
+    ./components/morphic/chat-messages.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./components/morphic/todo-list-content.tsx:3:1
+Module not found: Can't resolve '@/lib/morphic/utils'
+  1 | 'use client'
+  2 | import { Check } from 'lucide-react'
+> 3 | import { cn } from '@/lib/morphic/utils'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  4 |
+  5 | export function TodoListContent({ todos = [], message, completedCount, totalCount, showSummary = true, className }: any) {
+  6 |     const completed = completedCount ?? todos.filter((t: any) => t.status === 'completed').length
+
+Import map: aliased to relative './lib/morphic/utils' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./components/morphic/todo-list-content.tsx [Client Component Browser]
+    ./components/morphic/tool-todo-display.tsx [Client Component Browser]
+    ./components/morphic/tool-section.tsx [Client Component Browser]
+    ./components/morphic/research-process-section.tsx [Client Component Browser]
+    ./components/morphic/render-message.tsx [Client Component Browser]
+    ./components/morphic/chat-messages.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./components/morphic/todo-list-content.tsx [Client Component SSR]
+    ./components/morphic/tool-todo-display.tsx [Client Component SSR]
+    ./components/morphic/tool-section.tsx [Client Component SSR]
+    ./components/morphic/research-process-section.tsx [Client Component SSR]
+    ./components/morphic/render-message.tsx [Client Component SSR]
+    ./components/morphic/chat-messages.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./components/morphic/tool-badge.tsx:3:1
+Module not found: Can't resolve '@/lib/morphic/utils'
+  1 | import React from 'react'
+  2 | import { Link, Search } from 'lucide-react'
+> 3 | import { cn } from '@/lib/morphic/utils'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  4 | import { Badge } from './ui/badge'
+  5 |
+  6 | type ToolBadgeProps = { tool: string; children: React.ReactNode; className?: string; isLoading?: boolean }
+
+Import map: aliased to relative './lib/morphic/utils' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./components/morphic/tool-badge.tsx [Client Component Browser]
+    ./components/morphic/section.tsx [Client Component Browser]
+    ./components/morphic/search-section.tsx [Client Component Browser]
+    ./components/morphic/tool-section.tsx [Client Component Browser]
+    ./components/morphic/research-process-section.tsx [Client Component Browser]
+    ./components/morphic/render-message.tsx [Client Component Browser]
+    ./components/morphic/chat-messages.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./components/morphic/tool-badge.tsx [Client Component SSR]
+    ./components/morphic/section.tsx [Client Component SSR]
+    ./components/morphic/search-section.tsx [Client Component SSR]
+    ./components/morphic/tool-section.tsx [Client Component SSR]
+    ./components/morphic/research-process-section.tsx [Client Component SSR]
+    ./components/morphic/render-message.tsx [Client Component SSR]
+    ./components/morphic/chat-messages.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./components/morphic/ui/animated-logo.tsx:2:1
+Module not found: Can't resolve '@/lib/morphic/utils'
+  1 | 'use client'
+> 2 | import { cn } from '@/lib/morphic/utils'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  3 | export function AnimatedLogo({ className, ...props }: React.ComponentProps<'svg'>) {
+  4 |     return (
+  5 |         <svg fill="currentColor" viewBox="0 0 256 256" role="img" xmlns="http://www.w3.org/2000/svg" className={cn('h-8 w-8', className)} {...props}>
+
+Import map: aliased to relative './lib/morphic/utils' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./components/morphic/ui/animated-logo.tsx [Client Component Browser]
+    ./components/morphic/chat-messages.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./components/morphic/ui/animated-logo.tsx [Client Component SSR]
+    ./components/morphic/chat-messages.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./components/morphic/ui/avatar.tsx:4:1
+Module not found: Can't resolve '@/lib/morphic/utils'
+  2 | import * as React from 'react'
+  3 | import * as AvatarPrimitive from '@radix-ui/react-avatar'
+> 4 | import { cn } from '@/lib/morphic/utils'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  5 | const Avatar = React.forwardRef<React.ElementRef<typeof AvatarPrimitive.Root>, React.ComponentPropsWithoutRef<typeof AvatarPrimitive.Root>>(({ className, ...props }, ref) => (
+  6 |     <AvatarPrimitive.Root ref={ref} className={cn('relative flex h-10 w-10 shrink-0 overflow-hidden rounded-full', className)} {...props} />
+  7 | ))
+
+Import map: aliased to relative './lib/morphic/utils' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./components/morphic/ui/avatar.tsx [Client Component Browser]
+    ./components/morphic/search-results.tsx [Client Component Browser]
+    ./components/morphic/search-section.tsx [Client Component Browser]
+    ./components/morphic/tool-section.tsx [Client Component Browser]
+    ./components/morphic/research-process-section.tsx [Client Component Browser]
+    ./components/morphic/render-message.tsx [Client Component Browser]
+    ./components/morphic/chat-messages.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./components/morphic/ui/avatar.tsx [Client Component SSR]
+    ./components/morphic/search-results.tsx [Client Component SSR]
+    ./components/morphic/search-section.tsx [Client Component SSR]
+    ./components/morphic/tool-section.tsx [Client Component SSR]
+    ./components/morphic/research-process-section.tsx [Client Component SSR]
+    ./components/morphic/render-message.tsx [Client Component SSR]
+    ./components/morphic/chat-messages.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./components/morphic/ui/badge.tsx:3:1
+Module not found: Can't resolve '@/lib/morphic/utils'
+  1 | import * as React from 'react'
+  2 | import { cva, type VariantProps } from 'class-variance-authority'
+> 3 | import { cn } from '@/lib/morphic/utils'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  4 |
+  5 | const badgeVariants = cva(
+  6 |     'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-hidden focus:ring-2 focus:ring-ring focus:ring-offset-2',
+
+Import map: aliased to relative './lib/morphic/utils' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./components/morphic/ui/badge.tsx [Client Component Browser]
+    ./components/morphic/section.tsx [Client Component Browser]
+    ./components/morphic/search-section.tsx [Client Component Browser]
+    ./components/morphic/tool-section.tsx [Client Component Browser]
+    ./components/morphic/research-process-section.tsx [Client Component Browser]
+    ./components/morphic/render-message.tsx [Client Component Browser]
+    ./components/morphic/chat-messages.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./components/morphic/ui/badge.tsx [Client Component SSR]
+    ./components/morphic/section.tsx [Client Component SSR]
+    ./components/morphic/search-section.tsx [Client Component SSR]
+    ./components/morphic/tool-section.tsx [Client Component SSR]
+    ./components/morphic/research-process-section.tsx [Client Component SSR]
+    ./components/morphic/render-message.tsx [Client Component SSR]
+    ./components/morphic/chat-messages.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./components/morphic/ui/button.tsx:4:1
+Module not found: Can't resolve '@/lib/morphic/utils'
+  2 | import { Slot } from '@radix-ui/react-slot'
+  3 | import { cva, type VariantProps } from 'class-variance-authority'
+> 4 | import { cn } from '@/lib/morphic/utils'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  5 |
+  6 | const buttonVariants = cva(
+  7 |     'inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50',
+
+Import map: aliased to relative './lib/morphic/utils' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./components/morphic/ui/button.tsx [Client Component Browser]
+    ./components/morphic/chat-panel.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./components/morphic/ui/button.tsx [Client Component SSR]
+    ./components/morphic/chat-panel.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./components/morphic/ui/card.tsx:2:1
+Module not found: Can't resolve '@/lib/morphic/utils'
+  1 | import * as React from 'react'
+> 2 | import { cn } from '@/lib/morphic/utils'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  3 |
+  4 | const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(({ className, ...props }, ref) => (
+  5 |     <div ref={ref} className={cn('rounded-lg border bg-card text-card-foreground shadow-xs', className)} {...props} />
+
+Import map: aliased to relative './lib/morphic/utils' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./components/morphic/ui/card.tsx [Client Component Browser]
+    ./components/morphic/chat-error.tsx [Client Component Browser]
+    ./components/morphic/chat-messages.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./components/morphic/ui/card.tsx [Client Component SSR]
+    ./components/morphic/chat-error.tsx [Client Component SSR]
+    ./components/morphic/chat-messages.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./components/morphic/ui/carousel.tsx:5:1
+Module not found: Can't resolve '@/lib/morphic/utils'
+  3 | import useEmblaCarousel, { type UseEmblaCarouselType } from 'embla-carousel-react'
+  4 | import { ArrowLeft, ArrowRight } from 'lucide-react'
+> 5 | import { cn } from '@/lib/morphic/utils'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 | import { Button } from './button'
+  7 |
+  8 | type CarouselApi = UseEmblaCarouselType[1]
+
+Import map: aliased to relative './lib/morphic/utils' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./components/morphic/ui/carousel.tsx [Client Component Browser]
+    ./components/morphic/search-results-image.tsx [Client Component Browser]
+    ./components/morphic/search-section.tsx [Client Component Browser]
+    ./components/morphic/tool-section.tsx [Client Component Browser]
+    ./components/morphic/research-process-section.tsx [Client Component Browser]
+    ./components/morphic/render-message.tsx [Client Component Browser]
+    ./components/morphic/chat-messages.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./components/morphic/ui/carousel.tsx [Client Component SSR]
+    ./components/morphic/search-results-image.tsx [Client Component SSR]
+    ./components/morphic/search-section.tsx [Client Component SSR]
+    ./components/morphic/tool-section.tsx [Client Component SSR]
+    ./components/morphic/research-process-section.tsx [Client Component SSR]
+    ./components/morphic/render-message.tsx [Client Component SSR]
+    ./components/morphic/chat-messages.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./components/morphic/ui/dialog.tsx:5:1
+Module not found: Can't resolve '@/lib/morphic/utils'
+  3 | import * as DialogPrimitive from '@radix-ui/react-dialog'
+  4 | import { X } from 'lucide-react'
+> 5 | import { cn } from '@/lib/morphic/utils'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 |
+  7 | const Dialog = DialogPrimitive.Root
+  8 | const DialogTrigger = DialogPrimitive.Trigger
+
+Import map: aliased to relative './lib/morphic/utils' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./components/morphic/ui/dialog.tsx [Client Component Browser]
+    ./components/morphic/search-results-image.tsx [Client Component Browser]
+    ./components/morphic/search-section.tsx [Client Component Browser]
+    ./components/morphic/tool-section.tsx [Client Component Browser]
+    ./components/morphic/research-process-section.tsx [Client Component Browser]
+    ./components/morphic/render-message.tsx [Client Component Browser]
+    ./components/morphic/chat-messages.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./components/morphic/ui/dialog.tsx [Client Component SSR]
+    ./components/morphic/search-results-image.tsx [Client Component SSR]
+    ./components/morphic/search-section.tsx [Client Component SSR]
+    ./components/morphic/tool-section.tsx [Client Component SSR]
+    ./components/morphic/research-process-section.tsx [Client Component SSR]
+    ./components/morphic/render-message.tsx [Client Component SSR]
+    ./components/morphic/chat-messages.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./components/morphic/ui/dropdown-menu.tsx:5:1
+Module not found: Can't resolve '@/lib/morphic/utils'
+  3 | import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu'
+  4 | import { Check, ChevronRight, Circle } from 'lucide-react'
+> 5 | import { cn } from '@/lib/morphic/utils'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 |
+  7 | const DropdownMenu = DropdownMenuPrimitive.Root
+  8 | const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger
+
+Import map: aliased to relative './lib/morphic/utils' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./components/morphic/ui/dropdown-menu.tsx [Client Component Browser]
+    ./components/morphic/model-type-selector.tsx [Client Component Browser]
+    ./components/morphic/chat-panel.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./components/morphic/ui/dropdown-menu.tsx [Client Component SSR]
+    ./components/morphic/model-type-selector.tsx [Client Component SSR]
+    ./components/morphic/chat-panel.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./components/morphic/ui/icons.tsx:3:1
+Module not found: Can't resolve '@/lib/morphic/utils'
+  1 | 'use client'
+  2 | import { useEffect, useRef } from 'react'
+> 3 | import { cn } from '@/lib/morphic/utils'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  4 |
+  5 | function IconLogo({ className, ...props }: React.ComponentProps<'svg'>) {
+  6 |     return (
+
+Import map: aliased to relative './lib/morphic/utils' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./components/morphic/ui/icons.tsx [Client Component Browser]
+    ./components/morphic/collapsible-message.tsx [Client Component Browser]
+    ./components/morphic/answer-section.tsx [Client Component Browser]
+    ./components/morphic/render-message.tsx [Client Component Browser]
+    ./components/morphic/chat-messages.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./components/morphic/ui/icons.tsx [Client Component SSR]
+    ./components/morphic/collapsible-message.tsx [Client Component SSR]
+    ./components/morphic/answer-section.tsx [Client Component SSR]
+    ./components/morphic/render-message.tsx [Client Component SSR]
+    ./components/morphic/chat-messages.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./components/morphic/ui/popover.tsx:4:1
+Module not found: Can't resolve '@/lib/morphic/utils'
+  2 | import * as React from 'react'
+  3 | import * as PopoverPrimitive from '@radix-ui/react-popover'
+> 4 | import { cn } from '@/lib/morphic/utils'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  5 | const Popover = PopoverPrimitive.Root
+  6 | const PopoverTrigger = PopoverPrimitive.Trigger
+  7 | const PopoverContent = React.forwardRef<React.ElementRef<typeof PopoverPrimitive.Content>, React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Content>>(({ className, align = 'center', sideOffset = 4, ...props }, ref) => (
+
+Import map: aliased to relative './lib/morphic/utils' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./components/morphic/ui/popover.tsx [Client Component Browser]
+    ./components/morphic/citation-link.tsx [Client Component Browser]
+    ./components/morphic/custom-link.tsx [Client Component Browser]
+    ./components/morphic/markdown-message.tsx [Client Component Browser]
+    ./components/morphic/answer-section.tsx [Client Component Browser]
+    ./components/morphic/render-message.tsx [Client Component Browser]
+    ./components/morphic/chat-messages.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./components/morphic/ui/popover.tsx [Client Component SSR]
+    ./components/morphic/citation-link.tsx [Client Component SSR]
+    ./components/morphic/custom-link.tsx [Client Component SSR]
+    ./components/morphic/markdown-message.tsx [Client Component SSR]
+    ./components/morphic/answer-section.tsx [Client Component SSR]
+    ./components/morphic/render-message.tsx [Client Component SSR]
+    ./components/morphic/chat-messages.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./components/morphic/ui/separator.tsx:4:1
+Module not found: Can't resolve '@/lib/morphic/utils'
+  2 | import * as React from 'react'
+  3 | import * as SeparatorPrimitive from '@radix-ui/react-separator'
+> 4 | import { cn } from '@/lib/morphic/utils'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  5 |
+  6 | const Separator = React.forwardRef<
+  7 |     React.ElementRef<typeof SeparatorPrimitive.Root>,
+
+Import map: aliased to relative './lib/morphic/utils' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./components/morphic/ui/separator.tsx [Client Component Browser]
+    ./components/morphic/collapsible-message.tsx [Client Component Browser]
+    ./components/morphic/answer-section.tsx [Client Component Browser]
+    ./components/morphic/render-message.tsx [Client Component Browser]
+    ./components/morphic/chat-messages.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./components/morphic/ui/separator.tsx [Client Component SSR]
+    ./components/morphic/collapsible-message.tsx [Client Component SSR]
+    ./components/morphic/answer-section.tsx [Client Component SSR]
+    ./components/morphic/render-message.tsx [Client Component SSR]
+    ./components/morphic/chat-messages.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./components/morphic/ui/skeleton.tsx:1:1
+Module not found: Can't resolve '@/lib/morphic/utils'
+> 1 | import { cn } from '@/lib/morphic/utils'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  2 | function Skeleton({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+  3 |     return <div className={cn('animate-pulse rounded-md bg-muted', className)} {...props} />
+  4 | }
+
+Import map: aliased to relative './lib/morphic/utils' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./components/morphic/ui/skeleton.tsx [Client Component Browser]
+    ./components/morphic/default-skeleton.tsx [Client Component Browser]
+    ./components/morphic/search-section.tsx [Client Component Browser]
+    ./components/morphic/tool-section.tsx [Client Component Browser]
+    ./components/morphic/research-process-section.tsx [Client Component Browser]
+    ./components/morphic/render-message.tsx [Client Component Browser]
+    ./components/morphic/chat-messages.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./components/morphic/ui/skeleton.tsx [Client Component SSR]
+    ./components/morphic/default-skeleton.tsx [Client Component SSR]
+    ./components/morphic/search-section.tsx [Client Component SSR]
+    ./components/morphic/tool-section.tsx [Client Component SSR]
+    ./components/morphic/research-process-section.tsx [Client Component SSR]
+    ./components/morphic/render-message.tsx [Client Component SSR]
+    ./components/morphic/chat-messages.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./components/morphic/ui/switch.tsx:4:1
+Module not found: Can't resolve '@/lib/morphic/utils'
+  2 | import * as React from 'react'
+  3 | import * as SwitchPrimitives from '@radix-ui/react-switch'
+> 4 | import { cn } from '@/lib/morphic/utils'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  5 |
+  6 | const Switch = React.forwardRef<React.ElementRef<typeof SwitchPrimitives.Root>, React.ComponentPropsWithoutRef<typeof SwitchPrimitives.Root>>(({ className, ...props }, ref) => (
+  7 |     <SwitchPrimitives.Root className={cn('peer inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input', className)} {...props} ref={ref}>
+
+Import map: aliased to relative './lib/morphic/utils' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./components/morphic/ui/switch.tsx [Client Component Browser]
+    ./components/morphic/knowledge-toggle.tsx [Client Component Browser]
+    ./components/morphic/chat-panel.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./components/morphic/ui/switch.tsx [Client Component SSR]
+    ./components/morphic/knowledge-toggle.tsx [Client Component SSR]
+    ./components/morphic/chat-panel.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./components/morphic/ui/tooltip.tsx:4:1
+Module not found: Can't resolve '@/lib/morphic/utils'
+  2 | import * as React from 'react'
+  3 | import * as TooltipPrimitive from '@radix-ui/react-tooltip'
+> 4 | import { cn } from '@/lib/morphic/utils'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  5 |
+  6 | const TooltipProvider = TooltipPrimitive.Provider
+  7 | const Tooltip = TooltipPrimitive.Root
+
+Import map: aliased to relative './lib/morphic/utils' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./components/morphic/ui/tooltip.tsx [Client Component Browser]
+    ./components/morphic/knowledge-toggle.tsx [Client Component Browser]
+    ./components/morphic/chat-panel.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./components/morphic/ui/tooltip.tsx [Client Component SSR]
+    ./components/morphic/knowledge-toggle.tsx [Client Component SSR]
+    ./components/morphic/chat-panel.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./components/morphic/knowledge-toggle.tsx:4:1
+Module not found: Can't resolve '@/lib/morphic/utils/cookies'
+  2 | import { useEffect, useState } from 'react'
+  3 | import { Database } from 'lucide-react'
+> 4 | import { getCookie, setCookie } from '@/lib/morphic/utils/cookies'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  5 | import { Switch } from './ui/switch'
+  6 | import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip'
+  7 |
+
+Import map: aliased to relative './lib/morphic/utils/cookies' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./components/morphic/knowledge-toggle.tsx [Client Component Browser]
+    ./components/morphic/chat-panel.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./components/morphic/knowledge-toggle.tsx [Client Component SSR]
+    ./components/morphic/chat-panel.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./components/morphic/model-type-selector.tsx:4:1
+Module not found: Can't resolve '@/lib/morphic/utils/cookies'
+  2 | import { useEffect, useState } from 'react'
+  3 | import { Check, ChevronDown } from 'lucide-react'
+> 4 | import { getCookie, setCookie } from '@/lib/morphic/utils/cookies'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  5 | import { Button } from './ui/button'
+  6 | import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu'
+  7 |
+
+Import map: aliased to relative './lib/morphic/utils/cookies' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./components/morphic/model-type-selector.tsx [Client Component Browser]
+    ./components/morphic/chat-panel.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./components/morphic/model-type-selector.tsx [Client Component SSR]
+    ./components/morphic/chat-panel.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./components/morphic/search-mode-selector.tsx:5:1
+Module not found: Can't resolve '@/lib/morphic/utils/cookies'
+  3 | import { Check, ChevronDown } from 'lucide-react'
+  4 | import { SEARCH_MODE_CONFIGS } from '@/lib/morphic/config/search-modes'
+> 5 | import { getCookie, setCookie } from '@/lib/morphic/utils/cookies'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 | import { Button } from './ui/button'
+  7 | import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu'
+  8 |
+
+Import map: aliased to relative './lib/morphic/utils/cookies' inside of [project]/
+
+
+Import traces:
+  Client Component Browser:
+    ./components/morphic/search-mode-selector.tsx [Client Component Browser]
+    ./components/morphic/chat-panel.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./components/morphic/search-mode-selector.tsx [Client Component SSR]
+    ./components/morphic/chat-panel.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+./components/morphic/search-mode-selector.tsx:4:1
+Export SEARCH_MODE_CONFIGS doesn't exist in target module
+  2 | import { useEffect, useRef, useState } from 'react'
+  3 | import { Check, ChevronDown } from 'lucide-react'
+> 4 | import { SEARCH_MODE_CONFIGS } from '@/lib/morphic/config/search-modes'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  5 | import { getCookie, setCookie } from '@/lib/morphic/utils/cookies'
+  6 | import { Button } from './ui/button'
+  7 | import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu'
+
+The export SEARCH_MODE_CONFIGS was not found in module [project]/lib/morphic/config/search-modes.ts [app-client] (ecmascript).
+Did you mean to import searchModes?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import traces:
+  Client Component Browser:
+    ./components/morphic/search-mode-selector.tsx [Client Component Browser]
+    ./components/morphic/chat-panel.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./components/morphic/search-mode-selector.tsx [Client Component SSR]
+    ./components/morphic/chat-panel.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+
+./components/morphic/search-mode-selector.tsx:4:1
+Export SEARCH_MODE_CONFIGS doesn't exist in target module
+  2 | import { useEffect, useRef, useState } from 'react'
+  3 | import { Check, ChevronDown } from 'lucide-react'
+> 4 | import { SEARCH_MODE_CONFIGS } from '@/lib/morphic/config/search-modes'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  5 | import { getCookie, setCookie } from '@/lib/morphic/utils/cookies'
+  6 | import { Button } from './ui/button'
+  7 | import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu'
+
+The export SEARCH_MODE_CONFIGS was not found in module [project]/lib/morphic/config/search-modes.ts [app-ssr] (ecmascript).
+Did you mean to import searchModes?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import traces:
+  Client Component Browser:
+    ./components/morphic/search-mode-selector.tsx [Client Component Browser]
+    ./components/morphic/chat-panel.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./components/morphic/search-mode-selector.tsx [Client Component SSR]
+    ./components/morphic/chat-panel.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+
+./lib/morphic/agents/researcher.ts:1:1
+Export ToolLoopAgent doesn't exist in target module
+> 1 | import { stepCountIs, tool, ToolLoopAgent, type UIMessageStreamWriter } from 'ai'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  2 | import type { ResearcherTools } from '@/lib/morphic/types/agent'
+  3 | import { type ModelType } from '@/lib/morphic/types/model-type'
+  4 | import { type Model } from '@/lib/morphic/types/models'
+
+The export ToolLoopAgent was not found in module [project]/node_modules/.pnpm/ai@4.3.19_react@18.3.1_zod@4.1.12/node_modules/ai/dist/index.mjs [app-route] (ecmascript).
+Did you mean to import tool?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  App Route:
+    ./lib/morphic/agents/researcher.ts
+    ./lib/morphic/streaming/create-chat-stream-response.ts
+    ./app/api/morphic/chat/route.ts
+
+
+./lib/morphic/streaming/create-chat-stream-response.ts:1:1
+Export consumeStream doesn't exist in target module
+> 1 | import { consumeStream, convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, pruneMessages, smoothStream, UIMessage, UIMessageStreamWriter } from 'ai'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  2 | import { randomUUID } from 'crypto'
+  3 | import { researcher } from '@/lib/morphic/agents/researcher'
+  4 | import { isTracingEnabled } from '@/lib/morphic/utils/telemetry'
+
+The export consumeStream was not found in module [project]/node_modules/.pnpm/ai@4.3.19_react@18.3.1_zod@4.1.12/node_modules/ai/dist/index.mjs [app-route] (ecmascript).
+Did you mean to import jsonSchema?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  App Route:
+    ./lib/morphic/streaming/create-chat-stream-response.ts
+    ./app/api/morphic/chat/route.ts
+
+
+./lib/morphic/streaming/create-chat-stream-response.ts:1:1
+Export convertToModelMessages doesn't exist in target module
+> 1 | import { consumeStream, convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, pruneMessages, smoothStream, UIMessage, UIMessageStreamWriter } from 'ai'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  2 | import { randomUUID } from 'crypto'
+  3 | import { researcher } from '@/lib/morphic/agents/researcher'
+  4 | import { isTracingEnabled } from '@/lib/morphic/utils/telemetry'
+
+The export convertToModelMessages was not found in module [project]/node_modules/.pnpm/ai@4.3.19_react@18.3.1_zod@4.1.12/node_modules/ai/dist/index.mjs [app-route] (ecmascript).
+Did you mean to import convertToCoreMessages?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  App Route:
+    ./lib/morphic/streaming/create-chat-stream-response.ts
+    ./app/api/morphic/chat/route.ts
+
+
+./lib/morphic/streaming/helpers/prepare-messages.ts:2:1
+Export createChat doesn't exist in target module
+  1 | import { UIMessage } from 'ai'
+> 2 | import { createChat, createChatWithFirstMessage, deleteMessagesFromIndex, loadChat, upsertMessage } from '@/lib/morphic/db/actions'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  3 | import { generateId } from '@/lib/morphic/db/schema'
+  4 | import { perfLog, perfTime } from '@/lib/morphic/utils/perf-logging'
+  5 | import type { StreamContext } from './types'
+
+The export createChat was not found in module [project]/lib/morphic/db/actions.ts [app-route] (ecmascript).
+Did you mean to import deleteChat?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  App Route:
+    ./lib/morphic/streaming/helpers/prepare-messages.ts
+    ./lib/morphic/streaming/create-chat-stream-response.ts
+    ./app/api/morphic/chat/route.ts
+
+
+./lib/morphic/streaming/helpers/persist-stream-results.ts:2:1
+Export createChatWithFirstMessage doesn't exist in target module
+  1 | import { UIMessage } from 'ai'
+> 2 | import { createChatWithFirstMessage, upsertMessage, updateChatTitle } from '@/lib/morphic/db/actions'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  3 | import { SearchMode } from '@/lib/morphic/types/search'
+  4 | import { perfTime } from '@/lib/morphic/utils/perf-logging'
+  5 |
+
+The export createChatWithFirstMessage was not found in module [project]/lib/morphic/db/actions.ts [app-route] (ecmascript).
+Did you mean to import clearChats?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  App Route:
+    ./lib/morphic/streaming/helpers/persist-stream-results.ts
+    ./lib/morphic/streaming/create-chat-stream-response.ts
+    ./app/api/morphic/chat/route.ts
+
+
+./lib/morphic/streaming/helpers/prepare-messages.ts:2:1
+Export createChatWithFirstMessage doesn't exist in target module
+  1 | import { UIMessage } from 'ai'
+> 2 | import { createChat, createChatWithFirstMessage, deleteMessagesFromIndex, loadChat, upsertMessage } from '@/lib/morphic/db/actions'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  3 | import { generateId } from '@/lib/morphic/db/schema'
+  4 | import { perfLog, perfTime } from '@/lib/morphic/utils/perf-logging'
+  5 | import type { StreamContext } from './types'
+
+The export createChatWithFirstMessage was not found in module [project]/lib/morphic/db/actions.ts [app-route] (ecmascript).
+Did you mean to import clearChats?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  App Route:
+    ./lib/morphic/streaming/helpers/prepare-messages.ts
+    ./lib/morphic/streaming/create-chat-stream-response.ts
+    ./app/api/morphic/chat/route.ts
+
+
+./lib/morphic/streaming/create-chat-stream-response.ts:1:1
+Export createUIMessageStream doesn't exist in target module
+> 1 | import { consumeStream, convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, pruneMessages, smoothStream, UIMessage, UIMessageStreamWriter } from 'ai'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  2 | import { randomUUID } from 'crypto'
+  3 | import { researcher } from '@/lib/morphic/agents/researcher'
+  4 | import { isTracingEnabled } from '@/lib/morphic/utils/telemetry'
+
+The export createUIMessageStream was not found in module [project]/node_modules/.pnpm/ai@4.3.19_react@18.3.1_zod@4.1.12/node_modules/ai/dist/index.mjs [app-route] (ecmascript).
+Did you mean to import createDataStream?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  App Route:
+    ./lib/morphic/streaming/create-chat-stream-response.ts
+    ./app/api/morphic/chat/route.ts
+
+
+./lib/morphic/streaming/create-chat-stream-response.ts:1:1
+Export createUIMessageStreamResponse doesn't exist in target module
+> 1 | import { consumeStream, convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, pruneMessages, smoothStream, UIMessage, UIMessageStreamWriter } from 'ai'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  2 | import { randomUUID } from 'crypto'
+  3 | import { researcher } from '@/lib/morphic/agents/researcher'
+  4 | import { isTracingEnabled } from '@/lib/morphic/utils/telemetry'
+
+The export createUIMessageStreamResponse was not found in module [project]/node_modules/.pnpm/ai@4.3.19_react@18.3.1_zod@4.1.12/node_modules/ai/dist/index.mjs [app-route] (ecmascript).
+Did you mean to import createDataStreamResponse?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  App Route:
+    ./lib/morphic/streaming/create-chat-stream-response.ts
+    ./app/api/morphic/chat/route.ts
+
+
+./components/morphic/tool-todo-display.tsx:5:1
+Export default doesn't exist in target module
+  3 | import { CollapsibleMessage } from './collapsible-message'
+  4 | import ProcessHeader from './process-header'
+> 5 | import TodoListContent from './todo-list-content'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 |
+  7 | export function ToolTodoDisplay({ state, output, toolCallId, isOpen = false, onOpenChange, borderless = false }: any) {
+  8 |     const completedCount = (output?.completedCount ?? output?.todos?.filter((t: any) => t.status === 'completed').length) || 0
+
+The export default was not found in module [project]/components/morphic/todo-list-content.tsx [app-client] (ecmascript).
+Did you mean to import TodoListContent?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import traces:
+  Client Component Browser:
+    ./components/morphic/tool-todo-display.tsx [Client Component Browser]
+    ./components/morphic/tool-section.tsx [Client Component Browser]
+    ./components/morphic/research-process-section.tsx [Client Component Browser]
+    ./components/morphic/render-message.tsx [Client Component Browser]
+    ./components/morphic/chat-messages.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./components/morphic/tool-todo-display.tsx [Client Component SSR]
+    ./components/morphic/tool-section.tsx [Client Component SSR]
+    ./components/morphic/research-process-section.tsx [Client Component SSR]
+    ./components/morphic/render-message.tsx [Client Component SSR]
+    ./components/morphic/chat-messages.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+
+./components/morphic/tool-todo-display.tsx:5:1
+Export default doesn't exist in target module
+  3 | import { CollapsibleMessage } from './collapsible-message'
+  4 | import ProcessHeader from './process-header'
+> 5 | import TodoListContent from './todo-list-content'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 |
+  7 | export function ToolTodoDisplay({ state, output, toolCallId, isOpen = false, onOpenChange, borderless = false }: any) {
+  8 |     const completedCount = (output?.completedCount ?? output?.todos?.filter((t: any) => t.status === 'completed').length) || 0
+
+The export default was not found in module [project]/components/morphic/todo-list-content.tsx [app-ssr] (ecmascript).
+Did you mean to import TodoListContent?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import traces:
+  Client Component Browser:
+    ./components/morphic/tool-todo-display.tsx [Client Component Browser]
+    ./components/morphic/tool-section.tsx [Client Component Browser]
+    ./components/morphic/research-process-section.tsx [Client Component Browser]
+    ./components/morphic/render-message.tsx [Client Component Browser]
+    ./components/morphic/chat-messages.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Client Component Browser]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./components/morphic/tool-todo-display.tsx [Client Component SSR]
+    ./components/morphic/tool-section.tsx [Client Component SSR]
+    ./components/morphic/research-process-section.tsx [Client Component SSR]
+    ./components/morphic/render-message.tsx [Client Component SSR]
+    ./components/morphic/chat-messages.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Client Component SSR]
+    ./components/morphic/chat.tsx [Server Component]
+    ./app/ai-search/page.tsx [Server Component]
+
+
+./lib/morphic/streaming/helpers/prepare-messages.ts:2:1
+Export deleteMessagesFromIndex doesn't exist in target module
+  1 | import { UIMessage } from 'ai'
+> 2 | import { createChat, createChatWithFirstMessage, deleteMessagesFromIndex, loadChat, upsertMessage } from '@/lib/morphic/db/actions'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  3 | import { generateId } from '@/lib/morphic/db/schema'
+  4 | import { perfLog, perfTime } from '@/lib/morphic/utils/perf-logging'
+  5 | import type { StreamContext } from './types'
+
+The export deleteMessagesFromIndex was not found in module [project]/lib/morphic/db/actions.ts [app-route] (ecmascript).
+Did you mean to import deleteChat?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  App Route:
+    ./lib/morphic/streaming/helpers/prepare-messages.ts
+    ./lib/morphic/streaming/create-chat-stream-response.ts
+    ./app/api/morphic/chat/route.ts
+
+
+./lib/morphic/streaming/create-chat-stream-response.ts:6:1
+Export generateChatTitle doesn't exist in target module
+  4 | import { isTracingEnabled } from '@/lib/morphic/utils/telemetry'
+  5 | import { loadChat } from '@/lib/morphic/db/actions'
+> 6 | import { generateChatTitle } from '@/lib/morphic/agents/title-generator'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  7 | import { signInternalFileUrls } from '@/lib/morphic/utils/file-signer'
+  8 | import { getTextFromParts } from '@/lib/morphic/utils/message-utils'
+  9 | import { perfLog, perfTime } from '@/lib/morphic/utils/perf-logging'
+
+The export generateChatTitle was not found in module [project]/lib/morphic/agents/title-generator.ts [app-route] (ecmascript).
+Did you mean to import generateTitle?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  App Route:
+    ./lib/morphic/streaming/create-chat-stream-response.ts
+    ./app/api/morphic/chat/route.ts
+
+
+./lib/morphic/agents/prompts/search-mode-prompts.ts:1:1
+Export isGeneralSearchProviderAvailable doesn't exist in target module
+> 1 | import { getContentTypesGuidance, isGeneralSearchProviderAvailable } from '@/lib/morphic/utils/search-config'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  2 |
+  3 | export function getQuickModePrompt(): string {
+  4 |     const hasGeneralProvider = isGeneralSearchProviderAvailable()
+
+The export isGeneralSearchProviderAvailable was not found in module [project]/lib/morphic/utils/search-config.ts [app-route] (ecmascript).
+Did you mean to import getGeneralSearchProviderType?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  App Route:
+    ./lib/morphic/agents/prompts/search-mode-prompts.ts
+    ./lib/morphic/agents/researcher.ts
+    ./lib/morphic/streaming/create-chat-stream-response.ts
+    ./app/api/morphic/chat/route.ts
+
+
+./lib/morphic/streaming/create-chat-stream-response.ts:5:1
+Export loadChat doesn't exist in target module
+  3 | import { researcher } from '@/lib/morphic/agents/researcher'
+  4 | import { isTracingEnabled } from '@/lib/morphic/utils/telemetry'
+> 5 | import { loadChat } from '@/lib/morphic/db/actions'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 | import { generateChatTitle } from '@/lib/morphic/agents/title-generator'
+  7 | import { signInternalFileUrls } from '@/lib/morphic/utils/file-signer'
+  8 | import { getTextFromParts } from '@/lib/morphic/utils/message-utils'
+
+The export loadChat was not found in module [project]/lib/morphic/db/actions.ts [app-route] (ecmascript).
+Did you mean to import clearChats?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  App Route:
+    ./lib/morphic/streaming/create-chat-stream-response.ts
+    ./app/api/morphic/chat/route.ts
+
+
+./lib/morphic/streaming/helpers/prepare-messages.ts:2:1
+Export loadChat doesn't exist in target module
+  1 | import { UIMessage } from 'ai'
+> 2 | import { createChat, createChatWithFirstMessage, deleteMessagesFromIndex, loadChat, upsertMessage } from '@/lib/morphic/db/actions'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  3 | import { generateId } from '@/lib/morphic/db/schema'
+  4 | import { perfLog, perfTime } from '@/lib/morphic/utils/perf-logging'
+  5 | import type { StreamContext } from './types'
+
+The export loadChat was not found in module [project]/lib/morphic/db/actions.ts [app-route] (ecmascript).
+Did you mean to import clearChats?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  App Route:
+    ./lib/morphic/streaming/helpers/prepare-messages.ts
+    ./lib/morphic/streaming/create-chat-stream-response.ts
+    ./app/api/morphic/chat/route.ts
+
+
+./lib/morphic/streaming/create-chat-stream-response.ts:1:1
+Export pruneMessages doesn't exist in target module
+> 1 | import { consumeStream, convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, pruneMessages, smoothStream, UIMessage, UIMessageStreamWriter } from 'ai'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  2 | import { randomUUID } from 'crypto'
+  3 | import { researcher } from '@/lib/morphic/agents/researcher'
+  4 | import { isTracingEnabled } from '@/lib/morphic/utils/telemetry'
+
+The export pruneMessages was not found in module [project]/node_modules/.pnpm/ai@4.3.19_react@18.3.1_zod@4.1.12/node_modules/ai/dist/index.mjs [app-route] (ecmascript).
+Did you mean to import coreMessageSchema?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  App Route:
+    ./lib/morphic/streaming/create-chat-stream-response.ts
+    ./app/api/morphic/chat/route.ts
+
+
+./lib/morphic/agents/researcher.ts:1:1
+Export stepCountIs doesn't exist in target module
+> 1 | import { stepCountIs, tool, ToolLoopAgent, type UIMessageStreamWriter } from 'ai'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  2 | import type { ResearcherTools } from '@/lib/morphic/types/agent'
+  3 | import { type ModelType } from '@/lib/morphic/types/model-type'
+  4 | import { type Model } from '@/lib/morphic/types/models'
+
+The export stepCountIs was not found in module [project]/node_modules/.pnpm/ai@4.3.19_react@18.3.1_zod@4.1.12/node_modules/ai/dist/index.mjs [app-route] (ecmascript).
+Did you mean to import Output?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  App Route:
+    ./lib/morphic/agents/researcher.ts
+    ./lib/morphic/streaming/create-chat-stream-response.ts
+    ./app/api/morphic/chat/route.ts
+
+
+./lib/morphic/streaming/helpers/persist-stream-results.ts:2:1
+Export updateChatTitle doesn't exist in target module
+  1 | import { UIMessage } from 'ai'
+> 2 | import { createChatWithFirstMessage, upsertMessage, updateChatTitle } from '@/lib/morphic/db/actions'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  3 | import { SearchMode } from '@/lib/morphic/types/search'
+  4 | import { perfTime } from '@/lib/morphic/utils/perf-logging'
+  5 |
+
+The export updateChatTitle was not found in module [project]/lib/morphic/db/actions.ts [app-route] (ecmascript).
+Did you mean to import getChat?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  App Route:
+    ./lib/morphic/streaming/helpers/persist-stream-results.ts
+    ./lib/morphic/streaming/create-chat-stream-response.ts
+    ./app/api/morphic/chat/route.ts
+
+
+./lib/morphic/streaming/helpers/persist-stream-results.ts:2:1
+Export upsertMessage doesn't exist in target module
+  1 | import { UIMessage } from 'ai'
+> 2 | import { createChatWithFirstMessage, upsertMessage, updateChatTitle } from '@/lib/morphic/db/actions'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  3 | import { SearchMode } from '@/lib/morphic/types/search'
+  4 | import { perfTime } from '@/lib/morphic/utils/perf-logging'
+  5 |
+
+The export upsertMessage was not found in module [project]/lib/morphic/db/actions.ts [app-route] (ecmascript).
+Did you mean to import saveMessage?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  App Route:
+    ./lib/morphic/streaming/helpers/persist-stream-results.ts
+    ./lib/morphic/streaming/create-chat-stream-response.ts
+    ./app/api/morphic/chat/route.ts
+
+
+./lib/morphic/streaming/helpers/prepare-messages.ts:2:1
+Export upsertMessage doesn't exist in target module
+  1 | import { UIMessage } from 'ai'
+> 2 | import { createChat, createChatWithFirstMessage, deleteMessagesFromIndex, loadChat, upsertMessage } from '@/lib/morphic/db/actions'
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  3 | import { generateId } from '@/lib/morphic/db/schema'
+  4 | import { perfLog, perfTime } from '@/lib/morphic/utils/perf-logging'
+  5 | import type { StreamContext } from './types'
+
+The export upsertMessage was not found in module [project]/lib/morphic/db/actions.ts [app-route] (ecmascript).
+Did you mean to import saveMessage?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import trace:
+  App Route:
+    ./lib/morphic/streaming/helpers/prepare-messages.ts
+    ./lib/morphic/streaming/create-chat-stream-response.ts
+    ./app/api/morphic/chat/route.ts
+
+
+    at <unknown> (./components/morphic/chat-panel.tsx:5:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./components/morphic/citation-link.tsx:5:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./components/morphic/collapsible-message.tsx:2:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./components/morphic/dynamic-tool-display.tsx:11:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./components/morphic/fetch-section.tsx:3:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./components/morphic/markdown-message.tsx:8:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./components/morphic/message-actions.tsx:6:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./components/morphic/process-header.tsx:3:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./components/morphic/section.tsx:4:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./components/morphic/source-favicons.tsx:3:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./components/morphic/todo-list-content.tsx:3:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./components/morphic/tool-badge.tsx:3:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./components/morphic/ui/animated-logo.tsx:2:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./components/morphic/ui/avatar.tsx:4:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./components/morphic/ui/badge.tsx:3:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./components/morphic/ui/button.tsx:4:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./components/morphic/ui/card.tsx:2:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./components/morphic/ui/carousel.tsx:5:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./components/morphic/ui/dialog.tsx:5:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./components/morphic/ui/dropdown-menu.tsx:5:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./components/morphic/ui/icons.tsx:3:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./components/morphic/ui/popover.tsx:4:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./components/morphic/ui/separator.tsx:4:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./components/morphic/ui/skeleton.tsx:1:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./components/morphic/ui/switch.tsx:4:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./components/morphic/ui/tooltip.tsx:4:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./components/morphic/knowledge-toggle.tsx:4:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./components/morphic/model-type-selector.tsx:4:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./components/morphic/search-mode-selector.tsx:5:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+    at <unknown> (./components/morphic/search-mode-selector.tsx:4:1)
+    at <unknown> (./components/morphic/search-mode-selector.tsx:4:1)
+    at <unknown> (./lib/morphic/agents/researcher.ts:1:1)
+    at <unknown> (./lib/morphic/streaming/create-chat-stream-response.ts:1:1)
+    at <unknown> (./lib/morphic/streaming/create-chat-stream-response.ts:1:1)
+    at <unknown> (./lib/morphic/streaming/helpers/prepare-messages.ts:2:1)
+    at <unknown> (./lib/morphic/streaming/helpers/persist-stream-results.ts:2:1)
+    at <unknown> (./lib/morphic/streaming/helpers/prepare-messages.ts:2:1)
+    at <unknown> (./lib/morphic/streaming/create-chat-stream-response.ts:1:1)
+    at <unknown> (./lib/morphic/streaming/create-chat-stream-response.ts:1:1)
+    at <unknown> (./components/morphic/tool-todo-display.tsx:5:1)
+    at <unknown> (./components/morphic/tool-todo-display.tsx:5:1)
+    at <unknown> (./lib/morphic/streaming/helpers/prepare-messages.ts:2:1)
+    at <unknown> (./lib/morphic/streaming/create-chat-stream-response.ts:6:1)
+    at <unknown> (./lib/morphic/agents/prompts/search-mode-prompts.ts:1:1)
+    at <unknown> (./lib/morphic/streaming/create-chat-stream-response.ts:5:1)
+    at <unknown> (./lib/morphic/streaming/helpers/prepare-messages.ts:2:1)
+    at <unknown> (./lib/morphic/streaming/create-chat-stream-response.ts:1:1)
+    at <unknown> (./lib/morphic/agents/researcher.ts:1:1)
+    at <unknown> (./lib/morphic/streaming/helpers/persist-stream-results.ts:2:1)
+    at <unknown> (./lib/morphic/streaming/helpers/persist-stream-results.ts:2:1)
+    at <unknown> (./lib/morphic/streaming/helpers/prepare-messages.ts:2:1)

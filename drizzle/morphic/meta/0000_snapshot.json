@@ -1,0 +1,968 @@
+{
+  "id": "05fc5e16-ccad-4b22-80fd-3bd0feb9d07f",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.morphic_ai_model_config": {
+      "name": "morphic_ai_model_config",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(191)",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "search_mode": {
+          "name": "search_mode",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "model_type": {
+          "name": "model_type",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "model_id": {
+          "name": "model_id",
+          "type": "varchar(191)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "priority": {
+          "name": "priority",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "morphic_ai_model_config_mode_type_idx": {
+          "name": "morphic_ai_model_config_mode_type_idx",
+          "columns": [
+            {
+              "expression": "search_mode",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "model_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "morphic_ai_model_config_model_id_morphic_ai_models_id_fk": {
+          "name": "morphic_ai_model_config_model_id_morphic_ai_models_id_fk",
+          "tableFrom": "morphic_ai_model_config",
+          "tableTo": "morphic_ai_models",
+          "columnsFrom": [
+            "model_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {
+        "admins_manage_morphic_model_config": {
+          "name": "admins_manage_morphic_model_config",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": [
+            "public"
+          ],
+          "using": "current_setting('app.current_user_id', true) IS NOT NULL",
+          "withCheck": "current_setting('app.current_user_id', true) IS NOT NULL"
+        }
+      },
+      "checkConstraints": {},
+      "isRLSEnabled": true
+    },
+    "public.morphic_ai_models": {
+      "name": "morphic_ai_models",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(191)",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "provider_id": {
+          "name": "provider_id",
+          "type": "varchar(191)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "model_id": {
+          "name": "model_id",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "is_enabled": {
+          "name": "is_enabled",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "morphic_ai_models_provider_id_morphic_ai_providers_id_fk": {
+          "name": "morphic_ai_models_provider_id_morphic_ai_providers_id_fk",
+          "tableFrom": "morphic_ai_models",
+          "tableTo": "morphic_ai_providers",
+          "columnsFrom": [
+            "provider_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {
+        "admins_manage_morphic_models": {
+          "name": "admins_manage_morphic_models",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": [
+            "public"
+          ],
+          "using": "current_setting('app.current_user_id', true) IS NOT NULL",
+          "withCheck": "current_setting('app.current_user_id', true) IS NOT NULL"
+        }
+      },
+      "checkConstraints": {},
+      "isRLSEnabled": true
+    },
+    "public.morphic_ai_providers": {
+      "name": "morphic_ai_providers",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(191)",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'openai'"
+        },
+        "base_url": {
+          "name": "base_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "api_key": {
+          "name": "api_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_enabled": {
+          "name": "is_enabled",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "status": {
+          "name": "status",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'disabled'"
+        },
+        "last_error": {
+          "name": "last_error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_checked_at": {
+          "name": "last_checked_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {
+        "admins_manage_morphic_providers": {
+          "name": "admins_manage_morphic_providers",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": [
+            "public"
+          ],
+          "using": "current_setting('app.current_user_id', true) IS NOT NULL",
+          "withCheck": "current_setting('app.current_user_id', true) IS NOT NULL"
+        }
+      },
+      "checkConstraints": {},
+      "isRLSEnabled": true
+    },
+    "public.morphic_chats": {
+      "name": "morphic_chats",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(191)",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "visibility": {
+          "name": "visibility",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'private'"
+        }
+      },
+      "indexes": {
+        "morphic_chats_user_id_idx": {
+          "name": "morphic_chats_user_id_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "morphic_chats_user_id_created_at_idx": {
+          "name": "morphic_chats_user_id_created_at_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "morphic_chats_created_at_idx": {
+          "name": "morphic_chats_created_at_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "morphic_chats_id_user_id_idx": {
+          "name": "morphic_chats_id_user_id_idx",
+          "columns": [
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {
+        "users_manage_own_morphic_chats": {
+          "name": "users_manage_own_morphic_chats",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": [
+            "public"
+          ],
+          "using": "user_id = current_setting('app.current_user_id', true)",
+          "withCheck": "user_id = current_setting('app.current_user_id', true)"
+        },
+        "public_morphic_chats_readable": {
+          "name": "public_morphic_chats_readable",
+          "as": "PERMISSIVE",
+          "for": "SELECT",
+          "to": [
+            "public"
+          ],
+          "using": "visibility = 'public'"
+        }
+      },
+      "checkConstraints": {},
+      "isRLSEnabled": true
+    },
+    "public.morphic_feedback": {
+      "name": "morphic_feedback",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(191)",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sentiment": {
+          "name": "sentiment",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "message": {
+          "name": "message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "page_url": {
+          "name": "page_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_agent": {
+          "name": "user_agent",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "morphic_feedback_user_id_idx": {
+          "name": "morphic_feedback_user_id_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "morphic_feedback_created_at_idx": {
+          "name": "morphic_feedback_created_at_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {
+        "anyone_can_insert_morphic_feedback": {
+          "name": "anyone_can_insert_morphic_feedback",
+          "as": "PERMISSIVE",
+          "for": "INSERT",
+          "to": [
+            "public"
+          ],
+          "withCheck": "true"
+        }
+      },
+      "checkConstraints": {},
+      "isRLSEnabled": true
+    },
+    "public.morphic_messages": {
+      "name": "morphic_messages",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(191)",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "chat_id": {
+          "name": "chat_id",
+          "type": "varchar(191)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role": {
+          "name": "role",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "morphic_messages_chat_id_idx": {
+          "name": "morphic_messages_chat_id_idx",
+          "columns": [
+            {
+              "expression": "chat_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "morphic_messages_chat_id_created_at_idx": {
+          "name": "morphic_messages_chat_id_created_at_idx",
+          "columns": [
+            {
+              "expression": "chat_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "morphic_messages_chat_id_morphic_chats_id_fk": {
+          "name": "morphic_messages_chat_id_morphic_chats_id_fk",
+          "tableFrom": "morphic_messages",
+          "tableTo": "morphic_chats",
+          "columnsFrom": [
+            "chat_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {
+        "users_manage_morphic_chat_messages": {
+          "name": "users_manage_morphic_chat_messages",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": [
+            "public"
+          ],
+          "using": "EXISTS (\n        SELECT 1 FROM \"morphic_chats\"\n        WHERE \"morphic_chats\".id = chat_id\n        AND \"morphic_chats\".user_id = current_setting('app.current_user_id', true)\n      )",
+          "withCheck": "EXISTS (\n        SELECT 1 FROM \"morphic_chats\"\n        WHERE \"morphic_chats\".id = chat_id\n        AND \"morphic_chats\".user_id = current_setting('app.current_user_id', true)\n      )"
+        },
+        "public_morphic_chat_messages_readable": {
+          "name": "public_morphic_chat_messages_readable",
+          "as": "PERMISSIVE",
+          "for": "SELECT",
+          "to": [
+            "public"
+          ],
+          "using": "EXISTS (\n        SELECT 1 FROM \"morphic_chats\"\n        WHERE \"morphic_chats\".id = chat_id\n        AND \"morphic_chats\".visibility = 'public'\n      )"
+        }
+      },
+      "checkConstraints": {},
+      "isRLSEnabled": true
+    },
+    "public.morphic_parts": {
+      "name": "morphic_parts",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(191)",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "message_id": {
+          "name": "message_id",
+          "type": "varchar(191)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "order": {
+          "name": "order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "text_text": {
+          "name": "text_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reasoning_text": {
+          "name": "reasoning_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "file_media_type": {
+          "name": "file_media_type",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "file_filename": {
+          "name": "file_filename",
+          "type": "varchar(1024)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "file_url": {
+          "name": "file_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_url_source_id": {
+          "name": "source_url_source_id",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_url_url": {
+          "name": "source_url_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_url_title": {
+          "name": "source_url_title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_document_source_id": {
+          "name": "source_document_source_id",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_document_media_type": {
+          "name": "source_document_media_type",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_document_title": {
+          "name": "source_document_title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_document_filename": {
+          "name": "source_document_filename",
+          "type": "varchar(1024)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_document_url": {
+          "name": "source_document_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_document_snippet": {
+          "name": "source_document_snippet",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tool_tool_call_id": {
+          "name": "tool_tool_call_id",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tool_state": {
+          "name": "tool_state",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tool_error_text": {
+          "name": "tool_error_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tool_search_input": {
+          "name": "tool_search_input",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tool_search_output": {
+          "name": "tool_search_output",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tool_fetch_input": {
+          "name": "tool_fetch_input",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tool_fetch_output": {
+          "name": "tool_fetch_output",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tool_question_input": {
+          "name": "tool_question_input",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tool_question_output": {
+          "name": "tool_question_output",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tool_todoWrite_input": {
+          "name": "tool_todoWrite_input",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tool_todoWrite_output": {
+          "name": "tool_todoWrite_output",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tool_todoRead_input": {
+          "name": "tool_todoRead_input",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tool_todoRead_output": {
+          "name": "tool_todoRead_output",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tool_dynamic_input": {
+          "name": "tool_dynamic_input",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tool_dynamic_output": {
+          "name": "tool_dynamic_output",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tool_dynamic_name": {
+          "name": "tool_dynamic_name",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tool_dynamic_type": {
+          "name": "tool_dynamic_type",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "data_prefix": {
+          "name": "data_prefix",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "data_content": {
+          "name": "data_content",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "data_id": {
+          "name": "data_id",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "provider_metadata": {
+          "name": "provider_metadata",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "morphic_parts_message_id_idx": {
+          "name": "morphic_parts_message_id_idx",
+          "columns": [
+            {
+              "expression": "message_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "morphic_parts_message_id_order_idx": {
+          "name": "morphic_parts_message_id_order_idx",
+          "columns": [
+            {
+              "expression": "message_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "order",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "morphic_parts_message_id_morphic_messages_id_fk": {
+          "name": "morphic_parts_message_id_morphic_messages_id_fk",
+          "tableFrom": "morphic_parts",
+          "tableTo": "morphic_messages",
+          "columnsFrom": [
+            "message_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {
+        "users_manage_morphic_message_parts": {
+          "name": "users_manage_morphic_message_parts",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": [
+            "public"
+          ],
+          "using": "EXISTS (\n        SELECT 1 FROM \"morphic_messages\"\n        INNER JOIN \"morphic_chats\" ON \"morphic_chats\".id = \"morphic_messages\".chat_id\n        WHERE \"morphic_messages\".id = message_id\n        AND \"morphic_chats\".user_id = current_setting('app.current_user_id', true)\n      )",
+          "withCheck": "EXISTS (\n        SELECT 1 FROM \"morphic_messages\"\n        INNER JOIN \"morphic_chats\" ON \"morphic_chats\".id = \"morphic_messages\".chat_id\n        WHERE \"morphic_messages\".id = message_id\n        AND \"morphic_chats\".user_id = current_setting('app.current_user_id', true)\n      )"
+        },
+        "public_morphic_chat_parts_readable": {
+          "name": "public_morphic_chat_parts_readable",
+          "as": "PERMISSIVE",
+          "for": "SELECT",
+          "to": [
+            "public"
+          ],
+          "using": "EXISTS (\n        SELECT 1 FROM \"morphic_messages\"\n        INNER JOIN \"morphic_chats\" ON \"morphic_chats\".id = \"morphic_messages\".chat_id\n        WHERE \"morphic_messages\".id = message_id\n        AND \"morphic_chats\".visibility = 'public'\n      )"
+        }
+      },
+      "checkConstraints": {},
+      "isRLSEnabled": true
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}
