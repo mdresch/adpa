@@ -831,6 +831,43 @@ router.post("/generate",
         })()
       })
 
+      // 🔍 RAG Sync: Sync document to Gemini File Search for AI Search
+      setImmediate(() => {
+        (async () => {
+          try {
+            const { ragSyncService } = await import('../services/ragSyncService')
+            if (ragSyncService.isAvailable()) {
+              log.info('🔍 [RAG-SYNC] Syncing generated document to File Search', {
+                documentId,
+                projectId,
+                documentName: name
+              })
+
+              const syncResult = await ragSyncService.syncDocument(documentId, projectId)
+
+              if (syncResult.success) {
+                log.info('✅ [RAG-SYNC] Document synced to File Search', {
+                  documentId,
+                  fileName: syncResult.fileName
+                })
+              } else {
+                log.warn('⚠️ [RAG-SYNC] Document sync failed (non-blocking)', {
+                  documentId,
+                  error: syncResult.error
+                })
+              }
+            }
+          } catch (ragError: any) {
+            // Don't fail document generation if RAG sync fails
+            log.error('❌ [RAG-SYNC] Failed to sync to File Search', {
+              documentId,
+              error: ragError.message
+            })
+          }
+        })()
+      })
+
+
       res.status(201).json({
         message: "Document generated successfully",
         document: documentResult.rows[0],

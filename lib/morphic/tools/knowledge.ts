@@ -33,13 +33,16 @@ const voyageClient = VOYAGE_API_KEY
  */
 export const createRagSearchTool = (userId: string) => tool({
     description: 'Search the internal knowledge base (RAG) for historical research, documents, and unstructured data using vector similarity.',
-    parameters: z.object({
+    inputSchema: z.object({
         query: z.string().describe('The search query to find relevant context for.'),
         limit: z.number().optional().default(5).describe('Maximum number of results to return.')
     }),
-    execute: async ({ query, limit }) => {
+    execute: async function* ({ query, limit }) {
+        yield { state: 'searching' as const, query }
+
         if (!MONGODB_URI || !voyageClient) {
-            return { error: 'RAG search is not configured (missing MongoDB URI or Voyage API Key).' }
+            yield { state: 'output-error' as const, error: 'RAG search is not configured (missing MongoDB URI or Voyage API Key).' }
+            return 'RAG search is not configured'
         }
 
         try {
@@ -85,7 +88,8 @@ export const createRagSearchTool = (userId: string) => tool({
 
             const results = await collection.aggregate(pipeline).toArray()
 
-            return {
+            yield {
+                state: 'complete' as const,
                 query,
                 results: results.map(r => ({
                     content: r.content,
@@ -93,9 +97,11 @@ export const createRagSearchTool = (userId: string) => tool({
                     score: r.score
                 }))
             }
+            return results
         } catch (error) {
             console.error('[RAG] Search Error:', error)
-            return { error: `Search failed: ${error instanceof Error ? error.message : String(error)}` }
+            yield { state: 'output-error' as const, error: `Search failed: ${error instanceof Error ? error.message : String(error)}` }
+            return error
         }
     }
 })
@@ -105,24 +111,28 @@ export const createRagSearchTool = (userId: string) => tool({
  */
 export const createDbQueryTool = (userId: string) => tool({
     description: 'Execute read-only SQL queries on the local PostgreSQL database to retrieve system information, chat history, or model configurations. Only SELECT statements are allowed.',
-    parameters: z.object({
+    inputSchema: z.object({
         sqlQuery: z.string().describe('The SQL query to execute. MUST be a SELECT statement.')
     }),
-    execute: async ({ sqlQuery }) => {
+    execute: async function* ({ sqlQuery }) {
+        yield { state: 'querying' as const, sqlQuery }
+
         // Basic security check
         const normalizedQuery = sqlQuery.trim().toLowerCase()
         if (!normalizedQuery.startsWith('select')) {
-            return { error: 'Only SELECT statements are allowed for security reasons.' }
+            yield { state: 'output-error' as const, error: 'Only SELECT statements are allowed for security reasons.' }
+            return 'Security violation'
         }
 
         // Block potentially sensitive tables if needed, but for now we allow selectivity
         if (normalizedQuery.includes('delete') || normalizedQuery.includes('update') || normalizedQuery.includes('drop') || normalizedQuery.includes('insert')) {
-            return { error: 'Destructive operations are forbidden.' }
+            yield { state: 'output-error' as const, error: 'Destructive operations are forbidden.' }
+            return 'Security violation'
         }
 
         try {
             // Execute the raw SQL using drizzle in a transaction to set local RLS variable
-            return await db.transaction(async (tx) => {
+            const resultPayload = await db.transaction(async (tx) => {
                 // Set the current user ID for RLS policies
                 await tx.execute(sql`SELECT set_config('app.current_user_id', ${userId}, true)`)
 
@@ -135,9 +145,16 @@ export const createDbQueryTool = (userId: string) => tool({
                     results: result
                 }
             })
+
+            yield {
+                state: 'complete' as const,
+                ...resultPayload
+            }
+            return resultPayload
         } catch (error) {
             console.error('[DB Query] Error:', error)
-            return { error: `Query failed: ${error instanceof Error ? error.message : String(error)}` }
+            yield { state: 'output-error' as const, error: `Query failed: ${error instanceof Error ? error.message : String(error)}` }
+            return error
         }
     }
 })

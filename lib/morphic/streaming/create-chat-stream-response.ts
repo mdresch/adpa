@@ -1,13 +1,19 @@
 import {
-    // @ts-ignore - convertToModelMessages exists in runtime but not in d.ts
-    convertToModelMessages
+    convertToModelMessages,
+    createUIMessageStream,
+    createUIMessageStreamResponse,
+    pruneMessages,
+    smoothStream,
+    consumeStream,
+    UIMessage,
+    UIMessageStreamWriter
 } from 'ai'
 import { v4 as uuidv4 } from 'uuid'
 
 import { researcher } from '@/lib/morphic/agents/researcher'
 import { isTracingEnabled } from '@/lib/morphic/utils/telemetry'
 
-import { loadChatWithMessages as loadChat } from '../db/actions'
+import { loadChatWithMessages as loadChat, upsertMessage, createChat } from '../db/actions'
 import { generateChatTitle } from '../agents/title-generator'
 import { signInternalFileUrls } from '../utils/file-signer'
 import { getTextFromParts } from '../utils/message-utils'
@@ -37,7 +43,8 @@ export async function createChatStreamResponse(
         messageId,
         abortSignal,
         isNewChat,
-        knowledgeEnabled
+        knowledgeEnabled,
+        ragScope
     } = config
 
     // Verify that chatId is provided
@@ -46,6 +53,23 @@ export async function createChatStreamResponse(
             status: 400,
             statusText: 'Bad Request'
         })
+    }
+
+    // Persist user message and create chat if needed
+    if (message) {
+        // Ensure chat exists if new
+        if (isNewChat && userId) {
+            const title = getTextFromParts(message.parts)?.slice(0, 100) || DEFAULT_CHAT_TITLE
+            await createChat({ id: chatId, title, userId })
+        }
+
+        // Save the user message
+        if (userId) {
+            await upsertMessage({
+                ...message,
+                chatId
+            }, userId)
+        }
     }
 
     // Skip loading chat for new chats optimization
@@ -108,92 +132,146 @@ export async function createChatStreamResponse(
 
         let lastError: any = null
 
-        // Fallback Orchestration Loop
-        for (const candidate of candidateModels) {
-            const currentModelId = `${candidate.providerId}:${candidate.id}`
+        // We wrap the entire execution within createUIMessageStream so we can merge the result
+        // matching the UI message protocol expected by the DefaultChatTransport on the frontend.
+        const stream = createUIMessageStream<UIMessage>({
+            execute: async ({ writer }: { writer: UIMessageStreamWriter }) => {
+                let lastError: any = null
+                let success = false
 
-            try {
-                perfLog(`Attempting model: ${currentModelId} `)
-                context.modelId = currentModelId
+                // Fallback Orchestration Loop
+                for (const candidate of candidateModels) {
+                    const currentModelId = `${candidate.providerId}:${candidate.id}`
 
-                const messagesToModel = await prepareMessages(context, message)
+                    try {
+                        perfLog(`Attempting model: ${currentModelId} `)
+                        context.modelId = currentModelId
 
-                // Get the researcher agent
-                // Note: We create it fresh for each model candidate
-                const researchAgent = researcher({
-                    model: currentModelId,
-                    modelConfig: candidate,
-                    parentTraceId,
-                    searchMode,
-                    modelType,
-                    knowledgeEnabled,
-                    userId
-                })
+                        const messagesToModel = await prepareMessages(context, message)
 
-                const signedMessages = await signInternalFileUrls(messagesToModel, currentModelId)
-                const isOpenAI = currentModelId.startsWith('openai:')
-                const messagesToConvert = isOpenAI
-                    ? stripReasoningParts(signedMessages)
-                    : signedMessages
+                        // Get the researcher agent — pass writer for tool UI streaming
+                        const researchAgent = researcher({
+                            model: currentModelId,
+                            modelConfig: candidate,
+                            writer,
+                            parentTraceId,
+                            searchMode,
+                            modelType,
+                            knowledgeEnabled,
+                            userId,
+                            ragScope
+                        })
 
-                // Convert to ModelMessages (v6 standard substitution)
-                // convertToModelMessages is async? index.d.ts says it returns Promise<ModelMessage[]>
-                const coreMessages = await convertToModelMessages(messagesToConvert)
+                        const signedMessages = await signInternalFileUrls(messagesToModel, currentModelId)
+                        const isOpenAI = currentModelId.startsWith('openai:')
+                        let messagesToConvert = isOpenAI
+                            ? stripReasoningParts(signedMessages)
+                            : signedMessages
 
-                // Title generation
-                if (!initialChat && message && !titlePromise) {
-                    const messageContent = getTextFromParts(message.parts)
-                    if (messageContent) {
-                        titlePromise = generateChatTitle({
-                            userMessageContent: messageContent,
-                            modelId: currentModelId,
+                        // Cleanup Morphic specific generator states ('complete', 'error', etc) from previous tool results
+                        messagesToConvert = messagesToConvert.map(msg => {
+                            const msgAny = msg as any
+                            if (Array.isArray(msgAny.parts)) {
+                                return {
+                                    ...msg,
+                                    parts: msgAny.parts.map((toolPart: any) => {
+                                        if (toolPart.type === 'tool-result' && toolPart.result && typeof toolPart.result === 'object') {
+                                            const cleanedResult = { ...toolPart.result }
+                                            delete cleanedResult.state
+                                            return { ...toolPart, result: cleanedResult }
+                                        }
+                                        return toolPart
+                                    })
+                                }
+                            }
+                            return msg
+                        })
+
+                        let coreMessages = await convertToModelMessages(messagesToConvert)
+
+                        // Prune messages to keep context manageable
+                        coreMessages = pruneMessages({
+                            messages: coreMessages,
+                            reasoning: 'before-last-message',
+                            toolCalls: 'before-last-2-messages',
+                            emptyMessages: 'remove'
+                        })
+
+                        if (!initialChat && message && !titlePromise) {
+                            const messageContent = getTextFromParts(message.parts)
+                            if (messageContent) {
+                                titlePromise = generateChatTitle({
+                                    userMessageContent: messageContent,
+                                    modelId: currentModelId,
+                                    abortSignal,
+                                    parentTraceId
+                                }).catch(() => DEFAULT_CHAT_TITLE)
+                            }
+                        }
+
+                        const llmStart = performance.now()
+
+                        // Execute the stream via the ToolLoopAgent
+                        const result = await researchAgent.stream({
+                            messages: coreMessages,
                             abortSignal,
-                            parentTraceId
-                        }).catch(() => DEFAULT_CHAT_TITLE)
+                            experimental_transform: smoothStream({ chunking: 'word' })
+                        })
+
+                        perfTime(`researchAgent.stream initiated(${currentModelId})`, llmStart)
+
+                        // Consume and map the stream to the UI
+                        result.consumeStream()
+
+                        writer.merge(
+                            result.toUIMessageStream({
+                                messageMetadata: ({ part }: any) => {
+                                    if (part.type === 'start') {
+                                        return {
+                                            traceId: parentTraceId,
+                                            searchMode,
+                                            modelId: currentModelId
+                                        }
+                                    }
+                                }
+                            })
+                        )
+
+                        success = true
+                        break // Break Out on Success
+
+                    } catch (error: any) {
+                        console.error(`Model ${currentModelId} failed: `, error)
+                        lastError = error
+                        if (candidate === candidateModels[candidateModels.length - 1]) throw error
+                        perfLog(`Falling back from ${currentModelId}...`)
                     }
                 }
 
-                const llmStart = performance.now()
-
-                // Execute the stream via the agent wrapper
-                // @ts-ignore - Assuming coreMessages is compatible
-                const result = await researchAgent.stream(coreMessages as any)
-                // Log available keys for debugging
-                console.log(`[Debug] Result keys:`, Object.keys(result))
-
-                perfTime(`researchAgent.stream initiated(${currentModelId})`, llmStart)
-
-                // Return the data stream response using the stable v6 method
-                // @ts-ignore
-                if (typeof result.toUIMessageStreamResponse === 'function') {
-                    console.log(`[Debug] Using toUIMessageStreamResponse`)
-                    return result.toUIMessageStreamResponse()
+                if (!success && lastError) {
+                    throw lastError
                 }
+            },
+            onError: (error: any) => {
+                return error instanceof Error ? error.message : String(error)
+            },
+            onFinish: async ({ responseMessage, isAborted }) => {
+                if (isAborted || !responseMessage) return
 
-                // Fallback to toTextStreamResponse if UI stream is not available
-                // @ts-ignore
-                if (typeof result.toTextStreamResponse === 'function') {
-                    console.log(`[Debug] Fallback to toTextStreamResponse`)
-                    return result.toTextStreamResponse()
-                }
-
-                throw new Error('No compatible stream response method found (toUIMessageStreamResponse or toTextStreamResponse missing)')
-
-            } catch (error: any) {
-                console.error(`Model ${currentModelId} failed: `, error)
-                lastError = error
-                if (candidate === candidateModels[candidateModels.length - 1]) {
-                    throw error
-                }
-                perfLog(`Falling back from ${currentModelId}...`)
+                // Persist stream results to database (includes title update)
+                await persistStreamResults(
+                    responseMessage,
+                    chatId,
+                    userId,
+                    titlePromise,
+                    parentTraceId,
+                    searchMode,
+                    context.modelId
+                )
             }
-        }
+        })
 
-        if (lastError) {
-            throw lastError
-        }
-
-        return new Response('No models available', { status: 500 })
+        return createUIMessageStreamResponse({ stream, consumeSseStream: consumeStream })
 
     } catch (error) {
         console.error('Stream execution error:', error)

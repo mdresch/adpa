@@ -15,6 +15,7 @@ import {
 } from '@/lib/morphic/types/dynamic-tools'
 import { cn } from '@/lib/morphic/utils'
 import { useFileDropzone } from '@/lib/morphic/hooks/use-file-dropzone'
+import { getScopeFromCookie } from './rag-scope-selector'
 import { ChatMessages } from './chat-messages'
 import { ChatPanel } from './chat-panel'
 import { DragOverlay } from './drag-overlay'
@@ -103,7 +104,8 @@ export function Chat({
                         isNewChat:
                             trigger === 'submit-message' &&
                             messages.length === 1 &&
-                            savedMessages.length === 0
+                            savedMessages.length === 0,
+                        ragScope: getScopeFromCookie()
                     }
                 }
             }

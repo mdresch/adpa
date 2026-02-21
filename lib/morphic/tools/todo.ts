@@ -33,25 +33,30 @@ export function createTodoTools() {
     const todoWrite = tool({
         description:
             'Create or update todos to track progress on complex tasks. Use this to maintain a list of action items. The response includes completedCount and totalCount to verify task completion.',
-        parameters: todoWriteInputSchema,
-        execute: async ({ todos, progressMessage }) => {
+        inputSchema: todoWriteInputSchema,
+        execute: async function* ({ todos, progressMessage }) {
+            // Yield initial state
+            yield { state: 'writing', progressMessage }
+
             // Update session todos - ensure priority is always set
-            sessionTodos = todos.map(todo => ({
+            sessionTodos = todos.map((todo: any) => ({
                 ...todo,
                 priority: todo.priority || 'medium'
             }))
 
             // Calculate progress
-            const completedCount = todos.filter(t => t.status === 'completed').length
+            const completedCount = todos.filter((t: any) => t.status === 'completed').length
             const totalCount = todos.length
 
-            return {
+            yield {
+                state: 'complete',
                 success: true,
                 message: progressMessage || `Updated ${totalCount} todos`,
                 completedCount,
                 totalCount,
                 todos: sessionTodos
             }
+            return sessionTodos
         }
     })
 

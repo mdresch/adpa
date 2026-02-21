@@ -1,4 +1,4 @@
-import { tool, ToolInvocation } from 'ai'
+import { tool, UIToolInvocation } from 'ai'
 
 import { fetchSchema } from '@/lib/morphic/schema/fetch'
 import { SearchResults as SearchResultsType } from '@/lib/morphic/types'
@@ -160,9 +160,9 @@ async function fetchTavilyExtractData(url: string): Promise<SearchResultsType> {
 export const fetchTool = tool({
     description:
         'Fetch content from any URL. By default uses "regular" type which performs fast, direct HTML fetching without external APIs - ideal for most websites. IMPORTANT: "regular" type does NOT support PDFs and will fail on PDF URLs. Use "api" type when you need: 1) PDF content extraction (required for .pdf URLs), 2) Complex JavaScript-rendered pages, 3) Better markdown formatting, 4) Table extraction. The "api" type requires Jina or Tavily API keys and uses Jina Reader if available, otherwise falls back to Tavily Extract.',
-    parameters: fetchSchema,
-    async execute({ url, type = 'regular' }) {
-        // yield { state: 'fetching' as const, url } - Removed for Promise return compatibility
+    inputSchema: fetchSchema,
+    async *execute({ url, type = 'regular' }) {
+        yield { state: 'fetching' as const, url }
 
         try {
             let results: SearchResultsType
@@ -180,21 +180,23 @@ export const fetchTool = tool({
                 }
             }
 
-            // Return final results with complete state
-            return {
+            // Yield final results with complete state
+            yield {
                 state: 'complete' as const,
                 ...results
             }
+            return results.results?.map(r => r.content).join('\n\n') || 'No content found at URL.'
         } catch (error) {
-            // Return error state
-            return {
+            // Yield error state
+            yield {
                 state: 'error' as const,
                 error: error instanceof Error ? error.message : 'Failed to fetch content',
                 url
             }
+            return error
         }
     }
 })
 
 // Export type for UI tool invocation
-export type FetchUIToolInvocation = ToolInvocation
+export type FetchUIToolInvocation = UIToolInvocation<any>

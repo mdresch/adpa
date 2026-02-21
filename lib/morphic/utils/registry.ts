@@ -13,7 +13,9 @@ import { createOllama } from 'ollama-ai-provider-v2'
 const staticProviders: Record<string, any> = {
     openai,
     anthropic,
-    google,
+    google: createGoogleGenerativeAI({
+        apiKey: process.env.GOOGLE_AI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY
+    }),
     mistral,
     'openai-compatible': createOpenAI({
         apiKey: process.env.OPENAI_COMPATIBLE_API_KEY,
@@ -53,7 +55,7 @@ export async function refreshRegistry() {
                 })
             } else if (providerType === 'google') {
                 providers[p.id] = createGoogleGenerativeAI({
-                    apiKey: p.apiKey || process.env.GOOGLE_GENERATIVE_AI_API_KEY,
+                    apiKey: p.apiKey || process.env.GOOGLE_AI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY,
                     baseURL: p.baseUrl || undefined
                 })
             } else if (providerType === 'anthropic') {
@@ -100,7 +102,7 @@ export function isProviderEnabled(providerId: string): boolean {
         switch (providerId) {
             case 'openai': return !!process.env.OPENAI_API_KEY
             case 'anthropic': return !!process.env.ANTHROPIC_API_KEY
-            case 'google': return !!process.env.GOOGLE_GENERATIVE_AI_API_KEY
+            case 'google': return !!process.env.GOOGLE_AI_API_KEY || !!process.env.GOOGLE_GENERATIVE_AI_API_KEY
             case 'ollama': return !!process.env.OLLAMA_BASE_URL
             default: return true
         }

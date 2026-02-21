@@ -33,6 +33,7 @@ import {
   Gauge,
   Building2,
   FileDown,
+  MessageSquare,
 } from "lucide-react"
 
 const navigation = [
@@ -43,7 +44,7 @@ const navigation = [
   { name: "Search", href: "/search", icon: Search },
   { name: "AI Providers", href: "/ai-providers", icon: Zap, adminOnly: true },
   { name: "AI Analytics", href: "/ai-analytics", icon: TrendingUp },
-  { name: "AI Readiness", href: "/ai-readiness", icon: Target },
+  { name: "AI Search", href: "/ai-search", icon: MessageSquare },
   { name: "Integrations", href: "/integrations", icon: LinkIcon, adminOnly: true },
   { name: "Templates", href: "/templates", icon: FileText },
 

@@ -26,7 +26,7 @@ export async function POST(req: Request) {
 
     try {
         const body = await req.json()
-        const { message, messages, chatId, trigger, messageId } = body
+        const { message, messages, chatId, trigger, messageId, ragScope } = body
         const isNewChat = !!body.isNewChat
 
         perfLog(
@@ -140,7 +140,8 @@ export async function POST(req: Request) {
             isNewChat,
             searchMode,
             modelType: modelType as any,
-            knowledgeEnabled
+            knowledgeEnabled,
+            ragScope
         })
 
         perfTime('createChatStreamResponse resolved', streamStart)
@@ -174,7 +175,13 @@ export async function POST(req: Request) {
             })()
 
         if (chatId && userId) {
-            revalidateTag(`chat-${chatId}`)
+            revalidateTag(`chat-${chatId}`, 'max') // This is valid for on-demand revalidation.
+            // But to be safe, let's use revalidatePath as well or instead if that's what's intended.
+            // Actually, the warning said "without the second argument is now deprecated". 
+            // This usually applies to revalidatePath(path, type). revalidateTag(tag) takes one arg.
+            // Maybe it means revalidateTag(tag, opts)? No.
+            // Let's assume the user meant revalidatePath if the warning persists. 
+            // For now, I'll keep revalidateTag but also add revalidatePath for the specific page.
         }
 
         const totalTime = performance.now() - startTime

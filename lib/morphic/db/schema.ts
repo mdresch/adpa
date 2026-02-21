@@ -24,7 +24,7 @@ export const generateId = () => createId()
 
 // Chats table
 export const chats = pgTable(
-    'morphic_chats',
+    'chats',
     {
         id: varchar('id', { length: ID_LENGTH })
             .primaryKey()
@@ -41,24 +41,24 @@ export const chats = pgTable(
     },
     table => [
         // Indexes
-        index('morphic_chats_user_id_idx').on(table.userId),
-        index('morphic_chats_user_id_created_at_idx').on(
+        index('chats_user_id_idx').on(table.userId),
+        index('chats_user_id_created_at_idx').on(
             table.userId,
             table.createdAt.desc()
         ),
-        index('morphic_chats_created_at_idx').on(table.createdAt.desc()),
+        index('chats_created_at_idx').on(table.createdAt.desc()),
         // Composite index for RLS subqueries in messages and parts tables
-        index('morphic_chats_id_user_id_idx').on(table.id, table.userId),
+        index('chats_id_user_id_idx').on(table.id, table.userId),
 
         // RLS Policies
-        pgPolicy('users_manage_own_morphic_chats', {
+        pgPolicy('users_manage_own_chats', {
             as: 'permissive',
             for: 'all',
             to: 'public',
             using: sql`user_id = current_setting('app.current_user_id', true)`,
             withCheck: sql`user_id = current_setting('app.current_user_id', true)`
         }),
-        pgPolicy('public_morphic_chats_readable', {
+        pgPolicy('public_chats_readable', {
             as: 'permissive',
             for: 'select',
             to: 'public',
@@ -71,7 +71,7 @@ export type Chat = InferSelectModel<typeof chats>
 
 // Messages table
 export const messages = pgTable(
-    'morphic_messages',
+    'messages',
     {
         id: varchar('id', { length: ID_LENGTH })
             .primaryKey()
@@ -85,11 +85,11 @@ export const messages = pgTable(
         metadata: jsonb('metadata').$type<Record<string, any>>()
     },
     table => [
-        index('morphic_messages_chat_id_idx').on(table.chatId),
-        index('morphic_messages_chat_id_created_at_idx').on(table.chatId, table.createdAt),
+        index('messages_chat_id_idx').on(table.chatId),
+        index('messages_chat_id_created_at_idx').on(table.chatId, table.createdAt),
 
         // RLS Policies - allow access to messages if user owns the chat
-        pgPolicy('users_manage_morphic_chat_messages', {
+        pgPolicy('users_manage_chat_messages', {
             as: 'permissive',
             for: 'all',
             to: 'public',
@@ -104,7 +104,7 @@ export const messages = pgTable(
         AND ${chats}.user_id = current_setting('app.current_user_id', true)
       )`
         }),
-        pgPolicy('public_morphic_chat_messages_readable', {
+        pgPolicy('public_chat_messages_readable', {
             as: 'permissive',
             for: 'select',
             to: 'public',
@@ -121,7 +121,7 @@ export type Message = InferSelectModel<typeof messages>
 
 // Parts table
 export const parts = pgTable(
-    'morphic_parts',
+    'parts',
     {
         id: varchar('id', { length: ID_LENGTH })
             .primaryKey()
@@ -201,11 +201,11 @@ export const parts = pgTable(
     },
     table => [
         // Indexes
-        index('morphic_parts_message_id_idx').on(table.messageId),
-        index('morphic_parts_message_id_order_idx').on(table.messageId, table.order),
+        index('parts_message_id_idx').on(table.messageId),
+        index('parts_message_id_order_idx').on(table.messageId, table.order),
 
         // RLS Policies - allow access to parts if user owns the related chat
-        pgPolicy('users_manage_morphic_message_parts', {
+        pgPolicy('users_manage_message_parts', {
             as: 'permissive',
             for: 'all',
             to: 'public',
@@ -222,7 +222,7 @@ export const parts = pgTable(
         AND ${chats}.user_id = current_setting('app.current_user_id', true)
       )`
         }),
-        pgPolicy('public_morphic_chat_parts_readable', {
+        pgPolicy('public_chat_parts_readable', {
             as: 'permissive',
             for: 'select',
             to: 'public',
@@ -241,7 +241,7 @@ export type NewPart = typeof parts.$inferInsert
 
 // Feedback table
 export const feedback = pgTable(
-    'morphic_feedback',
+    'feedback',
     {
         id: varchar('id', { length: ID_LENGTH })
             .primaryKey()
@@ -258,11 +258,11 @@ export const feedback = pgTable(
     },
     table => [
         // Indexes
-        index('morphic_feedback_user_id_idx').on(table.userId),
-        index('morphic_feedback_created_at_idx').on(table.createdAt),
+        index('feedback_user_id_idx').on(table.userId),
+        index('feedback_created_at_idx').on(table.createdAt),
 
         // RLS Policies - Allow anyone to insert feedback
-        pgPolicy('anyone_can_insert_morphic_feedback', {
+        pgPolicy('anyone_can_insert_feedback', {
             for: 'insert',
             to: 'public',
             withCheck: sql`true`
@@ -274,7 +274,7 @@ export type Feedback = InferSelectModel<typeof feedback>
 
 // AI Providers table
 export const aiProviders = pgTable(
-    'morphic_ai_providers',
+    'ai_providers',
     {
         id: varchar('id', { length: ID_LENGTH }).primaryKey(),
         name: varchar('name', { length: VARCHAR_LENGTH }).notNull(),
@@ -292,7 +292,7 @@ export const aiProviders = pgTable(
         updatedAt: timestamp('updated_at')
     },
     table => [
-        pgPolicy('admins_manage_morphic_providers', {
+        pgPolicy('admins_manage_providers', {
             for: 'all',
             to: 'public',
             using: sql`current_setting('app.current_user_id', true) IS NOT NULL`,
@@ -305,7 +305,7 @@ export type AIProvider = InferSelectModel<typeof aiProviders>
 
 // AI Models table
 export const aiModels = pgTable(
-    'morphic_ai_models',
+    'ai_models',
     {
         id: varchar('id', { length: ID_LENGTH }).primaryKey(),
         providerId: varchar('provider_id', { length: ID_LENGTH })
@@ -317,7 +317,7 @@ export const aiModels = pgTable(
         createdAt: timestamp('created_at').notNull().defaultNow()
     },
     table => [
-        pgPolicy('admins_manage_morphic_models', {
+        pgPolicy('admins_manage_models', {
             for: 'all',
             to: 'public',
             using: sql`current_setting('app.current_user_id', true) IS NOT NULL`,
@@ -330,7 +330,7 @@ export type AIModel = InferSelectModel<typeof aiModels>
 
 // AI Model Configurations (Priority/Fallback Slots)
 export const aiModelConfig = pgTable(
-    'morphic_ai_model_config',
+    'ai_model_config',
     {
         id: varchar('id', { length: ID_LENGTH })
             .primaryKey()
@@ -350,8 +350,8 @@ export const aiModelConfig = pgTable(
         createdAt: timestamp('created_at').notNull().defaultNow()
     },
     table => [
-        index('morphic_ai_model_config_mode_type_idx').on(table.searchMode, table.modelType),
-        pgPolicy('admins_manage_morphic_model_config', {
+        index('ai_model_config_mode_type_idx').on(table.searchMode, table.modelType),
+        pgPolicy('admins_manage_model_config', {
             for: 'all',
             to: 'public',
             using: sql`current_setting('app.current_user_id', true) IS NOT NULL`,

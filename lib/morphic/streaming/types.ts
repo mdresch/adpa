@@ -4,6 +4,13 @@ import { ModelType } from '../types/model-type'
 import { Model } from '../types/models'
 import { SearchMode } from '../types/search'
 
+export interface RAGScope {
+    program?: string
+    project?: string
+    template?: string
+    entities?: string
+}
+
 export interface BaseStreamConfig {
     message: UIMessage | null
     model: Model
@@ -16,4 +23,6 @@ export interface BaseStreamConfig {
     searchMode?: SearchMode
     modelType?: ModelType
     knowledgeEnabled?: boolean
+    ragScope?: RAGScope
 }
+

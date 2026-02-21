@@ -5,6 +5,7 @@ import type {
 } from 'ai'
 
 import type { fetchTool } from '../tools/fetch'
+import type { createFileSearchTool } from '../tools/file-search'
 import type { createDbQueryTool, createRagSearchTool } from '../tools/knowledge'
 import type { createQuestionTool } from '../tools/question'
 import type { createSearchTool } from '../tools/search'
@@ -17,6 +18,7 @@ export type ResearcherTools = {
     askQuestion: ReturnType<typeof createQuestionTool>
     ragSearch: ReturnType<typeof createRagSearchTool>
     dbQuery: ReturnType<typeof createDbQueryTool>
+    fileSearch: ReturnType<typeof createFileSearchTool>
 } & ReturnType<typeof createTodoTools>
 
 // Tool invocation types for each tool

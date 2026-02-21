@@ -1,4 +1,4 @@
-import { tool, ToolInvocation } from 'ai'
+import { tool, UIToolInvocation } from 'ai'
 
 import { getSearchSchemaForModel } from '@/lib/morphic/schema/search'
 import { SearchResultItem, SearchResults } from '@/lib/morphic/types'
@@ -21,19 +21,22 @@ export function createSearchTool(fullModel: string) {
     return tool({
         description: getSearchToolDescription(),
         inputSchema: getSearchSchemaForModel(fullModel),
-        async execute(
-            {
+        execute: async function* (options, context) {
+            const {
                 query,
                 type = 'optimized',
                 content_types = ['web'],
                 max_results = 20,
-                search_depth = 'basic', // Default for standard schema
+                search_depth = 'basic',
                 include_domains = [],
                 exclude_domains = []
-            },
-            context
-        ) {
-            // Removed yield searching state to satisfy context-less Promise return
+            } = options as any
+
+            yield {
+                state: 'searching',
+                query
+            }
+
             // Ensure max_results is at least 10
             const minResults = 10
             const effectiveMaxResults = Math.max(
@@ -42,27 +45,20 @@ export function createSearchTool(fullModel: string) {
             )
             const effectiveSearchDepth = search_depth as 'basic' | 'advanced'
 
-            // Use the original query as is - any provider-specific handling will be done in the provider
             const filledQuery = query
             let searchResult: SearchResults
 
             // Determine which provider to use based on type
             let searchAPI: SearchProviderType
             if (type === 'general') {
-                // Try to use dedicated general search provider
                 const generalProvider = getGeneralSearchProviderType()
                 if (generalProvider) {
                     searchAPI = generalProvider
                 } else {
-                    // Fallback to primary provider (optimized search provider)
                     searchAPI =
                         (process.env.SEARCH_API as SearchProviderType) || DEFAULT_PROVIDER
-                    console.log(
-                        `[Search] type="general" requested but no dedicated provider available, using optimized search provider: ${searchAPI}`
-                    )
                 }
             } else {
-                // For 'optimized', use the configured provider
                 searchAPI =
                     (process.env.SEARCH_API as SearchProviderType) || DEFAULT_PROVIDER
             }
@@ -73,18 +69,12 @@ export function createSearchTool(fullModel: string) {
                     ? 'advanced'
                     : effectiveSearchDepth || 'basic'
 
-            console.log(
-                `Using search API: ${searchAPI}, Type: ${type}, Search Depth: ${effectiveSearchDepthForAPI}`
-            )
-
             try {
                 if (
                     searchAPI === 'searxng' &&
                     effectiveSearchDepthForAPI === 'advanced'
                 ) {
-                    // Get the base URL using the centralized utility function
                     const baseUrl = await getBaseUrlString()
-
                     const response = await fetch(`${baseUrl}/api/advanced-search`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -103,10 +93,7 @@ export function createSearchTool(fullModel: string) {
                     }
                     searchResult = await response.json()
                 } else {
-                    // Use the provider factory to get the appropriate search provider
                     const searchProvider = createSearchProvider(searchAPI)
-
-                    // Pass content_types only for Brave provider
                     if (searchAPI === 'brave') {
                         searchResult = await searchProvider.search(
                             filledQuery,
@@ -133,31 +120,33 @@ export function createSearchTool(fullModel: string) {
                 }
             } catch (error) {
                 console.error('Search API error:', error)
-                // Re-throw the error to let AI SDK handle it properly
                 throw error instanceof Error ? error : new Error('Unknown search error')
             }
 
-            // Add citation mapping and toolCallId to search results
             if (searchResult.results && searchResult.results.length > 0) {
                 const citationMap: Record<number, SearchResultItem> = {}
                 searchResult.results.forEach((result, index) => {
-                    citationMap[index + 1] = result // Citation numbers start at 1
+                    citationMap[index + 1] = result
                 })
                 searchResult.citationMap = citationMap
             }
 
-            // Add toolCallId from context
             if (context?.toolCallId) {
                 searchResult.toolCallId = context.toolCallId
             }
 
-            console.log('completed search')
-
-            // Return final results with complete state
-            return {
+            yield {
                 state: 'complete' as const,
                 ...searchResult
             }
+            // Return a simplified string version of results to the LLM to prevent context overflow or JSON schema parsing errors
+            if (searchResult.results?.length) {
+                return JSON.stringify({
+                    query: searchResult.query,
+                    results: searchResult.results.map(r => ({ title: r.title, content: r.content, url: r.url }))
+                })
+            }
+            return 'No results found.'
         }
     })
 }
@@ -166,7 +155,7 @@ export function createSearchTool(fullModel: string) {
 export const searchTool = createSearchTool('openai:gpt-4o-mini')
 
 // Export type for UI tool invocation
-export type SearchUIToolInvocation = ToolInvocation
+export type SearchUIToolInvocation = UIToolInvocation<any>
 
 export async function search(
     query: string,
@@ -175,7 +164,7 @@ export async function search(
     includeDomains: string[] = [],
     excludeDomains: string[] = []
 ): Promise<SearchResults> {
-    const result = await searchTool.execute?.(
+    const generator = (searchTool as any).execute?.(
         {
             query,
             type: 'general',
@@ -191,15 +180,28 @@ export async function search(
         }
     )
 
-    if (!result) {
+    if (!generator) {
         return { results: [], images: [], query, number_of_results: 0 }
     }
 
-    // For Promise results, the state might be nested in the object we returned
-    if (result && typeof result === 'object' && 'state' in result && result.state === 'complete') {
-        const { state, ...rest } = result as any
-        return rest as SearchResults
+    let finalResult: any = null
+
+    // Consume the generator to get the final 'complete' state
+    if (Symbol.asyncIterator in generator) {
+        for await (const partial of generator) {
+            if (partial && typeof partial === 'object' && 'state' in partial && partial.state === 'complete') {
+                finalResult = partial
+            }
+        }
+    } else {
+        // Fallback for cases where it might return a promise instead of a generator
+        finalResult = await generator
     }
 
-    return result as SearchResults
+    if (!finalResult) {
+        return { results: [], images: [], query, number_of_results: 0 }
+    }
+
+    const { state, ...rest } = finalResult
+    return rest as SearchResults
 }

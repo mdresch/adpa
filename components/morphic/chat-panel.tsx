@@ -12,8 +12,8 @@ import { cn } from '@/lib/morphic/utils'
 import { ActionButtons } from './action-buttons'
 import { useArtifact } from './artifact/artifact-context'
 import { FileUploadButton } from './file-upload-button'
-import { KnowledgeToggle } from './knowledge-toggle'
 import { ModelTypeSelector } from './model-type-selector'
+import { RAGScopeSelector } from './rag-scope-selector'
 import { SearchModeSelector } from './search-mode-selector'
 import { Button } from './ui/button'
 import { IconBlinkingLogo } from './ui/icons'
@@ -271,7 +271,7 @@ export function ChatPanel({
                                 />
                             )}
                             <SearchModeSelector />
-                            <KnowledgeToggle />
+                            <RAGScopeSelector />
                         </div>
                         <div className="flex items-center gap-2">
                             {messages.length > 0 && (

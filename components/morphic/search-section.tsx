@@ -10,6 +10,7 @@ import { SearchResultsImageSection } from './search-results-image'
 import { Section } from './section'
 import { SourceFavicons } from './source-favicons'
 import { createVideoSearchResults, VideoSearchResults } from './video-search-results'
+import { useArtifact } from './artifact/artifact-context'
 
 export function SearchSection({ tool, isOpen, onOpenChange, status, borderless, isFirst, isLast }: any) {
     const isLoading = status === 'submitted' || status === 'streaming'
@@ -19,8 +20,10 @@ export function SearchSection({ tool, isOpen, onOpenChange, status, borderless, 
     const searchResults = output?.state === 'complete' ? output : undefined
     const query = tool.input?.query || output?.query || ''
 
+    const { open } = useArtifact()
+
     const header = (
-        <ProcessHeader isLoading={isLoading && (isToolLoading || isSearching)} ariaExpanded={isOpen} label={<div className="flex items-center gap-2 min-w-0"><SearchIcon size={16} /> <span className="truncate">{query}</span></div>}
+        <ProcessHeader isLoading={isLoading && (isToolLoading || isSearching)} ariaExpanded={isOpen} onInspect={() => open(tool)} label={<div className="flex items-center gap-2 min-w-0"><SearchIcon size={16} /> <span className="truncate">{query}</span></div>}
             meta={searchResults ? <div className="flex items-center gap-2"><StatusIndicator icon={Check} iconClassName="text-green-500">{searchResults.results?.length || 0} results</StatusIndicator><SourceFavicons results={searchResults.results || []} /></div> : null}
         />
     )
