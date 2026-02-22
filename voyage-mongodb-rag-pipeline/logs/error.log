@@ -4947,3 +4947,471 @@
   message: 'Failed to delete vectors from Pinecone',
   timestamp: '2026-02-08 12:26:04'
 }
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  message: 'Error fetching projects: TypeError: fetch failed',
+  details: 'TypeError: fetch failed\n' +
+    '\n' +
+    'Caused by: Error: getaddrinfo ENOTFOUND your-project.supabase.co (ENOTFOUND)\n' +
+    'Error: getaddrinfo ENOTFOUND your-project.supabase.co\n' +
+    '    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:120:26)',
+  hint: '',
+  code: '',
+  level: 'error',
+  timestamp: '2026-02-22 00:02:24'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  message: 'Database error in getProjects: TypeError: fetch failed',
+  details: 'TypeError: fetch failed\n' +
+    '\n' +
+    'Caused by: Error: getaddrinfo ENOTFOUND your-project.supabase.co (ENOTFOUND)\n' +
+    'Error: getaddrinfo ENOTFOUND your-project.supabase.co\n' +
+    '    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:120:26)',
+  hint: '',
+  code: '',
+  level: 'error',
+  timestamp: '2026-02-22 00:02:24'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  message: 'Error fetching projects from Supabase: TypeError: fetch failed',
+  details: 'TypeError: fetch failed\n' +
+    '\n' +
+    'Caused by: Error: getaddrinfo ENOTFOUND your-project.supabase.co (ENOTFOUND)\n' +
+    'Error: getaddrinfo ENOTFOUND your-project.supabase.co\n' +
+    '    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:120:26)',
+  hint: '',
+  code: '',
+  level: 'error',
+  timestamp: '2026-02-22 00:02:24'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  error: 'The API key you provided was rejected while calling https://api.pinecone.io/indexes/adpa-integrated-embeddings. Please check your configuration values and try again. You can find the configuration values for your project in the Pinecone developer console at https://app.pinecone.io',
+  projectsCount: 1,
+  level: 'error',
+  message: 'Failed to upsert projects to Pinecone',
+  timestamp: '2026-02-22 00:02:37'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  message: 'Error fetching documents: TypeError: fetch failed',
+  details: 'TypeError: fetch failed\n' +
+    '\n' +
+    'Caused by: Error: getaddrinfo ENOTFOUND your-project.supabase.co (ENOTFOUND)\n' +
+    'Error: getaddrinfo ENOTFOUND your-project.supabase.co\n' +
+    '    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:120:26)',
+  hint: '',
+  code: '',
+  level: 'error',
+  timestamp: '2026-02-22 00:02:41'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  message: 'Database error in getProjectDocuments: TypeError: fetch failed',
+  details: 'TypeError: fetch failed\n' +
+    '\n' +
+    'Caused by: Error: getaddrinfo ENOTFOUND your-project.supabase.co (ENOTFOUND)\n' +
+    'Error: getaddrinfo ENOTFOUND your-project.supabase.co\n' +
+    '    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:120:26)',
+  hint: '',
+  code: '',
+  level: 'error',
+  timestamp: '2026-02-22 00:02:41'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  message: 'Error fetching documents from Supabase: TypeError: fetch failed',
+  details: 'TypeError: fetch failed\n' +
+    '\n' +
+    'Caused by: Error: getaddrinfo ENOTFOUND your-project.supabase.co (ENOTFOUND)\n' +
+    'Error: getaddrinfo ENOTFOUND your-project.supabase.co\n' +
+    '    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:120:26)',
+  hint: '',
+  code: '',
+  level: 'error',
+  timestamp: '2026-02-22 00:02:41'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  message: 'Error fetching semantic units: TypeError: fetch failed',
+  details: 'TypeError: fetch failed\n' +
+    '\n' +
+    'Caused by: Error: getaddrinfo ENOTFOUND your-project.supabase.co (ENOTFOUND)\n' +
+    'Error: getaddrinfo ENOTFOUND your-project.supabase.co\n' +
+    '    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:120:26)',
+  hint: '',
+  code: '',
+  level: 'error',
+  timestamp: '2026-02-22 00:02:41'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  message: 'Database error in getDocumentSemanticUnits: TypeError: fetch failed',
+  details: 'TypeError: fetch failed\n' +
+    '\n' +
+    'Caused by: Error: getaddrinfo ENOTFOUND your-project.supabase.co (ENOTFOUND)\n' +
+    'Error: getaddrinfo ENOTFOUND your-project.supabase.co\n' +
+    '    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:120:26)',
+  hint: '',
+  code: '',
+  level: 'error',
+  timestamp: '2026-02-22 00:02:41'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  message: 'Error fetching semantic units from Supabase: TypeError: fetch failed',
+  details: 'TypeError: fetch failed\n' +
+    '\n' +
+    'Caused by: Error: getaddrinfo ENOTFOUND your-project.supabase.co (ENOTFOUND)\n' +
+    'Error: getaddrinfo ENOTFOUND your-project.supabase.co\n' +
+    '    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:120:26)',
+  hint: '',
+  code: '',
+  level: 'error',
+  timestamp: '2026-02-22 00:02:41'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  error: 'The API key you provided was rejected while calling https://api.pinecone.io/indexes/adpa-integrated-embeddings. Please check your configuration values and try again. You can find the configuration values for your project in the Pinecone developer console at https://app.pinecone.io',
+  entitiesCount: 6,
+  level: 'error',
+  message: 'Failed to upsert entities to Pinecone with integrated embedding',
+  timestamp: '2026-02-22 00:02:47'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  message: 'Error fetching semantic units: TypeError: fetch failed',
+  details: 'TypeError: fetch failed\n' +
+    '\n' +
+    'Caused by: Error: getaddrinfo ENOTFOUND your-project.supabase.co (ENOTFOUND)\n' +
+    'Error: getaddrinfo ENOTFOUND your-project.supabase.co\n' +
+    '    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:120:26)',
+  hint: '',
+  code: '',
+  level: 'error',
+  timestamp: '2026-02-22 00:02:51'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  message: 'Database error in getDocumentSemanticUnits: TypeError: fetch failed',
+  details: 'TypeError: fetch failed\n' +
+    '\n' +
+    'Caused by: Error: getaddrinfo ENOTFOUND your-project.supabase.co (ENOTFOUND)\n' +
+    'Error: getaddrinfo ENOTFOUND your-project.supabase.co\n' +
+    '    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:120:26)',
+  hint: '',
+  code: '',
+  level: 'error',
+  timestamp: '2026-02-22 00:02:51'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  message: 'Error fetching semantic units from Supabase: TypeError: fetch failed',
+  details: 'TypeError: fetch failed\n' +
+    '\n' +
+    'Caused by: Error: getaddrinfo ENOTFOUND your-project.supabase.co (ENOTFOUND)\n' +
+    'Error: getaddrinfo ENOTFOUND your-project.supabase.co\n' +
+    '    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:120:26)',
+  hint: '',
+  code: '',
+  level: 'error',
+  timestamp: '2026-02-22 00:02:51'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  error: 'The API key you provided was rejected while calling https://api.pinecone.io/indexes/adpa-integrated-embeddings. Please check your configuration values and try again. You can find the configuration values for your project in the Pinecone developer console at https://app.pinecone.io',
+  entitiesCount: 6,
+  level: 'error',
+  message: 'Failed to upsert entities to Pinecone with integrated embedding',
+  timestamp: '2026-02-22 00:02:56'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  message: 'Error fetching semantic units: TypeError: fetch failed',
+  details: 'TypeError: fetch failed\n' +
+    '\n' +
+    'Caused by: Error: getaddrinfo ENOTFOUND your-project.supabase.co (ENOTFOUND)\n' +
+    'Error: getaddrinfo ENOTFOUND your-project.supabase.co\n' +
+    '    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:120:26)',
+  hint: '',
+  code: '',
+  level: 'error',
+  timestamp: '2026-02-22 00:03:00'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  message: 'Database error in getDocumentSemanticUnits: TypeError: fetch failed',
+  details: 'TypeError: fetch failed\n' +
+    '\n' +
+    'Caused by: Error: getaddrinfo ENOTFOUND your-project.supabase.co (ENOTFOUND)\n' +
+    'Error: getaddrinfo ENOTFOUND your-project.supabase.co\n' +
+    '    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:120:26)',
+  hint: '',
+  code: '',
+  level: 'error',
+  timestamp: '2026-02-22 00:03:00'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  message: 'Error fetching semantic units from Supabase: TypeError: fetch failed',
+  details: 'TypeError: fetch failed\n' +
+    '\n' +
+    'Caused by: Error: getaddrinfo ENOTFOUND your-project.supabase.co (ENOTFOUND)\n' +
+    'Error: getaddrinfo ENOTFOUND your-project.supabase.co\n' +
+    '    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:120:26)',
+  hint: '',
+  code: '',
+  level: 'error',
+  timestamp: '2026-02-22 00:03:00'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  error: 'The API key you provided was rejected while calling https://api.pinecone.io/indexes/adpa-integrated-embeddings. Please check your configuration values and try again. You can find the configuration values for your project in the Pinecone developer console at https://app.pinecone.io',
+  entitiesCount: 6,
+  level: 'error',
+  message: 'Failed to upsert entities to Pinecone with integrated embedding',
+  timestamp: '2026-02-22 00:03:05'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  error: 'The API key you provided was rejected while calling https://api.pinecone.io/indexes/adpa-integrated-embeddings. Please check your configuration values and try again. You can find the configuration values for your project in the Pinecone developer console at https://app.pinecone.io',
+  documentsCount: 3,
+  level: 'error',
+  message: 'Failed to upsert documents to Pinecone with integrated embedding',
+  timestamp: '2026-02-22 00:03:06'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  error: 'The API key you provided was rejected while calling https://api.pinecone.io/indexes/adpa-integrated-embeddings. Please check your configuration values and try again. You can find the configuration values for your project in the Pinecone developer console at https://app.pinecone.io',
+  projectsCount: 1,
+  level: 'error',
+  message: 'Failed to upsert projects to Pinecone',
+  timestamp: '2026-02-22 00:03:07'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  message: 'Error fetching documents: TypeError: fetch failed',
+  details: 'TypeError: fetch failed\n' +
+    '\n' +
+    'Caused by: Error: getaddrinfo ENOTFOUND your-project.supabase.co (ENOTFOUND)\n' +
+    'Error: getaddrinfo ENOTFOUND your-project.supabase.co\n' +
+    '    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:120:26)',
+  hint: '',
+  code: '',
+  level: 'error',
+  timestamp: '2026-02-22 00:03:11'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  message: 'Database error in getProjectDocuments: TypeError: fetch failed',
+  details: 'TypeError: fetch failed\n' +
+    '\n' +
+    'Caused by: Error: getaddrinfo ENOTFOUND your-project.supabase.co (ENOTFOUND)\n' +
+    'Error: getaddrinfo ENOTFOUND your-project.supabase.co\n' +
+    '    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:120:26)',
+  hint: '',
+  code: '',
+  level: 'error',
+  timestamp: '2026-02-22 00:03:11'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  message: 'Error fetching documents from Supabase: TypeError: fetch failed',
+  details: 'TypeError: fetch failed\n' +
+    '\n' +
+    'Caused by: Error: getaddrinfo ENOTFOUND your-project.supabase.co (ENOTFOUND)\n' +
+    'Error: getaddrinfo ENOTFOUND your-project.supabase.co\n' +
+    '    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:120:26)',
+  hint: '',
+  code: '',
+  level: 'error',
+  timestamp: '2026-02-22 00:03:11'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  message: 'Error fetching semantic units: TypeError: fetch failed',
+  details: 'TypeError: fetch failed\n' +
+    '\n' +
+    'Caused by: Error: getaddrinfo ENOTFOUND your-project.supabase.co (ENOTFOUND)\n' +
+    'Error: getaddrinfo ENOTFOUND your-project.supabase.co\n' +
+    '    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:120:26)',
+  hint: '',
+  code: '',
+  level: 'error',
+  timestamp: '2026-02-22 00:03:11'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  message: 'Database error in getDocumentSemanticUnits: TypeError: fetch failed',
+  details: 'TypeError: fetch failed\n' +
+    '\n' +
+    'Caused by: Error: getaddrinfo ENOTFOUND your-project.supabase.co (ENOTFOUND)\n' +
+    'Error: getaddrinfo ENOTFOUND your-project.supabase.co\n' +
+    '    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:120:26)',
+  hint: '',
+  code: '',
+  level: 'error',
+  timestamp: '2026-02-22 00:03:11'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  message: 'Error fetching semantic units from Supabase: TypeError: fetch failed',
+  details: 'TypeError: fetch failed\n' +
+    '\n' +
+    'Caused by: Error: getaddrinfo ENOTFOUND your-project.supabase.co (ENOTFOUND)\n' +
+    'Error: getaddrinfo ENOTFOUND your-project.supabase.co\n' +
+    '    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:120:26)',
+  hint: '',
+  code: '',
+  level: 'error',
+  timestamp: '2026-02-22 00:03:11'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  error: 'The API key you provided was rejected while calling https://api.pinecone.io/indexes/adpa-integrated-embeddings. Please check your configuration values and try again. You can find the configuration values for your project in the Pinecone developer console at https://app.pinecone.io',
+  entitiesCount: 6,
+  level: 'error',
+  message: 'Failed to upsert entities to Pinecone with integrated embedding',
+  timestamp: '2026-02-22 00:03:16'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  message: 'Error fetching semantic units: TypeError: fetch failed',
+  details: 'TypeError: fetch failed\n' +
+    '\n' +
+    'Caused by: Error: getaddrinfo ENOTFOUND your-project.supabase.co (ENOTFOUND)\n' +
+    'Error: getaddrinfo ENOTFOUND your-project.supabase.co\n' +
+    '    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:120:26)',
+  hint: '',
+  code: '',
+  level: 'error',
+  timestamp: '2026-02-22 00:03:20'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  message: 'Database error in getDocumentSemanticUnits: TypeError: fetch failed',
+  details: 'TypeError: fetch failed\n' +
+    '\n' +
+    'Caused by: Error: getaddrinfo ENOTFOUND your-project.supabase.co (ENOTFOUND)\n' +
+    'Error: getaddrinfo ENOTFOUND your-project.supabase.co\n' +
+    '    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:120:26)',
+  hint: '',
+  code: '',
+  level: 'error',
+  timestamp: '2026-02-22 00:03:20'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  message: 'Error fetching semantic units from Supabase: TypeError: fetch failed',
+  details: 'TypeError: fetch failed\n' +
+    '\n' +
+    'Caused by: Error: getaddrinfo ENOTFOUND your-project.supabase.co (ENOTFOUND)\n' +
+    'Error: getaddrinfo ENOTFOUND your-project.supabase.co\n' +
+    '    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:120:26)',
+  hint: '',
+  code: '',
+  level: 'error',
+  timestamp: '2026-02-22 00:03:20'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  error: 'The API key you provided was rejected while calling https://api.pinecone.io/indexes/adpa-integrated-embeddings. Please check your configuration values and try again. You can find the configuration values for your project in the Pinecone developer console at https://app.pinecone.io',
+  entitiesCount: 6,
+  level: 'error',
+  message: 'Failed to upsert entities to Pinecone with integrated embedding',
+  timestamp: '2026-02-22 00:03:25'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  message: 'Error fetching semantic units: TypeError: fetch failed',
+  details: 'TypeError: fetch failed\n' +
+    '\n' +
+    'Caused by: Error: getaddrinfo ENOTFOUND your-project.supabase.co (ENOTFOUND)\n' +
+    'Error: getaddrinfo ENOTFOUND your-project.supabase.co\n' +
+    '    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:120:26)',
+  hint: '',
+  code: '',
+  level: 'error',
+  timestamp: '2026-02-22 00:03:29'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  message: 'Database error in getDocumentSemanticUnits: TypeError: fetch failed',
+  details: 'TypeError: fetch failed\n' +
+    '\n' +
+    'Caused by: Error: getaddrinfo ENOTFOUND your-project.supabase.co (ENOTFOUND)\n' +
+    'Error: getaddrinfo ENOTFOUND your-project.supabase.co\n' +
+    '    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:120:26)',
+  hint: '',
+  code: '',
+  level: 'error',
+  timestamp: '2026-02-22 00:03:29'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  message: 'Error fetching semantic units from Supabase: TypeError: fetch failed',
+  details: 'TypeError: fetch failed\n' +
+    '\n' +
+    'Caused by: Error: getaddrinfo ENOTFOUND your-project.supabase.co (ENOTFOUND)\n' +
+    'Error: getaddrinfo ENOTFOUND your-project.supabase.co\n' +
+    '    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:120:26)',
+  hint: '',
+  code: '',
+  level: 'error',
+  timestamp: '2026-02-22 00:03:29'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  error: 'The API key you provided was rejected while calling https://api.pinecone.io/indexes/adpa-integrated-embeddings. Please check your configuration values and try again. You can find the configuration values for your project in the Pinecone developer console at https://app.pinecone.io',
+  entitiesCount: 6,
+  level: 'error',
+  message: 'Failed to upsert entities to Pinecone with integrated embedding',
+  timestamp: '2026-02-22 00:03:34'
+}
+{
+  service: 'voyage-mongodb-rag-pipeline',
+  environment: 'development',
+  error: 'The API key you provided was rejected while calling https://api.pinecone.io/indexes/adpa-integrated-embeddings. Please check your configuration values and try again. You can find the configuration values for your project in the Pinecone developer console at https://app.pinecone.io',
+  documentsCount: 3,
+  level: 'error',
+  message: 'Failed to upsert documents to Pinecone with integrated embedding',
+  timestamp: '2026-02-22 00:03:35'
+}

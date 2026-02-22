@@ -181,14 +181,13 @@ export async function saveCapacityForecasts(
     const placeholders: string[] = []
 
     entities.forEach((e, index) => {
-      const offset = index * 9
+      const offset = index * 8
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8})`
       )
 
       values.push(
         projectId,
-        e.period || null,
         e.role || null,
         e.available_hours ?? null,
         e.demand_hours ?? null,
@@ -201,7 +200,7 @@ export async function saveCapacityForecasts(
 
     await client.query(
       `INSERT INTO capacity_forecasts (
-        project_id, period, role, available_hours, demand_hours, gap_hours,
+        project_id, role, available_hours, demand_hours, gap_hours,
         notes, source_document_id, created_by
       )
       VALUES ${placeholders.join(', ')}`,

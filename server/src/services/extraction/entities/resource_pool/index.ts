@@ -186,9 +186,9 @@ export async function saveResourcePool(
     const placeholders: string[] = []
 
     entities.forEach((e, index) => {
-      const offset = index * 13
+      const offset = index * 14
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14})`
       )
 
       values.push(
@@ -196,13 +196,12 @@ export async function saveResourcePool(
         e.resource_name || '',
         e.resource_type || 'human',
         null, // description (not available from resource_pool)
-        e.availability_pct || null,
-        e.cost_rate || null,
+        e.availability_pct ? String(e.availability_pct) : null, // allocation
+        e.cost_rate || null, // cost_estimate
         e.skills || [],
         e.role || null,
         e.availability_pct || null,
         e.cost_rate || null,
-        e.capacity_hours || null,
         e.location || null,
         e.source_document_id || null,
         new Date().toISOString(), // created_at
@@ -213,7 +212,7 @@ export async function saveResourcePool(
     await client.query(
       `INSERT INTO resources (
         project_id, name, type, description, allocation, cost_estimate, 
-        skills, role, availability_pct, cost_rate, capacity_hours, location,
+        skills, role, availability_pct, cost_rate, location,
         source_document_id, created_at, updated_at
       )
       VALUES ${placeholders.join(', ')}`,
