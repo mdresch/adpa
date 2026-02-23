@@ -13,8 +13,10 @@ import Link from "next/link"
 export function Header() {
   const { theme, setTheme } = useTheme()
   const [metrics, setMetrics] = useState<any>({})
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
+    setMounted(true)
     const fetchMetrics = async () => {
       try {
         // Check if user has a token before making request
@@ -93,7 +95,7 @@ export function Header() {
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
           className="hover:bg-slate-100 dark:hover:bg-slate-700 transition-all duration-200 hover:scale-110"
         >
-          {theme === "dark" ? <Sun className="h-4 w-4 text-yellow-500" /> : <Moon className="h-4 w-4 text-slate-600" />}
+          {!mounted ? <Moon className="h-4 w-4 text-slate-600" /> : theme === "dark" ? <Sun className="h-4 w-4 text-yellow-500" /> : <Moon className="h-4 w-4 text-slate-600" />}
         </Button>
 
         {/* Notifications */}
