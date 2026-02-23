@@ -246,6 +246,25 @@ export async function createChatStreamResponse(
                             emptyMessages: 'remove'
                         })
 
+                        // Strict Final Filter: Gemini crashes if content is an empty array, empty string, or an array of empty text objects
+                        coreMessages = coreMessages.filter(msg => {
+                            if (typeof msg.content === 'string') {
+                                return msg.content.trim().length > 0;
+                            }
+                            if (Array.isArray(msg.content)) {
+                                if (msg.content.length === 0) return false;
+                                // Check if all parts are text parts with empty strings
+                                const hasRealContent = msg.content.some(part => {
+                                    if (part.type === 'text') {
+                                        return part.text.trim().length > 0;
+                                    }
+                                    return true; // tool invocations/results count as real content
+                                });
+                                return hasRealContent;
+                            }
+                            return true;
+                        });
+
                         // Update Langfuse generation with prepared input
                         if (langfuseGeneration) {
                             langfuseGeneration.update({
@@ -257,6 +276,11 @@ export async function createChatStreamResponse(
                                 }))
                             })
                         }
+
+                        // DEBUGGING GEMINI ERROR:
+                        console.log("\n--- CORE MESSAGES PAYLOAD ---");
+                        console.log(JSON.stringify(coreMessages, null, 2));
+                        console.log("-----------------------------\n");
 
                         if (!initialChat && message && !titlePromise) {
                             const messageContent = getTextFromParts(message.parts)
@@ -363,8 +387,17 @@ export async function createChatStreamResponse(
                                 totalParts: responseMessage.parts.length
                             }
                         })
+
+                        // Update the parent Trace with the final input and aggregated output
+                        if (langfuseTrace && textParts) {
+                            langfuseTrace.update({
+                                input: typeof message === 'string' ? message : JSON.stringify(message),
+                                output: textParts.substring(0, 10000)
+                            })
+                        }
                     } catch (e) {
                         // Non-critical — don't break persistence
+                        console.error('[Langfuse] Error updating trace data onFinish:', e);
                     }
                 }
 
