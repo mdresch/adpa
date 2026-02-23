@@ -1565,6 +1565,106 @@ class AIService {
           }
         }
 
+        // FALLBACK: Try direct Groq (OpenAI-compatible API)
+        if (providerType === 'groq') {
+          logger.info('🔄 [AI-SERVICE] Falling back to direct Groq...')
+
+          // Get direct API key from provider configuration
+          const directApiKey = providerResult.rows[0].configuration?.apiKey
+            || this.decryptApiKey(providerResult.rows[0].api_key_encrypted)
+          if (!directApiKey) {
+            throw new Error('Direct Groq API key not found in provider configuration or database')
+          }
+
+          logger.debug('[AI-SERVICE] Using direct Groq (OpenAI-compatible)')
+
+          const groq = createOpenAI({
+            apiKey: directApiKey,
+            baseURL: 'https://api.groq.com/openai/v1'
+          })
+
+          // Use appropriate Groq model
+          const groqModels = ['llama-3.3-70b-versatile', 'llama3-8b-8192', 'llama3-70b-8192',
+            'mixtral-8x7b-32768', 'gemma2-9b-it']
+          const modelName = groqModels.includes(request.model || '')
+            ? request.model
+            : 'llama-3.3-70b-versatile'
+
+          const groqResult = await generateText({
+            model: groq(modelName),
+            messages: [
+              ...(systemMessage ? [{ role: 'system' as const, content: systemMessage }] : []),
+              { role: 'user' as const, content: userMessage }
+            ],
+            temperature: request.temperature,
+            maxOutputTokens: request.max_tokens,
+            experimental_telemetry: {
+              isEnabled: isTracingEnabled(),
+              functionId: 'ai-groq-fallback',
+              metadata: {
+                userId: request.userId,
+                projectId: request.projectId,
+                documentId: request.documentId,
+                provider: 'groq',
+                model: modelName
+              }
+            }
+          })
+
+          logger.debug('[AI-SERVICE] Groq successful:', { contentLength: groqResult.text.length })
+
+          const { inputTokens, outputTokens, totalTokens } = this.normalizeUsage(groqResult.usage)
+
+          // Update usage stats
+          await this.updateUsageStats(request.provider, {
+            total_tokens: totalTokens,
+          })
+
+          // Track detailed AI usage for analytics (background, non-blocking)
+          const responseTimeMs = Date.now() - startTime
+          setImmediate(() => {
+            this.trackAIUsageAsync(
+              request.provider,
+              modelName,
+              {
+                prompt_tokens: inputTokens,
+                completion_tokens: outputTokens,
+                total_tokens: totalTokens,
+              },
+              responseTimeMs,
+              true,
+              request.userId,
+              request.projectId,
+              request.documentId
+            )
+          })
+
+          logger.info(`[AI] ✓ Groq/${modelName} - ${totalTokens} tokens - ${responseTimeMs}ms`)
+
+          if (langfuseGeneration) {
+            langfuseGeneration.end({
+              output: groqResult.text,
+              usage: {
+                promptTokens: inputTokens,
+                completionTokens: outputTokens,
+                totalTokens: totalTokens
+              }
+            });
+            await langfuse.flushAsync();
+          }
+
+          return {
+            content: groqResult.text,
+            provider: request.provider,
+            model: modelName,
+            usage: {
+              prompt_tokens: inputTokens,
+              completion_tokens: outputTokens,
+              total_tokens: totalTokens,
+            },
+          }
+        }
+
         // No fallback available for this provider
         throw gatewayError
       } finally {
