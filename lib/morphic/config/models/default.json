@@ -10,8 +10,8 @@
                     "providerId": "google"
                 },
                 "quality": {
-                    "id": "gemini-3.1-pro",
-                    "name": "Gemini 3.1 Pro",
+                    "id": "gemini-3-pro-preview",
+                    "name": "Gemini 3 Pro Preview",
                     "provider": "Google",
                     "providerId": "google"
                 }
@@ -24,16 +24,16 @@
                     "providerId": "google"
                 },
                 "quality": {
-                    "id": "gemini-3.1-pro",
-                    "name": "Gemini 3.1 Pro",
+                    "id": "gemini-3-pro-preview",
+                    "name": "Gemini 3 Pro Preview",
                     "provider": "Google",
                     "providerId": "google"
                 }
             }
         },
         "relatedQuestions": {
-            "id": "gemini-3.1-pro",
-            "name": "Gemini 3.1 Pro",
+            "id": "gemini-3-pro-preview",
+            "name": "Gemini 3 Pro Preview",
             "provider": "Google",
             "providerId": "google"
         }
