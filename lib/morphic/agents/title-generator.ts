@@ -2,6 +2,7 @@ import { generateText } from 'ai'
 
 import { getModel } from '@/lib/morphic/utils/registry'
 import { isTracingEnabled } from '@/lib/morphic/utils/telemetry'
+import { getLangfuseClient } from '@/lib/morphic/utils/langfuse-client'
 
 interface GenerateChatTitleParams {
     userMessageContent: string
@@ -28,6 +29,19 @@ export async function generateChatTitle({
     try {
         const systemPrompt = `System: You are an AI assistant specialized in creating very short, concise, and informative titles for chat conversations based on the user's first message. The title should ideally be 3-5 words long, and no more than 10 words. Only output the title itself, with no prefixes, labels, or quotation marks.`
 
+        // Start Langfuse generation span
+        const langfuse = getLangfuseClient()
+        let langfuseGeneration: any = null
+        if (langfuse && parentTraceId) {
+            const trace = langfuse.trace({ id: parentTraceId })
+            langfuseGeneration = trace.generation({
+                name: 'title-generation',
+                model: modelId,
+                input: userMessageContent,
+                metadata: { promptLength: userMessageContent.length }
+            })
+        }
+
         const { text: generatedTitle } = await generateText({
             model: getModel(modelId),
             system: systemPrompt,
@@ -49,6 +63,16 @@ export async function generateChatTitle({
         })
 
         const cleanedTitle = generatedTitle.trim()
+
+        // End Langfuse generation span on success
+        if (langfuseGeneration) {
+            langfuseGeneration.end({
+                output: cleanedTitle || fallbackTitle,
+                level: 'DEFAULT',
+                statusMessage: 'SUCCESS'
+            })
+            await langfuse?.flushAsync()
+        }
 
         // If the model returns an empty string, use the fallback.
         if (!cleanedTitle) {

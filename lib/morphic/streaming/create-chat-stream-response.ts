@@ -12,6 +12,7 @@ import { v4 as uuidv4 } from 'uuid'
 
 import { researcher } from '@/lib/morphic/agents/researcher'
 import { isTracingEnabled } from '@/lib/morphic/utils/telemetry'
+import { getLangfuseClient } from '@/lib/morphic/utils/langfuse-client'
 
 import { loadChatWithMessages as loadChat, upsertMessage, createChat } from '../db/actions'
 import { generateChatTitle } from '../agents/title-generator'
@@ -89,10 +90,29 @@ export async function createChatStreamResponse(
         perfLog('loadChat skipped for new chat')
     }
 
-    // Create parent trace ID
+    // Create parent trace ID and Langfuse trace
     let parentTraceId: string | undefined
+    const langfuse = getLangfuseClient()
+    let langfuseTrace: any = null
     if (isTracingEnabled()) {
         parentTraceId = uuidv4()
+    }
+    if (langfuse) {
+        langfuseTrace = langfuse.trace({
+            id: parentTraceId,
+            name: `morphic-search-${searchMode || 'adaptive'}`,
+            sessionId: chatId,
+            userId: userId || 'anonymous',
+            metadata: {
+                chatId,
+                searchMode,
+                modelType,
+                modelId: model ? `${model.providerId}:${model.id}` : 'unknown',
+                knowledgeEnabled,
+                trigger
+            },
+            tags: ['morphic', searchMode || 'adaptive', model?.providerId || 'unknown']
+        })
     }
 
     // Create stream context
@@ -143,9 +163,23 @@ export async function createChatStreamResponse(
                 for (const candidate of candidateModels) {
                     const currentModelId = `${candidate.providerId}:${candidate.id}`
 
+                    let langfuseGeneration: any = null
                     try {
                         perfLog(`Attempting model: ${currentModelId} `)
                         context.modelId = currentModelId
+
+                        // Start a Langfuse generation span for this LLM call
+                        if (langfuseTrace) {
+                            langfuseGeneration = langfuseTrace.generation({
+                                name: `researcher-${searchMode || 'adaptive'}`,
+                                model: currentModelId,
+                                metadata: {
+                                    searchMode,
+                                    modelType,
+                                    knowledgeEnabled
+                                }
+                            })
+                        }
 
                         const messagesToModel = await prepareMessages(context, message)
 
@@ -237,11 +271,28 @@ export async function createChatStreamResponse(
                             })
                         )
 
+                        // End Langfuse generation span on success
+                        if (langfuseGeneration) {
+                            langfuseGeneration.end({
+                                output: `[streaming response from ${currentModelId}]`,
+                                level: 'DEFAULT',
+                                statusMessage: 'SUCCESS'
+                            })
+                        }
+
                         success = true
                         break // Break Out on Success
 
                     } catch (error: any) {
                         console.error(`Model ${currentModelId} failed: `, error)
+                        // End Langfuse generation span on error
+                        if (langfuseGeneration) {
+                            langfuseGeneration.end({
+                                output: error.message || 'Unknown error',
+                                level: 'ERROR',
+                                statusMessage: error.message
+                            })
+                        }
                         lastError = error
                         if (candidate === candidateModels[candidateModels.length - 1]) throw error
                         perfLog(`Falling back from ${currentModelId}...`)
@@ -268,6 +319,15 @@ export async function createChatStreamResponse(
                     searchMode,
                     context.modelId
                 )
+
+                // Flush Langfuse traces
+                if (langfuse) {
+                    try {
+                        await langfuse.flushAsync()
+                    } catch (e) {
+                        console.error('[Langfuse] Error flushing traces:', e)
+                    }
+                }
             }
         })
 
