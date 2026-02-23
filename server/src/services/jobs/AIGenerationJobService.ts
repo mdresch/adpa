@@ -13,7 +13,7 @@ import { pool } from '../../database/connection'
 import { logger } from '../../utils/logger'
 import { aiService } from '../aiService'
 import { ContextAwareAIService } from '../../modules/context/integration'
-import { io } from '../../server'
+import { io } from '@/socket'
 import { v4 as uuidv4 } from 'uuid'
 import type { IQueueJob } from './queue/IQueue'
 // Phase 3: Use centralized types
@@ -251,7 +251,7 @@ export class AIGenerationJobService {
       const rawContent = result?.content ? result.content : result
       const docContent = typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent)
       const projectIdForDoc = projectId || variables?.project_id || null
-      
+
       // 🔍 DEBUG: Log projectId resolution
       log.info('[AI-JOB] Project ID resolution:', {
         projectIdFromJobData: projectId,
@@ -273,7 +273,7 @@ export class AIGenerationJobService {
             `SELECT name, description, framework FROM projects WHERE id = $1`,
             [projectIdForDoc]
           )
-          
+
           if (projectResult.rows.length > 0) {
             const project = projectResult.rows[0]
             const projectContextEntry = {
@@ -352,12 +352,12 @@ export class AIGenerationJobService {
                WHERE d.id IN (${placeholders})`,
               documentIds
             )
-            
+
             const otherDocuments = docsResult.rows.map((doc: any, index: number) => {
               const charCount = doc.character_count || (typeof doc.content === 'string' ? doc.content.length : 0)
               const wordCount = doc.word_count || Math.round(charCount / 5)
               const readingTimeMinutes = Math.round((wordCount / 250) * 10) / 10
-              
+
               return {
                 id: doc.id,
                 title: doc.name,
@@ -373,7 +373,7 @@ export class AIGenerationJobService {
                 reading_time_minutes: readingTimeMinutes
               }
             })
-            
+
             sourceDocuments.push(...otherDocuments)
             log.info('[AI-JOB] Added document details to source documents', {
               documentIdsCount: documentIds.length,
@@ -444,11 +444,11 @@ export class AIGenerationJobService {
           }
         }
       }
-      
+
       // 🔍 FINAL SAFETY CHECK: If we still don't have sourceDocuments but have projectIdForDoc, 
       // try one more time to get project context (this should never happen, but just in case)
       if (projectIdForDoc && sourceDocuments.length === 0) {
-        log.error('[AI-JOB] ⚠️⚠️⚠️ DOUBLE-CHECK FAILED: sourceDocuments still empty after fallback!', { 
+        log.error('[AI-JOB] ⚠️⚠️⚠️ DOUBLE-CHECK FAILED: sourceDocuments still empty after fallback!', {
           projectId: projectIdForDoc,
           hasProjectId: !!projectId,
           hasVariablesProjectId: !!variables?.project_id
@@ -580,10 +580,10 @@ export class AIGenerationJobService {
 
   private static buildGenerationMetadata(options: any): any {
     const { result, provider, model, temperature, inputTokens, outputTokens, totalTokens, estimatedCost, processingTimeMs, processingTimeSec, wordCount, characterCount, sentenceCount, paragraphCount, qualityMetrics, jobId, sourceDocuments, contextStats } = options
-    
+
     // Use provided sourceDocuments array if available, otherwise fall back to empty array
     const finalSourceDocuments = sourceDocuments || []
-    
+
     return {
       aiProcessing: {
         provider: result?.provider || provider,

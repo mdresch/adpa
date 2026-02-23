@@ -262,6 +262,7 @@ export const Plane = getIcon("Plane")
 export const Stethoscope = getIcon("Stethoscope")
 export const GraduationCap = getIcon("GraduationCap")
 export const Baby = getIcon("Baby")
+export const FileSearch = getIcon("FileSearch")
 
 // Default export with all icons
 export default {
@@ -417,7 +418,8 @@ export default {
   Building2,
   Ruler,
   Wallet,
-  UserCog
+  UserCog,
+  FileSearch
 }
 
 // All icons are now properly exported above

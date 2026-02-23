@@ -2,7 +2,8 @@ node_modules
 .next
 .env.local
 .env
-server
+# server removed to allow next.js build access
+# server
 *.log
 logs
 .DS_Store

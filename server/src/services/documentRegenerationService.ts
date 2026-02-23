@@ -8,7 +8,7 @@
 import { pool } from '../database/connection'
 import { logger, childLogger } from '../utils/logger'
 import { ContextAwareAIService, EnhancedAIRequest } from '../modules/context/integration'
-import { io } from '../server'
+import { io } from '@/socket'
 import { v4 as uuidv4 } from 'uuid'
 import { ConflictDetectionService, ConflictResolutionMethod } from './document/ConflictDetectionService'
 

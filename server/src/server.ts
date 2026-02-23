@@ -8,7 +8,7 @@ import express from "express"
 import cors from "cors"
 import helmet from "helmet"
 import { createServer } from "http"
-import { Server as SocketIOServer } from "socket.io"
+import { initSocketIO } from "./socket"
 
 import { errorHandler } from "./middleware/errorHandler"
 import requestIdMiddleware from "./middleware/requestId"
@@ -71,7 +71,7 @@ try {
   const m = require("./routes/ai-provider-testing")
   aiProviderTestingRoutes = m?.default || m
 } catch (e) {
-  console.warn("⚠️  Skipping ai-provider-testing routes:", (e as any)?.message || e)
+  // This is expected if the file is ignored in production
 }
 // import azureAIFoundryRoutes from "./routes/azure-ai-foundry"
 import processFlowRoutes from "./routes/process-flow"
@@ -140,34 +140,7 @@ import mediaRoutes from "./routes/mediaRoutes"
 
 const app = express()
 const server = createServer(app)
-const io = new SocketIOServer(server, {
-  cors: {
-    origin: (origin, callback) => {
-      // Allow requests with no origin (mobile apps, Postman, etc.)
-      if (!origin) return callback(null, true)
-
-      // Check if origin matches any allowed pattern
-      const isAllowed = allowedOrigins.some(allowed => {
-        if (typeof allowed === 'string') {
-          return allowed === origin
-        }
-        if (allowed instanceof RegExp) {
-          return allowed.test(origin)
-        }
-        return false
-      })
-
-      if (isAllowed) {
-        callback(null, true)
-      } else {
-        console.warn(`Socket.IO CORS blocked origin: ${origin}`)
-        callback(new Error(`Origin ${origin} not allowed by CORS`))
-      }
-    },
-    methods: ["GET", "POST"],
-    credentials: true,
-  },
-})
+const io = initSocketIO(server)
 
 const PORT = parseInt(process.env.PORT || "5000", 10)
 
@@ -250,6 +223,18 @@ app.get("/health", (req, res) => {
     status: "OK",
     timestamp: new Date().toISOString(),
     version: process.env.npm_package_version || "1.0.0",
+  })
+})
+
+// Debug env (sanitized)
+app.get("/api/debug-env", (req, res) => {
+  res.json({
+    NEO4J_URI: process.env.NEO4J_URI,
+    NEO4J_CLIENT_NAME: process.env.NEO4J_CLIENT_NAME,
+    NEO4J_CLIENT_ID: process.env.NEO4J_CLIENT_ID ? 'SET' : 'NOT SET',
+    NEO4J_USER: process.env.NEO4J_USER,
+    NODE_ENV: process.env.NODE_ENV,
+    TIMESTAMP: new Date().toISOString()
   })
 })
 
@@ -730,4 +715,5 @@ else if (!process.argv[1] || process.argv[1].includes('server')) {
 }
 
 
-export { app, io }
+export { app }
+

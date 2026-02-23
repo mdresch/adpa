@@ -9,7 +9,7 @@ import { pool } from '../../database/connection';
 import { logger } from '../../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
-import { io } from '../../server';
+import { io } from '@/socket';
 import { ConflictDetectionService } from './ConflictDetectionService';
 
 /**

@@ -1,144 +1,133 @@
+/**
+ * Run Migration 358: Morphic Integration Initialization
+ * Enables Morphic Chat History, File Uploads, and Langfuse Integration
+ * Creates tables: morphic_chats, morphic_messages, morphic_parts, morphic_feedback, morphic_ai_providers, morphic_ai_models, morphic_ai_model_config
+ * 
+ * Usage:
+ *   npx tsx server/scripts/run-migration-358.ts
+ */
+
+
 import dotenv from "dotenv"
-import { getDatabasePool, connectDatabase } from "../src/database/connection"
+import { logger } from "../src/utils/logger"
 import * as fs from "fs"
 import * as path from "path"
 
-// Load environment variables
-if (process.env.NODE_ENV !== "production") {
+// Load environment variables *before* importing database connection
+const envPath = path.resolve(__dirname, "../../.env")
+console.log(`Loading .env from: ${envPath}`)
+if (fs.existsSync(envPath)) {
+  dotenv.config({ path: envPath })
+} else {
+  console.warn("⚠️  .env file not found at expected path")
   dotenv.config()
 }
 
 async function runMigration() {
+  // Dynamic import to ensure env vars are loaded first
+  const { getDatabasePool, connectDatabase } = await import("../src/database/connection")
+
   try {
-    console.log("🔌 Connecting to database...")
+    logger.info("Connecting to database...")
     await connectDatabase()
-    const pool = getDatabasePool()
-    
-    if (!pool) {
-      throw new Error("Database pool not available")
+
+    logger.info("Database connected successfully")
+  } catch (error) {
+    logger.error("Failed to connect to database:", error)
+    throw error
+  }
+
+  const pool = getDatabasePool()
+  const client = await pool.connect()
+
+  try {
+    console.log("🚀 Running Migration 358: Morphic Integration Initialization\n")
+
+    // Load migration file
+    const migrationPath = path.join(__dirname, "../migrations/358_morphic_init.sql")
+    const migrationSQL = fs.readFileSync(migrationPath, "utf-8")
+
+    console.log(`📄 Migration file loaded: ${migrationPath}`)
+    console.log(`📊 Migration size: ${migrationSQL.length} characters\n`)
+
+    // Check if table already exists
+    console.log("🔍 Checking if tables already exist...")
+    const tableCheck = await client.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'morphic_chats'
+      )
+    `)
+
+    if (tableCheck.rows[0].exists) {
+      console.log("   ⚠️  Table 'morphic_chats' already exists")
+      console.log("   ℹ️  Migration may have already been run. Skipping...")
+      return
+    } else {
+      console.log("   ✅ Table 'morphic_chats' does not exist - will be created")
     }
+    console.log("\n")
 
-    const client = await pool.connect()
-
+    // Execute migration
+    console.log("🔄 Executing migration...")
+    await client.query("BEGIN")
     try {
-      console.log("🚀 Running Migration 358: Add metadata JSONB column to users table")
-      console.log("")
-
-      // Check if metadata column already exists
-      const checkColumn = await client.query(`
-        SELECT column_name, data_type 
-        FROM information_schema.columns 
-        WHERE table_name = 'users' AND column_name = 'metadata'
-      `)
-
-      if (checkColumn.rows.length > 0) {
-        console.log("✅ Metadata column already exists in users table")
-        console.log(`   Column type: ${checkColumn.rows[0].data_type}`)
-        
-        // Check if it's JSONB
-        if (checkColumn.rows[0].data_type !== 'jsonb') {
-          console.log("⚠️  Warning: metadata column exists but is not JSONB type")
-          console.log("   Consider updating the column type manually")
-        }
-      } else {
-        console.log("📝 Metadata column does not exist, will be created")
-      }
-
-      // Load and execute migration SQL
-      const migrationPath = path.join(__dirname, "../migrations/358_add_metadata_to_users.sql")
-      const migrationSQL = fs.readFileSync(migrationPath, "utf-8")
-
-      console.log("📄 Executing migration SQL...")
-      await client.query("BEGIN")
-      
-      try {
-        await client.query(migrationSQL)
-        await client.query("COMMIT")
-        console.log("✅ Migration SQL executed successfully")
-      } catch (error: any) {
-        await client.query("ROLLBACK")
-        throw error
-      }
-
-      // Verify the column was created
-      const verifyColumn = await client.query(`
-        SELECT column_name, data_type, column_default
-        FROM information_schema.columns 
-        WHERE table_name = 'users' AND column_name = 'metadata'
-      `)
-
-      if (verifyColumn.rows.length > 0) {
-        console.log("")
-        console.log("✅ Verification: Metadata column exists")
-        console.log(`   Type: ${verifyColumn.rows[0].data_type}`)
-        console.log(`   Default: ${verifyColumn.rows[0].column_default || 'none'}`)
-      } else {
-        console.log("")
-        console.log("⚠️  Warning: Metadata column not found after migration")
-      }
-
-      // Check for index
-      const checkIndex = await client.query(`
-        SELECT indexname, indexdef
-        FROM pg_indexes
-        WHERE tablename = 'users' AND indexname = 'idx_users_metadata'
-      `)
-
-      if (checkIndex.rows.length > 0) {
-        console.log("✅ GIN index on metadata column exists")
-      } else {
-        console.log("⚠️  Warning: GIN index on metadata column not found")
-      }
-
-      // Count users with metadata
-      const userCount = await client.query(`
-        SELECT 
-          COUNT(*) as total_users,
-          COUNT(metadata) as users_with_metadata,
-          COUNT(CASE WHEN metadata = '{}'::jsonb THEN 1 END) as users_with_empty_metadata
-        FROM users
-      `)
-
-      if (userCount.rows.length > 0) {
-        const stats = userCount.rows[0]
-        console.log("")
-        console.log("📊 User Statistics:")
-        console.log(`   Total users: ${stats.total_users}`)
-        console.log(`   Users with metadata: ${stats.users_with_metadata}`)
-        console.log(`   Users with empty metadata: ${stats.users_with_empty_metadata}`)
-      }
-
-      console.log("")
-      console.log("✨ Migration 358 completed successfully!")
-      console.log("")
-      console.log("Next steps:")
-      console.log("  1. The metadata column is now available for storing user data")
-      console.log("  2. Company names can now be stored in metadata.company_name")
-      console.log("  3. Test by updating a user with a company name")
-      console.log("")
-
+      await client.query(migrationSQL)
+      await client.query("COMMIT")
+      console.log("✅ Migration executed successfully\n")
     } catch (error: any) {
-      console.error("❌ Migration failed:", error.message)
-      if (error.stack) {
-        console.error(error.stack)
-      }
+      await client.query("ROLLBACK")
       throw error
-    } finally {
-      client.release()
-      await pool.end()
     }
+
+    // Verify table was created
+    console.log("🔍 Verifying table creation...")
+    const tablesToCheck = [
+      'morphic_chats',
+      'morphic_messages',
+      'morphic_parts',
+      'morphic_feedback',
+      'morphic_ai_providers',
+      'morphic_ai_models',
+      'morphic_ai_model_config'
+    ]
+
+    for (const tableName of tablesToCheck) {
+      const verifyTable = await client.query(`
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_schema = 'public' 
+                AND table_name = $1
+            )
+        `, [tableName])
+
+      if (verifyTable.rows[0].exists) {
+        console.log(`   ✅ Table '${tableName}' exists`)
+      } else {
+        console.log(`   ❌ Table '${tableName}' NOT found`)
+      }
+    }
+    console.log("\n")
+
+    console.log("✨ Migration 358 completed successfully!")
+
   } catch (error: any) {
-    console.error("❌ Migration error:", error)
+    logger.error("Migration failed:", error)
+    console.error("\n❌ Migration failed:", error.message)
+    if (error.stack) {
+      console.error("Stack trace:", error.stack)
+    }
     process.exit(1)
+  } finally {
+    client.release()
+    await pool.end()
   }
 }
 
-runMigration()
-  .then(() => {
-    process.exit(0)
-  })
-  .catch((error) => {
-    console.error("Migration error:", error)
-    process.exit(1)
-  })
-
+// Run migration
+runMigration().catch((error) => {
+  logger.error("Unhandled error:", error)
+  console.error("Unhandled error:", error)
+  process.exit(1)
+})

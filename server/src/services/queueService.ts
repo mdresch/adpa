@@ -5,7 +5,7 @@ import { logger } from "../utils/logger"
 import { pool } from "../database/connection"
 import { aiService } from "./aiService"
 import { ContextAwareAIService } from "../modules/context/integration"
-import { io } from "../server"
+import { io } from "../socket"
 import { createQueueService } from "./jobs/queue/QueueServiceFactory"
 import type { QueueName } from "./jobs/types"
 import type { QueueServiceDependencies } from "./jobs/queue/QueueDependencies"
@@ -595,79 +595,79 @@ import("./digitalTwinTriggerService").then(({ processDocumentTrigger }) => {
   logger.info(`[QUEUE] Registered process-trigger processor on digitalTwinTriggerQueue (Rabbit) with worker ID: ${WORKER_ID}`)
 })
 
-// GKG sync processing
-;(async () => {
-  try {
-    console.log("[GKG] Registering GKG sync processors...")
-    const { getNeo4jDriver, getNeo4jDatabase } = await import("../utils/neo4j")
-    const { getDatabasePool } = await import("../database/connection")
-    const { runBootstrap, runSyncProject, runSyncDocument } = await import("./gkg")
-
-    gkgSyncQueue.process("gkg-bootstrap", QUEUE_PREFETCH, async (job) => {
-    console.log("[GKG] Processing gkg-bootstrap")
+  // GKG sync processing
+  ; (async () => {
     try {
-      const driver = getNeo4jDriver()
-      if (!driver) throw new Error("Neo4j not configured or unavailable")
-      const db = getNeo4jDatabase()
-      const result = await runBootstrap(driver, db)
-      console.log("[GKG] Bootstrap completed", result)
-      logger.info("[GKG] Bootstrap completed", result)
-      return result
+      console.log("[GKG] Registering GKG sync processors...")
+      const { getNeo4jDriver, getNeo4jDatabase } = await import("../utils/neo4j")
+      const { getDatabasePool } = await import("../database/connection")
+      const { runBootstrap, runSyncProject, runSyncDocument } = await import("./gkg")
+
+      gkgSyncQueue.process("gkg-bootstrap", QUEUE_PREFETCH, async (job) => {
+        console.log("[GKG] Processing gkg-bootstrap")
+        try {
+          const driver = getNeo4jDriver()
+          if (!driver) throw new Error("Neo4j not configured or unavailable")
+          const db = getNeo4jDatabase()
+          const result = await runBootstrap(driver, db)
+          console.log("[GKG] Bootstrap completed", result)
+          logger.info("[GKG] Bootstrap completed", result)
+          return result
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err)
+          console.error("[GKG] Bootstrap failed:", msg)
+          throw err
+        }
+      })
+
+      gkgSyncQueue.process("gkg-sync-project", QUEUE_PREFETCH, async (job) => {
+        const { projectId } = (job.data as { projectId?: string }) ?? {}
+        if (!projectId) throw new Error("gkg-sync-project: projectId required")
+        console.log("[GKG] Processing gkg-sync-project", { projectId })
+        try {
+          const driver = getNeo4jDriver()
+          if (!driver) throw new Error("Neo4j not configured or unavailable")
+          const pool = getDatabasePool()
+          const db = getNeo4jDatabase()
+          const result = await runSyncProject(pool, driver, db, projectId)
+          console.log("[GKG] Sync project completed", { projectId, ...result })
+          logger.info("[GKG] Sync project completed", { projectId, ...result })
+          return result
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err)
+          console.error("[GKG] Sync project failed:", projectId, msg)
+          throw err
+        }
+      })
+
+      gkgSyncQueue.process("gkg-sync-document", QUEUE_PREFETCH, async (job) => {
+        const { documentId } = (job.data as { documentId?: string }) ?? {}
+        if (!documentId) throw new Error("gkg-sync-document: documentId required")
+        console.log("[GKG] Processing gkg-sync-document", { documentId })
+        try {
+          const driver = getNeo4jDriver()
+          if (!driver) throw new Error("Neo4j not configured or unavailable")
+          const pool = getDatabasePool()
+          const db = getNeo4jDatabase()
+          const result = await runSyncDocument(pool, driver, db, documentId)
+          console.log("[GKG] Sync document completed", { documentId, ...result })
+          logger.info("[GKG] Sync document completed", { documentId, ...result })
+          return result
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err)
+          console.error("[GKG] Sync document failed:", documentId, msg)
+          throw err
+        }
+      })
+
+      logger.info(`[QUEUE] Registered GKG sync processors on gkgSyncQueue (Rabbit)`)
+      console.log("✅ GKG sync processors registered for queue: gkg-sync")
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      console.error("[GKG] Bootstrap failed:", msg)
-      throw err
+      logger.error("[GKG] Failed to register GKG sync processors", { error: msg })
+      console.error("[GKG] Failed to register GKG sync processors:", msg)
     }
-  })
-
-  gkgSyncQueue.process("gkg-sync-project", QUEUE_PREFETCH, async (job) => {
-    const { projectId } = (job.data as { projectId?: string }) ?? {}
-    if (!projectId) throw new Error("gkg-sync-project: projectId required")
-    console.log("[GKG] Processing gkg-sync-project", { projectId })
-    try {
-      const driver = getNeo4jDriver()
-      if (!driver) throw new Error("Neo4j not configured or unavailable")
-      const pool = getDatabasePool()
-      const db = getNeo4jDatabase()
-      const result = await runSyncProject(pool, driver, db, projectId)
-      console.log("[GKG] Sync project completed", { projectId, ...result })
-      logger.info("[GKG] Sync project completed", { projectId, ...result })
-      return result
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      console.error("[GKG] Sync project failed:", projectId, msg)
-      throw err
-    }
-  })
-
-  gkgSyncQueue.process("gkg-sync-document", QUEUE_PREFETCH, async (job) => {
-    const { documentId } = (job.data as { documentId?: string }) ?? {}
-    if (!documentId) throw new Error("gkg-sync-document: documentId required")
-    console.log("[GKG] Processing gkg-sync-document", { documentId })
-    try {
-      const driver = getNeo4jDriver()
-      if (!driver) throw new Error("Neo4j not configured or unavailable")
-      const pool = getDatabasePool()
-      const db = getNeo4jDatabase()
-      const result = await runSyncDocument(pool, driver, db, documentId)
-      console.log("[GKG] Sync document completed", { documentId, ...result })
-      logger.info("[GKG] Sync document completed", { documentId, ...result })
-      return result
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      console.error("[GKG] Sync document failed:", documentId, msg)
-      throw err
-    }
-  })
-
-    logger.info(`[QUEUE] Registered GKG sync processors on gkgSyncQueue (Rabbit)`)
-    console.log("✅ GKG sync processors registered for queue: gkg-sync")
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    logger.error("[GKG] Failed to register GKG sync processors", { error: msg })
-    console.error("[GKG] Failed to register GKG sync processors:", msg)
-  }
-})()
+  })()
 
 // Export Redis client for legacy consumers
 export { redisClient }

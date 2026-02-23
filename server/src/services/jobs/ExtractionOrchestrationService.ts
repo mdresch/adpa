@@ -14,7 +14,7 @@
 
 import { pool } from '@/database/connection'
 import { logger } from '@/utils/logger'
-import { io } from '../../server'
+import { io } from '../../socket'
 import { PMBOK_DOMAINS } from '@/types/pmbok'
 import type { PmbokDomain } from '@/types/pmbok'
 import type { IQueueJob } from './queue/IQueue'
@@ -241,6 +241,7 @@ type DomainCountSummary = {
   satisfactionSurveys: number
   stakeholderIssues: number
   relationshipHealth: number
+  dtAssets: number
 }
 
 const ENTITY_COUNT_KEY_MAP: Record<EntityType, keyof DomainCountSummary> = {
@@ -315,7 +316,8 @@ const ENTITY_COUNT_KEY_MAP: Record<EntityType, keyof DomainCountSummary> = {
   communication_logs: 'communicationLogs',
   satisfaction_surveys: 'satisfactionSurveys',
   stakeholder_issues: 'stakeholderIssues',
-  relationship_health: 'relationshipHealth'
+  relationship_health: 'relationshipHealth',
+  dt_assets: 'dtAssets'
 }
 
 type DomainRunIdMap = Partial<Record<PmbokDomain, string>>
@@ -1518,7 +1520,7 @@ export class ExtractionOrchestrationService {
 
       // Enqueue GKG sync when Neo4j is configured (non-fatal if enqueue fails)
       try {
-        const { isNeo4jConfigured } = await import("../utils/neo4j")
+        const { isNeo4jConfigured } = await import("../../utils/neo4j")
         const { addJob } = await import("../queueService")
         if (isNeo4jConfigured() && projectId) {
           await addJob("gkg-sync-project", { projectId }, { attempts: 2, backoff: { type: "exponential", delay: 5000 } })

@@ -22,9 +22,44 @@
         "name": "next"
       }
     ],
+    "baseUrl": ".",
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "@/server/*": [
+        "server/*"
+      ],
+      "@/database/*": [
+        "server/src/database/*"
+      ],
+      "@/utils/*": [
+        "server/src/utils/*"
+      ],
+      "@/services/*": [
+        "server/src/services/*"
+      ],
+      "@/modules/*": [
+        "server/src/modules/*"
+      ],
+      "@/types/*": [
+        "types/*",
+        "server/src/types/*"
+      ],
+      "@/config/*": [
+        "server/src/config/*"
+      ],
+      "@/constants/*": [
+        "server/src/constants/*"
+      ],
+      "@/middleware/*": [
+        "server/src/middleware/*"
+      ],
+      "@/routes/*": [
+        "server/src/routes/*"
+      ],
+      "@/socket": [
+        "server/src/socket"
       ]
     }
   },

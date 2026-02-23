@@ -1,0 +1,15 @@
+[dotenv@17.2.3] injecting env (62) from server\.env -- tip: ≡ƒöÉ prevent building .env in docker: https://dotenvx.com/prebuild
+API Key loaded: true
+Getting stores...
+(node:49252) Warning: Setting the NODE_TLS_REJECT_UNAUTHORIZED environment variable to '0' makes TLS connections and HTTPS requests insecure by disabling certificate verification.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Creating store...
+Using store: fileSearchStores/adpateststore-3gsxd4k694xe
+Uploading file...
+Uploaded file: files/a3665b1eyerk
+State: ACTIVE
+Attempting import...
+Import success! ImportFileOperation {
+  name: 'fileSearchStores/adpateststore-3gsxd4k694xe/operations/a3665b1eyerk-6teq7an5cwd2',
+  response: {}
+}
