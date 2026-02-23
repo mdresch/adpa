@@ -24,6 +24,8 @@ import { persistStreamResults } from './helpers/persist-stream-results'
 import { prepareMessages } from './helpers/prepare-messages'
 import { streamRelatedQuestions } from './helpers/stream-related-questions'
 import { stripReasoningParts } from './helpers/strip-reasoning-parts'
+import { CacheService } from '@/lib/kv'
+import { createHash } from 'crypto'
 import type { StreamContext } from './helpers/types'
 import { BaseStreamConfig } from './types'
 
@@ -114,6 +116,17 @@ export async function createChatStreamResponse(
             tags: ['morphic', searchMode || 'adaptive', model?.providerId || 'unknown']
         })
     }
+
+    // Cache check
+    const cacheKey = createHash('sha256')
+        .update(JSON.stringify({
+            message,
+            searchMode,
+            modelType,
+            knowledgeEnabled,
+            ragScope
+        }))
+        .digest('hex')
 
     // Create stream context
     if (!model) {
@@ -319,6 +332,11 @@ export async function createChatStreamResponse(
                     searchMode,
                     context.modelId
                 )
+
+                // Cache the finished response message
+                if (responseMessage.parts.length > 0) {
+                    await CacheService.set(`chat:cache:${chatId}:${cacheKey}`, responseMessage, 3600)
+                }
 
                 // Flush Langfuse traces
                 if (langfuse) {
