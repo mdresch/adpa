@@ -226,6 +226,18 @@ app.get("/health", (req, res) => {
   })
 })
 
+// Debug env (sanitized)
+app.get("/api/debug-env", (req, res) => {
+  res.json({
+    NEO4J_URI: process.env.NEO4J_URI,
+    NEO4J_CLIENT_NAME: process.env.NEO4J_CLIENT_NAME,
+    NEO4J_CLIENT_ID: process.env.NEO4J_CLIENT_ID ? 'SET' : 'NOT SET',
+    NEO4J_USER: process.env.NEO4J_USER,
+    NODE_ENV: process.env.NODE_ENV,
+    TIMESTAMP: new Date().toISOString()
+  })
+})
+
 // API Routes
 console.log("🔧 Registering API routes...")
 
@@ -704,3 +716,4 @@ else if (!process.argv[1] || process.argv[1].includes('server')) {
 
 
 export { app }
+

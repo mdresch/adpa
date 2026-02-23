@@ -16,6 +16,7 @@ import Anthropic from "@anthropic-ai/sdk"  // Native Anthropic SDK
 import { logger } from "../utils/logger"
 import { pool } from "../database/connection"
 import AnalyticsTrackingService from "./analyticsTrackingService"
+import { isTracingEnabled } from "../tracing"
 
 export interface AIProvider {
   name: string
@@ -474,7 +475,18 @@ class AIService {
               { role: 'user' as const, content: userMessage }
             ],
             temperature: request.temperature,
-            maxOutputTokens: request.max_tokens
+            maxOutputTokens: request.max_tokens,
+            experimental_telemetry: {
+              isEnabled: isTracingEnabled(),
+              functionId: 'ai-generate-deepseek',
+              metadata: {
+                userId: request.userId,
+                projectId: request.projectId,
+                documentId: request.documentId,
+                provider: 'deepseek',
+                model: modelName
+              }
+            }
           })
 
           const { inputTokens, outputTokens, totalTokens } = this.normalizeUsage(deepseekResult.usage)
@@ -590,7 +602,18 @@ class AIService {
               { role: 'user' as const, content: userMessage }
             ],
             temperature: request.temperature,
-            maxOutputTokens: request.max_tokens
+            maxOutputTokens: request.max_tokens,
+            experimental_telemetry: {
+              isEnabled: isTracingEnabled(),
+              functionId: 'ai-generate-xai',
+              metadata: {
+                userId: request.userId,
+                projectId: request.projectId,
+                documentId: request.documentId,
+                provider: 'xai',
+                model: modelName
+              }
+            }
           })
 
           const { inputTokens, outputTokens, totalTokens } = this.normalizeUsage(xaiResult.usage)
@@ -810,6 +833,17 @@ class AIService {
             ],
             temperature: request.temperature || 0.7,
             maxOutputTokens: request.max_tokens || 2000,
+            experimental_telemetry: {
+              isEnabled: isTracingEnabled(),
+              functionId: 'ai-gateway-messages',
+              metadata: {
+                userId: request.userId,
+                projectId: request.projectId,
+                documentId: request.documentId,
+                provider: 'gateway',
+                modelId: gatewayModelId
+              }
+            }
           } as any)
         } else {
           logger.info('📨 [AI-SERVICE-6/8] Using simple prompt (no template)')
@@ -818,6 +852,17 @@ class AIService {
             prompt: userMessage,
             temperature: request.temperature || 0.7,
             maxOutputTokens: request.max_tokens || 2000,
+            experimental_telemetry: {
+              isEnabled: isTracingEnabled(),
+              functionId: 'ai-gateway-prompt',
+              metadata: {
+                userId: request.userId,
+                projectId: request.projectId,
+                documentId: request.documentId,
+                provider: 'gateway',
+                modelId: gatewayModelId
+              }
+            }
           } as any)
         }
 
@@ -989,7 +1034,18 @@ class AIService {
               { role: 'user' as const, content: userMessage }
             ],
             temperature: request.temperature,
-            maxOutputTokens: request.max_tokens
+            maxOutputTokens: request.max_tokens,
+            experimental_telemetry: {
+              isEnabled: isTracingEnabled(),
+              functionId: 'ai-mistral-direct',
+              metadata: {
+                userId: request.userId,
+                projectId: request.projectId,
+                documentId: request.documentId,
+                provider: 'mistral',
+                model: modelName
+              }
+            }
           })
 
           logger.debug('[AI-SERVICE] Mistral AI successful:', { contentLength: mistralResult.text.length })
@@ -1055,7 +1111,18 @@ class AIService {
               { role: 'user' as const, content: userMessage }
             ],
             temperature: request.temperature,
-            maxOutputTokens: request.max_tokens
+            maxOutputTokens: request.max_tokens,
+            experimental_telemetry: {
+              isEnabled: isTracingEnabled(),
+              functionId: 'ai-deepseek-fallback',
+              metadata: {
+                userId: request.userId,
+                projectId: request.projectId,
+                documentId: request.documentId,
+                provider: 'deepseek',
+                model: modelName
+              }
+            }
           })
 
           logger.debug('[AI-SERVICE] DeepSeek successful:', { contentLength: deepseekResult.text.length })
@@ -1121,7 +1188,18 @@ class AIService {
               { role: 'user' as const, content: userMessage }
             ],
             temperature: request.temperature,
-            maxOutputTokens: request.max_tokens
+            maxOutputTokens: request.max_tokens,
+            experimental_telemetry: {
+              isEnabled: isTracingEnabled(),
+              functionId: 'ai-moonshot-fallback',
+              metadata: {
+                userId: request.userId,
+                projectId: request.projectId,
+                documentId: request.documentId,
+                provider: 'moonshot',
+                model: modelName
+              }
+            }
           })
 
           logger.debug('[AI-SERVICE] Moonshot AI successful:', { contentLength: moonshotResult.text.length })
@@ -1283,7 +1361,18 @@ class AIService {
               { role: 'user' as const, content: userMessage }
             ],
             temperature: request.temperature || 0.7,
-            maxOutputTokens: request.max_tokens || 2000
+            maxOutputTokens: request.max_tokens || 2000,
+            experimental_telemetry: {
+              isEnabled: isTracingEnabled(),
+              functionId: 'ai-openai-fallback',
+              metadata: {
+                userId: request.userId,
+                projectId: request.projectId,
+                documentId: request.documentId,
+                provider: 'openai',
+                model: modelName
+              }
+            }
           })
 
           logger.debug('[AI-SERVICE] OpenAI successful:', { contentLength: openaiResult.text.length })

@@ -2,15 +2,12 @@
  * RAG Sync Service
  * 
  * Automatically syncs ADPA documents to Google Gemini File Search
- * for RAG-powered AI Search. Uses the @google/generative-ai SDK.
+ * for RAG-powered AI Search. Uses the @google/genai SDK.
  */
 
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import { GoogleGenAI } from '@google/genai'
 import { pool } from '../database/connection'
 import { logger, childLogger } from '../utils/logger'
-
-// Dynamic require for server-side only SDK components
-const { GoogleAIFileManager } = require('@google/generative-ai/server')
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -34,24 +31,22 @@ interface SyncResult {
 // ─── Service ────────────────────────────────────────────────────────────
 
 class RAGSyncService {
-    private genai: GoogleGenerativeAI | null = null
-    private fileManager: any | null = null
+    private genai: GoogleGenAI | null = null
     private storeName: string | null = null
     private log = childLogger({ service: 'rag-sync' })
 
     /**
-     * Initialize the Gemini clients lazily.
+     * Initialize the Gemini client lazily.
      */
-    private getClients() {
-        if (!this.genai || !this.fileManager) {
+    private getClient(): GoogleGenAI {
+        if (!this.genai) {
             const apiKey = process.env.GOOGLE_AI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY
             if (!apiKey) {
                 throw new Error('GOOGLE_AI_API_KEY is not configured. RAG sync is unavailable.')
             }
-            if (!this.genai) this.genai = new GoogleGenerativeAI(apiKey)
-            if (!this.fileManager) this.fileManager = new GoogleAIFileManager(apiKey)
+            this.genai = new GoogleGenAI({ apiKey })
         }
-        return { genai: this.genai, fileManager: this.fileManager }
+        return this.genai
     }
 
     /**
@@ -61,12 +56,12 @@ class RAGSyncService {
     async getStoreName(): Promise<string> {
         if (this.storeName) return this.storeName
 
-        const { genai } = this.getClients()
+        const client = this.getClient()
         const displayName = 'ADPA Knowledge Base'
 
         try {
             // List existing stores and find ours
-            const storesPager = await (genai as any).fileSearchStores.list()
+            const storesPager = await (client as any).fileSearchStores.list()
             let existing: any = null
 
             if (storesPager && (Symbol.asyncIterator in (storesPager as any))) {
@@ -87,7 +82,7 @@ class RAGSyncService {
             }
 
             // Create new store
-            const store = await (genai as any).fileSearchStores.create({ displayName })
+            const store = await (client as any).fileSearchStores.create({ displayName })
             if (!store?.name) throw new Error('Failed to create File Search store')
 
             this.storeName = store.name
@@ -105,7 +100,7 @@ class RAGSyncService {
      */
     async syncDocument(documentId: string, projectId: string): Promise<SyncResult> {
         try {
-            const { genai, fileManager } = this.getClients()
+            const client = this.getClient()
             const storeName = await this.getStoreName()
 
             // Fetch document with project and template info
@@ -185,33 +180,45 @@ class RAGSyncService {
             if (metadata.version) customMetadata.push({ key: 'version', stringValue: String(metadata.version) })
             if (metadata.date) customMetadata.push({ key: 'date', stringValue: String(metadata.date) })
 
-            this.log.debug('[RAG-SYNC] Uploading file to Gemini API', { displayName: metadata.document })
+            this.log.info('[RAG-SYNC] Uploading file to Gemini API', {
+                displayName: metadata.document,
+                contentLength: doc.content.length
+            })
 
-            const fs = require('fs')
-            const path = require('path')
-            const os = require('os')
-            const tempFile = path.join(os.tmpdir(), `rag-${documentId}.md`)
-            fs.writeFileSync(tempFile, doc.content)
-
+            // Upload content via Files API (part of @google/genai)
             let uploadResponse: any
             try {
-                uploadResponse = await fileManager.uploadFile(tempFile, {
-                    displayName: `${doc.project_name} - ${doc.name}`,
-                    mimeType: 'text/markdown'
+                const blob = new Blob([doc.content], { type: 'text/plain' })
+                uploadResponse = await (client as any).files.upload({
+                    file: blob,
+                    config: {
+                        displayName: `${doc.project_name} - ${doc.name}`.substring(0, 500),
+                        mimeType: 'text/plain'
+                    }
+                })
+                this.log.info('[RAG-SYNC] File upload response received', {
+                    name: uploadResponse.name,
+                    status: (uploadResponse as any).file?.state || 'unknown'
                 })
             } catch (uploadError: any) {
-                this.log.error('[RAG-SYNC] File upload failed', { error: uploadError.message })
+                this.log.error('[RAG-SYNC] File upload failed', {
+                    error: uploadError.message,
+                    errorData: uploadError.response?.data || uploadError.details
+                })
                 throw uploadError
-            } finally {
-                // Clean up temp file
-                if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile)
             }
 
-            if (!uploadResponse?.file?.name) {
-                throw new Error('File upload returned empty response or no name')
+            if (!uploadResponse) {
+                throw new Error('File upload returned empty response')
             }
 
-            const fileName = uploadResponse.file.name
+            // Extract the file name
+            const fileName = uploadResponse.file?.name || uploadResponse.name
+
+            if (!fileName) {
+                this.log.error('[RAG-SYNC] No file name in upload response', { uploadResponse })
+                return { success: false, documentId, error: 'File upload returned no name' }
+            }
 
             // 🕒 WAIT for file to be ACTIVE
             let fileReady = false
@@ -220,8 +227,8 @@ class RAGSyncService {
 
             while (!fileReady && attempts < maxAttempts) {
                 try {
-                    const file = await fileManager.getFile(fileName)
-                    this.log.debug(`[RAG-SYNC] File status for ${fileName}: ${file.state}`, { attempts })
+                    const file = await (client as any).files.get({ name: fileName })
+                    this.log.info(`[RAG-SYNC] File status for ${fileName}: ${file.state}`, { attempts })
 
                     if (file.state === 'ACTIVE') {
                         fileReady = true
@@ -242,14 +249,32 @@ class RAGSyncService {
                 throw new Error(`File ${fileName} did not become ACTIVE within timeout`)
             }
 
-            this.log.debug('[RAG-SYNC] Importing file into store', { storeName, fileName, metadataCount: customMetadata.length })
-
             // Import into File Search store with metadata
-            await (genai as any).fileSearchStores.importFile({
-                fileSearchStoreName: storeName,
-                fileName: fileName,
-                config: { customMetadata }
-            })
+            try {
+                const formattedStoreName = storeName.replace('fileSearchStores/', '')
+                const formattedFileName = fileName.replace('files/', '')
+
+                this.log.info('[RAG-SYNC] Calling importFile', {
+                    fileSearchStoreName: formattedStoreName,
+                    fileName: formattedFileName
+                })
+
+                await (client as any).fileSearchStores.importFile({
+                    fileSearchStoreName: formattedStoreName,
+                    fileName: formattedFileName
+                })
+                this.log.info('[RAG-SYNC] File import call sent successfully')
+            } catch (importError: any) {
+                this.log.error('[RAG-SYNC] File import failed', {
+                    error: importError.message,
+                    errorData: importError.response?.data || importError.details,
+                    params: {
+                        fileSearchStoreName: storeName.replace('fileSearchStores/', ''),
+                        fileName: fileName.replace('files/', '')
+                    }
+                })
+                throw importError
+            }
 
             this.log.info('[RAG-SYNC] Document synced successfully', {
                 documentId,
