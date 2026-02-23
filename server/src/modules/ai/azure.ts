@@ -1,5 +1,13 @@
 // import { generateText } from 'ai'; // Temporarily disabled
 // import { createAzure } from '@ai-sdk/azure'; // Temporarily disabled
+import { isTracingEnabled } from '../../tracing'
+import { Langfuse } from 'langfuse'
+
+const langfuse = new Langfuse({
+  publicKey: process.env.LANGFUSE_PUBLIC_KEY,
+  secretKey: process.env.LANGFUSE_SECRET_KEY,
+  baseUrl: process.env.LANGFUSE_BASE_URL || 'https://cloud.langfuse.com'
+})
 
 export interface AzureConfig {
   resourceName: string;
@@ -66,14 +74,14 @@ export class AzureConnector {
         try {
           console.log(`[AZURE AI] Loading provider: ${row.name}`);
           console.log(`[AZURE AI] Encrypted API key: ${row.api_key_encrypted}`);
-          
+
           const decryptedApiKey = this.decryptApiKey(row.api_key_encrypted);
           console.log(`[AZURE AI] Decrypted API key: ${decryptedApiKey ? decryptedApiKey.substring(0, 10) + '...' : 'NULL'}`);
-          
+
           // Extract resource name from endpoint
           const endpoint = row.configuration?.endpoint || '';
           const resourceName = endpoint.replace('https://', '').replace('.cognitiveservices.azure.com', '');
-          
+
           const config: AzureConfig = {
             resourceName: resourceName,
             apiKey: decryptedApiKey,
@@ -94,7 +102,7 @@ export class AzureConnector {
           console.error(`[AZURE AI] Error initializing provider ${row.name}:`, error);
         }
       }
-      
+
       console.log(`[AZURE AI] Initialized ${this.providers.size} providers`);
     } catch (error) {
       console.error('[AZURE AI] Error initializing providers:', error);
@@ -105,10 +113,10 @@ export class AzureConnector {
   async addProvider(provider: AzureProvider): Promise<void> {
     try {
       console.log(`[AZURE AI] Adding provider: ${provider.name}`);
-      
+
       // Skip API key validation during startup - validate during actual usage
       // await this.validateApiKey(provider.config.apiKey, provider.config.deployment);
-      
+
       this.providers.set(provider.name, provider);
       console.log(`[AZURE AI] Provider ${provider.name} added successfully`);
     } catch (error) {
@@ -118,6 +126,9 @@ export class AzureConnector {
   }
 
   async generateContent(providerName: string, request: any): Promise<AzureResponse> {
+    let langfuseTrace: any = null;
+    let langfuseGeneration: any = null;
+
     try {
       const provider = this.providers.get(providerName);
       if (!provider) {
@@ -132,13 +143,13 @@ export class AzureConnector {
       console.log(`[AZURE AI] Request:`, request);
 
       const deployment = provider.config.deployment;
-      
+
       // Create Azure AI client using @ai-sdk/azure
       const azure = createAzure({
         resourceName: provider.config.resourceName,
         apiKey: provider.config.apiKey,
       });
-      
+
       // Handle both prompt and messages formats
       let promptText = '';
       if (request.prompt) {
@@ -149,12 +160,39 @@ export class AzureConnector {
       } else {
         throw new Error('No prompt or messages provided');
       }
-      
+
+      // Create Langfuse trace and generation
+      langfuseTrace = isTracingEnabled() ? langfuse.trace({
+        name: `azure-ai-generate`,
+        metadata: { provider: providerName, deployment },
+        tags: ['azure', deployment]
+      }) : null;
+
+      if (langfuseTrace) {
+        langfuseGeneration = langfuseTrace.generation({
+          name: 'azure-generation',
+          model: deployment,
+          modelParameters: {
+            temperature: request.temperature || 0.7,
+            maxTokens: request.maxTokens || request.max_tokens || 1000
+          },
+          input: promptText
+        });
+      }
+
       const result = await generateText({
         model: azure(deployment),
         messages: [{ role: 'user', content: promptText }],
         maxTokens: request.maxTokens || request.max_tokens || 1000,
         temperature: request.temperature || 0.7,
+        experimental_telemetry: {
+          isEnabled: isTracingEnabled(),
+          functionId: 'azure-ai-generate',
+          metadata: {
+            provider: providerName,
+            deployment: deployment
+          }
+        }
       });
 
       const response: AzureResponse = {
@@ -167,10 +205,30 @@ export class AzureConnector {
         finishReason: result.finishReason,
       };
 
+      // End Langfuse generation on success
+      if (langfuseGeneration) {
+        langfuseGeneration.end({
+          output: result.text,
+          usage: result.usage ? {
+            promptTokens: result.usage.promptTokens,
+            completionTokens: result.usage.completionTokens,
+            totalTokens: result.usage.totalTokens,
+          } : undefined
+        });
+        await langfuse.flushAsync();
+      }
+
       console.log(`[AZURE AI] Content generated successfully for ${providerName}`);
       return response;
     } catch (error) {
       console.error(`[AZURE AI] Error generating content for ${providerName}:`, error);
+      if (langfuseGeneration) {
+        langfuseGeneration.end({
+          level: 'ERROR',
+          statusMessage: error instanceof Error ? error.message : String(error)
+        });
+        await langfuse.flushAsync();
+      }
       throw error;
     }
   }
@@ -196,7 +254,7 @@ export class AzureConnector {
       };
 
       await this.generateContent(providerName, testRequest);
-      
+
       console.log(`[AZURE AI] Connection test successful for ${providerName}`);
       return true;
     } catch (error) {
@@ -222,13 +280,13 @@ export class AzureConnector {
 
       console.log(`[AZURE AI] Validating API key: ${apiKey.substring(0, 10)}...`);
       const model = deployment || 'gpt-4.1-mini';
-      
+
       // Create Azure AI client for validation
       const azure = createAzure({
         resourceName: 'cognisync-knowledgehub-resource', // Default resource name for validation
         apiKey: apiKey,
       });
-      
+
       await generateText({
         model: azure(model),
         prompt: 'API key validation test',
