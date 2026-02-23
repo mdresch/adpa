@@ -26,12 +26,14 @@ const staticProviders: Record<string, any> = {
     })
 }
 
-const ollamaBaseUrl = process.env.NEXT_PUBLIC_OLLAMA_BASE_URL || process.env.OLLAMA_BASE_URL
+function getOllamaBaseUrl() {
+    return process.env.NEXT_PUBLIC_OLLAMA_BASE_URL || process.env.OLLAMA_BASE_URL
+}
 
-if (ollamaBaseUrl) {
-    console.log(`[Registry] Ollama provider initialized: ${ollamaBaseUrl}/api`)
+if (getOllamaBaseUrl()) {
+    console.log(`[Registry] Ollama provider initialized: ${getOllamaBaseUrl()}/api`)
     staticProviders.ollama = createOllama({
-        baseURL: `${ollamaBaseUrl}/api`
+        baseURL: `${getOllamaBaseUrl()}/api`
     })
 } else {
     console.warn('[Registry] OLLAMA_BASE_URL not set — Ollama provider disabled')
@@ -70,7 +72,7 @@ export async function refreshRegistry() {
                 })
             } else if (providerType === 'ollama') {
                 providers[p.id] = createOllama({
-                    baseURL: p.baseUrl || `${ollamaBaseUrl}/api`
+                    baseURL: p.baseUrl || `${getOllamaBaseUrl()}/api`
                 })
             } else if (providerType === 'mistral') {
                 providers[p.id] = createMistral({
@@ -108,7 +110,7 @@ export function isProviderEnabled(providerId: string): boolean {
             case 'openai': return !!process.env.OPENAI_API_KEY
             case 'anthropic': return !!process.env.ANTHROPIC_API_KEY
             case 'google': return !!process.env.GOOGLE_AI_API_KEY || !!process.env.GOOGLE_GENERATIVE_AI_API_KEY
-            case 'ollama': return !!ollamaBaseUrl
+            case 'ollama': return !!getOllamaBaseUrl()
             default: return true
         }
     }
