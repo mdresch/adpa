@@ -11,6 +11,11 @@ const nextConfig = {
   // Enable standalone output for Docker containerization
   output: 'standalone',
 
+  // Explicitly expose server-side environment variables that are missing the NEXT_PUBLIC_ prefix
+  env: {
+    OLLAMA_BASE_URL: process.env.OLLAMA_BASE_URL,
+  },
+
   // Exclude problematic server-side packages from bundling
   serverExternalPackages: [
     '@adobe/pdfservices-node-sdk',

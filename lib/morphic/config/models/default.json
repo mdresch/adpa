@@ -24,10 +24,10 @@
                     "providerId": "google"
                 },
                 "quality": {
-                    "id": "gemini-3-pro-preview",
-                    "name": "Gemini 3 Pro Preview",
-                    "provider": "Google",
-                    "providerId": "google"
+                    "id": "mistral-large-3:675b-cloud",
+                    "name": "Mistral Large 3 (Ollama)",
+                    "provider": "Ollama",
+                    "providerId": "ollama"
                 }
             }
         },

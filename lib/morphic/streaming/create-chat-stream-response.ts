@@ -167,6 +167,7 @@ export async function createChatStreamResponse(
 
         // We wrap the entire execution within createUIMessageStream so we can merge the result
         // matching the UI message protocol expected by the DefaultChatTransport on the frontend.
+        let activeLangfuseGeneration: any = null
         const stream = createUIMessageStream<UIMessage>({
             execute: async ({ writer }: { writer: UIMessageStreamWriter }) => {
                 let lastError: any = null
@@ -192,6 +193,7 @@ export async function createChatStreamResponse(
                                     knowledgeEnabled
                                 }
                             })
+                            activeLangfuseGeneration = langfuseGeneration
                         }
 
                         const messagesToModel = await prepareMessages(context, message)
@@ -244,6 +246,18 @@ export async function createChatStreamResponse(
                             emptyMessages: 'remove'
                         })
 
+                        // Update Langfuse generation with prepared input
+                        if (langfuseGeneration) {
+                            langfuseGeneration.update({
+                                input: coreMessages.map(m => ({
+                                    role: m.role,
+                                    content: typeof m.content === 'string'
+                                        ? m.content.substring(0, 2000)
+                                        : JSON.stringify(m.content).substring(0, 2000)
+                                }))
+                            })
+                        }
+
                         if (!initialChat && message && !titlePromise) {
                             const messageContent = getTextFromParts(message.parts)
                             if (messageContent) {
@@ -284,10 +298,9 @@ export async function createChatStreamResponse(
                             })
                         )
 
-                        // End Langfuse generation span on success
+                        // End Langfuse generation span on success (final output added in onFinish)
                         if (langfuseGeneration) {
                             langfuseGeneration.end({
-                                output: `[streaming response from ${currentModelId}]`,
                                 level: 'DEFAULT',
                                 statusMessage: 'SUCCESS'
                             })
@@ -332,6 +345,28 @@ export async function createChatStreamResponse(
                     searchMode,
                     context.modelId
                 )
+
+                // Update Langfuse generation with actual streamed output
+                if (activeLangfuseGeneration && responseMessage.parts) {
+                    try {
+                        const textParts = responseMessage.parts
+                            .filter((p: any) => p.type === 'text')
+                            .map((p: any) => p.text)
+                            .join('')
+                        const toolParts = responseMessage.parts
+                            .filter((p: any) => p.type === 'tool-invocation')
+                            .map((p: any) => ({ tool: p.toolInvocation?.toolName, args: p.toolInvocation?.args }))
+                        activeLangfuseGeneration.update({
+                            output: {
+                                text: textParts.substring(0, 5000),
+                                toolCalls: toolParts.length > 0 ? toolParts : undefined,
+                                totalParts: responseMessage.parts.length
+                            }
+                        })
+                    } catch (e) {
+                        // Non-critical — don't break persistence
+                    }
+                }
 
                 // Cache the finished response message
                 if (responseMessage.parts.length > 0) {

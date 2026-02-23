@@ -15,8 +15,8 @@ import { diag, DiagConsoleLogger, DiagLogLevel } from '@opentelemetry/api'
 import { SimpleSpanProcessor, ConsoleSpanExporter } from '@opentelemetry/sdk-trace-base'
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
 
-// Disable diagnostic logging to prevent console flood
-// diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.DEBUG)
+// Only log OpenTelemetry errors (suppress info/warn/debug noise)
+diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.ERROR)
 
 // Configuration
 const ENABLE_LANGFUSE = process.env.ENABLE_LANGFUSE_TRACING === 'true'
@@ -71,8 +71,8 @@ export function initTracing(): void {
           }
         })))
 
-        // Also add ConsoleExporter to see spans in server logs
-        if (process.env.NODE_ENV === 'development' || process.env.DEBUG_TRACING === 'true') {
+        // ConsoleSpanExporter disabled to reduce noise — enable with DEBUG_TRACING=true
+        if (process.env.DEBUG_TRACING === 'true') {
           console.log('[Tracing]    ConsoleSpanExporter enabled for local debugging')
           spanProcessors.push(new SimpleSpanProcessor(new ConsoleSpanExporter()))
         }
