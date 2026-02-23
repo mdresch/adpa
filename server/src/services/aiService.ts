@@ -17,6 +17,13 @@ import { logger } from "../utils/logger"
 import { pool } from "../database/connection"
 import AnalyticsTrackingService from "./analyticsTrackingService"
 import { isTracingEnabled } from "../tracing"
+import { Langfuse } from "langfuse"
+
+const langfuse = new Langfuse({
+  publicKey: process.env.LANGFUSE_PUBLIC_KEY,
+  secretKey: process.env.LANGFUSE_SECRET_KEY,
+  baseUrl: process.env.LANGFUSE_BASE_URL || "https://cloud.langfuse.com"
+});
 
 export interface AIProvider {
   name: string
@@ -416,6 +423,9 @@ class AIService {
       logger.debug('[AI-SERVICE] Using provided system_prompt')
     }
 
+    let langfuseTrace: any = null;
+    let langfuseGeneration: any = null;
+
     try {
       // Get provider type from database to build the model ID
       logger.debug('[AI-SERVICE] Looking up provider type')
@@ -428,6 +438,27 @@ class AIService {
       if (!providerResult || !providerResult.rows) {
         logger.error('❌ [AI-SERVICE] Provider lookup returned null result for', request.provider)
         throw new Error(`Provider lookup failed for: ${request.provider}`)
+      }
+
+      langfuseTrace = isTracingEnabled() ? langfuse.trace({
+        name: `ai-generate-${request.provider}`,
+        userId: request.userId,
+        metadata: {
+          projectId: request.projectId
+        },
+        tags: [request.provider, request.model || "default"]
+      }) : null;
+
+      if (langfuseTrace) {
+        langfuseGeneration = langfuseTrace.generation({
+          name: `${request.provider}-generation`,
+          model: request.model || "unknown",
+          modelParameters: {
+            temperature: request.temperature,
+            maxTokens: request.max_tokens
+          },
+          input: systemMessage ? [{ role: "system", content: systemMessage }, { role: "user", content: userMessage }] : userMessage
+        });
       }
 
       if (providerResult.rows.length === 0) {
@@ -508,6 +539,18 @@ class AIService {
             }, responseTimeMs, true, request.userId, request.projectId, request.documentId)
           })
 
+          if (langfuseGeneration) {
+            langfuseGeneration.end({
+              output: deepseekResult.text,
+              usage: {
+                promptTokens: inputTokens,
+                completionTokens: outputTokens,
+                totalTokens: totalTokens
+              }
+            });
+            await langfuse.flushAsync();
+          }
+
           return {
             content: deepseekResult.text,
             provider: request.provider,
@@ -571,6 +614,18 @@ class AIService {
             }, responseTimeMs, true, request.userId, request.projectId, request.documentId)
           })
 
+          if (langfuseGeneration) {
+            langfuseGeneration.end({
+              output: content,
+              usage: {
+                promptTokens: promptTokens,
+                completionTokens: completionTokens,
+                totalTokens: totalTokens
+              }
+            });
+            await langfuse.flushAsync();
+          }
+
           return {
             content,
             provider: request.provider,
@@ -626,14 +681,25 @@ class AIService {
           })
 
           // Track detailed AI usage for analytics
-          const responseTimeMs = Date.now() - startTime
           setImmediate(() => {
             this.trackAIUsageAsync(request.provider, modelName, {
               prompt_tokens: inputTokens,
               completion_tokens: outputTokens,
               total_tokens: totalTokens,
-            }, responseTimeMs, true, request.userId, request.projectId, request.documentId)
+            }, Date.now() - startTime, true, request.userId, request.projectId, request.documentId)
           })
+
+          if (langfuseGeneration) {
+            langfuseGeneration.end({
+              output: xaiResult.text,
+              usage: {
+                promptTokens: inputTokens,
+                completionTokens: outputTokens,
+                totalTokens: totalTokens
+              }
+            });
+            await langfuse.flushAsync();
+          }
 
           return {
             content: xaiResult.text,
@@ -771,6 +837,18 @@ class AIService {
               total_tokens: totalTokens,
             }, responseTimeMs, true, request.userId, request.projectId, request.documentId)
           })
+
+          if (langfuseGeneration) {
+            langfuseGeneration.end({
+              output: content,
+              usage: {
+                promptTokens: promptTokens,
+                completionTokens: completionTokens,
+                totalTokens: totalTokens
+              }
+            });
+            await langfuse.flushAsync();
+          }
 
           return {
             content,
@@ -995,6 +1073,18 @@ class AIService {
 
           logger.info(`[AI] ✓ Google AI/${finalModel} - ${estimatedTokens} tokens - ${Date.now() - startTime}ms`)
 
+          if (langfuseGeneration) {
+            langfuseGeneration.end({
+              output: text,
+              usage: {
+                promptTokens: Math.ceil(promptLength / 4),
+                completionTokens: Math.ceil(text.length / 4),
+                totalTokens: estimatedTokens
+              }
+            });
+            await langfuse.flushAsync();
+          }
+
           return {
             content: text,
             provider: request.provider,
@@ -1068,6 +1158,18 @@ class AIService {
           })
 
           logger.info(`[AI] ✓ Mistral AI/${modelName} - ${totalTokens} tokens - ${Date.now() - startTime}ms`)
+
+          if (langfuseGeneration) {
+            langfuseGeneration.end({
+              output: mistralResult.text,
+              usage: {
+                promptTokens: inputTokens,
+                completionTokens: outputTokens,
+                totalTokens: totalTokens
+              }
+            });
+            await langfuse.flushAsync();
+          }
 
           return {
             content: mistralResult.text,
@@ -1146,6 +1248,18 @@ class AIService {
 
           logger.info(`[AI] ✓ DeepSeek/${modelName} - ${totalTokens} tokens - ${Date.now() - startTime}ms`)
 
+          if (langfuseGeneration) {
+            langfuseGeneration.end({
+              output: deepseekResult.text,
+              usage: {
+                promptTokens: inputTokens,
+                completionTokens: outputTokens,
+                totalTokens: totalTokens
+              }
+            });
+            await langfuse.flushAsync();
+          }
+
           return {
             content: deepseekResult.text,
             provider: request.provider,
@@ -1221,7 +1335,17 @@ class AIService {
             }, responseTimeMs, true, request.userId, request.projectId, request.documentId)
           })
 
-          logger.info(`[AI] ✓ Moonshot AI/${modelName} - ${totalTokens} tokens - ${Date.now() - startTime}ms`)
+          if (langfuseGeneration) {
+            langfuseGeneration.end({
+              output: moonshotResult.text,
+              usage: {
+                promptTokens: inputTokens,
+                completionTokens: outputTokens,
+                totalTokens: totalTokens
+              }
+            });
+            await langfuse.flushAsync();
+          }
 
           return {
             content: moonshotResult.text,
@@ -1316,6 +1440,18 @@ class AIService {
 
             logger.info(`[AI] ✓ Ollama/${modelName} - ${totalTokens} tokens - ${responseTimeMs}ms`)
 
+            if (langfuseGeneration) {
+              langfuseGeneration.end({
+                output: generatedText,
+                usage: {
+                  promptTokens: promptTokens,
+                  completionTokens: completionTokens,
+                  totalTokens: totalTokens
+                }
+              });
+              await langfuse.flushAsync();
+            }
+
             return {
               content: generatedText,
               provider: request.provider,
@@ -1405,6 +1541,18 @@ class AIService {
 
           logger.info(`[AI] ✓ OpenAI/${modelName} - ${totalTokens} tokens - ${responseTimeMs}ms`)
 
+          if (langfuseGeneration) {
+            langfuseGeneration.end({
+              output: openaiResult.text,
+              usage: {
+                promptTokens: inputTokens,
+                completionTokens: outputTokens,
+                totalTokens: totalTokens
+              }
+            });
+            await langfuse.flushAsync();
+          }
+
           return {
             content: openaiResult.text,
             provider: request.provider,
@@ -1467,6 +1615,18 @@ class AIService {
 
         logger.info('✅ [AI-SERVICE-8/8] Usage stats updated. Returning response.')
 
+        if (langfuseGeneration) {
+          langfuseGeneration.end({
+            output: result.text,
+            usage: {
+              promptTokens: gatewayInputTokens,
+              completionTokens: gatewayOutputTokens,
+              totalTokens: gatewayTotalTokens
+            }
+          });
+          await langfuse.flushAsync();
+        }
+
         return {
           content: result.text,
           provider: request.provider,
@@ -1493,6 +1653,13 @@ class AIService {
         message: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : undefined
       })
+      if (typeof langfuseGeneration !== 'undefined' && langfuseGeneration) {
+        langfuseGeneration.end({
+          level: "ERROR",
+          statusMessage: error instanceof Error ? error.message : String(error)
+        });
+        await langfuse.flushAsync();
+      }
       throw error
     }
   }

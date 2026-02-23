@@ -167,6 +167,7 @@
     "json2csv": "6.0.0-alpha.2",
     "jsonwebtoken": "latest",
     "jspdf": "^4.1.0",
+    "langfuse": "^3.38.6",
     "lodash": "^4.17.23",
     "lucide-react": "^0.575.0",
     "mammoth": "latest",

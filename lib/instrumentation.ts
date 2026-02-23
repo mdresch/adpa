@@ -6,8 +6,8 @@ import { diag, DiagConsoleLogger, DiagLogLevel } from '@opentelemetry/api'
 import { SimpleSpanProcessor, ConsoleSpanExporter } from '@opentelemetry/sdk-trace-base'
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
 
-// Enable diagnostic logging
-diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.DEBUG)
+// Disable diagnostic logging to prevent console flood
+// diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.DEBUG)
 
 console.log('[Instrumentation] Initializing OpenTelemetry SDK for adpa-morphic...')
 
