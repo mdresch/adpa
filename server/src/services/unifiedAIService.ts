@@ -200,7 +200,7 @@ class UnifiedAIService {
 
       // Create Langfuse trace and generation
       langfuseTrace = isTracingEnabled() ? langfuse.trace({
-        name: `unified-ai-generate-${provider.type}`,
+        name: `unified-ai-generate-${provider.type}-entity`,
         metadata: { provider: provider.name },
         tags: [provider.type, model]
       }) : null

@@ -441,7 +441,7 @@ class AIService {
       }
 
       langfuseTrace = isTracingEnabled() ? langfuse.trace({
-        name: `ai-generate-${request.provider}`,
+        name: `ai-generate-${request.provider}-entity`,
         sessionId: request.projectId || request.documentId || undefined,
         userId: request.userId,
         metadata: {
