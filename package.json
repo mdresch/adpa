@@ -171,7 +171,7 @@
     "lodash": "^4.17.23",
     "lucide-react": "^0.575.0",
     "mammoth": "latest",
-    "markdown-it": "^14.1.0",
+    "markdown-it": "^14.1.1",
     "marked": "^17.0.2",
     "mongodb": "^7.1.0",
     "multer": "^2.0.2",
