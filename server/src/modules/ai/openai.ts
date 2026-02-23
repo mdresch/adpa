@@ -3,6 +3,14 @@ import { createOpenAI } from '@ai-sdk/openai'
 import { generateText } from 'ai'
 import { pool } from "../../database/connection"
 import { logger } from "../../utils/logger"
+import { isTracingEnabled } from '../../tracing'
+import { Langfuse } from 'langfuse'
+
+const langfuse = new Langfuse({
+  publicKey: process.env.LANGFUSE_PUBLIC_KEY,
+  secretKey: process.env.LANGFUSE_SECRET_KEY,
+  baseUrl: process.env.LANGFUSE_BASE_URL || 'https://cloud.langfuse.com'
+})
 
 // Types for internal use
 export interface OpenAIConfig {
@@ -191,6 +199,27 @@ export class OpenAIConnector {
 
     let lastError: OpenAIError | null = null
 
+    // Create Langfuse trace for the overall completion request
+    const langfuseTrace = isTracingEnabled() ? langfuse.trace({
+      name: 'openai-connector-completion',
+      metadata: { model: request.model },
+      tags: ['openai', request.model]
+    }) : null
+
+    let langfuseGeneration: any = null
+    if (langfuseTrace) {
+      langfuseGeneration = langfuseTrace.generation({
+        name: 'openai-completion',
+        model: request.model,
+        modelParameters: {
+          temperature: request.temperature,
+          maxTokens: request.max_tokens,
+          topP: request.top_p
+        },
+        input: request.messages
+      })
+    }
+
     for (const providerName of providers) {
       try {
         const provider = this.providers.get(providerName)!
@@ -207,6 +236,19 @@ export class OpenAIConnector {
         // Update usage statistics
         if (response.usage) {
           await this.updateUsageStats(provider, response.usage)
+        }
+
+        // End Langfuse generation on success
+        if (langfuseGeneration) {
+          langfuseGeneration.end({
+            output: response.choices[0]?.message?.content || '',
+            usage: {
+              promptTokens: response.usage?.prompt_tokens ?? 0,
+              completionTokens: response.usage?.completion_tokens ?? 0,
+              totalTokens: response.usage?.total_tokens ?? 0
+            }
+          })
+          await langfuse.flushAsync()
         }
 
         return {
@@ -233,7 +275,15 @@ export class OpenAIConnector {
       }
     }
 
-    // All providers failed
+    // All providers failed — end Langfuse generation with error
+    if (langfuseGeneration) {
+      langfuseGeneration.end({
+        level: 'ERROR',
+        statusMessage: lastError?.message || 'All OpenAI providers failed'
+      })
+      await langfuse.flushAsync()
+    }
+
     throw new Error(`All OpenAI providers failed. Last error: ${lastError?.message || "Unknown error"}`)
   }
 
@@ -313,6 +363,14 @@ export class OpenAIConnector {
       frequencyPenalty: request.frequency_penalty,
       presencePenalty: request.presence_penalty,
       stopSequences: typeof request.stop === 'string' ? [request.stop] : request.stop,
+      experimental_telemetry: {
+        isEnabled: isTracingEnabled(),
+        functionId: 'openai-connector-api-call',
+        metadata: {
+          provider: provider.name,
+          model: request.model
+        }
+      }
     } as any)
 
     // Normalize usage
