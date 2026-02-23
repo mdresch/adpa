@@ -550,6 +550,15 @@ class AIService {
                 totalTokens: totalTokens
               }
             });
+
+            // Explicitly update the root trace with the full input/output before flushing
+            if (langfuseTrace) {
+              langfuseTrace.update({
+                input: systemMessage ? `${systemMessage}\n\n---\n\n${userMessage}` : userMessage,
+                output: deepseekResult.text
+              });
+            }
+
             await langfuse.flushAsync();
           }
 
@@ -625,6 +634,15 @@ class AIService {
                 totalTokens: totalTokens
               }
             });
+
+            // Explicitly update the root trace with the full input/output before flushing
+            if (langfuseTrace) {
+              langfuseTrace.update({
+                input: systemMessage ? `${systemMessage}\n\n---\n\n${userMessage}` : userMessage,
+                output: content
+              });
+            }
+
             await langfuse.flushAsync();
           }
 
@@ -700,6 +718,15 @@ class AIService {
                 totalTokens: totalTokens
               }
             });
+
+            // Explicitly update the root trace with the full input/output before flushing
+            if (langfuseTrace) {
+              langfuseTrace.update({
+                input: systemMessage ? `${systemMessage}\n\n---\n\n${userMessage}` : userMessage,
+                output: xaiResult.text
+              });
+            }
+
             await langfuse.flushAsync();
           }
 
@@ -1084,6 +1111,15 @@ class AIService {
                 totalTokens: estimatedTokens
               }
             });
+
+            // Explicitly update the root trace with the full input/output before flushing
+            if (langfuseTrace) {
+              langfuseTrace.update({
+                input: combinedPrompt,
+                output: text
+              });
+            }
+
             await langfuse.flushAsync();
           }
 
