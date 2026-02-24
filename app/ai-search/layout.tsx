@@ -1,17 +1,8 @@
-import Link from 'next/link'
-import { Plus } from 'lucide-react'
-
-import { ChatHistory } from '@/components/morphic/chat-history'
-import {
-    Sidebar,
-    SidebarContent,
-    SidebarFooter,
-    SidebarHeader,
-    SidebarProvider,
-    SidebarTrigger
-} from '@/components/morphic/ui/sidebar'
-import { Button } from '@/components/ui/button'
+import { SidebarProvider } from '@/components/morphic/ui/sidebar'
 import ArtifactRoot from '@/components/morphic/artifact/artifact-root'
+import { ChatSidebar } from '@/components/morphic/chat-sidebar'
+import { Sidebar as MainSidebar } from '@/components/sidebar'
+import { Header } from '@/components/header'
 
 export default function AISearchLayout({
     children
@@ -19,31 +10,26 @@ export default function AISearchLayout({
     children: React.ReactNode
 }) {
     return (
-        <SidebarProvider>
-            <Sidebar className="border-r">
-                <SidebarHeader className="h-14 flex items-center px-4 border-b">
-                    <Link href="/ai-search" className="flex items-center gap-2 font-semibold">
-                        <span>Morphic Search</span>
-                    </Link>
-                    <div className="ml-auto">
-                        <Button variant="ghost" size="icon" asChild>
-                            <Link href="/ai-search">
-                                <Plus className="h-4 w-4" />
-                                <span className="sr-only">New Chat</span>
-                            </Link>
-                        </Button>
-                    </div>
-                </SidebarHeader>
-                <SidebarContent>
-                    <ChatHistory />
-                </SidebarContent>
-                <SidebarFooter className="p-4">
-                    {/* Footer content if needed */}
-                </SidebarFooter>
-            </Sidebar>
-            <ArtifactRoot>
-                {children}
-            </ArtifactRoot>
-        </SidebarProvider>
+        <div className="flex h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 overflow-hidden">
+            {/* Global ADPA Sidebar */}
+            <MainSidebar />
+
+            <div className="flex-1 flex flex-col overflow-hidden">
+                {/* Global Header */}
+                <Header />
+
+                {/* AI Search Content with Morphic sidebar */}
+                <main className="flex-1 overflow-hidden relative flex">
+                    <SidebarProvider defaultOpen={false}>
+                        <ChatSidebar />
+                        <div className="flex-1 flex overflow-hidden relative">
+                            <ArtifactRoot>
+                                {children}
+                            </ArtifactRoot>
+                        </div>
+                    </SidebarProvider>
+                </main>
+            </div>
+        </div>
     )
 }

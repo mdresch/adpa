@@ -24,7 +24,7 @@ const LANGFUSE_PUBLIC_KEY = process.env.LANGFUSE_PUBLIC_KEY
 const LANGFUSE_SECRET_KEY = process.env.LANGFUSE_SECRET_KEY
 
 const OTLP_ENDPOINT = ENABLE_LANGFUSE
-  ? (process.env.LANGFUSE_OTLP_ENDPOINT || 'https://cloud.langfuse.com/api/public/otlp/v1/traces')
+  ? (process.env.LANGFUSE_OTLP_ENDPOINT || 'https://cloud.langfuse.com/api/public/otel/v1/traces')
   : (process.env.OTLP_ENDPOINT || 'http://localhost:4318/v1/traces')
 
 const SERVICE_NAME = process.env.SERVICE_NAME || 'adpa-backend'

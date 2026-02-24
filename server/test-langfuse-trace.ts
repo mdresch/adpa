@@ -27,7 +27,7 @@ const sdk = new NodeSDK({
     spanProcessors: [
         new SimpleSpanProcessor(new ConsoleSpanExporter()),
         new SimpleSpanProcessor(new OTLPTraceExporter({
-            url: 'https://cloud.langfuse.com/api/public/otlp/v1/traces',
+            url: 'https://cloud.langfuse.com/api/public/otel/v1/traces',
             headers: {
                 Authorization: authHeader,
             }

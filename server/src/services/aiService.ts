@@ -41,6 +41,7 @@ export interface AIGenerateRequest {
   template_id?: string
   variables?: Record<string, any>
   system_prompt?: string
+  traceName?: string
   // Analytics tracking (optional)
   userId?: string
   projectId?: string
@@ -441,7 +442,7 @@ class AIService {
       }
 
       langfuseTrace = isTracingEnabled() ? langfuse.trace({
-        name: `ai-generate-${request.provider}-entity`,
+        name: request.traceName || `ai-generate-${request.provider}-entity`,
         sessionId: request.projectId || request.documentId || undefined,
         userId: request.userId,
         metadata: {

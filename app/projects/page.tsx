@@ -135,7 +135,7 @@ export default function Projects() {
     model: "llama-3.1-8b-instant",
     temperature: 0.7,
   })
-  
+
   // Generation progress tracking
   const [generationProgress, setGenerationProgress] = useState<GenerationProgress>({
     step: 0,
@@ -206,7 +206,7 @@ export default function Projects() {
   // Create new project
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!newProject.name || !newProject.framework) {
       toast.error("Please fill in required fields (Name and Framework)")
       return
@@ -237,21 +237,21 @@ export default function Projects() {
         start_date: newProject.start_date || undefined,
         end_date: newProject.end_date || undefined,
       }
-      
+
       const createdProject = await apiClient.createProject(projectData)
-      
+
       // Check if there's a business case draft to save as a document
       const projectDraft = sessionStorage.getItem('project-draft')
       console.log('🔍 Checking for project draft in sessionStorage:', {
         hasDraft: !!projectDraft,
         draftLength: projectDraft?.length
       })
-      
+
       if (projectDraft) {
         try {
           const draft = JSON.parse(projectDraft)
           const content = draft.content || ''
-          
+
           console.log('🔍 Project draft parsed:', {
             hasContent: !!content,
             contentLength: content.length,
@@ -259,7 +259,7 @@ export default function Projects() {
             templateName: draft.templateName,
             framework: draft.framework
           })
-          
+
           // Create a document from the business case
           if (content && createdProject && createdProject.id) {
             try {
@@ -269,7 +269,7 @@ export default function Projects() {
                 contentLength: content.length,
                 templateId: draft.templateId
               })
-              
+
               // Create document via API (expects JSON, not file upload)
               const documentData = {
                 name: draft.templateName || `${newProject.name} - Business Case`,
@@ -278,15 +278,15 @@ export default function Projects() {
                 status: 'draft', // Changed from 'final' to 'draft'
                 metadata: draft.metadata || {}
               }
-              
+
               console.log('📄 Sending document data:', {
                 ...documentData,
                 content: `${content.substring(0, 100)}... (${content.length} chars total)`
               })
-              
+
               // Use apiClient instead of raw fetch to avoid URL duplication
               const createdDocument = await apiClient.createDocument(createdProject.id, documentData)
-              
+
               console.log('✅ Document created successfully:', createdDocument)
               toast.success(`Project created with ${draft.templateName || 'initial document'}!`)
             } catch (docCreateError: any) {
@@ -303,7 +303,7 @@ export default function Projects() {
             })
             toast.success("Project created successfully!")
           }
-          
+
           // Clear the draft from session storage
           sessionStorage.removeItem('project-draft')
         } catch (docError) {
@@ -314,7 +314,7 @@ export default function Projects() {
         console.log('ℹ️ No project draft found in sessionStorage - creating project without initial document')
         toast.success("Project created successfully!")
       }
-      
+
       setDialogOpen(false)
       setNewProject({
         name: "",
@@ -338,7 +338,7 @@ export default function Projects() {
   // Update project
   const handleUpdateProject = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!editingProject?.name || !editingProject?.framework) {
       toast.error("Please fill in required fields (Name and Framework)")
       return
@@ -368,7 +368,7 @@ export default function Projects() {
         start_date: editingProject.start_date || undefined,
         end_date: editingProject.end_date || undefined,
       }
-      
+
       await apiClient.updateProject(editingProject.id, projectData)
       toast.success("Project updated successfully!")
       setEditDialogOpen(false)
@@ -390,7 +390,7 @@ export default function Projects() {
         if (!d) return ""
         const dt = new Date(d)
         if (isNaN(dt.getTime())) return ""
-        
+
         // Ensure we get the date in local timezone for the input
         const year = dt.getFullYear()
         const month = String(dt.getMonth() + 1).padStart(2, '0')
@@ -468,7 +468,7 @@ export default function Projects() {
   const fetchTemplates = async () => {
     try {
       setLoadingTemplates(true)
-      const response = await apiClient.getTemplates({ 
+      const response = await apiClient.getTemplates({
         limit: 100  // Increased limit to get more templates
       })
       setTemplates(response.templates || [])
@@ -485,7 +485,7 @@ export default function Projects() {
   const fetchTemplatesForUpload = async (framework: string) => {
     try {
       setLoadingTemplates(true)
-      const response = await apiClient.getTemplates({ 
+      const response = await apiClient.getTemplates({
         limit: 100  // Increased limit to get more templates
       })
       setTemplates(response.templates || [])
@@ -501,7 +501,7 @@ export default function Projects() {
   // Generate document handler
   const handleGenerateDocumentSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!selectedProjectForGeneration || !documentGenerationForm.name || !documentGenerationForm.prompt) {
       toast.error("Please fill in required fields")
       return
@@ -509,13 +509,13 @@ export default function Projects() {
 
     const startTime = Date.now()
     const templateName = templates.find(t => t.id === documentGenerationForm.template_id)?.name || 'Custom'
-    
+
     try {
       setGeneratingDocument(true)
-      
+
       // Track template generation start
       trackTemplateGeneration(templateName, 'success')
-      
+
       // Track feature usage
       trackFeatureUsage('template_generation', 'started', {
         project_id: selectedProjectForGeneration.id,
@@ -523,7 +523,7 @@ export default function Projects() {
         provider: documentGenerationForm.provider || "Groq AI",
         model: documentGenerationForm.model || "llama-3.1-8b-instant"
       })
-      
+
       // Step 1: Preparing context
       setGenerationProgress({
         step: 1,
@@ -531,20 +531,20 @@ export default function Projects() {
         message: 'Preparing project context...',
         percentage: 25,
       })
-      
+
       // Small delay for visual feedback
       await new Promise(resolve => setTimeout(resolve, 300))
-      
+
       // Step 2: Generating content with AI
       setGenerationProgress({
         step: 2,
         totalSteps: 4,
-        message: `Generating content with ${documentGenerationForm.provider}...`,
+        message: `Agentic Process: Planning & Drafting Sections...`,
         percentage: 50,
       })
-      
+
       const aiStartTime = Date.now()
-      
+
       // Generate content using AI Gateway
       const aiResponse = await apiClient.generateContent({
         prompt: documentGenerationForm.prompt,
@@ -555,13 +555,13 @@ export default function Projects() {
       })
 
       const aiDuration = Date.now() - aiStartTime
-      
+
       // Track AI performance
       trackPerformance('ai_generation_time', aiDuration)
 
       // Extract Markdown content from response
       const content = aiResponse.result?.content || aiResponse.result?.text || aiResponse.content || aiResponse.text || "# Document content not generated"
-      
+
       // Step 3: Saving document
       setGenerationProgress({
         step: 3,
@@ -577,7 +577,7 @@ export default function Projects() {
         template_id: documentGenerationForm.template_id || undefined,
         status: "draft",
       })
-      
+
       // Step 4: Complete!
       setGenerationProgress({
         step: 4,
@@ -585,15 +585,15 @@ export default function Projects() {
         message: 'Document created successfully! ✓',
         percentage: 100,
       })
-      
+
       const totalDuration = Date.now() - startTime
-      
+
       // Track successful template generation
       trackTemplateGeneration(templateName, 'success')
-      
+
       // Track performance
       trackPerformance('template_generation_time', totalDuration)
-      
+
       // Track feature usage success
       trackFeatureUsage('template_generation', 'completed', {
         project_id: selectedProjectForGeneration.id,
@@ -602,7 +602,7 @@ export default function Projects() {
         generation_duration_ms: totalDuration.toString(),
         ai_duration_ms: aiDuration.toString()
       })
-      
+
       // Small delay to show success message
       await new Promise(resolve => setTimeout(resolve, 800))
 
@@ -621,15 +621,15 @@ export default function Projects() {
     } catch (error) {
       const totalDuration = Date.now() - startTime
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      
+
       console.error("Failed to generate document:", error)
-      
+
       // Track failed template generation
       trackTemplateGeneration(templateName, 'failed')
-      
+
       // Track error
       trackError('template_generation', errorMessage)
-      
+
       // Track feature usage failure
       trackFeatureUsage('template_generation', 'failed', {
         project_id: selectedProjectForGeneration?.id || 'unknown',
@@ -637,7 +637,7 @@ export default function Projects() {
         provider: documentGenerationForm.provider || "Groq AI",
         error_type: 'generation_error'
       })
-      
+
       toast.error("Failed to generate document")
       setGenerationProgress({ step: 0, totalSteps: 4, message: '', percentage: 0 })
     } finally {
@@ -648,7 +648,7 @@ export default function Projects() {
   // Upload document handler
   const handleUploadDocumentSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!selectedProjectForUpload || !documentUploadForm.name || !documentUploadForm.file || !documentUploadForm.template_id) {
       toast.error("Please fill in all required fields including template selection")
       return
@@ -656,7 +656,7 @@ export default function Projects() {
 
     const startTime = Date.now()
     const templateName = templates.find(t => t.id === documentUploadForm.template_id)?.name || 'Unknown'
-    
+
     // CRITICAL: Validate file object is actually a File, not a metadata object
     if (!(documentUploadForm.file instanceof File)) {
       console.error('❌ Invalid file object:', documentUploadForm.file)
@@ -668,10 +668,10 @@ export default function Projects() {
 
     try {
       setUploadingDocument(true)
-      
+
       // Track document upload start
       trackDocumentUpload('started', templateName)
-      
+
       // Track feature usage
       trackFeatureUsage('document_upload', 'started', {
         project_id: selectedProjectForUpload.id,
@@ -679,7 +679,7 @@ export default function Projects() {
         file_name: fileName,
         file_size_bytes: fileSize.toString()
       })
-      
+
       // For binary files, we'll store them as base64 or use FormData
       // For now, let's handle text files and create a placeholder for binary files
       let content: any
@@ -689,25 +689,25 @@ export default function Projects() {
       // Use case-insensitive file extension checks as primary detection method
       const fileNameLower = documentUploadForm.file.name.toLowerCase()
       const fileType = documentUploadForm.file.type?.toLowerCase() || ''
-      
+
       // Check file extension first (more reliable than MIME type)
       const isPDF = fileNameLower.endsWith('.pdf')
       const isDOCX = fileNameLower.endsWith('.docx') || fileNameLower.endsWith('.doc')
       const isTXT = fileNameLower.endsWith('.txt')
       const isMD = fileNameLower.endsWith('.md') || fileNameLower.endsWith('.markdown')
-      
+
       // Also check MIME types as secondary check
       const isPDFMime = fileType === 'application/pdf'
-      const isDOCXMime = fileType.includes('wordprocessingml') || 
-                         fileType.includes('msword') ||
-                         fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-                         fileType === 'application/msword'
+      const isDOCXMime = fileType.includes('wordprocessingml') ||
+        fileType.includes('msword') ||
+        fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+        fileType === 'application/msword'
       const isTextMime = fileType === 'text/plain' || fileType === 'text/markdown'
-      
+
       // Determine file category (prioritize extension over MIME type)
       const isBinaryFile = isPDF || isDOCX || isPDFMime || isDOCXMime
       const isTextFile = isTXT || isMD || isTextMime
-      
+
       console.log('📄 File upload detection:', {
         fileName: documentUploadForm.file.name,
         fileType: documentUploadForm.file.type,
@@ -718,7 +718,7 @@ export default function Projects() {
         isBinaryFile,
         isTextFile
       })
-      
+
       if (isBinaryFile) {
         // For binary files (PDF/DOCX), use the upload endpoint
         const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
@@ -730,7 +730,7 @@ export default function Projects() {
         formData.append('files', documentUploadForm.file)
         formData.append('projectId', selectedProjectForUpload.id)
         formData.append('assessmentName', documentUploadForm.name)
-        
+
         const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/onboarding/upload`, {
           method: 'POST',
           headers: {
@@ -745,7 +745,7 @@ export default function Projects() {
         }
 
         const result = await response.json()
-        
+
         toast.success("Document uploaded successfully! Processing will begin shortly.")
         setUploadDialogOpen(false)
         setSelectedProjectForUpload(null)
@@ -754,14 +754,14 @@ export default function Projects() {
           file: null,
           template_id: "",
         })
-        
+
         // Refresh projects to update document count
         fetchProjects()
         return // Exit early - don't continue to createDocument
       } else if (isTextFile) {
         // For text files, read content and create document directly with Markdown
         const textContent = await documentUploadForm.file.text()
-        
+
         // CRITICAL: Ensure content is a string, never an object
         if (typeof textContent !== 'string' || textContent.trim() === '') {
           throw new Error("File content is empty or invalid. Cannot create document.")
@@ -776,9 +776,9 @@ export default function Projects() {
         }
 
         // Final validation: ensure content is not a file metadata object
-        if (typeof documentData.content === 'object' || 
-            (typeof documentData.content === 'string' && 
-             (documentData.content.includes('"fileName"') || 
+        if (typeof documentData.content === 'object' ||
+          (typeof documentData.content === 'string' &&
+            (documentData.content.includes('"fileName"') ||
               documentData.content.includes('"fileSize"') ||
               documentData.content.includes('"fileType"')))) {
           console.error('❌ Attempted to send file metadata as content:', documentData)
@@ -787,34 +787,34 @@ export default function Projects() {
 
         await apiClient.createDocument(selectedProjectForUpload.id, documentData)
 
-      const totalDuration = Date.now() - startTime
-      
-      // Track successful document upload
-      trackDocumentUpload('success', templateName)
-      
-      // Track performance
-      trackPerformance('document_upload_time', totalDuration)
-      
-      // Track feature usage success
-      trackFeatureUsage('document_upload', 'completed', {
-        project_id: selectedProjectForUpload.id,
-        template_name: templateName,
-        file_name: fileName,
-        file_size_bytes: fileSize.toString(),
-        upload_duration_ms: totalDuration.toString()
-      })
+        const totalDuration = Date.now() - startTime
 
-      toast.success("Document uploaded successfully!")
-      setUploadDialogOpen(false)
-      setSelectedProjectForUpload(null)
-      setDocumentUploadForm({
-        name: "",
-        file: null,
-        template_id: "",
-      })
-      
-      // Refresh projects to update document count
-      fetchProjects()
+        // Track successful document upload
+        trackDocumentUpload('success', templateName)
+
+        // Track performance
+        trackPerformance('document_upload_time', totalDuration)
+
+        // Track feature usage success
+        trackFeatureUsage('document_upload', 'completed', {
+          project_id: selectedProjectForUpload.id,
+          template_name: templateName,
+          file_name: fileName,
+          file_size_bytes: fileSize.toString(),
+          upload_duration_ms: totalDuration.toString()
+        })
+
+        toast.success("Document uploaded successfully!")
+        setUploadDialogOpen(false)
+        setSelectedProjectForUpload(null)
+        setDocumentUploadForm({
+          name: "",
+          file: null,
+          template_id: "",
+        })
+
+        // Refresh projects to update document count
+        fetchProjects()
       } else {
         // If file type cannot be determined, reject it to prevent sending metadata objects
         console.error('❌ Unsupported file type:', {
@@ -829,20 +829,20 @@ export default function Projects() {
     } catch (error: any) {
       const totalDuration = Date.now() - startTime
       const errorMessage = error.message || 'Unknown error'
-      
+
       console.error("❌ Failed to upload document:", {
         error: errorMessage,
         fileName: documentUploadForm.file?.name,
         fileType: documentUploadForm.file?.type,
         stack: error.stack
       })
-      
+
       // Track failed document upload
       trackDocumentUpload('failed', templateName)
-      
+
       // Track error
       trackError('document_upload', errorMessage)
-      
+
       // Track feature usage failure
       trackFeatureUsage('document_upload', 'failed', {
         project_id: selectedProjectForUpload?.id || 'unknown',
@@ -850,7 +850,7 @@ export default function Projects() {
         file_name: fileName,
         error_type: 'upload_error'
       })
-      
+
       toast.error(errorMessage || "Failed to upload document. Please ensure the file is a PDF, DOCX, TXT, or Markdown file.")
     } finally {
       setUploadingDocument(false)
@@ -862,24 +862,24 @@ export default function Projects() {
       project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (project.description?.toLowerCase().includes(searchTerm.toLowerCase()) || false)
     const matchesStatus = statusFilter === "all" || project.status === statusFilter
-    
+
     // Track filter usage when filters are applied
     if (statusFilter !== "all" || searchTerm) {
       const filterType = statusFilter !== "all" ? 'status' : 'search'
       const filterValue = statusFilter !== "all" ? statusFilter : searchTerm
       trackFilterUsage(filterType, filterValue, projects.length)
     }
-    
+
     return matchesSearch && matchesStatus
   })
 
   // Sort by most recently updated first
   const sortedProjects = [...filteredProjects].sort((a, b) => {
     // Sort by last_activity (most recent document or project update)
-    const aTime = (a as any).last_activity ? new Date((a as any).last_activity).getTime() : 
-                  a.updated_at ? new Date(a.updated_at).getTime() : 0
-    const bTime = (b as any).last_activity ? new Date((b as any).last_activity).getTime() : 
-                  b.updated_at ? new Date(b.updated_at).getTime() : 0
+    const aTime = (a as any).last_activity ? new Date((a as any).last_activity).getTime() :
+      a.updated_at ? new Date(a.updated_at).getTime() : 0
+    const bTime = (b as any).last_activity ? new Date((b as any).last_activity).getTime() :
+      b.updated_at ? new Date(b.updated_at).getTime() : 0
     return bTime - aTime
   })
 
@@ -895,19 +895,19 @@ export default function Projects() {
   useEffect(() => {
     const startTime = Date.now()
     let interactionCount = 0
-    
+
     const handleInteraction = () => {
       interactionCount++
     }
-    
+
     document.addEventListener('click', handleInteraction)
     document.addEventListener('scroll', handleInteraction)
-    
+
     return () => {
       // Calculate engagement when page unloads
       const timeSpent = Math.floor((Date.now() - startTime) / 1000)
       trackPageEngagement('/projects', timeSpent, interactionCount)
-      
+
       document.removeEventListener('click', handleInteraction)
       document.removeEventListener('scroll', handleInteraction)
     }
@@ -917,15 +917,15 @@ export default function Projects() {
   useEffect(() => {
     const autoCreate = sessionStorage.getItem('auto-create-project')
     const projectDraft = sessionStorage.getItem('project-draft')
-    
+
     if (autoCreate === 'true' && projectDraft) {
       try {
         const draft = JSON.parse(projectDraft)
         const content = draft.content || ''
-        
+
         // Extract project name from business case or ideation title
         let projectName = ''
-        
+
         // Try Business Case format first
         let titleMatch = content.match(/^#\s*Business Case:\s*(.+?)$/m)
         if (titleMatch && titleMatch[1]) {
@@ -947,10 +947,10 @@ export default function Projects() {
             }
           }
         }
-        
+
         // Extract description from Business Need or Core Concept section (increased to 2000 chars)
         let description = ''
-        
+
         // Try Business Case format (1.2 Business Need)
         let descMatch = content.match(/###\s*1\.2\s*Business Need\s*\n([\s\S]+?)(?=\n###|\n##|$)/i)
         if (descMatch && descMatch[1]) {
@@ -980,7 +980,7 @@ export default function Projects() {
             }
           }
         }
-        
+
         // Extract Project Manager
         let manager = ''
         const pmMatch = content.match(/\*\*Project Manager:\*\*\s*(.+?)(?:\n|,|$)/m)
@@ -992,7 +992,7 @@ export default function Projects() {
             manager = preparedByMatch[1].trim()
           }
         }
-        
+
         // Extract Budget
         let budget = ''
         const budgetMatches = [
@@ -1005,7 +1005,7 @@ export default function Projects() {
           if (match && match[1]) {
             let budgetValue = match[1].replace(/,/g, '')
             const parsedValue = parseFloat(budgetValue)
-            
+
             // Only set budget if we got a valid number
             if (!isNaN(parsedValue) && parsedValue > 0) {
               // If the text mentions "M" or "Million", multiply by 1,000,000
@@ -1024,11 +1024,11 @@ export default function Projects() {
         if (!budget || budget === 'NaN') {
           budget = ''
         }
-        
+
         // Extract Timeline/Dates
         let startDate = ''
         let endDate = ''
-        
+
         // Try to find timeline mentions
         const timelineMatch = content.match(/\*\*High-level Timeline:\*\*\s*(.+?)(?:\n|$)/m)
         if (timelineMatch && timelineMatch[1]) {
@@ -1044,7 +1044,7 @@ export default function Projects() {
             endDate = endDateObj.toISOString().split('T')[0]
           }
         }
-        
+
         // Try to extract specific dates (e.g., "Q2 2026", "June 1, 2026")
         if (!startDate) {
           const dateRangeMatch = content.match(/(?:October|November|December|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},?\s+\d{4}\s*[–-]\s*(?:October|November|December|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},?\s+\d{4}/i)
@@ -1060,11 +1060,11 @@ export default function Projects() {
             }
           }
         }
-        
+
         // Extract Framework (fallback chain)
         // For ideations and business cases, use the template's framework as default
         let framework = draft.framework || 'Custom'
-        
+
         // Try to find explicit framework mention in content (for business cases)
         if (!framework || framework === 'Custom') {
           const frameworkMatch = content.match(/\*\*Framework:\*\*\s*(.+?)(?:\n|,|$)/m)
@@ -1082,7 +1082,7 @@ export default function Projects() {
             }
           }
         }
-        
+
         // Pre-fill the form with extracted business case data
         setNewProject({
           name: projectName,
@@ -1094,13 +1094,13 @@ export default function Projects() {
           budget: budget,
           manager: manager,
         })
-        
+
         // Open the create dialog
         setDialogOpen(true)
-        
+
         // Clear the flags so it doesn't auto-open again
         sessionStorage.removeItem('auto-create-project')
-        
+
         toast.success('Business case loaded! Review and complete the project details.')
       } catch (error) {
         console.error('Failed to load project draft:', error)

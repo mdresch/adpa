@@ -37,6 +37,11 @@ export interface AIGenerateRequest {
   temperature?: number
   max_tokens?: number
   messages?: Array<{ role: string; content: string }>
+  traceName?: string
+}
+
+export interface AIStructuredGenerateRequest extends AIGenerateRequest {
+  schema: any // Zod schema
 }
 
 export interface AIGenerateResponse {
@@ -200,7 +205,7 @@ class UnifiedAIService {
 
       // Create Langfuse trace and generation
       langfuseTrace = isTracingEnabled() ? langfuse.trace({
-        name: `unified-ai-generate-${provider.type}-entity`,
+        name: request.traceName || `unified-ai-generate-${provider.type}-entity`,
         metadata: { provider: provider.name },
         tags: [provider.type, model]
       }) : null
@@ -267,12 +272,126 @@ class UnifiedAIService {
         },
         metadata: {
           finishReason: response.finishReason,
-          model: response.model,
         }
       }
 
     } catch (error) {
       logger.error(`Failed to generate content with AI provider ${request.provider}:`, error)
+      if (langfuseGeneration) {
+        langfuseGeneration.end({
+          level: 'ERROR',
+          statusMessage: error instanceof Error ? error.message : String(error)
+        })
+        await langfuse.flushAsync()
+      }
+      throw error
+    }
+  }
+
+  /**
+   * Generate structured object using AI SDK v5
+   */
+  async generateStructuredObject(request: AIStructuredGenerateRequest): Promise<{ object: any; usage?: any }> {
+    let langfuseTrace: any = null
+    let langfuseGeneration: any = null
+
+    try {
+      const provider = this.providers.get(request.provider)
+      if (!provider) {
+        throw new Error(`Provider ${request.provider} not found`)
+      }
+
+      if (!provider.isActive) {
+        throw new Error(`Provider ${provider.name} is not active`)
+      }
+
+      const client = this.clients.get(request.provider)
+      if (!client) {
+        throw new Error(`Client for provider ${request.provider} not found`)
+      }
+
+      // Prepare messages
+      let messages: Array<{ role: string; content: string }> = []
+
+      if (request.messages) {
+        messages = request.messages
+      } else if (request.prompt) {
+        messages = [{ role: 'user', content: request.prompt }]
+      } else {
+        throw new Error('No prompt or messages provided')
+      }
+
+      // Get default model if not specified
+      const model = request.model || this.getDefaultModel(provider.type)
+
+      // Create Langfuse trace and generation
+      langfuseTrace = isTracingEnabled() ? langfuse.trace({
+        name: request.traceName || `unified-ai-generate-object-${provider.type}-entity`,
+        metadata: { provider: provider.name },
+        tags: [provider.type, model]
+      }) : null
+
+      if (langfuseTrace) {
+        langfuseGeneration = langfuseTrace.generation({
+          name: `${provider.type}-object-generation`,
+          model: model,
+          modelParameters: {
+            temperature: request.temperature,
+          },
+          input: messages
+        })
+      }
+
+      // Generate object using AI SDK
+      const response = await generateObject({
+        model: client(model),
+        schema: request.schema,
+        messages: messages.map(msg => ({
+          role: msg.role as 'user' | 'assistant' | 'system',
+          content: msg.content,
+        })),
+        temperature: request.temperature || 0.7,
+        experimental_telemetry: {
+          isEnabled: isTracingEnabled(),
+          functionId: `unified-ai-generate-object-${provider.type}`,
+          metadata: {
+            provider: provider.name,
+            model: model
+          }
+        }
+      })
+
+      logger.info(`Generated structured object using AI provider: ${provider.name}`)
+
+      const {
+        promptTokens,
+        completionTokens,
+        totalTokens,
+      } = this.normalizeUsage(response.usage)
+
+      if (langfuseGeneration) {
+        langfuseGeneration.end({
+          output: JSON.stringify(response.object),
+          usage: {
+            promptTokens,
+            completionTokens,
+            totalTokens
+          }
+        })
+        await langfuse.flushAsync()
+      }
+
+      return {
+        object: response.object,
+        usage: {
+          prompt_tokens: promptTokens,
+          completion_tokens: completionTokens,
+          total_tokens: totalTokens,
+        }
+      }
+
+    } catch (error) {
+      logger.error(`Failed to generate structured object with AI provider ${request.provider}:`, error)
       if (langfuseGeneration) {
         langfuseGeneration.end({
           level: 'ERROR',

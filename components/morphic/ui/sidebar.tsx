@@ -170,7 +170,7 @@ export const SidebarProvider = React.forwardRef<
                             } as React.CSSProperties
                         }
                         className={cn(
-                            'group/sidebar-wrapper flex h-[100dvh] w-full has-data-[variant=inset]:bg-sidebar',
+                            'group/sidebar-wrapper flex h-full w-full has-data-[variant=inset]:bg-sidebar',
                             // Prevent flash during hydration
                             !isHydrated && 'opacity-0',
                             isHydrated && 'opacity-100 transition-opacity duration-150',
@@ -252,7 +252,7 @@ export const Sidebar = React.forwardRef<
         return (
             <div
                 ref={ref}
-                className="group peer hidden text-sidebar-foreground md:block"
+                className="group peer hidden relative h-full text-sidebar-foreground md:block"
                 data-state={state}
                 data-collapsible={state === 'collapsed' ? collapsible : ''}
                 data-variant={variant}
@@ -260,7 +260,7 @@ export const Sidebar = React.forwardRef<
             >
                 <div
                     className={cn(
-                        'relative w-(--sidebar-width) bg-transparent transition-[width] duration-200 ease-linear',
+                        'relative h-full w-(--sidebar-width) bg-transparent transition-[width] duration-200 ease-linear',
                         'group-data-[collapsible=offcanvas]:w-0',
                         'group-data-[side=right]:rotate-180',
                         variant === 'floating' || variant === 'inset'
@@ -270,10 +270,10 @@ export const Sidebar = React.forwardRef<
                 />
                 <div
                     className={cn(
-                        'fixed inset-y-0 z-10 hidden h-[100dvh] w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear md:flex',
+                        'absolute inset-y-0 z-10 hidden h-full w-(--sidebar-width) transition-[left,right,width,transform] duration-200 ease-linear md:flex',
                         side === 'left'
-                            ? 'left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]'
-                            : 'right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]',
+                            ? 'left-0 group-data-[collapsible=offcanvas]:-translate-x-full group-data-[collapsible=offcanvas]:border-transparent'
+                            : 'right-0 group-data-[collapsible=offcanvas]:translate-x-full group-data-[collapsible=offcanvas]:border-transparent',
                         variant === 'floating' || variant === 'inset'
                             ? 'p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4))+2px)]'
                             : 'group-data-[collapsible=icon]:w-(--sidebar-width-icon) group-data-[side=left]:border-r group-data-[side=right]:border-l',

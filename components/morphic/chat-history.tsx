@@ -34,7 +34,7 @@ import {
 import { Chat } from '@/lib/morphic/db/schema'
 import { fetcher } from '@/lib/morphic/utils'
 
-export function ChatHistory() {
+export function ChatHistory({ searchQuery = '' }: { searchQuery?: string }) {
     const { id } = useParams()
     const pathname = usePathname()
     const [deleteId, setDeleteId] = React.useState<string | null>(null)
@@ -59,6 +59,16 @@ export function ChatHistory() {
             window.removeEventListener('chat-history-updated', handleHistoryUpdate)
         }
     }, [mutate])
+
+    const filteredChats = React.useMemo(() => {
+        if (!data?.chats) return []
+        if (!searchQuery.trim()) return data.chats
+
+        const query = searchQuery.toLowerCase().trim()
+        return data.chats.filter((chat) =>
+            chat.title.toLowerCase().includes(query)
+        )
+    }, [data?.chats, searchQuery])
 
     const handleDelete = async (chatId: string) => {
         try {
@@ -85,12 +95,12 @@ export function ChatHistory() {
         }
     }
 
-    if (!data?.chats?.length) {
+    if (!filteredChats.length) {
         return (
             <SidebarGroup>
                 <SidebarGroupContent>
                     <div className="px-2 text-sm text-muted-foreground text-center py-4">
-                        No history yet
+                        {searchQuery ? 'No matching chats found' : 'No history yet'}
                     </div>
                 </SidebarGroupContent>
             </SidebarGroup>
@@ -102,7 +112,7 @@ export function ChatHistory() {
             <SidebarGroup>
                 <SidebarGroupContent>
                     <SidebarMenu>
-                        {data?.chats?.map((chat: Chat) => (
+                        {filteredChats.map((chat: Chat) => (
                             <SidebarMenuItem key={chat.id}>
                                 <SidebarMenuButton
                                     asChild

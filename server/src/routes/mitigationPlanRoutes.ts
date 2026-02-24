@@ -45,7 +45,7 @@ router.get(
           count: 0
         })
       }
-      
+
       const filters: MitigationPlanFilters = {
         risk_id: riskId,
         status: req.query.status ? (Array.isArray(req.query.status) ? req.query.status as string[] : [req.query.status as string]) : undefined,
@@ -56,12 +56,12 @@ router.get(
         overdue: req.query.overdue === 'true',
         due_before: req.query.due_before as string
       }
-      
+
       const userId = (req as any).user!.id
       const plans = await getMitigationPlans(filters, userId)
-      
+
       log.info('[MITIGATION-PLANS] Retrieved mitigation plans', { count: plans.length })
-      
+
       res.json({
         success: true,
         data: plans,
@@ -106,16 +106,16 @@ router.get(
           }
         })
       }
-      
+
       const filters: MitigationPlanFilters = {
         risk_id: riskId,
         status: req.query.status ? (Array.isArray(req.query.status) ? req.query.status as string[] : [req.query.status as string]) : undefined
       }
-      
+
       const stats = await getMitigationPlanStats(filters)
-      
+
       log.info('[MITIGATION-PLANS] Retrieved mitigation plan stats')
-      
+
       res.json({
         success: true,
         data: stats
@@ -152,7 +152,7 @@ router.post(
     const { risk_id } = req.body // Extract risk_id early for error handling
     try {
       const { risk_title, risk_description, risk_category, risk_probability, risk_impact, risk_severity } = req.body
-      
+
       // Fetch risk details if not provided
       let riskTitle = risk_title
       let riskDescription = risk_description
@@ -160,7 +160,7 @@ router.post(
       let riskProbability = risk_probability
       let riskImpact = risk_impact
       let riskSeverity = risk_severity
-      
+
       if (!riskTitle || !riskDescription) {
         const riskResult = await pool.query(
           `SELECT title, description, category, probability, impact, risk_level 
@@ -168,7 +168,7 @@ router.post(
            WHERE id = $1`,
           [risk_id]
         )
-        
+
         if (riskResult.rows.length > 0) {
           const risk = riskResult.rows[0]
           riskTitle = riskTitle || risk.title || 'Unknown Risk'
@@ -179,7 +179,7 @@ router.post(
           riskSeverity = riskSeverity || risk.risk_level || 'medium'
         }
       }
-      
+
       // Build AI prompt for mitigation plan suggestions
       const prompt = `You are a risk management expert. Analyze the following risk and generate 3-5 comprehensive mitigation plan suggestions.
 
@@ -241,7 +241,7 @@ Guidelines:
 - Return ONLY valid JSON, no markdown or explanation`
 
       log.info('[MITIGATION-PLANS-SUGGEST] Generating AI suggestions', { risk_id })
-      
+
       // Use the built-in AI provider selection and fallback mechanism
       // This automatically:
       // 1. Queries the database for active AI providers (ordered by priority)
@@ -257,11 +257,11 @@ Guidelines:
         // Get the best available provider from database (by priority)
         const availableProviders = await aiService.getAvailableProviders()
         const activeProviders = availableProviders.filter(p => p.is_active)
-        
+
         if (activeProviders.length === 0) {
           throw new Error('No active AI providers configured. Please configure at least one AI provider in Settings.')
         }
-        
+
         // Use the highest priority active provider as preferred
         const preferredProvider = activeProviders[0].type
         log.info('[MITIGATION-PLANS-SUGGEST] Using AI provider system', {
@@ -269,7 +269,7 @@ Guidelines:
           totalActiveProviders: activeProviders.length,
           providers: activeProviders.map(p => `${p.type} (priority: ${p.name})`).join(', ')
         })
-        
+
         // Call generateWithFallback without fallbackProviders list
         // This lets it use ALL active providers from database in priority order
         aiResponse = await aiService.generateWithFallback({
@@ -278,11 +278,12 @@ Guidelines:
           // model: undefined - let each provider use its default model
           temperature: 0.7,
           max_tokens: 3000,
-          userId: (req as any).user!.id
+          userId: (req as any).user!.id,
+          traceName: 'ai-suggest-mitigation-plans'
         })
         // Note: Not passing fallbackProviders means it uses ALL active providers from DB
-        
-        log.info('[MITIGATION-PLANS-SUGGEST] AI suggestions generated successfully', { 
+
+        log.info('[MITIGATION-PLANS-SUGGEST] AI suggestions generated successfully', {
           providerUsed: (aiResponse as any).providerUsed || 'unknown',
           contentLength: aiResponse.content?.length || 0
         })
@@ -296,13 +297,13 @@ Guidelines:
         // Re-throw to be handled by outer catch block
         throw fallbackError
       }
-      
+
       // Parse AI response
       let suggestions: any[] = []
       try {
         const parsed = JSON.parse(aiResponse.content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim())
         suggestions = parsed.suggestions || []
-        
+
         // Validate and normalize suggestions
         suggestions = suggestions.map((suggestion: any, index: number) => ({
           title: suggestion.title || `Mitigation Plan ${index + 1}`,
@@ -310,7 +311,7 @@ Guidelines:
           action_type: suggestion.action_type || 'mitigation',
           priority: suggestion.priority || 'medium',
           expected_effectiveness: Math.min(100, Math.max(0, suggestion.expected_effectiveness || 75)),
-          cost_estimate: ['low', 'medium', 'high'].includes(suggestion.cost_estimate?.toLowerCase()) 
+          cost_estimate: ['low', 'medium', 'high'].includes(suggestion.cost_estimate?.toLowerCase())
             ? suggestion.cost_estimate.toLowerCase() as 'low' | 'medium' | 'high'
             : undefined,
           key_steps: Array.isArray(suggestion.key_steps) ? suggestion.key_steps : [],
@@ -322,9 +323,9 @@ Guidelines:
         log.error('[MITIGATION-PLANS-SUGGEST] Failed to parse AI response', { error: parseError.message, response: aiResponse.content.substring(0, 500) })
         throw new Error('Failed to parse AI suggestions. Please try again.')
       }
-      
+
       log.info('[MITIGATION-PLANS-SUGGEST] Generated suggestions', { count: suggestions.length })
-      
+
       res.json({
         success: true,
         data: {
@@ -339,11 +340,11 @@ Guidelines:
         stack: error.stack,
         risk_id
       })
-      
+
       // Provide more helpful error messages
       let errorMessage = error.message || 'Failed to generate mitigation plan suggestions'
       let statusCode = 500
-      
+
       if (error.message?.includes('No active providers') || error.message?.includes('All active providers')) {
         errorMessage = 'No AI providers are currently configured or active. Please configure at least one AI provider in Settings.'
         statusCode = 503 // Service Unavailable
@@ -354,7 +355,7 @@ Guidelines:
         errorMessage = 'AI provider rate limit exceeded. Please try again in a few moments.'
         statusCode = 429 // Too Many Requests
       }
-      
+
       // Make sure we haven't already sent a response
       if (!res.headersSent) {
         res.status(statusCode).json({
@@ -385,11 +386,11 @@ router.get(
     const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { riskId } = req.params
-      
+
       const completion = await getRiskMitigationCompletion(riskId)
-      
+
       log.info('[MITIGATION-PLANS] Retrieved risk mitigation completion', { riskId, completion })
-      
+
       res.json({
         success: true,
         data: {
@@ -422,18 +423,18 @@ router.get(
     const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { id } = req.params
-      
+
       const plan = await getMitigationPlanById(id)
-      
+
       if (!plan) {
         return res.status(404).json({
           success: false,
           error: 'Mitigation plan not found'
         })
       }
-      
+
       log.info('[MITIGATION-PLANS] Retrieved mitigation plan', { id })
-      
+
       res.json({
         success: true,
         data: plan
@@ -480,9 +481,9 @@ router.post(
     try {
       const userId = (req as any).user!.id
       const plan = await createMitigationPlan(req.body, userId)
-      
+
       log.info('[MITIGATION-PLANS] Created mitigation plan', { id: plan.id, risk_id: plan.risk_id })
-      
+
       res.status(201).json({
         success: true,
         data: plan
@@ -533,11 +534,11 @@ router.put(
     try {
       const { id } = req.params
       const userId = (req as any).user!.id
-      
+
       const plan = await updateMitigationPlan(id, req.body, userId)
-      
+
       log.info('[MITIGATION-PLANS] Updated mitigation plan', { id: plan.id })
-      
+
       res.json({
         success: true,
         data: plan
@@ -567,18 +568,18 @@ router.delete(
     const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { id } = req.params
-      
+
       const deleted = await deleteMitigationPlan(id)
-      
+
       if (!deleted) {
         return res.status(404).json({
           success: false,
           error: 'Mitigation plan not found'
         })
       }
-      
+
       log.info('[MITIGATION-PLANS] Deleted mitigation plan', { id })
-      
+
       res.json({
         success: true,
         message: 'Mitigation plan deleted successfully'
