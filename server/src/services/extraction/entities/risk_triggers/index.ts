@@ -1,7 +1,3 @@
-/**
- * Risk Triggers Entity Module
- */
-
 import { logger } from '../../../../utils/logger'
 import { aiService } from '../../../aiService'
 import type { ExtractionContext } from '../../base/ExtractionContext'
@@ -10,6 +6,7 @@ import { parseAIResponse } from '../../base/Parser'
 import { buildExtractionPrompt } from '../../base/PromptBuilder'
 import { resolveSourceDocumentIdStrict } from '../../base/SourceDocumentResolver'
 import { extractionCacheService } from '../../cache'
+import { isValidUUID } from '../../base/Persistence'
 import type { PoolClient } from 'pg'
 import type { PersistenceResult } from '../../base/Persistence'
 
@@ -23,6 +20,8 @@ export interface RiskTrigger {
   monitoring_frequency?: string
   source_document?: string
   source_document_id?: string
+  probability?: string
+  impact?: string
 }
 
 export async function extractRiskTriggers(
@@ -159,6 +158,18 @@ export async function extractRiskTriggers(
   }
 }
 
+const PROB_IMPACT = new Set(['very_high', 'high', 'medium', 'low', 'very_low'])
+
+function normalizeProbImpact(v: unknown): string | null {
+  if (!v) return null
+  const s = String(v).toLowerCase().trim().replace(/\s+/g, '_')
+  if (PROB_IMPACT.has(s)) return s
+  const map: Record<string, string> = {
+    veryhigh: 'very_high', verylow: 'very_low'
+  }
+  return map[s] ?? null
+}
+
 export async function saveRiskTriggers(
   client: PoolClient,
   projectId: string,
@@ -170,36 +181,89 @@ export async function saveRiskTriggers(
   }
 
   try {
+    const columnResult = await client.query<{ column_name: string }>(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'risk_triggers'`
+    )
+    const columnSet = new Set(columnResult.rows.map(row => row.column_name))
+
+    const pickColumn = (options: string[]): string | null => {
+      for (const option of options) {
+        if (columnSet.has(option)) {
+          return option
+        }
+      }
+      return null
+    }
+
+    const riskIdColumn = pickColumn(['risk_id', 'risk_identifier'])
+    const riskTitleColumn = pickColumn(['risk_title', 'risk_name', 'title'])
+    const triggerConditionColumn = pickColumn(['trigger_condition', 'condition'])
+    const thresholdColumn = pickColumn(['threshold', 'trigger_threshold'])
+    const indicatorColumn = pickColumn(['indicator', 'warning_indicator'])
+    const responseActionColumn = pickColumn(['response_action', 'action_taken', 'response_strategy'])
+    const monitoringFreqColumn = pickColumn(['monitoring_frequency', 'frequency'])
+    const sourceDocumentColumn = pickColumn(['source_document_id'])
+    const createdByColumn = pickColumn(['created_by'])
+    const probabilityColumn = pickColumn(['probability', 'likelihood'])
+    const impactColumn = pickColumn(['impact'])
+
+    const columnOrder: Array<{ name: string; value: (entity: RiskTrigger) => any }> = [
+      { name: 'project_id', value: () => projectId }
+    ]
+
+    if (riskIdColumn) {
+      columnOrder.push({ name: riskIdColumn, value: (e) => isValidUUID(e.risk_id) ? e.risk_id : null })
+    }
+    if (riskTitleColumn) {
+      columnOrder.push({ name: riskTitleColumn, value: (e) => e.risk_title || null })
+    }
+    if (triggerConditionColumn) {
+      columnOrder.push({ name: triggerConditionColumn, value: (e) => e.trigger_condition || null })
+    }
+    if (thresholdColumn) {
+      columnOrder.push({ name: thresholdColumn, value: (e) => e.threshold || null })
+    }
+    if (indicatorColumn) {
+      columnOrder.push({ name: indicatorColumn, value: (e) => e.indicator || null })
+    }
+    if (responseActionColumn) {
+      columnOrder.push({ name: responseActionColumn, value: (e) => e.response_action || null })
+    }
+    if (monitoringFreqColumn) {
+      columnOrder.push({ name: monitoringFreqColumn, value: (e) => e.monitoring_frequency || null })
+    }
+    if (sourceDocumentColumn) {
+      columnOrder.push({ name: sourceDocumentColumn, value: (e) => e.source_document_id || null })
+    }
+    if (createdByColumn) {
+      columnOrder.push({ name: createdByColumn, value: () => userId })
+    }
+    if (probabilityColumn) {
+      columnOrder.push({ name: probabilityColumn, value: (e) => normalizeProbImpact(e.probability) })
+    }
+    if (impactColumn) {
+      columnOrder.push({ name: impactColumn, value: (e) => normalizeProbImpact(e.impact) })
+    }
+
     await client.query('DELETE FROM risk_triggers WHERE project_id = $1', [projectId])
 
     const values: any[] = []
     const placeholders: string[] = []
 
     entities.forEach((e, index) => {
-      const offset = index * 10
-      placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10})`
-      )
-
-      values.push(
-        projectId,
-        e.risk_id || null,
-        e.risk_title || null,
-        e.trigger_condition || null,
-        e.threshold || null,
-        e.indicator || null,
-        e.response_action || null,
-        e.monitoring_frequency || null,
-        e.source_document_id || null,
-        userId
-      )
+      const offset = index * columnOrder.length
+      const rowPlaceholders = columnOrder.map((_, columnIndex) => `$${offset + columnIndex + 1}`)
+      placeholders.push(`(${rowPlaceholders.join(', ')})`)
+      columnOrder.forEach(column => {
+        values.push(column.value(e))
+      })
     })
 
     await client.query(
-      `INSERT INTO risk_triggers (
-        project_id, risk_id, risk_title, trigger_condition, threshold, indicator,
-        response_action, monitoring_frequency, source_document_id, created_by
-      )
+      `INSERT INTO risk_triggers (${columnOrder.map(col => col.name).join(', ')})
       VALUES ${placeholders.join(', ')}`,
       values
     )

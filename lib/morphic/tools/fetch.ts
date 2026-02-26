@@ -1,7 +1,7 @@
 import { tool, UIToolInvocation } from 'ai'
 
-import { fetchSchema } from '@/lib/morphic/schema/fetch'
-import { SearchResults as SearchResultsType } from '@/lib/morphic/types'
+import { fetchSchema } from '../schema/fetch'
+import { SearchResults as SearchResultsType } from '../types'
 
 const CONTENT_CHARACTER_LIMIT = 50000
 const TITLE_CHARACTER_LIMIT = 100
@@ -89,26 +89,50 @@ async function fetchRegularData(url: string): Promise<SearchResultsType> {
 
 async function fetchJinaReaderData(url: string): Promise<SearchResultsType> {
     try {
+        const apiKey = process.env.JINA_API_KEY
+        const headers: Record<string, string> = {
+            Accept: 'application/json',
+            'X-With-Generated-Alt': 'true'
+        }
+
+        if (apiKey) {
+            headers['Authorization'] = `Bearer ${apiKey}`
+        }
+
         const response = await fetch(`https://r.jina.ai/${url}`, {
             method: 'GET',
-            headers: {
-                Accept: 'application/json',
-                'X-With-Generated-Alt': 'true'
-            }
+            headers
         })
+
+        if (!response.ok) {
+            const errorText = await response.text()
+            console.error(`Jina Reader API error (${response.status}):`, errorText)
+            throw new Error(
+                `Jina Reader API failed with status ${response.status}: ${response.statusText}`
+            )
+        }
+
         const json = await response.json()
-        if (!json.data || json.data.length === 0) {
+        if (!json.data || (Array.isArray(json.data) && json.data.length === 0)) {
+            console.error('Jina Reader API returned empty data:', json)
             throw new Error('No data returned from Jina Reader API')
         }
 
-        const content = json.data.content.slice(0, CONTENT_CHARACTER_LIMIT)
+        // Jina API can return data as an object or an array of objects
+        const data = Array.isArray(json.data) ? json.data[0] : json.data
+
+        if (!data || !data.content) {
+            throw new Error('Invalid data format returned from Jina Reader API')
+        }
+
+        const content = data.content.slice(0, CONTENT_CHARACTER_LIMIT)
 
         return {
             results: [
                 {
-                    title: json.data.title,
+                    title: data.title || new URL(url).hostname,
                     content,
-                    url: json.data.url
+                    url: data.url || url
                 }
             ],
             query: '',

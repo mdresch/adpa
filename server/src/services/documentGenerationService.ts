@@ -409,15 +409,25 @@ class DocumentGenerationService {
     // Basic cleanup
     let cleaned = content.trim()
 
-    // Remove any non-Markdown wrapper text if AI added explanations
+    // Remove common code block wrappers added by AI (e.g., ```markdown ... ```)
+    const codeBlockRegex = /^```(?:markdown|md)?\n([\s\S]*?)\n```$/i;
+    const match = cleaned.match(codeBlockRegex);
+    if (match) {
+      cleaned = match[1].trim();
+    }
+
+    // Remove any non-Markdown wrapper text if AI added explanations at the start
     const mdStart = cleaned.indexOf('#')
-    if (mdStart > 50) {
-      // If there's a lot of text before the first heading, try to remove it
-      cleaned = cleaned.substring(mdStart)
+    if (mdStart > 0 && mdStart < 100) { // If heading starts soon but not at 0
+      // Check if there's only whitespace/noise before it
+      const lead = cleaned.substring(0, mdStart).trim();
+      if (lead.length < 50) {
+        cleaned = cleaned.substring(mdStart);
+      }
     }
 
     // Ensure it starts with a heading
-    if (!cleaned.startsWith('#')) {
+    if (!cleaned.startsWith('#') && cleaned.length > 0) {
       cleaned = `# Document\n\n${cleaned}`
     }
 

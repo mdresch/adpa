@@ -235,10 +235,10 @@ export async function saveRiskAssessments(
       columnOrder.push({ name: assessmentDateColumn, value: (e) => e.assessment_date || new Date().toISOString() })
     }
     if (probabilityColumn) {
-      columnOrder.push({ name: probabilityColumn, value: (e) => e.probability || null })
+      columnOrder.push({ name: probabilityColumn, value: (e) => normalizeProbImpact(e.probability) })
     }
     if (impactColumn) {
-      columnOrder.push({ name: impactColumn, value: (e) => e.impact || null })
+      columnOrder.push({ name: impactColumn, value: (e) => normalizeProbImpact(e.impact) })
     }
     if (detectabilityColumn) {
       columnOrder.push({ name: detectabilityColumn, value: (e) => e.detectability ?? null })

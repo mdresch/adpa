@@ -7269,7 +7269,7 @@ Output valid JSON object with "performance_actuals" array only.`
       }
 
       // Resolve source_document_id
-      const sourceDocumentId = (a as any).source_document_id || null
+      const sourceDocumentId = a.source_document_id || (a as any).source_document_id || null
 
       values.push(
         projectId,

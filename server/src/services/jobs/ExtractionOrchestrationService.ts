@@ -1530,6 +1530,40 @@ export class ExtractionOrchestrationService {
         log.warn(`[EXTRACTION-PARENT] GKG sync enqueue failed (non-fatal): ${gkgErr?.message || gkgErr}`)
       }
 
+      // Automatically trigger WBS import after successful extraction
+      try {
+        const relevantDomains: PmbokDomain[] = ['planning', 'project_work', 'delivery', 'scope', 'schedule', 'development_approach', 'team', 'resources']
+        const hasRelevantData = Object.keys(domainRunIds).some(domain =>
+          relevantDomains.includes(domain as PmbokDomain)
+        )
+
+        if (hasRelevantData) {
+          const { importWBSFromProjectEntities } = await import("../wbsImportService")
+
+          // Get the user ID who triggered the job
+          const jobResult = await db.query('SELECT created_by FROM jobs WHERE id = $1', [jobId])
+          const userId = jobResult.rows[0]?.created_by || 'system'
+
+          log.info(`[EXTRACTION-PARENT] Automatically triggering WBS import for project ${projectId}`)
+          const importResult = await importWBSFromProjectEntities(projectId, userId, { autoMatchRoles: true })
+
+          log.info(`[EXTRACTION-PARENT] Auto-WBS import completed`, {
+            projectId,
+            tasksCreated: importResult.tasksCreated,
+            totalHours: importResult.totalEstimatedHours
+          })
+
+          // Update message with WBS import summary
+          const wbsSummary = `Auto-WBS: ${importResult.tasksCreated} tasks created/updated.`
+          await db.query(
+            `UPDATE jobs SET message = message || $1 WHERE id = $2`,
+            [`\n${wbsSummary}`, jobId]
+          )
+        }
+      } catch (importErr: any) {
+        log.warn(`[EXTRACTION-PARENT] Auto-WBS import failed (non-fatal): ${importErr?.message || importErr}`)
+      }
+
     } catch (error: any) {
       log.error(`[EXTRACTION-PARENT] Failed to finalize: ${jobId} ${error.message}`)
 

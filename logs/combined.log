@@ -482,3 +482,7 @@
 {"level":"info","message":"✅ Database connected successfully via DATABASE_URL","service":"adpa-backend","timestamp":"2026-02-19T13:29:55.935Z"}
 {"level":"info","message":"[DB-CONCURRENCY] Pool max (50) >= estimated queue concurrency (0).","service":"adpa-backend","timestamp":"2026-02-19T13:29:55.944Z"}
 {"level":"info","message":"Database connected successfully","service":"adpa-backend","timestamp":"2026-02-19T13:29:55.944Z"}
+{"documentId":"test-doc","level":"info","message":"Starting WBS import","options":{"autoMatchRoles":false},"projectId":"test-project","service":"adpa-backend","timestamp":"2026-02-26T11:34:50.961Z"}
+{"level":"info","message":"WBS import completed","result":{"dependenciesCreated":0,"errors":[],"tasksCreated":4,"tasksNeedingRoleAssignment":1,"tasksUpdated":0,"totalEstimatedCost":0,"totalEstimatedHours":16},"service":"adpa-backend","timestamp":"2026-02-26T11:34:50.972Z"}
+{"documentId":"test-doc","level":"info","message":"Starting WBS import","options":{"autoMatchRoles":false},"projectId":"test-project","service":"adpa-backend","timestamp":"2026-02-26T11:36:07.513Z"}
+{"level":"info","message":"WBS import completed","result":{"dependenciesCreated":0,"errors":[],"tasksCreated":4,"tasksNeedingRoleAssignment":1,"tasksUpdated":0,"totalEstimatedCost":0,"totalEstimatedHours":16},"service":"adpa-backend","timestamp":"2026-02-26T11:36:07.522Z"}

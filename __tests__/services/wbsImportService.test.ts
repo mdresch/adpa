@@ -16,7 +16,7 @@ const mockEntities = [
     entityType: 'activity',
     name: 'Develop Feature A',
     description: 'Implement core logic',
-    parentId: null,
+    parent_task_id: null,
     status: 'in_progress',
     estimated_hours: 16,
   },
@@ -25,7 +25,7 @@ const mockEntities = [
     entityType: 'milestone',
     name: 'Phase 1 Complete',
     description: 'All core features done',
-    parentId: null,
+    parent_task_id: null,
     status: 'not_started',
   },
   {
@@ -33,7 +33,7 @@ const mockEntities = [
     entityType: 'phase',
     name: 'Phase 1',
     description: 'Initial development phase',
-    parentId: null,
+    parent_task_id: null,
     status: 'in_progress',
   },
   {
@@ -41,7 +41,7 @@ const mockEntities = [
     entityType: 'work_item',
     name: 'Write Unit Tests',
     description: 'Tests for Feature A',
-    parentId: '1',
+    parent_task_id: '1',
     status: 'not_started',
     estimated_hours: 4,
   },
@@ -50,7 +50,7 @@ const mockEntities = [
     entityType: 'checklist_item',
     name: 'Code Review',
     description: 'Review Feature A',
-    parentId: '1',
+    parent_task_id: '1',
     status: 'not_started',
     estimated_hours: 2,
   },
@@ -59,7 +59,7 @@ const mockEntities = [
     entityType: 'deliverable',
     name: 'Release v1',
     description: 'First public release',
-    parentId: '3', // child of Phase 1 (should map to created project task id 'task-3')
+    parent_task_id: '3', // child of Phase 1 (should map to created project task id 'task-3')
     status: 'proposed',
   },
 ];

@@ -34,7 +34,7 @@ export interface ExtractedPerformanceActual {
 }
 
 export class EnhancedPerformanceActualsExtractionService {
-  
+
   /**
    * Extract performance actuals with precise location information
    */
@@ -48,7 +48,7 @@ export class EnhancedPerformanceActualsExtractionService {
 
       // Build enhanced prompt with location tracking instructions
       const prompt = this.buildPerformanceActualsPrompt(documents)
-      
+
       // Use AI service for extraction
       const response = await aiService.generateWithFallback({
         prompt,
@@ -61,11 +61,11 @@ export class EnhancedPerformanceActualsExtractionService {
       // Parse response
       const parsed = this.parseAIResponse(response.content)
       const actuals = parsed.performance_actuals || []
-      
+
       // Enhance each actual with location information
       const enhancedActuals = actuals.map((actual: any) => {
         const locationData = this.extractLocationData(actual, documents)
-        return {
+        const enhanced = {
           ...actual,
           source_text_start: locationData.startChar,
           source_text_end: locationData.endChar,
@@ -75,6 +75,20 @@ export class EnhancedPerformanceActualsExtractionService {
           source_snippet: locationData.snippet,
           entity_markdown_tag: locationData.tag
         }
+
+        // Detailed logging for discovered entity
+        logger.info(`[ENHANCED-PERFORMANCE-ACTUALS] Discovered performance actual: "${enhanced.entity_name}"`, {
+          source_document_id: enhanced.source_document_id,
+          source_text_start: enhanced.source_text_start,
+          source_text_end: enhanced.source_text_end,
+          source_line_start: enhanced.source_line_start,
+          source_line_end: enhanced.source_line_end,
+          source_context: enhanced.source_context,
+          source_snippet: enhanced.source_snippet,
+          entity_markdown_tag: enhanced.entity_markdown_tag
+        })
+
+        return enhanced
       })
 
       logger.info(`[ENHANCED-PERFORMANCE-ACTUALS] Extracted ${enhancedActuals.length} performance actuals with locations`)
@@ -96,7 +110,7 @@ export class EnhancedPerformanceActualsExtractionService {
   ): string {
     const documentContext = this.buildDocumentContextWithLineNumbers(documents)
     const documentList = this.buildDocumentList(documents)
-    
+
     return `You are analyzing project documents to extract PERFORMANCE ACTUALS - actual performance data that occurred during project execution.
 
 CRITICAL: Only extract ACTUAL performance data (what happened), NOT planned/future data.
@@ -177,10 +191,10 @@ Guidelines:
   ): string {
     return documents.map((doc, docIndex) => {
       const lines = doc.content.split('\n')
-      const numberedContent = lines.map((line, lineIndex) => 
+      const numberedContent = lines.map((line, lineIndex) =>
         `${(lineIndex + 1).toString().padStart(3, ' ')}: ${line}`
       ).join('\n')
-      
+
       return `Document ${docIndex + 1}: "${doc.title}" (ID: ${doc.id})
 ${numberedContent}
 ---`
@@ -215,8 +229,8 @@ ${numberedContent}
     tag: string
   } {
     // Find the source document
-    const sourceDoc = documents.find(doc => 
-      doc.title === actual.source_document || 
+    const sourceDoc = documents.find(doc =>
+      doc.title === actual.source_document ||
       doc.template_name === actual.source_document ||
       doc.id === actual.source_document_id
     )
@@ -236,7 +250,7 @@ ${numberedContent}
 
     const content = sourceDoc.content
     const lines = content.split('\n')
-    
+
     // Build search terms from multiple fields for better matching
     const searchTerms = [
       actual.entity_name,
@@ -246,7 +260,7 @@ ${numberedContent}
       actual.planned_end_date,
       actual.actual_end_date
     ].filter(term => term && term.trim().length > 0)
-    
+
     let bestMatch = {
       startChar: 0,
       endChar: 0,
@@ -348,12 +362,12 @@ ${numberedContent}
       const endChar = startChar + match[0].length
       const startLine = this.getLineNumberFromPosition(content, startChar)
       const endLine = this.getLineNumberFromPosition(content, endChar)
-      
+
       // Get context (±100 characters)
       const contextStart = Math.max(0, startChar - 100)
       const contextEnd = Math.min(content.length, endChar + 100)
       const context = content.substring(contextStart, contextEnd)
-      
+
       matches.push({
         startChar,
         endChar,
@@ -386,7 +400,7 @@ ${numberedContent}
   }> {
     const matches = []
     const words = searchTerm.split(/\s+/).filter(word => word.length > 2)
-    
+
     for (const word of words) {
       const escapedWord = this.escapeRegex(word)
       const regex = new RegExp(`\\b${escapedWord}\\b`, 'gi')
@@ -397,11 +411,11 @@ ${numberedContent}
         const endChar = startChar + match[0].length
         const startLine = this.getLineNumberFromPosition(content, startChar)
         const endLine = this.getLineNumberFromPosition(content, endChar)
-        
+
         const contextStart = Math.max(0, startChar - 100)
         const contextEnd = Math.min(content.length, endChar + 100)
         const context = content.substring(contextStart, contextEnd)
-        
+
         matches.push({
           startChar,
           endChar,
@@ -447,18 +461,18 @@ ${numberedContent}
     for (let i = 0; i < words.length; i++) {
       const word = words[i]
       const similarity = this.calculateSimilarity(searchTerm.toLowerCase(), word.toLowerCase())
-      
+
       if (similarity > 0.7 && similarity > bestMatch.confidence) {
         const position = content.indexOf(word)
         const startChar = position
         const endChar = startChar + word.length
         const startLine = this.getLineNumberFromPosition(content, startChar)
         const endLine = this.getLineNumberFromPosition(content, endChar)
-        
+
         const contextStart = Math.max(0, startChar - 100)
         const contextEnd = Math.min(content.length, endChar + 100)
         const context = content.substring(contextStart, contextEnd)
-        
+
         bestMatch = {
           startChar,
           endChar,
@@ -480,9 +494,9 @@ ${numberedContent}
   private calculateSimilarity(str1: string, str2: string): number {
     const longer = str1.length > str2.length ? str1 : str2
     const shorter = str1.length > str2.length ? str2 : str1
-    
+
     if (longer.length === 0) return 1.0
-    
+
     const editDistance = this.levenshteinDistance(longer, shorter)
     return (longer.length - editDistance) / longer.length
   }
@@ -492,15 +506,15 @@ ${numberedContent}
    */
   private levenshteinDistance(str1: string, str2: string): number {
     const matrix = []
-    
+
     for (let i = 0; i <= str2.length; i++) {
       matrix[i] = [i]
     }
-    
+
     for (let j = 0; j <= str1.length; j++) {
       matrix[0][j] = j
     }
-    
+
     for (let i = 1; i <= str2.length; i++) {
       for (let j = 1; j <= str1.length; j++) {
         if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
@@ -514,7 +528,7 @@ ${numberedContent}
         }
       }
     }
-    
+
     return matrix[str2.length][str1.length]
   }
 
@@ -531,9 +545,9 @@ ${numberedContent}
    */
   private detectMarkdownTag(lineNumber: number, lines: string[]): string {
     if (lineNumber <= 0 || lineNumber > lines.length) return 'p'
-    
+
     const line = lines[lineNumber - 1].trim()
-    
+
     // Check for headers
     if (line.startsWith('# ')) return 'h1'
     if (line.startsWith('## ')) return 'h2'
@@ -541,15 +555,15 @@ ${numberedContent}
     if (line.startsWith('#### ')) return 'h4'
     if (line.startsWith('##### ')) return 'h5'
     if (line.startsWith('###### ')) return 'h6'
-    
+
     // Check for list items
     if (line.match(/^[-*+]\s/)) return 'li'
     if (line.match(/^\d+\.\s/)) return 'li'
-    
+
     // Check for other common patterns
     if (line.match(/^>/)) return 'blockquote'
     if (line.match(/^\|/)) return 'table'
-    
+
     return 'p'
   }
 
@@ -585,7 +599,7 @@ ${numberedContent}
    */
   private normalizeDate(dateString: any): string | null {
     if (!dateString) return null
-    
+
     try {
       const date = new Date(dateString)
       if (isNaN(date.getTime())) return null
