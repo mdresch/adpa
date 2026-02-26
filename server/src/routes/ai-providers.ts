@@ -18,19 +18,19 @@ const router = express.Router()
 // Middleware to require admin or super_admin role
 const requireAdmin = (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const user = (req as any).user;
-  
+
   if (!user) {
     return res.status(401).json({ error: 'Authentication required' });
   }
-  
+
   const userRole = user.role?.toLowerCase();
   if (userRole !== 'admin' && userRole !== 'super_admin') {
-    return res.status(403).json({ 
+    return res.status(403).json({
       error: 'Admin access required',
       message: 'AI provider configuration is admin-only. Guest users cannot modify system-wide AI settings.'
     });
   }
-  
+
   next();
 }
 
@@ -81,16 +81,16 @@ router.get('/', async (req, res) => {
           }
         }
       }
-      
+
       // Fallback to configuration.models or default models if available_models is empty
       const configuredModels = row.configuration?.models || []
       const fallbackModels = getDefaultModels(row.provider_type)
-      
+
       // Use available_models if it has data, otherwise fall back
-      const models = availableModels.length > 0 
-        ? availableModels 
+      const models = availableModels.length > 0
+        ? availableModels
         : (configuredModels.length > 0 ? configuredModels : fallbackModels)
-      
+
       const uid = row.id as string
       const usage = usageMap.get(uid)
       const usageStats = row.usage_stats || {}
@@ -227,14 +227,14 @@ router.post('/:name/configure', authenticateToken, requireAdmin, async (req, res
 
     // Merge configurations and ensure API key is synced
     let updatedConfiguration = existingProvider.rows[0].configuration || {}
-    
+
     if (configuration) {
       updatedConfiguration = {
         ...updatedConfiguration,
         ...configuration
       }
     }
-    
+
     // If API key is being updated, sync it to both fields
     if (api_key) {
       updatedConfiguration.apiKey = api_key
@@ -335,7 +335,7 @@ router.post('/:name/test', authenticateToken, requireAdmin, async (req, res) => 
     }
 
     const provider = providerResult.rows[0]
-    
+
     // Decrypt API key
     const apiKey = Buffer.from(provider.api_key_encrypted, 'base64').toString('utf-8')
 
@@ -369,6 +369,7 @@ function getDefaultModel(providerType: string): string {
     case 'cohere': return 'command'
     case 'huggingface': return 'microsoft/DialoGPT-medium'
     case 'copilot': return 'copilot-chat'
+    case 'ollama': return 'llama3'
     default: return 'gpt-3.5-turbo'
   }
 }
@@ -392,6 +393,7 @@ function getDefaultEndpoint(providerType: string): string {
     case 'cohere': return 'https://api.cohere.ai'
     case 'huggingface': return 'https://api-inference.huggingface.co'
     case 'copilot': return 'https://api.github.com'
+    case 'ollama': return 'http://localhost:11434'
     default: return 'https://api.openai.com/v1'
   }
 }

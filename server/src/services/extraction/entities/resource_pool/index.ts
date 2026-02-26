@@ -11,6 +11,7 @@ import { buildExtractionPrompt } from '../../base/PromptBuilder'
 import { resolveSourceDocumentIdStrict } from '../../base/SourceDocumentResolver'
 import { extractionCacheService } from '../../cache'
 import type { PoolClient } from 'pg'
+import { isValidUUID } from '../../base/Persistence'
 import type { PersistenceResult } from '../../base/Persistence'
 
 export interface ResourcePoolEntry {
@@ -26,6 +27,18 @@ export interface ResourcePoolEntry {
   source_document_id?: string
 }
 
+function normalizeResourceType(type: string | undefined | null): string {
+  if (!type) return 'human'
+  const t = type.toLowerCase().trim()
+  if (['human', 'person', 'labor', 'staff'].includes(t)) return 'human'
+  if (['contractor', 'vendor'].includes(t)) return 'contractor'
+  if (['equipment', 'tool', 'machinery'].includes(t)) return 'equipment'
+  if (['material', 'consumable'].includes(t)) return 'material'
+  if (['software', 'license', 'saas'].includes(t)) return 'software'
+  if (['facility', 'office', 'room', 'space'].includes(t)) return 'facility'
+  if (['budget', 'money', 'finance'].includes(t)) return 'budget'
+  return 'other'
+}
 export async function extractResourcePool(
   context: ExtractionContext,
   options: { temperature?: number; maxTokens?: number } = {}
@@ -194,7 +207,7 @@ export async function saveResourcePool(
       values.push(
         projectId,
         e.resource_name || '',
-        e.resource_type || 'human',
+        normalizeResourceType(e.resource_type),
         null, // description (not available from resource_pool)
         e.availability_pct ? String(e.availability_pct) : null, // allocation
         e.cost_rate || null, // cost_estimate
@@ -203,7 +216,7 @@ export async function saveResourcePool(
         e.availability_pct || null,
         e.cost_rate || null,
         e.location || null,
-        e.source_document_id || null,
+        isValidUUID(e.source_document_id) ? e.source_document_id : null,
         new Date().toISOString(), // created_at
         new Date().toISOString()  // updated_at
       )

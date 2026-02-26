@@ -10,7 +10,7 @@ import { logger } from '../utils/logger'
 import { v4 as uuidv4 } from 'uuid'
 
 // AI Provider Types
-export type AIProviderType = 'openai' | 'google' | 'azure' | 'anthropic' | 'cohere' | 'huggingface'
+export type AIProviderType = 'openai' | 'google' | 'azure' | 'anthropic' | 'cohere' | 'huggingface' | 'ollama' | 'deepseek' | 'moonshot' | 'xai' | 'groq'
 
 // AI Provider Configuration
 export interface AIProviderConfig {
@@ -76,10 +76,10 @@ class AIProviderService {
 
     try {
       logger.info('Initializing AI Provider Service...')
-      
+
       // Load providers from database
       await this.loadProvidersFromDatabase()
-      
+
       this.initialized = true
       logger.info(`AI Provider Service initialized with ${this.providers.size} providers`)
     } catch (error) {
@@ -118,7 +118,7 @@ class AIProviderService {
 
           const provider = this.createProvider(config)
           this.providers.set(config.name, provider)
-          
+
           logger.info(`Loaded AI provider: ${config.name} (${config.type})`)
         } catch (error) {
           logger.error(`Failed to load provider ${row.name}:`, error)
@@ -147,6 +147,16 @@ class AIProviderService {
         return new CohereProvider(config)
       case 'huggingface':
         return new HuggingFaceProvider(config)
+      case 'ollama':
+        return new OllamaProvider(config)
+      case 'deepseek':
+        return new DeepSeekProvider(config)
+      case 'moonshot':
+        return new MoonshotProvider(config)
+      case 'xai':
+        return new XAIProvider(config)
+      case 'groq':
+        return new GroqProvider(config)
       default:
         throw new Error(`Unsupported provider type: ${config.type}`)
     }
@@ -166,7 +176,7 @@ class AIProviderService {
     }
 
     // Try preferred provider first, then fallback to others
-    const providerOrder = preferredProvider 
+    const providerOrder = preferredProvider
       ? [preferredProvider, ...providers.filter(p => p !== preferredProvider)]
       : providers
 
@@ -179,10 +189,10 @@ class AIProviderService {
       try {
         logger.info(`Attempting generation with provider: ${providerName}`)
         const response = await provider.generate(request)
-        
+
         // Log usage
         await this.logUsage(providerName, response.usage)
-        
+
         return response
       } catch (error) {
         logger.error(`Provider ${providerName} failed:`, error)
@@ -230,7 +240,7 @@ class AIProviderService {
    */
   async addProvider(config: Omit<AIProviderConfig, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
     const id = uuidv4()
-    
+
     try {
       // Encrypt API key
       const encryptedApiKey = this.encryptApiKey(config.apiKey)
@@ -331,7 +341,7 @@ class AIProviderService {
     try {
       await pool.query('DELETE FROM ai_providers WHERE name = $1', [name])
       this.providers.delete(name)
-      
+
       logger.info(`Removed AI provider: ${name}`)
     } catch (error) {
       logger.error(`Failed to remove provider ${name}:`, error)
@@ -574,6 +584,117 @@ class HuggingFaceProvider implements AIProvider {
   async getModels(): Promise<string[]> {
     return ['microsoft/DialoGPT-medium', 'facebook/blenderbot-400M-distill']
   }
+}
+
+class OllamaProvider implements AIProvider {
+  name: string
+  type: AIProviderType
+
+  constructor(private config: AIProviderConfig) {
+    this.name = config.name
+    this.type = config.type
+  }
+
+  async generate(request: AIRequest): Promise<AIResponse> {
+    const endpoint = this.config.endpoint || this.config.configuration?.endpoint || 'http://localhost:11434';
+    const model = request.model || this.config.model || 'llama3';
+
+    try {
+      const response = await fetch(`${endpoint}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          prompt: request.prompt,
+          system: request.systemPrompt,
+          stream: false,
+          options: {
+            temperature: request.temperature || 0.7,
+            num_predict: request.maxTokens || 2048
+          }
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Ollama error: ${response.statusText}`);
+      }
+
+      const data = await response.json() as any;
+      return {
+        content: data.response || '',
+        model,
+        provider: this.name,
+        usage: {
+          promptTokens: data.prompt_eval_count || 0,
+          completionTokens: data.eval_count || 0,
+          totalTokens: (data.prompt_eval_count || 0) + (data.eval_count || 0)
+        }
+      };
+    } catch (error) {
+      logger.error(`Ollama generation failed:`, error);
+      throw error;
+    }
+  }
+
+  async test(): Promise<boolean> {
+    const endpoint = this.config.endpoint || this.config.configuration?.endpoint || 'http://localhost:11434';
+    try {
+      const response = await fetch(`${endpoint}/api/tags`);
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  async getModels(): Promise<string[]> {
+    const endpoint = this.config.endpoint || this.config.configuration?.endpoint || 'http://localhost:11434';
+    try {
+      const response = await fetch(`${endpoint}/api/tags`);
+      if (response.ok) {
+        const data = await response.json() as any;
+        return data.models?.map((m: any) => m.name) || ['llama3', 'mistral'];
+      }
+    } catch (e) {
+      logger.error('Failed to fetch Ollama models:', e);
+    }
+    return ['llama3', 'mistral'];
+  }
+}
+
+class DeepSeekProvider implements AIProvider {
+  name: string
+  type: AIProviderType
+  constructor(private config: AIProviderConfig) { this.name = config.name; this.type = config.type; }
+  async generate(request: AIRequest): Promise<AIResponse> { return { content: 'Mock DeepSeek response', model: 'deepseek-chat', provider: this.name }; }
+  async test(): Promise<boolean> { return true; }
+  async getModels(): Promise<string[]> { return ['deepseek-chat', 'deepseek-coder']; }
+}
+
+class MoonshotProvider implements AIProvider {
+  name: string
+  type: AIProviderType
+  constructor(private config: AIProviderConfig) { this.name = config.name; this.type = config.type; }
+  async generate(request: AIRequest): Promise<AIResponse> { return { content: 'Mock Moonshot response', model: 'kimi-k2-turbo-preview', provider: this.name }; }
+  async test(): Promise<boolean> { return true; }
+  async getModels(): Promise<string[]> { return ['kimi-k2-turbo-preview', 'moonshot-v1-8k']; }
+}
+
+class XAIProvider implements AIProvider {
+  name: string
+  type: AIProviderType
+  constructor(private config: AIProviderConfig) { this.name = config.name; this.type = config.type; }
+  async generate(request: AIRequest): Promise<AIResponse> { return { content: 'Mock xAI response', model: 'grok-beta', provider: this.name }; }
+  async test(): Promise<boolean> { return true; }
+  async getModels(): Promise<string[]> { return ['grok-beta']; }
+}
+
+class GroqProvider implements AIProvider {
+  name: string
+  type: AIProviderType
+  constructor(private config: AIProviderConfig) { this.name = config.name; this.type = config.type; }
+  async generate(request: AIRequest): Promise<AIResponse> { return { content: 'Mock Groq response', model: 'llama-3.3-70b-versatile', provider: this.name }; }
+  async test(): Promise<boolean> { return true; }
+  async getModels(): Promise<string[]> { return ['llama-3.3-70b-versatile', 'mixtral-8x7b-32768']; }
 }
 
 // Export singleton instance

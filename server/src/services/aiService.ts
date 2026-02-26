@@ -255,6 +255,12 @@ class AIService {
     if (fallbackProviders && fallbackProviders.length > 0) {
       // Filter fallback list to only include active providers
       availableProviders = fallbackProviders.filter(p => activeProvidersFromDb.includes(p))
+
+      // If none of the requested fallback providers are active, use all active providers as safety net
+      if (availableProviders.length === 0) {
+        logger.info('⚠️ [AI-FALLBACK] None of the requested fallback providers are active, falling back to all active providers')
+        availableProviders = activeProvidersFromDb
+      }
     } else {
       availableProviders = activeProvidersFromDb
     }
@@ -262,12 +268,13 @@ class AIService {
     // Check if requested provider is active
     const isRequestedProviderActive = activeProvidersFromDb.includes(request.provider)
 
-    // Build provider chain: only include requested provider if it's active
+    // Build provider chain: always maintain DB priority, but try requested provider first
     let providers: string[]
     if (isRequestedProviderActive) {
+      // Start with requested, then add others in their relative DB priority order
       providers = [request.provider, ...availableProviders.filter(p => p !== request.provider)]
     } else {
-      logger.info(`⚠️ [AI-FALLBACK] Requested provider ${request.provider} is not active, using active providers only`)
+      logger.info(`🔄 [AI-FALLBACK] Requested provider ${request.provider} is not active or not in active list, using active providers only in priority order`)
       providers = availableProviders
     }
 
@@ -1996,6 +2003,8 @@ class AIService {
         return ["grok-beta", "grok-vision-beta"]
       case "copilot":
         return ["copilot-chat"]
+      case "ollama":
+        return ["llama3", "llama3.1", "mistral", "phi3"]
       default:
         return []
     }

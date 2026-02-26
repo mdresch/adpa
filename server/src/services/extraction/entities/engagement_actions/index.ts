@@ -10,9 +10,9 @@ import { parseAIResponse } from '../../base/Parser'
 import { buildExtractionPrompt } from '../../base/PromptBuilder'
 import { resolveSourceDocumentIdStrict } from '../../base/SourceDocumentResolver'
 import { extractionCacheService } from '../../cache'
-import { isValidUUID } from '../../base/Persistence'
-import type { PoolClient } from 'pg'
+import { isValidUUID, normalizeDate } from '../../base/Persistence'
 import type { PersistenceResult } from '../../base/Persistence'
+import type { PoolClient } from 'pg'
 
 export interface EngagementAction {
   action_id?: string
@@ -207,8 +207,8 @@ export async function saveEngagementActions(
         e.stakeholder_name || null,
         e.action_type || null,
         e.description || null,
-        e.planned_date || null,
-        e.actual_date || null,
+        e.planned_date ? normalizeDate(e.planned_date) : null,
+        e.actual_date ? normalizeDate(e.actual_date) : null,
         e.outcome || null,
         e.follow_up_required ?? false,
         e.status || null,

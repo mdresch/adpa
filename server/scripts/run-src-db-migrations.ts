@@ -20,11 +20,6 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 // Bypass SSL certificate validation for cloud databases
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
-const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false
-});
-
 interface MigrationFile {
     number: number;
     filename: string;
@@ -223,7 +218,7 @@ async function runMigrations() {
         console.error(error);
         process.exit(1);
     } finally {
-        try { await db.end() } catch (e) {}
+        try { await db.end() } catch (e) { }
     }
 }
 
