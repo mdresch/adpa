@@ -214,7 +214,7 @@ export const Sidebar = React.forwardRef<
             return (
                 <div
                     className={cn(
-                        'flex h-full w-(--sidebar-width) flex-col bg-sidebar text-sidebar-foreground',
+                        'flex h-full w-[var(--sidebar-width)] flex-col bg-sidebar text-sidebar-foreground',
                         className
                     )}
                     ref={ref}
@@ -231,7 +231,7 @@ export const Sidebar = React.forwardRef<
                     <SheetContent
                         data-sidebar="sidebar"
                         data-mobile="true"
-                        className="w-(--sidebar-width) bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden"
+                        className="w-[var(--sidebar-width)] bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden"
                         style={
                             {
                                 '--sidebar-width': SIDEBAR_WIDTH_MOBILE
@@ -260,23 +260,23 @@ export const Sidebar = React.forwardRef<
             >
                 <div
                     className={cn(
-                        'relative h-full w-(--sidebar-width) bg-transparent transition-[width] duration-200 ease-linear',
+                        'relative h-full w-[var(--sidebar-width)] bg-transparent transition-[width] duration-200 ease-linear',
                         'group-data-[collapsible=offcanvas]:w-0',
                         'group-data-[side=right]:rotate-180',
                         variant === 'floating' || variant === 'inset'
-                            ? 'group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4)))]'
-                            : 'group-data-[collapsible=icon]:w-(--sidebar-width-icon)'
+                            ? 'group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+theme(spacing.4))]'
+                            : 'group-data-[collapsible=icon]:w-[var(--sidebar-width-icon)]'
                     )}
                 />
                 <div
                     className={cn(
-                        'absolute inset-y-0 z-10 hidden h-full w-(--sidebar-width) transition-[left,right,width,transform] duration-200 ease-linear md:flex',
+                        'absolute inset-y-0 z-10 hidden h-full w-[var(--sidebar-width)] transition-[left,right,width,transform] duration-200 ease-linear md:flex',
                         side === 'left'
                             ? 'left-0 group-data-[collapsible=offcanvas]:-translate-x-full group-data-[collapsible=offcanvas]:border-transparent'
                             : 'right-0 group-data-[collapsible=offcanvas]:translate-x-full group-data-[collapsible=offcanvas]:border-transparent',
                         variant === 'floating' || variant === 'inset'
-                            ? 'p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4))+2px)]'
-                            : 'group-data-[collapsible=icon]:w-(--sidebar-width-icon) group-data-[side=left]:border-r group-data-[side=right]:border-l',
+                            ? 'p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+theme(spacing.4)+2px)]'
+                            : 'group-data-[collapsible=icon]:w-[var(--sidebar-width-icon)] group-data-[side=left]:border-r group-data-[side=right]:border-l',
                         className
                     )}
                     {...props}

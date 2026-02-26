@@ -41,7 +41,6 @@ import { apiClient } from "@/lib/api"
 
 interface Portfolio {
   id: string
-  program_id?: string
   portfolio_name: string
   description?: string
   owner_id?: string
@@ -56,7 +55,6 @@ interface Portfolio {
   risk_review_notes?: string
   created_at: string
   updated_at: string
-  program_name?: string
   owner_name?: string
   lead_name?: string
   risk_count?: number
@@ -71,7 +69,7 @@ export default function PortfoliosPage() {
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [editingPortfolio, setEditingPortfolio] = useState<Portfolio | null>(null)
-  
+
   const [formData, setFormData] = useState({
     portfolio_name: "",
     description: "",
@@ -104,9 +102,9 @@ export default function PortfoliosPage() {
       if (statusFilter !== "all") {
         params.append("status", statusFilter)
       }
-      
+
       const data = await apiClient.get<{ success: boolean; data: Portfolio[] }>(`/portfolios?${params.toString()}`)
-      
+
       if (data.success) {
         setPortfolios(data.data)
       } else {
@@ -293,7 +291,7 @@ export default function PortfoliosPage() {
                       {editingPortfolio ? "Update portfolio details and risk review information" : "Add a new portfolio to track programs and projects"}
                     </DialogDescription>
                   </DialogHeader>
-                  
+
                   <div className="space-y-4 py-4">
                     <div className="space-y-2">
                       <Label htmlFor="portfolio_name">Portfolio Name *</Label>
@@ -321,7 +319,7 @@ export default function PortfoliosPage() {
                         <Label htmlFor="status">Status</Label>
                         <Select
                           value={formData.status}
-                          onValueChange={(value: 'active' | 'archived' | 'paused') => 
+                          onValueChange={(value: 'active' | 'archived' | 'paused') =>
                             setFormData({ ...formData, status: value })
                           }
                         >
@@ -389,7 +387,7 @@ export default function PortfoliosPage() {
 
                     <div className="border-t pt-4 mt-4">
                       <h3 className="text-sm font-semibold mb-3">Monthly Risk Review Tracking</h3>
-                      
+
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label htmlFor="last_risk_review_at">Last Review Date</Label>

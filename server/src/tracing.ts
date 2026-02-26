@@ -7,12 +7,15 @@
  * IMPORTANT: This file must be imported BEFORE any other imports in server.ts
  */
 
+import dotenv from 'dotenv'
+dotenv.config()
+
 import { NodeSDK } from '@opentelemetry/sdk-node'
 import { Resource } from '@opentelemetry/resources'
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node'
 import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions'
 import { diag, DiagConsoleLogger, DiagLogLevel } from '@opentelemetry/api'
-import { SimpleSpanProcessor, ConsoleSpanExporter } from '@opentelemetry/sdk-trace-base'
+import { BatchSpanProcessor, SimpleSpanProcessor, ConsoleSpanExporter } from '@opentelemetry/sdk-trace-base'
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
 
 // Only log OpenTelemetry errors (suppress info/warn/debug noise)
@@ -28,7 +31,8 @@ const OTLP_ENDPOINT = ENABLE_LANGFUSE
   : (process.env.OTLP_ENDPOINT || 'http://localhost:4318/v1/traces')
 
 const SERVICE_NAME = process.env.SERVICE_NAME || 'adpa-backend'
-const SERVICE_VERSION = process.env.npm_package_version || '2.0.0'
+const SERVICE_VERSION = process.env.npm_package_version || process.env.SERVICE_VERSION || '1.0.0'
+const NODE_ENV = process.env.NODE_ENV || 'development'
 const TRACING_ENABLED = process.env.TRACING_ENABLED !== 'false'
 
 let sdk: NodeSDK | null = null
@@ -63,13 +67,22 @@ export function initTracing(): void {
 
         const authHeader = `Basic ${Buffer.from(`${LANGFUSE_PUBLIC_KEY}:${LANGFUSE_SECRET_KEY}`).toString('base64')}`
 
-        // Use SimpleSpanProcessor for OTLP to ensure they are sent immediately in dev/debug
-        spanProcessors.push(new SimpleSpanProcessor(new OTLPTraceExporter({
+        // Use BatchSpanProcessor for OTLP to improve efficiency and reduce concurrency errors
+        // (SimpleSpanProcessor sends spans immediately, which can hit limits during high load)
+        spanProcessors.push(new BatchSpanProcessor(new OTLPTraceExporter({
           url: OTLP_ENDPOINT,
           headers: {
             Authorization: authHeader,
-          }
-        })))
+          },
+          timeoutMillis: parseInt(process.env.OTLP_TIMEOUT || '10000'),
+        }), {
+          // Periodically export spans
+          scheduledDelayMillis: parseInt(process.env.OTLP_SCHEDULED_DELAY || '5000'),
+          // Maximum batch size (reduce network calls)
+          maxExportBatchSize: parseInt(process.env.OTLP_MAX_BATCH_SIZE || '512'),
+          // Buffer size
+          maxQueueSize: parseInt(process.env.OTLP_MAX_QUEUE_SIZE || '2048'),
+        }))
 
         // ConsoleSpanExporter disabled to reduce noise — enable with DEBUG_TRACING=true
         if (process.env.DEBUG_TRACING === 'true') {
@@ -83,7 +96,7 @@ export function initTracing(): void {
     const resource = new Resource({
       [ATTR_SERVICE_NAME]: SERVICE_NAME,
       [ATTR_SERVICE_VERSION]: SERVICE_VERSION,
-      'deployment.environment': process.env.NODE_ENV || 'development',
+      'deployment.environment': NODE_ENV,
     })
 
     // Initialize the SDK with auto-instrumentation

@@ -123,7 +123,7 @@ export function ChatArtifactContainer({
     }, [isResizing])
 
     return (
-        <div className="flex-1 min-h-0 min-w-0 h-screen flex">
+        <div className="flex-1 min-h-0 min-w-0 h-full flex">
             <div className="absolute p-4 z-50 transition-opacity duration-1000">
                 {(!open || isMobileSidebar) && (
                     <SidebarTrigger className="animate-fade-in h-8 w-8 bg-background/80 backdrop-blur-sm border shadow-sm rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" />

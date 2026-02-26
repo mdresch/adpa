@@ -2551,6 +2551,30 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                   <BreadcrumbLink href="/projects">Projects</BreadcrumbLink>
                 </BreadcrumbItem>
                 <BreadcrumbSeparator />
+                {project.portfolio_name && (
+                  <>
+                    <BreadcrumbItem>
+                      {project.portfolio_id ? (
+                        <BreadcrumbLink href="/portfolios">{project.portfolio_name}</BreadcrumbLink>
+                      ) : (
+                        <span className="text-muted-foreground">{project.portfolio_name}</span>
+                      )}
+                    </BreadcrumbItem>
+                    <BreadcrumbSeparator />
+                  </>
+                )}
+                {project.program_name && (
+                  <>
+                    <BreadcrumbItem>
+                      {project.program_id ? (
+                        <BreadcrumbLink href={`/programs/${project.program_id}`}>{project.program_name}</BreadcrumbLink>
+                      ) : (
+                        <span className="text-muted-foreground">{project.program_name}</span>
+                      )}
+                    </BreadcrumbItem>
+                    <BreadcrumbSeparator />
+                  </>
+                )}
                 <BreadcrumbItem>
                   <BreadcrumbPage>{project.name}</BreadcrumbPage>
                 </BreadcrumbItem>

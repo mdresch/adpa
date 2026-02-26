@@ -44,6 +44,10 @@ export interface Project {
   budget?: number
   created_at: string
   updated_at: string
+  program_id?: string
+  program_name?: string
+  portfolio_id?: string
+  portfolio_name?: string
 }
 
 export interface Program {
@@ -64,6 +68,8 @@ export interface Program {
   project_count?: number
   created_by?: string
   updated_by?: string
+  portfolio_id?: string
+  portfolio_name?: string
 }
 
 export interface Document {

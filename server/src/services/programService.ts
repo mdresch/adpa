@@ -3,6 +3,7 @@ import { logger } from '../utils/logger'
 
 export interface Program {
   id: string
+  portfolio_id?: string
   name: string
   description?: string
   budget?: string
@@ -20,9 +21,10 @@ export async function createProgram(data: Partial<Program>): Promise<Program> {
   try {
     const result = await pool.query(
       `INSERT INTO programs (
-        name, description, budget, currency, start_date, end_date, status, owner_id, created_by
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+        portfolio_id, name, description, budget, currency, start_date, end_date, status, owner_id, created_by
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
       [
+        data.portfolio_id || null,
         data.name,
         data.description || null,
         data.budget || null,
@@ -44,7 +46,12 @@ export async function createProgram(data: Partial<Program>): Promise<Program> {
 
 export async function getProgramById(id: string): Promise<Program | null> {
   try {
-    const result = await pool.query(`SELECT * FROM programs WHERE id = $1`, [id])
+    const result = await pool.query(`
+      SELECT p.*, pg.portfolio_name
+      FROM programs p
+      LEFT JOIN portfolio_governance pg ON p.portfolio_id = pg.id
+      WHERE p.id = $1
+    `, [id])
     return result.rows[0] || null
   } catch (error) {
     logger.error('getProgramById error', { error })
@@ -80,7 +87,7 @@ export async function deleteProgram(id: string): Promise<boolean> {
   }
 }
 
-export async function listPrograms(opts: { limit?: number; offset?: number; ownerId?: string; status?: string; search?: string } = {}) {
+export async function listPrograms(opts: { limit?: number; offset?: number; ownerId?: string; portfolioId?: string; status?: string; search?: string } = {}) {
   try {
     const clauses: string[] = []
     const params: any[] = []
@@ -89,6 +96,11 @@ export async function listPrograms(opts: { limit?: number; offset?: number; owne
     if (opts.ownerId) {
       clauses.push(`p.owner_id = $${idx++}`)
       params.push(opts.ownerId)
+    }
+
+    if (opts.portfolioId) {
+      clauses.push(`p.portfolio_id = $${idx++}`)
+      params.push(opts.portfolioId)
     }
 
     if (opts.status) {
@@ -111,9 +123,11 @@ export async function listPrograms(opts: { limit?: number; offset?: number; owne
       SELECT 
         p.*,
         u.name as owner_name,
+        pg.portfolio_name,
         (SELECT COUNT(*) FROM projects WHERE program_id = p.id) as project_count
       FROM programs p
       LEFT JOIN users u ON p.owner_id = u.id
+      LEFT JOIN portfolio_governance pg ON p.portfolio_id = pg.id
       ${where} 
       ORDER BY p.created_at DESC 
       LIMIT $${idx++} OFFSET $${idx++}
@@ -121,12 +135,12 @@ export async function listPrograms(opts: { limit?: number; offset?: number; owne
     params.push(limit, offset)
 
     const result = await pool.query(query, params)
-    
-    logger.info('[PROGRAMS] List query returned', { 
+
+    logger.info('[PROGRAMS] List query returned', {
       rowCount: result.rows.length,
       query: where
     })
-    
+
     return result.rows
   } catch (error) {
     logger.error('listPrograms error', { error })
@@ -155,12 +169,12 @@ export async function getProgramProjects(programId: string): Promise<Record<stri
     }
 
     // Build query with conditional review meeting joins
-    const reviewJoin = hasReviewMeetings 
+    const reviewJoin = hasReviewMeetings
       ? `LEFT JOIN review_meetings rm ON rm.program_id = $1
          LEFT JOIN review_decisions rd ON rd.review_meeting_id = rm.id 
            AND (p.id = ANY(rd.affected_projects::uuid[]))`
       : ''
-    
+
     const reviewSelects = hasReviewMeetings
       ? `MAX(rm.scheduled_date) as last_review_date,
          MAX(CASE WHEN rm.status = 'completed' THEN rm.actual_date END) as last_review_completed_date`
@@ -352,9 +366,9 @@ export async function getProgramProjects(programId: string): Promise<Record<stri
     `
 
     const result = await pool.query(query, [programId])
-    
-    logger.info('[PROGRAM] Projects fetched', { 
-      programId, 
+
+    logger.info('[PROGRAM] Projects fetched', {
+      programId,
       count: result.rows.length,
       sampleCompliance: result.rows[0]?.avg_standards_compliance,
       sampleQuality: result.rows[0]?.document_quality_score
@@ -377,11 +391,11 @@ export async function assignProject(programId: string, projectId: string): Promi
       WHERE id = $2
       RETURNING *
     `, [programId, projectId])
-    
+
     if (result.rows.length === 0) {
       return null
     }
-    
+
     logger.info('[PROGRAM] Project assigned', { programId, projectId })
     return result.rows[0]
   } catch (error) {
@@ -400,7 +414,7 @@ export async function removeProject(projectId: string): Promise<boolean> {
       SET program_id = NULL, updated_at = NOW()
       WHERE id = $1
     `, [projectId])
-    
+
     logger.info('[PROGRAM] Project removed', { projectId })
     return true
   } catch (error) {
@@ -423,15 +437,15 @@ export async function canArchiveProgram(programId: string): Promise<{ canArchive
       FROM projects
       WHERE program_id = $1
     `, [programId])
-    
+
     const { total_projects, archived_projects, unarchived_projects } = result.rows[0]
-    
+
     if (parseInt(total_projects) === 0) {
-      return { 
-        canArchive: true 
+      return {
+        canArchive: true
       }
     }
-    
+
     if (parseInt(unarchived_projects) > 0) {
       return {
         canArchive: false,
@@ -439,7 +453,7 @@ export async function canArchiveProgram(programId: string): Promise<{ canArchive
         unarchivedCount: parseInt(unarchived_projects)
       }
     }
-    
+
     return { canArchive: true }
   } catch (error) {
     logger.error('canArchiveProgram error', { error })
@@ -455,11 +469,11 @@ export async function archiveProgram(programId: string, userId: string): Promise
   try {
     // Check if program can be archived
     const archiveCheck = await canArchiveProgram(programId)
-    
+
     if (!archiveCheck.canArchive) {
       throw new Error(archiveCheck.reason || 'Cannot archive program')
     }
-    
+
     const result = await pool.query(`
       UPDATE programs 
       SET 
@@ -470,11 +484,11 @@ export async function archiveProgram(programId: string, userId: string): Promise
       WHERE id = $1
       RETURNING *
     `, [programId, userId])
-    
+
     if (result.rows.length === 0) {
       return null
     }
-    
+
     logger.info('[PROGRAM] Program archived', { programId, userId })
     return result.rows[0]
   } catch (error) {
@@ -498,11 +512,11 @@ export async function unarchiveProgram(programId: string): Promise<any> {
       WHERE id = $1
       RETURNING *
     `, [programId])
-    
+
     if (result.rows.length === 0) {
       return null
     }
-    
+
     logger.info('[PROGRAM] Program unarchived', { programId })
     return result.rows[0]
   } catch (error) {

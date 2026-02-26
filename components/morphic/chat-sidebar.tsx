@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { type ChangeEvent } from 'react'
 import Link from 'next/link'
 import { Plus, Search } from 'lucide-react'
 
@@ -10,6 +11,7 @@ import {
     SidebarContent,
     SidebarFooter,
     SidebarHeader,
+    SidebarTrigger,
 } from '@/components/morphic/ui/sidebar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -19,18 +21,19 @@ export function ChatSidebar() {
 
     return (
         <Sidebar className="border-r h-full">
-            <SidebarHeader className="h-14 flex items-center px-4 border-b">
-                <div className="flex-1 flex items-center gap-2 relative">
-                    <Search className="h-4 w-4 absolute left-2 text-muted-foreground" />
-                    <Input
-                        placeholder="Search history..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="h-8 pl-8 pr-2 w-full bg-background shadow-sm"
-                    />
-                </div>
-                <div className="ml-2">
-                    <Button variant="ghost" size="icon" asChild>
+            <SidebarHeader className="h-14 justify-center px-4 border-b">
+                <div className="flex flex-row items-center gap-2">
+                    <SidebarTrigger className="-ml-2 opacity-70 hover:opacity-100 transition-opacity" />
+                    <div className="flex-1 flex items-center relative">
+                        <Search className="h-3.5 w-3.5 absolute left-2.5 text-muted-foreground" />
+                        <Input
+                            placeholder="Search history..."
+                            value={searchQuery}
+                            onChange={(e: ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
+                            className="h-8 pl-8 pr-2 w-full bg-background shadow-sm border-muted/50"
+                        />
+                    </div>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 -mr-1" asChild>
                         <Link href="/ai-search">
                             <Plus className="h-4 w-4" />
                             <span className="sr-only">New Chat</span>

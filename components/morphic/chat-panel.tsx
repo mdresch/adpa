@@ -1,7 +1,7 @@
 'use client'
 
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useRef, useState } from 'react'
 import Textarea from 'react-textarea-autosize'
 import { UseChatHelpers } from '@ai-sdk/react'
 import { ArrowUp, ChevronDown, MessageCirclePlus, Square } from 'lucide-react'
@@ -172,16 +172,14 @@ export function ChatPanel({
 
                 <div
                     className={cn(
-                        'relative flex flex-col w-full gap-2 bg-muted rounded-3xl border border-input transition-shadow',
-                        isInputFocused &&
-                        'ring-1 ring-ring/20 ring-offset-1 ring-offset-background/50'
+                        'relative flex flex-col w-full gap-2 bg-muted rounded-3xl border border-input transition-shadow'
                     )}
                 >
                     <Textarea
                         ref={inputRef}
                         name="input"
                         rows={2}
-                        maxRows={5}
+                        maxRows={10}
                         tabIndex={0}
                         onCompositionStart={handleCompositionStart}
                         onCompositionEnd={handleCompositionEnd}
@@ -191,9 +189,9 @@ export function ChatPanel({
                         spellCheck={false}
                         value={input}
                         disabled={isLoading || isToolInvocationInProgress()}
-                        className="resize-none w-full min-h-12 bg-transparent border-0 p-4 text-sm placeholder:text-muted-foreground focus-visible:outline-hidden disabled:cursor-not-allowed disabled:opacity-50"
+                        className="resize-none w-full min-h-12 bg-transparent border-0 p-4 text-sm placeholder:text-muted-foreground focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                         onChange={handleInputChange}
-                        onKeyDown={e => {
+                        onKeyDown={(e: React.KeyboardEvent<HTMLTextAreaElement>) => {
                             if (
                                 e.key === 'Enter' &&
                                 !e.shiftKey &&
