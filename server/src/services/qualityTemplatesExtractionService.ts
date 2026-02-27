@@ -84,7 +84,7 @@ export interface ExtractedTemplateImprovement {
 }
 
 export class QualityTemplatesExtractionService {
-  
+
   /**
    * Extract quality & templates entities with location tracking
    */
@@ -102,7 +102,7 @@ export class QualityTemplatesExtractionService {
 
       // Build enhanced prompt with location tracking instructions
       const prompt = this.buildQualityTemplatesPrompt(documents)
-      
+
       // Use AI service for extraction
       const response = await aiService.generateWithFallback({
         prompt,
@@ -114,12 +114,12 @@ export class QualityTemplatesExtractionService {
 
       // Parse response
       const parsed = this.parseAIResponse(response.content)
-      
+
       // Enhance each entity with location information
       const enhanceWithLocations = (entities: any[], entityType: string) => {
         return entities.map((entity: any) => {
           const locationData = this.extractLocationData(entity, documents)
-          return {
+          const enhanced = {
             ...entity,
             source_text_start: locationData.startChar,
             source_text_end: locationData.endChar,
@@ -129,6 +129,20 @@ export class QualityTemplatesExtractionService {
             source_snippet: locationData.snippet,
             entity_markdown_tag: locationData.tag
           }
+
+          // Detailed logging for discovered entity
+          logger.info(`[QUALITY-TEMPLATES] Discovered ${entityType}: "${enhanced.title || enhanced.name}"`, {
+            source_document_id: enhanced.source_document_id,
+            source_text_start: enhanced.source_text_start,
+            source_text_end: enhanced.source_text_end,
+            source_line_start: enhanced.source_line_start,
+            source_line_end: enhanced.source_line_end,
+            source_context: enhanced.source_context,
+            source_snippet: enhanced.source_snippet,
+            entity_markdown_tag: enhanced.entity_markdown_tag
+          })
+
+          return enhanced
         })
       }
 
@@ -137,7 +151,7 @@ export class QualityTemplatesExtractionService {
       const template_improvements = enhanceWithLocations(parsed.template_improvements || [], 'template_improvement')
 
       logger.info(`[QUALITY-TEMPLATES-EXTRACTION] Extracted ${quality_audits.length} quality audits, ${best_practices.length} best practices, ${template_improvements.length} template improvements with locations`)
-      
+
       return { quality_audits, best_practices, template_improvements }
 
     } catch (error) {
@@ -156,7 +170,7 @@ export class QualityTemplatesExtractionService {
   ): string {
     const documentContext = this.buildDocumentContextWithLineNumbers(documents)
     const documentList = this.buildDocumentList(documents)
-    
+
     return `You are analyzing project documents to extract QUALITY & TEMPLATES ENTITIES - quality audits, best practices, and template improvements.
 
 Look for:
@@ -286,10 +300,10 @@ Return ONLY valid JSON with quality_audits, best_practices, and template_improve
   ): string {
     return documents.map((doc, docIndex) => {
       const lines = doc.content.split('\n')
-      const numberedContent = lines.map((line, lineIndex) => 
+      const numberedContent = lines.map((line, lineIndex) =>
         `${(lineIndex + 1).toString().padStart(3, ' ')}: ${line}`
       ).join('\n')
-      
+
       return `Document ${docIndex + 1}: "${doc.title}" (ID: ${doc.id})
 ${numberedContent}
 ---`
@@ -324,8 +338,8 @@ ${numberedContent}
     tag: string
   } {
     // Find the source document
-    const sourceDoc = documents.find(doc => 
-      doc.title === entity.source_document || 
+    const sourceDoc = documents.find(doc =>
+      doc.title === entity.source_document ||
       doc.template_name === entity.source_document ||
       doc.id === entity.source_document_id
     )
@@ -344,7 +358,7 @@ ${numberedContent}
 
     const content = sourceDoc.content
     const lines = content.split('\n')
-    
+
     // Try to find the entity text in the document
     const entityText = entity.title || entity.name || entity.description || ''
     let bestMatch = {
@@ -361,25 +375,25 @@ ${numberedContent}
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i]
       const lineStartPos = content.substring(0, content.indexOf(line)).length
-      
+
       // Find all occurrences of the entity text in this line
       const regex = new RegExp(this.escapeRegex(entityText), 'gi')
       let match
-      
+
       while ((match = regex.exec(line)) !== null) {
         const startChar = lineStartPos + match.index
         const endChar = startChar + match[0].length
         const startLine = i + 1
         const endLine = i + 1
-        
+
         // Get context (±100 characters)
         const contextStart = Math.max(0, startChar - 100)
         const contextEnd = Math.min(content.length, endChar + 100)
         const context = content.substring(contextStart, contextEnd)
-        
+
         // Get snippet (the exact matched text)
         const snippet = match[0]
-        
+
         // Use the first match found
         bestMatch = {
           startChar,
@@ -388,11 +402,11 @@ ${numberedContent}
           endLine,
           context,
           snippet,
-          tag: Math.random() > 0.5 ? 'h5' : 'h6' // Random tag for variety
+          tag: 'h5' // Standardized to h5
         }
         break
       }
-      
+
       if (bestMatch.snippet) break
     }
 

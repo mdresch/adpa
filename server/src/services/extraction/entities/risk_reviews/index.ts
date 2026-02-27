@@ -191,57 +191,6 @@ export async function saveRiskReviews(
     )
     const columnSet = new Set(columnResult.rows.map(row => row.column_name))
 
-<<<<<<< HEAD
-    const pick = (opts: string[]) => opts.find(c => columnSet.has(c)) ?? null
-
-    const reviewIdCol = pick(['review_id'])
-    const reviewDateCol = pick(['review_date'])
-    const reviewTypeCol = pick(['review_type'])
-    const actionItemsCol = pick(['action_items', 'actions'])
-    const reviewedByCol = pick(['reviewed_by', 'reviewer'])
-    const keyFindingsCol = pick(['key_findings', 'notes'])
-    const statusChangesCol = pick(['status_changes'])
-    const sourceDocCol = pick(['source_document_id'])
-    const createdByCol = pick(['created_by'])
-
-    const columnOrder: Array<{ name: string; value: (e: RiskReview, index: number) => unknown }> = [
-      { name: 'project_id', value: () => projectId }
-    ]
-    if (reviewIdCol) {
-      columnOrder.push({
-        name: reviewIdCol,
-        value: (e, i) => safeReviewId(e.review_date || '', e.risk_id, i)
-      })
-    }
-    if (reviewDateCol) {
-      columnOrder.push({
-        name: reviewDateCol,
-        value: (e) => e.review_date || new Date().toISOString().split('T')[0]
-      })
-    }
-    if (reviewTypeCol) columnOrder.push({ name: reviewTypeCol, value: () => 'ad_hoc' })
-    if (actionItemsCol) columnOrder.push({ name: actionItemsCol, value: (e) => e.actions || [] })
-    if (reviewedByCol) {
-      columnOrder.push({
-        name: reviewedByCol,
-        value: (e) => (e.reviewer ? [e.reviewer] : [])
-      })
-    }
-    if (keyFindingsCol) columnOrder.push({ name: keyFindingsCol, value: (e) => e.notes || null })
-    if (statusChangesCol) {
-      columnOrder.push({
-        name: statusChangesCol,
-        value: (e) => {
-          if (!e.status_before && !e.status_after) return []
-          return [{ old_status: e.status_before, new_status: e.status_after }]
-        }
-      })
-    }
-    if (sourceDocCol) columnOrder.push({ name: sourceDocCol, value: (e) => e.source_document_id || null })
-    if (createdByCol) columnOrder.push({ name: createdByCol, value: () => userId })
-
-    if (columnOrder.length <= 1) {
-=======
     const pickColumn = (options: string[]): string | null => {
       for (const option of options) {
         if (columnSet.has(option)) {
@@ -256,9 +205,9 @@ export async function saveRiskReviews(
     const riskTitleColumn = pickColumn(['risk_title', 'risk_name', 'title'])
     const statusBeforeColumn = pickColumn(['status_before', 'previous_status'])
     const statusAfterColumn = pickColumn(['status_after', 'current_status'])
-    const actionsColumn = pickColumn(['actions', 'follow_up_actions'])
+    const actionsColumn = pickColumn(['actions', 'follow_up_actions', 'action_items'])
     const reviewerColumn = pickColumn(['reviewer', 'reviewed_by', 'reviewer_name'])
-    const notesColumn = pickColumn(['notes', 'summary', 'review_notes'])
+    const notesColumn = pickColumn(['notes', 'summary', 'review_notes', 'key_findings'])
     const sourceDocumentColumn = pickColumn(['source_document_id'])
     const createdByColumn = pickColumn(['created_by'])
 
@@ -267,7 +216,7 @@ export async function saveRiskReviews(
     ]
 
     if (reviewDateColumn) {
-      columnOrder.push({ name: reviewDateColumn, value: (e) => e.review_date || null })
+      columnOrder.push({ name: reviewDateColumn, value: (e) => e.review_date || new Date().toISOString() })
     }
     if (riskIdColumn) {
       columnOrder.push({ name: riskIdColumn, value: (e) => e.risk_id || null })
@@ -297,8 +246,7 @@ export async function saveRiskReviews(
       columnOrder.push({ name: createdByColumn, value: () => userId })
     }
 
-    if (columnOrder.length === 0) {
->>>>>>> 349abf3391101e9126a8b665d7784e535c158240
+    if (columnOrder.length <= 1) {
       throw new Error('risk_reviews table has no writable columns')
     }
 
@@ -309,17 +257,6 @@ export async function saveRiskReviews(
 
     entities.forEach((e, index) => {
       const offset = index * columnOrder.length
-<<<<<<< HEAD
-      placeholders.push(
-        columnOrder.map((_, i) => `$${offset + i + 1}`).join(', ')
-      )
-      columnOrder.forEach(col => values.push(col.value(e, index)))
-    })
-
-    await client.query(
-      `INSERT INTO risk_reviews (${columnOrder.map(c => c.name).join(', ')})
-       VALUES ${placeholders.map(p => `(${p})`).join(', ')}`,
-=======
       const rowPlaceholders = columnOrder.map((_, columnIndex) => `$${offset + columnIndex + 1}`)
       placeholders.push(`(${rowPlaceholders.join(', ')})`)
       columnOrder.forEach(column => {
@@ -330,7 +267,6 @@ export async function saveRiskReviews(
     await client.query(
       `INSERT INTO risk_reviews (${columnOrder.map(col => col.name).join(', ')})
       VALUES ${placeholders.join(', ')}`,
->>>>>>> 349abf3391101e9126a8b665d7784e535c158240
       values
     )
 

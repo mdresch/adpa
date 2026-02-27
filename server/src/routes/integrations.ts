@@ -140,7 +140,7 @@ router.post("/",
   requirePermission("integrations.create"),
   validate(Joi.object({
     name: Joi.string().min(2).max(100).required(),
-    type: Joi.string().valid("confluence", "sharepoint", "github", "slack", "teams", "adobe", "jira", "notion", "mongodb").required(),
+    type: Joi.string().valid("confluence", "sharepoint", "github", "slack", "teams", "adobe", "jira", "notion", "mongodb", "pinecone", "supabase", "neo4j").required(),
     configuration: Joi.object().required(),
     credentials: Joi.object().required(),
     is_active: Joi.boolean().default(true),
@@ -207,7 +207,7 @@ router.put("/:id",
   validateParams(Joi.object({ id: Joi.string().uuid().required() })),
   validate(Joi.object({
     name: Joi.string().min(2).max(100).optional(),
-    type: Joi.string().valid("confluence", "sharepoint", "github", "slack", "teams", "adobe", "jira", "notion", "mongodb").optional(),
+    type: Joi.string().valid("confluence", "sharepoint", "github", "slack", "teams", "adobe", "jira", "notion", "mongodb", "pinecone", "supabase", "neo4j").optional(),
     configuration: Joi.object().optional(),
     credentials: Joi.object().optional(),
     is_active: Joi.boolean().optional(),
@@ -832,6 +832,143 @@ router.get("/:id/supabase/stats",
   }
 )
 
+// Get Neo4j stats
+router.get("/:id/neo4j/stats",
+  authenticateToken,
+  validateParams(Joi.object({ id: Joi.string().uuid().required() })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { id } = req.params
+
+      const result = await pool.query(
+        "SELECT type FROM integrations WHERE id = $1",
+        [id]
+      )
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: "Integration not found" })
+      }
+
+      if (result.rows[0].type !== 'neo4j') {
+        return res.status(400).json({ error: "Integration is not Neo4j type" })
+      }
+
+      const { getNeo4jDriver, isNeo4jConfigured } = await import('../utils/neo4j')
+
+      if (!isNeo4jConfigured()) {
+        return res.json({
+          totalNodes: 0,
+          totalRelationships: 0,
+          status: 'unavailable',
+          database: 'neo4j'
+        })
+      }
+
+      const driver = getNeo4jDriver()
+      if (!driver) {
+        return res.json({
+          totalNodes: 0,
+          totalRelationships: 0,
+          status: 'unavailable',
+          database: 'neo4j'
+        })
+      }
+
+      const session = driver.session()
+
+      try {
+        const nodesResult = await session.run('MATCH (n) RETURN count(n) as count')
+        const relsResult = await session.run('MATCH ()-[r]->() RETURN count(r) as count')
+
+        res.json({
+          totalNodes: nodesResult.records[0].get('count').toNumber(),
+          totalRelationships: relsResult.records[0].get('count').toNumber(),
+          status: 'active',
+          database: 'neo4j'
+        })
+      } finally {
+        await session.close()
+      }
+
+    } catch (error: any) {
+      log.error("Get Neo4j stats error:", error)
+      res.status(500).json({ error: "Internal server error", message: error.message })
+    }
+  }
+)
+
+// Search Neo4j Graph
+router.post("/:id/neo4j/search",
+  authenticateToken,
+  validateParams(Joi.object({ id: Joi.string().uuid().required() })),
+  validate(Joi.object({
+    query: Joi.string().required(),
+  })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { id } = req.params
+      const { query } = req.body
+
+      const result = await pool.query(
+        "SELECT type FROM integrations WHERE id = $1",
+        [id]
+      )
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: "Integration not found" })
+      }
+
+      if (result.rows[0].type !== 'neo4j') {
+        return res.status(400).json({ error: "Integration is not Neo4j type" })
+      }
+
+      const { getNeo4jDriver } = await import('../utils/neo4j')
+      const driver = getNeo4jDriver()
+
+      if (!driver) {
+        return res.status(503).json({ success: false, message: "Neo4j is not available or circuit is open" })
+      }
+
+      const session = driver.session()
+      try {
+        // Very basic search matching either node labels or a default 'name' property
+        // For production, this should be replaced with full text search or an LLM-powered cypher generator
+        const searchQuery = `
+          MATCH (n) 
+          WHERE any(label IN labels(n) WHERE toLower(label) CONTAINS toLower($searchTerm))
+             OR toLower(n.name) CONTAINS toLower($searchTerm)
+             OR toLower(n.title) CONTAINS toLower($searchTerm)
+          RETURN n LIMIT 10
+        `
+        const searchResult = await session.run(searchQuery, { searchTerm: query })
+
+        const matches = searchResult.records.map(record => {
+          const node = record.get('n')
+          return {
+            id: node.elementId || node.identity?.toString(),
+            labels: node.labels,
+            properties: node.properties
+          }
+        })
+
+        res.json({
+          success: true,
+          matches,
+          query
+        })
+      } finally {
+        await session.close()
+      }
+    } catch (error: any) {
+      log.error("Neo4j search error:", error)
+      res.status(500).json({ error: "Internal server error", message: error.message })
+    }
+  }
+)
+
+
 // Sync integration data
 router.post("/:id/sync",
   authenticateToken,
@@ -981,9 +1118,15 @@ router.get("/types/available", authenticateToken, async (req, res) => {
       {
         type: "supabase",
         name: "Supabase",
-        description: "Manage Supabase projects, edge functions, and database operations",
-        features: ["project_management", "edge_functions", "migrations", "database_operations"],
+        description: "Postgres database and edge functions management",
+        features: ["database_management", "edge_functions", "authentication"],
       },
+      {
+        type: "neo4j",
+        name: "Neo4j Graph Database",
+        description: "Graph database connection and vector sync status",
+        features: ["graph_search", "entity_relationships", "analytics"],
+      }
     ]
 
     res.json({ types })

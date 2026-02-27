@@ -14,7 +14,7 @@ export interface MarkdownEntity {
 }
 
 export class MarkdownHighlightingService {
-  
+
   /**
    * Wrap entities in markdown with h5/h6 tags for highlighting
    */
@@ -33,8 +33,8 @@ export class MarkdownHighlightingService {
 
       // Process each entity and wrap it in the corresponding document
       entities.forEach((entity, index) => {
-        const docIndex = highlightedDocuments.findIndex(doc => 
-          doc.title === entity.source_document || 
+        const docIndex = highlightedDocuments.findIndex(doc =>
+          doc.title === entity.source_document ||
           doc.template_name === entity.source_document ||
           doc.id === entity.source_document_id
         )
@@ -46,27 +46,27 @@ export class MarkdownHighlightingService {
 
         const document = highlightedDocuments[docIndex]
         const entityText = entity.entity_name || entity.name || ''
-        
+
         if (!entityText) {
           logger.warn(`[MARKDOWN-HIGHLIGHTING] Empty entity name for: ${entity.entity_type}`)
           return
         }
 
-        // Determine which tag to use (alternate between h5 and h6 for variety)
-        const tag = index % 2 === 0 ? 'h5' : 'h6'
-        
+        // Standardized to h5 as per requirements
+        const tag = 'h5'
+
         // Wrap the entity in markdown heading tags
         const wrappedEntity = `<${tag}>${entityText}</${tag}>`
-        
+
         // Replace all occurrences of the entity text with the wrapped version
         // Use word boundaries to avoid partial matches
         const regex = new RegExp(`\\b${this.escapeRegex(entityText)}\\b`, 'g')
         document.content = document.content.replace(regex, wrappedEntity)
-        
+
         // Store the tag used for this entity
         entity.entity_markdown_tag = tag
         entity.markdown_highlighted_content = document.content
-        
+
         logger.debug(`[MARKDOWN-HIGHLIGHTING] Wrapped "${entityText}" in <${tag}> tags in document "${document.title}"`)
       })
 
@@ -90,10 +90,9 @@ export class MarkdownHighlightingService {
 IMPORTANT MARKDOWN HIGHLIGHTING REQUIREMENTS:
 For each entity extracted, you MUST wrap the entity name in HTML heading tags in the original document context:
 
-1. Use <h5>Entity Name</h5> for the first occurrence of each entity type
-2. Use <h6>Entity Name</h6> for subsequent occurrences
-3. This enables yellow highlighting in the UI
-4. Only wrap the entity name, not surrounding text
+1. Use <h5>Entity Name</h5> for all occurrences
+2. This enables yellow highlighting in the UI
+3. Only wrap the entity name, not surrounding text
 
 Example:
 - Original: "Testing Complete on 2026-02-28"
@@ -116,7 +115,7 @@ This simple approach provides visual highlighting without complex position track
 
       // Build enhanced prompt
       const enhancedPrompt = this.buildMarkdownWrappingPrompt(prompt)
-      
+
       // Use AI service (reuse existing logic)
       const { aiService } = await import('./aiService')
       const response = await aiService.generateWithFallback({
@@ -130,10 +129,10 @@ This simple approach provides visual highlighting without complex position track
       // Parse response
       const parsed = this.parseAIResponse(response.content)
       const entities = parsed[entityType.toLowerCase()] || []
-      
+
       // Wrap entities in markdown
       this.wrapEntitiesInMarkdown(documents, entities)
-      
+
       logger.info(`[MARKDOWN-EXTRACTION] Extracted and wrapped ${entities.length} ${entityType}`)
       return entities
 

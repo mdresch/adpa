@@ -78,7 +78,7 @@ server/src/modules/quantum/
 server/src/modules/ecs/
 
 # AI provider testing and analytics (experimental)
-server/src/routes/ai-provider-testing.ts
+# server/src/routes/ai-provider-testing.ts  # NOW ENABLED FOR PRODUCTION
 server/src/routes/ai-analytics.ts
 server/src/routes/quantum-stability.ts
 server/src/routes/speed-of-light.ts
@@ -86,7 +86,7 @@ server/src/routes/monte-carlo-proof.ts
 
 # Azure and validation modules (experimental)
 server/src/modules/ai/AzureAIFoundryConfig.ts
-server/src/modules/ai/AIProviderTestSuite.ts
+# server/src/modules/ai/AIProviderTestSuite.ts  # NOW ENABLED FOR PRODUCTION
 lib/azure-validation.ts
 hooks/use-azure-validation.ts
 components/validation-feedback.tsx

@@ -23,6 +23,30 @@ import MarkdownIt from "markdown-it";
 
 const md = new MarkdownIt({ html: true, breaks: true });
 
+const cleanMarkdown = (content: string): string => {
+  if (!content) return "";
+  let cleaned = content.trim();
+
+  // Remove common code block wrappers added by AI (e.g., ```markdown ... ```)
+  // Matching start and end markers
+  const codeBlockRegex = /^```(?:markdown|md)?\n([\s\S]*?)\n```$/i;
+  const match = cleaned.match(codeBlockRegex);
+  if (match) {
+    cleaned = match[1].trim();
+  }
+
+  // Remove any non-Markdown wrapper text if AI added explanations at the start
+  const mdHeadingStart = cleaned.indexOf("#");
+  if (mdHeadingStart > 0 && mdHeadingStart < 100) {
+    const lead = cleaned.substring(0, mdHeadingStart).trim();
+    if (lead.length < 50) {
+      cleaned = cleaned.substring(mdHeadingStart);
+    }
+  }
+
+  return cleaned;
+};
+
 interface NovelEditorProps {
   initialValue?: JSONContent | string;
   onChange?: (value: JSONContent, html: string, markdown: string) => void;
@@ -67,8 +91,9 @@ const NovelEditor = ({ initialValue, onChange, storageKey, onFeedback }: NovelEd
           if ((trimmed.startsWith('{') || trimmed.startsWith('[')) && (trimmed.endsWith('}') || trimmed.endsWith(']'))) {
             setInitialContent(JSON.parse(initialValue));
           } else {
-            // Assume markdown -> parse to HTML
-            const parsedHtml = md.render(initialValue);
+            // Assume markdown -> clean and parse to HTML
+            const cleanedMarkdown = cleanMarkdown(initialValue);
+            const parsedHtml = md.render(cleanedMarkdown);
             setInitialContent(parsedHtml);
           }
         } catch (e) {

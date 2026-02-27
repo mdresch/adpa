@@ -16,6 +16,14 @@ import Anthropic from "@anthropic-ai/sdk"  // Native Anthropic SDK
 import { logger } from "../utils/logger"
 import { pool } from "../database/connection"
 import AnalyticsTrackingService from "./analyticsTrackingService"
+import { isTracingEnabled } from "../tracing"
+import { Langfuse } from "langfuse"
+
+const langfuse = new Langfuse({
+  publicKey: process.env.LANGFUSE_PUBLIC_KEY,
+  secretKey: process.env.LANGFUSE_SECRET_KEY,
+  baseUrl: process.env.LANGFUSE_BASE_URL || "https://cloud.langfuse.com"
+});
 
 export interface AIProvider {
   name: string
@@ -33,6 +41,7 @@ export interface AIGenerateRequest {
   template_id?: string
   variables?: Record<string, any>
   system_prompt?: string
+  traceName?: string
   // Analytics tracking (optional)
   userId?: string
   projectId?: string
@@ -246,6 +255,12 @@ class AIService {
     if (fallbackProviders && fallbackProviders.length > 0) {
       // Filter fallback list to only include active providers
       availableProviders = fallbackProviders.filter(p => activeProvidersFromDb.includes(p))
+
+      // If none of the requested fallback providers are active, use all active providers as safety net
+      if (availableProviders.length === 0) {
+        logger.info('⚠️ [AI-FALLBACK] None of the requested fallback providers are active, falling back to all active providers')
+        availableProviders = activeProvidersFromDb
+      }
     } else {
       availableProviders = activeProvidersFromDb
     }
@@ -253,12 +268,13 @@ class AIService {
     // Check if requested provider is active
     const isRequestedProviderActive = activeProvidersFromDb.includes(request.provider)
 
-    // Build provider chain: only include requested provider if it's active
+    // Build provider chain: always maintain DB priority, but try requested provider first
     let providers: string[]
     if (isRequestedProviderActive) {
+      // Start with requested, then add others in their relative DB priority order
       providers = [request.provider, ...availableProviders.filter(p => p !== request.provider)]
     } else {
-      logger.info(`⚠️ [AI-FALLBACK] Requested provider ${request.provider} is not active, using active providers only`)
+      logger.info(`🔄 [AI-FALLBACK] Requested provider ${request.provider} is not active or not in active list, using active providers only in priority order`)
       providers = availableProviders
     }
 
@@ -415,6 +431,9 @@ class AIService {
       logger.debug('[AI-SERVICE] Using provided system_prompt')
     }
 
+    let langfuseTrace: any = null;
+    let langfuseGeneration: any = null;
+
     try {
       // Get provider type from database to build the model ID
       logger.debug('[AI-SERVICE] Looking up provider type')
@@ -427,6 +446,29 @@ class AIService {
       if (!providerResult || !providerResult.rows) {
         logger.error('❌ [AI-SERVICE] Provider lookup returned null result for', request.provider)
         throw new Error(`Provider lookup failed for: ${request.provider}`)
+      }
+
+      langfuseTrace = isTracingEnabled() ? langfuse.trace({
+        name: request.traceName || `ai-generate-${request.provider}-entity`,
+        sessionId: request.projectId || request.documentId || undefined,
+        userId: request.userId,
+        metadata: {
+          projectId: request.projectId,
+          documentId: request.documentId
+        },
+        tags: [request.provider, request.model || "default"]
+      }) : null;
+
+      if (langfuseTrace) {
+        langfuseGeneration = langfuseTrace.generation({
+          name: `${request.provider}-generation`,
+          model: request.model || "unknown",
+          modelParameters: {
+            temperature: request.temperature,
+            maxTokens: request.max_tokens
+          },
+          input: systemMessage ? [{ role: "system", content: systemMessage }, { role: "user", content: userMessage }] : userMessage
+        });
       }
 
       if (providerResult.rows.length === 0) {
@@ -474,7 +516,18 @@ class AIService {
               { role: 'user' as const, content: userMessage }
             ],
             temperature: request.temperature,
-            maxOutputTokens: request.max_tokens
+            maxOutputTokens: request.max_tokens,
+            experimental_telemetry: {
+              isEnabled: isTracingEnabled(),
+              functionId: 'ai-generate-deepseek',
+              metadata: {
+                userId: request.userId,
+                projectId: request.projectId,
+                documentId: request.documentId,
+                provider: 'deepseek',
+                model: modelName
+              }
+            }
           })
 
           const { inputTokens, outputTokens, totalTokens } = this.normalizeUsage(deepseekResult.usage)
@@ -495,6 +548,27 @@ class AIService {
               total_tokens: totalTokens,
             }, responseTimeMs, true, request.userId, request.projectId, request.documentId)
           })
+
+          if (langfuseGeneration) {
+            langfuseGeneration.end({
+              output: deepseekResult.text,
+              usage: {
+                promptTokens: inputTokens,
+                completionTokens: outputTokens,
+                totalTokens: totalTokens
+              }
+            });
+
+            // Explicitly update the root trace with the full input/output before flushing
+            if (langfuseTrace) {
+              langfuseTrace.update({
+                input: systemMessage ? `${systemMessage}\n\n---\n\n${userMessage}` : userMessage,
+                output: deepseekResult.text
+              });
+            }
+
+            await langfuse.flushAsync();
+          }
 
           return {
             content: deepseekResult.text,
@@ -559,6 +633,27 @@ class AIService {
             }, responseTimeMs, true, request.userId, request.projectId, request.documentId)
           })
 
+          if (langfuseGeneration) {
+            langfuseGeneration.end({
+              output: content,
+              usage: {
+                promptTokens: promptTokens,
+                completionTokens: completionTokens,
+                totalTokens: totalTokens
+              }
+            });
+
+            // Explicitly update the root trace with the full input/output before flushing
+            if (langfuseTrace) {
+              langfuseTrace.update({
+                input: systemMessage ? `${systemMessage}\n\n---\n\n${userMessage}` : userMessage,
+                output: content
+              });
+            }
+
+            await langfuse.flushAsync();
+          }
+
           return {
             content,
             provider: request.provider,
@@ -590,7 +685,18 @@ class AIService {
               { role: 'user' as const, content: userMessage }
             ],
             temperature: request.temperature,
-            maxOutputTokens: request.max_tokens
+            maxOutputTokens: request.max_tokens,
+            experimental_telemetry: {
+              isEnabled: isTracingEnabled(),
+              functionId: 'ai-generate-xai',
+              metadata: {
+                userId: request.userId,
+                projectId: request.projectId,
+                documentId: request.documentId,
+                provider: 'xai',
+                model: modelName
+              }
+            }
           })
 
           const { inputTokens, outputTokens, totalTokens } = this.normalizeUsage(xaiResult.usage)
@@ -603,14 +709,34 @@ class AIService {
           })
 
           // Track detailed AI usage for analytics
-          const responseTimeMs = Date.now() - startTime
           setImmediate(() => {
             this.trackAIUsageAsync(request.provider, modelName, {
               prompt_tokens: inputTokens,
               completion_tokens: outputTokens,
               total_tokens: totalTokens,
-            }, responseTimeMs, true, request.userId, request.projectId, request.documentId)
+            }, Date.now() - startTime, true, request.userId, request.projectId, request.documentId)
           })
+
+          if (langfuseGeneration) {
+            langfuseGeneration.end({
+              output: xaiResult.text,
+              usage: {
+                promptTokens: inputTokens,
+                completionTokens: outputTokens,
+                totalTokens: totalTokens
+              }
+            });
+
+            // Explicitly update the root trace with the full input/output before flushing
+            if (langfuseTrace) {
+              langfuseTrace.update({
+                input: systemMessage ? `${systemMessage}\n\n---\n\n${userMessage}` : userMessage,
+                output: xaiResult.text
+              });
+            }
+
+            await langfuse.flushAsync();
+          }
 
           return {
             content: xaiResult.text,
@@ -749,6 +875,18 @@ class AIService {
             }, responseTimeMs, true, request.userId, request.projectId, request.documentId)
           })
 
+          if (langfuseGeneration) {
+            langfuseGeneration.end({
+              output: content,
+              usage: {
+                promptTokens: promptTokens,
+                completionTokens: completionTokens,
+                totalTokens: totalTokens
+              }
+            });
+            await langfuse.flushAsync();
+          }
+
           return {
             content,
             provider: request.provider,
@@ -810,6 +948,17 @@ class AIService {
             ],
             temperature: request.temperature || 0.7,
             maxOutputTokens: request.max_tokens || 2000,
+            experimental_telemetry: {
+              isEnabled: isTracingEnabled(),
+              functionId: 'ai-gateway-messages',
+              metadata: {
+                userId: request.userId,
+                projectId: request.projectId,
+                documentId: request.documentId,
+                provider: 'gateway',
+                modelId: gatewayModelId
+              }
+            }
           } as any)
         } else {
           logger.info('📨 [AI-SERVICE-6/8] Using simple prompt (no template)')
@@ -818,6 +967,17 @@ class AIService {
             prompt: userMessage,
             temperature: request.temperature || 0.7,
             maxOutputTokens: request.max_tokens || 2000,
+            experimental_telemetry: {
+              isEnabled: isTracingEnabled(),
+              functionId: 'ai-gateway-prompt',
+              metadata: {
+                userId: request.userId,
+                projectId: request.projectId,
+                documentId: request.documentId,
+                provider: 'gateway',
+                modelId: gatewayModelId
+              }
+            }
           } as any)
         }
 
@@ -950,6 +1110,27 @@ class AIService {
 
           logger.info(`[AI] ✓ Google AI/${finalModel} - ${estimatedTokens} tokens - ${Date.now() - startTime}ms`)
 
+          if (langfuseGeneration) {
+            langfuseGeneration.end({
+              output: text,
+              usage: {
+                promptTokens: Math.ceil(promptLength / 4),
+                completionTokens: Math.ceil(text.length / 4),
+                totalTokens: estimatedTokens
+              }
+            });
+
+            // Explicitly update the root trace with the full input/output before flushing
+            if (langfuseTrace) {
+              langfuseTrace.update({
+                input: combinedPrompt,
+                output: text
+              });
+            }
+
+            await langfuse.flushAsync();
+          }
+
           return {
             content: text,
             provider: request.provider,
@@ -989,7 +1170,18 @@ class AIService {
               { role: 'user' as const, content: userMessage }
             ],
             temperature: request.temperature,
-            maxOutputTokens: request.max_tokens
+            maxOutputTokens: request.max_tokens,
+            experimental_telemetry: {
+              isEnabled: isTracingEnabled(),
+              functionId: 'ai-mistral-direct',
+              metadata: {
+                userId: request.userId,
+                projectId: request.projectId,
+                documentId: request.documentId,
+                provider: 'mistral',
+                model: modelName
+              }
+            }
           })
 
           logger.debug('[AI-SERVICE] Mistral AI successful:', { contentLength: mistralResult.text.length })
@@ -1012,6 +1204,18 @@ class AIService {
           })
 
           logger.info(`[AI] ✓ Mistral AI/${modelName} - ${totalTokens} tokens - ${Date.now() - startTime}ms`)
+
+          if (langfuseGeneration) {
+            langfuseGeneration.end({
+              output: mistralResult.text,
+              usage: {
+                promptTokens: inputTokens,
+                completionTokens: outputTokens,
+                totalTokens: totalTokens
+              }
+            });
+            await langfuse.flushAsync();
+          }
 
           return {
             content: mistralResult.text,
@@ -1055,7 +1259,18 @@ class AIService {
               { role: 'user' as const, content: userMessage }
             ],
             temperature: request.temperature,
-            maxOutputTokens: request.max_tokens
+            maxOutputTokens: request.max_tokens,
+            experimental_telemetry: {
+              isEnabled: isTracingEnabled(),
+              functionId: 'ai-deepseek-fallback',
+              metadata: {
+                userId: request.userId,
+                projectId: request.projectId,
+                documentId: request.documentId,
+                provider: 'deepseek',
+                model: modelName
+              }
+            }
           })
 
           logger.debug('[AI-SERVICE] DeepSeek successful:', { contentLength: deepseekResult.text.length })
@@ -1078,6 +1293,18 @@ class AIService {
           })
 
           logger.info(`[AI] ✓ DeepSeek/${modelName} - ${totalTokens} tokens - ${Date.now() - startTime}ms`)
+
+          if (langfuseGeneration) {
+            langfuseGeneration.end({
+              output: deepseekResult.text,
+              usage: {
+                promptTokens: inputTokens,
+                completionTokens: outputTokens,
+                totalTokens: totalTokens
+              }
+            });
+            await langfuse.flushAsync();
+          }
 
           return {
             content: deepseekResult.text,
@@ -1121,7 +1348,18 @@ class AIService {
               { role: 'user' as const, content: userMessage }
             ],
             temperature: request.temperature,
-            maxOutputTokens: request.max_tokens
+            maxOutputTokens: request.max_tokens,
+            experimental_telemetry: {
+              isEnabled: isTracingEnabled(),
+              functionId: 'ai-moonshot-fallback',
+              metadata: {
+                userId: request.userId,
+                projectId: request.projectId,
+                documentId: request.documentId,
+                provider: 'moonshot',
+                model: modelName
+              }
+            }
           })
 
           logger.debug('[AI-SERVICE] Moonshot AI successful:', { contentLength: moonshotResult.text.length })
@@ -1143,7 +1381,17 @@ class AIService {
             }, responseTimeMs, true, request.userId, request.projectId, request.documentId)
           })
 
-          logger.info(`[AI] ✓ Moonshot AI/${modelName} - ${totalTokens} tokens - ${Date.now() - startTime}ms`)
+          if (langfuseGeneration) {
+            langfuseGeneration.end({
+              output: moonshotResult.text,
+              usage: {
+                promptTokens: inputTokens,
+                completionTokens: outputTokens,
+                totalTokens: totalTokens
+              }
+            });
+            await langfuse.flushAsync();
+          }
 
           return {
             content: moonshotResult.text,
@@ -1238,6 +1486,18 @@ class AIService {
 
             logger.info(`[AI] ✓ Ollama/${modelName} - ${totalTokens} tokens - ${responseTimeMs}ms`)
 
+            if (langfuseGeneration) {
+              langfuseGeneration.end({
+                output: generatedText,
+                usage: {
+                  promptTokens: promptTokens,
+                  completionTokens: completionTokens,
+                  totalTokens: totalTokens
+                }
+              });
+              await langfuse.flushAsync();
+            }
+
             return {
               content: generatedText,
               provider: request.provider,
@@ -1283,7 +1543,18 @@ class AIService {
               { role: 'user' as const, content: userMessage }
             ],
             temperature: request.temperature || 0.7,
-            maxOutputTokens: request.max_tokens || 2000
+            maxOutputTokens: request.max_tokens || 2000,
+            experimental_telemetry: {
+              isEnabled: isTracingEnabled(),
+              functionId: 'ai-openai-fallback',
+              metadata: {
+                userId: request.userId,
+                projectId: request.projectId,
+                documentId: request.documentId,
+                provider: 'openai',
+                model: modelName
+              }
+            }
           })
 
           logger.debug('[AI-SERVICE] OpenAI successful:', { contentLength: openaiResult.text.length })
@@ -1316,8 +1587,120 @@ class AIService {
 
           logger.info(`[AI] ✓ OpenAI/${modelName} - ${totalTokens} tokens - ${responseTimeMs}ms`)
 
+          if (langfuseGeneration) {
+            langfuseGeneration.end({
+              output: openaiResult.text,
+              usage: {
+                promptTokens: inputTokens,
+                completionTokens: outputTokens,
+                totalTokens: totalTokens
+              }
+            });
+            await langfuse.flushAsync();
+          }
+
           return {
             content: openaiResult.text,
+            provider: request.provider,
+            model: modelName,
+            usage: {
+              prompt_tokens: inputTokens,
+              completion_tokens: outputTokens,
+              total_tokens: totalTokens,
+            },
+          }
+        }
+
+        // FALLBACK: Try direct Groq (OpenAI-compatible API)
+        if (providerType === 'groq') {
+          logger.info('🔄 [AI-SERVICE] Falling back to direct Groq...')
+
+          // Get direct API key from provider configuration
+          const directApiKey = providerResult.rows[0].configuration?.apiKey
+            || this.decryptApiKey(providerResult.rows[0].api_key_encrypted)
+          if (!directApiKey) {
+            throw new Error('Direct Groq API key not found in provider configuration or database')
+          }
+
+          logger.debug('[AI-SERVICE] Using direct Groq (OpenAI-compatible)')
+
+          const groq = createOpenAI({
+            apiKey: directApiKey,
+            baseURL: 'https://api.groq.com/openai/v1'
+          })
+
+          // Use appropriate Groq model
+          const groqModels = ['llama-3.3-70b-versatile', 'llama3-8b-8192', 'llama3-70b-8192',
+            'mixtral-8x7b-32768', 'gemma2-9b-it']
+          const modelName = groqModels.includes(request.model || '')
+            ? request.model
+            : 'llama-3.3-70b-versatile'
+
+          const groqResult = await generateText({
+            model: groq(modelName),
+            messages: [
+              ...(systemMessage ? [{ role: 'system' as const, content: systemMessage }] : []),
+              { role: 'user' as const, content: userMessage }
+            ],
+            temperature: request.temperature,
+            maxOutputTokens: request.max_tokens,
+            experimental_telemetry: {
+              isEnabled: isTracingEnabled(),
+              functionId: 'ai-groq-fallback',
+              metadata: {
+                userId: request.userId,
+                projectId: request.projectId,
+                documentId: request.documentId,
+                provider: 'groq',
+                model: modelName
+              }
+            }
+          })
+
+          logger.debug('[AI-SERVICE] Groq successful:', { contentLength: groqResult.text.length })
+
+          const { inputTokens, outputTokens, totalTokens } = this.normalizeUsage(groqResult.usage)
+
+          // Update usage stats
+          await this.updateUsageStats(request.provider, {
+            total_tokens: totalTokens,
+          })
+
+          // Track detailed AI usage for analytics (background, non-blocking)
+          const responseTimeMs = Date.now() - startTime
+          setImmediate(() => {
+            this.trackAIUsageAsync(
+              request.provider,
+              modelName,
+              {
+                prompt_tokens: inputTokens,
+                completion_tokens: outputTokens,
+                total_tokens: totalTokens,
+              },
+              responseTimeMs,
+              true,
+              request.userId,
+              request.projectId,
+              request.documentId
+            )
+          })
+
+          logger.info(`[AI] ✓ Groq/${modelName} - ${totalTokens} tokens - ${responseTimeMs}ms`)
+
+          if (langfuseGeneration) {
+            langfuseGeneration.end({
+              output: groqResult.text,
+              usage: {
+                promptTokens: inputTokens,
+                completionTokens: outputTokens,
+                totalTokens: totalTokens
+              }
+            });
+            await langfuse.flushAsync();
+          }
+
+          return {
+            content: groqResult.text,
             provider: request.provider,
             model: modelName,
             usage: {
@@ -1378,6 +1761,18 @@ class AIService {
 
         logger.info('✅ [AI-SERVICE-8/8] Usage stats updated. Returning response.')
 
+        if (langfuseGeneration) {
+          langfuseGeneration.end({
+            output: result.text,
+            usage: {
+              promptTokens: gatewayInputTokens,
+              completionTokens: gatewayOutputTokens,
+              totalTokens: gatewayTotalTokens
+            }
+          });
+          await langfuse.flushAsync();
+        }
+
         return {
           content: result.text,
           provider: request.provider,
@@ -1404,6 +1799,13 @@ class AIService {
         message: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : undefined
       })
+      if (typeof langfuseGeneration !== 'undefined' && langfuseGeneration) {
+        langfuseGeneration.end({
+          level: "ERROR",
+          statusMessage: error instanceof Error ? error.message : String(error)
+        });
+        await langfuse.flushAsync();
+      }
       throw error
     }
   }
@@ -1601,6 +2003,8 @@ class AIService {
         return ["grok-beta", "grok-vision-beta"]
       case "copilot":
         return ["copilot-chat"]
+      case "ollama":
+        return ["llama3", "llama3.1", "mistral", "phi3"]
       default:
         return []
     }

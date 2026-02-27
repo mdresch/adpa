@@ -188,9 +188,15 @@ export async function saveResourceConflicts(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11})`
       )
 
+      // Ensure resource_id is a valid UUID, otherwise nullify it
+      // This prevents errors when the AI extracts a role name into the ID field
+      const resourceId = e.resource_id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(e.resource_id)
+        ? e.resource_id
+        : null
+
       values.push(
         projectId,
-        e.resource_id || null,
+        resourceId,
         e.resource_name || null,
         e.conflict_type || null,
         e.conflict_description || null,

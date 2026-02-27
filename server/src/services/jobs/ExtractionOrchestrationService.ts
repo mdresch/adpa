@@ -14,7 +14,7 @@
 
 import { pool } from '@/database/connection'
 import { logger } from '@/utils/logger'
-import { io } from '../../server'
+import { io } from '../../socket'
 import { PMBOK_DOMAINS } from '@/types/pmbok'
 import type { PmbokDomain } from '@/types/pmbok'
 import type { IQueueJob } from './queue/IQueue'
@@ -241,6 +241,7 @@ type DomainCountSummary = {
   satisfactionSurveys: number
   stakeholderIssues: number
   relationshipHealth: number
+  dtAssets: number
 }
 
 const ENTITY_COUNT_KEY_MAP: Record<EntityType, keyof DomainCountSummary> = {
@@ -315,7 +316,8 @@ const ENTITY_COUNT_KEY_MAP: Record<EntityType, keyof DomainCountSummary> = {
   communication_logs: 'communicationLogs',
   satisfaction_surveys: 'satisfactionSurveys',
   stakeholder_issues: 'stakeholderIssues',
-  relationship_health: 'relationshipHealth'
+  relationship_health: 'relationshipHealth',
+  dt_assets: 'dtAssets'
 }
 
 type DomainRunIdMap = Partial<Record<PmbokDomain, string>>
@@ -1518,7 +1520,7 @@ export class ExtractionOrchestrationService {
 
       // Enqueue GKG sync when Neo4j is configured (non-fatal if enqueue fails)
       try {
-        const { isNeo4jConfigured } = await import("../utils/neo4j")
+        const { isNeo4jConfigured } = await import("../../utils/neo4j")
         const { addJob } = await import("../queueService")
         if (isNeo4jConfigured() && projectId) {
           await addJob("gkg-sync-project", { projectId }, { attempts: 2, backoff: { type: "exponential", delay: 5000 } })
@@ -1526,6 +1528,40 @@ export class ExtractionOrchestrationService {
         }
       } catch (gkgErr: any) {
         log.warn(`[EXTRACTION-PARENT] GKG sync enqueue failed (non-fatal): ${gkgErr?.message || gkgErr}`)
+      }
+
+      // Automatically trigger WBS import after successful extraction
+      try {
+        const relevantDomains: PmbokDomain[] = ['planning', 'project_work', 'delivery', 'scope', 'schedule', 'development_approach', 'team', 'resources']
+        const hasRelevantData = Object.keys(domainRunIds).some(domain =>
+          relevantDomains.includes(domain as PmbokDomain)
+        )
+
+        if (hasRelevantData) {
+          const { importWBSFromProjectEntities } = await import("../wbsImportService")
+
+          // Get the user ID who triggered the job
+          const jobResult = await db.query('SELECT created_by FROM jobs WHERE id = $1', [jobId])
+          const userId = jobResult.rows[0]?.created_by || 'system'
+
+          log.info(`[EXTRACTION-PARENT] Automatically triggering WBS import for project ${projectId}`)
+          const importResult = await importWBSFromProjectEntities(projectId, userId, { autoMatchRoles: true })
+
+          log.info(`[EXTRACTION-PARENT] Auto-WBS import completed`, {
+            projectId,
+            tasksCreated: importResult.tasksCreated,
+            totalHours: importResult.totalEstimatedHours
+          })
+
+          // Update message with WBS import summary
+          const wbsSummary = `Auto-WBS: ${importResult.tasksCreated} tasks created/updated.`
+          await db.query(
+            `UPDATE jobs SET message = message || $1 WHERE id = $2`,
+            [`\n${wbsSummary}`, jobId]
+          )
+        }
+      } catch (importErr: any) {
+        log.warn(`[EXTRACTION-PARENT] Auto-WBS import failed (non-fatal): ${importErr?.message || importErr}`)
       }
 
     } catch (error: any) {

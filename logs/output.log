@@ -1,0 +1,37 @@
+--- Calling generateText ---
+[Provider Utils CJS] parseDef typeName: ZodObject Path: #
+[Provider Utils CJS] parseDef typeName: ZodString Path: #/properties/query
+[Google SDK CJS] doGenerate keys: [
+  'maxOutputTokens', 'temperature',
+  'topP',            'topK',
+  'presencePenalty', 'frequencyPenalty',
+  'stopSequences',   'seed',
+  'tools',           'toolChoice',
+  'responseFormat',  'prompt',
+  'providerOptions', 'abortSignal',
+  'headers'
+]
+[Google SDK CJS] prepareTools called with tools count: 1
+[Google SDK CJS] Tool: search Full InputSchema: {"type":"object","properties":{"query":{"type":"string","description":"The query to search for"}},"required":["query"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}
+[Google SDK CJS] Tool Schema Input (keys): [ 'type', 'properties', 'required', 'additionalProperties', '$schema' ]
+[Google SDK CJS] Tool Schema Unwrapped (type): object
+[Google SDK CJS] Tool Schema Properties: [ 'query' ]
+[Google SDK CJS] Tool Declarations: [
+ {
+  "name": "search",
+  "description": "Search the web",
+  "parameters": {
+   "required": [
+    "query"
+   ],
+   "type": "object",
+   "properties": {
+    "query": {
+     "description": "The query to search for",
+     "type": "string"
+    }
+   }
+  }
+ }
+]
+Error (expected): models/gemini-1.5-pro is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.

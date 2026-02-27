@@ -37,6 +37,7 @@ import { Database } from "@/components/ui/icons-shim"
 import { MongoDBDashboard } from "./MongoDBDashboard"
 import { PineconeDashboard } from "./PineconeDashboard"
 import { SupabaseDashboard } from "./SupabaseDashboard"
+import { Neo4jDashboard } from "./Neo4jDashboard"
 
 export default function Integrations() {
   const { user } = useAuth()
@@ -1615,6 +1616,7 @@ export default function Integrations() {
                 <TabsTrigger value="mongodb-analysis">MongoDB Analysis</TabsTrigger>
                 <TabsTrigger value="pinecone-analysis">Pinecone Analysis</TabsTrigger>
                 <TabsTrigger value="supabase-management">Supabase</TabsTrigger>
+                <TabsTrigger value="neo4j-analysis">Neo4j Analysis</TabsTrigger>
               </TabsList>
 
               <TabsContent value="overview" className="space-y-4">
@@ -2804,6 +2806,12 @@ export default function Integrations() {
               <TabsContent value="supabase-management" className="space-y-4">
                 <SupabaseDashboard
                   integrationId={realIntegrations.find(i => i.type === "supabase")?.id || null}
+                />
+              </TabsContent>
+
+              <TabsContent value="neo4j-analysis" className="space-y-4">
+                <Neo4jDashboard
+                  integrationId={realIntegrations.find(i => i.type === "neo4j")?.id || null}
                 />
               </TabsContent>
             </Tabs >

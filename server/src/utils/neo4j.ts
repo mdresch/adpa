@@ -8,8 +8,8 @@ import { logger } from "./logger"
 import CircuitBreaker from "./circuitBreaker"
 
 const NEO4J_URI = process.env.NEO4J_URI || process.env.NEO4J_URL || ""
-const NEO4J_USER = process.env.NEO4J_USERNAME || process.env.NEO4J_USER || "neo4j"
-const NEO4J_PASSWORD = process.env.NEO4J_PASSWORD || ""
+const NEO4J_USER = process.env.NEO4J_CLIENT_NAME || process.env.CLIENT_NAME || process.env.NEO4J_CLIENT_ID || process.env.CLIENT_ID || process.env.NEO4J_USERNAME || process.env.NEO4J_USER || "neo4j"
+const NEO4J_PASSWORD = process.env.NEO4J_CLIENT_SECRET || process.env.CLIENT_SECRET || process.env.NEO4J_PASSWORD || ""
 
 let driver: Driver | null = null
 const neo4jBreaker = new CircuitBreaker(3, 30000)
@@ -57,12 +57,19 @@ export async function connectNeo4j(): Promise<void> {
     return
   }
 
+  logger.warn("[Neo4j] Attempting connection", {
+    uri: NEO4J_URI.replace(/:[^:@]+@/, ":***@"),
+    userKey: process.env.NEO4J_CLIENT_NAME ? 'NEO4J_CLIENT_NAME' : (process.env.NEO4J_CLIENT_ID ? 'NEO4J_CLIENT_ID' : (process.env.NEO4J_USERNAME ? 'NEO4J_USERNAME' : 'default')),
+    userLength: NEO4J_USER.length,
+    passLength: NEO4J_PASSWORD.length
+  })
+
   // Aura instances may need longer to become ready after creation
   const timeoutMs = Number(process.env.NEO4J_CONNECT_TIMEOUT_MS) || 15000
   try {
     const auth = NEO4J_PASSWORD
       ? neo4j.auth.basic(NEO4J_USER, NEO4J_PASSWORD)
-      : neo4j.auth.none()
+      : (neo4j.auth as any).none()
 
     driver = neo4j.driver(NEO4J_URI, auth, {
       maxConnectionLifetime: 3 * 60 * 60 * 1000,
@@ -86,7 +93,7 @@ export async function connectNeo4j(): Promise<void> {
     logger.error("[Neo4j] Connection failed", { uri: NEO4J_URI.replace(/:[^:@]+@/, ":***@"), error: msg })
     neo4jBreaker.recordFailure()
     if (driver) {
-      await driver.close().catch(() => {})
+      await driver.close().catch(() => { })
       driver = null
     }
     throw err

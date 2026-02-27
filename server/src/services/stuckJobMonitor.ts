@@ -134,14 +134,14 @@ export class StuckJobMonitor {
               // Dynamically require addJob to avoid circular imports at module load
               try {
                 // eslint-disable-next-line @typescript-eslint/no-var-requires
-                const { addJob } = require('../jobs/queue/QueueService') as any
+                const { addJob } = require('./jobs/queue/QueueService') as any
                 // If not exported, fallback to top-level service
                 let addFn = addJob
                 if (typeof addFn !== 'function') {
                   try {
                     // Try service entrypoint
                     // eslint-disable-next-line @typescript-eslint/no-var-requires
-                    addFn = require('../queueService').addJob
+                    addFn = require('./queueService').addJob
                   } catch (e) {
                     addFn = null
                   }

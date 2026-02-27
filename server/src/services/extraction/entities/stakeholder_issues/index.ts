@@ -166,6 +166,23 @@ export async function extractStakeholderIssues(
   }
 }
 
+const ISSUE_CATEGORIES = new Set([
+  'communication', 'expectations', 'resources', 'scope', 'timeline',
+  'budget', 'quality', 'risk', 'governance', 'technical', 'stakeholder', 'other'
+])
+
+function normalizeIssueCategory(v: unknown): string | null {
+  if (!v) return null
+  const s = String(v).toLowerCase().trim().replace(/\s+/g, '_')
+  if (ISSUE_CATEGORIES.has(s)) return s
+  const map: Record<string, string> = {
+    concern: 'expectations',
+    complaint: 'stakeholder',
+    change_request: 'scope'
+  }
+  return map[s] ?? 'other'
+}
+
 export async function saveStakeholderIssues(
   client: PoolClient,
   projectId: string,
@@ -221,7 +238,7 @@ export async function saveStakeholderIssues(
       columnOrder.push({ name: stakeholderNameColumn, value: (e) => e.stakeholder_name || null })
     }
     if (issueTypeColumn) {
-      columnOrder.push({ name: issueTypeColumn, value: (e) => e.issue_type || null })
+      columnOrder.push({ name: issueTypeColumn, value: (e) => normalizeIssueCategory(e.issue_type) })
     }
     if (severityColumn) {
       columnOrder.push({ name: severityColumn, value: (e) => e.severity || null })

@@ -200,7 +200,7 @@ export async function saveRiskAssessments(
     )
     const columnSet = new Set(columnResult.rows.map(row => row.column_name))
 
-const pickColumn = (options: string[]): string | null => {
+    const pickColumn = (options: string[]): string | null => {
       for (const option of options) {
         if (columnSet.has(option)) {
           return option
@@ -232,13 +232,13 @@ const pickColumn = (options: string[]): string | null => {
       columnOrder.push({ name: riskTitleColumn, value: (e) => e.risk_title || null })
     }
     if (assessmentDateColumn) {
-      columnOrder.push({ name: assessmentDateColumn, value: (e) => e.assessment_date || null })
+      columnOrder.push({ name: assessmentDateColumn, value: (e) => e.assessment_date || new Date().toISOString() })
     }
     if (probabilityColumn) {
-      columnOrder.push({ name: probabilityColumn, value: (e) => e.probability || null })
+      columnOrder.push({ name: probabilityColumn, value: (e) => normalizeProbImpact(e.probability) })
     }
     if (impactColumn) {
-      columnOrder.push({ name: impactColumn, value: (e) => e.impact || null })
+      columnOrder.push({ name: impactColumn, value: (e) => normalizeProbImpact(e.impact) })
     }
     if (detectabilityColumn) {
       columnOrder.push({ name: detectabilityColumn, value: (e) => e.detectability ?? null })

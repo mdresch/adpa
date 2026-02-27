@@ -1,8 +1,10 @@
 import { pool } from "../database/connection"
 import { logger } from "../utils/logger"
 import { aiService } from "./aiService"
+import { unifiedAIService } from "./unifiedAIService"
 import { documentTemplateService } from "../modules/documentTemplates/service"
 import { getContextForStrategy } from "./gkg"
+import { z } from "zod"
 
 export interface DocumentGenerationRequest {
   projectId: string
@@ -53,22 +55,22 @@ export interface TemplateContext {
 }
 
 class DocumentGenerationService {
-  
+
   async generateDocument(request: DocumentGenerationRequest) {
     try {
-      logger.info(`Starting document generation for project ${request.projectId}`)
-      
+      logger.info(`Starting agentic document generation for project ${request.projectId}`)
+
       // 1. Fetch project context
       const project = await this.getProjectContext(request.projectId)
       logger.info(`Project context fetched: ${project.name}`)
-      
+
       // 2. Fetch template (if provided)
-      const template = request.templateId 
+      const template = request.templateId
         ? await this.getTemplate(request.templateId)
         : null
       logger.info(`Template: ${template?.name || 'None'}`)
 
-      // 2.5. Fetch GKG context when template has gkg_context_strategy (same as pipeline)
+      // 2.5. Fetch GKG context when template has gkg_context_strategy
       let gkg_context_snapshot: { markdown: string; unitsCount: number; documentsCount: number; entityTypes: string[] } | undefined
       if (request.templateId && request.projectId) {
         try {
@@ -87,7 +89,6 @@ class DocumentGenerationService {
               logger.info(`GKG context injected for generation`, {
                 templateId: request.templateId,
                 unitsCount: gkgResult.unitsCount,
-                entityTypes: gkgResult.entityTypes?.length ?? 0,
               })
             }
           }
@@ -98,70 +99,235 @@ class DocumentGenerationService {
           })
         }
       }
-      
-      // 3. Build enriched prompt (includes GKG context when available)
-      const enrichedPrompt = await this.buildEnrichedPrompt({
+
+      // 3. AGENTIC PHASE 1: Plan Document Structure (Research Plan)
+      logger.info(`[AGENT] Phase 1: Planning Document Structure...`)
+      const generationPlan = await this.planDocumentStructure({
         userPrompt: request.userPrompt,
         project,
         template,
-        projectId: request.projectId,
-        userId: request.userId,
-        gkgContext: gkg_context_snapshot,
-      })
-      
-      logger.info(`Enriched prompt built (${enrichedPrompt.length} chars)`)
-      
-      // 4. Generate via AI Gateway with fallback
-      const aiResponse = await aiService.generateWithFallback({
-        prompt: enrichedPrompt,
         provider: request.provider,
-        model: request.model,
-        temperature: request.temperature || 0.7,
-        template_id: request.templateId,
-      }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
-      
-      logger.info(`AI generation successful. Tokens: ${aiResponse.usage?.total_tokens}`)
-      
-      // 5. Validate and clean Markdown
-      const markdown = this.validateAndCleanMarkdown(aiResponse.content)
-      
-      // 6. Optionally publish to Confluence if project mapping exists
-      try {
-        const { getByProjectId } = await import('../database/projectIntegrations')
-        const mapping = await getByProjectId(request.projectId)
-        if (mapping?.confluence_space_key) {
-          const { queueService } = await import('./queueService')
-          const title = `${project.name} - ${template?.name || 'Generated Document'}`
-          // Attempt to get a documentId if saved downstream; if available upstream, include it
-          // Note: Confluence publishing is now handled by direct auto-integration
-          // in the document creation/update endpoints (documents.ts and projects.ts)
-          // This ensures immediate publishing without requiring a separate job queue
-          logger.debug('[PUBLISH-CONFLUENCE] Skipping queue-based publish - using direct auto-integration instead')
-        }
-      } catch (e) {
-        logger.warn('[PUBLISH-CONFLUENCE] Integration check failed', e)
+        model: request.model
+      })
+
+      if (!generationPlan || !generationPlan.sections || generationPlan.sections.length === 0) {
+        throw new Error("AI failed to return a valid document structure plan.")
       }
 
-      // 7. Return structured result (include gkg_context_snapshot for document view "Show injected context")
+      logger.info(`[AGENT] Plan returned ${generationPlan.sections.length} required sections to draft.`)
+
+      // 4. Extract global reference materials once
+      const customContextItems = await this.fetchContextItems(request.projectId)
+
+      // 5. AGENTIC PHASE 2: Parallel Drafting of Sections
+      logger.info(`[AGENT] Phase 2: Drafting ${generationPlan.sections.length} sections in parallel...`)
+
+      // We draft each section in parallel to save time, providing targeted context for each.
+      const sectionPromises = generationPlan.sections.map((sectionTask, index) => {
+        return this.draftSection({
+          task: sectionTask,
+          order: index,
+          project,
+          gkgContext: gkg_context_snapshot,
+          contextItems: customContextItems,
+          provider: request.provider,
+          model: request.model,
+          temperature: request.temperature
+        })
+      })
+
+      const draftedSections = await Promise.all(sectionPromises)
+
+      // Sort sections back into their planned order (Promise.all preserves array order, but it's safe to sort)
+      draftedSections.sort((a, b) => a.order - b.order)
+
+      let totalTokensUsed = 0;
+
+      // 6. AGENTIC PHASE 3: Synthesis & Assembly
+      logger.info(`[AGENT] Phase 3: Assembling Document...`)
+
+      let finalMarkdown = ""
+      for (const section of draftedSections) {
+        totalTokensUsed += section.tokensUsed
+        // Ensure each section is separated cleanly
+        finalMarkdown += section.markdown.trim() + "\n\n"
+      }
+
+      const markdown = this.validateAndCleanMarkdown(finalMarkdown)
+
+      // 7. Return structured result
       return {
         content: markdown,
         metadata: {
-          provider: aiResponse.provider,
-          model: aiResponse.model,
-          tokensUsed: aiResponse.usage?.total_tokens || 0,
+          provider: request.provider,
+          model: request.model || 'default',
+          tokensUsed: totalTokensUsed, // Aggregate of all parallel calls
           context: {
             projectName: project.name,
             framework: project.framework,
             templateUsed: template?.name,
             stakeholdersIncluded: (project.stakeholders?.length || 0) > 0,
             documentsReferenced: (project.documents?.length || 0),
+            agenticSectionsPlanned: generationPlan.sections.length
           }
         },
         ...(gkg_context_snapshot && { gkg_context_snapshot }),
       }
     } catch (error) {
-      logger.error('Document generation failed:', error)
+      logger.error('Agentic document generation failed:', error)
       throw error
+    }
+  }
+
+  /**
+   * AGENTIC PHASE 1: Plan Document Structure
+   * Asks the AI to analyze the prompt/template and output an array of precise "Research Tasks".
+   */
+  private async planDocumentStructure(params: {
+    userPrompt: string;
+    project: ProjectContext;
+    template: TemplateContext | null;
+    provider: string;
+    model?: string;
+  }) {
+    // We define the Zod schema representing the JSON we want the AI to return.
+    const planSchema = z.object({
+      sections: z.array(z.object({
+        heading: z.string().describe("The Markdown heading for the section (e.g. '## Executive Summary')"),
+        goal: z.string().describe("What this specific section needs to accomplish based on the user prompt."),
+        informational_needs: z.string().describe("What context (stakeholders, budget, GKG data, etc) is needed to write this section accurately. BE SPECIFIC."),
+      }))
+    })
+
+    let plannerPrompt = `You are a Senior Project Manager planning a document using the ${params.project.framework} framework.\n\n`
+    plannerPrompt += `Your job is to read the User's Request and the required Template Structure, and break the document down into an array of sections that need to be drafted.\n\n`
+    plannerPrompt += `### Project Overview:\n- Name: ${params.project.name}\n- Status: ${params.project.status}\n\n`
+
+    if (params.template?.template_paragraphs) {
+      plannerPrompt += `### Required Template Structure:\n`
+      const sortedParagraphs = params.template.template_paragraphs.sort((a, b) => a.order - b.order)
+      sortedParagraphs.forEach((para) => {
+        plannerPrompt += `${para.order}. ${para.section_name} (${para.section_type}, required: ${para.required})\n`
+        if (para.description) plannerPrompt += `   Description: ${para.description}\n`
+      })
+      plannerPrompt += `\n`
+    }
+
+    plannerPrompt += `### User Request:\n${params.userPrompt}\n\n`
+    plannerPrompt += `Output a JSON array of sections. Map the required template structure to the user's specific request.`
+
+    try {
+      const result = await unifiedAIService.generateStructuredObject({
+        prompt: plannerPrompt,
+        provider: params.provider,
+        model: params.model,
+        temperature: 0.1, // Low temperature for deterministic planning
+        schema: planSchema,
+        traceName: 'agentic-doc-gen-plan'
+      })
+      return result.object
+    } catch (e: any) {
+      logger.warn(`Failed structured generation, falling back to manual template mapping`, e)
+      // Fallback: If AI fails the structured output, manually construct the plan based on template paragraphs
+      if (params.template?.template_paragraphs) {
+        return {
+          sections: params.template.template_paragraphs
+            .sort((a, b) => a.order - b.order)
+            .map(p => ({
+              heading: `## ${p.section_name}`,
+              goal: p.description || `Write the ${p.section_name} section`,
+              informational_needs: p.prompt_guidance || "General project context."
+            }))
+        }
+      } else {
+        return {
+          sections: [{ heading: "## Document Generation", goal: "Fulfill user request", informational_needs: "All available project context" }]
+        }
+      }
+    }
+  }
+
+  /**
+   * AGENTIC PHASE 2: Draft Single Section
+   * Targeted AI call to write just the markdown for a single specific section.
+   */
+  private async draftSection(params: {
+    task: { heading: string; goal: string; informational_needs: string };
+    order: number;
+    project: ProjectContext;
+    gkgContext?: { markdown: string };
+    contextItems: Array<any>;
+    provider: string;
+    model?: string;
+    temperature?: number;
+  }) {
+    let sectionPrompt = `You are an expert technical writer drafting a specific section of a ${params.project.framework} document.\n\n`
+
+    // We explicitly tell the AI what its isolated job is
+    sectionPrompt += `### Your Mission\n`
+    sectionPrompt += `Write ONLY the following section: **${params.task.heading}**\n`
+    sectionPrompt += `Goal: ${params.task.goal}\n\n`
+
+    // Inject targeted context (we can optimize this later to filter context intelligently based on informational_needs)
+    sectionPrompt += `### Context Available to You\n`
+    sectionPrompt += `**Project:** ${params.project.name}\n`
+
+    // Simple relevance filter - if informational needs mention stakeholders, inject them
+    if (params.task.informational_needs.toLowerCase().includes('stakeholder') && params.project.stakeholders) {
+      sectionPrompt += `**Key Stakeholders:**\n`
+      params.project.stakeholders.forEach(sh => {
+        sectionPrompt += `- ${sh.name} (${sh.role}) - Influence: ${sh.influence_level}\n`
+      })
+    }
+
+    if (params.task.informational_needs.toLowerCase().includes('budget') && params.project.budget) {
+      sectionPrompt += `**Budget:** ${params.project.budget}\n`
+    }
+
+    // Always inject GKG context if available as it represents the semantic truth
+    if (params.gkgContext?.markdown) {
+      sectionPrompt += `\n**Semantic Graph Context:**\n${params.gkgContext.markdown}\n`
+    }
+
+    // Inject custom context materials
+    if (params.contextItems && params.contextItems.length > 0) {
+      sectionPrompt += `\n**Reference Materials:**\n`
+      // Limit to top 3 to avoid context explosion on smaller models
+      params.contextItems.slice(0, 3).forEach(item => {
+        sectionPrompt += `[${item.title}]: ${item.content.substring(0, 1000)}...\n`
+      })
+    }
+
+    sectionPrompt += `\n---\n\n`
+    sectionPrompt += `Output ONLY the Markdown for your assigned section. Start your output exactly with: ${params.task.heading}`
+
+    const aiResponse = await aiService.generateWithFallback({
+      prompt: sectionPrompt,
+      provider: params.provider,
+      model: params.model,
+      temperature: params.temperature || 0.5, // Slightly lower temperature for drafting facts
+      traceName: 'agentic-doc-gen-draft'
+    }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
+
+    return {
+      order: params.order,
+      markdown: aiResponse.content,
+      tokensUsed: aiResponse.usage?.total_tokens || 0
+    }
+  }
+
+  private async fetchContextItems(projectId: string) {
+    try {
+      const contextItemsResult = await pool.query(
+        `SELECT id, type, title, content, source_url, integration_type, integration_page_id
+         FROM project_context_items
+         WHERE project_id = $1 AND is_active = true
+         ORDER BY priority DESC, created_at ASC`,
+        [projectId]
+      )
+      return contextItemsResult.rows
+    } catch (e) {
+      return []
     }
   }
 
@@ -233,180 +399,6 @@ class DocumentGenerationService {
     }
   }
 
-  private async buildEnrichedPrompt(params: {
-    userPrompt: string
-    project: ProjectContext
-    template: TemplateContext | null
-    projectId: string
-    userId: string
-    gkgContext?: { markdown: string; unitsCount: number; documentsCount: number; entityTypes: string[] }
-  }): Promise<string> {
-    const { userPrompt, project, template, projectId, userId, gkgContext } = params
-
-    let prompt = ""
-
-    // 1. System instructions for framework compliance
-    prompt += `You are an expert business analyst and technical writer specializing in ${project.framework} framework.\n\n`
-    prompt += `Generate a professional, well-structured document in Markdown format.\n\n`
-
-    // 2. Project context
-    prompt += `## Project Context\n\n`
-    prompt += `**Project Name:** ${project.name}\n`
-    prompt += `**Framework:** ${project.framework}\n`
-    if (project.description) {
-      prompt += `**Description:** ${project.description}\n`
-    }
-    if (project.status) {
-      prompt += `**Status:** ${project.status}\n`
-    }
-    prompt += `\n`
-
-    // 3. Stakeholders context (if available)
-    if (project.stakeholders && project.stakeholders.length > 0) {
-      prompt += `## Key Stakeholders\n\n`
-      project.stakeholders.forEach(sh => {
-        prompt += `- **${sh.name}** (${sh.role}) - Interest: ${sh.interest_level}, Influence: ${sh.influence_level}\n`
-      })
-      prompt += `\n`
-    }
-
-    // 4. Additional Project Context (Reference Materials)
-    try {
-      const contextItemsResult = await pool.query(
-        `SELECT id, type, title, content, source_url, integration_type, integration_page_id
-         FROM project_context_items
-         WHERE project_id = $1 AND is_active = true
-         ORDER BY priority DESC, created_at ASC`,
-        [projectId]
-      )
-
-      if (contextItemsResult.rows.length > 0) {
-        prompt += `## Additional Project Context (Reference Materials)\n\n`
-        prompt += `The following reference materials provide additional context for this project:\n\n`
-
-        // Group by type
-        const itemsByType: Record<string, typeof contextItemsResult.rows> = {}
-        contextItemsResult.rows.forEach((item) => {
-          if (!itemsByType[item.type]) {
-            itemsByType[item.type] = []
-          }
-          itemsByType[item.type].push(item)
-        })
-
-        // Custom text (highest priority)
-        if (itemsByType['custom_text']) {
-          prompt += `### Custom Context\n\n`
-          itemsByType['custom_text'].forEach((item) => {
-            prompt += `**${item.title}:**\n${item.content}\n\n`
-          })
-        }
-
-        // Integration pages
-        if (itemsByType['jira_page'] || itemsByType['confluence_page']) {
-          prompt += `### Integration Sources\n\n`
-          ;[...(itemsByType['jira_page'] || []), ...(itemsByType['confluence_page'] || [])].forEach((item) => {
-            const source = item.integration_type === 'jira' ? 'Jira' : 'Confluence'
-            prompt += `**${source} - ${item.title}:**\n${item.content.substring(0, 2000)}${item.content.length > 2000 ? '...' : ''}\n\n`
-          })
-        }
-
-        // URLs
-        if (itemsByType['url']) {
-          prompt += `### External Sources\n\n`
-          itemsByType['url'].forEach((item) => {
-            prompt += `**URL: ${item.source_url}**\n${item.content.substring(0, 2000)}${item.content.length > 2000 ? '...' : ''}\n\n`
-          })
-        }
-
-        // Reference documents
-        if (itemsByType['reference_document']) {
-          prompt += `### Reference Documents\n\n`
-          itemsByType['reference_document'].forEach((item) => {
-            prompt += `**Reference: ${item.title}**\n${item.content.substring(0, 2000)}${item.content.length > 2000 ? '...' : ''}\n\n`
-          })
-        }
-
-        prompt += `\n`
-
-        // Log usage for all context items used
-        const contextItemIds = contextItemsResult.rows.map((r) => r.id)
-        for (const itemId of contextItemIds) {
-          try {
-            await pool.query(
-              `INSERT INTO project_context_usage_log (
-                project_id, context_item_id, usage_type, usage_timestamp, metadata
-              ) VALUES ($1, $2, $3, NOW(), $4)`,
-              [
-                projectId,
-                itemId,
-                'document_generation',
-                JSON.stringify({ logged_by: userId }),
-              ]
-            )
-          } catch (logError: any) {
-            // Don't fail document generation if logging fails
-            logger.warn('Failed to log context item usage', {
-              itemId,
-              error: logError.message,
-            })
-          }
-        }
-      }
-    } catch (error: any) {
-      // Don't fail document generation if context items can't be fetched
-      logger.warn('Failed to fetch project context items', {
-        projectId,
-        error: error.message,
-      })
-    }
-
-    // 4. Template structure guidance (if provided)
-    if (template) {
-      prompt += `## Template: ${template.name}\n\n`
-      
-      if (template.system_prompt) {
-        prompt += `${template.system_prompt}\n\n`
-      }
-
-      if (template.template_paragraphs && Array.isArray(template.template_paragraphs)) {
-        prompt += `### Required Sections:\n\n`
-        const sortedParagraphs = template.template_paragraphs.sort((a, b) => a.order - b.order)
-        sortedParagraphs.forEach((para) => {
-          prompt += `${para.order}. **${para.section_name}** (${para.section_type}${para.required ? ', required' : ', optional'})\n`
-          if (para.description) {
-            prompt += `   ${para.description}\n`
-          }
-          if (para.prompt_guidance) {
-            prompt += `   Guidance: ${para.prompt_guidance}\n`
-          }
-        })
-        prompt += `\n`
-      }
-    }
-
-    // 5. GKG (Governance Knowledge Graph) context when template uses semantic model
-    if (gkgContext?.markdown?.trim()) {
-      prompt += gkgContext.markdown.trim()
-      prompt += `\n\n`
-    }
-
-    // 6. Output format requirements
-    prompt += `## Output Requirements\n\n`
-    prompt += `- Format: Markdown only\n`
-    prompt += `- Use proper headings (# ## ###)\n`
-    prompt += `- Include tables where appropriate\n`
-    prompt += `- Use bullet points and numbered lists\n`
-    prompt += `- Include code blocks if relevant\n`
-    prompt += `- Be professional and concise\n\n`
-
-    // 7. User's specific instructions
-    prompt += `## User Request\n\n`
-    prompt += userPrompt
-    prompt += `\n\n---\n\n`
-    prompt += `Generate the document now. Output only the Markdown content, no explanations.`
-
-    return prompt
-  }
 
   private validateAndCleanMarkdown(content: string): string {
     if (!content || typeof content !== 'string') {
@@ -417,15 +409,25 @@ class DocumentGenerationService {
     // Basic cleanup
     let cleaned = content.trim()
 
-    // Remove any non-Markdown wrapper text if AI added explanations
+    // Remove common code block wrappers added by AI (e.g., ```markdown ... ```)
+    const codeBlockRegex = /^```(?:markdown|md)?\n([\s\S]*?)\n```$/i;
+    const match = cleaned.match(codeBlockRegex);
+    if (match) {
+      cleaned = match[1].trim();
+    }
+
+    // Remove any non-Markdown wrapper text if AI added explanations at the start
     const mdStart = cleaned.indexOf('#')
-    if (mdStart > 50) {
-      // If there's a lot of text before the first heading, try to remove it
-      cleaned = cleaned.substring(mdStart)
+    if (mdStart > 0 && mdStart < 100) { // If heading starts soon but not at 0
+      // Check if there's only whitespace/noise before it
+      const lead = cleaned.substring(0, mdStart).trim();
+      if (lead.length < 50) {
+        cleaned = cleaned.substring(mdStart);
+      }
     }
 
     // Ensure it starts with a heading
-    if (!cleaned.startsWith('#')) {
+    if (!cleaned.startsWith('#') && cleaned.length > 0) {
       cleaned = `# Document\n\n${cleaned}`
     }
 

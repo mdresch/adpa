@@ -141,7 +141,7 @@ router.get("/", authenticateToken, async (req, res) => {
       // If company_id column doesn't exist on projects table, rebuild query without it
       if (err.message?.includes('column "company_id"') || err.code === '42703') {
         log.warn('company_id column not found on projects table, using owner_id and team_members filtering')
-        
+
         // Rebuild query without company_id filter
         query = `
           SELECT p.*, u.name as owner_name, u.email as owner_email,
@@ -155,43 +155,43 @@ router.get("/", authenticateToken, async (req, res) => {
         `
         params.length = 0
         paramCount = 0
-        
+
         // Filter by owner_id or team_members for non-admins
         if (userRole !== "admin") {
           paramCount++
           query += ` AND (p.owner_id = $${paramCount} OR p.team_members ? $${paramCount}::text)`
           params.push(userId)
         }
-        
+
         // Re-apply other filters
         if (status) {
           paramCount++
           query += ` AND p.status = $${paramCount}`
           params.push(status)
         }
-        
+
         if (framework) {
           paramCount++
           query += ` AND p.framework = $${paramCount}`
           params.push(framework)
         }
-        
+
         if (search) {
           paramCount++
           query += ` AND (p.name ILIKE $${paramCount} OR p.description ILIKE $${paramCount})`
           params.push(`%${search}%`)
         }
-        
+
         query += ` GROUP BY p.id, u.name, u.email ORDER BY last_activity DESC NULLS LAST, p.name ASC, p.id ASC`
-        
+
         paramCount++
         query += ` LIMIT $${paramCount}`
         params.push(Number(limit))
-        
+
         paramCount++
         query += ` OFFSET $${paramCount}`
         params.push(offset)
-        
+
         result = await pool.query(query, params)
       } else {
         throw err
@@ -242,39 +242,39 @@ router.get("/", authenticateToken, async (req, res) => {
         countQuery = "SELECT COUNT(*) FROM projects p WHERE 1=1"
         countParams.length = 0
         countParamCount = 0
-        
+
         // Filter by owner_id or team_members for non-admins
         if (userRole !== "admin") {
           countParamCount++
           countQuery += ` AND (p.owner_id = $${countParamCount} OR p.team_members ? $${countParamCount}::text)`
           countParams.push(userId)
         }
-        
+
         // Re-apply other filters
         if (status) {
           countParamCount++
           countQuery += ` AND p.status = $${countParamCount}`
           countParams.push(status)
         }
-        
+
         if (framework) {
           countParamCount++
           countQuery += ` AND p.framework = $${countParamCount}`
           countParams.push(framework)
         }
-        
+
         if (search) {
           countParamCount++
           countQuery += ` AND (p.name ILIKE $${countParamCount} OR p.description ILIKE $${countParamCount})`
           countParams.push(`%${search}%`)
         }
-        
+
         countResult = await pool.query(countQuery, countParams)
       } else {
         throw err
       }
     }
-    
+
     const total = Number.parseInt(countResult.rows[0].count)
 
     res.json({
@@ -346,7 +346,7 @@ router.get("/:projectId/risks", authenticateToken, async (req, res) => {
 
     // Build SELECT fields dynamically - only include columns that exist
     const selectFields = ['r.id', 'r.title']
-    
+
     if (availableColumns.has('description')) selectFields.push('r.description')
     if (availableColumns.has('category')) selectFields.push('r.category')
     if (availableColumns.has('probability')) selectFields.push('r.probability')
@@ -368,13 +368,13 @@ router.get("/:projectId/risks", authenticateToken, async (req, res) => {
         selectFields.push("'low' as severity")
       }
     }
-    
+
     if (availableColumns.has('status')) {
       selectFields.push("COALESCE(r.status, 'identified') as status")
     } else {
       selectFields.push("'identified' as status")
     }
-    
+
     if (availableColumns.has('mitigation_strategy')) selectFields.push('r.mitigation_strategy')
     if (availableColumns.has('contingency_plan')) selectFields.push('r.contingency_plan')
     if (availableColumns.has('owner')) selectFields.push('r.owner')
@@ -422,13 +422,13 @@ router.get("/:projectId/risks", authenticateToken, async (req, res) => {
     } else {
       selectFields.push('NULL as created_at')
     }
-    
+
     if (availableColumns.has('updated_at')) {
       selectFields.push('r.updated_at')
     } else {
       selectFields.push('NULL as updated_at')
     }
-    
+
     // Add document title if join is possible
     if (hasExtractedFromDoc || hasSourceDoc) {
       selectFields.push('d.title as source_document_title')
@@ -470,7 +470,7 @@ router.get("/:projectId/risks", authenticateToken, async (req, res) => {
     // Build ORDER BY clause - handle severity if it exists or was calculated
     const createdAtField = availableColumns.has('created_at') ? 'r.created_at' : 'r.id'
     let orderByClause = ''
-    
+
     if (availableColumns.has('severity')) {
       orderByClause = `
         ORDER BY 
@@ -551,7 +551,7 @@ router.get("/:projectId/risks", authenticateToken, async (req, res) => {
       code: error?.code,
       detail: error?.detail
     })
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
       error: "Internal server error",
       message: error?.message || "Unknown error",
@@ -821,10 +821,10 @@ router.put("/:projectId/risks/:riskId", authenticateToken, async (req, res) => {
     if (riskCheck.rows.length === 0) {
       return res.status(404).json({ error: "Risk not found" })
     }
-    
+
     const currentRisk = riskCheck.rows[0]
     const currentRiskLevel = currentRisk.risk_level
-    
+
     // If risk_level is not being updated, ensure current value will be normalized by trigger
     if (!updates.hasOwnProperty('risk_level') && currentRiskLevel) {
       const validLevels = ['project', 'program', 'portfolio', 'systemic']
@@ -842,12 +842,12 @@ router.put("/:projectId/risks/:riskId", authenticateToken, async (req, res) => {
       )
       const prob = updates.probability || currentRisk.rows[0].probability
       const imp = updates.impact || currentRisk.rows[0].impact
-      
+
       const probScore = prob === 'very_high' ? 90 : prob === 'high' ? 70 : prob === 'medium' ? 50 : prob === 'low' ? 30 : 10
       const impactScore = imp === 'very_high' ? 5 : imp === 'high' ? 4 : imp === 'medium' ? 3 : imp === 'low' ? 2 : 1
       const score = (probScore / 100) * impactScore
       const calculatedSeverity = score >= 4 ? 'critical' : score >= 3 ? 'high' : score >= 2 ? 'medium' : 'low'
-      
+
       // Ensure severity is never set to a risk_level value
       if (!['critical', 'high', 'medium', 'low'].includes(calculatedSeverity)) {
         log.error(`CRITICAL: Calculated severity "${calculatedSeverity}" is invalid, defaulting to 'medium'`)
@@ -856,7 +856,7 @@ router.put("/:projectId/risks/:riskId", authenticateToken, async (req, res) => {
         updates.severity = calculatedSeverity
       }
     }
-    
+
     // CRITICAL: Prevent severity from being set to risk_level values
     // If frontend accidentally sends severity with a risk_level value, remove it
     if (updates.hasOwnProperty('severity')) {
@@ -897,16 +897,16 @@ router.put("/:projectId/risks/:riskId", authenticateToken, async (req, res) => {
       'title', 'description', 'category', 'probability', 'impact',
       'status', 'mitigation_strategy', 'contingency_plan', 'owner'
     ]
-    
+
     // Optional fields that may not exist
     const optionalFields = ['severity']
-    
+
     // Check each new field individually
     const newFields: string[] = []
     if (availableColumns.has('risk_origin')) newFields.push('risk_origin')
     if (availableColumns.has('risk_level')) newFields.push('risk_level')
     if (availableColumns.has('is_curated')) newFields.push('is_curated')
-    
+
     // Build allowed fields list - only include optional fields if they exist
     const allowedFields = [...baseFields, ...newFields]
     if (availableColumns.has('severity')) {
@@ -917,13 +917,13 @@ router.put("/:projectId/risks/:riskId", authenticateToken, async (req, res) => {
     for (const field of allowedFields) {
       if (updates.hasOwnProperty(field)) {
         let fieldValue = updates[field]
-        
+
         // Validate severity - ensure it's never set to a risk_level value
         if (field === 'severity' && fieldValue !== undefined && fieldValue !== null && fieldValue !== '') {
           const normalizedSeverity = String(fieldValue).trim().toLowerCase()
           const validSeverities = ['critical', 'high', 'medium', 'low']
           const riskLevelValues = ['project', 'program', 'portfolio', 'systemic']
-          
+
           if (riskLevelValues.includes(normalizedSeverity)) {
             log.error(`CRITICAL: severity cannot be set to risk_level value "${fieldValue}". This should be risk_level, not severity.`, {
               fieldValue,
@@ -933,7 +933,7 @@ router.put("/:projectId/risks/:riskId", authenticateToken, async (req, res) => {
             skippedFields.push(field)
             continue
           }
-          
+
           if (!validSeverities.includes(normalizedSeverity)) {
             log.warn(`Invalid severity value: "${fieldValue}" (normalized: "${normalizedSeverity}"), skipping update`)
             skippedFields.push(field)
@@ -942,7 +942,7 @@ router.put("/:projectId/risks/:riskId", authenticateToken, async (req, res) => {
           // Use normalized value
           fieldValue = normalizedSeverity
         }
-        
+
         // Validate and normalize risk_level if being updated
         if (field === 'risk_level' && fieldValue !== undefined && fieldValue !== null && fieldValue !== '') {
           // Strict normalization: remove all whitespace, convert to lowercase, remove any non-alphabetic characters
@@ -950,7 +950,7 @@ router.put("/:projectId/risks/:riskId", authenticateToken, async (req, res) => {
             .replace(/\s+/g, '') // Remove all whitespace
             .replace(/[^a-z]/gi, '') // Remove non-alphabetic characters
             .toLowerCase()
-          
+
           const validLevels = ['project', 'program', 'portfolio', 'systemic']
           if (!validLevels.includes(normalizedValue)) {
             log.warn(`Invalid risk_level value: "${fieldValue}" (normalized: "${normalizedValue}"), skipping update`, {
@@ -965,19 +965,19 @@ router.put("/:projectId/risks/:riskId", authenticateToken, async (req, res) => {
           fieldValue = normalizedValue
           log.debug(`Normalized risk_level: "${String(fieldValue)}" -> "${normalizedValue}"`)
         }
-        
+
         // Skip empty strings for optional fields to let trigger handle defaults
         if (newFields.includes(field) && (fieldValue === '' || fieldValue === null || fieldValue === undefined)) {
           log.debug(`Skipping empty/null value for ${field}, letting trigger set default`)
           skippedFields.push(field)
           continue
         }
-        
+
         // Check if column exists - baseFields are assumed to exist, but verify optional fields
-        const fieldExists = baseFields.includes(field) || 
-                           newFields.includes(field) || 
-                           (optionalFields.includes(field) && availableColumns.has(field))
-        
+        const fieldExists = baseFields.includes(field) ||
+          newFields.includes(field) ||
+          (optionalFields.includes(field) && availableColumns.has(field))
+
         if (fieldExists) {
           // Final normalization for risk_level - ensure it's exactly one of the valid values
           if (field === 'risk_level' && fieldValue) {
@@ -986,7 +986,7 @@ router.put("/:projectId/risks/:riskId", authenticateToken, async (req, res) => {
               .replace(/\s+/g, '') // Remove all whitespace
               .replace(/[^a-z]/gi, '') // Remove non-alphabetic characters
               .toLowerCase()
-            
+
             const validLevels = ['project', 'program', 'portfolio', 'systemic']
             if (validLevels.includes(cleaned)) {
               fieldValue = cleaned
@@ -1012,13 +1012,13 @@ router.put("/:projectId/risks/:riskId", authenticateToken, async (req, res) => {
     }
 
     if (updateFields.length === 0) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
         error: "No valid fields to update",
         skippedFields: skippedFields.length > 0 ? skippedFields : undefined
       })
     }
-    
+
     // Warn if important fields were skipped
     if (skippedFields.length > 0) {
       log.warn(`Some fields could not be updated (columns don't exist): ${skippedFields.join(', ')}`)
@@ -1038,19 +1038,19 @@ router.put("/:projectId/risks/:riskId", authenticateToken, async (req, res) => {
         log.debug(`Normalizing existing risk_level: "${currentLevel}" -> "${normalized}"`)
       }
     }
-    
+
     // Always update updated_at if column exists
     if (availableColumns.has('updated_at')) {
       updateFields.push(`updated_at = NOW()`)
     }
-    
+
     // Add last_updated_by if column exists and we're updating
     if (availableColumns.has('last_updated_by')) {
       updateFields.push(`last_updated_by = $${paramCount}`)
       updateValues.push(userId)
       paramCount++
     }
-    
+
     updateValues.push(riskId, projectId)
 
     const query = `
@@ -1088,12 +1088,12 @@ router.put("/:projectId/risks/:riskId", authenticateToken, async (req, res) => {
       success: true,
       data: result.rows[0]
     }
-    
+
     // Include warning if fields were skipped
     if (skippedFields.length > 0) {
       response.warning = `Some fields could not be updated (columns don't exist): ${skippedFields.join(', ')}. Please run migration 340 to enable these features.`
     }
-    
+
     res.json(response)
   } catch (error: any) {
     log.error("Update project risk error:", {
@@ -1102,7 +1102,7 @@ router.put("/:projectId/risks/:riskId", authenticateToken, async (req, res) => {
       code: error?.code,
       detail: error?.detail
     })
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
       error: "Internal server error",
       message: error?.message || "Unknown error",
@@ -1262,7 +1262,7 @@ const upload = multer({
     ]
     const allowedExtensions = ['.pdf', '.docx', '.md', '.markdown', '.html', '.htm', '.txt']
     const fileExtension = '.' + file.originalname.split('.').pop()?.toLowerCase()
-    
+
     if (
       allowedMimes.includes(file.mimetype) ||
       allowedExtensions.includes(fileExtension)
@@ -1434,7 +1434,7 @@ router.post("/:projectId/context-items", authenticateToken, upload.single('file'
           fetchMethod: 'backend_fetch',
         }
       }
-      
+
       if (!finalContent || finalContent.trim().length === 0) {
         return res.status(400).json({ error: "URL content is empty or invalid" })
       }
@@ -1938,9 +1938,12 @@ router.get("/:id", authenticateToken, async (req, res) => {
         // Super admin has unrestricted access
         result = await pool.query(
           `
-          SELECT p.*, u.name as owner_name, u.email as owner_email
+          SELECT p.*, u.name as owner_name, u.email as owner_email,
+                 pr.name as program_name, pg.portfolio_name
           FROM projects p
           LEFT JOIN users u ON p.owner_id = u.id
+          LEFT JOIN programs pr ON p.program_id = pr.id
+          LEFT JOIN portfolio_governance pg ON pr.portfolio_id = pg.id
           WHERE p.id = $1
           `,
           [id],
@@ -1948,9 +1951,12 @@ router.get("/:id", authenticateToken, async (req, res) => {
       } else if (userCompanyId) {
         result = await pool.query(
           `
-          SELECT p.*, u.name as owner_name, u.email as owner_email
+          SELECT p.*, u.name as owner_name, u.email as owner_email,
+                 pr.name as program_name, pg.portfolio_name
           FROM projects p
           LEFT JOIN users u ON p.owner_id = u.id
+          LEFT JOIN programs pr ON p.program_id = pr.id
+          LEFT JOIN portfolio_governance pg ON pr.portfolio_id = pg.id
           WHERE p.id = $1 AND p.company_id = $2
           `,
           [id, userCompanyId],
@@ -1959,9 +1965,12 @@ router.get("/:id", authenticateToken, async (req, res) => {
         // If user has no company_id, check by owner_id or team_members
         result = await pool.query(
           `
-          SELECT p.*, u.name as owner_name, u.email as owner_email
+          SELECT p.*, u.name as owner_name, u.email as owner_email,
+                 pr.name as program_name, pg.portfolio_name
           FROM projects p
           LEFT JOIN users u ON p.owner_id = u.id
+          LEFT JOIN programs pr ON p.program_id = pr.id
+          LEFT JOIN portfolio_governance pg ON pr.portfolio_id = pg.id
           WHERE p.id = $1 AND (p.owner_id = $2 OR p.team_members ? $2::text)
           `,
           [id, userId],
@@ -1974,9 +1983,12 @@ router.get("/:id", authenticateToken, async (req, res) => {
         if (!isSuperAdmin) {
           result = await pool.query(
             `
-            SELECT p.*, u.name as owner_name, u.email as owner_email
+            SELECT p.*, u.name as owner_name, u.email as owner_email,
+                   pr.name as program_name, pg.portfolio_name
             FROM projects p
             LEFT JOIN users u ON p.owner_id = u.id
+            LEFT JOIN programs pr ON p.program_id = pr.id
+            LEFT JOIN portfolio_governance pg ON pr.portfolio_id = pg.id
             WHERE p.id = $1 AND (p.owner_id = $2 OR p.team_members ? $2::text)
             `,
             [id, userId],
@@ -1984,9 +1996,12 @@ router.get("/:id", authenticateToken, async (req, res) => {
         } else {
           result = await pool.query(
             `
-            SELECT p.*, u.name as owner_name, u.email as owner_email
+            SELECT p.*, u.name as owner_name, u.email as owner_email,
+                   pr.name as program_name, pg.portfolio_name
             FROM projects p
             LEFT JOIN users u ON p.owner_id = u.id
+            LEFT JOIN programs pr ON p.program_id = pr.id
+            LEFT JOIN portfolio_governance pg ON pr.portfolio_id = pg.id
             WHERE p.id = $1
             `,
             [id],
@@ -2132,7 +2147,7 @@ router.post("/", authenticateToken, requirePermission("projects.create"), async 
       }
     }
 
-  log.info(`Project created: ${name} by ${req.user?.email}`)
+    log.info(`Project created: ${name} by ${req.user?.email}`)
 
     // Track project creation
     if (req.user?.id) {
@@ -2366,7 +2381,7 @@ router.delete("/:id", authenticateToken, requirePermission("projects.delete"), a
       return res.status(404).json({ error: "Project not found" })
     }
 
-  log.info(`Project deleted: ${id} by ${req.user?.email}`)
+    log.info(`Project deleted: ${id} by ${req.user?.email}`)
 
     res.json({ message: "Project deleted successfully" })
   } catch (error) {
@@ -2438,8 +2453,8 @@ router.post("/:projectId/documents", authenticateToken, async (req, res) => {
           [
             'project-data-extraction',
             'pending',
-            JSON.stringify({ 
-              projectId, 
+            JSON.stringify({
+              projectId,
               documentIds: [documentId], // Extract only from this newly created document
               autoTriggered: true,
               sourceDocumentId: documentId,
@@ -2507,7 +2522,7 @@ router.post("/:projectId/documents", authenticateToken, async (req, res) => {
               // Use queue service for async processing
               const { getQueueService } = await import('../services/queueService')
               const auditJobId = uuidv4()
-              
+
               await getQueueService().addJob('quality-audit', {
                 jobId: auditJobId,
                 documentId,
@@ -2569,124 +2584,124 @@ router.post("/:projectId/documents", authenticateToken, async (req, res) => {
             if (settings.confluence_enabled === true && settings.confluence_auto_publish === true) {
               try {
                 log.info('🔗 [AUTO-INTEGRATION] Auto-publishing document to Confluence', {
-                documentId,
-                documentName: title,
-                projectId
-              })
-
-              // Get latest active Confluence integration
-              const integrationResult = await pool.query(
-                `SELECT * FROM integrations WHERE type = 'confluence' AND is_active = true ORDER BY updated_at DESC LIMIT 1`
-              )
-
-              if (integrationResult.rows.length > 0) {
-                const integration = integrationResult.rows[0]
-                
-                // Parse configuration (JSONB might be string or object)
-                const config = typeof integration.configuration === 'string' 
-                  ? JSON.parse(integration.configuration) 
-                  : integration.configuration || {}
-                
-                // Decrypt credentials
-                let credentials: any = {}
-                try {
-                  if (integration.credentials_encrypted) {
-                    const decryptedData = Buffer.from(integration.credentials_encrypted, "base64").toString("utf-8")
-                    credentials = JSON.parse(decryptedData)
-                  }
-                } catch (e) {
-                  log.warn('Failed to decrypt Confluence credentials for auto-publish', e)
-                  throw new Error('Invalid credentials')
-                }
-
-                const { ConfluenceIntegration } = await import('../integrations/confluence')
-                const confluenceIntegration = new ConfluenceIntegration(
-                  {
-                    baseUrl: config.base_url || config.baseUrl || credentials.baseUrl,
-                    username: credentials.username,
-                    apiToken: credentials.api_token,
-                    cloudId: config.cloud_id || config.cloudId
-                  },
-                  integration.id
-                )
-
-                const projectSettings = {
-                  confluence_enabled: settings.confluence_enabled,
-                  confluence_space_key_override: settings.confluence_space_key_override,
-                  confluence_parent_page_id_override: settings.confluence_parent_page_id_override
-                }
-
-                confluenceUrl = await confluenceIntegration.uploadDocument({
-                  id: document.id,
-                  title: document.title || document.name,
-                  content: document.content,
-                  project_id: projectId,
-                  framework: document.framework,
-                  status: document.status,
-                }, projectSettings)
-
-                // Update document with Confluence URL
-                await pool.query(
-                  `UPDATE documents SET confluence_page_url = $1 WHERE id = $2`,
-                  [confluenceUrl, documentId]
-                )
-
-                log.info('✅ [AUTO-INTEGRATION] Document auto-published to Confluence', {
                   documentId,
-                  confluenceUrl
+                  documentName: title,
+                  projectId
                 })
-              } else {
-                log.warn('⚠️ [AUTO-INTEGRATION] No active Confluence integration found for auto-publish')
-              }
-            } catch (confluenceError: any) {
-              // Don't fail document creation if auto-publish fails
-              log.error('❌ [AUTO-INTEGRATION] Failed to auto-publish to Confluence', {
-                documentId,
-                error: confluenceError.message,
-                stack: confluenceError.stack
-              })
-            }
-              }
 
-              // Auto-create Jira issue if enabled
-              if (settings.jira_enabled === true && settings.jira_auto_create === true) {
-                try {
-                  log.info('🔗 [AUTO-INTEGRATION] Auto-creating Jira issue for document', {
-                    documentId,
-                    documentName: title,
-                    projectId
-                  })
+                // Get latest active Confluence integration
+                const integrationResult = await pool.query(
+                  `SELECT * FROM integrations WHERE type = 'confluence' AND is_active = true ORDER BY updated_at DESC LIMIT 1`
+                )
 
-                  const { jiraLinkageService } = await import('../services/jiraLinkageService')
-                  const jiraResult = await jiraLinkageService.linkDocumentToJira(
-                    documentId,
-                    title,
-                    projectId,
-                    confluenceUrl || undefined,
-                    `Document: ${title}\n\nProject: ${projectId}\nDocument ID: ${documentId}`,
-                    settings.jira_issue_type_override || undefined,
-                    settings.jira_priority_override || undefined
+                if (integrationResult.rows.length > 0) {
+                  const integration = integrationResult.rows[0]
+
+                  // Parse configuration (JSONB might be string or object)
+                  const config = typeof integration.configuration === 'string'
+                    ? JSON.parse(integration.configuration)
+                    : integration.configuration || {}
+
+                  // Decrypt credentials
+                  let credentials: any = {}
+                  try {
+                    if (integration.credentials_encrypted) {
+                      const decryptedData = Buffer.from(integration.credentials_encrypted, "base64").toString("utf-8")
+                      credentials = JSON.parse(decryptedData)
+                    }
+                  } catch (e) {
+                    log.warn('Failed to decrypt Confluence credentials for auto-publish', e)
+                    throw new Error('Invalid credentials')
+                  }
+
+                  const { ConfluenceIntegration } = await import('../integrations/confluence')
+                  const confluenceIntegration = new ConfluenceIntegration(
+                    {
+                      baseUrl: config.base_url || config.baseUrl || credentials.baseUrl,
+                      username: credentials.username,
+                      apiToken: credentials.api_token,
+                      cloudId: config.cloud_id || config.cloudId
+                    },
+                    integration.id
                   )
 
-                  if (jiraResult) {
-                    log.info('✅ [AUTO-INTEGRATION] Jira issue auto-created for document', {
-                      documentId,
-                      issueKey: jiraResult.issueKey,
-                      issueUrl: jiraResult.issueUrl,
-                      created: jiraResult.created
-                    })
-                  } else {
-                    log.warn('⚠️ [AUTO-INTEGRATION] Jira linkage service returned null (may be disabled or misconfigured)')
+                  const projectSettings = {
+                    confluence_enabled: settings.confluence_enabled,
+                    confluence_space_key_override: settings.confluence_space_key_override,
+                    confluence_parent_page_id_override: settings.confluence_parent_page_id_override
                   }
-                } catch (jiraError: any) {
-                  // Don't fail document creation if auto-create fails
-                  log.error('❌ [AUTO-INTEGRATION] Failed to auto-create Jira issue', {
+
+                  confluenceUrl = await confluenceIntegration.uploadDocument({
+                    id: document.id,
+                    title: document.title || document.name,
+                    content: document.content,
+                    project_id: projectId,
+                    framework: document.framework,
+                    status: document.status,
+                  }, projectSettings)
+
+                  // Update document with Confluence URL
+                  await pool.query(
+                    `UPDATE documents SET confluence_page_url = $1 WHERE id = $2`,
+                    [confluenceUrl, documentId]
+                  )
+
+                  log.info('✅ [AUTO-INTEGRATION] Document auto-published to Confluence', {
                     documentId,
-                    error: jiraError.message,
-                    stack: jiraError.stack
+                    confluenceUrl
                   })
+                } else {
+                  log.warn('⚠️ [AUTO-INTEGRATION] No active Confluence integration found for auto-publish')
                 }
+              } catch (confluenceError: any) {
+                // Don't fail document creation if auto-publish fails
+                log.error('❌ [AUTO-INTEGRATION] Failed to auto-publish to Confluence', {
+                  documentId,
+                  error: confluenceError.message,
+                  stack: confluenceError.stack
+                })
               }
+            }
+
+            // Auto-create Jira issue if enabled
+            if (settings.jira_enabled === true && settings.jira_auto_create === true) {
+              try {
+                log.info('🔗 [AUTO-INTEGRATION] Auto-creating Jira issue for document', {
+                  documentId,
+                  documentName: title,
+                  projectId
+                })
+
+                const { jiraLinkageService } = await import('../services/jiraLinkageService')
+                const jiraResult = await jiraLinkageService.linkDocumentToJira(
+                  documentId,
+                  title,
+                  projectId,
+                  confluenceUrl || undefined,
+                  `Document: ${title}\n\nProject: ${projectId}\nDocument ID: ${documentId}`,
+                  settings.jira_issue_type_override || undefined,
+                  settings.jira_priority_override || undefined
+                )
+
+                if (jiraResult) {
+                  log.info('✅ [AUTO-INTEGRATION] Jira issue auto-created for document', {
+                    documentId,
+                    issueKey: jiraResult.issueKey,
+                    issueUrl: jiraResult.issueUrl,
+                    created: jiraResult.created
+                  })
+                } else {
+                  log.warn('⚠️ [AUTO-INTEGRATION] Jira linkage service returned null (may be disabled or misconfigured)')
+                }
+              } catch (jiraError: any) {
+                // Don't fail document creation if auto-create fails
+                log.error('❌ [AUTO-INTEGRATION] Failed to auto-create Jira issue', {
+                  documentId,
+                  error: jiraError.message,
+                  stack: jiraError.stack
+                })
+              }
+            }
           } else {
             log.debug('ℹ️ [AUTO-INTEGRATION] No project integration settings found, skipping auto-integration')
           }
@@ -2700,15 +2715,15 @@ router.post("/:projectId/documents", authenticateToken, async (req, res) => {
           })
         }
       })().catch((err: any) => {
-          // Catch any unhandled promise rejections
-          log.error('❌ [AUTO-INTEGRATION] Unhandled error in auto-integration', {
-            documentId,
-            projectId,
-            error: err?.message || 'Unknown error',
-            stack: err?.stack
-          })
+        // Catch any unhandled promise rejections
+        log.error('❌ [AUTO-INTEGRATION] Unhandled error in auto-integration', {
+          documentId,
+          projectId,
+          error: err?.message || 'Unknown error',
+          stack: err?.stack
         })
       })
+    })
 
     res.json(result.rows[0])
   } catch (error) {
@@ -2834,7 +2849,7 @@ router.get("/:projectId/documents/:documentId", authenticateToken, async (req, r
     }
 
     const document = result.rows[0]
-    
+
     // 🔍 DEBUG: Log what we got from database
     log.info('📊 [GET-PROJECT-DOC] Retrieved document:', {
       id: document.id,
@@ -2853,7 +2868,7 @@ router.get("/:projectId/documents/:documentId", authenticateToken, async (req, r
         document.metadata = {}
       }
     }
-    
+
     // Parse generation_metadata if it exists and is a string
     if (document.generation_metadata && typeof document.generation_metadata === 'string') {
       try {
@@ -2869,7 +2884,7 @@ router.get("/:projectId/documents/:documentId", authenticateToken, async (req, r
     } else {
       log.info('❌ [GET-PROJECT-DOC] No generation_metadata in database')
     }
-    
+
     // Parse template_metadata if it exists and is a string
     if (document.template_metadata && typeof document.template_metadata === 'string') {
       try {
@@ -2879,7 +2894,7 @@ router.get("/:projectId/documents/:documentId", authenticateToken, async (req, r
         document.template_metadata = null
       }
     }
-    
+
     // 🔍 DEBUG: Log what we're sending
     log.info('📤 [GET-PROJECT-DOC] Sending to frontend:', {
       id: document.id,
@@ -2960,7 +2975,7 @@ router.get("/:projectId/documents/:documentId/versions", authenticateToken, asyn
       WHERE id = $1 AND project_id = $2
     `
     const verifyResult = await pool.query(verifyQuery, [documentId, projectId])
-    
+
     if (verifyResult.rows.length === 0) {
       return res.status(404).json({ error: "Document not found" })
     }
@@ -3019,18 +3034,18 @@ router.put("/:projectId/documents/:documentId", authenticateToken, async (req, r
     }
 
     const currentDoc = docResult.rows[0]
-    
+
     // Calculate next versions (both integer and semantic)
     const currentVersionInt = parseInt(currentDoc.version) || 1
     const nextVersionInt = currentVersionInt + 1
-    
+
     // Parse semantic version (handles "1.0.0", "1", etc.)
     const currentSemantic = currentDoc.semantic_version || currentDoc.version?.toString() || '1.0.0'
     const semParts = currentSemantic.split('.')
     let major = parseInt(semParts[0]) || 1
     let minor = parseInt(semParts[1]) || 0
     let patch = parseInt(semParts[2]) || 0
-    
+
     // Increment patch for manual edits
     patch += 1
     const nextSemanticVersion = `${major}.${minor}.${patch}`
@@ -3057,7 +3072,7 @@ router.put("/:projectId/documents/:documentId", authenticateToken, async (req, r
         currentDoc.generation_metadata || null
       ]
     )
-    
+
     log.info(`Saved v${currentSemantic} to version history`)
 
     // 📝 STEP 2: Update the current document with new content and incremented versions
@@ -3119,7 +3134,7 @@ router.put("/:projectId/documents/:documentId", authenticateToken, async (req, r
     if (content) {
       try {
         const { qualityAuditService } = await import('../services/qualityAuditService')
-        
+
         log.info('[MANUAL-EDIT] Triggering quality audit after content modification', {
           documentId,
           documentName: updatedDoc.name,
@@ -3131,7 +3146,7 @@ router.put("/:projectId/documents/:documentId", authenticateToken, async (req, r
         // Enqueue quality audit job (async, non-blocking)
         const { getQueueService } = await import('../services/queueService')
         const auditJobId = require('uuid').v4()
-        
+
         getQueueService().addJob('quality-audit', {
           jobId: auditJobId,
           documentId,
@@ -3392,7 +3407,7 @@ router.post("/:id/upgrade-to-program", authenticateToken, requirePermission("pro
 
     // Check if project is already assigned to a program
     if (project.program_id) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: "Project is already assigned to a program",
         program_id: project.program_id
       })
@@ -3432,10 +3447,10 @@ router.post("/:id/upgrade-to-program", authenticateToken, requirePermission("pro
     // Link project to the new program
     await programService.assignProject(newProgram.id, projectId)
 
-    log.info(`Project upgraded to program`, { 
-      projectId, 
+    log.info(`Project upgraded to program`, {
+      projectId,
       programId: newProgram.id,
-      userId 
+      userId
     })
 
     res.json({
@@ -3450,14 +3465,14 @@ router.post("/:id/upgrade-to-program", authenticateToken, requirePermission("pro
     })
   } catch (error: any) {
     log.error("Failed to upgrade project to program:", error)
-    
+
     if (error.code === 'PROGRAM_NOT_FOUND' || error.message?.includes('not found')) {
       return res.status(404).json({ error: error.message || "Resource not found" })
     }
-    
-    res.status(500).json({ 
+
+    res.status(500).json({
       error: "Failed to upgrade project to program",
-      details: error.message 
+      details: error.message
     })
   }
 })

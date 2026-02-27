@@ -10,6 +10,14 @@ import { mistral } from '@ai-sdk/mistral'
 // import { azure } from '@ai-sdk/azure' // Package not installed
 import { logger } from '../utils/logger'
 import { pool } from '../database/connection'
+import { isTracingEnabled } from '../tracing'
+import { Langfuse } from 'langfuse'
+
+const langfuse = new Langfuse({
+  publicKey: process.env.LANGFUSE_PUBLIC_KEY,
+  secretKey: process.env.LANGFUSE_SECRET_KEY,
+  baseUrl: process.env.LANGFUSE_BASE_URL || 'https://cloud.langfuse.com'
+})
 
 export interface AIProvider {
   id: string
@@ -29,6 +37,11 @@ export interface AIGenerateRequest {
   temperature?: number
   max_tokens?: number
   messages?: Array<{ role: string; content: string }>
+  traceName?: string
+}
+
+export interface AIStructuredGenerateRequest extends AIGenerateRequest {
+  schema: any // Zod schema
 }
 
 export interface AIGenerateResponse {
@@ -127,12 +140,12 @@ class UnifiedAIService {
         return openai(config)
       case 'google':
         throw new Error('Google AI SDK not installed. Install @ai-sdk/google to use this provider.')
-        // return google(config)
+      // return google(config)
       case 'mistral':
         return mistral(config)
       case 'azure':
         throw new Error('Azure AI SDK not installed. Install @ai-sdk/azure to use this provider.')
-        // return azure(config)
+      // return azure(config)
       default:
         throw new Error(`Unsupported provider type: ${provider.type}`)
     }
@@ -158,6 +171,9 @@ class UnifiedAIService {
    * Generate content using AI SDK v5
    */
   async generate(request: AIGenerateRequest): Promise<AIGenerateResponse> {
+    let langfuseTrace: any = null
+    let langfuseGeneration: any = null
+
     try {
       const provider = this.providers.get(request.provider)
       if (!provider) {
@@ -175,7 +191,7 @@ class UnifiedAIService {
 
       // Prepare messages
       let messages: Array<{ role: string; content: string }> = []
-      
+
       if (request.messages) {
         messages = request.messages
       } else if (request.prompt) {
@@ -187,6 +203,25 @@ class UnifiedAIService {
       // Get default model if not specified
       const model = request.model || this.getDefaultModel(provider.type)
 
+      // Create Langfuse trace and generation
+      langfuseTrace = isTracingEnabled() ? langfuse.trace({
+        name: request.traceName || `unified-ai-generate-${provider.type}-entity`,
+        metadata: { provider: provider.name },
+        tags: [provider.type, model]
+      }) : null
+
+      if (langfuseTrace) {
+        langfuseGeneration = langfuseTrace.generation({
+          name: `${provider.type}-generation`,
+          model: model,
+          modelParameters: {
+            temperature: request.temperature,
+            maxTokens: request.max_tokens
+          },
+          input: messages
+        })
+      }
+
       // Generate content using AI SDK
       const response = await generateText({
         model: client(model),
@@ -196,6 +231,14 @@ class UnifiedAIService {
         })),
         maxOutputTokens: request.max_tokens || 8000,
         temperature: request.temperature || 0.7,
+        experimental_telemetry: {
+          isEnabled: isTracingEnabled(),
+          functionId: `unified-ai-generate-${provider.type}`,
+          metadata: {
+            provider: provider.name,
+            model: model
+          }
+        }
       })
 
       logger.info(`Generated content using AI provider: ${provider.name}`)
@@ -205,6 +248,18 @@ class UnifiedAIService {
         completionTokens,
         totalTokens,
       } = this.normalizeUsage(response.usage)
+
+      if (langfuseGeneration) {
+        langfuseGeneration.end({
+          output: response.text,
+          usage: {
+            promptTokens,
+            completionTokens,
+            totalTokens
+          }
+        })
+        await langfuse.flushAsync()
+      }
 
       return {
         content: response.text,
@@ -217,12 +272,133 @@ class UnifiedAIService {
         },
         metadata: {
           finishReason: response.finishReason,
-          model: response.model,
         }
       }
 
     } catch (error) {
       logger.error(`Failed to generate content with AI provider ${request.provider}:`, error)
+      if (langfuseGeneration) {
+        langfuseGeneration.end({
+          level: 'ERROR',
+          statusMessage: error instanceof Error ? error.message : String(error)
+        })
+        await langfuse.flushAsync()
+      }
+      throw error
+    }
+  }
+
+  /**
+   * Generate structured object using AI SDK v5
+   */
+  async generateStructuredObject(request: AIStructuredGenerateRequest): Promise<{ object: any; usage?: any }> {
+    let langfuseTrace: any = null
+    let langfuseGeneration: any = null
+
+    try {
+      const provider = this.providers.get(request.provider)
+      if (!provider) {
+        throw new Error(`Provider ${request.provider} not found`)
+      }
+
+      if (!provider.isActive) {
+        throw new Error(`Provider ${provider.name} is not active`)
+      }
+
+      const client = this.clients.get(request.provider)
+      if (!client) {
+        throw new Error(`Client for provider ${request.provider} not found`)
+      }
+
+      // Prepare messages
+      let messages: Array<{ role: string; content: string }> = []
+
+      if (request.messages) {
+        messages = request.messages
+      } else if (request.prompt) {
+        messages = [{ role: 'user', content: request.prompt }]
+      } else {
+        throw new Error('No prompt or messages provided')
+      }
+
+      // Get default model if not specified
+      const model = request.model || this.getDefaultModel(provider.type)
+
+      // Create Langfuse trace and generation
+      langfuseTrace = isTracingEnabled() ? langfuse.trace({
+        name: request.traceName || `unified-ai-generate-object-${provider.type}-entity`,
+        metadata: { provider: provider.name },
+        tags: [provider.type, model]
+      }) : null
+
+      if (langfuseTrace) {
+        langfuseGeneration = langfuseTrace.generation({
+          name: `${provider.type}-object-generation`,
+          model: model,
+          modelParameters: {
+            temperature: request.temperature,
+          },
+          input: messages
+        })
+      }
+
+      // Generate object using AI SDK
+      const response = await generateObject({
+        model: client(model),
+        schema: request.schema,
+        messages: messages.map(msg => ({
+          role: msg.role as 'user' | 'assistant' | 'system',
+          content: msg.content,
+        })),
+        temperature: request.temperature || 0.7,
+        experimental_telemetry: {
+          isEnabled: isTracingEnabled(),
+          functionId: `unified-ai-generate-object-${provider.type}`,
+          metadata: {
+            provider: provider.name,
+            model: model
+          }
+        }
+      })
+
+      logger.info(`Generated structured object using AI provider: ${provider.name}`)
+
+      const {
+        promptTokens,
+        completionTokens,
+        totalTokens,
+      } = this.normalizeUsage(response.usage)
+
+      if (langfuseGeneration) {
+        langfuseGeneration.end({
+          output: JSON.stringify(response.object),
+          usage: {
+            promptTokens,
+            completionTokens,
+            totalTokens
+          }
+        })
+        await langfuse.flushAsync()
+      }
+
+      return {
+        object: response.object,
+        usage: {
+          prompt_tokens: promptTokens,
+          completion_tokens: completionTokens,
+          total_tokens: totalTokens,
+        }
+      }
+
+    } catch (error) {
+      logger.error(`Failed to generate structured object with AI provider ${request.provider}:`, error)
+      if (langfuseGeneration) {
+        langfuseGeneration.end({
+          level: 'ERROR',
+          statusMessage: error instanceof Error ? error.message : String(error)
+        })
+        await langfuse.flushAsync()
+      }
       throw error
     }
   }
@@ -235,8 +411,8 @@ class UnifiedAIService {
       // Return all default models for all providers
       return [
         // OpenAI models
-        'gpt-4', 'gpt-4-turbo', 'gpt-4-turbo-preview', 'gpt-4-0125-preview', 
-        'gpt-4-1106-preview', 'gpt-3.5-turbo', 'gpt-3.5-turbo-16k', 
+        'gpt-4', 'gpt-4-turbo', 'gpt-4-turbo-preview', 'gpt-4-0125-preview',
+        'gpt-4-1106-preview', 'gpt-3.5-turbo', 'gpt-3.5-turbo-16k',
         'gpt-3.5-turbo-1106', 'gpt-3.5-turbo-0125',
         // Google models
         'gemini-2.5-flash', 'gemini-1.5-pro', 'gemini-1.5-flash',
@@ -306,7 +482,7 @@ class UnifiedAIService {
     try {
       const client = this.createAISDKClient(provider)
       const defaultModel = this.getDefaultModel(provider.type)
-      
+
       // Test the API key by making a simple request
       await generateText({
         model: client(defaultModel),
@@ -341,6 +517,9 @@ class UnifiedAIService {
    * Stream content using AI SDK v5 streaming capabilities
    */
   async stream(request: AIGenerateRequest) {
+    let langfuseTrace: any = null
+    let langfuseGeneration: any = null
+
     try {
       const provider = this.providers.get(request.provider)
       if (!provider) {
@@ -358,7 +537,7 @@ class UnifiedAIService {
 
       // Prepare messages
       let messages: Array<{ role: string; content: string }> = []
-      
+
       if (request.messages) {
         messages = request.messages
       } else if (request.prompt) {
@@ -370,6 +549,25 @@ class UnifiedAIService {
       // Get default model if not specified
       const model = request.model || this.getDefaultModel(provider.type)
 
+      // Create Langfuse trace and generation
+      langfuseTrace = isTracingEnabled() ? langfuse.trace({
+        name: `unified-ai-stream-${provider.type}`,
+        metadata: { provider: provider.name },
+        tags: [provider.type, model]
+      }) : null
+
+      if (langfuseTrace) {
+        langfuseGeneration = langfuseTrace.generation({
+          name: `${provider.type}-stream`,
+          model: model,
+          modelParameters: {
+            temperature: request.temperature,
+            maxTokens: request.max_tokens
+          },
+          input: messages
+        })
+      }
+
       // Stream content using AI SDK v4 (generateText for now)
       const result = await generateText({
         model: client(model),
@@ -379,13 +577,41 @@ class UnifiedAIService {
         })),
         maxOutputTokens: request.max_tokens || 8000,
         temperature: request.temperature || 0.7,
+        experimental_telemetry: {
+          isEnabled: isTracingEnabled(),
+          functionId: `unified-ai-stream-${provider.type}`,
+          metadata: {
+            provider: provider.name,
+            model: model
+          }
+        }
       })
 
       logger.info(`Streaming content using AI provider: ${provider.name}`)
+
+      if (langfuseGeneration) {
+        langfuseGeneration.end({
+          output: result.text,
+          usage: {
+            promptTokens: (result as any)?.usage?.promptTokens ?? 0,
+            completionTokens: (result as any)?.usage?.completionTokens ?? 0,
+            totalTokens: (result as any)?.usage?.totalTokens ?? 0
+          }
+        })
+        await langfuse.flushAsync()
+      }
+
       return result
 
     } catch (error) {
       logger.error(`Failed to stream content with AI provider ${request.provider}:`, error)
+      if (langfuseGeneration) {
+        langfuseGeneration.end({
+          level: 'ERROR',
+          statusMessage: error instanceof Error ? error.message : String(error)
+        })
+        await langfuse.flushAsync()
+      }
       throw error
     }
   }

@@ -1,0 +1,110 @@
+diff --git a/lib/v3.js b/lib/v3.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..838d79dd1db9ac9f6756f6501730f59a92e68da2
+--- /dev/null
++++ b/lib/v3.js
+@@ -0,0 +1,2 @@
++"use strict";
++module.exports = require('./index.js');
+diff --git a/lib/v3.mjs b/lib/v3.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..9a6dd2f3f523af4f0d7429bf29352095f384d3f4
+--- /dev/null
++++ b/lib/v3.mjs
+@@ -0,0 +1,2 @@
++export * from "./index.mjs";
++export { default } from "./index.mjs";
+diff --git a/lib/v4.js b/lib/v4.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..e46eab8a6cbcfe2a63eefc343cf7a7bb5c19791c
+--- /dev/null
++++ b/lib/v4.js
+@@ -0,0 +1,22 @@
++"use strict";
++const original = require('./index.js');
++
++module.exports = {
++    ...original,
++    safeParseAsync: (schema, data, params) => {
++        return schema.safeParseAsync(data, params);
++    },
++    parse: (schema, data, params) => {
++        return schema.parse(data, params);
++    },
++    parseAsync: (schema, data, params) => {
++        return schema.parseAsync(data, params);
++    },
++    $ZodError: original.ZodError,
++    toJSONSchema: (schema, options) => {
++        if (schema && schema._def) {
++            return { type: "object", description: "Zod 3 schema (v4 compatibility layer)" };
++        }
++        return {};
++    }
++};
+diff --git a/lib/v4.mjs b/lib/v4.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..fafcd2f8de748a531c6c4fbfc78c51091e9e3c5a
+--- /dev/null
++++ b/lib/v4.mjs
+@@ -0,0 +1,34 @@
++import * as zod from "./index.mjs";
++export * from "./index.mjs";
++export const {
++    default: ZodDefault,
++    z,
++    ZodType,
++    ZodSchema,
++    ZodError,
++    ZodFirstPartyTypeKind,
++} = zod;
++export default zod.default;
++
++export const safeParseAsync = (schema, data, params) => {
++    return schema.safeParseAsync(data, params);
++};
++
++export const parse = (schema, data, params) => {
++    return schema.parse(data, params);
++};
++
++export const parseAsync = (schema, data, params) => {
++    return schema.parseAsync(data, params);
++};
++
++export const $ZodError = ZodError;
++
++export const toJSONSchema = (schema, options) => {
++    // Basic fallback for static analysis and runtime if called.
++    // Real Zod 3 schemas should ideally be handled by ai-sdk's internal zod3ToJsonSchema.
++    if (schema && schema._def) {
++        return { type: "object", description: "Zod 3 schema (v4 compatibility layer)" };
++    }
++    return {};
++};
+diff --git a/package.json b/package.json
+index 3389e63d76ec5bc05df34b3a706c76b729b08e49..c8b42c5dc44cd1d4912e9f9e1b7c574ac90aa709 100644
+--- a/package.json
++++ b/package.json
+@@ -53,6 +53,21 @@
+       "require": "./lib/index.js",
+       "import": "./lib/index.mjs"
+     },
++    "./v3": {
++      "types": "./index.d.ts",
++      "require": "./lib/v3.js",
++      "import": "./lib/v3.mjs"
++    },
++    "./v4": {
++      "types": "./index.d.ts",
++      "require": "./lib/v4.js",
++      "import": "./lib/v4.mjs"
++    },
++    "./v4/core": {
++      "types": "./index.d.ts",
++      "require": "./lib/v4.js",
++      "import": "./lib/v4.mjs"
++    },
+     "./package.json": "./package.json",
+     "./locales/*": "./lib/locales/*"
+   },

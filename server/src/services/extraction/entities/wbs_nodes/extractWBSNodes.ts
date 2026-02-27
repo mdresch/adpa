@@ -95,7 +95,7 @@ export async function extractWBSNodes(
             model: context.model,
             temperature: options.temperature ?? 0.1,
             max_tokens: options.maxTokens ?? 4000
-        }, ['openai', 'google', 'anthropic'])
+        }, ['google', 'mistral', 'openai', 'anthropic', 'xai', 'ollama'])
 
         const parsed = parseAIResponse(response.content)
         const rawEntities = parsed.wbs_nodes || []

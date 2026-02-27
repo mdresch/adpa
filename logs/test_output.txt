@@ -1,0 +1,18 @@
+D:\Source\Repos\adpa\lib\morphic\db\index.ts:11
+    throw new Error('DATABASE_URL environment variable is not set')
+          ^
+
+
+Error: DATABASE_URL environment variable is not set
+    at postgres (D:\Source\Repos\adpa\lib\morphic\db\index.ts:11:11)
+    at Object.<anonymous> (D:\Source\Repos\adpa\lib\morphic\db\index.ts:42:2)
+    at Module._compile (node:internal/modules/cjs/loader:1469:14)
+    at Object.transformer (D:\Source\Repos\adpa\node_modules\.pnpm\tsx@4.20.6\node_modules\tsx\dist\register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1288:32)
+    at Module._load (node:internal/modules/cjs/loader:1104:12)
+    at Module.require (node:internal/modules/cjs/loader:1311:19)
+    at require (node:internal/modules/helpers:179:18)
+    at <anonymous> (D:\Source\Repos\adpa\lib\morphic\tools\knowledge.ts:1:20)
+    at Object.<anonymous> (D:\Source\Repos\adpa\lib\morphic\tools\knowledge.ts:106:34)
+
+Node.js v20.18.2

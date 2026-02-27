@@ -13,7 +13,7 @@ const dnsResolve4 = promisify(dns.resolve4)
 // Check if DATABASE_URL is provided (Railway, Heroku, etc.)
 const databaseUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL
 console.log(`🔍 DATABASE_URL check: ${databaseUrl ? `Found (${databaseUrl.substring(0, 30)}...)` : 'Not found'}`)
-console.log(`🔍 NODE_ENV: ${process.env.NODE_ENV}`)
+console.log(`🔍 NODE_ENV: ${process.env.NODE_ENV || 'undefined (defaulting to development)'}`)
 
 // Connection methods for **non-DATABASE_URL** environments.
 // IMPORTANT: Docker-specific hosts are intentionally **not** included because

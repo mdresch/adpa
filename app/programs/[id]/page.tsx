@@ -32,6 +32,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from '@/components/ui/breadcrumb';
 
 // Mock data for demonstration purposes
 // In production, this would come from the API
@@ -149,7 +157,7 @@ export default function ProgramDetailPage() {
   const params = useParams();
   const router = useRouter();
   const programId = params?.id as string;
-  
+
   const [program, setProgram] = useState<Program | null>(null);
   const [metrics, setMetrics] = useState<ProgramMetrics | null>(null);
   const [loading, setLoading] = useState(true);
@@ -157,9 +165,9 @@ export default function ProgramDetailPage() {
   const [archiving, setArchiving] = useState(false);
   const [showArchiveDialog, setShowArchiveDialog] = useState(false);
   const [archiveCheck, setArchiveCheck] = useState<{ canArchive: boolean; reason?: string; unarchivedCount?: number } | null>(null);
-  const [assignedProjects, setAssignedProjects] = useState<Array<{ 
-    id: string; 
-    name: string; 
+  const [assignedProjects, setAssignedProjects] = useState<Array<{
+    id: string;
+    name: string;
     status: string;
     description?: string;
     budget?: number;
@@ -175,11 +183,11 @@ export default function ProgramDetailPage() {
     const fetchProgramData = async () => {
       try {
         setLoading(true);
-        
+
         // Fetch program details using apiClient
         const programData = await apiClient.getProgram(programId);
         setProgram(programData);
-        
+
         // Fetch program metrics (use existing endpoint)
         try {
           const metricsResponse = await fetch(getApiUrl(`/programs/${programId}/metrics`), {
@@ -187,14 +195,14 @@ export default function ProgramDetailPage() {
               'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
             }
           });
-          
+
           if (metricsResponse.ok) {
             const metricsData = await metricsResponse.json();
             console.log('[METRICS] Raw API response:', metricsData);
-            
+
             if (metricsData.success && metricsData.data) {
               const backendMetrics = metricsData.data;
-              
+
               // Transform backend response to frontend format
               const transformedMetrics: ProgramMetrics = {
                 budget: backendMetrics.budget || {
@@ -215,7 +223,7 @@ export default function ProgramDetailPage() {
                 risks: backendMetrics.risks || [],
                 milestones: backendMetrics.milestones || []
               };
-              
+
               console.log('[METRICS] Transformed metrics:', transformedMetrics);
               setMetrics(transformedMetrics);
             } else {
@@ -233,7 +241,7 @@ export default function ProgramDetailPage() {
           // Use mock data if metrics endpoint fails
           setMetrics(mockProgramMetrics);
         }
-        
+
       } catch (error) {
         console.error('Failed to fetch program data:', error);
         toast.error('Failed to load program');
@@ -261,14 +269,14 @@ export default function ProgramDetailPage() {
         success: boolean
         data: Array<{ id: string; name: string; status: string }>
       }>(`/programs/${programId}/projects`);
-      
+
       if (response && response.success && response.data) {
         const projects = response.data.map((p: any) => ({
           id: p.id,
           name: p.name || 'Unnamed Project',
           status: p.status || 'active'
         }));
-        
+
         console.log('[OVERVIEW] Mapped projects:', projects.length, 'projects');
         setAssignedProjects(projects);
       } else {
@@ -289,7 +297,7 @@ export default function ProgramDetailPage() {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         }
       });
-      
+
       if (response.ok) {
         const data = await response.json();
         setArchiveCheck(data.data);
@@ -313,27 +321,27 @@ export default function ProgramDetailPage() {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         }
       });
-      
+
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.error || 'Failed to archive program');
       }
-      
+
       toast.success('Program archived successfully');
       setShowArchiveDialog(false);
-      
+
       // Refresh program data
       const programResponse = await fetch(getApiUrl(`/programs/${programId}`), {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         }
       });
-      
+
       if (programResponse.ok) {
         const programData = await programResponse.json();
         setProgram(programData.data);
       }
-      
+
     } catch (error: any) {
       console.error('Failed to archive program:', error);
       toast.error(error.message || 'Failed to archive program');
@@ -351,25 +359,25 @@ export default function ProgramDetailPage() {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         }
       });
-      
+
       if (!response.ok) {
         throw new Error('Failed to unarchive program');
       }
-      
+
       toast.success('Program unarchived successfully');
-      
+
       // Refresh program data
       const programResponse = await fetch(getApiUrl(`/programs/${programId}`), {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         }
       });
-      
+
       if (programResponse.ok) {
         const programData = await programResponse.json();
         setProgram(programData.data);
       }
-      
+
     } catch (error) {
       console.error('Failed to unarchive program:', error);
       toast.error('Failed to unarchive program');
@@ -397,6 +405,27 @@ export default function ProgramDetailPage() {
                   </div>
                 ) : (
                   <>
+                    {/* Breadcrumb */}
+                    <Breadcrumb className="mb-4">
+                      <BreadcrumbList>
+                        <BreadcrumbItem>
+                          <BreadcrumbLink href="/programs">Programs</BreadcrumbLink>
+                        </BreadcrumbItem>
+                        <BreadcrumbSeparator />
+                        {program?.portfolio_name && (
+                          <>
+                            <BreadcrumbItem>
+                              <BreadcrumbLink href="/portfolios">{program.portfolio_name}</BreadcrumbLink>
+                            </BreadcrumbItem>
+                            <BreadcrumbSeparator />
+                          </>
+                        )}
+                        <BreadcrumbItem>
+                          <BreadcrumbPage>{program?.name}</BreadcrumbPage>
+                        </BreadcrumbItem>
+                      </BreadcrumbList>
+                    </Breadcrumb>
+
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 via-sky-600 to-cyan-600 bg-clip-text text-transparent">
@@ -406,7 +435,7 @@ export default function ProgramDetailPage() {
                           {program?.description || 'Monitor program health, budget, risks, and milestones'}
                         </p>
                       </div>
-                      
+
                       {/* Action Buttons */}
                       {program && (
                         <div className="ml-4 flex gap-2">
@@ -453,14 +482,14 @@ export default function ProgramDetailPage() {
                         </div>
                       )}
                     </div>
-                    
+
                     {program?.status && (
                       <div className="mt-3 flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-medium">Status:</span>
                         <Badge className={
                           program.status === 'green' ? 'bg-green-100 text-green-800 border-green-300' :
-                          program.status === 'amber' ? 'bg-yellow-100 text-yellow-800 border-yellow-300' :
-                          'bg-red-100 text-red-800 border-red-300'
+                            program.status === 'amber' ? 'bg-yellow-100 text-yellow-800 border-yellow-300' :
+                              'bg-red-100 text-red-800 border-red-300'
                         }>
                           {program.status === 'green' && '🟢'}
                           {program.status === 'amber' && '🟡'}
@@ -557,8 +586,8 @@ export default function ProgramDetailPage() {
                               {projectsLoading ? 'Loading...' : `${assignedProjects.length} project${assignedProjects.length !== 1 ? 's' : ''} assigned to this program`}
                             </p>
                           </div>
-                          <Button 
-                            variant="outline" 
+                          <Button
+                            variant="outline"
                             onClick={() => setActiveTab('projects')}
                             className="gap-2"
                           >
@@ -592,8 +621,8 @@ export default function ProgramDetailPage() {
                             </div>
                             {assignedProjects.length > 6 && (
                               <div className="text-center pt-2">
-                                <Button 
-                                  variant="ghost" 
+                                <Button
+                                  variant="ghost"
                                   onClick={() => setActiveTab('projects')}
                                   className="text-sm"
                                 >
@@ -605,8 +634,8 @@ export default function ProgramDetailPage() {
                         ) : (
                           <div className="text-center py-8">
                             <p className="text-muted-foreground mb-4">No projects assigned yet</p>
-                            <Button 
-                              variant="outline" 
+                            <Button
+                              variant="outline"
                               onClick={() => setActiveTab('projects')}
                             >
                               Assign Projects
@@ -618,8 +647,8 @@ export default function ProgramDetailPage() {
 
                     {/* Metrics Dashboard */}
                     {metrics ? (
-                      <MetricsDashboard 
-                        metrics={metrics} 
+                      <MetricsDashboard
+                        metrics={metrics}
                         programId={programId}
                         loading={loading}
                       />

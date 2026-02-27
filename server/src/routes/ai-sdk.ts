@@ -229,7 +229,7 @@ router.post('/providers/:name/test', async (req, res) => {
     }
 
     const provider = providerResult.rows[0]
-    
+
     // Decrypt API key
     const apiKey = Buffer.from(provider.api_key_encrypted, 'base64').toString('utf-8')
 
@@ -322,7 +322,7 @@ router.get('/models', async (req, res) => {
     for (const row of result.rows) {
       const providerName = row.name
       const providerType = row.provider_type
-      
+
       // Return default models for each provider type
       switch (providerType) {
         case 'openai':
@@ -342,6 +342,9 @@ router.get('/models', async (req, res) => {
           break
         case 'huggingface':
           models[providerName] = ['microsoft/DialoGPT-medium', 'facebook/blenderbot-400M-distill']
+          break
+        case 'ollama':
+          models[providerName] = ['llama3', 'llama3.1', 'mistral', 'phi3']
           break
         default:
           models[providerName] = ['gpt-3.5-turbo']
@@ -399,6 +402,7 @@ function getDefaultModel(providerType: string): string {
     case 'cohere': return 'command'
     case 'huggingface': return 'microsoft/DialoGPT-medium'
     case 'copilot': return 'copilot-chat'
+    case 'ollama': return 'llama3'
     default: return 'gpt-3.5-turbo'
   }
 }
@@ -412,6 +416,7 @@ function getDefaultEndpoint(providerType: string): string {
     case 'cohere': return 'https://api.cohere.ai'
     case 'huggingface': return 'https://api-inference.huggingface.co'
     case 'copilot': return 'https://api.github.com'
+    case 'ollama': return 'http://localhost:11434'
     default: return 'https://api.openai.com/v1'
   }
 }

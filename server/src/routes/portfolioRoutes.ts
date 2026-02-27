@@ -10,7 +10,6 @@ const router = Router()
  */
 const createPortfolioSchema = Joi.object({
   company_id: Joi.string().uuid().optional().allow(null),
-  program_id: Joi.string().uuid().optional().allow(null),
   portfolio_name: Joi.string().required().max(255),
   description: Joi.string().optional().allow(null, ''),
   owner_id: Joi.string().uuid().optional().allow(null),
@@ -27,7 +26,6 @@ const createPortfolioSchema = Joi.object({
 
 const updatePortfolioSchema = Joi.object({
   company_id: Joi.string().uuid().optional().allow(null),
-  program_id: Joi.string().uuid().optional().allow(null),
   portfolio_name: Joi.string().optional().max(255),
   description: Joi.string().optional().allow(null, ''),
   owner_id: Joi.string().uuid().optional().allow(null),
@@ -48,11 +46,10 @@ const updatePortfolioSchema = Joi.object({
  */
 router.get('/', async (req: Request, res: Response) => {
   const pool = getDatabasePool()
-  
+
   try {
     const {
       status,
-      program_id,
       limit = '50',
       offset = '0',
       sort_by = 'created_at',
@@ -63,14 +60,12 @@ router.get('/', async (req: Request, res: Response) => {
       SELECT 
         p.*,
         c.name as company_name,
-        prog.name as program_name,
         u1.name as owner_name,
         u2.name as lead_name,
         u3.name as created_by_name,
         COUNT(DISTINCT pr.id) as risk_count
       FROM portfolio_governance p
       LEFT JOIN companies c ON p.company_id = c.id
-      LEFT JOIN programs prog ON p.program_id = prog.id
       LEFT JOIN users u1 ON p.owner_id = u1.id
       LEFT JOIN users u2 ON p.portfolio_lead = u2.id
       LEFT JOIN users u3 ON p.created_by = u3.id
@@ -87,13 +82,7 @@ router.get('/', async (req: Request, res: Response) => {
       paramIndex++
     }
 
-    if (program_id) {
-      query += ` AND p.program_id = $${paramIndex}`
-      params.push(program_id)
-      paramIndex++
-    }
-
-    query += ` GROUP BY p.id, prog.name, u1.name, u2.name, u3.name`
+    query += ` GROUP BY p.id, u1.name, u2.name, u3.name`
 
     // Add sorting
     const allowedSortColumns = ['portfolio_name', 'status', 'budget', 'created_at', 'start_date', 'end_date']
@@ -116,11 +105,6 @@ router.get('/', async (req: Request, res: Response) => {
       countQuery += ` AND status = $${countParamIndex}`
       countParams.push(status)
       countParamIndex++
-    }
-
-    if (program_id) {
-      countQuery += ` AND program_id = $${countParamIndex}`
-      countParams.push(program_id)
     }
 
     const countResult = await pool.query(countQuery, countParams)
@@ -158,7 +142,6 @@ router.get('/:id', async (req: Request, res: Response) => {
       `
       SELECT 
         p.*,
-        prog.name as program_name,
         u1.name as owner_name,
         u2.name as lead_name,
         u3.name as created_by_name,
@@ -166,13 +149,12 @@ router.get('/:id', async (req: Request, res: Response) => {
         COUNT(DISTINCT pr.id) FILTER (WHERE pr.severity = 'critical') as critical_risk_count,
         COUNT(DISTINCT pr.id) FILTER (WHERE pr.severity = 'high') as high_risk_count
       FROM portfolio_governance p
-      LEFT JOIN programs prog ON p.program_id = prog.id
       LEFT JOIN users u1 ON p.owner_id = u1.id
       LEFT JOIN users u2 ON p.portfolio_lead = u2.id
       LEFT JOIN users u3 ON p.created_by = u3.id
       LEFT JOIN portfolio_risks pr ON pr.portfolio_id = p.id
       WHERE p.id = $1
-      GROUP BY p.id, prog.name, u1.name, u2.name, u3.name
+      GROUP BY p.id, u1.name, u2.name, u3.name
       `,
       [id]
     )
@@ -219,17 +201,16 @@ router.post('/', async (req: Request, res: Response) => {
     const result = await pool.query(
       `
       INSERT INTO portfolio_governance (
-        program_id, portfolio_name, description, owner_id, portfolio_lead,
+        portfolio_name, description, owner_id, portfolio_lead,
         status, budget, budget_currency, start_date, end_date,
         last_risk_review_at, next_risk_review_due, risk_review_notes,
         created_by, created_at, updated_at
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), NOW()
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW()
       )
       RETURNING *
       `,
       [
-        value.program_id,
         value.portfolio_name,
         value.description,
         value.owner_id,
@@ -254,7 +235,7 @@ router.post('/', async (req: Request, res: Response) => {
     })
   } catch (error: any) {
     logger.error('Error creating portfolio:', error)
-    
+
     if (error.code === '23505') { // Unique constraint violation
       return res.status(409).json({
         success: false,
@@ -336,7 +317,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     })
   } catch (error: any) {
     logger.error('Error updating portfolio:', error)
-    
+
     if (error.code === '23505') {
       return res.status(409).json({
         success: false,

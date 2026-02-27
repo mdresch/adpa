@@ -11,6 +11,7 @@ import { buildExtractionPrompt } from '../../base/PromptBuilder'
 import { resolveSourceDocumentIdStrict } from '../../base/SourceDocumentResolver'
 import { extractionCacheService } from '../../cache'
 import type { PoolClient } from 'pg'
+import { isValidUUID, normalizeDate } from '../../base/Persistence'
 import type { PersistenceResult } from '../../base/Persistence'
 
 export interface ResourceAssignment {
@@ -190,16 +191,21 @@ export async function saveResourceAssignments(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14}, $${offset + 15})`
       )
 
+      // Ensure resource_id is a valid UUID, otherwise nullify it
+      // This prevents "invalid input syntax for type uuid" errors
+      const resourceIdVal = isValidUUID(e.resource_id) ? e.resource_id : null
+      const activityIdVal = isValidUUID(e.activity_id) ? e.activity_id : null
+
       values.push(
         projectId,
-        e.resource_id || null, // user_id (using resource_id as user_id for now)
+        resourceIdVal, // user_id (using resource_id as user_id for now)
         null, // role_id (nullable for extraction)
         e.resource_name || null,
-        e.activity_id || null,
+        activityIdVal,
         e.activity_name || null,
         e.allocation_pct ?? null,
-        e.start_date || null,
-        e.end_date || null,
+        normalizeDate(e.start_date),
+        normalizeDate(e.end_date),
         e.skill_required || null,
         e.skill_level || null,
         e.source_document_id || null,

@@ -1,0 +1,5 @@
+[dotenv@17.2.3] injecting env (63) from server\.env -- tip: ≡ƒæÑ sync secrets across teammates & machines: https://dotenvx.com/ops
+API Key loaded: true
+Buffer length: 41
+Byte length: 41
+Upload Error: Can not determine mimeType. Please provide mimeType in the config.

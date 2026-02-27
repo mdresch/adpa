@@ -60,21 +60,21 @@ interface WBSImportResult {
  */
 function parseEstimatedHours(text: string): number | null {
   if (!text) return null
-  
+
   const patterns = [
     /(\d+)\s*hours?/i,
     /(\d+)\s*hrs?/i,
     /\((\d+)\s*h/i,
     /(\d+)-\d+\s*hours?/i,  // Range - take first number
   ]
-  
+
   for (const pattern of patterns) {
     const match = text.match(pattern)
     if (match) {
       return parseInt(match[1])
     }
   }
-  
+
   return null
 }
 
@@ -86,7 +86,7 @@ function parseEstimatedHours(text: string): number | null {
 function parseWBSCode(text: string): string | null {
   if (!text) return null
   // Safe pattern: Max 5 levels deep to prevent ReDoS (e.g., "1.2.3.4.5")
-  
+
   // Safe pattern: Max 5 levels deep to prevent ReDoS (e.g., "1.2.3.4.5")
   const pattern = /\b(\d+(?:\.\d+){1,4})\b/
   const match = text.match(pattern)
@@ -99,7 +99,7 @@ function parseWBSCode(text: string): string | null {
  */
 function extractRequiredRole(text: string): string | null {
   if (!text) return null
-  
+
   const roleKeywords = [
     'Senior Developer', 'Developer', 'Senior Dev',
     'Business Analyst', 'BA',
@@ -111,15 +111,15 @@ function extractRequiredRole(text: string): string | null {
     'Technical Lead', 'Team Lead',
     'Architect', 'Consultant'
   ]
-  
+
   const lowerText = text.toLowerCase()
-  
+
   for (const role of roleKeywords) {
     if (lowerText.includes(role.toLowerCase())) {
       return role
     }
   }
-  
+
   return null
 }
 
@@ -137,38 +137,38 @@ async function getExtractedEntities(documentId: string): Promise<ExtractedEntity
       ORDER BY created_at DESC
       LIMIT 1
     `, [documentId])
-    
+
     if (result.rows.length === 0) {
       return []
     }
-    
+
     const extractedData = result.rows[0].extracted_data
-    
+
     // Handle different extraction data formats
     let entities: ExtractedEntity[] = []
     if (extractedData.entities) {
-        entities = extractedData.entities
+      entities = extractedData.entities
     } else if (Array.isArray(extractedData)) {
-        entities = extractedData
+      entities = extractedData
     } else if (extractedData.activities) {
-        entities = extractedData.activities.map((a: any) => ({
-          id: a.id,
-          entityType: 'activity',
-          name: a.activity_name || a.name,
-          description: a.description,
-          parent_task_id: a.parent_task_id || a.parentId || a.parent_id,
-          start_date: a.start_date,
-          end_date: a.end_date,
-          status: a.status,
-          cost: a.cost,
-          estimated_hours: a.estimated_hours || null,
-          assignee_id: a.assigned_to || a.assignee_id || null,
-          sequence: a.sequence || null,
-          sourceDocument: a.extracted_from_document_id || null,
-          metadata: a.metadata || null
-        }))
+      entities = extractedData.activities.map((a: any) => ({
+        id: a.id,
+        entityType: 'activity',
+        name: a.activity_name || a.name,
+        description: a.description,
+        parent_task_id: a.parent_task_id || a.parentId || a.parent_id,
+        start_date: a.start_date,
+        end_date: a.end_date,
+        status: a.status,
+        cost: a.cost,
+        estimated_hours: a.estimated_hours || null,
+        assignee_id: a.assigned_to || a.assignee_id || null,
+        sequence: a.sequence || null,
+        sourceDocument: a.extracted_from_document_id || null,
+        metadata: a.metadata || null
+      }))
     }
-    
+
     return entities
   } catch (error) {
     logger.error('getExtractedEntities error', { error, documentId })
@@ -191,7 +191,7 @@ async function findRoleByName(roleName: string): Promise<string | null> {
         CASE WHEN role_name ILIKE $1 THEN 1 ELSE 2 END
       LIMIT 1
     `, [roleName])
-    
+
     return result.rows.length > 0 ? result.rows[0].id : null
   } catch (error) {
     logger.error('findRoleByName error', { error, roleName })
@@ -216,10 +216,10 @@ export async function importWBSFromProjectEntities(
     tasksNeedingRoleAssignment: 0,
     errors: []
   }
-  
+
   try {
     logger.info('Starting WBS import from project entities', { projectId, options })
-    
+
     // 1. Get extracted activities, deliverables, phases, milestones and work_items from project tables
     const activitiesResult = await pool.query(`
       SELECT id, name, activity_name, description, category, start_date, end_date, 
@@ -228,7 +228,7 @@ export async function importWBSFromProjectEntities(
       WHERE project_id = $1
       ORDER BY name
     `, [projectId])
-    
+
     const deliverablesResult = await pool.query(`
       SELECT id, name, description, type, due_date, status, owner, 
              acceptance_criteria, extracted_from_document_id
@@ -257,39 +257,39 @@ export async function importWBSFromProjectEntities(
       WHERE project_id = $1
       ORDER BY name
     `, [projectId])
-    
+
     const activities = activitiesResult.rows
     const deliverables = deliverablesResult.rows
     const phases = phasesResult.rows
     const milestones = milestonesResult.rows
     const workItems = workItemsResult.rows
     const totalItems = activities.length + deliverables.length + phases.length + milestones.length + workItems.length
-    
+
     if (totalItems === 0) {
       throw new Error('No activities or deliverables found in extracted data. Please run extraction first.')
     }
-    
-    logger.info('Found items to import', { 
-      activities: activities.length, 
+
+    logger.info('Found items to import', {
+      activities: activities.length,
       deliverables: deliverables.length,
       phases: phases.length,
       milestones: milestones.length,
       work_items: workItems.length,
       total: totalItems
     })
-    
+
     // 3. Import deliverables, phases and milestones as parent tasks
     // Keep a map of source entity id -> created project_task.id so child work_items can be linked
     const sourceToTaskId: Record<string, string> = {}
     for (let i = 0; i < deliverables.length; i++) {
       const deliverable = deliverables[i]
-      
+
       try {
         const fullText = `${deliverable.name} ${deliverable.description || ''}`
         const estimatedHours = parseEstimatedHours(fullText) || 40 // Default 40h for deliverables
-        
+
         const taskNumber = `DEL-${String(i + 1).padStart(3, '0')}`
-        
+
         // Map deliverable status to project_tasks allowed values
         const deliverableStatusMap: Record<string, string> = {
           'not_started': 'planned',
@@ -302,7 +302,18 @@ export async function importWBSFromProjectEntities(
           'delivered': 'completed'
         }
         const mappedDeliverableStatus = deliverableStatusMap[(deliverable.status || 'not_started').toLowerCase()] || 'planned'
-        
+
+        // Find existing task by name to avoid duplicates if task_number changed
+        const existingTask = await pool.query(`
+          SELECT id, task_number FROM project_tasks 
+          WHERE project_id = $1 AND task_name = $2
+          LIMIT 1
+        `, [projectId, deliverable.name]);
+
+        const finalTaskNumber = existingTask.rows.length > 0
+          ? existingTask.rows[0].task_number
+          : taskNumber;
+
         const taskResult = await pool.query(`
           INSERT INTO project_tasks (
             project_id,
@@ -324,7 +335,7 @@ export async function importWBSFromProjectEntities(
           RETURNING id, estimated_hours
         `, [
           projectId,
-          taskNumber,
+          finalTaskNumber,
           deliverable.name,
           deliverable.description,
           estimatedHours,
@@ -335,7 +346,7 @@ export async function importWBSFromProjectEntities(
           userId,
           (deliverable.parent_task_id && sourceToTaskId[deliverable.parent_task_id]) ? sourceToTaskId[deliverable.parent_task_id] : deliverable.parent_task_id || null
         ])
-        
+
         const created = taskResult.rows[0]
         if (created && deliverable.id) {
           sourceToTaskId[deliverable.id] = created.id
@@ -344,7 +355,7 @@ export async function importWBSFromProjectEntities(
         if (estimatedHours) {
           result.totalEstimatedHours += estimatedHours
         }
-        
+
       } catch (error: any) {
         result.errors.push(`Failed to import deliverable ${deliverable.name}: ${error.message}`)
         logger.error('Failed to import deliverable', { error, deliverable: deliverable.name })
@@ -358,6 +369,17 @@ export async function importWBSFromProjectEntities(
         const fullText = `${phase.name} ${phase.description || ''}`
         const estimatedHours = parseEstimatedHours(fullText) || 0
         const taskNumber = `PHASE-${String(i + 1).padStart(3, '0')}`
+
+        // Find existing task by name
+        const existingTask = await pool.query(`
+          SELECT id, task_number FROM project_tasks 
+          WHERE project_id = $1 AND task_name = $2
+          LIMIT 1
+        `, [projectId, phase.name]);
+
+        const finalTaskNumber = existingTask.rows.length > 0
+          ? existingTask.rows[0].task_number
+          : taskNumber;
 
         const taskResult = await pool.query(`
           INSERT INTO project_tasks (
@@ -381,7 +403,7 @@ export async function importWBSFromProjectEntities(
           RETURNING id, estimated_hours
         `, [
           projectId,
-          taskNumber,
+          finalTaskNumber,
           phase.name,
           phase.description,
           estimatedHours,
@@ -412,6 +434,17 @@ export async function importWBSFromProjectEntities(
         const estimatedHours = parseEstimatedHours(fullText) || 0
         const taskNumber = `MILE-${String(i + 1).padStart(3, '0')}`
 
+        // Find existing task by name
+        const existingTask = await pool.query(`
+          SELECT id, task_number FROM project_tasks 
+          WHERE project_id = $1 AND task_name = $2
+          LIMIT 1
+        `, [projectId, milestone.name]);
+
+        const finalTaskNumber = existingTask.rows.length > 0
+          ? existingTask.rows[0].task_number
+          : taskNumber;
+
         const taskResult = await pool.query(`
           INSERT INTO project_tasks (
             project_id,
@@ -434,7 +467,7 @@ export async function importWBSFromProjectEntities(
           RETURNING id, estimated_hours
         `, [
           projectId,
-          taskNumber,
+          finalTaskNumber,
           milestone.name,
           milestone.description,
           estimatedHours,
@@ -456,26 +489,37 @@ export async function importWBSFromProjectEntities(
         logger.error('Failed to import milestone', { error, milestone: milestone.name })
       }
     }
-    
+
     // 4. Import activities as tasks
     for (let i = 0; i < activities.length; i++) {
       const activity = activities[i]
-      
+
       try {
         const activityName = activity.activity_name || activity.name
         const fullText = `${activityName} ${activity.description || ''}`
         const wbsCode = parseWBSCode(fullText) || parseWBSCode(activityName)
         const estimatedHours = parseEstimatedHours(fullText) || 8 // Default 8 hours if not found
         const requiredRole = extractRequiredRole(fullText)
-        
+
         // Find role ID if role name found
         let roleId = null
         if (requiredRole && options.autoMatchRoles) {
           roleId = await findRoleByName(requiredRole)
         }
-        
+
         const taskNumber = wbsCode || `ACT-${String(i + 1).padStart(3, '0')}`
-        
+
+        // Find existing task by name
+        const existingTask = await pool.query(`
+          SELECT id, task_number FROM project_tasks 
+          WHERE project_id = $1 AND task_name = $2
+          LIMIT 1
+        `, [projectId, activityName]);
+
+        const finalTaskNumber = existingTask.rows.length > 0
+          ? existingTask.rows[0].task_number
+          : taskNumber;
+
         // Map activity status to project_tasks allowed values
         // activities table uses: not_started, in_progress, completed, cancelled
         // project_tasks table uses: planned, in_progress, completed, on_hold, cancelled
@@ -487,7 +531,7 @@ export async function importWBSFromProjectEntities(
           'on_hold': 'on_hold'
         }
         const mappedStatus = statusMap[(activity.status || 'not_started').toLowerCase()] || 'planned'
-        
+
         const taskResult = await pool.query(`
           INSERT INTO project_tasks (
             project_id,
@@ -513,7 +557,7 @@ export async function importWBSFromProjectEntities(
           RETURNING id, estimated_hours
         `, [
           projectId,
-          taskNumber,
+          finalTaskNumber,
           wbsCode,
           activityName,
           activity.description,
@@ -527,19 +571,19 @@ export async function importWBSFromProjectEntities(
           userId,
           (activity.parent_task_id && sourceToTaskId[activity.parent_task_id]) ? sourceToTaskId[activity.parent_task_id] : activity.parent_task_id || null
         ])
-        
+
         const task = taskResult.rows[0]
         if (task && activity.id) sourceToTaskId[activity.id] = task.id
         result.tasksCreated++
-        
+
         if (estimatedHours) {
           result.totalEstimatedHours += estimatedHours
         }
-        
+
         if (!roleId && requiredRole) {
           result.tasksNeedingRoleAssignment++
         }
-        
+
       } catch (error: any) {
         result.errors.push(`Failed to import activity ${activity.name}: ${error.message}`)
         logger.error('Failed to import activity', { error, activity: activity.name })
@@ -552,30 +596,30 @@ export async function importWBSFromProjectEntities(
       try {
         // Find the task that was created from the parent activity
         // work_items are linked to activities via activity_id, and activities were imported as tasks
-        const parentTaskId = item.activity_id && sourceToTaskId[item.activity_id] 
-          ? sourceToTaskId[item.activity_id] 
+        const parentTaskId = item.activity_id && sourceToTaskId[item.activity_id]
+          ? sourceToTaskId[item.activity_id]
           : null
-        
+
         if (!parentTaskId) {
-          logger.warn('Skipping work item - no parent task found', { 
-            workItemId: item.id, 
-            workItemName: item.name, 
+          logger.warn('Skipping work item - no parent task found', {
+            workItemId: item.id,
+            workItemName: item.name,
             activityId: item.activity_id,
-            activityName: item.activity_name 
+            activityName: item.activity_name
           })
           continue
         }
-        
+
         await pool.query(`
           INSERT INTO checklist_items (
-            id, task_id, name, description, cost, status, assignee_id, estimated_hours, source_document_id
+            id, task_id, item_name, description, cost, status, assigned_user_id, estimated_hours, source_document_id
           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
           ON CONFLICT (id) DO UPDATE SET
-            name = EXCLUDED.name,
+            item_name = EXCLUDED.item_name,
             description = EXCLUDED.description,
             cost = EXCLUDED.cost,
             status = EXCLUDED.status,
-            assignee_id = EXCLUDED.assignee_id,
+            assigned_user_id = EXCLUDED.assigned_user_id,
             estimated_hours = EXCLUDED.estimated_hours,
             updated_at = NOW()
         `, [
@@ -594,11 +638,11 @@ export async function importWBSFromProjectEntities(
         logger.error('Failed to import work_item', { error, item: item.name })
       }
     }
-    
+
     logger.info('WBS import from project entities completed', { result })
-    
+
     return result
-    
+
   } catch (error) {
     logger.error('WBS import from project entities failed', { error, projectId })
     throw error
@@ -663,6 +707,17 @@ export async function importWBSFromDocument(
 
       try {
         if (['activity', 'deliverable', 'milestone', 'phase'].includes(entity.entityType)) {
+          // Find existing task by name to avoid duplicates if task_number changed
+          const existingTask = await pool.query(`
+            SELECT id, task_number FROM project_tasks 
+            WHERE project_id = $1 AND task_name = $2
+            LIMIT 1
+          `, [projectId, entity.name]);
+
+          const finalTaskNumber = existingTask.rows.length > 0
+            ? existingTask.rows[0].task_number
+            : (wbsCode || `TASK-${String(i + 1).padStart(3, '0')}`);
+
           // Insert as project_task (with parent_task_id if present)
           const taskResult = await pool.query(`
             INSERT INTO project_tasks (
@@ -690,7 +745,7 @@ export async function importWBSFromDocument(
             RETURNING id, estimated_hours
           `, [
             projectId,
-            wbsCode || `TASK-${String(i + 1).padStart(3, '0')}`,
+            finalTaskNumber,
             wbsCode,
             entity.name,
             entity.description,
@@ -714,17 +769,17 @@ export async function importWBSFromDocument(
           // Insert as checklist_item (with task_id = parent_task_id)
           await pool.query(`
             INSERT INTO checklist_items (
-              id, task_id, name, description, cost, status, assignee_id, estimated_hours, sequence, source_document_id
+              id, task_id, item_name, description, cost, status, assigned_user_id, estimated_hours, sequence_order, source_document_id
             ) VALUES (
               $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
             ) ON CONFLICT (id) DO UPDATE SET
-              name = EXCLUDED.name,
+              item_name = EXCLUDED.item_name,
               description = EXCLUDED.description,
               cost = EXCLUDED.cost,
               status = EXCLUDED.status,
-              assignee_id = EXCLUDED.assignee_id,
+              assigned_user_id = EXCLUDED.assigned_user_id,
               estimated_hours = EXCLUDED.estimated_hours,
-              sequence = EXCLUDED.sequence,
+              sequence_order = EXCLUDED.sequence_order,
               updated_at = NOW()
           `, [
             entity.id,
@@ -768,7 +823,7 @@ export async function getWBSImportedTasks(projectId: string): Promise<any[]> {
       WHERE project_id = $1 AND imported_from_wbs = TRUE
       ORDER BY wbs_code NULLS LAST, task_number
     `, [projectId])
-    
+
     return result.rows
   } catch (error) {
     logger.error('getWBSImportedTasks error', { error, projectId })
@@ -794,7 +849,7 @@ export async function getWBSImportHistory(projectId: string): Promise<any[]> {
       GROUP BY d.id, d.title
       ORDER BY imported_at DESC
     `, [projectId])
-    
+
     return result.rows
   } catch (error) {
     logger.error('getWBSImportHistory error', { error, projectId })
