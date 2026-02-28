@@ -13,6 +13,28 @@ import { extractionCacheService } from '../../cache'
 import type { PoolClient } from 'pg'
 import type { PersistenceResult } from '../../base/Persistence'
 
+function isUuid(value?: string | null): boolean {
+  if (!value) return false
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+}
+
+function normalizeProcessType(value?: string | null): 'onboarding' | 'offboarding' {
+  const normalized = (value || '').toLowerCase().trim()
+  if (normalized === 'offboarding') return 'offboarding'
+  return 'onboarding'
+}
+
+function normalizeDate(value?: string | null): string | null {
+  if (!value || typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (!trimmed || /^yyyy-mm-dd$/i.test(trimmed)) return null
+  if (/^\[.*\]$/.test(trimmed)) return null
+  if (/\btbd\b|unknown|n\/a|to be determined/i.test(trimmed)) return null
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed
+  if (/^\d{4}-\d{2}$/.test(trimmed)) return `${trimmed}-01`
+  return null
+}
+
 export interface OnboardingOffboarding {
   resource_id?: string
   resource_name?: string
@@ -174,34 +196,95 @@ export async function saveOnboardingOffboarding(
   try {
     await client.query('DELETE FROM onboarding_offboarding WHERE project_id = $1', [projectId])
 
+    const columnResult = await client.query(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_name = 'onboarding_offboarding'`
+    )
+
+    const availableColumns = new Set<string>(
+      columnResult.rows.map((row: { column_name: string }) => row.column_name)
+    )
+
+    const insertColumns = [
+      'project_id',
+      'resource_id',
+      'resource_name',
+      'process_type',
+      'action_type',
+      'start_date',
+      'end_date',
+      'planned_start_date',
+      'actual_start_date',
+      'planned_completion_date',
+      'actual_completion_date',
+      'planned_date',
+      'actual_date',
+      'status',
+      'checklist_status',
+      'tasks',
+      'required_training',
+      'required_access',
+      'handover_notes',
+      'notes',
+      'description',
+      'assigned_to',
+      'source_document_id',
+      'created_by'
+    ].filter((column) => availableColumns.has(column))
+
+    if (insertColumns.length === 0) {
+      throw new Error('onboarding_offboarding table has no expected columns for extraction insert')
+    }
+
     const values: any[] = []
     const placeholders: string[] = []
 
     entities.forEach((e, index) => {
-      const offset = index * 11
+      const offset = index * insertColumns.length
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11})`
+        `(${insertColumns.map((_, i) => `$${offset + i + 1}`).join(', ')})`
       )
 
-      values.push(
-        projectId,
-        e.resource_id || null,
-        e.resource_name || null,
-        e.action_type || null,
-        e.start_date || null,
-        e.end_date || null,
-        e.status || null,
-        e.checklist_status || null,
-        e.notes || null,
-        e.source_document_id || null,
-        userId
-      )
+      const processType = normalizeProcessType(e.action_type)
+      const normalizedStartDate = normalizeDate(e.start_date)
+      const normalizedEndDate = normalizeDate(e.end_date)
+
+      const rowData: Record<string, any> = {
+        project_id: projectId,
+        resource_id: isUuid(e.resource_id) ? e.resource_id : null,
+        resource_name: e.resource_name || e.resource_id || 'Unknown resource',
+        process_type: processType,
+        action_type: e.action_type || processType,
+        start_date: normalizedStartDate,
+        end_date: normalizedEndDate,
+        planned_start_date: normalizedStartDate,
+        actual_start_date: null,
+        planned_completion_date: normalizedEndDate,
+        actual_completion_date: null,
+        planned_date: normalizedStartDate,
+        actual_date: normalizedEndDate,
+        status: e.status || null,
+        checklist_status: e.checklist_status || null,
+        tasks: [],
+        required_training: [],
+        required_access: [],
+        handover_notes: e.notes || null,
+        notes: e.notes || null,
+        description: e.notes || null,
+        assigned_to: null,
+        source_document_id: e.source_document_id || null,
+        created_by: userId
+      }
+
+      insertColumns.forEach((column) => {
+        values.push(rowData[column] ?? null)
+      })
     })
 
     await client.query(
       `INSERT INTO onboarding_offboarding (
-        project_id, resource_id, resource_name, action_type, start_date, end_date,
-        status, checklist_status, notes, source_document_id, created_by
+        ${insertColumns.join(', ')}
       )
       VALUES ${placeholders.join(', ')}`,
       values

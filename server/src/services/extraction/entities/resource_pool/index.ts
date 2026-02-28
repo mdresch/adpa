@@ -195,10 +195,24 @@ export async function saveResourcePool(
   try {
     await client.query('DELETE FROM resources WHERE project_id = $1', [projectId])
 
+    const dedupedEntities = Array.from(
+      entities.reduce((acc, entry, index) => {
+        const fallbackName = `Unknown resource ${index + 1}`
+        const normalizedName = (entry.resource_name || '').trim().toLowerCase() || fallbackName.toLowerCase()
+        if (!acc.has(normalizedName)) {
+          acc.set(normalizedName, {
+            ...entry,
+            resource_name: (entry.resource_name || '').trim() || fallbackName
+          })
+        }
+        return acc
+      }, new Map<string, ResourcePoolEntry>()).values()
+    )
+
     const values: any[] = []
     const placeholders: string[] = []
 
-    entities.forEach((e, index) => {
+    dedupedEntities.forEach((e, index) => {
       const offset = index * 14
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14})`
@@ -232,7 +246,11 @@ export async function saveResourcePool(
       values
     )
 
-    return { saved: entities.length, skipped: 0, failed: 0 }
+    return {
+      saved: dedupedEntities.length,
+      skipped: entities.length - dedupedEntities.length,
+      failed: 0
+    }
   } catch (error: unknown) {
     logger.error('[EXTRACTION-RESOURCE-POOL] Failed to save', {
       projectId,

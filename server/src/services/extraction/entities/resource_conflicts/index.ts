@@ -12,8 +12,10 @@ import { resolveSourceDocumentIdStrict } from '../../base/SourceDocumentResolver
 import { extractionCacheService } from '../../cache'
 import type { PoolClient } from 'pg'
 import type { PersistenceResult } from '../../base/Persistence'
+import { randomUUID } from 'crypto'
 
 export interface ResourceConflict {
+  conflict_id?: string
   resource_id?: string
   resource_name?: string
   conflict_type?: string
@@ -24,6 +26,67 @@ export interface ResourceConflict {
   resolution_date?: string
   source_document?: string
   source_document_id?: string
+}
+
+function normalizeConflictType(value?: string | null): string | null {
+  if (!value) return 'overallocation'
+  const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, '_')
+
+  const map: Record<string, string> = {
+    overallocated: 'overallocation',
+    overallocation: 'overallocation',
+    schedule_clash: 'scheduling',
+    scheduling: 'scheduling',
+    schedule: 'scheduling',
+    skill_gap: 'skill_gap',
+    skillgap: 'skill_gap'
+  }
+
+  return map[normalized] || 'overallocation'
+}
+
+function normalizeSeverity(value?: string | null): string {
+  if (!value) return 'medium'
+  const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, '_')
+
+  const map: Record<string, string> = {
+    low: 'low',
+    minor: 'low',
+    medium: 'medium',
+    moderate: 'medium',
+    med: 'medium',
+    high: 'high',
+    major: 'high',
+    severe: 'high',
+    critical: 'critical',
+    blocker: 'critical'
+  }
+
+  return map[normalized] || 'medium'
+}
+
+async function getAllowedConstraintValues(
+  client: PoolClient,
+  tableName: string,
+  constraintNameHint: string
+): Promise<string[] | null> {
+  const result = await client.query(
+    `SELECT pg_get_constraintdef(c.oid) AS constraint_def
+     FROM pg_constraint c
+     JOIN pg_class t ON c.conrelid = t.oid
+     JOIN pg_namespace n ON t.relnamespace = n.oid
+     WHERE t.relname = $1
+       AND c.conname ILIKE $2
+       AND c.contype = 'c'
+     LIMIT 1`,
+    [tableName, `%${constraintNameHint}%`]
+  )
+
+  const constraintDef: string | undefined = result.rows[0]?.constraint_def
+  if (!constraintDef) return null
+
+  const matches = [...constraintDef.matchAll(/'([^']+)'/g)].map((m) => m[1].toLowerCase())
+  return matches.length > 0 ? matches : null
 }
 
 export async function extractResourceConflicts(
@@ -179,14 +242,49 @@ export async function saveResourceConflicts(
   try {
     await client.query('DELETE FROM resource_conflicts WHERE project_id = $1', [projectId])
 
+    const allowedConflictTypes = await getAllowedConstraintValues(
+      client,
+      'resource_conflicts',
+      'conflict_type'
+    )
+
+    const columnResult = await client.query(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_name = 'resource_conflicts'`
+    )
+
+    const availableColumns = new Set<string>(
+      columnResult.rows.map((row: { column_name: string }) => row.column_name)
+    )
+
+    const insertColumns = [
+      'conflict_id',
+      'id',
+      'project_id',
+      'resource_id',
+      'resource_name',
+      'conflict_type',
+      'conflict_description',
+      'impacted_activities',
+      'severity',
+      'resolution',
+      'resolution_date',
+      'conflict_date',
+      'source_document_id',
+      'created_by'
+    ].filter((column) => availableColumns.has(column))
+
+    if (insertColumns.length === 0) {
+      throw new Error('resource_conflicts table has no expected columns for extraction insert')
+    }
+
     const values: any[] = []
     const placeholders: string[] = []
 
     entities.forEach((e, index) => {
-      const offset = index * 11
-      placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11})`
-      )
+      const offset = index * insertColumns.length
+      placeholders.push(`(${insertColumns.map((_, i) => `$${offset + i + 1}`).join(', ')})`)
 
       // Ensure resource_id is a valid UUID, otherwise nullify it
       // This prevents errors when the AI extracts a role name into the ID field
@@ -194,25 +292,37 @@ export async function saveResourceConflicts(
         ? e.resource_id
         : null
 
-      values.push(
-        projectId,
-        resourceId,
-        e.resource_name || null,
-        e.conflict_type || null,
-        e.conflict_description || null,
-        e.impacted_activities || [],
-        e.severity || null,
-        e.resolution || null,
-        e.resolution_date || null,
-        e.source_document_id || null,
-        userId
-      )
+      const rowData: Record<string, any> = {
+        conflict_id: e.conflict_id || randomUUID(),
+        id: randomUUID(),
+        project_id: projectId,
+        resource_id: resourceId,
+        resource_name: e.resource_name || 'Unknown resource',
+        conflict_type: (() => {
+          const normalizedType = normalizeConflictType(e.conflict_type) || 'overallocation'
+          if (!allowedConflictTypes || allowedConflictTypes.length === 0) return normalizedType
+          return allowedConflictTypes.includes(normalizedType)
+            ? normalizedType
+            : (allowedConflictTypes[0] || normalizedType)
+        })(),
+        conflict_description: e.conflict_description || null,
+        impacted_activities: JSON.stringify(e.impacted_activities || []),
+        severity: normalizeSeverity(e.severity),
+        resolution: e.resolution || null,
+        resolution_date: e.resolution_date || null,
+        conflict_date: e.resolution_date || null,
+        source_document_id: e.source_document_id || null,
+        created_by: userId
+      }
+
+      insertColumns.forEach((column) => {
+        values.push(rowData[column] ?? null)
+      })
     })
 
     await client.query(
       `INSERT INTO resource_conflicts (
-        project_id, resource_id, resource_name, conflict_type, conflict_description,
-        impacted_activities, severity, resolution, resolution_date, source_document_id, created_by
+        ${insertColumns.join(', ')}
       )
       VALUES ${placeholders.join(', ')}`,
       values

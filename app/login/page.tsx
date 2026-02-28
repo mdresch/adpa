@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import * as React from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -28,19 +28,19 @@ export default function LoginPage() {
   const { login, register, isAuthenticated, loading } = useAuth()
   const router = useRouter()
 
-  const [activeTab, setActiveTab] = useState("login")
-  const [showPassword, setShowPassword] = useState(false)
-  const [formData, setFormData] = useState({
+  const [activeTab, setActiveTab] = React.useState("login")
+  const [showPassword, setShowPassword] = React.useState(false)
+  const [formData, setFormData] = React.useState({
     email: "",
     password: "",
     name: "",
     confirmPassword: "",
   })
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [error, setError] = useState("")
+  const [isSubmitting, setIsSubmitting] = React.useState(false)
+  const [error, setError] = React.useState("")
 
   // Redirect if already authenticated
-  useEffect(() => {
+  React.useEffect(() => {
     if (isAuthenticated) {
       router.push("/")
     }

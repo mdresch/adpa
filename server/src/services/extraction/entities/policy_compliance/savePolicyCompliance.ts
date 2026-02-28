@@ -7,6 +7,25 @@ import type { PoolClient } from 'pg'
 import type { PersistenceResult } from '../../base/Persistence'
 import type { PolicyCompliance } from './types'
 
+function normalizeTimestamp(value: unknown): string | null {
+    if (!value || typeof value !== 'string') return null
+    const trimmed = value.trim()
+    if (!trimmed) return null
+
+    const lowered = trimmed.toLowerCase()
+    if (['n/a', 'na', 'not specified', 'unknown', 'tbd', 'yyyy-mm-dd'].includes(lowered)) {
+        return null
+    }
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+        return `${trimmed}T00:00:00.000Z`
+    }
+
+    const parsed = Date.parse(trimmed)
+    if (Number.isNaN(parsed)) return null
+    return new Date(parsed).toISOString()
+}
+
 export async function savePolicyCompliance(
     client: PoolClient,
     projectId: string,
@@ -36,8 +55,8 @@ export async function savePolicyCompliance(
                 e.category || null,
                 e.compliance_status || null,
                 e.findings || null,
-                e.last_audit_date || null,
-                e.next_audit_date || null,
+                normalizeTimestamp(e.last_audit_date),
+                normalizeTimestamp(e.next_audit_date),
                 e.source_document_id || null,
                 userId
             )

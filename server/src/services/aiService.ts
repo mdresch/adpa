@@ -5,18 +5,19 @@
  * Version: 3.1 - AI Gateway + Direct Fallback
  */
 
-import { generateText } from "ai"
+import * as ai from "ai"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { createMistral } from "@ai-sdk/mistral"
 import { createOpenAI } from "@ai-sdk/openai"
 import { createXai } from "@ai-sdk/xai"
 import { createDeepSeek } from "@ai-sdk/deepseek"
+import { wrapAISDK } from "langsmith/experimental/vercel"
 import OpenAI from "openai"  // Native OpenAI SDK for Moonshot
 import Anthropic from "@anthropic-ai/sdk"  // Native Anthropic SDK
 import { logger } from "../utils/logger"
 import { pool } from "../database/connection"
 import AnalyticsTrackingService from "./analyticsTrackingService"
-import { isTracingEnabled } from "../tracing"
+import { isTracingEnabled, isNativeLangfuseEnabled } from "../tracing"
 import { Langfuse } from "langfuse"
 
 const langfuse = new Langfuse({
@@ -24,6 +25,8 @@ const langfuse = new Langfuse({
   secretKey: process.env.LANGFUSE_SECRET_KEY,
   baseUrl: process.env.LANGFUSE_BASE_URL || "https://cloud.langfuse.com"
 });
+
+const { generateText: tracedGenerateText } = wrapAISDK(ai)
 
 export interface AIProvider {
   name: string
@@ -46,6 +49,15 @@ export interface AIGenerateRequest {
   userId?: string
   projectId?: string
   documentId?: string
+  // Rich tracing metadata (optional)
+  aiCallType?: string
+  requestedGeneration?: string
+  template_name?: string
+  entityName?: string
+  entityType?: string
+  templateRecommendation?: boolean
+  riskMitigationPlan?: boolean
+  riskName?: string
 }
 
 export interface AIGenerateResponse {
@@ -113,6 +125,64 @@ class AIService {
       inputTokens,
       outputTokens,
       totalTokens,
+    }
+  }
+
+  private inferAICallType(request: AIGenerateRequest): string {
+    if (request.aiCallType) return request.aiCallType
+    if (request.templateRecommendation) return 'template_recommendation'
+    if (request.riskMitigationPlan) return 'risk_mitigation_plan'
+    if (request.entityName || request.entityType) return 'entity_extraction'
+    if (request.template_id) return 'template_generation'
+    return 'general_generation'
+  }
+
+  private buildTelemetryMetadata(
+    request: AIGenerateRequest,
+    context: {
+      provider: string
+      model: string
+      callPath: string
+      templateName?: string
+    }
+  ): Record<string, any> {
+    return {
+      userId: request.userId || null,
+      projectId: request.projectId || null,
+      documentId: request.documentId || null,
+      provider: context.provider,
+      model: context.model,
+      callPath: context.callPath,
+      aiCallType: this.inferAICallType(request),
+      requestedGeneration: request.requestedGeneration || request.prompt?.slice(0, 1000) || null,
+      templateId: request.template_id || null,
+      templateName: request.template_name || context.templateName || null,
+      entityName: request.entityName || null,
+      entityType: request.entityType || null,
+      templateRecommendation: request.templateRecommendation ?? false,
+      riskMitigationPlan: request.riskMitigationPlan ?? false,
+      riskName: request.riskName || null,
+      traceName: request.traceName || null,
+    }
+  }
+
+  private async getTemplateName(templateId?: string, fallbackName?: string): Promise<string | undefined> {
+    if (fallbackName) return fallbackName
+    if (!templateId) return undefined
+
+    try {
+      const result = await pool.query(
+        "SELECT name FROM templates WHERE id = $1 LIMIT 1",
+        [templateId]
+      )
+
+      return result.rows[0]?.name
+    } catch (error) {
+      logger.warn('[AI-SERVICE] Failed to resolve template name for telemetry metadata', {
+        templateId,
+        error: error instanceof Error ? error.message : String(error)
+      })
+      return undefined
     }
   }
 
@@ -431,6 +501,14 @@ class AIService {
       logger.debug('[AI-SERVICE] Using provided system_prompt')
     }
 
+    const resolvedTemplateName = await this.getTemplateName(request.template_id, request.template_name)
+    const rootTraceMetadata = this.buildTelemetryMetadata(request, {
+      provider: request.provider,
+      model: request.model || 'default',
+      callPath: 'ai-service-generate-entry',
+      templateName: resolvedTemplateName,
+    })
+
     let langfuseTrace: any = null;
     let langfuseGeneration: any = null;
 
@@ -448,15 +526,16 @@ class AIService {
         throw new Error(`Provider lookup failed for: ${request.provider}`)
       }
 
-      langfuseTrace = isTracingEnabled() ? langfuse.trace({
+      langfuseTrace = isNativeLangfuseEnabled() ? langfuse.trace({
         name: request.traceName || `ai-generate-${request.provider}-entity`,
         sessionId: request.projectId || request.documentId || undefined,
         userId: request.userId,
-        metadata: {
-          projectId: request.projectId,
-          documentId: request.documentId
-        },
-        tags: [request.provider, request.model || "default"]
+        metadata: rootTraceMetadata,
+        tags: [
+          request.provider,
+          request.model || "default",
+          this.inferAICallType(request)
+        ]
       }) : null;
 
       if (langfuseTrace) {
@@ -509,7 +588,7 @@ class AIService {
             ? request.model
             : 'deepseek-chat'
 
-          const deepseekResult = await generateText({
+          const deepseekResult = await tracedGenerateText({
             model: deepseek(modelName),
             messages: [
               ...(systemMessage ? [{ role: 'system' as const, content: systemMessage }] : []),
@@ -520,13 +599,12 @@ class AIService {
             experimental_telemetry: {
               isEnabled: isTracingEnabled(),
               functionId: 'ai-generate-deepseek',
-              metadata: {
-                userId: request.userId,
-                projectId: request.projectId,
-                documentId: request.documentId,
+              metadata: this.buildTelemetryMetadata(request, {
                 provider: 'deepseek',
-                model: modelName
-              }
+                model: modelName,
+                callPath: 'direct-deepseek',
+                templateName: resolvedTemplateName,
+              })
             }
           })
 
@@ -678,7 +756,7 @@ class AIService {
             ? request.model
             : 'grok-beta'
 
-          const xaiResult = await generateText({
+          const xaiResult = await tracedGenerateText({
             model: xai(modelName),
             messages: [
               ...(systemMessage ? [{ role: 'system' as const, content: systemMessage }] : []),
@@ -689,13 +767,12 @@ class AIService {
             experimental_telemetry: {
               isEnabled: isTracingEnabled(),
               functionId: 'ai-generate-xai',
-              metadata: {
-                userId: request.userId,
-                projectId: request.projectId,
-                documentId: request.documentId,
+              metadata: this.buildTelemetryMetadata(request, {
                 provider: 'xai',
-                model: modelName
-              }
+                model: modelName,
+                callPath: 'direct-xai',
+                templateName: resolvedTemplateName,
+              })
             }
           })
 
@@ -940,7 +1017,7 @@ class AIService {
         // KISS: Use messages array if we have system message, otherwise use prompt
         if (systemMessage) {
           logger.info('📨 [AI-SERVICE-6/8] Using KISS architecture with system + user messages')
-          result = await generateText({
+          result = await ai.generateText({
             model: gatewayModelId,
             messages: [
               { role: 'system', content: systemMessage },
@@ -951,18 +1028,17 @@ class AIService {
             experimental_telemetry: {
               isEnabled: isTracingEnabled(),
               functionId: 'ai-gateway-messages',
-              metadata: {
-                userId: request.userId,
-                projectId: request.projectId,
-                documentId: request.documentId,
+              metadata: this.buildTelemetryMetadata(request, {
                 provider: 'gateway',
-                modelId: gatewayModelId
-              }
+                model: gatewayModelId,
+                callPath: 'gateway-messages',
+                templateName: resolvedTemplateName,
+              })
             }
           } as any)
         } else {
           logger.info('📨 [AI-SERVICE-6/8] Using simple prompt (no template)')
-          result = await generateText({
+          result = await ai.generateText({
             model: gatewayModelId,
             prompt: userMessage,
             temperature: request.temperature || 0.7,
@@ -970,13 +1046,12 @@ class AIService {
             experimental_telemetry: {
               isEnabled: isTracingEnabled(),
               functionId: 'ai-gateway-prompt',
-              metadata: {
-                userId: request.userId,
-                projectId: request.projectId,
-                documentId: request.documentId,
+              metadata: this.buildTelemetryMetadata(request, {
                 provider: 'gateway',
-                modelId: gatewayModelId
-              }
+                model: gatewayModelId,
+                callPath: 'gateway-prompt',
+                templateName: resolvedTemplateName,
+              })
             }
           } as any)
         }
@@ -999,7 +1074,11 @@ class AIService {
           logger.warn('⚠️ [AI-SERVICE] AI Gateway returned empty content - falling back to direct provider')
         } else {
           logger.warn('⚠️ [AI-SERVICE] AI Gateway failed, attempting direct provider fallback...')
-          logger.warn('⚠️ [AI-SERVICE] Gateway error:', gatewayError?.message || gatewayError)
+          logger.warn(`⚠️ [AI-SERVICE] Gateway error: ${gatewayError?.message || String(gatewayError)}`, {
+            code: gatewayError?.code,
+            type: gatewayError?.type,
+            status: gatewayError?.status || gatewayError?.statusCode,
+          })
         }
 
         // Check if result exists but is empty (edge case where gateway "succeeds" but returns empty)
@@ -1040,6 +1119,7 @@ class AIService {
             'gemini-2.0-flash-exp': 'gemini-2.0-flash',
             'gemini-2.5-flash': 'gemini-2.0-flash',
             'gemini-2.5-pro': 'gemini-2.0-flash',
+            'gemini-3-flash-preview': 'gemini-2.0-flash',
           }
 
           // Use mapped model or fallback to current default (gemini-2.0-flash)
@@ -1163,7 +1243,7 @@ class AIService {
             ? request.model
             : 'mistral-small-latest' // Default to small (free tier)
 
-          const mistralResult = await generateText({
+          const mistralResult = await tracedGenerateText({
             model: mistral(modelName),
             messages: [
               ...(systemMessage ? [{ role: 'system' as const, content: systemMessage }] : []),
@@ -1174,13 +1254,12 @@ class AIService {
             experimental_telemetry: {
               isEnabled: isTracingEnabled(),
               functionId: 'ai-mistral-direct',
-              metadata: {
-                userId: request.userId,
-                projectId: request.projectId,
-                documentId: request.documentId,
+              metadata: this.buildTelemetryMetadata(request, {
                 provider: 'mistral',
-                model: modelName
-              }
+                model: modelName,
+                callPath: 'fallback-mistral-direct',
+                templateName: resolvedTemplateName,
+              })
             }
           })
 
@@ -1252,7 +1331,7 @@ class AIService {
             ? request.model
             : 'deepseek-chat' // Default to chat mode
 
-          const deepseekResult = await generateText({
+          const deepseekResult = await tracedGenerateText({
             model: deepseek(modelName),
             messages: [
               ...(systemMessage ? [{ role: 'system' as const, content: systemMessage }] : []),
@@ -1263,13 +1342,12 @@ class AIService {
             experimental_telemetry: {
               isEnabled: isTracingEnabled(),
               functionId: 'ai-deepseek-fallback',
-              metadata: {
-                userId: request.userId,
-                projectId: request.projectId,
-                documentId: request.documentId,
+              metadata: this.buildTelemetryMetadata(request, {
                 provider: 'deepseek',
-                model: modelName
-              }
+                model: modelName,
+                callPath: 'fallback-deepseek-direct',
+                templateName: resolvedTemplateName,
+              })
             }
           })
 
@@ -1341,7 +1419,7 @@ class AIService {
             ? request.model
             : 'kimi-k2-0905-preview' // Default to latest Kimi K2
 
-          const moonshotResult = await generateText({
+          const moonshotResult = await tracedGenerateText({
             model: moonshot(modelName),
             messages: [
               ...(systemMessage ? [{ role: 'system' as const, content: systemMessage }] : []),
@@ -1352,13 +1430,12 @@ class AIService {
             experimental_telemetry: {
               isEnabled: isTracingEnabled(),
               functionId: 'ai-moonshot-fallback',
-              metadata: {
-                userId: request.userId,
-                projectId: request.projectId,
-                documentId: request.documentId,
+              metadata: this.buildTelemetryMetadata(request, {
                 provider: 'moonshot',
-                model: modelName
-              }
+                model: modelName,
+                callPath: 'fallback-moonshot-direct',
+                templateName: resolvedTemplateName,
+              })
             }
           })
 
@@ -1536,7 +1613,7 @@ class AIService {
           // Use the model specified in request, or default to gpt-4o
           const modelName = request.model || 'gpt-4o'
 
-          const openaiResult = await generateText({
+          const openaiResult = await tracedGenerateText({
             model: openai(modelName),
             messages: [
               ...(systemMessage ? [{ role: 'system' as const, content: systemMessage }] : []),
@@ -1547,13 +1624,12 @@ class AIService {
             experimental_telemetry: {
               isEnabled: isTracingEnabled(),
               functionId: 'ai-openai-fallback',
-              metadata: {
-                userId: request.userId,
-                projectId: request.projectId,
-                documentId: request.documentId,
+              metadata: this.buildTelemetryMetadata(request, {
                 provider: 'openai',
-                model: modelName
-              }
+                model: modelName,
+                callPath: 'fallback-openai-direct',
+                templateName: resolvedTemplateName,
+              })
             }
           })
 
@@ -1636,7 +1712,7 @@ class AIService {
             ? request.model
             : 'llama-3.3-70b-versatile'
 
-          const groqResult = await generateText({
+          const groqResult = await tracedGenerateText({
             model: groq(modelName),
             messages: [
               ...(systemMessage ? [{ role: 'system' as const, content: systemMessage }] : []),
@@ -1647,13 +1723,12 @@ class AIService {
             experimental_telemetry: {
               isEnabled: isTracingEnabled(),
               functionId: 'ai-groq-fallback',
-              metadata: {
-                userId: request.userId,
-                projectId: request.projectId,
-                documentId: request.documentId,
+              metadata: this.buildTelemetryMetadata(request, {
                 provider: 'groq',
-                model: modelName
-              }
+                model: modelName,
+                callPath: 'fallback-groq-direct',
+                templateName: resolvedTemplateName,
+              })
             }
           })
 
@@ -1850,6 +1925,7 @@ class AIService {
         'gemini-1.5-pro': 'gemini-1.5-pro',
         'gemini-2.0-flash-exp': 'gemini-1.5-flash',
         'gemini-2.5-flash': 'gemini-1.5-flash',
+        'gemini-3-flash-preview': 'gemini-1.5-flash',
       }
     }
 

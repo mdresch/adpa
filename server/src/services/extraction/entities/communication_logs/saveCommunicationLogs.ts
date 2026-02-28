@@ -7,6 +7,17 @@ import type { PoolClient } from 'pg'
 import type { PersistenceResult } from '../../base/Persistence'
 import type { CommunicationLog } from './types'
 
+function normalizeTimestamp(value: unknown): string | null {
+    if (!value || typeof value !== 'string') return null
+    const trimmed = value.trim()
+    if (!trimmed) return null
+
+    const parsed = Date.parse(trimmed)
+    if (Number.isNaN(parsed)) return null
+
+    return new Date(parsed).toISOString()
+}
+
 export async function saveCommunicationLogs(
     client: PoolClient,
     projectId: string,
@@ -35,7 +46,7 @@ export async function saveCommunicationLogs(
                 e.sender || null,
                 e.recipient || null,
                 e.communication_type || null,
-                e.communication_date || null,
+                normalizeTimestamp(e.communication_date),
                 e.subject || null,
                 e.content_summary || null,
                 e.key_decisions_made || null,

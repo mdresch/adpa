@@ -414,21 +414,30 @@ router.post("/:id/test",
       }
 
       const integration = result.rows[0]
+      const configuration = typeof integration.configuration === 'string'
+        ? JSON.parse(integration.configuration)
+        : integration.configuration
 
       // Decrypt credentials
-      const credentials = JSON.parse(
-        Buffer.from(integration.credentials_encrypted, "base64").toString("utf-8")
-      )
+      const credentials = decodeIntegrationCredentials(integration.credentials_encrypted)
+      if (!credentials && integration.type !== 'pinecone') {
+        return res.status(400).json({
+          success: false,
+          message: 'Missing or invalid integration credentials',
+        })
+      }
 
-      log.info("Decrypted credentials for test:", {
-        hasIntegrationToken: !!credentials.integration_token,
-        hasApiKey: !!credentials.apiKey,
-        tokenLength: credentials.integration_token?.length || credentials.apiKey?.length || 0,
-        tokenPrefix: (credentials.integration_token || credentials.apiKey)?.substring(0, 10) + "..."
-      })
+      if (credentials) {
+        log.info("Decrypted credentials for test:", {
+          hasIntegrationToken: !!credentials.integration_token,
+          hasApiKey: !!credentials.apiKey,
+          tokenLength: credentials.integration_token?.length || credentials.apiKey?.length || 0,
+          tokenPrefix: (credentials.integration_token || credentials.apiKey)?.substring(0, 10) + "..."
+        })
+      }
 
       // Test connection based on integration type
-      const testResult = await testIntegrationConnection(integration.type, integration.configuration, credentials)
+      const testResult = await testIntegrationConnection(integration.type, configuration, credentials || {})
 
       // Update sync status
       await pool.query(
@@ -491,6 +500,24 @@ router.get("/:id/sync/status",
 )
 
 // Get MongoDB stats
+router.get("/mongodb/stats",
+  authenticateToken,
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { mongoVectorStore } = await import('../services/mongoVectorStore')
+
+      await mongoVectorStore.connect()
+      const stats = await mongoVectorStore.getStats()
+
+      res.json(stats)
+    } catch (error: any) {
+      log.error("Get MongoDB stats (global) error:", error)
+      res.status(500).json({ error: "Internal server error", message: error.message })
+    }
+  }
+)
+
 router.get("/:id/mongodb/stats",
   authenticateToken,
   validateParams(Joi.object({ id: Joi.string().uuid().required() })),
@@ -528,6 +555,42 @@ router.get("/:id/mongodb/stats",
 )
 
 // Search MongoDB vector store
+router.post("/mongodb/search",
+  authenticateToken,
+  validate(Joi.object({
+    query: Joi.string().required(),
+    topK: Joi.number().integer().min(1).max(100).default(10),
+    indexName: Joi.string().optional(),
+    numCandidates: Joi.number().integer().min(1).optional()
+  })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { query, topK, indexName, numCandidates } = req.body
+
+      const { mongoVectorStore } = await import('../services/mongoVectorStore')
+      const { voyageAIService } = await import('../services/voyageAIService')
+
+      await mongoVectorStore.connect()
+
+      log.info("Generating embedding for query", { query: query.substring(0, 50) })
+      const queryEmbedding = await voyageAIService.generateEmbedding(query, 'query', 'voyage-2')
+
+      const matches = await mongoVectorStore.vectorSearch(queryEmbedding, topK, undefined, indexName, numCandidates)
+
+      res.json({
+        success: true,
+        matches,
+        query,
+        resultsCount: matches.length
+      })
+    } catch (error: any) {
+      log.error("MongoDB vector search (global) error:", error)
+      res.status(500).json({ error: "Internal server error", message: error.message })
+    }
+  }
+)
+
 router.post("/:id/mongodb/search",
   authenticateToken,
   validateParams(Joi.object({ id: Joi.string().uuid().required() })),
@@ -611,23 +674,24 @@ router.get("/:id/pinecone/stats",
       const { PineconeService } = await import('../services/pineconeService')
 
       const integration = result.rows[0]
-      const configuration = typeof integration.configuration === 'string'
-        ? JSON.parse(integration.configuration)
-        : integration.configuration
+      const credentials = decodeIntegrationCredentials(integration.credentials_encrypted)
+      const pineconeConfigs = resolvePineconeConnectionCandidates(integration, credentials)
+      if (pineconeConfigs.length === 0) {
+        return res.status(400).json({ error: 'Missing or invalid Pinecone credentials' })
+      }
 
-      const credentials = JSON.parse(
-        Buffer.from(integration.credentials_encrypted, "base64").toString("utf-8")
-      )
+      let indexStats: any = null
+      let selectedConfig: { apiKey: string; indexName?: string; indexHost?: string } | null = null
 
-      // Instantiate service with credentials from DB
-      const pineconeService = new PineconeService({
-        apiKey: credentials.apiKey || credentials.api_key,
-        indexName: configuration.indexName || configuration.index_name,
-        indexHost: configuration.indexHost || configuration.index_host
-      })
+      for (const pineconeConfig of pineconeConfigs) {
+        const pineconeService = new PineconeService(pineconeConfig)
+        indexStats = await pineconeService.getIndexStats()
 
-      // Get index stats
-      const indexStats = await pineconeService.getIndexStats()
+        if (indexStats) {
+          selectedConfig = pineconeConfig
+          break
+        }
+      }
 
       if (!indexStats) {
         return res.status(500).json({ error: "Failed to retrieve Pinecone stats" })
@@ -635,7 +699,7 @@ router.get("/:id/pinecone/stats",
 
       res.json({
         indexStats,
-        indexName: process.env.PINECONE_INDEX_NAME || 'adpa-rag-index',
+        indexName: selectedConfig?.indexName || process.env.PINECONE_INDEX_NAME || 'adpa-rag-index',
         environment: process.env.PINECONE_ENVIRONMENT || 'us-west1-gcp'
       })
     } catch (error: any) {
@@ -677,20 +741,13 @@ router.post("/:id/pinecone/search",
       const { PineconeService } = await import('../services/pineconeService')
 
       const integration = result.rows[0]
-      const configuration = typeof integration.configuration === 'string'
-        ? JSON.parse(integration.configuration)
-        : integration.configuration
+      const credentials = decodeIntegrationCredentials(integration.credentials_encrypted)
+      const pineconeConfig = resolvePineconeConnectionConfig(integration, credentials)
+      if (!pineconeConfig) {
+        return res.status(400).json({ error: 'Missing or invalid Pinecone credentials' })
+      }
 
-      const credentials = JSON.parse(
-        Buffer.from(integration.credentials_encrypted, "base64").toString("utf-8")
-      )
-
-      // Instantiate service with credentials from DB
-      const pineconeService = new PineconeService({
-        apiKey: credentials.apiKey || credentials.api_key,
-        indexName: configuration.indexName || configuration.index_name,
-        indexHost: configuration.indexHost || configuration.index_host
-      })
+      const pineconeService = new PineconeService(pineconeConfig)
 
       // Perform search
       const matches = await pineconeService.search(query, topK, undefined, namespace)
@@ -1006,6 +1063,14 @@ router.post("/:id/sync",
         authorId: user?.id || null
       }
       const syncResult = await performIntegrationSync(integration, syncOptions)
+      const normalizedSyncResult = syncResult || {
+        success: false,
+        details: {
+          synced_items: 0,
+          error: 'Sync returned no result',
+          last_sync: new Date().toISOString(),
+        },
+      }
 
       // Update sync status and timestamp
       await pool.query(
@@ -1014,15 +1079,15 @@ router.post("/:id/sync",
         SET sync_status = $1, last_sync = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP 
         WHERE id = $2
       `,
-        [syncResult.success ? "completed" : "error", id]
+        [normalizedSyncResult.success ? "completed" : "error", id]
       )
 
-      log.info(`Integration sync: ${id} - ${syncResult.success ? "success" : "failed"}`)
+      log.info(`Integration sync: ${id} - ${normalizedSyncResult.success ? "success" : "failed"}`)
 
       res.json({
         message: "Sync completed",
-        success: syncResult.success,
-        details: syncResult.details,
+        success: normalizedSyncResult.success,
+        details: normalizedSyncResult.details,
       })
     } catch (error: any) {
       log.error("Sync integration error:", {
@@ -1229,13 +1294,27 @@ async function testIntegrationConnection(type: string, configuration: any, crede
       }
     case "pinecone":
       try {
+        const pineconeConfigs = resolvePineconeConnectionCandidates({ configuration }, credentials)
+
+        if (pineconeConfigs.length === 0) {
+          return {
+            success: false,
+            message: "Pinecone API key not configured",
+            details: { type, tested_at: new Date().toISOString(), error: 'Missing API key in credentials/config/env' },
+          }
+        }
+
         const { PineconeService } = await import("../services/pineconeService")
-        const pineconeService = new PineconeService({
-          apiKey: credentials.apiKey || credentials.api_key,
-          indexName: configuration.indexName || configuration.index_name,
-          indexHost: configuration.indexHost || configuration.index_host
-        })
-        const connected = await pineconeService.testConnection()
+        let connected = false
+
+        for (const pineconeConfig of pineconeConfigs) {
+          const pineconeService = new PineconeService(pineconeConfig)
+          connected = await pineconeService.testConnection()
+          if (connected) {
+            break
+          }
+        }
+
         return {
           success: connected,
           message: connected ? "Pinecone connection successful" : "Pinecone connection failed",
@@ -1263,22 +1342,159 @@ interface SyncOptions {
   authorId?: string | null
 }
 
-async function performIntegrationSync(integration: any, syncOptions: SyncOptions = {}) {
-  // Guard clause for missing credentials
-  if (!integration.credentials_encrypted) {
-    console.warn(`[SYNC] Skipping sync for integration ${integration.id} (${integration.type}): Missing encrypted credentials`)
-    return
+function decodeIntegrationCredentials(encryptedCredentials: unknown): Record<string, any> | null {
+  if (typeof encryptedCredentials !== 'string' || encryptedCredentials.trim() === '') {
+    return null
   }
 
-  // Decrypt credentials
-  let credentials
   try {
-    credentials = JSON.parse(
-      Buffer.from(integration.credentials_encrypted, "base64").toString("utf-8")
-    )
-  } catch (err: any) {
-    console.error(`[SYNC] Failed to decrypt credentials for integration ${integration.id}:`, err.message)
-    return
+    const decoded = Buffer.from(encryptedCredentials, 'base64').toString('utf-8')
+    return JSON.parse(decoded)
+  } catch {
+    return null
+  }
+}
+
+function parseIntegrationConfiguration(configuration: unknown): Record<string, any> {
+  if (!configuration) {
+    return {}
+  }
+
+  if (typeof configuration === 'string') {
+    try {
+      return JSON.parse(configuration)
+    } catch {
+      return {}
+    }
+  }
+
+  if (typeof configuration === 'object') {
+    return configuration as Record<string, any>
+  }
+
+  return {}
+}
+
+function resolvePineconeConnectionConfig(
+  integration: any,
+  credentials?: Record<string, any> | null
+): { apiKey: string; indexName?: string; indexHost?: string } | null {
+  const candidates = resolvePineconeConnectionCandidates(integration, credentials)
+  return candidates[0] || null
+}
+
+function resolvePineconeConnectionCandidates(
+  integration: any,
+  credentials?: Record<string, any> | null
+): Array<{ apiKey: string; indexName?: string; indexHost?: string }> {
+  const config = parseIntegrationConfiguration(integration?.configuration)
+
+  const configIndexName = normalizeOptionalString(config.indexName) || normalizeOptionalString(config.index_name)
+  const configIndexHost = normalizeOptionalString(config.indexHost) || normalizeOptionalString(config.index_host)
+  const envIndexName = normalizeOptionalString(process.env.PINECONE_INDEX_NAME)
+  const envIndexHost = normalizeOptionalString(process.env.PINECONE_INDEX_HOST)
+
+  const rawApiKeys = [
+    credentials?.apiKey,
+    credentials?.api_key,
+    config.apiKey,
+    config.api_key,
+    process.env.PINECONE_API_KEY,
+  ]
+
+  const apiKeys = uniqueNonEmptyStrings(rawApiKeys)
+
+  const indexPairs = buildIndexCandidates(configIndexName, configIndexHost, envIndexName, envIndexHost)
+
+  const combinations: Array<{ apiKey: string; indexName?: string; indexHost?: string }> = []
+  const seen = new Set<string>()
+
+  for (const apiKey of apiKeys) {
+    for (const pair of indexPairs) {
+      const dedupeKey = `${apiKey}|${pair.indexName || ''}|${pair.indexHost || ''}`
+      if (seen.has(dedupeKey)) {
+        continue
+      }
+      seen.add(dedupeKey)
+      combinations.push({ apiKey, indexName: pair.indexName, indexHost: pair.indexHost })
+    }
+  }
+
+  return combinations
+}
+
+function buildIndexCandidates(
+  configIndexName?: string,
+  configIndexHost?: string,
+  envIndexName?: string,
+  envIndexHost?: string
+): Array<{ indexName: string; indexHost?: string }> {
+  const pairs: Array<{ indexName: string; indexHost?: string }> = []
+  const seen = new Set<string>()
+
+  const push = (indexName?: string, indexHost?: string) => {
+    if (!indexName) {
+      return
+    }
+    const key = `${indexName}|${indexHost || ''}`
+    if (seen.has(key)) {
+      return
+    }
+    seen.add(key)
+    pairs.push({ indexName, indexHost })
+  }
+
+  // Source-aligned pairs first
+  push(configIndexName, configIndexHost)
+  push(envIndexName, envIndexHost)
+
+  // Auto-discovery fallback for each index name (no host)
+  push(configIndexName, undefined)
+  push(envIndexName, undefined)
+
+  // Final default
+  push('adpa-rag-index', undefined)
+
+  return pairs
+}
+
+function uniqueNonEmptyStrings(values: unknown[]): string[] {
+  const uniqueValues = new Set<string>()
+
+  for (const value of values) {
+    const normalized = normalizeOptionalString(value)
+    if (normalized) {
+      uniqueValues.add(normalized)
+    }
+  }
+
+  return Array.from(uniqueValues)
+}
+
+function normalizeOptionalString(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined
+  }
+
+  const normalized = value.trim()
+  return normalized.length > 0 ? normalized : undefined
+}
+
+async function performIntegrationSync(integration: any, syncOptions: SyncOptions = {}) {
+  const credentials = decodeIntegrationCredentials(integration.credentials_encrypted)
+
+  // Non-pinecone integrations still require encrypted credentials
+  if (!credentials && integration.type !== 'pinecone') {
+    console.warn(`[SYNC] Skipping sync for integration ${integration.id} (${integration.type}): Missing encrypted credentials`)
+    return {
+      success: false,
+      details: {
+        synced_items: 0,
+        skipped: true,
+        error: 'Missing encrypted credentials',
+        last_sync: new Date().toISOString(),
+      },
+    }
   }
 
   // Implement actual sync logic for each integration type
@@ -1372,16 +1588,22 @@ async function performIntegrationSync(integration: any, syncOptions: SyncOptions
           }, 3600) // 1 hour TTL
         }
 
-        const config = typeof integration.configuration === 'string'
-          ? JSON.parse(integration.configuration)
-          : integration.configuration
+        const pineconeConfig = resolvePineconeConnectionConfig(integration, credentials)
+        if (!pineconeConfig) {
+          console.warn(`[SYNC] Skipping sync for integration ${integration.id} (pinecone): Missing API key in credentials/config/env`)
+          return {
+            success: false,
+            details: {
+              synced_items: 0,
+              skipped: true,
+              error: 'Missing Pinecone API key in credentials/config/env',
+              last_sync: new Date().toISOString(),
+            },
+          }
+        }
 
         // Instantiate service with credentials
-        const pineconeService = new PineconeService({
-          apiKey: credentials.apiKey || credentials.api_key,
-          indexName: config?.indexName || config?.index_name,
-          indexHost: config?.indexHost || config?.index_host
-        })
+        const pineconeService = new PineconeService(pineconeConfig)
 
         const result = await pineconeService.syncAll(projectId, onProgress)
 

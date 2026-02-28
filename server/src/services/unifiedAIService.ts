@@ -10,7 +10,7 @@ import { mistral } from '@ai-sdk/mistral'
 // import { azure } from '@ai-sdk/azure' // Package not installed
 import { logger } from '../utils/logger'
 import { pool } from '../database/connection'
-import { isTracingEnabled } from '../tracing'
+import { isTracingEnabled, isNativeLangfuseEnabled } from '../tracing'
 import { Langfuse } from 'langfuse'
 
 const langfuse = new Langfuse({
@@ -38,6 +38,10 @@ export interface AIGenerateRequest {
   max_tokens?: number
   messages?: Array<{ role: string; content: string }>
   traceName?: string
+  projectId?: string
+  documentId?: string
+  userId?: string
+  template_id?: string
 }
 
 export interface AIStructuredGenerateRequest extends AIGenerateRequest {
@@ -204,9 +208,16 @@ class UnifiedAIService {
       const model = request.model || this.getDefaultModel(provider.type)
 
       // Create Langfuse trace and generation
-      langfuseTrace = isTracingEnabled() ? langfuse.trace({
+      langfuseTrace = isNativeLangfuseEnabled() ? langfuse.trace({
         name: request.traceName || `unified-ai-generate-${provider.type}-entity`,
-        metadata: { provider: provider.name },
+        sessionId: request.projectId || request.documentId || undefined,
+        userId: request.userId,
+        metadata: {
+          provider: provider.name,
+          projectId: request.projectId,
+          documentId: request.documentId,
+          templateId: request.template_id,
+        },
         tags: [provider.type, model]
       }) : null
 
@@ -325,9 +336,16 @@ class UnifiedAIService {
       const model = request.model || this.getDefaultModel(provider.type)
 
       // Create Langfuse trace and generation
-      langfuseTrace = isTracingEnabled() ? langfuse.trace({
+      langfuseTrace = isNativeLangfuseEnabled() ? langfuse.trace({
         name: request.traceName || `unified-ai-generate-object-${provider.type}-entity`,
-        metadata: { provider: provider.name },
+        sessionId: request.projectId || request.documentId || undefined,
+        userId: request.userId,
+        metadata: {
+          provider: provider.name,
+          projectId: request.projectId,
+          documentId: request.documentId,
+          templateId: request.template_id,
+        },
         tags: [provider.type, model]
       }) : null
 
@@ -550,9 +568,16 @@ class UnifiedAIService {
       const model = request.model || this.getDefaultModel(provider.type)
 
       // Create Langfuse trace and generation
-      langfuseTrace = isTracingEnabled() ? langfuse.trace({
+      langfuseTrace = isNativeLangfuseEnabled() ? langfuse.trace({
         name: `unified-ai-stream-${provider.type}`,
-        metadata: { provider: provider.name },
+        sessionId: request.projectId || request.documentId || undefined,
+        userId: request.userId,
+        metadata: {
+          provider: provider.name,
+          projectId: request.projectId,
+          documentId: request.documentId,
+          templateId: request.template_id,
+        },
         tags: [provider.type, model]
       }) : null
 

@@ -10,6 +10,8 @@ import { authenticateToken, requirePermission } from "../middleware/auth"
 import { getNeo4jDatabase, getNeo4jDriver, isNeo4jConfigured } from "../utils/neo4j"
 import { addJob } from "../services/queueService"
 import { getContextForStrategy } from "../services/gkg/gkgContextService"
+import { runGkgReconciliation } from "../services/gkg/reconcile"
+import { getDatabasePool } from "../database/connection"
 import { logger } from "../utils/logger"
 import { v4 as uuidV4 } from "uuid"
 import type { GkgContextStrategy } from "../modules/documentTemplates/types"
@@ -60,6 +62,123 @@ router.post(
       const msg = err instanceof Error ? err.message : String(err)
       logger.error("[GKG] Sync enqueue failed", { error: msg })
       res.status(500).json({ status: "error", error: msg })
+    }
+  }
+)
+
+/**
+ * POST /api/gkg/activate
+ * Auto-create/activate Neo4j integration record for current environment,
+ * then optionally enqueue bootstrap and project sync jobs.
+ * Body: { projectId?: string, bootstrap?: boolean, syncProject?: boolean }
+ */
+router.post(
+  "/activate",
+  authenticateToken,
+  requirePermission("projects.view"),
+  async (req, res) => {
+    try {
+      if (!isNeo4jConfigured()) {
+        return res.status(503).json({
+          status: "unavailable",
+          error: "Neo4j is not configured; set NEO4J_URI to enable activation.",
+        })
+      }
+
+      const pool = getDatabasePool()
+      const { projectId, bootstrap, syncProject } =
+        (req.body as { projectId?: string; bootstrap?: boolean; syncProject?: boolean }) ?? {}
+
+      const configPayload = {
+        uri: process.env.NEO4J_URI || process.env.NEO4J_URL || "",
+        database: getNeo4jDatabase(),
+        source: "gkg-auto-activate",
+      }
+
+      const existing = await pool.query(
+        `
+        SELECT id
+        FROM integrations
+        WHERE type = 'neo4j'
+        ORDER BY is_active DESC, updated_at DESC
+        LIMIT 1
+      `
+      )
+
+      let integrationId: string
+      if (existing.rows.length > 0) {
+        integrationId = existing.rows[0].id
+        await pool.query(
+          `
+          UPDATE integrations
+          SET is_active = true,
+              name = COALESCE(name, 'Neo4j Graph Database'),
+              configuration = COALESCE(configuration, '{}'::jsonb) || $2::jsonb,
+              updated_at = CURRENT_TIMESTAMP
+          WHERE id = $1
+        `,
+          [integrationId, JSON.stringify(configPayload)]
+        )
+      } else {
+        integrationId = uuidV4()
+        const credentialsEncrypted = Buffer.from(JSON.stringify({})).toString("base64")
+        await pool.query(
+          `
+          INSERT INTO integrations (id, name, type, configuration, credentials_encrypted, is_active, created_by)
+          VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7)
+        `,
+          [
+            integrationId,
+            "Neo4j Graph Database",
+            "neo4j",
+            JSON.stringify(configPayload),
+            credentialsEncrypted,
+            true,
+            req.user?.id ?? null,
+          ]
+        )
+      }
+
+      const enqueuedJobs: Array<{ type: string; jobId: string }> = []
+
+      if (bootstrap === true) {
+        const bootstrapJobId = uuidV4()
+        await addJob(
+          "gkg-bootstrap",
+          { jobId: bootstrapJobId },
+          { jobId: bootstrapJobId, attempts: 2, backoff: { type: "exponential", delay: 5000 } }
+        )
+        enqueuedJobs.push({ type: "gkg-bootstrap", jobId: bootstrapJobId })
+      }
+
+      if (syncProject === true && projectId) {
+        const syncJobId = uuidV4()
+        await addJob(
+          "gkg-sync-project",
+          { jobId: syncJobId, projectId },
+          { jobId: syncJobId, attempts: 2, backoff: { type: "exponential", delay: 5000 } }
+        )
+        enqueuedJobs.push({ type: "gkg-sync-project", jobId: syncJobId })
+      }
+
+      logger.info("[GKG] Activation complete", {
+        integrationId,
+        bootstrap: bootstrap === true,
+        syncProject: syncProject === true,
+        projectId,
+        jobs: enqueuedJobs,
+      })
+
+      return res.json({
+        status: "ok",
+        integrationId,
+        activated: true,
+        enqueuedJobs,
+      })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      logger.error("[GKG] Activation failed", { error: msg })
+      return res.status(500).json({ status: "error", error: msg })
     }
   }
 )
@@ -225,6 +344,256 @@ router.get(
       return res.status(500).json({ status: "error", error: msg })
     } finally {
       await session.close()
+    }
+  }
+)
+
+/**
+ * POST /api/gkg/reconcile
+ * Dry-run drift report by default. Set cleanup=true to delete detected stale nodes/edges.
+ * Body: { cleanup?: boolean, limitPerType?: number }
+ */
+router.post(
+  "/reconcile",
+  authenticateToken,
+  requirePermission("projects.view"),
+  async (req, res) => {
+    if (!isNeo4jConfigured()) {
+      return res.status(503).json({
+        status: "unavailable",
+        error: "Neo4j is not configured; set NEO4J_URI to enable GKG reconciliation.",
+      })
+    }
+
+    const driver = getNeo4jDriver()
+    if (!driver) {
+      return res.status(503).json({
+        status: "unavailable",
+        error: "Neo4j driver is unavailable (circuit open or not connected).",
+      })
+    }
+
+    const { cleanup, limitPerType } =
+      (req.body as { cleanup?: boolean; limitPerType?: number }) ?? {}
+
+    try {
+      const database = getNeo4jDatabase()
+      const pool = getDatabasePool()
+      const report = await runGkgReconciliation(pool, driver, database, {
+        cleanup: cleanup === true,
+        limitPerType,
+      })
+
+      logger.info("[GKG] Reconciliation completed", {
+        cleanup: cleanup === true,
+        limitPerType: report.scanned.limitPerType,
+        staleProjects: report.staleNodes.projects.length,
+        staleDocuments: report.staleNodes.documents.length,
+        staleTemplates: report.staleNodes.templates.length,
+        staleTasks: report.staleNodes.tasks.length,
+        staleSemanticUnits: report.staleNodes.semanticUnits.length,
+      })
+
+      return res.json({
+        status: "ok",
+        mode: cleanup === true ? "cleanup" : "dry_run",
+        ...report,
+      })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      logger.error("[GKG] Reconciliation failed", {
+        cleanup: cleanup === true,
+        error: msg,
+      })
+      return res.status(500).json({ status: "error", error: msg })
+    }
+  }
+)
+
+/**
+ * POST /api/gkg/reconcile/queue
+ * Enqueue full GKG reconciliation for large graphs.
+ * Body: { cleanup?: boolean, batchSize?: number }
+ */
+router.post(
+  "/reconcile/queue",
+  authenticateToken,
+  requirePermission("projects.view"),
+  async (req, res) => {
+    try {
+      if (!isNeo4jConfigured()) {
+        return res.status(503).json({
+          status: "unavailable",
+          error: "Neo4j is not configured; set NEO4J_URI to enable GKG reconciliation.",
+        })
+      }
+
+      const driver = getNeo4jDriver()
+      if (!driver) {
+        return res.status(503).json({
+          status: "unavailable",
+          error: "Neo4j driver is unavailable (circuit open or not connected).",
+        })
+      }
+
+      const { cleanup, batchSize } =
+        (req.body as { cleanup?: boolean; batchSize?: number }) ?? {}
+
+      const jobId = uuidV4()
+      await addJob(
+        "gkg-reconcile",
+        { jobId, cleanup: cleanup === true, batchSize },
+        { jobId, attempts: 1, backoff: { type: "exponential", delay: 5000 } }
+      )
+
+      logger.info("[GKG] Enqueued gkg-reconcile", {
+        jobId,
+        cleanup: cleanup === true,
+        batchSize,
+      })
+
+      return res.json({
+        status: "enqueued",
+        type: "gkg-reconcile",
+        jobId,
+        cleanup: cleanup === true,
+        batchSize: typeof batchSize === "number" ? batchSize : undefined,
+      })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      logger.error("[GKG] Reconcile queue enqueue failed", { error: msg })
+      return res.status(500).json({ status: "error", error: msg })
+    }
+  }
+)
+
+/**
+ * GET /api/gkg/reconcile/recent
+ * Return recent queued/full reconcile jobs with summary statistics.
+ */
+router.get(
+  "/reconcile/recent",
+  authenticateToken,
+  requirePermission("projects.view"),
+  async (req, res) => {
+    try {
+      const pool = getDatabasePool()
+      const rawLimit = Number((req.query as { limit?: string })?.limit ?? 10)
+      const limit = Number.isFinite(rawLimit)
+        ? Math.max(1, Math.min(25, Math.floor(rawLimit)))
+        : 10
+
+      const recentResult = await pool.query(
+        `
+        SELECT
+          id,
+          status,
+          created_at,
+          queued_at,
+          processing_started_at,
+          completed_at,
+          failed_at,
+          error_message,
+          data,
+          result
+        FROM jobs
+        WHERE type = 'gkg-reconcile'
+        ORDER BY COALESCE(completed_at, failed_at, processing_started_at, queued_at, created_at) DESC
+        LIMIT $1
+      `,
+        [limit]
+      )
+
+      const rows = recentResult.rows || []
+
+      const parseJsonSafe = (value: unknown): Record<string, unknown> => {
+        if (!value) return {}
+        if (typeof value === "object") return value as Record<string, unknown>
+        if (typeof value === "string") {
+          try {
+            const parsed = JSON.parse(value)
+            return typeof parsed === "object" && parsed !== null
+              ? (parsed as Record<string, unknown>)
+              : {}
+          } catch {
+            return {}
+          }
+        }
+        return {}
+      }
+
+      const recent = rows.map((row) => {
+        const data = parseJsonSafe(row.data)
+        const result = parseJsonSafe(row.result)
+
+        const startedAt = row.processing_started_at || row.queued_at || row.created_at
+        const endedAt = row.completed_at || row.failed_at || null
+        const durationMs = startedAt && endedAt
+          ? Math.max(0, new Date(endedAt).getTime() - new Date(startedAt).getTime())
+          : null
+
+        return {
+          jobId: row.id,
+          status: row.status,
+          cleanup: data?.cleanup === true,
+          batchSize: typeof data?.batchSize === "number" ? data.batchSize : null,
+          createdAt: row.created_at,
+          startedAt,
+          completedAt: row.completed_at,
+          failedAt: row.failed_at,
+          durationMs,
+          errorMessage: row.error_message || null,
+          staleCounts: result?.staleCounts || null,
+          deletedNodes: result?.cleanup?.deletedNodes || null,
+          deletedEdges: result?.cleanup?.deletedEdges || null,
+        }
+      })
+
+      const summary = recent.reduce(
+        (acc, item) => {
+          acc.total += 1
+          if (item.status === "completed") acc.completed += 1
+          if (item.status === "failed") acc.failed += 1
+          if (item.cleanup) acc.cleanupRuns += 1
+          if (item.durationMs != null) {
+            acc.durationSamples += 1
+            acc.totalDurationMs += item.durationMs
+          }
+          if (item.staleCounts?.semanticUnits) {
+            acc.totalStaleUnits += Number(item.staleCounts.semanticUnits) || 0
+          }
+          return acc
+        },
+        {
+          total: 0,
+          completed: 0,
+          failed: 0,
+          cleanupRuns: 0,
+          durationSamples: 0,
+          totalDurationMs: 0,
+          totalStaleUnits: 0,
+        }
+      )
+
+      return res.json({
+        status: "ok",
+        summary: {
+          total: summary.total,
+          completed: summary.completed,
+          failed: summary.failed,
+          cleanupRuns: summary.cleanupRuns,
+          avgDurationMs:
+            summary.durationSamples > 0
+              ? Math.round(summary.totalDurationMs / summary.durationSamples)
+              : null,
+          totalStaleUnits: summary.totalStaleUnits,
+        },
+        recent,
+      })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      logger.error("[GKG] Recent reconcile stats failed", { error: msg })
+      return res.status(500).json({ status: "error", error: msg })
     }
   }
 )

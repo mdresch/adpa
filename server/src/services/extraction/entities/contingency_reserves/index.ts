@@ -12,8 +12,49 @@ import { resolveSourceDocumentIdStrict } from '../../base/SourceDocumentResolver
 import { extractionCacheService } from '../../cache'
 import type { PoolClient } from 'pg'
 import type { PersistenceResult } from '../../base/Persistence'
+import { randomUUID } from 'crypto'
+
+function normalizeReserveType(value?: string | null): string {
+  if (!value) return 'contingency'
+  const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, '_')
+  const map: Record<string, string> = {
+    contingency: 'contingency',
+    management: 'management',
+    mgmt: 'management',
+    management_reserve: 'management',
+    contingency_reserve: 'contingency',
+    reserve: 'contingency'
+  }
+  return map[normalized] || 'contingency'
+}
+
+async function getAllowedConstraintValues(
+  client: PoolClient,
+  tableName: string,
+  constraintNameHint: string
+): Promise<string[] | null> {
+  const result = await client.query(
+    `SELECT pg_get_constraintdef(c.oid) AS constraint_def
+     FROM pg_constraint c
+     JOIN pg_class t ON c.conrelid = t.oid
+     JOIN pg_namespace n ON t.relnamespace = n.oid
+     WHERE t.relname = $1
+       AND c.conname ILIKE $2
+       AND c.contype = 'c'
+     LIMIT 1`,
+    [tableName, `%${constraintNameHint}%`]
+  )
+
+  const constraintDef: string | undefined = result.rows[0]?.constraint_def
+  if (!constraintDef) return null
+
+  const matches = [...constraintDef.matchAll(/'([^']+)'/g)].map((m) => m[1].toLowerCase())
+  return matches.length > 0 ? matches : null
+}
 
 export interface ContingencyReserve {
+  reserve_id?: string
+  contingency_reserve_id?: string
   category?: string
   reserve_type?: string
   allocated_to?: string
@@ -181,34 +222,86 @@ export async function saveContingencyReserves(
   try {
     await client.query('DELETE FROM contingency_reserves WHERE project_id = $1', [projectId])
 
+    const allowedReserveTypes = await getAllowedConstraintValues(
+      client,
+      'contingency_reserves',
+      'reserve_type'
+    )
+
+    const columnResult = await client.query(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_name = 'contingency_reserves'`
+    )
+
+    const availableColumns = new Set<string>(
+      columnResult.rows.map((row: { column_name: string }) => row.column_name)
+    )
+
+    const insertColumns = [
+      'reserve_id',
+      'contingency_reserve_id',
+      'id',
+      'project_id',
+      'category',
+      'reserve_type',
+      'allocated_to',
+      'amount',
+      'remaining_amount',
+      'utilization',
+      'approval_date',
+      'approved_at',
+      'notes',
+      'description',
+      'source_document_id',
+      'created_by'
+    ].filter((column) => availableColumns.has(column))
+
+    if (insertColumns.length === 0) {
+      throw new Error('contingency_reserves table has no expected columns for extraction insert')
+    }
+
     const values: any[] = []
     const placeholders: string[] = []
 
     entities.forEach((e, index) => {
-      const offset = index * 11
-      placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11})`
-      )
+      const offset = index * insertColumns.length
+      placeholders.push(`(${insertColumns.map((_, i) => `$${offset + i + 1}`).join(', ')})`)
 
-      values.push(
-        projectId,
-        e.category || null,
-        e.reserve_type || null,
-        e.allocated_to || null,
-        e.amount ?? null,
-        e.remaining_amount ?? null,
-        e.utilization ?? null,
-        e.approval_date || null,
-        e.notes || null,
-        e.source_document_id || null,
-        userId
-      )
+      const generatedId = randomUUID()
+      const rowData: Record<string, any> = {
+        reserve_id: e.reserve_id || generatedId,
+        contingency_reserve_id: e.contingency_reserve_id || generatedId,
+        id: generatedId,
+        project_id: projectId,
+        category: e.category || null,
+        reserve_type: (() => {
+          const normalizedType = normalizeReserveType(e.reserve_type)
+          if (!allowedReserveTypes || allowedReserveTypes.length === 0) return normalizedType
+          return allowedReserveTypes.includes(normalizedType)
+            ? normalizedType
+            : (allowedReserveTypes[0] || 'contingency')
+        })(),
+        allocated_to: e.allocated_to || null,
+        amount: e.amount ?? null,
+        remaining_amount: e.remaining_amount ?? null,
+        utilization: e.utilization ?? null,
+        approval_date: e.approval_date || null,
+        approved_at: e.approval_date || null,
+        notes: e.notes || null,
+        description: e.notes || null,
+        source_document_id: e.source_document_id || null,
+        created_by: userId
+      }
+
+      insertColumns.forEach((column) => {
+        values.push(rowData[column] ?? null)
+      })
     })
 
     await client.query(
       `INSERT INTO contingency_reserves (
-        project_id, category, reserve_type, allocated_to, amount, remaining_amount,
-        utilization, approval_date, notes, source_document_id, created_by
+        ${insertColumns.join(', ')}
       )
       VALUES ${placeholders.join(', ')}`,
       values

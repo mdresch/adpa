@@ -1,6 +1,7 @@
 "use client"
 
-import React, { useEffect, useState } from "react"
+import * as React from "react"
+
 import { useRouter } from "next/navigation"
 import { useParams } from "next/navigation"
 import { toast } from '@/lib/notify'
@@ -11,13 +12,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
-import { 
-  ArrowLeft, 
-  Settings, 
-  Zap, 
-  Activity, 
-  Clock, 
-  BarChart3, 
+import {
+  ArrowLeft,
+  Settings,
+  Zap,
+  Activity,
+  Clock,
+  BarChart3,
   TestTube,
   ChevronDown,
   Plus,
@@ -71,36 +72,36 @@ export default function AIProviderDetails() {
   const router = useRouter()
   const providerId = params.id as string
 
-  const [provider, setProvider] = useState<ProviderDetails | null>(null)
-  const [models, setModels] = useState<Model[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [addModelDialogOpen, setAddModelDialogOpen] = useState(false)
-  const [editModelDialogOpen, setEditModelDialogOpen] = useState<string | null>(null)
-  const [deleteModelDialogOpen, setDeleteModelDialogOpen] = useState<string | null>(null)
-  
+  const [provider, setProvider] = React.useState<ProviderDetails | null>(null)
+  const [models, setModels] = React.useState<Model[]>([])
+  const [loading, setLoading] = React.useState(true)
+  const [error, setError] = React.useState<string | null>(null)
+  const [addModelDialogOpen, setAddModelDialogOpen] = React.useState(false)
+  const [editModelDialogOpen, setEditModelDialogOpen] = React.useState<string | null>(null)
+  const [deleteModelDialogOpen, setDeleteModelDialogOpen] = React.useState<string | null>(null)
+
   // Testing state
-  const [testing, setTesting] = useState(false)
-  const [testResults, setTestResults] = useState<Array<{
+  const [testing, setTesting] = React.useState(false)
+  const [testResults, setTestResults] = React.useState<Array<{
     testName: string
     status: string
     result: any
     timestamp: string
   }>>([])
-  
+
   // Model Discovery state
-  const [discovering, setDiscovering] = useState(false)
-  const [discoveredModels, setDiscoveredModels] = useState<any[]>([])
-  const [selectedModels, setSelectedModels] = useState<string[]>([])
-  const [syncingModels, setSyncingModels] = useState(false)
-  const [selectedDefaultModel, setSelectedDefaultModel] = useState<string | null>(null)
-  
+  const [discovering, setDiscovering] = React.useState(false)
+  const [discoveredModels, setDiscoveredModels] = React.useState<any[]>([])
+  const [selectedModels, setSelectedModels] = React.useState<string[]>([])
+  const [syncingModels, setSyncingModels] = React.useState(false)
+  const [selectedDefaultModel, setSelectedDefaultModel] = React.useState<string | null>(null)
+
   // Collapsible state
-  const [advancedConfigOpen, setAdvancedConfigOpen] = useState(false)
-  const [currentConfigOpen, setCurrentConfigOpen] = useState(false)
-  
+  const [advancedConfigOpen, setAdvancedConfigOpen] = React.useState(false)
+  const [currentConfigOpen, setCurrentConfigOpen] = React.useState(false)
+
   // Analytics state
-  const [analytics, setAnalytics] = useState<{
+  const [analytics, setAnalytics] = React.useState<{
     period?: string
     modelUsage?: Array<{
       model_name: string
@@ -116,12 +117,12 @@ export default function AIProviderDetails() {
       totalErrors: number
     }
   }>({})
-  const [analyticsPeriod, setAnalyticsPeriod] = useState<"7d" | "30d" | "90d" | "1y">("30d")
-  const [loadingAnalytics, setLoadingAnalytics] = useState(false)
-  
+  const [analyticsPeriod, setAnalyticsPeriod] = React.useState<"7d" | "30d" | "90d" | "1y">("30d")
+  const [loadingAnalytics, setLoadingAnalytics] = React.useState(false)
+
   // Add model state
-  const [addingModel, setAddingModel] = useState(false)
-  const [newModelForm, setNewModelForm] = useState<{
+  const [addingModel, setAddingModel] = React.useState(false)
+  const [newModelForm, setNewModelForm] = React.useState<{
     modelId: string
     modelName: string
     is_active: boolean
@@ -144,9 +145,9 @@ export default function AIProviderDetails() {
     presencePenalty: 0.0,
     configuration: {}
   })
-  
+
   // Configuration form state
-  const [configForm, setConfigForm] = useState<{
+  const [configForm, setConfigForm] = React.useState<{
     endpoint: string
     apiKey: string
     priority: number
@@ -177,10 +178,10 @@ export default function AIProviderDetails() {
   })
 
   // Initialize API client with token
-  useEffect(() => {
+  React.useEffect(() => {
     const token = localStorage.getItem('token')
     if (token && !(apiClient as any).token) {
-      ;(apiClient as any).setToken(token)
+      ; (apiClient as any).setToken(token)
     }
   }, [])
 
@@ -191,14 +192,14 @@ export default function AIProviderDetails() {
     try {
       const providers = await apiClient.getAIProviders()
       const providerData = providers.find((p: any) => p.id === providerId)
-      
+
       if (!providerData) {
         setError("Provider not found")
         return
       }
 
       setProvider(providerData)
-      
+
       // Update configuration form state with provider data
       setConfigForm({
         endpoint: providerData.configuration?.endpoint || "",
@@ -215,7 +216,7 @@ export default function AIProviderDetails() {
         resourceName: providerData.configuration?.resourceName || "",
         region: providerData.configuration?.region || ""
       })
-      
+
       // Load models for this provider
       await loadProviderModels()
     } catch (err: any) {
@@ -256,7 +257,7 @@ export default function AIProviderDetails() {
     }
   }
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (providerId) {
       loadProviderDetails()
       loadProviderAnalytics()
@@ -264,7 +265,7 @@ export default function AIProviderDetails() {
   }, [providerId])
 
   // Reload analytics when period changes
-  useEffect(() => {
+  React.useEffect(() => {
     if (providerId) {
       loadProviderAnalytics(analyticsPeriod)
     }
@@ -272,7 +273,7 @@ export default function AIProviderDetails() {
 
   const handleToggleProvider = async () => {
     if (!provider) return
-    
+
     try {
       const response = await apiClient.request<{
         is_active: boolean
@@ -280,7 +281,7 @@ export default function AIProviderDetails() {
       }>(`/ai/providers/${providerId}/toggle`, {
         method: "POST",
       })
-      
+
       setProvider(prev => prev ? { ...prev, is_active: response.is_active } : null)
       toast.success(response.message || `Provider ${response.is_active ? 'activated' : 'deactivated'}`)
     } catch (err: any) {
@@ -312,7 +313,7 @@ export default function AIProviderDetails() {
       await apiClient.createModelConfiguration(providerId, newModelForm)
       await loadProviderModels()
       setAddModelDialogOpen(false)
-      
+
       // Reset form
       setNewModelForm({
         modelId: "",
@@ -326,7 +327,7 @@ export default function AIProviderDetails() {
         presencePenalty: 0.0,
         configuration: {}
       })
-      
+
       toast.success("Model added successfully")
     } catch (err: any) {
       console.error(err)
@@ -364,9 +365,9 @@ export default function AIProviderDetails() {
   const runConnectivityTests = async () => {
     setTesting(true)
     setTestResults([])
-    
+
     const results = []
-    
+
     for (const test of connectivityTests) {
       try {
         const result = await runSingleTest(test.id)
@@ -385,13 +386,13 @@ export default function AIProviderDetails() {
         })
       }
     }
-    
+
     setTestResults(results)
     setTesting(false)
-    
+
     const passedTests = results.filter(r => r.status === 'completed' && (r.result as any)?.success).length
     const totalTests = results.length
-    
+
     if (passedTests === totalTests) {
       toast.success(`Connectivity Test completed! ${passedTests}/${totalTests} tests passed`)
     } else {
@@ -410,14 +411,14 @@ export default function AIProviderDetails() {
         provider?: { name?: string };
       }
       setDiscoveredModels(response.discovered_models || [])
-      
+
       // Pre-select all discovered models
       const modelIds = (response.discovered_models || []).map((m: any) => m.id || m.name || m)
       setSelectedModels(modelIds)
-      
+
       // Pre-select current default or first model
       setSelectedDefaultModel(response.current_default || modelIds[0] || null)
-      
+
       toast.success(`Discovered ${response.discovered_models?.length || 0} models from ${response.provider?.name}`)
     } catch (error: any) {
       console.error('Model discovery error:', error)
@@ -426,19 +427,19 @@ export default function AIProviderDetails() {
       setDiscovering(false)
     }
   }
-  
+
   // Sync selected models to database
   const syncModels = async () => {
     if (selectedModels.length === 0) {
       toast.error('Please select at least one model to sync')
       return
     }
-    
+
     if (!selectedDefaultModel) {
       toast.error('Please select a default model')
       return
     }
-    
+
     setSyncingModels(true)
     try {
       const response = await apiClient.request(`/ai/providers/${providerId}/sync-models`, {
@@ -448,12 +449,12 @@ export default function AIProviderDetails() {
           default_model: selectedDefaultModel
         })
       })
-      
+
       // Reload provider details to get updated models
       await loadProviderDetails()
-      
+
       toast.success(`Models synced successfully! ${selectedModels.length} models saved.`)
-      
+
       // Clear discovery state
       setDiscoveredModels([])
       setSelectedModels([])
@@ -465,11 +466,11 @@ export default function AIProviderDetails() {
       setSyncingModels(false)
     }
   }
-  
+
   // Toggle model selection
   const toggleModelSelection = (modelId: string) => {
-    setSelectedModels(prev => 
-      prev.includes(modelId) 
+    setSelectedModels(prev =>
+      prev.includes(modelId)
         ? prev.filter(id => id !== modelId)
         : [...prev, modelId]
     )
@@ -536,9 +537,9 @@ export default function AIProviderDetails() {
             {/* Header */}
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-4">
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={() => router.push('/ai-providers')}
                 >
                   <ArrowLeft className="h-4 w-4 mr-2" />
@@ -572,7 +573,7 @@ export default function AIProviderDetails() {
                   </p>
                 </CardContent>
               </Card>
-              
+
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">Status</CardTitle>
@@ -591,7 +592,7 @@ export default function AIProviderDetails() {
                   </p>
                 </CardContent>
               </Card>
-              
+
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">Last Used</CardTitle>
@@ -599,13 +600,13 @@ export default function AIProviderDetails() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-lg font-bold">
-                    {provider.usage_stats?.last_used 
-                      ? new Date(provider.usage_stats.last_used).toLocaleDateString('en-US', { 
-                          month: 'short', 
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })
+                    {provider.usage_stats?.last_used
+                      ? new Date(provider.usage_stats.last_used).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })
                       : "Never"}
                   </div>
                   <p className="text-xs text-muted-foreground">
@@ -613,7 +614,7 @@ export default function AIProviderDetails() {
                   </p>
                 </CardContent>
               </Card>
-              
+
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">Requests</CardTitle>
@@ -796,7 +797,7 @@ export default function AIProviderDetails() {
                           This is the default model used when no specific model is requested.
                         </p>
                         <div className="flex items-center gap-2">
-                          <Button 
+                          <Button
                             size="sm"
                             onClick={() => router.push(`/ai-providers/${providerId}/model/${encodeURIComponent(provider.default_model || provider.models[0])}`)}
                           >
@@ -820,13 +821,13 @@ export default function AIProviderDetails() {
                                 Available for use with {provider.name}
                               </p>
                               <div className="flex items-center gap-2">
-                                <Button 
+                                <Button
                                   size="sm"
                                   onClick={() => router.push(`/ai-providers/${providerId}/model/${encodeURIComponent(modelId)}`)}
                                 >
                                   View Details
                                 </Button>
-                                <Button 
+                                <Button
                                   size="sm"
                                   variant="destructive"
                                   onClick={async (e: React.MouseEvent) => {
@@ -835,7 +836,7 @@ export default function AIProviderDetails() {
                                       try {
                                         // Remove model from available_models array
                                         const updatedModels = provider.models.filter(m => m !== modelId)
-                                        
+
                                         await apiClient.request(`/context-ai/providers/${providerId}/configure`, {
                                           method: 'POST',
                                           body: JSON.stringify({
@@ -845,7 +846,7 @@ export default function AIProviderDetails() {
                                             }
                                           })
                                         })
-                                        
+
                                         toast.success(`Model "${modelId}" removed successfully`)
                                         await loadProviderDetails()
                                       } catch (error: any) {
@@ -942,7 +943,7 @@ export default function AIProviderDetails() {
                               The base URL for the AI provider's API
                             </p>
                           </div>
-                          
+
                           {provider.type !== 'ollama' && (
                             <div>
                               <Label htmlFor="api-key">API Key</Label>
@@ -959,7 +960,7 @@ export default function AIProviderDetails() {
                               </p>
                             </div>
                           )}
-                          
+
                           {provider.type === 'ollama' && (
                             <div>
                               <Label htmlFor="api-key">API Key</Label>
@@ -981,7 +982,7 @@ export default function AIProviderDetails() {
                       {provider.type === 'azure' && (
                         <div className="space-y-4">
                           <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">Azure AI Configuration</h4>
-                          
+
                           {/* Azure OpenAI Client Configuration */}
                           <div className="space-y-4">
                             <h5 className="font-medium text-sm text-blue-600 dark:text-blue-400">Azure OpenAI Client Settings</h5>
@@ -1210,12 +1211,12 @@ export default function AIProviderDetails() {
                                 if (configForm.apiVersion) configData.apiVersion = configForm.apiVersion
                                 if (configForm.deployment) configData.deployment = configForm.deployment
                                 if (configForm.modelName) configData.modelName = configForm.modelName
-                                
+
                                 // Azure AD Authentication (Optional)
                                 if (configForm.tenantId) configData.tenantId = configForm.tenantId
                                 if (configForm.clientId) configData.clientId = configForm.clientId
                                 if (configForm.clientSecret) configData.clientSecret = configForm.clientSecret
-                                
+
                                 // Azure Resource Configuration
                                 if (configForm.resourceName) configData.resourceName = configForm.resourceName
                                 if (configForm.region) configData.region = configForm.region
@@ -1224,7 +1225,7 @@ export default function AIProviderDetails() {
                               // Update provider configuration
                               // Extract API key from configData and send as separate top-level field
                               const { apiKey: extractedApiKey, ...configWithoutApiKey } = configData
-                              
+
                               await apiClient.request(`/context-ai/providers/${providerId}/configure`, {
                                 method: 'POST',
                                 body: JSON.stringify({
@@ -1234,7 +1235,7 @@ export default function AIProviderDetails() {
                               })
 
                               toast.success("Provider configuration updated successfully")
-                              
+
                               // Update form state with saved values (keep sensitive fields empty for security)
                               setConfigForm(prev => ({
                                 ...prev,
@@ -1253,10 +1254,10 @@ export default function AIProviderDetails() {
                                 apiKey: "",
                                 clientSecret: ""
                               }))
-                              
+
                               // Reload provider data to update the provider state
                               await loadProviderDetails()
-                              
+
                             } catch (error: any) {
                               console.error("Failed to update provider configuration:", error)
                               toast.error(error?.message || "Failed to update provider configuration")
@@ -1314,7 +1315,7 @@ export default function AIProviderDetails() {
                           </p>
                         </div>
                         <div className="flex items-center space-x-2">
-                          <Button 
+                          <Button
                             onClick={runConnectivityTests}
                             disabled={testing}
                             className="min-w-[140px]"
@@ -1334,7 +1335,7 @@ export default function AIProviderDetails() {
                               {testResults.filter(r => r.status === 'completed' && r.result?.success).length} of {testResults.length} tests passed
                             </div>
                           </div>
-                          
+
                           <div className="space-y-3">
                             {testResults.map((testResult, index) => (
                               <Card key={index} className="border-l-4 border-l-green-500">
@@ -1351,7 +1352,7 @@ export default function AIProviderDetails() {
                                       </Badge>
                                     </div>
                                   </div>
-                                  
+
                                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                                     <div>
                                       <span className="text-muted-foreground">Response Time:</span>
@@ -1378,7 +1379,7 @@ export default function AIProviderDetails() {
                                       </div>
                                     </div>
                                   </div>
-                                  
+
                                   {testResult.result?.success ? (
                                     <div className="mt-3 p-2 bg-green-50 dark:bg-green-900/20 rounded text-sm text-green-700 dark:text-green-300">
                                       ✅ {testResult.testName} completed successfully.
@@ -1388,7 +1389,7 @@ export default function AIProviderDetails() {
                                       ❌ {testResult.testName} failed: {(testResult.result as any)?.error || testResult.result?.message || 'Unknown error'}
                                     </div>
                                   )}
-                                  
+
                                   {/* Display available models for Model Availability test */}
                                   {testResult.testName === 'Model Availability' && (testResult.result as any)?.availableModels && (testResult.result as any).availableModels.length > 0 && (
                                     <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded border">
@@ -1553,11 +1554,10 @@ export default function AIProviderDetails() {
                                 <div key={model.model_name} className="p-4 border rounded-lg hover:shadow-md transition-shadow">
                                   <div className="flex items-center justify-between mb-3">
                                     <div className="flex items-center gap-3">
-                                      <div className={`w-3 h-3 rounded-full ${
-                                        index === 0 ? 'bg-blue-500' :
-                                        index === 1 ? 'bg-green-500' :
-                                        index === 2 ? 'bg-purple-500' : 'bg-orange-500'
-                                      }`} />
+                                      <div className={`w-3 h-3 rounded-full ${index === 0 ? 'bg-blue-500' :
+                                          index === 1 ? 'bg-green-500' :
+                                            index === 2 ? 'bg-purple-500' : 'bg-orange-500'
+                                        }`} />
                                       <div>
                                         <span className="font-medium text-lg">{model.model_name}</span>
                                         <p className="text-xs text-muted-foreground">
@@ -1572,12 +1572,11 @@ export default function AIProviderDetails() {
 
                                   {/* Progress bar */}
                                   <div className="w-full bg-muted rounded-full h-2.5 mb-3">
-                                    <div 
-                                      className={`h-2.5 rounded-full transition-all ${
-                                        index === 0 ? 'bg-blue-500' :
-                                        index === 1 ? 'bg-green-500' :
-                                        index === 2 ? 'bg-purple-500' : 'bg-orange-500'
-                                      }`}
+                                    <div
+                                      className={`h-2.5 rounded-full transition-all ${index === 0 ? 'bg-blue-500' :
+                                          index === 1 ? 'bg-green-500' :
+                                            index === 2 ? 'bg-purple-500' : 'bg-orange-500'
+                                        }`}
                                       style={{ width: `${percentage}%` }}
                                     ></div>
                                   </div>
@@ -1588,8 +1587,8 @@ export default function AIProviderDetails() {
                                       <div className="text-muted-foreground text-xs">Tokens</div>
                                       <div className="font-bold text-blue-600">
                                         {tokens >= 1000000 ? `${(tokens / 1000000).toFixed(1)}M` :
-                                         tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}K` : 
-                                         tokens.toLocaleString()}
+                                          tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}K` :
+                                            tokens.toLocaleString()}
                                       </div>
                                     </div>
                                     <div className="text-center p-2 bg-muted rounded">
@@ -1666,7 +1665,7 @@ export default function AIProviderDetails() {
                             Based on {(provider.usage_stats?.total_tokens || 0).toLocaleString()} tokens
                           </div>
                         </div>
-                        
+
                         <div className="p-4 bg-muted rounded-lg">
                           <div className="text-sm text-muted-foreground mb-1">Avg Cost per Request</div>
                           <div className="text-2xl font-bold">
@@ -1746,29 +1745,29 @@ export default function AIProviderDetails() {
                         <div>
                           <Label className="text-sm font-medium">First Used</Label>
                           <div className="text-lg font-semibold mt-1">
-                            {provider.created_at 
+                            {provider.created_at
                               ? new Date(provider.created_at).toLocaleDateString('en-US', {
-                                  month: 'short',
-                                  day: 'numeric',
-                                  year: 'numeric',
-                                  hour: '2-digit',
-                                  minute: '2-digit'
-                                })
+                                month: 'short',
+                                day: 'numeric',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })
                               : "Unknown"}
                           </div>
                         </div>
-                        
+
                         <div>
                           <Label className="text-sm font-medium">Last Used</Label>
                           <div className="text-lg font-semibold mt-1">
                             {provider.usage_stats?.last_used && provider.usage_stats.last_used !== "Never"
                               ? new Date(provider.usage_stats.last_used).toLocaleDateString('en-US', {
-                                  month: 'short',
-                                  day: 'numeric',
-                                  year: 'numeric',
-                                  hour: '2-digit',
-                                  minute: '2-digit'
-                                })
+                                month: 'short',
+                                day: 'numeric',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })
                               : "Never"}
                           </div>
                         </div>
@@ -1816,7 +1815,7 @@ export default function AIProviderDetails() {
                               {provider.usage_stats?.avg_response_time
                                 ? provider.usage_stats.avg_response_time < 2 ? "Excellent"
                                   : provider.usage_stats.avg_response_time < 5 ? "Good"
-                                  : "Slow"
+                                    : "Slow"
                                 : "N/A"}
                             </Badge>
                           </div>
@@ -1826,7 +1825,7 @@ export default function AIProviderDetails() {
                               : "N/A"}
                           </div>
                           <div className="mt-2 w-full bg-muted rounded-full h-2">
-                            <div 
+                            <div
                               className="bg-green-500 h-2 rounded-full transition-all"
                               style={{
                                 width: provider.usage_stats?.avg_response_time
@@ -1844,7 +1843,7 @@ export default function AIProviderDetails() {
                               {provider.usage_stats?.success_rate
                                 ? provider.usage_stats.success_rate >= 0.99 ? "Excellent"
                                   : provider.usage_stats.success_rate >= 0.95 ? "Good"
-                                  : "Needs Attention"
+                                    : "Needs Attention"
                                 : provider.usage_stats?.total_requests > 0 ? "Excellent" : "N/A"}
                             </Badge>
                           </div>
@@ -1854,7 +1853,7 @@ export default function AIProviderDetails() {
                               : provider.usage_stats?.total_requests > 0 ? "100%" : "N/A"}
                           </div>
                           <div className="mt-2 w-full bg-muted rounded-full h-2">
-                            <div 
+                            <div
                               className="bg-green-500 h-2 rounded-full transition-all"
                               style={{
                                 width: provider.usage_stats?.success_rate
@@ -1921,13 +1920,12 @@ export default function AIProviderDetails() {
                                 </span>
                               </div>
                               <div className="w-full bg-muted rounded-full h-2">
-                                <div 
-                                  className={`h-2 rounded-full transition-all ${
-                                    index === 0 ? "bg-blue-500" :
-                                    index === 1 ? "bg-green-500" :
-                                    index === 2 ? "bg-purple-500" :
-                                    "bg-orange-500"
-                                  }`}
+                                <div
+                                  className={`h-2 rounded-full transition-all ${index === 0 ? "bg-blue-500" :
+                                      index === 1 ? "bg-green-500" :
+                                        index === 2 ? "bg-purple-500" :
+                                          "bg-orange-500"
+                                    }`}
                                   style={{
                                     width: index === 0 ? "60%" : index === 1 ? "25%" : `${15 / (provider.models.length - 2)}%`
                                   }}
@@ -2009,7 +2007,7 @@ export default function AIProviderDetails() {
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <h4 className="text-sm font-semibold">Discover Models</h4>
-                        <Button 
+                        <Button
                           onClick={discoverModels}
                           disabled={discovering}
                           variant="default"
@@ -2053,11 +2051,10 @@ export default function AIProviderDetails() {
                             return (
                               <div
                                 key={modelId}
-                                className={`p-4 rounded-lg border-2 transition-all cursor-pointer ${
-                                  isSelected 
-                                    ? 'border-primary bg-primary/5' 
+                                className={`p-4 rounded-lg border-2 transition-all cursor-pointer ${isSelected
+                                    ? 'border-primary bg-primary/5'
                                     : 'border-border hover:border-primary/50'
-                                }`}
+                                  }`}
                                 onClick={() => toggleModelSelection(modelId)}
                               >
                                 <div className="flex items-start justify-between gap-4">
@@ -2188,7 +2185,7 @@ export default function AIProviderDetails() {
               Configure a new AI model for {provider?.name}. Fill in the required information below.
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="grid gap-4 py-4">
             {/* Basic Information */}
             <div className="grid grid-cols-2 gap-4">
@@ -2317,7 +2314,7 @@ export default function AIProviderDetails() {
             <Button variant="outline" onClick={() => setAddModelDialogOpen(false)}>
               Cancel
             </Button>
-            <Button 
+            <Button
               onClick={handleAddModel}
               disabled={!newModelForm.modelId || !newModelForm.modelName || addingModel}
             >
@@ -2336,7 +2333,7 @@ export default function AIProviderDetails() {
               Are you sure you want to delete this model configuration? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
-          
+
           {deleteModelDialogOpen && (
             <div className="py-4">
               <p className="text-sm">
@@ -2352,7 +2349,7 @@ export default function AIProviderDetails() {
             <Button variant="outline" onClick={() => setDeleteModelDialogOpen(null)}>
               Cancel
             </Button>
-            <Button 
+            <Button
               variant="destructive"
               onClick={() => deleteModelDialogOpen && handleDeleteModel(deleteModelDialogOpen)}
             >

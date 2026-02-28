@@ -24,7 +24,11 @@ export class TokenManager {
       'gemini-pro': 30720,
       'gemini-pro-vision': 16384,
       'gemini-1.5-pro': 1048576,
-      'gemini-1.5-flash': 1048576
+      'gemini-1.5-flash': 1048576,
+      'gemini-2.0-flash': 1048576,
+      'gemini-2.0-flash-exp': 1048576,
+      'gemini-2.5-flash': 1048576,
+      'gemini-3-flash-preview': 1048576
     },
     azure: {
       'gpt-4': 8192,
@@ -54,19 +58,40 @@ export class TokenManager {
    * Get token limit for a specific provider and model
    */
   static getTokenLimit(provider: string, model: string): number {
-    const providerLimits = this.DEFAULT_LIMITS[provider.toLowerCase()]
+    const normalizedProvider = provider.toLowerCase()
+    const providerLimits = this.DEFAULT_LIMITS[normalizedProvider]
     if (!providerLimits) {
       logger.warn(`Unknown provider: ${provider}, using default limit`)
       return 4096
     }
 
-    const modelLimit = providerLimits[model.toLowerCase()]
+    const normalizedModel = this.normalizeModelForProvider(normalizedProvider, model)
+    const modelLimit = providerLimits[normalizedModel]
     if (!modelLimit) {
+      if (normalizedProvider === 'google' && normalizedModel.startsWith('gemini-')) {
+        logger.info(`Using Google Gemini fallback token limit for model: ${model}`)
+        return providerLimits['gemini-1.5-flash'] || 1048576
+      }
       logger.warn(`Unknown model: ${model} for provider: ${provider}, using default limit`)
       return 4096
     }
 
     return modelLimit
+  }
+
+  private static normalizeModelForProvider(provider: string, model: string): string {
+    const normalizedModel = model.toLowerCase()
+
+    if (provider === 'google') {
+      const googleAliases: Record<string, string> = {
+        'gemini-3-flash-preview': 'gemini-2.0-flash',
+        'gemini-2.5-flash': 'gemini-2.0-flash',
+        'gemini-2.0-flash-exp': 'gemini-2.0-flash',
+      }
+      return googleAliases[normalizedModel] || normalizedModel
+    }
+
+    return normalizedModel
   }
 
   /**

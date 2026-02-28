@@ -23,6 +23,7 @@ export type JobType =
   | 'gkg-bootstrap'
   | 'gkg-sync-project'
   | 'gkg-sync-document'
+  | 'gkg-reconcile'
   | `extract-entity-${string}`
 
 /**
@@ -161,6 +162,11 @@ export interface PublishToConfluenceJobData extends BaseJobData {
   markdown: string
 }
 
+export interface GkgReconcileJobData extends BaseJobData {
+  cleanup?: boolean
+  batchSize?: number
+}
+
 /**
  * Union type for all job data types
  */
@@ -174,6 +180,7 @@ export type JobData =
   | QualityAuditJobData
   | PipelineProcessingJobData
   | PublishToConfluenceJobData
+  | GkgReconcileJobData
 
 /**
  * Bull Queue Job Options

@@ -1,8 +1,11 @@
-import { generateText } from 'ai'
+import * as ai from 'ai'
+import { wrapAISDK } from 'langsmith/experimental/vercel'
 
 import { getModel } from '@/lib/morphic/utils/registry'
 import { isTracingEnabled } from '@/lib/morphic/utils/telemetry'
 import { getLangfuseClient } from '@/lib/morphic/utils/langfuse-client'
+
+const { generateText: tracedGenerateText } = wrapAISDK(ai)
 
 interface GenerateChatTitleParams {
     userMessageContent: string
@@ -42,7 +45,7 @@ export async function generateChatTitle({
             })
         }
 
-        const { text: generatedTitle } = await generateText({
+        const { text: generatedTitle } = await tracedGenerateText({
             model: getModel(modelId),
             system: systemPrompt,
             prompt: userMessageContent,
@@ -53,6 +56,9 @@ export async function generateChatTitle({
                 metadata: {
                     modelId: modelId,
                     agentType: 'title-generator',
+                    aiCallType: 'title_generation',
+                    requestedGeneration: 'chat_title',
+                    callPath: 'morphic-title-generator',
                     promptLength: userMessageContent.length,
                     ...(parentTraceId && {
                         langfuseTraceId: parentTraceId,

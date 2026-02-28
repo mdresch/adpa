@@ -1,3 +1,5 @@
 export * from './types'
 export { extractWBSNodes } from './extractWBSNodes'
 export { saveWBSNodes } from './saveWBSNodes'
+export { extractWBSNodes as extractWbsNodes } from './extractWBSNodes'
+export { saveWBSNodes as saveWbsNodes } from './saveWBSNodes'

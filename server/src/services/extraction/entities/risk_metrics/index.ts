@@ -25,6 +25,15 @@ export interface RiskMetric {
   source_document_id?: string
 }
 
+function normalizeDate(value?: string | null): string | null {
+  if (!value || typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (!trimmed || /^yyyy-mm-dd$/i.test(trimmed)) return null
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed
+  if (/^\d{4}-\d{2}$/.test(trimmed)) return `${trimmed}-01`
+  return null
+}
+
 export async function extractRiskMetrics(
   context: ExtractionContext,
   options: { temperature?: number; maxTokens?: number } = {}
@@ -222,7 +231,7 @@ export async function saveRiskMetrics(
     if (measurementDateColumn) {
       columnOrder.push({
         name: measurementDateColumn,
-        value: (e) => e.measurement_date || new Date().toISOString().split('T')[0]
+        value: (e) => normalizeDate(e.measurement_date) || new Date().toISOString().split('T')[0]
       })
     }
     if (exposureIndexColumn) {
@@ -256,10 +265,33 @@ export async function saveRiskMetrics(
 
     await client.query('DELETE FROM risk_metrics WHERE project_id = $1', [projectId])
 
+    const dedupedEntities: RiskMetric[] = []
+    const seenDateKeys = new Set<string>()
+
+    entities.forEach((entity, index) => {
+      const normalized = normalizeDate(entity.measurement_date)
+      const effectiveDate = normalized || new Date().toISOString().split('T')[0]
+      const dedupeKey = `${projectId}:${effectiveDate}`
+
+      if (seenDateKeys.has(dedupeKey)) {
+        return
+      }
+
+      seenDateKeys.add(dedupeKey)
+      dedupedEntities.push(
+        normalized
+          ? entity
+          : {
+              ...entity,
+              measurement_date: effectiveDate
+            }
+      )
+    })
+
     const values: any[] = []
     const placeholders: string[] = []
 
-    entities.forEach((e, index) => {
+    dedupedEntities.forEach((e, index) => {
       const offset = index * columnOrder.length
       const rowPlaceholders = columnOrder.map((_, columnIndex) => `$${offset + columnIndex + 1}`)
       placeholders.push(`(${rowPlaceholders.join(', ')})`)
@@ -268,13 +300,21 @@ export async function saveRiskMetrics(
       })
     })
 
+    if (placeholders.length === 0) {
+      return { saved: 0, skipped: entities.length, failed: 0 }
+    }
+
     await client.query(
       `INSERT INTO risk_metrics (${columnOrder.map(col => col.name).join(', ')})
       VALUES ${placeholders.join(', ')}`,
       values
     )
 
-    return { saved: entities.length, skipped: 0, failed: 0 }
+    return {
+      saved: dedupedEntities.length,
+      skipped: entities.length - dedupedEntities.length,
+      failed: 0
+    }
   } catch (error: unknown) {
     logger.error('[EXTRACTION-RISK-METRICS] Failed to save', {
       projectId,

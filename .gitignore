@@ -141,3 +141,6 @@ scripts/*.log
 
 # Legacy Docker files (archived)
 /legacy/
+
+# Sentry Config File
+.env.sentry-build-plugin

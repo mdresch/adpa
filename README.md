@@ -117,7 +117,7 @@ pnpm dev
 cd server && npm run dev
 
 # 5. Access application
-# Frontend: http://localhost:3000
+# Frontend: http://localhost:3005
 # Backend:  http://localhost:5000/health
 ```
 
@@ -125,7 +125,7 @@ cd server && npm run dev
 
 | Service | URL | Purpose |
 |---------|-----|---------|
-| Frontend | http://localhost:3000 | Next.js React Application |
+| Frontend | http://localhost:3005 | Next.js React Application |
 | Backend | http://localhost:5000 | Express.js API Server |
 | PostgreSQL | localhost:5432 | Database |
 | Redis | localhost:6379 | Cache & Sessions |
@@ -149,6 +149,8 @@ cd server && npm run build
 
 📖 **Detailed setup instructions**: See `/docs/01-getting-started/`
 
+✅ **Minimal local startup runbook**: [Known Good Local Runbook](docs/01-getting-started/KNOWN_GOOD_LOCAL_RUNBOOK.md)
+
 ### ℹ️ Note: Docker Deprecated
 
 This project now uses **Supabase PostgreSQL** (serverless) and **Railway Redis** instead of local Docker containers. Legacy Docker files have been archived to `legacy/docker/` for reference only.
@@ -157,7 +159,7 @@ This project now uses **Supabase PostgreSQL** (serverless) and **Railway Redis**
 
 ### Web Admin Portal
 
-1. **Access the admin portal** at `http://localhost:3000`
+1. **Access the admin portal** at `http://localhost:3005`
 2. **Login** with your credentials or create a new account
 3. **Create a new project** from the Projects dashboard
 4. **Generate documents** using AI-powered templates
@@ -317,6 +319,14 @@ POSTGRES_URL_NON_POOLING=postgres://username:password@localhost:5432/adpa_db
 
 # Authentication
 JWT_SECRET=your-super-secret-jwt-key
+
+# Langfuse (SDK-only tracing)
+ENABLE_LANGFUSE_TRACING=false
+ENABLE_LANGFUSE_NATIVE_SDK=true
+LANGFUSE_DEBUG_TRACING=false
+LANGFUSE_PUBLIC_KEY=your-langfuse-public-key
+LANGFUSE_SECRET_KEY=your-langfuse-secret-key
+LANGFUSE_BASE_URL=https://cloud.langfuse.com
 ```
 
 #### Backend (server/.env)
@@ -343,7 +353,17 @@ ENCRYPTION_KEY=your-encryption-key
 # Server
 PORT=8000
 NODE_ENV=development
+
+# Langfuse (SDK-only tracing)
+ENABLE_LANGFUSE_TRACING=false
+ENABLE_LANGFUSE_NATIVE_SDK=true
+LANGFUSE_DEBUG_TRACING=false
+LANGFUSE_PUBLIC_KEY=your-langfuse-public-key
+LANGFUSE_SECRET_KEY=your-langfuse-secret-key
+LANGFUSE_BASE_URL=https://cloud.langfuse.com
 ```
+
+Note: `ENABLE_LANGFUSE_TRACING` controls OTLP tracing export. Keep it `false` to disable OTLP telemetry/reporting while `ENABLE_LANGFUSE_NATIVE_SDK=true` keeps native Langfuse SDK tracing enabled. Set `LANGFUSE_DEBUG_TRACING=true` temporarily when you need per-request trace/flush diagnostics.
 
 ### Integration Setup
 

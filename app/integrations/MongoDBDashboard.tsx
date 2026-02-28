@@ -35,12 +35,14 @@ export function MongoDBDashboard({ integrationId }: MongoDBDashboardProps) {
     const [loading, setLoading] = useState(false)
 
     const fetchStats = async () => {
-        if (!integrationId) return
-
         setLoading(true)
         try {
             const token = localStorage.getItem('auth_token') || localStorage.getItem('token')
-            const response = await fetch(`/api/integrations/${integrationId}/mongodb/stats`, {
+            const statsPath = integrationId
+                ? `/api/integrations/${integrationId}/mongodb/stats`
+                : '/api/integrations/mongodb/stats'
+
+            const response = await fetch(statsPath, {
                 headers: { 'Authorization': `Bearer ${token}` }
             })
 
@@ -62,19 +64,6 @@ export function MongoDBDashboard({ integrationId }: MongoDBDashboardProps) {
         fetchStats()
     }, [integrationId])
 
-    if (!integrationId) {
-        return (
-            <Card className="border-dashed">
-                <CardContent className="py-10 text-center">
-                    <Database className="h-12 w-12 mx-auto text-muted-foreground mb-4 opacity-20" />
-                    <p className="text-muted-foreground italic">
-                        No active MongoDB integration found.
-                    </p>
-                </CardContent>
-            </Card>
-        )
-    }
-
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
@@ -95,6 +84,15 @@ export function MongoDBDashboard({ integrationId }: MongoDBDashboardProps) {
                     Refresh
                 </Button>
             </div>
+
+            {!integrationId && (
+                <Card className="border-dashed">
+                    <CardContent className="py-4 text-center text-sm text-muted-foreground">
+                        <Database className="h-5 w-5 inline-block mr-2 align-text-bottom opacity-60" />
+                        Using server-level MongoDB analysis (no active MongoDB integration record found).
+                    </CardContent>
+                </Card>
+            )}
 
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <Card>
@@ -192,7 +190,7 @@ export function MongoDBDashboard({ integrationId }: MongoDBDashboardProps) {
     )
 }
 
-function VectorSearch({ integrationId }: { integrationId: string }) {
+function VectorSearch({ integrationId }: { integrationId: string | null }) {
     const [query, setQuery] = useState("")
     const [results, setResults] = useState<any[]>([])
     const [searching, setSearching] = useState(false)
@@ -204,7 +202,11 @@ function VectorSearch({ integrationId }: { integrationId: string }) {
         setSearching(true)
         try {
             const token = localStorage.getItem('auth_token') || localStorage.getItem('token')
-            const response = await fetch(`/api/integrations/${integrationId}/mongodb/search`, {
+            const searchPath = integrationId
+                ? `/api/integrations/${integrationId}/mongodb/search`
+                : '/api/integrations/mongodb/search'
+
+            const response = await fetch(searchPath, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

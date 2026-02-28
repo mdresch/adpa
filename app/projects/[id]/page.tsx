@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import * as React from "react"
+
 import Link from "next/link"
 // @ts-expect-error - useParams is available in Next.js 14
 import { useParams, useSearchParams } from "next/navigation"
@@ -178,18 +179,18 @@ export default function ProjectDetail() {
 
   // Get initial tab from query parameter, default to "overview"
   const initialTab = searchParams?.get('tab') || 'overview'
-  const [activeTab, setActiveTab] = useState<string>(initialTab)
+  const [activeTab, setActiveTab] = React.useState<string>(initialTab)
 
-  const [project, setProject] = useState<ExtendedProject | null>(null)
-  const [documents, setDocuments] = useState<Document[]>([])
-  const [stakeholders, setStakeholders] = useState<Stakeholder[]>([])
-  const [loading, setLoading] = useState(true)
-  const [documentsLoading, setDocumentsLoading] = useState(true)
-  const [stakeholdersLoading, setStakeholdersLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState("")
+  const [project, setProject] = React.useState<ExtendedProject | null>(null)
+  const [documents, setDocuments] = React.useState<Document[]>([])
+  const [stakeholders, setStakeholders] = React.useState<Stakeholder[]>([])
+  const [loading, setLoading] = React.useState(true)
+  const [documentsLoading, setDocumentsLoading] = React.useState(true)
+  const [stakeholdersLoading, setStakeholdersLoading] = React.useState(true)
+  const [searchTerm, setSearchTerm] = React.useState("")
 
   // Update active tab when query parameter changes
-  useEffect(() => {
+  React.useEffect(() => {
     const tabFromQuery = searchParams?.get('tab')
     if (tabFromQuery) {
       setActiveTab(tabFromQuery)
@@ -197,13 +198,13 @@ export default function ProjectDetail() {
   }, [searchParams])
 
   // Smart Document Versioning state
-  const [conflictDialogOpen, setConflictDialogOpen] = useState(false)
-  const [conflictData, setConflictData] = useState<{
+  const [conflictDialogOpen, setConflictDialogOpen] = React.useState(false)
+  const [conflictData, setConflictData] = React.useState<{
     existingDocument: any
     templateName: string
     generationData: any
   } | null>(null)
-  const [documentsPagination, setDocumentsPagination] = useState<{
+  const [documentsPagination, setDocumentsPagination] = React.useState<{
     page: number
     limit: number
     total: number
@@ -214,7 +215,7 @@ export default function ProjectDetail() {
     total: 0,
     pages: 0,
   })
-  const [documentStats, setDocumentStats] = useState<{
+  const [documentStats, setDocumentStats] = React.useState<{
     totalDocuments: number
     counts: {
       draft: number
@@ -226,44 +227,44 @@ export default function ProjectDetail() {
     totalDocuments: 0,
     counts: { draft: 0, published: 0, review: 0, archived: 0 }
   })
-  const [createDialogOpen, setCreateDialogOpen] = useState(false)
-  const [creatingDocument, setCreatingDocument] = useState(false)
-  const [selectedTemplate, setSelectedTemplate] = useState("")
-  const [documentName, setDocumentName] = useState("")
-  const [documentDescription, setDocumentDescription] = useState("")
-  const [editProjectDialogOpen, setEditProjectDialogOpen] = useState(false)
-  const [upgradeToProgramDialogOpen, setUpgradeToProgramDialogOpen] = useState(false)
-  const [upgrading, setUpgrading] = useState(false)
+  const [createDialogOpen, setCreateDialogOpen] = React.useState(false)
+  const [creatingDocument, setCreatingDocument] = React.useState(false)
+  const [selectedTemplate, setSelectedTemplate] = React.useState("")
+  const [documentName, setDocumentName] = React.useState("")
+  const [documentDescription, setDocumentDescription] = React.useState("")
+  const [editProjectDialogOpen, setEditProjectDialogOpen] = React.useState(false)
+  const [upgradeToProgramDialogOpen, setUpgradeToProgramDialogOpen] = React.useState(false)
+  const [upgrading, setUpgrading] = React.useState(false)
 
   // AI Provider selection for document generation
-  const [aiProviders, setAiProviders] = useState<any[]>([])
-  const [selectedProvider, setSelectedProvider] = useState("Mistral AI")
-  const [selectedModel, setSelectedModel] = useState("mistral-large-latest")
-  const [aiTemperature, setAiTemperature] = useState(0.7)
-  const [updating, setUpdating] = useState(false)
+  const [aiProviders, setAiProviders] = React.useState<any[]>([])
+  const [selectedProvider, setSelectedProvider] = React.useState("OpenAI")
+  const [selectedModel, setSelectedModel] = React.useState("gpt-4o")
+  const [aiTemperature, setAiTemperature] = React.useState(0.7)
+  const [updating, setUpdating] = React.useState(false)
 
   // Generation progress tracking
-  const [generationProgress, setGenerationProgress] = useState({
+  const [generationProgress, setGenerationProgress] = React.useState({
     step: 0,
     totalSteps: 4,
     message: '',
     percentage: 0,
   })
-  const [stakeholderDialogOpen, setStakeholderDialogOpen] = useState(false)
-  const [editingStakeholder, setEditingStakeholder] = useState<Stakeholder | null>(null)
-  const [savingStakeholder, setSavingStakeholder] = useState(false)
-  const [users, setUsers] = useState<any[]>([])
-  const [loadingUsers, setLoadingUsers] = useState(false)
-  const [selectedUserId, setSelectedUserId] = useState<string>("")
-  const [linkingUser, setLinkingUser] = useState(false)
+  const [stakeholderDialogOpen, setStakeholderDialogOpen] = React.useState(false)
+  const [editingStakeholder, setEditingStakeholder] = React.useState<Stakeholder | null>(null)
+  const [savingStakeholder, setSavingStakeholder] = React.useState(false)
+  const [users, setUsers] = React.useState<any[]>([])
+  const [loadingUsers, setLoadingUsers] = React.useState(false)
+  const [selectedUserId, setSelectedUserId] = React.useState<string>("")
+  const [linkingUser, setLinkingUser] = React.useState(false)
 
   // Document upload state
-  const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
-  const [uploadingDocument, setUploadingDocument] = useState(false)
-  const [templates, setTemplates] = useState<Template[]>([])
-  const [loadingTemplates, setLoadingTemplates] = useState(false)
-  const [usedTemplateIds, setUsedTemplateIds] = useState<Set<string>>(new Set())
-  const [uploadForm, setUploadForm] = useState<{
+  const [uploadDialogOpen, setUploadDialogOpen] = React.useState(false)
+  const [uploadingDocument, setUploadingDocument] = React.useState(false)
+  const [templates, setTemplates] = React.useState<Template[]>([])
+  const [loadingTemplates, setLoadingTemplates] = React.useState(false)
+  const [usedTemplateIds, setUsedTemplateIds] = React.useState<Set<string>>(new Set())
+  const [uploadForm, setUploadForm] = React.useState<{
     name: string
     file: File | null
     template_id: string
@@ -274,7 +275,7 @@ export default function ProjectDetail() {
   })
 
   // Edit form state
-  const [editForm, setEditForm] = useState<{
+  const [editForm, setEditForm] = React.useState<{
     name: string
     description: string
     framework: string
@@ -299,7 +300,7 @@ export default function ProjectDetail() {
   })
 
   // Stakeholder form state
-  const [stakeholderForm, setStakeholderForm] = useState<{
+  const [stakeholderForm, setStakeholderForm] = React.useState<{
     name: string
     role: string
     department: string
@@ -2183,14 +2184,14 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
     }
   }
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (isAuthenticated && projectId) {
       fetchProject()
     }
   }, [projectId, isAuthenticated])
 
   // Fetch documents when pagination or search changes
-  useEffect(() => {
+  React.useEffect(() => {
     if (isAuthenticated && projectId) {
       fetchDocuments()
     }
@@ -2198,7 +2199,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
 
   // Listen for document events via WebSocket and refresh documents for this project
   const { on, off } = useWebSocket()
-  useEffect(() => {
+  React.useEffect(() => {
     if (!projectId || projectId === 'undefined') return
     const room = `project:${projectId}`
     joinRoom(room)

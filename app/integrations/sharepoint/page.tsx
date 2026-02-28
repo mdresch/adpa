@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import * as React from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -94,22 +94,22 @@ interface SharePointFile {
 export default function SharePointIntegrationPage() {
   const { user, hasPermission } = useAuth()
   const { isConnected } = useWebSocket()
-  
-  const [integration, setIntegration] = useState<any>(null)
-  const [sites, setSites] = useState<SharePointSite[]>([])
-  const [drives, setDrives] = useState<SharePointDrive[]>([])
-  const [files, setFiles] = useState<SharePointFile[]>([])
-  const [searchResults, setSearchResults] = useState<SharePointFile[]>([])
-  const [loading, setLoading] = useState(true)
-  const [syncing, setSyncing] = useState(false)
-  const [testing, setTesting] = useState(false)
-  const [searchQuery, setSearchQuery] = useState("")
-  const [selectedSite, setSelectedSite] = useState("")
-  const [selectedDrive, setSelectedDrive] = useState("")
-  const [activeTab, setActiveTab] = useState("overview")
+
+  const [integration, setIntegration] = React.useState<any>(null)
+  const [sites, setSites] = React.useState<SharePointSite[]>([])
+  const [drives, setDrives] = React.useState<SharePointDrive[]>([])
+  const [files, setFiles] = React.useState<SharePointFile[]>([])
+  const [searchResults, setSearchResults] = React.useState<SharePointFile[]>([])
+  const [loading, setLoading] = React.useState(true)
+  const [syncing, setSyncing] = React.useState(false)
+  const [testing, setTesting] = React.useState(false)
+  const [searchQuery, setSearchQuery] = React.useState("")
+  const [selectedSite, setSelectedSite] = React.useState("")
+  const [selectedDrive, setSelectedDrive] = React.useState("")
+  const [activeTab, setActiveTab] = React.useState("overview")
 
   // Configuration state
-  const [config, setConfig] = useState({
+  const [config, setConfig] = React.useState({
     tenantId: "",
     clientId: "",
     clientSecret: "",
@@ -119,7 +119,7 @@ export default function SharePointIntegrationPage() {
     syncInterval: 60,
   })
 
-  useEffect(() => {
+  React.useEffect(() => {
     fetchIntegration()
   }, [])
 
@@ -129,7 +129,7 @@ export default function SharePointIntegrationPage() {
       // Get SharePoint integration
       const integrations = await apiClient.getIntegrations()
       const sharepointIntegration = integrations.find(i => i.type === "sharepoint")
-      
+
       if (sharepointIntegration) {
         setIntegration(sharepointIntegration)
         setConfig({
@@ -141,7 +141,7 @@ export default function SharePointIntegrationPage() {
           autoSync: sharepointIntegration.configuration.auto_sync ?? false,
           syncInterval: sharepointIntegration.configuration.sync_interval || 60,
         })
-        
+
         if (sharepointIntegration.is_active) {
           await fetchSites(sharepointIntegration.id)
         }
@@ -158,7 +158,7 @@ export default function SharePointIntegrationPage() {
     try {
       const response = await fetch(`http://localhost:5001/api/integrations/sharepoint/${integrationId}/sites`)
       const data = await response.json()
-      
+
       if (data.success) {
         setSites(data.sites)
       }
@@ -173,7 +173,7 @@ export default function SharePointIntegrationPage() {
     try {
       const response = await fetch(`http://localhost:5001/api/integrations/sharepoint/${integration.id}/sites/${siteId}/drives`)
       const data = await response.json()
-      
+
       if (data.success) {
         setDrives(data.drives)
       }
@@ -190,7 +190,7 @@ export default function SharePointIntegrationPage() {
         `http://localhost:5001/api/integrations/sharepoint/${integration.id}/drives/${driveId}/files?folderId=${folderId}`
       )
       const data = await response.json()
-      
+
       if (data.success) {
         setFiles(data.files)
       }
@@ -299,7 +299,7 @@ export default function SharePointIntegrationPage() {
 
     try {
       setSyncing(true)
-      
+
       const response = await fetch(`http://localhost:5000/api/integrations/sharepoint/${integration.id}/sync`, {
         method: "POST",
         headers: {

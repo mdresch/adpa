@@ -22,11 +22,11 @@ import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
 diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.ERROR)
 
 // Configuration
-const ENABLE_LANGFUSE = process.env.ENABLE_LANGFUSE_TRACING === 'true'
+const ENABLE_LANGFUSE_OTLP = process.env.ENABLE_LANGFUSE_TRACING === 'true'
 const LANGFUSE_PUBLIC_KEY = process.env.LANGFUSE_PUBLIC_KEY
 const LANGFUSE_SECRET_KEY = process.env.LANGFUSE_SECRET_KEY
 
-const OTLP_ENDPOINT = ENABLE_LANGFUSE
+const OTLP_ENDPOINT = ENABLE_LANGFUSE_OTLP
   ? (process.env.LANGFUSE_OTLP_ENDPOINT || 'https://cloud.langfuse.com/api/public/otel/v1/traces')
   : (process.env.OTLP_ENDPOINT || 'http://localhost:4318/v1/traces')
 
@@ -45,6 +45,14 @@ export function isTracingEnabled(): boolean {
 }
 
 /**
+ * Check if native Langfuse SDK tracing is enabled.
+ * Useful when OTLP tracing should remain enabled but native ingestion should be disabled.
+ */
+export function isNativeLangfuseEnabled(): boolean {
+  return process.env.ENABLE_LANGFUSE_NATIVE_SDK !== 'false'
+}
+
+/**
  * Initialize OpenTelemetry tracing
  */
 export function initTracing(): void {
@@ -53,10 +61,15 @@ export function initTracing(): void {
     return
   }
 
+  if (!ENABLE_LANGFUSE_OTLP) {
+    console.log('📊 OpenTelemetry OTLP tracing is disabled (native Langfuse SDK tracing remains available)')
+    return
+  }
+
   try {
     // Create span processors
     const spanProcessors = []
-    if (ENABLE_LANGFUSE) {
+    if (ENABLE_LANGFUSE_OTLP) {
       if (!LANGFUSE_PUBLIC_KEY || !LANGFUSE_SECRET_KEY) {
         console.warn('⚠️ Langfuse credentials missing, skipping tracing')
       } else {
@@ -131,8 +144,8 @@ export function initTracing(): void {
 
     console.log(`📊 OpenTelemetry tracing initialized`)
     console.log(`   Service: ${SERVICE_NAME} v${SERVICE_VERSION}`)
-    console.log(`   Endpoint: ${OTLP_ENDPOINT} ${ENABLE_LANGFUSE ? '(Langfuse)' : '(Local/Native)'}`)
-    if (ENABLE_LANGFUSE) {
+    console.log(`   Endpoint: ${OTLP_ENDPOINT} ${ENABLE_LANGFUSE_OTLP ? '(Langfuse)' : '(Local/Native)'}`)
+    if (ENABLE_LANGFUSE_OTLP) {
       console.log(`   Status: 🚀 Exporting to Langfuse Cloud`)
     }
 

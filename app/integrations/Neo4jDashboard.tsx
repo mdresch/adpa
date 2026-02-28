@@ -20,6 +20,7 @@ interface Neo4jStats {
     totalRelationships: number;
     status: 'active' | 'unavailable' | 'unknown';
     database: string;
+    source?: 'integration' | 'gkg';
 }
 
 interface Neo4jDashboardProps {
@@ -31,30 +32,54 @@ export function Neo4jDashboard({ integrationId }: Neo4jDashboardProps) {
     const [loading, setLoading] = useState(false)
 
     const fetchStats = async () => {
-        if (!integrationId) return
-
         setLoading(true)
         try {
             const token = localStorage.getItem('auth_token') || localStorage.getItem('token')
-            // Using placeholder endpoints until the backend integration is fully implemented
-            const response = await fetch(`/api/integrations/${integrationId}/neo4j/stats`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            })
+            const headers = { 'Authorization': `Bearer ${token}` }
 
-            if (!response.ok) {
+            // Prefer explicit integration endpoint when integration record exists.
+            if (integrationId) {
+                const response = await fetch(`/api/integrations/${integrationId}/neo4j/stats`, {
+                    headers
+                })
+
+                if (response.ok) {
+                    const data = await response.json()
+                    setStats({ ...data, source: 'integration' })
+                    return
+                }
+            }
+
+            // Fallback: use GKG summary even when no integration row exists.
+            const gkgResponse = await fetch(`/api/gkg/summary`, { headers })
+            if (!gkgResponse.ok) {
                 throw new Error("Failed to fetch Neo4j statistics")
             }
 
-            const data = await response.json()
-            setStats(data)
+            const gkg = await gkgResponse.json()
+            const totalNodes =
+                Number(gkg.totalPrograms || 0) +
+                Number(gkg.totalProjects || 0) +
+                Number(gkg.totalDocuments || 0) +
+                Number(gkg.totalTasks || 0) +
+                Number(gkg.totalUnits || 0)
+
+            setStats({
+                totalNodes,
+                totalRelationships: 0,
+                status: 'active',
+                database: 'neo4j',
+                source: 'gkg',
+            })
+
         } catch (error) {
             console.error("Dashboard error:", error)
-            // Mocking some fallback stats for visual demonstration if the endpoint isn't ready
             setStats({
                 totalNodes: 0,
                 totalRelationships: 0,
                 status: 'unavailable',
-                database: 'neo4j'
+                database: 'neo4j',
+                source: 'gkg',
             })
             toast.error("Failed to load Neo4j statistics")
         } finally {
@@ -66,19 +91,6 @@ export function Neo4jDashboard({ integrationId }: Neo4jDashboardProps) {
         fetchStats()
     }, [integrationId])
 
-    if (!integrationId) {
-        return (
-            <Card className="border-dashed">
-                <CardContent className="py-10 text-center">
-                    <Database className="h-12 w-12 mx-auto text-muted-foreground mb-4 opacity-20" />
-                    <p className="text-muted-foreground italic">
-                        No active Neo4j integration found.
-                    </p>
-                </CardContent>
-            </Card>
-        )
-    }
-
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
@@ -87,6 +99,11 @@ export function Neo4jDashboard({ integrationId }: Neo4jDashboardProps) {
                     <p className="text-muted-foreground">
                         Monitor Graph Database health and entity coverage.
                     </p>
+                    {!integrationId && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                            No Neo4j integration record found; showing data via GKG service fallback.
+                        </p>
+                    )}
                 </div>
                 <Button
                     variant="outline"
@@ -163,7 +180,15 @@ export function Neo4jDashboard({ integrationId }: Neo4jDashboardProps) {
 
             <div className="space-y-4">
                 <h3 className="text-lg font-semibold">Graph Search</h3>
-                <GraphSearch integrationId={integrationId} />
+                {integrationId ? (
+                    <GraphSearch integrationId={integrationId} />
+                ) : (
+                    <Card className="border-dashed">
+                        <CardContent className="py-6 text-sm text-muted-foreground">
+                            Graph search requires a Neo4j integration record. Create/activate a Neo4j integration to enable search.
+                        </CardContent>
+                    </Card>
+                )}
             </div>
         </div>
     )

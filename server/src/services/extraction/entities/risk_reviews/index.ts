@@ -172,6 +172,31 @@ function safeReviewId(date: string, riskId: string | undefined, index: number): 
   return `ra-${d}-${r}`
 }
 
+function isUuid(value?: string | null): boolean {
+  if (!value) return false
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+}
+
+function toStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .map(v => (typeof v === 'string' ? v.trim() : String(v ?? '').trim()))
+      .filter(Boolean)
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) return []
+    if (trimmed.includes(',')) {
+      return trimmed.split(',').map(v => v.trim()).filter(Boolean)
+    }
+    return [trimmed]
+  }
+
+  if (value == null) return []
+  return [String(value)]
+}
+
 export async function saveRiskReviews(
   client: PoolClient,
   projectId: string,
@@ -183,13 +208,14 @@ export async function saveRiskReviews(
   }
 
   try {
-    const columnResult = await client.query<{ column_name: string }>(
-      `SELECT column_name
+    const columnResult = await client.query<{ column_name: string; data_type: string; udt_name: string }>(
+      `SELECT column_name, data_type, udt_name
        FROM information_schema.columns
        WHERE table_schema = 'public'
          AND table_name = 'risk_reviews'`
     )
     const columnSet = new Set(columnResult.rows.map(row => row.column_name))
+    const columnMeta = new Map(columnResult.rows.map(row => [row.column_name, row]))
 
     const pickColumn = (options: string[]): string | null => {
       for (const option of options) {
@@ -260,7 +286,27 @@ export async function saveRiskReviews(
       const rowPlaceholders = columnOrder.map((_, columnIndex) => `$${offset + columnIndex + 1}`)
       placeholders.push(`(${rowPlaceholders.join(', ')})`)
       columnOrder.forEach(column => {
-        values.push(column.value(e))
+        let value = column.value(e)
+        const meta = columnMeta.get(column.name)
+
+        if (meta?.udt_name === 'uuid') {
+          value = isUuid(typeof value === 'string' ? value : null) ? value : null
+        } else if (meta?.udt_name === '_uuid') {
+          const uuidValues = toStringArray(value).filter(v => isUuid(v))
+          value = uuidValues
+        } else if (meta?.data_type === 'ARRAY') {
+          value = toStringArray(value)
+        } else if (meta?.data_type === 'date') {
+          const str = typeof value === 'string' ? value : ''
+          const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(str)
+            ? str
+            : (str && !Number.isNaN(Date.parse(str))
+              ? new Date(str).toISOString().slice(0, 10)
+              : new Date().toISOString().slice(0, 10))
+          value = dateOnly
+        }
+
+        values.push(value)
       })
     })
 

@@ -76,26 +76,66 @@ export class ContextInjector {
         request.prompt
       )
 
-      // Build enhanced prompt
-      const enhancedPrompt = this.buildEnhancedPrompt(
-        request.prompt,
-        contextSections,
-        fullConfig
-      )
+      // Validate final token usage; if still over budget, truncate context instead of failing.
+      const contextContent = this.extractContextContent(contextSections)
+      const contextWarnings: string[] = []
+      let finalContextContent = contextContent
+      let tokenUsage: ReturnType<typeof TokenManager.validateTokenUsage>
 
-      // Validate final token usage
-      const tokenUsage = TokenManager.validateTokenUsage(
+      try {
+        tokenUsage = TokenManager.validateTokenUsage(
+          request.prompt,
+          finalContextContent,
+          request.provider,
+          request.model || 'gpt-3.5-turbo'
+        )
+      } catch (validationError) {
+        const fallbackContextTokens = Math.max(
+          0,
+          TokenManager.calculateAvailableTokens(
+            request.prompt,
+            request.provider,
+            request.model || 'gpt-3.5-turbo',
+            fullConfig.max_context_ratio
+          )
+        )
+
+        finalContextContent = TokenManager.truncateToTokenLimit(
+          contextContent,
+          fallbackContextTokens
+        )
+
+        tokenUsage = TokenManager.validateTokenUsage(
+          request.prompt,
+          finalContextContent,
+          request.provider,
+          request.model || 'gpt-3.5-turbo'
+        )
+
+        contextWarnings.push(
+          `Context was truncated to fit token budget (${tokenUsage.context_tokens} context tokens used).`
+        )
+        logger.warn('[Context] Context exceeded token budget; applied truncation fallback', {
+          provider: request.provider,
+          model: request.model,
+          contextTokens: tokenUsage.context_tokens,
+        })
+      }
+
+      const enhancedPrompt = this.buildEnhancedPromptFromContextContent(
         request.prompt,
-        this.extractContextContent(contextSections),
-        request.provider,
-        request.model || 'gpt-3.5-turbo'
+        finalContextContent,
+        fullConfig
       )
 
       // Generate context summary
       const contextSummary = this.generateContextSummary(contextSections)
 
       // Check for warnings
-      const warnings = this.generateWarnings(contextSections, tokenUsage, contextTokenLimit)
+      const warnings = [
+        ...this.generateWarnings(contextSections, tokenUsage, contextTokenLimit),
+        ...contextWarnings,
+      ]
 
       logger.info(`[Context] ${tokenUsage.context_tokens} tokens injected`)
 
@@ -219,6 +259,28 @@ ${originalPrompt}`
     } else {
       return `${contextBlock}${config.context_separator}${originalPrompt}`
     }
+  }
+
+  private static buildEnhancedPromptFromContextContent(
+    originalPrompt: string,
+    contextContent: string,
+    config: ContextConfig
+  ): string {
+    if (!contextContent || contextContent.trim().length === 0) {
+      return originalPrompt
+    }
+
+    const contextBlock = `CONTEXT INFORMATION:
+${contextContent}
+
+Please use the above context information to provide more accurate and relevant responses.`
+
+    if (config.preserve_user_prompt) {
+      return `${contextBlock}${config.context_separator}USER REQUEST:
+${originalPrompt}`
+    }
+
+    return `${contextBlock}${config.context_separator}${originalPrompt}`
   }
 
   /**

@@ -185,7 +185,12 @@ export function createResearcher({
                 metadata: {
                     modelId: model,
                     agentType: 'researcher',
+                    aiCallType: 'research_agent',
+                    requestedGeneration: 'research_response',
+                    callPath: 'morphic-researcher-agent',
                     searchMode,
+                    modelType: modelType || 'default',
+                    knowledgeEnabled,
                     ...(parentTraceId && {
                         langfuseTraceId: parentTraceId,
                         langfuseUpdateParent: false

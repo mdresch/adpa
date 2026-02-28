@@ -9,8 +9,13 @@ import { logger, childLogger } from '../utils/logger'
 import { validate } from '../middleware/validation'
 import Joi from 'joi'
 import {
+  searchPortfolios,
+  searchPrograms,
   searchProjects,
   searchDocuments,
+  searchProjectTasks,
+  searchChecklistItems,
+  searchTodos,
   searchTemplates,
   searchUsers,
   UniversalSearchRequest,
@@ -56,7 +61,19 @@ router.post(
   authenticateToken,
   validate(Joi.object({
     query: Joi.string().required().min(2).max(500),
-    types: Joi.array().items(Joi.string().valid('project', 'document', 'template', 'user')).optional(),
+    types: Joi.array().items(
+      Joi.string().valid(
+        'portfolio',
+        'program',
+        'project',
+        'document',
+        'task',
+        'checklist_item',
+        'todo',
+        'template',
+        'user'
+      )
+    ).optional(),
     frameworks: Joi.array().items(Joi.string()).optional(),
     authors: Joi.array().items(Joi.string()).optional(),
     tags: Joi.array().items(Joi.string()).optional(),
@@ -142,16 +159,31 @@ router.post(
       // Determine which entity types to search
       const typesToSearch = searchRequest.types && searchRequest.types.length > 0
         ? searchRequest.types
-        : ['project', 'document', 'template', 'user']
+        : ['portfolio', 'program', 'project', 'document', 'task', 'checklist_item', 'todo', 'template', 'user']
       
       // Parallel search across entity types
       const searchPromises: Promise<SearchResult[]>[] = []
       
+      if (typesToSearch.includes('portfolio')) {
+        searchPromises.push(searchPortfolios(searchRequest, userId))
+      }
+      if (typesToSearch.includes('program')) {
+        searchPromises.push(searchPrograms(searchRequest, userId))
+      }
       if (typesToSearch.includes('project')) {
         searchPromises.push(searchProjects(searchRequest, userId))
       }
       if (typesToSearch.includes('document')) {
         searchPromises.push(searchDocuments(searchRequest, userId))
+      }
+      if (typesToSearch.includes('task')) {
+        searchPromises.push(searchProjectTasks(searchRequest, userId))
+      }
+      if (typesToSearch.includes('checklist_item')) {
+        searchPromises.push(searchChecklistItems(searchRequest, userId))
+      }
+      if (typesToSearch.includes('todo')) {
+        searchPromises.push(searchTodos(searchRequest, userId))
       }
       if (typesToSearch.includes('template')) {
         searchPromises.push(searchTemplates(searchRequest, userId))

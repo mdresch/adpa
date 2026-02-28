@@ -13,6 +13,25 @@ import { extractionCacheService } from '../../cache'
 import type { PoolClient } from 'pg'
 import type { PersistenceResult } from '../../base/Persistence'
 
+function normalizeRelationshipStrength(value?: string | null): string | null {
+  if (!value) return null
+  const normalized = value.toLowerCase().trim()
+  if (['strong', 'moderate', 'weak', 'at_risk', 'critical'].includes(normalized)) {
+    return normalized
+  }
+
+  if (['excellent', 'very_good', 'healthy', 'green', 'good'].includes(normalized)) return 'strong'
+  if (['fair', 'yellow', 'amber', 'medium'].includes(normalized)) return 'moderate'
+  if (['poor', 'low', 'red'].includes(normalized)) return 'weak'
+  if (['warning', 'at risk'].includes(normalized)) return 'at_risk'
+  return null
+}
+
+function isUuid(value?: string | null): boolean {
+  if (!value) return false
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+}
+
 export interface RelationshipHealth {
   stakeholder_id?: string
   stakeholder_name?: string
@@ -180,34 +199,74 @@ export async function saveRelationshipHealth(
   try {
     await client.query('DELETE FROM relationship_health WHERE project_id = $1', [projectId])
 
+    const columnResult = await client.query(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_name = 'relationship_health'`
+    )
+
+    const availableColumns = new Set<string>(
+      columnResult.rows.map((row: { column_name: string }) => row.column_name)
+    )
+
+    const insertColumns = [
+      'project_id',
+      'stakeholder_id',
+      'stakeholder_name',
+      'assessment_date',
+      'health_score',
+      'overall_health_score',
+      'health_status',
+      'relationship_strength',
+      'health_indicators',
+      'indicators',
+      'trend',
+      'notes',
+      'source_document_id',
+      'created_by'
+    ].filter((column) => availableColumns.has(column))
+
+    if (insertColumns.length === 0) {
+      throw new Error('relationship_health table has no expected columns for extraction insert')
+    }
+
     const values: any[] = []
     const placeholders: string[] = []
 
     entities.forEach((e, index) => {
-      const offset = index * 11
-      placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11})`
-      )
+      const offset = index * insertColumns.length
+      placeholders.push(`(${insertColumns.map((_, i) => `$${offset + i + 1}`).join(', ')})`)
 
-      values.push(
-        projectId,
-        e.stakeholder_id || null,
-        e.stakeholder_name || null,
-        e.assessment_date || null,
-        e.health_score ?? null,
-        e.health_status || null,
-        e.indicators || [],
-        e.trend || null,
-        e.notes || null,
-        e.source_document_id || null,
-        userId
-      )
+      const score = typeof e.health_score === 'number' ? e.health_score : null
+      const relationshipStrength = normalizeRelationshipStrength(e.health_status)
+      const normalizedAssessmentDate = e.assessment_date || new Date().toISOString().slice(0, 10)
+      const normalizedStakeholderId = isUuid(e.stakeholder_id) ? e.stakeholder_id : null
+      const normalizedStakeholderName = e.stakeholder_name || (normalizedStakeholderId ? null : e.stakeholder_id) || null
+      const rowData: Record<string, unknown> = {
+        project_id: projectId,
+        stakeholder_id: normalizedStakeholderId,
+        stakeholder_name: normalizedStakeholderName,
+        assessment_date: normalizedAssessmentDate,
+        health_score: score,
+        overall_health_score: typeof score === 'number' ? Math.max(1, Math.min(5, score <= 5 ? score : score / 20)) : null,
+        health_status: e.health_status || null,
+        relationship_strength: relationshipStrength,
+        health_indicators: e.indicators || [],
+        indicators: e.indicators || [],
+        trend: e.trend || null,
+        notes: e.notes || null,
+        source_document_id: isUuid(e.source_document_id) ? e.source_document_id : null,
+        created_by: userId
+      }
+
+      insertColumns.forEach((column) => {
+        values.push(rowData[column] ?? null)
+      })
     })
 
     await client.query(
       `INSERT INTO relationship_health (
-        project_id, stakeholder_id, stakeholder_name, assessment_date, health_score,
-        health_status, indicators, trend, notes, source_document_id, created_by
+        ${insertColumns.join(', ')}
       )
       VALUES ${placeholders.join(', ')}`,
       values

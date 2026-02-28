@@ -3,7 +3,7 @@ import { createOpenAI } from '@ai-sdk/openai'
 import { generateText } from 'ai'
 import { pool } from "../../database/connection"
 import { logger } from "../../utils/logger"
-import { isTracingEnabled } from '../../tracing'
+import { isTracingEnabled, isNativeLangfuseEnabled } from '../../tracing'
 import { Langfuse } from 'langfuse'
 
 const langfuse = new Langfuse({
@@ -200,7 +200,7 @@ export class OpenAIConnector {
     let lastError: OpenAIError | null = null
 
     // Create Langfuse trace for the overall completion request
-    const langfuseTrace = isTracingEnabled() ? langfuse.trace({
+    const langfuseTrace = isNativeLangfuseEnabled() ? langfuse.trace({
       name: 'openai-connector-completion',
       metadata: { model: request.model },
       tags: ['openai', request.model]

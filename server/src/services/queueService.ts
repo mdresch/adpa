@@ -181,7 +181,20 @@ export async function updateJobStatus(
   queueName?: string,
   errorMessage?: string
 ): Promise<void> {
-  await (await getQueueServiceInstance()).updateJobStatus(jobId, status, progress, workerId, queueName, errorMessage)
+  try {
+    await (await getQueueServiceInstance()).updateJobStatus(jobId, status, progress, workerId, queueName, errorMessage)
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error)
+    if (message.includes('Database pool not initialized')) {
+      logger.warn('[QUEUE] Skipping job status update while database is initializing', {
+        jobId,
+        status,
+        queueName,
+      })
+      return
+    }
+    throw error
+  }
 }
 
 export function getQueueService() {
@@ -601,7 +614,7 @@ import("./digitalTwinTriggerService").then(({ processDocumentTrigger }) => {
       console.log("[GKG] Registering GKG sync processors...")
       const { getNeo4jDriver, getNeo4jDatabase } = await import("../utils/neo4j")
       const { getDatabasePool } = await import("../database/connection")
-      const { runBootstrap, runSyncProject, runSyncDocument } = await import("./gkg")
+      const { runBootstrap, runSyncProject, runSyncDocument, runGkgFullReconciliation } = await import("./gkg")
 
       gkgSyncQueue.process("gkg-bootstrap", QUEUE_PREFETCH, async (job) => {
         console.log("[GKG] Processing gkg-bootstrap")
@@ -656,6 +669,37 @@ import("./digitalTwinTriggerService").then(({ processDocumentTrigger }) => {
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err)
           console.error("[GKG] Sync document failed:", documentId, msg)
+          throw err
+        }
+      })
+
+      gkgSyncQueue.process("gkg-reconcile", QUEUE_PREFETCH, async (job) => {
+        const { cleanup, batchSize } =
+          (job.data as { cleanup?: boolean; batchSize?: number }) ?? {}
+        console.log("[GKG] Processing gkg-reconcile", {
+          cleanup: cleanup === true,
+          batchSize,
+        })
+        try {
+          const driver = getNeo4jDriver()
+          if (!driver) throw new Error("Neo4j not configured or unavailable")
+          const pool = getDatabasePool()
+          const db = getNeo4jDatabase()
+          const result = await runGkgFullReconciliation(pool, driver, db, {
+            cleanup: cleanup === true,
+            batchSize,
+          })
+          logger.info("[GKG] Full reconcile completed", {
+            cleanup: cleanup === true,
+            batchSize: result.scanned.batchSize,
+            staleCounts: result.staleCounts,
+            deletedNodes: result.cleanup.deletedNodes,
+            deletedEdges: result.cleanup.deletedEdges,
+          })
+          return result
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err)
+          console.error("[GKG] Full reconcile failed:", msg)
           throw err
         }
       })

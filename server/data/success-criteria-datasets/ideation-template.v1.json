@@ -1,0 +1,169 @@
+{
+  "name": "adpa-ideation-success-criteria",
+  "version": "1.0.0",
+  "entity_type": "success_criteria",
+  "expected": [
+    {
+      "title": "Recommendation Accuracy Improvement",
+      "description": "Measure improvement in recommendation accuracy after Langfuse integration.",
+      "metric": "Recommendation accuracy",
+      "target_value": "5-10% increase",
+      "measurement_method": "Track recommendation accuracy metrics",
+      "priority": "high",
+      "source_document": "Ideation Template"
+    },
+    {
+      "title": "User Engagement Improvement",
+      "description": "Measure improvement in user engagement metrics after Langfuse integration.",
+      "metric": "User engagement metrics (click-through rates, conversion rates)",
+      "target_value": "3-5% increase",
+      "measurement_method": "Track user engagement metrics",
+      "priority": "medium",
+      "source_document": "Ideation Template"
+    },
+    {
+      "title": "Debugging Time Reduction",
+      "description": "Measure reduction in debugging time for AI models.",
+      "metric": "Debugging time",
+      "target_value": "10-15% reduction",
+      "measurement_method": "Track debugging time",
+      "priority": "medium",
+      "source_document": "Ideation Template"
+    },
+    {
+      "title": "Compliance Violations Reduction",
+      "description": "Reduce compliance violations through enhanced monitoring.",
+      "metric": "Compliance violations",
+      "target_value": "Decrease",
+      "measurement_method": "Track compliance violations",
+      "priority": "high",
+      "source_document": "Ideation Template"
+    },
+    {
+      "title": "Actionable Insights from Langfuse Data",
+      "description": "Derive actionable insights from Langfuse data to optimize recommendations.",
+      "metric": "Number of actionable insights",
+      "target_value": "Increase",
+      "measurement_method": "Track number of actionable insights",
+      "priority": "medium",
+      "source_document": "Ideation Template"
+    },
+    {
+      "title": "Prompt Management Adoption",
+      "description": "Track the adoption rate of prompt management features and the impact on model performance.",
+      "metric": "Adoption rate of prompt management features",
+      "target_value": "Increase",
+      "measurement_method": "Track adoption rate and impact",
+      "priority": "medium",
+      "source_document": "Ideation Template"
+    },
+    {
+      "title": "Langfuse Deployment in Railway",
+      "description": "Successfully deploy and configure Langfuse within ADPA's Railway infrastructure.",
+      "metric": "Successful deployment",
+      "target_value": "Achieved",
+      "measurement_method": "Verify deployment status",
+      "priority": "critical",
+      "source_document": "Ideation Template"
+    },
+    {
+      "title": "ADPA Integration with Langfuse",
+      "description": "Seamlessly integrate ADPA's recommendation workflows to send structured traces and observations to Langfuse.",
+      "metric": "End-to-end tracing",
+      "target_value": "Established for at least one key workflow",
+      "measurement_method": "Verify tracing data",
+      "priority": "critical",
+      "source_document": "Ideation Template"
+    },
+    {
+      "title": "Key Dashboards Creation",
+      "description": "Develop dashboards within Langfuse to visualize key metrics and monitor model performance.",
+      "metric": "Functional dashboards",
+      "target_value": "Displaying key performance indicators (KPIs)",
+      "measurement_method": "Verify dashboard functionality",
+      "priority": "high",
+      "source_document": "Ideation Template"
+    },
+    {
+      "title": "Compliance Monitoring Implementation",
+      "description": "Implement compliance monitoring features within Langfuse to ensure adherence to regulatory standards.",
+      "metric": "Compliance monitoring features",
+      "target_value": "Fully integrated and operational",
+      "measurement_method": "Verify feature status",
+      "priority": "high",
+      "source_document": "Ideation Template"
+    },
+    {
+      "title": "Increase Recommendation Accuracy",
+      "description": "Implement prompt management features within Langfuse, and version prompts while tracking prompt impact",
+      "metric": "Increase in recommendation accuracy metrics",
+      "target_value": "5%-10%",
+      "measurement_method": "Track recommendation accuracy metrics",
+      "priority": "high",
+      "source_document": "Ideation Template"
+    },
+    {
+      "title": "Langfuse Deployment Success Rate",
+      "description": "Verify successful deployment and configuration of Langfuse in Railway.",
+      "metric": "Langfuse Deployment Success Rate",
+      "target_value": "100%",
+      "measurement_method": "Verify successful deployment and configuration of Langfuse in Railway.",
+      "priority": "critical",
+      "source_document": "Ideation Template"
+    },
+    {
+      "title": "ADPA Integration Completion Rate",
+      "description": "Verify successful integration of ADPA's recommendation workflows with Langfuse.",
+      "metric": "ADPA Integration Completion Rate",
+      "target_value": "100%",
+      "measurement_method": "Verify successful integration of ADPA's recommendation workflows with Langfuse.",
+      "priority": "critical",
+      "source_document": "Ideation Template"
+    },
+    {
+      "title": "Key Dashboards Creation Rate",
+      "description": "Verify creation of functional dashboards within Langfuse.",
+      "metric": "Key Dashboards Creation Rate",
+      "target_value": "100%",
+      "measurement_method": "Verify creation of functional dashboards within Langfuse.",
+      "priority": "high",
+      "source_document": "Ideation Template"
+    },
+    {
+      "title": "Compliance Monitoring Implementation Completion Rate",
+      "description": "Verify integration and operational status of compliance monitoring features.",
+      "metric": "Compliance Monitoring Implementation Completion Rate",
+      "target_value": "100%",
+      "measurement_method": "Verify integration and operational status of compliance monitoring features.",
+      "priority": "high",
+      "source_document": "Ideation Template"
+    },
+    {
+      "title": "Data Scientists Training Participation Rate",
+      "description": "Achieve high participation rate in training sessions for data scientists.",
+      "metric": "Data Scientists training participation rate",
+      "target_value": "90%",
+      "measurement_method": "Training logs and feedback surveys.",
+      "priority": "medium",
+      "source_document": "Ideation Template"
+    },
+    {
+      "title": "Project Budget Adherence",
+      "description": "Maintain project expenses within the defined budget.",
+      "metric": "Project Budget Adherence",
+      "target_value": "Within +/- 5%",
+      "measurement_method": "Track actual expenses vs. planned budget.",
+      "priority": "high",
+      "source_document": "Ideation Template"
+    },
+    {
+      "title": "Project Schedule Adherence",
+      "description": "Complete project activities within the defined schedule.",
+      "metric": "Project Schedule Adherence",
+      "target_value": "Within +/- 5%",
+      "measurement_method": "Track actual progress vs. planned schedule.",
+      "priority": "high",
+      "source_document": "Ideation Template"
+    }
+  ]
+}

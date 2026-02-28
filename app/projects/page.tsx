@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import * as React from "react"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { PageTransition } from "@/components/page-transition"
@@ -92,23 +92,23 @@ const healthConfig = {
 }
 
 export default function Projects() {
-  const [projects, setProjects] = useState<Project[]>([])
-  const [loading, setLoading] = useState(true)
-  const [creating, setCreating] = useState(false)
-  const [updating, setUpdating] = useState(false)
-  const [searchTerm, setSearchTerm] = useState("")
-  const [statusFilter, setStatusFilter] = useState("all")
-  const [pagination, setPagination] = useState<PaginationState>({
+  const [projects, setProjects] = React.useState<Project[]>([])
+  const [loading, setLoading] = React.useState(true)
+  const [creating, setCreating] = React.useState(false)
+  const [updating, setUpdating] = React.useState(false)
+  const [searchTerm, setSearchTerm] = React.useState("")
+  const [statusFilter, setStatusFilter] = React.useState("all")
+  const [pagination, setPagination] = React.useState<PaginationState>({
     page: 1,
     limit: 9,
     total: 0,
     pages: 0,
   })
-  const [dialogOpen, setDialogOpen] = useState(false)
+  const [dialogOpen, setDialogOpen] = React.useState(false)
   const { isAuthenticated } = useAuth()
 
   // Form state for creating new project
-  const [newProject, setNewProject] = useState<NewProjectForm>({
+  const [newProject, setNewProject] = React.useState<NewProjectForm>({
     name: "",
     description: "",
     framework: "",
@@ -120,14 +120,14 @@ export default function Projects() {
   })
 
   // Form state for editing project
-  const [editingProject, setEditingProject] = useState<Project | null>(null)
-  const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [editingProject, setEditingProject] = React.useState<Project | null>(null)
+  const [editDialogOpen, setEditDialogOpen] = React.useState(false)
 
   // Document generation state
-  const [generatingDocument, setGeneratingDocument] = useState(false)
-  const [generateDialogOpen, setGenerateDialogOpen] = useState(false)
-  const [selectedProjectForGeneration, setSelectedProjectForGeneration] = useState<Project | null>(null)
-  const [documentGenerationForm, setDocumentGenerationForm] = useState<DocumentGenerationForm>({
+  const [generatingDocument, setGeneratingDocument] = React.useState(false)
+  const [generateDialogOpen, setGenerateDialogOpen] = React.useState(false)
+  const [selectedProjectForGeneration, setSelectedProjectForGeneration] = React.useState<Project | null>(null)
+  const [documentGenerationForm, setDocumentGenerationForm] = React.useState<DocumentGenerationForm>({
     name: "",
     template_id: "",
     prompt: "",
@@ -137,7 +137,7 @@ export default function Projects() {
   })
 
   // Generation progress tracking
-  const [generationProgress, setGenerationProgress] = useState<GenerationProgress>({
+  const [generationProgress, setGenerationProgress] = React.useState<GenerationProgress>({
     step: 0,
     totalSteps: 4,
     message: '',
@@ -145,18 +145,18 @@ export default function Projects() {
   })
 
   // Document upload state
-  const [uploadingDocument, setUploadingDocument] = useState(false)
-  const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
-  const [selectedProjectForUpload, setSelectedProjectForUpload] = useState<Project | null>(null)
-  const [documentUploadForm, setDocumentUploadForm] = useState<DocumentUploadForm>({
+  const [uploadingDocument, setUploadingDocument] = React.useState(false)
+  const [uploadDialogOpen, setUploadDialogOpen] = React.useState(false)
+  const [selectedProjectForUpload, setSelectedProjectForUpload] = React.useState<Project | null>(null)
+  const [documentUploadForm, setDocumentUploadForm] = React.useState<DocumentUploadForm>({
     name: "",
     file: null,
     template_id: "",
   })
 
   // Templates state
-  const [templates, setTemplates] = useState<Template[]>([])
-  const [loadingTemplates, setLoadingTemplates] = useState(false)
+  const [templates, setTemplates] = React.useState<Template[]>([])
+  const [loadingTemplates, setLoadingTemplates] = React.useState(false)
 
   // Fetch projects from API
   const fetchProjects = async () => {
@@ -885,14 +885,14 @@ export default function Projects() {
 
   // Utility functions now in utils/helpers.ts
   // Fetch projects on component mount and when filters change
-  useEffect(() => {
+  React.useEffect(() => {
     if (isAuthenticated) {
       fetchProjects()
     }
   }, [isAuthenticated, statusFilter, searchTerm, pagination.page])
 
   // Track page engagement for projects page
-  useEffect(() => {
+  React.useEffect(() => {
     const startTime = Date.now()
     let interactionCount = 0
 
@@ -914,7 +914,7 @@ export default function Projects() {
   }, [])
 
   // Auto-open create dialog if coming from AI page
-  useEffect(() => {
+  React.useEffect(() => {
     const autoCreate = sessionStorage.getItem('auto-create-project')
     const projectDraft = sessionStorage.getItem('project-draft')
 

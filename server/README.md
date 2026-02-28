@@ -178,6 +178,16 @@ Authorization: Bearer <jwt_token>
 - `GOOGLE_AI_API_KEY` - Google AI API key
 - `AZURE_OPENAI_API_KEY` - Azure OpenAI API key
 
+#### Langfuse Tracing (SDK-only)
+- `ENABLE_LANGFUSE_TRACING=false` - Disables OTLP telemetry export/reporting
+- `ENABLE_LANGFUSE_NATIVE_SDK=true` - Enables native Langfuse SDK tracing
+- `LANGFUSE_DEBUG_TRACING=false` - Optional trace/flush debug logs (set to true only while troubleshooting)
+- `LANGFUSE_PUBLIC_KEY` - Langfuse public key
+- `LANGFUSE_SECRET_KEY` - Langfuse secret key
+- `LANGFUSE_BASE_URL` - Langfuse base URL (for self-hosted or cloud)
+
+Use `ENABLE_LANGFUSE_TRACING=false` with `ENABLE_LANGFUSE_NATIVE_SDK=true` to keep Langfuse SDK traces while OTLP telemetry is disabled.
+
 ### Database Schema
 
 The database includes these main tables:

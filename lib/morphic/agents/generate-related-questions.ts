@@ -1,4 +1,6 @@
-import { type ModelMessage, streamObject } from 'ai'
+import * as ai from 'ai'
+import { type ModelMessage } from 'ai'
+import { wrapAISDK } from 'langsmith/experimental/vercel'
 
 import { relatedSchema } from '../schema/related'
 import { getModel } from '../utils/registry'
@@ -6,6 +8,8 @@ import { isTracingEnabled } from '../utils/telemetry'
 import { getLangfuseClient } from '../utils/langfuse-client'
 
 import { RELATED_QUESTIONS_PROMPT } from './prompts/related-questions-prompt'
+
+const { streamObject: tracedStreamObject } = wrapAISDK(ai)
 
 export async function createRelatedQuestionsStream(
     messages: ModelMessage[],
@@ -30,7 +34,7 @@ export async function createRelatedQuestionsStream(
         })
     }
 
-    const stream = streamObject({
+    const stream = tracedStreamObject({
         model: getModel(modelId),
         schema: relatedSchema,
         system: RELATED_QUESTIONS_PROMPT,
@@ -49,6 +53,9 @@ export async function createRelatedQuestionsStream(
             metadata: {
                 modelId,
                 agentType: 'related-questions-generator',
+                aiCallType: 'related_questions_generation',
+                requestedGeneration: 'related_questions',
+                callPath: 'morphic-related-questions',
                 messageCount: messages.length,
                 ...(parentTraceId && {
                     langfuseTraceId: parentTraceId,

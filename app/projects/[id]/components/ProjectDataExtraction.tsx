@@ -114,11 +114,11 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
   const [selectedProvider, setSelectedProvider] = useState("google")
   const [selectedModel, setSelectedModel] = useState("gemini-2.0-flash-exp")
   const [selectedDocuments, setSelectedDocuments] = useState<string[]>([])
-  
+
   // WBS Import
   const [isImportingWBS, setIsImportingWBS] = useState(false)
   const [lastExtractedDocumentId, setLastExtractedDocumentId] = useState<string | null>(null)
-  
+
   // All documents (not paginated) for extraction selection
   const [allDocuments, setAllDocuments] = useState<Array<{ id: string; name: string; title?: string }>>([])
   const [loadingAllDocuments, setLoadingAllDocuments] = useState(false)
@@ -129,7 +129,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
   const [selectedEntityType, setSelectedEntityType] = useState<string | null>(null)
   const [entityDetails, setEntityDetails] = useState<any[]>([])
   const [loadingEntityDetails, setLoadingEntityDetails] = useState(false)
-  
+
   // KPI Source Traceability Dialog
   const [showKpiSourceDialog, setShowKpiSourceDialog] = useState(false)
   const [selectedKpi, setSelectedKpi] = useState<{
@@ -141,31 +141,31 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
   useEffect(() => {
     void fetchEntityCounts()
     void fetchAIProviders()
-    
+
     // Initialize with provided documents
     if (documents && documents.length > 0) {
       setAllDocuments(documents)
     }
   }, [projectId, documents])
-  
+
   const fetchAllDocuments = async () => {
     if (!projectId || projectId === 'undefined') return
     try {
       setLoadingAllDocuments(true)
-      
+
       // Use apiClient to get documents (same method as parent component)
-      const documentsData = await apiClient.getProjectDocuments(projectId, { 
-        page: 1, 
-        limit: 1000 
+      const documentsData = await apiClient.getProjectDocuments(projectId, {
+        page: 1,
+        limit: 1000
       })
-      
+
       console.log('[EXTRACTION] Fetched documents:', documentsData)
-      
+
       const docs = documentsData.documents || documentsData.data || []
       setAllDocuments(docs)
-      
+
       console.log('[EXTRACTION] Set allDocuments:', docs.length)
-      
+
     } catch (error) {
       console.error('[EXTRACTION] Failed to fetch all documents:', error)
       // Fallback to provided documents if fetch fails
@@ -179,35 +179,35 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
   // ========================================================================
   // Weighted Entity Allocation Functions
   // ========================================================================
-  
+
   /**
    * Calculate weighted entity count for a specific domain
    * Distributes entity counts across domains based on weight allocations
    */
   const calculateWeightedDomainCount = (domain: PmbokDomain, counts: EntityCounts | null): number => {
     if (!counts) return 0
-    
+
     let weightedTotal = 0
-    
+
     // Iterate through all entity types in entityCounts
     Object.entries(counts).forEach(([entityKey, count]) => {
       if (count === 0) return
-      
+
       // Get weight allocations for this entity type
       const weights = getEntityWeights(entityKey)
-      
+
       // Find the weight for this specific domain
       const domainWeight = weights.find(w => w.domain === domain)
-      
+
       if (domainWeight) {
         // Add weighted count to domain total
         weightedTotal += calculateWeightedCount(count, domainWeight.weight)
       }
     })
-    
+
     return weightedTotal
   }
-  
+
   /**
    * Get entity weight info for display (Primary/Secondary badge)
    */
@@ -218,16 +218,16 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
   } | null => {
     const weights = getEntityWeights(entityKey)
     const domainWeight = weights.find(w => w.domain === domain)
-    
+
     if (!domainWeight) return null
-    
+
     return {
       weight: domainWeight.weight,
       isPrimary: domainWeight.isPrimary,
       percentage: Math.round(domainWeight.weight * 100)
     }
   }
-  
+
   /**
    * Calculate total extracted entities (for validation)
    */
@@ -235,7 +235,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
     if (!counts) return 0
     return Object.values(counts).reduce((sum, count) => sum + count, 0)
   }
-  
+
   /**
    * Validate weighted allocations match extracted total
    */
@@ -248,52 +248,52 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
     if (!counts) {
       return { isValid: true, totalExtracted: 0, totalWeighted: 0, difference: 0 }
     }
-    
+
     const totalExtracted = calculateTotalExtractedEntities(counts)
-    
+
     // Calculate total weighted across all domains
     const allDomains: PmbokDomain[] = [
       ...PMBOK_DOMAINS
     ]
-    
+
     let totalWeighted = 0
     allDomains.forEach(domain => {
       totalWeighted += calculateWeightedDomainCount(domain, counts)
     })
-    
+
     const difference = totalExtracted - totalWeighted
     const isValid = Math.abs(difference) < 0.01 // Allow tiny rounding error
-    
+
     return { isValid, totalExtracted, totalWeighted, difference }
   }
-  
+
   /**
    * Calculate weighted entity count for a specific project phase
    */
   const calculateWeightedPhaseCount = (phase: ProjectPhase, counts: EntityCounts | null): number => {
     if (!counts) return 0
-    
+
     let weightedTotal = 0
-    
+
     // Iterate through all entity types
     Object.entries(counts).forEach(([entityKey, count]) => {
       if (count === 0) return
-      
+
       // Get phase weight allocations for this entity type
       const weights = getEntityPhaseWeights(entityKey)
-      
+
       // Find the weight for this specific phase
       const phaseWeight = weights.find(w => w.phase === phase)
-      
+
       if (phaseWeight) {
         // Add weighted count to phase total
         weightedTotal += calculateWeightedCount(count, phaseWeight.weight)
       }
     })
-    
+
     return weightedTotal
   }
-  
+
   /**
    * Get entity phase weight info for display
    */
@@ -304,16 +304,16 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
   } | null => {
     const weights = getEntityPhaseWeights(entityKey)
     const phaseWeight = weights.find(w => w.phase === phase)
-    
+
     if (!phaseWeight) return null
-    
+
     return {
       weight: phaseWeight.weight,
       isPrimary: phaseWeight.isPrimary,
       percentage: Math.round(phaseWeight.weight * 100)
     }
   }
-  
+
   /**
    * Validate phase weighted allocations match extracted total
    */
@@ -326,9 +326,9 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
     if (!counts) {
       return { isValid: true, totalExtracted: 0, totalWeighted: 0, difference: 0 }
     }
-    
+
     const totalExtracted = calculateTotalExtractedEntities(counts)
-    
+
     // Calculate total weighted across all project phases
     const allPhases: ProjectPhase[] = [
       'initiating',
@@ -337,15 +337,15 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
       'monitoring_controlling',
       'closing'
     ]
-    
+
     let totalWeighted = 0
     allPhases.forEach(phase => {
       totalWeighted += calculateWeightedPhaseCount(phase, counts)
     })
-    
+
     const difference = totalExtracted - totalWeighted
     const isValid = Math.abs(difference) < 0.01
-    
+
     return { isValid, totalExtracted, totalWeighted, difference }
   }
 
@@ -378,13 +378,13 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
       console.log('[EXTRACTION] Providers count:', providers?.length || 0)
       console.log('[EXTRACTION] First provider object keys:', providers[0] ? Object.keys(providers[0]) : 'No providers')
       console.log('[EXTRACTION] First provider full object:', providers[0])
-      
+
       if (!providers || providers.length === 0) {
         console.warn('[EXTRACTION] No providers returned from API')
         setAiProviders([])
         return
       }
-      
+
       const activeProviders = providers.filter((p: any) => p.is_active).map((p: any) => {
         // Helper function to extract model name/id from string or object
         const extractModelName = (model: any): string => {
@@ -397,7 +397,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
           }
           return String(model)
         }
-        
+
         // Normalize models - check multiple possible locations
         // API returns: configuration.models array OR configuration.model string OR top-level model string
         // Models can be strings or objects with {id, name, isDefault, maxTokens, ...}
@@ -405,7 +405,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
         const configModel = p.configuration?.model ? [extractModelName(p.configuration.model)] : []
         const topLevelModel = p.model ? [extractModelName(p.model)] : []
         const topLevelModels = (p.models || []).map(extractModelName)
-        
+
         // Combine all possible model sources, deduplicate
         const allModels = [...new Set([
           ...configModels,
@@ -413,10 +413,10 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
           ...topLevelModel,
           ...topLevelModels
         ])].filter(Boolean)
-        
+
         // Use 'type' property from API (API returns 'type', not 'provider_type')
         const providerType = p.type || p.provider_type || p.providerType || p.provider || 'unknown'
-        
+
         console.log(`[EXTRACTION] Provider ${p.name}:`, {
           type: p.type,
           provider_type: p.provider_type,
@@ -428,7 +428,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
           modelsLength: allModels.length,
           hasModels: allModels.length > 0
         })
-        
+
         // If no models found, use backend fallback models (matching server/src/routes/ai-providers.ts)
         const backendFallbackModels: Record<string, string[]> = {
           openai: ['gpt-4o', 'gpt-4-turbo-preview', 'gpt-4', 'gpt-3.5-turbo'],
@@ -439,47 +439,48 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
           anthropic: ['claude-sonnet-4.0', 'claude-haiku-4.0', 'claude-opus-4.0', 'claude-3-sonnet'],
           deepseek: ['deepseek-chat', 'deepseek-reasoner', 'deepseek-coder'],
           moonshot: ['kimi-k2-turbo-preview', 'moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k'],
-          xai: ['grok-beta', 'grok-vision-beta']
+          xai: ['grok-beta', 'grok-vision-beta'],
+          ollama: ['llama3', 'llama3.1', 'mistral', 'phi3']
         }
-        
+
         const finalModels = allModels.length > 0 ? allModels : (backendFallbackModels[providerType] || [])
-        
+
         return {
           ...p,
           provider_type: providerType, // Normalize to provider_type for component use
           models: finalModels
         }
       })
-      
+
       console.log('[EXTRACTION] Active providers with normalized models:', activeProviders)
       console.log('[EXTRACTION] Active providers count:', activeProviders.length)
-      
+
       if (activeProviders.length === 0) {
         console.warn('[EXTRACTION] No active providers found after filtering')
         setAiProviders([])
         return
       }
-      
+
       setAiProviders(activeProviders)
-      
+
       // Set default to first active provider WITH MODELS
       const providerWithModels = activeProviders.find(p => p.models && p.models.length > 0)
       if (providerWithModels) {
         console.log('[EXTRACTION] Setting default provider:', providerWithModels.provider_type, 'with models:', providerWithModels.models)
-        
+
         setSelectedProvider(providerWithModels.provider_type)
-        
+
         // Validate selected model exists in available models, otherwise use first model
         const currentModel = selectedModel
         const modelExists = providerWithModels.models.includes(currentModel)
         const modelToUse = modelExists ? currentModel : providerWithModels.models[0]
-        
+
         if (!modelExists && currentModel) {
           console.warn(`[EXTRACTION] Selected model "${currentModel}" not available, using "${modelToUse}" instead`)
         }
-        
+
         setSelectedModel(modelToUse)
-        
+
         console.log('[EXTRACTION] Defaults set - Provider:', providerWithModels.provider_type, 'Model:', modelToUse)
       } else {
         console.warn('[EXTRACTION] No providers with models available')
@@ -501,7 +502,8 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
               anthropic: 'claude-3-sonnet',
               deepseek: 'deepseek-chat',
               moonshot: 'moonshot-v1-8k',
-              xai: 'grok-beta'
+              xai: 'grok-beta',
+              ollama: 'llama3'
             }
             const defaultModel = defaultModels[firstProvider.provider_type] || ''
             if (defaultModel) {
@@ -558,12 +560,12 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
           statusText: response.statusText,
           errorData
         })
-        
+
         if (response.status === 403 || response.status === 401) {
           toast.error('Authentication failed. Please logout and login again.')
           throw new Error('Authentication required - please re-login')
         }
-        
+
         throw new Error(errorData.message || errorData.error || 'Failed to start extraction')
       }
 
@@ -600,14 +602,14 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
             clearInterval(pollInterval)
             setIsExtracting(false)
             setShowExtractionDialog(false)
-            
+
             // Save document ID for WBS import
             if (selectedDocuments.length > 0) {
               setLastExtractedDocumentId(selectedDocuments[0])
             }
-            
+
             toast.success(`Extraction complete! ${data.result?.totalEntities || 0} entities extracted.`)
-            
+
             // Hint about WBS import if activities found
             if (data.result?.entityCounts?.activities > 0) {
               setTimeout(() => {
@@ -617,7 +619,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                 )
               }, 1500)
             }
-            
+
             void fetchEntityCounts()
           } else if (data.status === 'failed') {
             clearInterval(pollInterval)
@@ -633,36 +635,36 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
     // Clear interval after 5 minutes (safety)
     setTimeout(() => clearInterval(pollInterval), 300000)
   }
-  
+
   const fetchEntityDetails = async (entityType: string) => {
     if (!projectId || projectId === 'undefined') return
     try {
       setLoadingEntityDetails(true)
       setSelectedEntityType(entityType)
       setShowEntityDialog(true)
-      
+
       const { getApiUrl } = await import('@/lib/api-url')
       const apiUrl = getApiUrl(`/project-data-extraction/entities/${projectId}/${entityType}?limit=100`)
       console.log('[ENTITY-DETAILS] Fetching:', apiUrl)
-      
+
       const response = await fetch(apiUrl, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         }
       })
-      
+
       console.log('[ENTITY-DETAILS] Response status:', response.status)
-      
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
         console.error('[ENTITY-DETAILS] Error response:', errorData)
         throw new Error(errorData.error || `Failed to fetch entity details (${response.status})`)
       }
-      
+
       const data = await response.json()
       console.log('[ENTITY-DETAILS] Response data:', data)
       console.log('[ENTITY-DETAILS] Entities count:', data.entities?.length || 0)
-      
+
       setEntityDetails(data.entities || [])
     } catch (error) {
       console.error('[ENTITY-DETAILS] Failed to fetch entity details:', error)
@@ -672,7 +674,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
       setLoadingEntityDetails(false)
     }
   }
-  
+
   const handleImportWBS = async () => {
     if (!projectId || projectId === 'undefined') {
       toast.error('Invalid project')
@@ -680,10 +682,10 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
     }
     try {
       setIsImportingWBS(true)
-      
+
       const { getApiUrl } = await import('@/lib/api-url')
       const token = localStorage.getItem('auth_token') || localStorage.getItem('token')
-      
+
       // Import from extracted entities (project-level) instead of requiring specific document
       const response = await fetch(getApiUrl('/tasks/import-wbs'), {
         method: 'POST',
@@ -702,20 +704,20 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
           }
         })
       })
-      
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
         throw new Error(errorData.error || 'Failed to import WBS')
       }
-      
+
       const result = await response.json()
       const data = result.data
-      
+
       toast.success(
         `WBS Import Complete! Created ${data.tasksCreated} tasks (${data.totalEstimatedHours} hours estimated)`,
         { duration: 5000 }
       )
-      
+
       // Show detailed result
       if (data.tasksNeedingRoleAssignment > 0) {
         toast.info(
@@ -723,7 +725,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
           { duration: 4000 }
         )
       }
-      
+
     } catch (error: any) {
       console.error('WBS import failed:', error)
       toast.error(error.message || 'Failed to import WBS')
@@ -736,20 +738,20 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
     if (!entityCounts) return 0
     return Object.values(entityCounts).reduce((sum, count) => sum + count, 0)
   }
-  
+
   const getFilteredDocuments = () => {
     if (!documentSearchTerm) return allDocuments
-    
+
     const searchLower = documentSearchTerm.toLowerCase()
-    return allDocuments.filter(doc => 
+    return allDocuments.filter(doc =>
       (doc.title || doc.name).toLowerCase().includes(searchLower)
     )
   }
-  
+
   const renderEntityField = (key: string, value: any, entity?: any): React.ReactNode => {
     if (value === null || value === undefined) return <span className="text-muted-foreground italic">-</span>
     if (typeof value === 'boolean') return value ? <span className="text-green-600">Yes</span> : <span className="text-red-600">No</span>
-    
+
     // Special handling for source_document_id - show clickable link
     if (key === 'source_document_id' && value) {
       return (
@@ -766,7 +768,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
         </div>
       )
     }
-    
+
     // Handle arrays (including JSONB arrays from PostgreSQL)
     if (Array.isArray(value)) {
       if (value.length === 0) {
@@ -802,7 +804,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
         </ul>
       )
     }
-    
+
     // Handle objects (non-arrays)
     if (typeof value === 'object') {
       return (
@@ -811,20 +813,20 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
         </pre>
       )
     }
-    
+
     // Handle dates (exclude user ID fields that contain "date" in their name)
-    if ((key.includes('date') || key.includes('Date')) && 
-        !key.includes('updated_by') && 
-        !key.includes('created_by') &&
-        !key.includes('updatedBy') &&
-        !key.includes('createdBy')) {
+    if ((key.includes('date') || key.includes('Date')) &&
+      !key.includes('updated_by') &&
+      !key.includes('created_by') &&
+      !key.includes('updatedBy') &&
+      !key.includes('createdBy')) {
       try {
         return new Date(value).toLocaleDateString()
       } catch {
         return String(value)
       }
     }
-    
+
     // Handle long text (like justification)
     if (key === 'justification' && typeof value === 'string' && value.length > 200) {
       return (
@@ -833,10 +835,10 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
         </div>
       )
     }
-    
+
     return <span className="text-foreground">{String(value)}</span>
   }
-  
+
   const getEntityTypeLabel = (entityType: string): string => {
     return entityTypes.find(et => et.key === entityType)?.label || entityType
   }
@@ -846,7 +848,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
   // =========================================================================
   // PMBOK 8 Domain Configuration - Two-Tier Model
   // =========================================================================
-  
+
   // Entity type definitions with icons
   const entityTypeConfig: Record<string, { label: string; icon: any; color: string }> = {
     // Core entities (Legacy/PMBOK 7)
@@ -923,7 +925,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
     stakeholderIssues: { label: 'Stakeholder Issues', icon: AlertCircle, color: 'text-sky-500' },
     relationshipHealth: { label: 'Relationship Health', icon: Activity, color: 'text-sky-600' },
   }
-  
+
   // Performance Domains (Tier 1) - PMBOK 8
   const performanceDomains: Array<{
     key: string
@@ -934,80 +936,80 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
     color: string
     entities: string[]
   }> = [
-    {
-      key: 'stakeholders_domain',
-      pmbokDomain: 'stakeholders',
-      name: 'Stakeholders',
-      description: 'Stakeholder identification, engagement, and communication',
-      icon: Users,
-      color: 'bg-blue-500',
-      entities: ['stakeholders']
-    },
-    {
-      key: 'team_domain',
-      pmbokDomain: 'team',
-      name: 'Team',
-      description: 'Team composition, skills, dynamics, and agreements',
-      icon: Users2,
-      color: 'bg-indigo-500',
-      entities: ['teamAgreements', 'resources']
-    },
-    {
-      key: 'development_approach_domain',
-      pmbokDomain: 'development_approach',
-      name: 'Development Approach',
-      description: 'Methodology, iterations, and quality gates',
-      icon: Code,
-      color: 'bg-orange-500',
-      entities: ['developmentApproaches', 'projectIterations', 'phases']
-    },
-    {
-      key: 'planning_domain',
-      pmbokDomain: 'planning',
-      name: 'Planning',
-      description: 'Milestones, activities, requirements, and constraints',
-      icon: Target,
-      color: 'bg-purple-500',
-      entities: ['milestones', 'activities', 'requirements', 'constraints', 'scopeItems']
-    },
-    {
-      key: 'project_work_domain',
-      pmbokDomain: 'project_work',
-      name: 'Project Work',
-      description: 'Work items, capacity plans, and execution tracking',
-      icon: Briefcase,
-      color: 'bg-slate-500',
-      entities: ['workItems', 'capacityPlans']
-    },
-    {
-      key: 'delivery_domain',
-      pmbokDomain: 'delivery',
-      name: 'Delivery',
-      description: 'Deliverables, quality standards, and success criteria',
-      icon: Archive,
-      color: 'bg-pink-500',
-      entities: ['deliverables', 'qualityStandards', 'successCriteria']
-    },
-    {
-      key: 'measurement_domain',
-      pmbokDomain: 'measurement',
-      name: 'Measurement',
-      description: 'Performance measurements and earned value metrics',
-      icon: BarChart3,
-      color: 'bg-cyan-500',
-      entities: ['performanceMeasurements', 'earnedValueMetrics', 'performanceActuals']
-    },
-    {
-      key: 'uncertainty_domain',
-      pmbokDomain: 'uncertainty',
-      name: 'Uncertainty',
-      description: 'Risks, opportunities, and risk responses',
-      icon: AlertTriangle,
-      color: 'bg-red-500',
-      entities: ['risks', 'opportunities', 'riskResponses']
-    }
-  ]
-  
+      {
+        key: 'stakeholders_domain',
+        pmbokDomain: 'stakeholders',
+        name: 'Stakeholders',
+        description: 'Stakeholder identification, engagement, and communication',
+        icon: Users,
+        color: 'bg-blue-500',
+        entities: ['stakeholders']
+      },
+      {
+        key: 'team_domain',
+        pmbokDomain: 'team',
+        name: 'Team',
+        description: 'Team composition, skills, dynamics, and agreements',
+        icon: Users2,
+        color: 'bg-indigo-500',
+        entities: ['teamAgreements', 'resources']
+      },
+      {
+        key: 'development_approach_domain',
+        pmbokDomain: 'development_approach',
+        name: 'Development Approach',
+        description: 'Methodology, iterations, and quality gates',
+        icon: Code,
+        color: 'bg-orange-500',
+        entities: ['developmentApproaches', 'projectIterations', 'phases']
+      },
+      {
+        key: 'planning_domain',
+        pmbokDomain: 'planning',
+        name: 'Planning',
+        description: 'Milestones, activities, requirements, and constraints',
+        icon: Target,
+        color: 'bg-purple-500',
+        entities: ['milestones', 'activities', 'requirements', 'constraints', 'scopeItems']
+      },
+      {
+        key: 'project_work_domain',
+        pmbokDomain: 'project_work',
+        name: 'Project Work',
+        description: 'Work items, capacity plans, and execution tracking',
+        icon: Briefcase,
+        color: 'bg-slate-500',
+        entities: ['workItems', 'capacityPlans']
+      },
+      {
+        key: 'delivery_domain',
+        pmbokDomain: 'delivery',
+        name: 'Delivery',
+        description: 'Deliverables, quality standards, and success criteria',
+        icon: Archive,
+        color: 'bg-pink-500',
+        entities: ['deliverables', 'qualityStandards', 'successCriteria']
+      },
+      {
+        key: 'measurement_domain',
+        pmbokDomain: 'measurement',
+        name: 'Measurement',
+        description: 'Performance measurements and earned value metrics',
+        icon: BarChart3,
+        color: 'bg-cyan-500',
+        entities: ['performanceMeasurements', 'earnedValueMetrics', 'performanceActuals']
+      },
+      {
+        key: 'uncertainty_domain',
+        pmbokDomain: 'uncertainty',
+        name: 'Uncertainty',
+        description: 'Risks, opportunities, and risk responses',
+        icon: AlertTriangle,
+        color: 'bg-red-500',
+        entities: ['risks', 'opportunities', 'riskResponses']
+      }
+    ]
+
   // Knowledge Domains (Tier 2) - Supplementary
   // Now includes all Knowledge Area Domain entities from the 38 new database tables
   const knowledgeDomains: Array<{
@@ -1019,71 +1021,71 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
     color: string
     entities: string[]
   }> = [
-    {
-      key: 'governance_domain',
-      pmbokDomain: 'governance',
-      name: 'Governance',
-      description: 'Decision-making, approvals, steering committees, and compliance',
-      icon: Building2,
-      color: 'bg-amber-600',
-      entities: ['governanceDecisions', 'approvalWorkflows', 'steeringCommittees', 'changeControlBoards', 'policyCompliance', 'complianceSecurity', 'developmentApproaches', 'phases', 'milestones', 'teamAgreements']
-    },
-    {
-      key: 'scope_domain',
-      pmbokDomain: 'scope',
-      name: 'Scope',
-      description: 'Scope baseline, WBS, change requests, and requirements traceability',
-      icon: Ruler,
-      color: 'bg-violet-500',
-      entities: ['scopeBaselines', 'wbsNodes', 'scopeChangeRequests', 'requirementsTraceability', 'scopeVerification', 'scopeItems', 'requirements', 'deliverables']
-    },
-    {
-      key: 'schedule_domain',
-      pmbokDomain: 'schedule',
-      name: 'Schedule',
-      description: 'Schedule baseline, critical path, variances, and forecasts',
-      icon: Timer,
-      color: 'bg-green-600',
-      entities: ['scheduleBaselines', 'scheduleActivities', 'criticalPathActivities', 'scheduleVariances', 'scheduleForecasts', 'milestones', 'activities', 'phases']
-    },
-    {
-      key: 'finance_domain',
-      pmbokDomain: 'finance',
-      name: 'Finance',
-      description: 'Budget baseline, cost tracking, funding, and procurement',
-      icon: Wallet,
-      color: 'bg-emerald-600',
-      entities: ['budgetBaselines', 'costActuals', 'costEstimates', 'fundingTranches', 'financialVariances', 'procurementCosts', 'earnedValueMetrics']
-    },
-    {
-      key: 'resources_domain',
-      pmbokDomain: 'resources',
-      name: 'Resources',
-      description: 'Resource allocation, capacity, utilization, and onboarding',
-      icon: UserCog,
-      color: 'bg-teal-500',
-      entities: ['resourceAssignments', 'resourcePool', 'capacityForecasts', 'utilizationRecords', 'resourceConflicts', 'onboardingOffboarding', 'resources', 'capacityPlans', 'teamAgreements']
-    },
-    {
-      key: 'risk_domain',
-      pmbokDomain: 'risk',
-      name: 'Risk',
-      description: 'Risk assessments, response plans, triggers, and reserves',
-      icon: ShieldAlert,
-      color: 'bg-rose-500',
-      entities: ['riskAssessments', 'riskResponsePlans', 'riskTriggers', 'riskReviews', 'contingencyReserves', 'riskMetrics', 'risks', 'riskResponses', 'opportunities']
-    },
-    {
-      key: 'stakeholders_ops_domain',
-      pmbokDomain: 'stakeholders_ops',
-      name: 'Stakeholders (Ops)',
-      description: 'Engagement actions, communications, surveys, and relationship health',
-      icon: MessageSquare,
-      color: 'bg-sky-500',
-      entities: ['engagementActions', 'communicationLogs', 'satisfactionSurveys', 'stakeholderIssues', 'relationshipHealth', 'stakeholders']
-    }
-  ]
-  
+      {
+        key: 'governance_domain',
+        pmbokDomain: 'governance',
+        name: 'Governance',
+        description: 'Decision-making, approvals, steering committees, and compliance',
+        icon: Building2,
+        color: 'bg-amber-600',
+        entities: ['governanceDecisions', 'approvalWorkflows', 'steeringCommittees', 'changeControlBoards', 'policyCompliance', 'complianceSecurity', 'developmentApproaches', 'phases', 'milestones', 'teamAgreements']
+      },
+      {
+        key: 'scope_domain',
+        pmbokDomain: 'scope',
+        name: 'Scope',
+        description: 'Scope baseline, WBS, change requests, and requirements traceability',
+        icon: Ruler,
+        color: 'bg-violet-500',
+        entities: ['scopeBaselines', 'wbsNodes', 'scopeChangeRequests', 'requirementsTraceability', 'scopeVerification', 'scopeItems', 'requirements', 'deliverables']
+      },
+      {
+        key: 'schedule_domain',
+        pmbokDomain: 'schedule',
+        name: 'Schedule',
+        description: 'Schedule baseline, critical path, variances, and forecasts',
+        icon: Timer,
+        color: 'bg-green-600',
+        entities: ['scheduleBaselines', 'scheduleActivities', 'criticalPathActivities', 'scheduleVariances', 'scheduleForecasts', 'milestones', 'activities', 'phases']
+      },
+      {
+        key: 'finance_domain',
+        pmbokDomain: 'finance',
+        name: 'Finance',
+        description: 'Budget baseline, cost tracking, funding, and procurement',
+        icon: Wallet,
+        color: 'bg-emerald-600',
+        entities: ['budgetBaselines', 'costActuals', 'costEstimates', 'fundingTranches', 'financialVariances', 'procurementCosts', 'earnedValueMetrics']
+      },
+      {
+        key: 'resources_domain',
+        pmbokDomain: 'resources',
+        name: 'Resources',
+        description: 'Resource allocation, capacity, utilization, and onboarding',
+        icon: UserCog,
+        color: 'bg-teal-500',
+        entities: ['resourceAssignments', 'resourcePool', 'capacityForecasts', 'utilizationRecords', 'resourceConflicts', 'onboardingOffboarding', 'resources', 'capacityPlans', 'teamAgreements']
+      },
+      {
+        key: 'risk_domain',
+        pmbokDomain: 'risk',
+        name: 'Risk',
+        description: 'Risk assessments, response plans, triggers, and reserves',
+        icon: ShieldAlert,
+        color: 'bg-rose-500',
+        entities: ['riskAssessments', 'riskResponsePlans', 'riskTriggers', 'riskReviews', 'contingencyReserves', 'riskMetrics', 'risks', 'riskResponses', 'opportunities']
+      },
+      {
+        key: 'stakeholders_ops_domain',
+        pmbokDomain: 'stakeholders_ops',
+        name: 'Stakeholders (Ops)',
+        description: 'Engagement actions, communications, surveys, and relationship health',
+        icon: MessageSquare,
+        color: 'bg-sky-500',
+        entities: ['engagementActions', 'communicationLogs', 'satisfactionSurveys', 'stakeholderIssues', 'relationshipHealth', 'stakeholders']
+      }
+    ]
+
   // Project Phases / Focus Areas
   const projectPhases = [
     {
@@ -1127,213 +1129,213 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
       entities: ['deliverables', 'successCriteria', 'bestPractices']
     }
   ]
-  
+
   // All entity types (flat list for backward compatibility)
   const entityTypes = Object.entries(entityTypeConfig).map(([key, config]) => ({
     key,
     ...config
   }))
-  
+
   // KPI to Entity Mapping - defines which entities feed into each KPI
   const kpiEntityMapping: Record<string, { entities: string[]; calculationHint: string }> = {
     // Stakeholders Domain
-    'engagement_score': { 
-      entities: ['stakeholders'], 
-      calculationHint: 'Average of (interest + influence) / 2 for stakeholders with both values populated' 
+    'engagement_score': {
+      entities: ['stakeholders'],
+      calculationHint: 'Average of (interest + influence) / 2 for stakeholders with both values populated'
     },
-    'freshness': { 
-      entities: ['stakeholders'], 
-      calculationHint: 'Percentage of stakeholders updated within last 30 days' 
+    'freshness': {
+      entities: ['stakeholders'],
+      calculationHint: 'Percentage of stakeholders updated within last 30 days'
     },
     // Team Domain
-    'skills_coverage': { 
-      entities: ['teamAgreements', 'resources'], 
-      calculationHint: 'Required skills matched by team member competencies' 
+    'skills_coverage': {
+      entities: ['teamAgreements', 'resources'],
+      calculationHint: 'Required skills matched by team member competencies'
     },
-    'velocity_trend': { 
-      entities: ['projectIterations', 'workItems'], 
-      calculationHint: 'Slope of story points completed across last 3 iterations' 
+    'velocity_trend': {
+      entities: ['projectIterations', 'workItems'],
+      calculationHint: 'Slope of story points completed across last 3 iterations'
     },
     // Development Approach Domain
-    'iteration_predictability': { 
-      entities: ['projectIterations', 'workItems'], 
-      calculationHint: 'Variance between planned vs actual completion per iteration' 
+    'iteration_predictability': {
+      entities: ['projectIterations', 'workItems'],
+      calculationHint: 'Variance between planned vs actual completion per iteration'
     },
     // Planning Domain
-    'dependency_coverage': { 
-      entities: ['milestones', 'activities'], 
-      calculationHint: 'Percentage of items with upstream/downstream dependencies defined' 
+    'dependency_coverage': {
+      entities: ['milestones', 'activities'],
+      calculationHint: 'Percentage of items with upstream/downstream dependencies defined'
     },
-    'planning_confidence': { 
-      entities: ['requirements', 'resources', 'risks', 'milestones'], 
-      calculationHint: 'Composite: scope clarity + resource readiness + risk mitigation' 
+    'planning_confidence': {
+      entities: ['requirements', 'resources', 'risks', 'milestones'],
+      calculationHint: 'Composite: scope clarity + resource readiness + risk mitigation'
     },
     // Project Work Domain
-    'blocker_sla': { 
-      entities: ['workItems'], 
-      calculationHint: 'Average days to resolve blockers in work items' 
+    'blocker_sla': {
+      entities: ['workItems'],
+      calculationHint: 'Average days to resolve blockers in work items'
     },
-    'utilization_alignment': { 
-      entities: ['capacityPlans', 'resources'], 
-      calculationHint: 'Variance between planned vs actual utilization' 
+    'utilization_alignment': {
+      entities: ['capacityPlans', 'resources'],
+      calculationHint: 'Variance between planned vs actual utilization'
     },
     // Delivery Domain
-    'first_pass_acceptance': { 
-      entities: ['deliverables', 'qualityStandards'], 
-      calculationHint: 'Percentage of deliverables accepted without rework' 
+    'first_pass_acceptance': {
+      entities: ['deliverables', 'qualityStandards'],
+      calculationHint: 'Percentage of deliverables accepted without rework'
     },
-    'release_success_rate': { 
-      entities: ['deliverables'], 
-      calculationHint: 'Ratio of releases completed without rollback' 
+    'release_success_rate': {
+      entities: ['deliverables'],
+      calculationHint: 'Ratio of releases completed without rollback'
     },
     // Measurement Domain
-    'kpi_on_track_ratio': { 
-      entities: ['successCriteria', 'performanceMeasurements'], 
-      calculationHint: 'Percentage of success criteria with on_track status' 
+    'kpi_on_track_ratio': {
+      entities: ['successCriteria', 'performanceMeasurements'],
+      calculationHint: 'Percentage of success criteria with on_track status'
     },
-    'spi': { 
-      entities: ['earnedValueMetrics', 'performanceActuals'], 
-      calculationHint: 'Earned Value / Planned Value from EVM data' 
+    'spi': {
+      entities: ['earnedValueMetrics', 'performanceActuals'],
+      calculationHint: 'Earned Value / Planned Value from EVM data'
     },
     // Uncertainty Domain
-    'risk_response_coverage': { 
-      entities: ['risks', 'riskResponses'], 
-      calculationHint: 'Percentage of medium+ risks with active response plans' 
+    'risk_response_coverage': {
+      entities: ['risks', 'riskResponses'],
+      calculationHint: 'Percentage of medium+ risks with active response plans'
     },
-    'opportunity_conversion': { 
-      entities: ['opportunities'], 
-      calculationHint: 'Ratio of realized vs identified opportunities' 
+    'opportunity_conversion': {
+      entities: ['opportunities'],
+      calculationHint: 'Ratio of realized vs identified opportunities'
     },
     // Governance Domain (uses new Knowledge Area tables)
-    'decision_cycle_time': { 
-      entities: ['governanceDecisions', 'approvalWorkflows', 'complianceSecurity'], 
-      calculationHint: 'Average days from decision request to approval' 
+    'decision_cycle_time': {
+      entities: ['governanceDecisions', 'approvalWorkflows', 'complianceSecurity'],
+      calculationHint: 'Average days from decision request to approval'
     },
-    'escalation_rate': { 
-      entities: ['governanceDecisions', 'steeringCommittees', 'complianceSecurity'], 
-      calculationHint: 'Percentage of decisions escalated beyond initial authority' 
+    'escalation_rate': {
+      entities: ['governanceDecisions', 'steeringCommittees', 'complianceSecurity'],
+      calculationHint: 'Percentage of decisions escalated beyond initial authority'
     },
-    'governance_health_score': { 
-      entities: ['governanceDecisions', 'policyCompliance', 'changeControlBoards', 'complianceSecurity'], 
-      calculationHint: 'Composite of compliance status and decision velocity' 
+    'governance_health_score': {
+      entities: ['governanceDecisions', 'policyCompliance', 'changeControlBoards', 'complianceSecurity'],
+      calculationHint: 'Composite of compliance status and decision velocity'
     },
-    'audit_findings_open': { 
-      entities: ['policyCompliance', 'complianceSecurity'], 
-      calculationHint: 'Count of critical audit findings open > 30 days' 
+    'audit_findings_open': {
+      entities: ['policyCompliance', 'complianceSecurity'],
+      calculationHint: 'Count of critical audit findings open > 30 days'
     },
     // Scope Domain (uses new Knowledge Area tables)
-    'scope_creep_index': { 
-      entities: ['scopeBaselines', 'scopeChangeRequests', 'scopeItems', 'requirements'], 
-      calculationHint: 'Unapproved scope additions relative to baseline' 
+    'scope_creep_index': {
+      entities: ['scopeBaselines', 'scopeChangeRequests', 'scopeItems', 'requirements'],
+      calculationHint: 'Unapproved scope additions relative to baseline'
     },
-    'requirements_coverage': { 
-      entities: ['requirementsTraceability', 'requirements', 'deliverables'], 
-      calculationHint: 'Percentage of requirements linked to deliverables' 
+    'requirements_coverage': {
+      entities: ['requirementsTraceability', 'requirements', 'deliverables'],
+      calculationHint: 'Percentage of requirements linked to deliverables'
     },
-    'wbs_completeness': { 
-      entities: ['wbsNodes', 'scopeItems', 'activities', 'resources'], 
-      calculationHint: 'WBS nodes with assigned resources and estimates' 
+    'wbs_completeness': {
+      entities: ['wbsNodes', 'scopeItems', 'activities', 'resources'],
+      calculationHint: 'WBS nodes with assigned resources and estimates'
     },
     // Schedule Domain (uses new Knowledge Area tables)
-    'critical_path_float': { 
-      entities: ['criticalPathActivities', 'scheduleActivities', 'activities', 'milestones'], 
-      calculationHint: 'Average float on critical path activities' 
+    'critical_path_float': {
+      entities: ['criticalPathActivities', 'scheduleActivities', 'activities', 'milestones'],
+      calculationHint: 'Average float on critical path activities'
     },
-    'milestone_hit_rate': { 
-      entities: ['scheduleBaselines', 'milestones'], 
-      calculationHint: 'Percentage of milestones completed on/before target' 
+    'milestone_hit_rate': {
+      entities: ['scheduleBaselines', 'milestones'],
+      calculationHint: 'Percentage of milestones completed on/before target'
     },
-    'schedule_variance_trend': { 
-      entities: ['scheduleVariances', 'scheduleForecasts', 'milestones', 'activities', 'performanceActuals'], 
-      calculationHint: 'Direction of schedule variance over periods' 
+    'schedule_variance_trend': {
+      entities: ['scheduleVariances', 'scheduleForecasts', 'milestones', 'activities', 'performanceActuals'],
+      calculationHint: 'Direction of schedule variance over periods'
     },
     // Finance Domain (uses new Knowledge Area tables)
-    'cpi': { 
-      entities: ['budgetBaselines', 'costActuals', 'earnedValueMetrics'], 
-      calculationHint: 'Earned Value / Actual Cost ratio' 
+    'cpi': {
+      entities: ['budgetBaselines', 'costActuals', 'earnedValueMetrics'],
+      calculationHint: 'Earned Value / Actual Cost ratio'
     },
-    'budget_utilization': { 
-      entities: ['budgetBaselines', 'costActuals', 'financialVariances', 'earnedValueMetrics', 'resources'], 
-      calculationHint: 'Budget consumed relative to timeline progress' 
+    'budget_utilization': {
+      entities: ['budgetBaselines', 'costActuals', 'financialVariances', 'earnedValueMetrics', 'resources'],
+      calculationHint: 'Budget consumed relative to timeline progress'
     },
-    'vac': { 
-      entities: ['budgetBaselines', 'costEstimates', 'earnedValueMetrics'], 
-      calculationHint: 'Budget at Completion minus Estimate at Completion' 
+    'vac': {
+      entities: ['budgetBaselines', 'costEstimates', 'earnedValueMetrics'],
+      calculationHint: 'Budget at Completion minus Estimate at Completion'
     },
-    'funding_runway': { 
-      entities: ['fundingTranches', 'procurementCosts', 'earnedValueMetrics', 'resources'], 
-      calculationHint: 'Months of runway at current burn rate' 
+    'funding_runway': {
+      entities: ['fundingTranches', 'procurementCosts', 'earnedValueMetrics', 'resources'],
+      calculationHint: 'Months of runway at current burn rate'
     },
     // Resources Domain (uses new Knowledge Area tables)
-    'utilization_rate': { 
-      entities: ['utilizationRecords', 'resourceAssignments', 'resources', 'capacityPlans'], 
-      calculationHint: 'Actual hours / available hours ratio' 
+    'utilization_rate': {
+      entities: ['utilizationRecords', 'resourceAssignments', 'resources', 'capacityPlans'],
+      calculationHint: 'Actual hours / available hours ratio'
     },
-    'resource_conflict_rate': { 
-      entities: ['resourceConflicts', 'resourceAssignments', 'resources', 'capacityPlans'], 
-      calculationHint: 'Percentage of resources with overallocation' 
+    'resource_conflict_rate': {
+      entities: ['resourceConflicts', 'resourceAssignments', 'resources', 'capacityPlans'],
+      calculationHint: 'Percentage of resources with overallocation'
     },
-    'skill_match_score': { 
-      entities: ['resourcePool', 'resourceAssignments', 'resources', 'teamAgreements'], 
-      calculationHint: 'Assignments where skill level meets requirement' 
+    'skill_match_score': {
+      entities: ['resourcePool', 'resourceAssignments', 'resources', 'teamAgreements'],
+      calculationHint: 'Assignments where skill level meets requirement'
     },
-    'bench_rate': { 
-      entities: ['resourcePool', 'capacityForecasts', 'resources'], 
-      calculationHint: 'Percentage of available resources unassigned' 
+    'bench_rate': {
+      entities: ['resourcePool', 'capacityForecasts', 'resources'],
+      calculationHint: 'Percentage of available resources unassigned'
     },
     // Risk Domain (uses new Knowledge Area tables)
-    'risk_exposure_index': { 
-      entities: ['riskAssessments', 'riskMetrics', 'risks'], 
-      calculationHint: 'Sum of probability × impact for all open risks' 
+    'risk_exposure_index': {
+      entities: ['riskAssessments', 'riskMetrics', 'risks'],
+      calculationHint: 'Sum of probability × impact for all open risks'
     },
-    'response_plan_coverage': { 
-      entities: ['riskResponsePlans', 'riskResponses', 'risks'], 
-      calculationHint: 'Medium+ risks with active response plans' 
+    'response_plan_coverage': {
+      entities: ['riskResponsePlans', 'riskResponses', 'risks'],
+      calculationHint: 'Medium+ risks with active response plans'
     },
-    'risk_velocity': { 
-      entities: ['riskReviews', 'riskTriggers', 'risks'], 
-      calculationHint: 'Rate of new risks identified per period' 
+    'risk_velocity': {
+      entities: ['riskReviews', 'riskTriggers', 'risks'],
+      calculationHint: 'Rate of new risks identified per period'
     },
-    'reserve_adequacy': { 
-      entities: ['contingencyReserves', 'riskMetrics', 'risks', 'earnedValueMetrics'], 
-      calculationHint: 'Ratio of reserves to current risk exposure' 
+    'reserve_adequacy': {
+      entities: ['contingencyReserves', 'riskMetrics', 'risks', 'earnedValueMetrics'],
+      calculationHint: 'Ratio of reserves to current risk exposure'
     },
     // Stakeholders Ops Domain (uses new Knowledge Area tables)
-    'communication_compliance': { 
-      entities: ['communicationLogs', 'engagementActions', 'stakeholders'], 
-      calculationHint: 'Actual vs planned communications ratio' 
+    'communication_compliance': {
+      entities: ['communicationLogs', 'engagementActions', 'stakeholders'],
+      calculationHint: 'Actual vs planned communications ratio'
     },
-    'issue_resolution_time': { 
-      entities: ['stakeholderIssues', 'stakeholders'], 
-      calculationHint: 'Average days to resolve stakeholder issues' 
+    'issue_resolution_time': {
+      entities: ['stakeholderIssues', 'stakeholders'],
+      calculationHint: 'Average days to resolve stakeholder issues'
     },
-    'satisfaction_trend': { 
-      entities: ['satisfactionSurveys', 'relationshipHealth', 'stakeholders'], 
-      calculationHint: 'NPS or satisfaction score trend' 
+    'satisfaction_trend': {
+      entities: ['satisfactionSurveys', 'relationshipHealth', 'stakeholders'],
+      calculationHint: 'NPS or satisfaction score trend'
     },
-    'engagement_action_completion': { 
-      entities: ['engagementActions', 'stakeholders'], 
-      calculationHint: 'Planned engagement actions completed' 
+    'engagement_action_completion': {
+      entities: ['engagementActions', 'stakeholders'],
+      calculationHint: 'Planned engagement actions completed'
     }
   }
-  
+
   // KPI Display Component - only shows KPIs with available source data
   const renderKpiSection = (pmbokDomain: PmbokDomain, domainEntities: string[]) => {
     const kpis = DOMAIN_KPI_KEYS[pmbokDomain] || []
     if (kpis.length === 0) return null
-    
+
     // Filter KPIs to only those with available entity data
     const calculableKpis = kpis.filter(kpi => {
       const mapping = kpiEntityMapping[kpi.key]
       if (!mapping) return false
-      
+
       // Check if we have data for at least one required entity
       return mapping.entities.some(entityKey => {
         const count = entityCounts?.[entityKey as keyof EntityCounts] || 0
         return count > 0
       })
     })
-    
+
     if (calculableKpis.length === 0) {
       return (
         <div className="mt-3 pt-3 border-t border-dashed">
@@ -1346,7 +1348,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
         </div>
       )
     }
-    
+
     return (
       <div className="mt-3 pt-3 border-t border-dashed">
         <div className="flex items-center gap-2 mb-2">
@@ -1364,9 +1366,9 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
               label: entityTypeConfig[e]?.label || e,
               count: entityCounts?.[e as keyof EntityCounts] || 0
             })).filter(e => e.count > 0)
-            
+
             const totalSourceCount = sourceEntityCounts.reduce((sum, e) => sum + e.count, 0)
-            
+
             // Handle KPI click - open source traceability dialog
             const handleKpiClick = () => {
               setSelectedKpi({
@@ -1376,10 +1378,10 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
               })
               setShowKpiSourceDialog(true)
             }
-            
+
             return (
-              <div 
-                key={kpi.key} 
+              <div
+                key={kpi.key}
                 className="p-2 bg-muted/30 rounded-md border border-dashed hover:bg-muted/50 hover:border-primary cursor-pointer transition-all group"
                 onClick={handleKpiClick}
                 title={`Click to view source dependencies and calculations`}
@@ -1412,8 +1414,8 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                     )}
                     {kpi.targetDirection === 'range' && (
                       <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300 border-amber-200">
-                        {kpi.minValue !== undefined && kpi.maxValue !== undefined 
-                          ? `${(kpi.minValue * 100).toFixed(0)}-${(kpi.maxValue * 100).toFixed(0)}%` 
+                        {kpi.minValue !== undefined && kpi.maxValue !== undefined
+                          ? `${(kpi.minValue * 100).toFixed(0)}-${(kpi.maxValue * 100).toFixed(0)}%`
                           : 'Range'}
                       </Badge>
                     )}
@@ -1475,7 +1477,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                   {getTotalEntities()}
                 </Badge>
               </div>
-              
+
               <p className="text-xs text-muted-foreground flex items-center gap-1">
                 <Info className="h-3 w-3" />
                 Click on any entity type below to view details
@@ -1485,277 +1487,277 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
               {entityCounts && (
                 (entityCounts.successCriteria > 0 || entityCounts.deliverables > 0 || entityCounts.stakeholders > 0)
               ) && (
-                <Card className="border-2 border-dashed border-emerald-500/30 bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950/30 dark:to-teal-950/20">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <TrendingUp className="h-5 w-5 text-emerald-600" />
-                      System for Value Delivery
-                    </CardTitle>
-                    <CardDescription>
-                      Creating tangible and intangible value through strategic alignment
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    
-                    {/* Value Types - Tangible vs Intangible */}
-                    <div className="grid grid-cols-2 gap-3">
-                      {/* Tangible Value */}
-                      <div className="p-3 rounded-lg border-2 border-emerald-300 bg-white dark:bg-emerald-950/50">
-                        <div className="flex items-center gap-2 mb-2">
-                          <div className="p-1.5 rounded bg-emerald-100 dark:bg-emerald-900">
-                            <Archive className="h-4 w-4 text-emerald-700 dark:text-emerald-300" />
-                          </div>
-                          <span className="font-semibold text-sm">Tangible Value</span>
-                        </div>
-                        <div className="space-y-1.5 text-xs">
-                          <div 
-                            className="flex items-center justify-between p-1.5 bg-emerald-50 dark:bg-emerald-900/30 rounded cursor-pointer hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors"
-                            onClick={() => entityCounts?.deliverables && entityCounts.deliverables > 0 && fetchEntityDetails('deliverables')}
-                          >
-                            <span>📦 Deliverables</span>
-                            <Badge variant="secondary" className="text-[10px]">{entityCounts?.deliverables || 0}</Badge>
-                          </div>
-                          <div 
-                            className="flex items-center justify-between p-1.5 bg-emerald-50 dark:bg-emerald-900/30 rounded cursor-pointer hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors"
-                            onClick={() => entityCounts?.earnedValueMetrics && entityCounts.earnedValueMetrics > 0 && fetchEntityDetails('earnedValueMetrics')}
-                          >
-                            <span>💰 Financial Metrics</span>
-                            <Badge variant="secondary" className="text-[10px]">{entityCounts?.earnedValueMetrics || 0}</Badge>
-                          </div>
-                          <div 
-                            className="flex items-center justify-between p-1.5 bg-emerald-50 dark:bg-emerald-900/30 rounded cursor-pointer hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors"
-                            onClick={() => entityCounts?.qualityStandards && entityCounts.qualityStandards > 0 && fetchEntityDetails('qualityStandards')}
-                          >
-                            <span>✅ Quality Standards</span>
-                            <Badge variant="secondary" className="text-[10px]">{entityCounts?.qualityStandards || 0}</Badge>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      {/* Intangible Value */}
-                      <div className="p-3 rounded-lg border-2 border-purple-300 bg-white dark:bg-purple-950/50">
-                        <div className="flex items-center gap-2 mb-2">
-                          <div className="p-1.5 rounded bg-purple-100 dark:bg-purple-900">
-                            <Sparkles className="h-4 w-4 text-purple-700 dark:text-purple-300" />
-                          </div>
-                          <span className="font-semibold text-sm">Intangible Value</span>
-                        </div>
-                        <div className="space-y-1.5 text-xs">
-                          <div 
-                            className="flex items-center justify-between p-1.5 bg-purple-50 dark:bg-purple-900/30 rounded cursor-pointer hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors"
-                            onClick={() => entityCounts?.stakeholders && entityCounts.stakeholders > 0 && fetchEntityDetails('stakeholders')}
-                          >
-                            <span>👥 Stakeholder Satisfaction</span>
-                            <Badge variant="secondary" className="text-[10px]">{entityCounts?.stakeholders || 0}</Badge>
-                          </div>
-                          <div 
-                            className="flex items-center justify-between p-1.5 bg-purple-50 dark:bg-purple-900/30 rounded cursor-pointer hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors"
-                            onClick={() => entityCounts?.bestPractices && entityCounts.bestPractices > 0 && fetchEntityDetails('bestPractices')}
-                          >
-                            <span>💡 Knowledge & Learning</span>
-                            <Badge variant="secondary" className="text-[10px]">{entityCounts?.bestPractices || 0}</Badge>
-                          </div>
-                          <div 
-                            className="flex items-center justify-between p-1.5 bg-purple-50 dark:bg-purple-900/30 rounded cursor-pointer hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors"
-                            onClick={() => entityCounts?.teamAgreements && entityCounts.teamAgreements > 0 && fetchEntityDetails('teamAgreements')}
-                          >
-                            <span>🤝 Team Capability</span>
-                            <Badge variant="secondary" className="text-[10px]">{entityCounts?.teamAgreements || 0}</Badge>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                  <Card className="border-2 border-dashed border-emerald-500/30 bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950/30 dark:to-teal-950/20">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <TrendingUp className="h-5 w-5 text-emerald-600" />
+                        System for Value Delivery
+                      </CardTitle>
+                      <CardDescription>
+                        Creating tangible and intangible value through strategic alignment
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
 
-                    {/* Value Delivery Hierarchy */}
-                    <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border">
-                      <div className="flex items-center gap-2 mb-3">
-                        <Layers className="h-4 w-4 text-blue-600" />
-                        <span className="font-semibold text-sm">Value Delivery Hierarchy</span>
-                      </div>
-                      <div className="relative pl-4 border-l-2 border-blue-200 dark:border-blue-800 space-y-2">
-                        {/* Vision & Mission */}
-                        <div className="relative">
-                          <div className="absolute -left-[21px] w-4 h-4 rounded-full bg-blue-600 flex items-center justify-center">
-                            <span className="text-white text-[8px] font-bold">V</span>
-                          </div>
-                          <div className="ml-2 p-2 bg-blue-50 dark:bg-blue-950/30 rounded text-xs">
-                            <div className="font-medium">Vision & Mission</div>
-                            <div className="text-muted-foreground">Strategic direction and purpose</div>
-                          </div>
-                        </div>
-                        
-                        {/* Organizational Strategy */}
-                        <div className="relative">
-                          <div className="absolute -left-[21px] w-4 h-4 rounded-full bg-blue-500 flex items-center justify-center">
-                            <span className="text-white text-[8px] font-bold">S</span>
-                          </div>
-                          <div className="ml-2 p-2 bg-blue-50 dark:bg-blue-950/30 rounded text-xs">
-                            <div className="font-medium">Organizational Strategy & Objectives</div>
-                            <div className="text-muted-foreground">Business goals alignment</div>
-                          </div>
-                        </div>
-                        
-                        {/* Portfolio Management */}
-                        <div className="relative">
-                          <div className="absolute -left-[21px] w-4 h-4 rounded-full bg-indigo-500 flex items-center justify-center">
-                            <span className="text-white text-[8px] font-bold">P</span>
-                          </div>
-                          <div 
-                            className="ml-2 p-2 bg-indigo-50 dark:bg-indigo-950/30 rounded text-xs cursor-pointer hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors"
-                            onClick={() => entityCounts?.successCriteria && entityCounts.successCriteria > 0 && fetchEntityDetails('successCriteria')}
-                          >
-                            <div className="font-medium flex items-center justify-between">
-                              <span>Portfolio & Strategic Planning</span>
-                              <Badge variant="outline" className="text-[9px]">{entityCounts?.successCriteria || 0} criteria</Badge>
+                      {/* Value Types - Tangible vs Intangible */}
+                      <div className="grid grid-cols-2 gap-3">
+                        {/* Tangible Value */}
+                        <div className="p-3 rounded-lg border-2 border-emerald-300 bg-white dark:bg-emerald-950/50">
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className="p-1.5 rounded bg-emerald-100 dark:bg-emerald-900">
+                              <Archive className="h-4 w-4 text-emerald-700 dark:text-emerald-300" />
                             </div>
-                            <div className="text-muted-foreground">Investment prioritization</div>
+                            <span className="font-semibold text-sm">Tangible Value</span>
                           </div>
-                        </div>
-                        
-                        {/* Program & Product Management */}
-                        <div className="relative">
-                          <div className="absolute -left-[21px] w-4 h-4 rounded-full bg-violet-500 flex items-center justify-center">
-                            <span className="text-white text-[8px] font-bold">M</span>
-                          </div>
-                          <div 
-                            className="ml-2 p-2 bg-violet-50 dark:bg-violet-950/30 rounded text-xs cursor-pointer hover:bg-violet-100 dark:hover:bg-violet-900/50 transition-colors"
-                            onClick={() => entityCounts?.phases && entityCounts.phases > 0 && fetchEntityDetails('phases')}
-                          >
-                            <div className="font-medium flex items-center justify-between">
-                              <span>Programs, Products & Operations</span>
-                              <Badge variant="outline" className="text-[9px]">{entityCounts?.phases || 0} phases</Badge>
+                          <div className="space-y-1.5 text-xs">
+                            <div
+                              className="flex items-center justify-between p-1.5 bg-emerald-50 dark:bg-emerald-900/30 rounded cursor-pointer hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors"
+                              onClick={() => entityCounts?.deliverables && entityCounts.deliverables > 0 && fetchEntityDetails('deliverables')}
+                            >
+                              <span>📦 Deliverables</span>
+                              <Badge variant="secondary" className="text-[10px]">{entityCounts?.deliverables || 0}</Badge>
                             </div>
-                            <div className="text-muted-foreground">Coordinated value streams</div>
-                          </div>
-                        </div>
-                        
-                        {/* Project Execution */}
-                        <div className="relative">
-                          <div className="absolute -left-[21px] w-4 h-4 rounded-full bg-emerald-500 flex items-center justify-center">
-                            <span className="text-white text-[8px] font-bold">X</span>
-                          </div>
-                          <div 
-                            className="ml-2 p-2 bg-emerald-50 dark:bg-emerald-950/30 rounded text-xs cursor-pointer hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors"
-                            onClick={() => entityCounts?.deliverables && entityCounts.deliverables > 0 && fetchEntityDetails('deliverables')}
-                          >
-                            <div className="font-medium flex items-center justify-between">
-                              <span>Authorized Projects & Deliverables</span>
-                              <Badge variant="outline" className="text-[9px]">{entityCounts?.deliverables || 0} deliverables</Badge>
+                            <div
+                              className="flex items-center justify-between p-1.5 bg-emerald-50 dark:bg-emerald-900/30 rounded cursor-pointer hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors"
+                              onClick={() => entityCounts?.earnedValueMetrics && entityCounts.earnedValueMetrics > 0 && fetchEntityDetails('earnedValueMetrics')}
+                            >
+                              <span>💰 Financial Metrics</span>
+                              <Badge variant="secondary" className="text-[10px]">{entityCounts?.earnedValueMetrics || 0}</Badge>
                             </div>
-                            <div className="text-muted-foreground">Value realization</div>
+                            <div
+                              className="flex items-center justify-between p-1.5 bg-emerald-50 dark:bg-emerald-900/30 rounded cursor-pointer hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors"
+                              onClick={() => entityCounts?.qualityStandards && entityCounts.qualityStandards > 0 && fetchEntityDetails('qualityStandards')}
+                            >
+                              <span>✅ Quality Standards</span>
+                              <Badge variant="secondary" className="text-[10px]">{entityCounts?.qualityStandards || 0}</Badge>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </div>
 
-                    {/* Value Propositions & Benefits */}
-                    <div className="grid grid-cols-2 gap-3">
-                      {/* Value Propositions */}
-                      <div 
-                        className="p-3 rounded-lg border bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 cursor-pointer hover:shadow-md transition-all"
-                        onClick={() => entityCounts?.requirements && entityCounts.requirements > 0 && fetchEntityDetails('requirements')}
-                      >
-                        <div className="flex items-center gap-2 mb-2">
-                          <Target className="h-4 w-4 text-amber-600" />
-                          <span className="font-semibold text-sm">Value Propositions</span>
-                        </div>
-                        <div className="text-xs text-muted-foreground mb-2">
-                          What value is promised to stakeholders?
-                        </div>
-                        <div className="flex flex-wrap gap-1">
-                          <Badge variant="outline" className="text-[9px] bg-amber-100 dark:bg-amber-900">
-                            📋 {entityCounts?.requirements || 0} requirements
-                          </Badge>
-                          <Badge variant="outline" className="text-[9px] bg-amber-100 dark:bg-amber-900">
-                            📦 {entityCounts?.scopeItems || 0} scope items
-                          </Badge>
-                        </div>
-                      </div>
-                      
-                      {/* Benefits Realization */}
-                      <div 
-                        className="p-3 rounded-lg border bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800 cursor-pointer hover:shadow-md transition-all"
-                        onClick={() => entityCounts?.successCriteria && entityCounts.successCriteria > 0 && fetchEntityDetails('successCriteria')}
-                      >
-                        <div className="flex items-center gap-2 mb-2">
-                          <CheckCircle2 className="h-4 w-4 text-green-600" />
-                          <span className="font-semibold text-sm">Benefits Realization</span>
-                        </div>
-                        <div className="text-xs text-muted-foreground mb-2">
-                          How is value measured and tracked?
-                        </div>
-                        <div className="flex flex-wrap gap-1">
-                          <Badge variant="outline" className="text-[9px] bg-green-100 dark:bg-green-900">
-                            ✅ {entityCounts?.successCriteria || 0} success criteria
-                          </Badge>
-                          <Badge variant="outline" className="text-[9px] bg-green-100 dark:bg-green-900">
-                            📊 {entityCounts?.performanceMeasurements || 0} measurements
-                          </Badge>
+                        {/* Intangible Value */}
+                        <div className="p-3 rounded-lg border-2 border-purple-300 bg-white dark:bg-purple-950/50">
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className="p-1.5 rounded bg-purple-100 dark:bg-purple-900">
+                              <Sparkles className="h-4 w-4 text-purple-700 dark:text-purple-300" />
+                            </div>
+                            <span className="font-semibold text-sm">Intangible Value</span>
+                          </div>
+                          <div className="space-y-1.5 text-xs">
+                            <div
+                              className="flex items-center justify-between p-1.5 bg-purple-50 dark:bg-purple-900/30 rounded cursor-pointer hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors"
+                              onClick={() => entityCounts?.stakeholders && entityCounts.stakeholders > 0 && fetchEntityDetails('stakeholders')}
+                            >
+                              <span>👥 Stakeholder Satisfaction</span>
+                              <Badge variant="secondary" className="text-[10px]">{entityCounts?.stakeholders || 0}</Badge>
+                            </div>
+                            <div
+                              className="flex items-center justify-between p-1.5 bg-purple-50 dark:bg-purple-900/30 rounded cursor-pointer hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors"
+                              onClick={() => entityCounts?.bestPractices && entityCounts.bestPractices > 0 && fetchEntityDetails('bestPractices')}
+                            >
+                              <span>💡 Knowledge & Learning</span>
+                              <Badge variant="secondary" className="text-[10px]">{entityCounts?.bestPractices || 0}</Badge>
+                            </div>
+                            <div
+                              className="flex items-center justify-between p-1.5 bg-purple-50 dark:bg-purple-900/30 rounded cursor-pointer hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors"
+                              onClick={() => entityCounts?.teamAgreements && entityCounts.teamAgreements > 0 && fetchEntityDetails('teamAgreements')}
+                            >
+                              <span>🤝 Team Capability</span>
+                              <Badge variant="secondary" className="text-[10px]">{entityCounts?.teamAgreements || 0}</Badge>
+                            </div>
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    {/* Assessing Project Success */}
-                    <div className="p-3 bg-gradient-to-r from-blue-50 to-green-50 dark:from-blue-950/30 dark:to-green-950/30 rounded-lg border">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Award className="h-4 w-4 text-blue-600" />
-                        <span className="font-semibold text-sm">Assessing Project Success</span>
+                      {/* Value Delivery Hierarchy */}
+                      <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border">
+                        <div className="flex items-center gap-2 mb-3">
+                          <Layers className="h-4 w-4 text-blue-600" />
+                          <span className="font-semibold text-sm">Value Delivery Hierarchy</span>
+                        </div>
+                        <div className="relative pl-4 border-l-2 border-blue-200 dark:border-blue-800 space-y-2">
+                          {/* Vision & Mission */}
+                          <div className="relative">
+                            <div className="absolute -left-[21px] w-4 h-4 rounded-full bg-blue-600 flex items-center justify-center">
+                              <span className="text-white text-[8px] font-bold">V</span>
+                            </div>
+                            <div className="ml-2 p-2 bg-blue-50 dark:bg-blue-950/30 rounded text-xs">
+                              <div className="font-medium">Vision & Mission</div>
+                              <div className="text-muted-foreground">Strategic direction and purpose</div>
+                            </div>
+                          </div>
+
+                          {/* Organizational Strategy */}
+                          <div className="relative">
+                            <div className="absolute -left-[21px] w-4 h-4 rounded-full bg-blue-500 flex items-center justify-center">
+                              <span className="text-white text-[8px] font-bold">S</span>
+                            </div>
+                            <div className="ml-2 p-2 bg-blue-50 dark:bg-blue-950/30 rounded text-xs">
+                              <div className="font-medium">Organizational Strategy & Objectives</div>
+                              <div className="text-muted-foreground">Business goals alignment</div>
+                            </div>
+                          </div>
+
+                          {/* Portfolio Management */}
+                          <div className="relative">
+                            <div className="absolute -left-[21px] w-4 h-4 rounded-full bg-indigo-500 flex items-center justify-center">
+                              <span className="text-white text-[8px] font-bold">P</span>
+                            </div>
+                            <div
+                              className="ml-2 p-2 bg-indigo-50 dark:bg-indigo-950/30 rounded text-xs cursor-pointer hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors"
+                              onClick={() => entityCounts?.successCriteria && entityCounts.successCriteria > 0 && fetchEntityDetails('successCriteria')}
+                            >
+                              <div className="font-medium flex items-center justify-between">
+                                <span>Portfolio & Strategic Planning</span>
+                                <Badge variant="outline" className="text-[9px]">{entityCounts?.successCriteria || 0} criteria</Badge>
+                              </div>
+                              <div className="text-muted-foreground">Investment prioritization</div>
+                            </div>
+                          </div>
+
+                          {/* Program & Product Management */}
+                          <div className="relative">
+                            <div className="absolute -left-[21px] w-4 h-4 rounded-full bg-violet-500 flex items-center justify-center">
+                              <span className="text-white text-[8px] font-bold">M</span>
+                            </div>
+                            <div
+                              className="ml-2 p-2 bg-violet-50 dark:bg-violet-950/30 rounded text-xs cursor-pointer hover:bg-violet-100 dark:hover:bg-violet-900/50 transition-colors"
+                              onClick={() => entityCounts?.phases && entityCounts.phases > 0 && fetchEntityDetails('phases')}
+                            >
+                              <div className="font-medium flex items-center justify-between">
+                                <span>Programs, Products & Operations</span>
+                                <Badge variant="outline" className="text-[9px]">{entityCounts?.phases || 0} phases</Badge>
+                              </div>
+                              <div className="text-muted-foreground">Coordinated value streams</div>
+                            </div>
+                          </div>
+
+                          {/* Project Execution */}
+                          <div className="relative">
+                            <div className="absolute -left-[21px] w-4 h-4 rounded-full bg-emerald-500 flex items-center justify-center">
+                              <span className="text-white text-[8px] font-bold">X</span>
+                            </div>
+                            <div
+                              className="ml-2 p-2 bg-emerald-50 dark:bg-emerald-950/30 rounded text-xs cursor-pointer hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors"
+                              onClick={() => entityCounts?.deliverables && entityCounts.deliverables > 0 && fetchEntityDetails('deliverables')}
+                            >
+                              <div className="font-medium flex items-center justify-between">
+                                <span>Authorized Projects & Deliverables</span>
+                                <Badge variant="outline" className="text-[9px]">{entityCounts?.deliverables || 0} deliverables</Badge>
+                              </div>
+                              <div className="text-muted-foreground">Value realization</div>
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                      <div className="grid grid-cols-4 gap-2 text-center">
-                        <div 
-                          className="p-2 bg-white dark:bg-slate-900 rounded border cursor-pointer hover:border-blue-400 transition-colors"
+
+                      {/* Value Propositions & Benefits */}
+                      <div className="grid grid-cols-2 gap-3">
+                        {/* Value Propositions */}
+                        <div
+                          className="p-3 rounded-lg border bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 cursor-pointer hover:shadow-md transition-all"
+                          onClick={() => entityCounts?.requirements && entityCounts.requirements > 0 && fetchEntityDetails('requirements')}
+                        >
+                          <div className="flex items-center gap-2 mb-2">
+                            <Target className="h-4 w-4 text-amber-600" />
+                            <span className="font-semibold text-sm">Value Propositions</span>
+                          </div>
+                          <div className="text-xs text-muted-foreground mb-2">
+                            What value is promised to stakeholders?
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            <Badge variant="outline" className="text-[9px] bg-amber-100 dark:bg-amber-900">
+                              📋 {entityCounts?.requirements || 0} requirements
+                            </Badge>
+                            <Badge variant="outline" className="text-[9px] bg-amber-100 dark:bg-amber-900">
+                              📦 {entityCounts?.scopeItems || 0} scope items
+                            </Badge>
+                          </div>
+                        </div>
+
+                        {/* Benefits Realization */}
+                        <div
+                          className="p-3 rounded-lg border bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800 cursor-pointer hover:shadow-md transition-all"
                           onClick={() => entityCounts?.successCriteria && entityCounts.successCriteria > 0 && fetchEntityDetails('successCriteria')}
                         >
-                          <div className="text-lg font-bold text-blue-600">{entityCounts?.successCriteria || 0}</div>
-                          <div className="text-[10px] text-muted-foreground">Success Criteria</div>
-                        </div>
-                        <div 
-                          className="p-2 bg-white dark:bg-slate-900 rounded border cursor-pointer hover:border-green-400 transition-colors"
-                          onClick={() => entityCounts?.performanceMeasurements && entityCounts.performanceMeasurements > 0 && fetchEntityDetails('performanceMeasurements')}
-                        >
-                          <div className="text-lg font-bold text-green-600">{entityCounts?.performanceMeasurements || 0}</div>
-                          <div className="text-[10px] text-muted-foreground">Performance KPIs</div>
-                        </div>
-                        <div 
-                          className="p-2 bg-white dark:bg-slate-900 rounded border cursor-pointer hover:border-purple-400 transition-colors"
-                          onClick={() => entityCounts?.stakeholders && entityCounts.stakeholders > 0 && fetchEntityDetails('stakeholders')}
-                        >
-                          <div className="text-lg font-bold text-purple-600">{entityCounts?.stakeholders || 0}</div>
-                          <div className="text-[10px] text-muted-foreground">Stakeholders</div>
-                        </div>
-                        <div 
-                          className="p-2 bg-white dark:bg-slate-900 rounded border cursor-pointer hover:border-amber-400 transition-colors"
-                          onClick={() => entityCounts?.deliverables && entityCounts.deliverables > 0 && fetchEntityDetails('deliverables')}
-                        >
-                          <div className="text-lg font-bold text-amber-600">{entityCounts?.deliverables || 0}</div>
-                          <div className="text-[10px] text-muted-foreground">Deliverables</div>
+                          <div className="flex items-center gap-2 mb-2">
+                            <CheckCircle2 className="h-4 w-4 text-green-600" />
+                            <span className="font-semibold text-sm">Benefits Realization</span>
+                          </div>
+                          <div className="text-xs text-muted-foreground mb-2">
+                            How is value measured and tracked?
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            <Badge variant="outline" className="text-[9px] bg-green-100 dark:bg-green-900">
+                              ✅ {entityCounts?.successCriteria || 0} success criteria
+                            </Badge>
+                            <Badge variant="outline" className="text-[9px] bg-green-100 dark:bg-green-900">
+                              📊 {entityCounts?.performanceMeasurements || 0} measurements
+                            </Badge>
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    {/* Value Artifacts Summary */}
-                    <div className="flex items-center gap-4 pt-2 border-t text-xs text-muted-foreground">
-                      <span className="font-medium">Value Artifacts:</span>
-                      <div className="flex items-center gap-1">
-                        <span>Tangible: {(entityCounts?.deliverables || 0) + (entityCounts?.earnedValueMetrics || 0) + (entityCounts?.qualityStandards || 0)}</span>
+                      {/* Assessing Project Success */}
+                      <div className="p-3 bg-gradient-to-r from-blue-50 to-green-50 dark:from-blue-950/30 dark:to-green-950/30 rounded-lg border">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Award className="h-4 w-4 text-blue-600" />
+                          <span className="font-semibold text-sm">Assessing Project Success</span>
+                        </div>
+                        <div className="grid grid-cols-4 gap-2 text-center">
+                          <div
+                            className="p-2 bg-white dark:bg-slate-900 rounded border cursor-pointer hover:border-blue-400 transition-colors"
+                            onClick={() => entityCounts?.successCriteria && entityCounts.successCriteria > 0 && fetchEntityDetails('successCriteria')}
+                          >
+                            <div className="text-lg font-bold text-blue-600">{entityCounts?.successCriteria || 0}</div>
+                            <div className="text-[10px] text-muted-foreground">Success Criteria</div>
+                          </div>
+                          <div
+                            className="p-2 bg-white dark:bg-slate-900 rounded border cursor-pointer hover:border-green-400 transition-colors"
+                            onClick={() => entityCounts?.performanceMeasurements && entityCounts.performanceMeasurements > 0 && fetchEntityDetails('performanceMeasurements')}
+                          >
+                            <div className="text-lg font-bold text-green-600">{entityCounts?.performanceMeasurements || 0}</div>
+                            <div className="text-[10px] text-muted-foreground">Performance KPIs</div>
+                          </div>
+                          <div
+                            className="p-2 bg-white dark:bg-slate-900 rounded border cursor-pointer hover:border-purple-400 transition-colors"
+                            onClick={() => entityCounts?.stakeholders && entityCounts.stakeholders > 0 && fetchEntityDetails('stakeholders')}
+                          >
+                            <div className="text-lg font-bold text-purple-600">{entityCounts?.stakeholders || 0}</div>
+                            <div className="text-[10px] text-muted-foreground">Stakeholders</div>
+                          </div>
+                          <div
+                            className="p-2 bg-white dark:bg-slate-900 rounded border cursor-pointer hover:border-amber-400 transition-colors"
+                            onClick={() => entityCounts?.deliverables && entityCounts.deliverables > 0 && fetchEntityDetails('deliverables')}
+                          >
+                            <div className="text-lg font-bold text-amber-600">{entityCounts?.deliverables || 0}</div>
+                            <div className="text-[10px] text-muted-foreground">Deliverables</div>
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1">
-                        <span>Intangible: {(entityCounts?.stakeholders || 0) + (entityCounts?.bestPractices || 0) + (entityCounts?.teamAgreements || 0)}</span>
+
+                      {/* Value Artifacts Summary */}
+                      <div className="flex items-center gap-4 pt-2 border-t text-xs text-muted-foreground">
+                        <span className="font-medium">Value Artifacts:</span>
+                        <div className="flex items-center gap-1">
+                          <span>Tangible: {(entityCounts?.deliverables || 0) + (entityCounts?.earnedValueMetrics || 0) + (entityCounts?.qualityStandards || 0)}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span>Intangible: {(entityCounts?.stakeholders || 0) + (entityCounts?.bestPractices || 0) + (entityCounts?.teamAgreements || 0)}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span>Total: {
+                            (entityCounts?.deliverables || 0) +
+                            (entityCounts?.earnedValueMetrics || 0) +
+                            (entityCounts?.qualityStandards || 0) +
+                            (entityCounts?.stakeholders || 0) +
+                            (entityCounts?.bestPractices || 0) +
+                            (entityCounts?.teamAgreements || 0)
+                          }</span>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1">
-                        <span>Total: {
-                          (entityCounts?.deliverables || 0) + 
-                          (entityCounts?.earnedValueMetrics || 0) + 
-                          (entityCounts?.qualityStandards || 0) +
-                          (entityCounts?.stakeholders || 0) + 
-                          (entityCounts?.bestPractices || 0) + 
-                          (entityCounts?.teamAgreements || 0)
-                        }</span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
+                    </CardContent>
+                  </Card>
+                )}
 
               {/* Project Lifecycle Methodology Indicator */}
               {entityCounts && (entityCounts.developmentApproaches > 0 || entityCounts.projectIterations > 0) && (
@@ -1773,9 +1775,9 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                     {/* Iron Triangle Visualization */}
                     <div className="grid grid-cols-3 gap-3">
                       {/* Scope */}
-                      <div 
+                      <div
                         className="p-3 rounded-lg border-2 cursor-pointer hover:shadow-md transition-all"
-                        style={{ 
+                        style={{
                           borderColor: 'rgb(139, 92, 246)',
                           backgroundColor: 'rgba(139, 92, 246, 0.1)'
                         }}
@@ -1787,19 +1789,19 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                           <div className="text-xs text-muted-foreground mt-1">
                             {entityCounts?.scopeItems || 0} items
                           </div>
-                          <Badge 
-                            variant="outline" 
+                          <Badge
+                            variant="outline"
                             className="mt-2 text-[10px] bg-violet-100 text-violet-800 dark:bg-violet-900 dark:text-violet-200"
                           >
                             {(entityCounts?.scopeItems || 0) > 0 ? 'Defined' : 'Pending'}
                           </Badge>
                         </div>
                       </div>
-                      
+
                       {/* Budget/Cost */}
-                      <div 
+                      <div
                         className="p-3 rounded-lg border-2 cursor-pointer hover:shadow-md transition-all"
-                        style={{ 
+                        style={{
                           borderColor: 'rgb(16, 185, 129)',
                           backgroundColor: 'rgba(16, 185, 129, 0.1)'
                         }}
@@ -1811,19 +1813,19 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                           <div className="text-xs text-muted-foreground mt-1">
                             {entityCounts?.earnedValueMetrics || 0} metrics
                           </div>
-                          <Badge 
-                            variant="outline" 
+                          <Badge
+                            variant="outline"
                             className="mt-2 text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200"
                           >
                             {(entityCounts?.earnedValueMetrics || 0) > 0 ? 'Tracked' : 'Pending'}
                           </Badge>
                         </div>
                       </div>
-                      
+
                       {/* Schedule/Time */}
-                      <div 
+                      <div
                         className="p-3 rounded-lg border-2 cursor-pointer hover:shadow-md transition-all"
-                        style={{ 
+                        style={{
                           borderColor: 'rgb(59, 130, 246)',
                           backgroundColor: 'rgba(59, 130, 246, 0.1)'
                         }}
@@ -1835,8 +1837,8 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                           <div className="text-xs text-muted-foreground mt-1">
                             {entityCounts?.milestones || 0} milestones
                           </div>
-                          <Badge 
-                            variant="outline" 
+                          <Badge
+                            variant="outline"
                             className="mt-2 text-[10px] bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
                           >
                             {(entityCounts?.milestones || 0) > 0 ? 'Planned' : 'Pending'}
@@ -1848,52 +1850,49 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                     {/* Methodology Approaches */}
                     <div className="grid grid-cols-3 gap-2 pt-3 border-t">
                       {/* Predictive Approach */}
-                      <div 
-                        className={`p-3 rounded-lg border text-center transition-all cursor-pointer hover:shadow-md ${
-                          entityCounts?.developmentApproaches && entityCounts.developmentApproaches > 0
+                      <div
+                        className={`p-3 rounded-lg border text-center transition-all cursor-pointer hover:shadow-md ${entityCounts?.developmentApproaches && entityCounts.developmentApproaches > 0
                             ? 'border-orange-300 bg-orange-50 dark:bg-orange-950/30'
                             : 'border-dashed opacity-60'
-                        }`}
+                          }`}
                         onClick={() => entityCounts?.developmentApproaches && entityCounts.developmentApproaches > 0 && fetchEntityDetails('developmentApproaches')}
                       >
                         <div className="text-2xl mb-1">📋</div>
                         <div className="font-semibold text-sm">Predictive</div>
                         <div className="text-[10px] text-muted-foreground mt-1 leading-tight">
-                          Scope Fixed<br/>
+                          Scope Fixed<br />
                           Budget & Schedule Variable
                         </div>
                         <div className="text-[9px] text-orange-600 dark:text-orange-400 mt-2 font-medium">
                           Waterfall / Sequential
                         </div>
                       </div>
-                      
+
                       {/* Adaptive Approach */}
-                      <div 
-                        className={`p-3 rounded-lg border text-center transition-all cursor-pointer hover:shadow-md ${
-                          entityCounts?.projectIterations && entityCounts.projectIterations > 0
+                      <div
+                        className={`p-3 rounded-lg border text-center transition-all cursor-pointer hover:shadow-md ${entityCounts?.projectIterations && entityCounts.projectIterations > 0
                             ? 'border-purple-300 bg-purple-50 dark:bg-purple-950/30'
                             : 'border-dashed opacity-60'
-                        }`}
+                          }`}
                         onClick={() => entityCounts?.projectIterations && entityCounts.projectIterations > 0 && fetchEntityDetails('projectIterations')}
                       >
                         <div className="text-2xl mb-1">🔄</div>
                         <div className="font-semibold text-sm">Adaptive</div>
                         <div className="text-[10px] text-muted-foreground mt-1 leading-tight">
-                          Budget & Schedule Fixed<br/>
+                          Budget & Schedule Fixed<br />
                           Scope Variable
                         </div>
                         <div className="text-[9px] text-purple-600 dark:text-purple-400 mt-2 font-medium">
                           Agile / Iterative
                         </div>
                       </div>
-                      
+
                       {/* Hybrid Approach */}
-                      <div 
-                        className={`p-3 rounded-lg border text-center transition-all cursor-pointer hover:shadow-md ${
-                          (entityCounts?.developmentApproaches || 0) > 0 && (entityCounts?.projectIterations || 0) > 0
+                      <div
+                        className={`p-3 rounded-lg border text-center transition-all cursor-pointer hover:shadow-md ${(entityCounts?.developmentApproaches || 0) > 0 && (entityCounts?.projectIterations || 0) > 0
                             ? 'border-teal-300 bg-teal-50 dark:bg-teal-950/30'
                             : 'border-dashed opacity-60'
-                        }`}
+                          }`}
                         onClick={() => {
                           if (entityCounts?.developmentApproaches && entityCounts.developmentApproaches > 0) {
                             fetchEntityDetails('developmentApproaches')
@@ -1905,7 +1904,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                         <div className="text-2xl mb-1">⚡</div>
                         <div className="font-semibold text-sm">Hybrid</div>
                         <div className="text-[10px] text-muted-foreground mt-1 leading-tight">
-                          Mixed Constraints<br/>
+                          Mixed Constraints<br />
                           Tailored Approach
                         </div>
                         <div className="text-[9px] text-teal-600 dark:text-teal-400 mt-2 font-medium">
@@ -1928,9 +1927,9 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                         <Calendar className="h-3.5 w-3.5" />
                         <span>{entityCounts?.phases || 0} phases</span>
                       </div>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         className="ml-auto h-6 text-xs"
                         onClick={() => entityCounts?.developmentApproaches && entityCounts.developmentApproaches > 0 && fetchEntityDetails('developmentApproaches')}
                       >
@@ -1961,7 +1960,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                     All Entities
                   </TabsTrigger>
                 </TabsList>
-                
+
                 {/* Performance Domains (Tier 1) */}
                 <TabsContent value="performance" className="mt-4 space-y-3">
                   <div className="flex items-center gap-2 mb-2">
@@ -1978,7 +1977,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                     const totalExtracted = calculateTotalExtractedEntities(entityCounts)
                     const percentage = totalExtracted > 0 ? (weightedCount / totalExtracted) * 100 : 0
                     const DomainIcon = domain.icon
-                    
+
                     return (
                       <Collapsible key={domain.key} className="border rounded-lg">
                         <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover:bg-muted/50 transition-colors">
@@ -2010,25 +2009,24 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                               if (!config) return null
                               const count = entityCounts?.[entityKey as keyof EntityCounts] || 0
                               const weightInfo = getEntityWeightInfo(entityKey, domain.pmbokDomain)
-                              
+
                               // Skip if entity has no weight allocation for this domain
                               if (!weightInfo || count === 0) return null
-                              
+
                               const weightedCount = calculateWeightedCount(count, weightInfo.weight)
                               const isClickable = count > 0
                               const EntityIcon = config.icon
                               const badgeVariant = weightInfo.isPrimary ? "default" : "secondary"
                               const badgeIcon = weightInfo.isPrimary ? "⭐" : "◆"
                               const badgeLabel = weightInfo.isPrimary ? "Primary" : "Secondary"
-                              
+
                               return (
                                 <div
                                   key={entityKey}
-                                  className={`flex items-center justify-between p-2 border rounded-md text-sm transition-all ${
-                                    isClickable 
-                                      ? 'cursor-pointer hover:bg-muted/50 hover:border-primary' 
+                                  className={`flex items-center justify-between p-2 border rounded-md text-sm transition-all ${isClickable
+                                      ? 'cursor-pointer hover:bg-muted/50 hover:border-primary'
                                       : 'opacity-50'
-                                  }`}
+                                    }`}
                                   onClick={() => isClickable && fetchEntityDetails(entityKey)}
                                 >
                                   <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -2054,7 +2052,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                       </Collapsible>
                     )
                   })}
-                  
+
                   {/* Performance Domain Weighted Allocation Validation */}
                   {entityCounts && (() => {
                     const validation = validateWeightedAllocations(entityCounts)
@@ -2094,7 +2092,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                             <p className="flex items-start gap-2">
                               <Info className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
                               <span>
-                                <strong>PMBOK 8 Performance Domains</strong> show outcome-focused entity distribution. 
+                                <strong>PMBOK 8 Performance Domains</strong> show outcome-focused entity distribution.
                                 Weighted allocation ensures accurate coverage measurement for compliance with PMBOK 8th Edition standards.
                                 Primary allocations (⭐) indicate highest outcome relevance.
                               </span>
@@ -2105,7 +2103,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                     )
                   })()}
                 </TabsContent>
-                
+
                 {/* Knowledge Domains (Tier 2) */}
                 <TabsContent value="knowledge" className="mt-4 space-y-3">
                   <div className="flex items-center gap-2 mb-2">
@@ -2122,7 +2120,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                     const totalExtracted = calculateTotalExtractedEntities(entityCounts)
                     const percentage = totalExtracted > 0 ? (weightedCount / totalExtracted) * 100 : 0
                     const DomainIcon = domain.icon
-                    
+
                     return (
                       <Collapsible key={domain.key} className="border rounded-lg">
                         <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover:bg-muted/50 transition-colors">
@@ -2154,25 +2152,24 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                               if (!config) return null
                               const count = entityCounts?.[entityKey as keyof EntityCounts] || 0
                               const weightInfo = getEntityWeightInfo(entityKey, domain.pmbokDomain)
-                              
+
                               // Skip if entity has no weight allocation for this domain
                               if (!weightInfo || count === 0) return null
-                              
+
                               const weightedCount = calculateWeightedCount(count, weightInfo.weight)
                               const isClickable = count > 0
                               const EntityIcon = config.icon
                               const badgeVariant = weightInfo.isPrimary ? "default" : "secondary"
                               const badgeIcon = weightInfo.isPrimary ? "⭐" : "◆"
                               const badgeLabel = weightInfo.isPrimary ? "Primary" : "Secondary"
-                              
+
                               return (
                                 <div
                                   key={entityKey}
-                                  className={`flex items-center justify-between p-2 border rounded-md text-sm transition-all ${
-                                    isClickable 
-                                      ? 'cursor-pointer hover:bg-muted/50 hover:border-primary' 
+                                  className={`flex items-center justify-between p-2 border rounded-md text-sm transition-all ${isClickable
+                                      ? 'cursor-pointer hover:bg-muted/50 hover:border-primary'
                                       : 'opacity-50'
-                                  }`}
+                                    }`}
                                   onClick={() => isClickable && fetchEntityDetails(entityKey)}
                                 >
                                   <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -2198,7 +2195,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                       </Collapsible>
                     )
                   })}
-                  
+
                   {/* Weighted Allocation Validation */}
                   {entityCounts && (() => {
                     const validation = validateWeightedAllocations(entityCounts)
@@ -2238,7 +2235,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                             <p className="flex items-start gap-2">
                               <Info className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
                               <span>
-                                Entities are distributed across domains based on relevance weights. 
+                                Entities are distributed across domains based on relevance weights.
                                 Primary allocations (⭐) show highest relevance; Secondary allocations (◆) show cross-domain relationships.
                               </span>
                             </p>
@@ -2248,7 +2245,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                     )
                   })()}
                 </TabsContent>
-                
+
                 {/* Project Phases / Focus Areas */}
                 <TabsContent value="phases" className="mt-4 space-y-3">
                   <div className="flex items-center gap-2 mb-2">
@@ -2265,7 +2262,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                     const totalExtracted = calculateTotalExtractedEntities(entityCounts)
                     const percentage = totalExtracted > 0 ? (weightedCount / totalExtracted) * 100 : 0
                     const PhaseIcon = phase.icon
-                    
+
                     return (
                       <Collapsible key={phase.key} className="border rounded-lg">
                         <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover:bg-muted/50 transition-colors">
@@ -2298,25 +2295,24 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                               if (!config) return null
                               const count = entityCounts?.[entityKey as keyof EntityCounts] || 0
                               const weightInfo = getEntityPhaseWeightInfo(entityKey, phase.key as ProjectPhase)
-                              
+
                               // Skip if entity has no weight allocation for this phase or count is 0
                               if (!weightInfo || count === 0 || weightInfo.weight === 0) return null
-                              
+
                               const weightedCount = calculateWeightedCount(count, weightInfo.weight)
                               const isClickable = count > 0
                               const EntityIcon = config.icon
                               const badgeVariant = weightInfo.isPrimary ? "default" : "secondary"
                               const badgeIcon = weightInfo.isPrimary ? "⭐" : "◆"
                               const badgeLabel = weightInfo.isPrimary ? "Primary" : "Secondary"
-                              
+
                               return (
                                 <div
                                   key={entityKey}
-                                  className={`flex items-center justify-between p-2 border rounded-md text-sm transition-all ${
-                                    isClickable 
-                                      ? 'cursor-pointer hover:bg-muted/50 hover:border-primary' 
+                                  className={`flex items-center justify-between p-2 border rounded-md text-sm transition-all ${isClickable
+                                      ? 'cursor-pointer hover:bg-muted/50 hover:border-primary'
                                       : 'opacity-50'
-                                  }`}
+                                    }`}
                                   onClick={() => isClickable && fetchEntityDetails(entityKey)}
                                 >
                                   <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -2340,7 +2336,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                       </Collapsible>
                     )
                   })}
-                  
+
                   {/* Phase Weighted Allocation Validation */}
                   {entityCounts && (() => {
                     const validation = validatePhaseWeightedAllocations(entityCounts)
@@ -2380,7 +2376,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                             <p className="flex items-start gap-2">
                               <Info className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
                               <span>
-                                Entities are distributed across project phases based on temporal weights showing WHEN they are active in the project lifecycle. 
+                                Entities are distributed across project phases based on temporal weights showing WHEN they are active in the project lifecycle.
                                 Primary allocations (⭐) show the phase where the entity is most active.
                               </span>
                             </p>
@@ -2390,22 +2386,21 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                     )
                   })()}
                 </TabsContent>
-                
+
                 {/* All Entities (Flat View) */}
                 <TabsContent value="all" className="mt-4">
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                     {entityTypes.map(({ key, label, icon: Icon, color }) => {
                       const count = entityCounts?.[key as keyof EntityCounts] || 0
                       const isClickable = count > 0
-                      
+
                       return (
                         <div
                           key={key}
-                          className={`flex items-center justify-between p-3 border rounded-lg transition-all ${
-                            isClickable 
-                              ? 'cursor-pointer hover:bg-muted/50 hover:border-primary hover:shadow-sm' 
+                          className={`flex items-center justify-between p-3 border rounded-lg transition-all ${isClickable
+                              ? 'cursor-pointer hover:bg-muted/50 hover:border-primary hover:shadow-sm'
                               : 'opacity-50 cursor-not-allowed'
-                          }`}
+                            }`}
                           onClick={() => isClickable && fetchEntityDetails(key)}
                           role={isClickable ? 'button' : undefined}
                           tabIndex={isClickable ? 0 : undefined}
@@ -2439,7 +2434,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                   </p>
                 </div>
               </div>
-              
+
               {/* WBS Import Button */}
               {entityCounts && (entityCounts.activities > 0 || entityCounts.deliverables > 0) && (
                 <div className="flex items-start gap-2 p-4 bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-950/20 dark:to-blue-950/20 border-2 border-purple-200 dark:border-purple-800 rounded-lg">
@@ -2449,7 +2444,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                       Convert WBS to Project Tasks
                     </p>
                     <p className="text-sm text-purple-700 dark:text-purple-300 mb-3">
-                      Found {entityCounts.activities} activities and {entityCounts.deliverables} deliverables. 
+                      Found {entityCounts.activities} activities and {entityCounts.deliverables} deliverables.
                       Import them as project tasks with estimated hours, roles, and dependencies.
                     </p>
                     <Button
@@ -2497,7 +2492,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
               {entityDetails.length} {getEntityTypeLabel(selectedEntityType || '')} extracted from project documents
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="flex-1 overflow-y-auto">
             {loadingEntityDetails ? (
               <div className="flex items-center justify-center py-12">
@@ -2526,10 +2521,10 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                             return false
                           }
                           // Skip created_by and updated_by UUIDs if we have name fields
-                          if ((key === 'created_by' || key === 'updated_by') && 
-                              typeof entity[key] === 'string' && 
-                              entity[key].match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i) &&
-                              entity[`${key}_name`]) {
+                          if ((key === 'created_by' || key === 'updated_by') &&
+                            typeof entity[key] === 'string' &&
+                            entity[key].match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i) &&
+                            entity[`${key}_name`]) {
                             return false // Skip UUID if name field exists
                           }
                           return true
@@ -2543,7 +2538,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                               key = baseKey // Display as "created_by" or "updated_by" but show the name
                             }
                           }
-                          
+
                           const isLongContent = key === 'justification' || (Array.isArray(value) && value.length > 0)
                           return (
                             <div key={key} className={isLongContent ? 'space-y-1' : 'grid grid-cols-3 gap-2 text-sm'}>
@@ -2562,7 +2557,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
               </div>
             )}
           </div>
-          
+
           <DialogFooter className="mt-4">
             <Button variant="outline" onClick={() => setShowEntityDialog(false)}>
               Close
@@ -2583,7 +2578,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
               View all source entities and understand how this KPI is calculated
             </DialogDescription>
           </DialogHeader>
-          
+
           {selectedKpi && (
             <div className="flex-1 overflow-y-auto space-y-4">
               {/* KPI Overview */}
@@ -2599,23 +2594,23 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                     <div>
                       {selectedKpi.kpi.targetDirection === 'higher_is_better' && (
                         <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                          ↑ Target: {selectedKpi.kpi.targetValue !== undefined 
-                            ? `${(selectedKpi.kpi.targetValue * 100).toFixed(0)}%` 
+                          ↑ Target: {selectedKpi.kpi.targetValue !== undefined
+                            ? `${(selectedKpi.kpi.targetValue * 100).toFixed(0)}%`
                             : 'Higher is better'}
                         </Badge>
                       )}
                       {selectedKpi.kpi.targetDirection === 'lower_is_better' && (
                         <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-                          ↓ Target: {selectedKpi.kpi.targetValue !== undefined 
-                            ? (selectedKpi.kpi.units === 'days' 
-                              ? `${selectedKpi.kpi.targetValue} days` 
+                          ↓ Target: {selectedKpi.kpi.targetValue !== undefined
+                            ? (selectedKpi.kpi.units === 'days'
+                              ? `${selectedKpi.kpi.targetValue} days`
                               : `${(selectedKpi.kpi.targetValue * 100).toFixed(0)}%`)
                             : 'Lower is better'}
                         </Badge>
                       )}
                       {selectedKpi.kpi.targetDirection === 'range' && (
                         <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
-                          ⟷ Range: {selectedKpi.kpi.minValue !== undefined && selectedKpi.kpi.maxValue !== undefined 
+                          ⟷ Range: {selectedKpi.kpi.minValue !== undefined && selectedKpi.kpi.maxValue !== undefined
                             ? `${(selectedKpi.kpi.minValue * 100).toFixed(0)}% - ${(selectedKpi.kpi.maxValue * 100).toFixed(0)}%`
                             : 'Within range'}
                         </Badge>
@@ -2642,15 +2637,15 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                   <Database className="h-4 w-4 text-muted-foreground" />
                   <h3 className="font-semibold">Source Entities ({selectedKpi.sourceEntityCounts.reduce((s, e) => s + e.count, 0)} total)</h3>
                 </div>
-                
+
                 <div className="space-y-2">
                   {selectedKpi.sourceEntityCounts.map((source, index) => {
                     const config = entityTypeConfig[source.key]
                     const EntityIcon = config?.icon || Database
-                    
+
                     return (
-                      <Card 
-                        key={source.key} 
+                      <Card
+                        key={source.key}
                         className="cursor-pointer hover:border-primary hover:shadow-sm transition-all"
                         onClick={() => {
                           setShowKpiSourceDialog(false)
@@ -2675,7 +2670,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                               <ChevronRight className="h-5 w-5 text-muted-foreground" />
                             </div>
                           </div>
-                          
+
                           {/* Relationship indicator */}
                           {index < selectedKpi.sourceEntityCounts.length - 1 && (
                             <div className="mt-3 pt-3 border-t border-dashed flex items-center gap-2 text-xs text-muted-foreground">
@@ -2724,7 +2719,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                 <div className="text-sm text-amber-900 dark:text-amber-100">
                   <p className="font-medium">Data Quality Note</p>
                   <p className="text-amber-700 dark:text-amber-300 text-xs mt-1">
-                    This KPI is calculated from {selectedKpi.sourceEntityCounts.length} entity type(s). 
+                    This KPI is calculated from {selectedKpi.sourceEntityCounts.length} entity type(s).
                     For accurate results, ensure all source entities have complete and up-to-date data.
                     Click on any source entity above to review the underlying data.
                   </p>
@@ -2732,13 +2727,13 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
               </div>
             </div>
           )}
-          
+
           <DialogFooter className="mt-4 border-t pt-4">
             <Button variant="outline" onClick={() => setShowKpiSourceDialog(false)}>
               Close
             </Button>
             {selectedKpi && selectedKpi.sourceEntityCounts.length > 0 && (
-              <Button 
+              <Button
                 onClick={() => {
                   setShowKpiSourceDialog(false)
                   fetchEntityDetails(selectedKpi.sourceEntityCounts[0].key)
@@ -2799,24 +2794,24 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                     onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                       const providerType = e.target.value
                       console.log('[EXTRACTION] Provider changed to:', providerType)
-                      
+
                       const provider = aiProviders.find(p => p.provider_type === providerType)
                       console.log('[EXTRACTION] Found provider:', provider)
                       console.log('[EXTRACTION] Provider models:', provider?.models)
-                      
+
                       setSelectedProvider(providerType)
-                      
+
                       // Auto-select first model for new provider (models already normalized in state)
                       if (provider && provider.models && provider.models.length > 0) {
                         // Check if current model is valid for this provider, otherwise use first
                         const currentModel = selectedModel
                         const modelExists = provider.models.includes(currentModel)
                         const modelToUse = modelExists ? currentModel : provider.models[0]
-                        
+
                         if (!modelExists && currentModel) {
                           console.warn(`[EXTRACTION] Model "${currentModel}" not available for ${providerType}, using "${modelToUse}"`)
                         }
-                        
+
                         console.log('[EXTRACTION] Auto-selecting model:', modelToUse)
                         setSelectedModel(modelToUse)
                       } else {
@@ -2850,21 +2845,21 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                   {(() => {
                     const provider = aiProviders.find((p: any) => p.provider_type === selectedProvider)
                     console.log('[EXTRACTION] Rendering models for provider:', selectedProvider, 'models:', provider?.models)
-                    
+
                     if (!selectedProvider) {
                       return <option value="">Select a provider first</option>
                     }
-                    
+
                     if (!provider) {
                       return <option value="">Provider not found</option>
                     }
-                    
+
                     const models = provider.models || []
-                    
+
                     if (models.length === 0) {
                       return <option value="">No models available for {provider.name}</option>
                     }
-                    
+
                     return models.map((model: string) => (
                       <option key={model} value={model}>
                         {model}
@@ -2886,7 +2881,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                     </span>
                   )}
                 </div>
-                
+
                 {/* Search Input */}
                 {allDocuments.length > 10 && (
                   <div className="relative">
@@ -2907,7 +2902,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                     )}
                   </div>
                 )}
-                
+
                 <div className="border rounded-lg p-3 max-h-64 overflow-y-auto space-y-2">
                   {loadingAllDocuments ? (
                     <div className="flex items-center justify-center py-4">
@@ -2919,8 +2914,8 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                       <div className="flex items-center space-x-2 pb-2 border-b sticky top-0 bg-white dark:bg-gray-950">
                         <Checkbox
                           id="select-all"
-                          checked={getFilteredDocuments().length > 0 && 
-                                   getFilteredDocuments().every(d => selectedDocuments.includes(d.id))}
+                          checked={getFilteredDocuments().length > 0 &&
+                            getFilteredDocuments().every(d => selectedDocuments.includes(d.id))}
                           onCheckedChange={(checked: boolean) => {
                             if (checked) {
                               // Add all filtered documents to selection
@@ -2934,16 +2929,16 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                           }}
                         />
                         <label htmlFor="select-all" className="text-sm font-medium cursor-pointer">
-                          Select All 
-                          {documentSearchTerm 
-                            ? ` (${getFilteredDocuments().length} filtered)` 
+                          Select All
+                          {documentSearchTerm
+                            ? ` (${getFilteredDocuments().length} filtered)`
                             : ` (${allDocuments.length} documents)`
                           }
                         </label>
                       </div>
                       {getFilteredDocuments().length === 0 ? (
                         <p className="text-sm text-muted-foreground text-center py-4">
-                          {documentSearchTerm 
+                          {documentSearchTerm
                             ? `No documents match "${documentSearchTerm}"`
                             : 'No documents available'
                           }
@@ -3000,14 +2995,14 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                 <Button variant="outline" onClick={() => setShowExtractionDialog(false)}>
                   Cancel
                 </Button>
-                <Button 
-                  onClick={handleExtractData} 
+                <Button
+                  onClick={handleExtractData}
                   disabled={!selectedProvider || !selectedModel || isExtracting}
                   title={
-                    !selectedProvider 
-                      ? "Please select an AI provider" 
-                      : !selectedModel 
-                        ? "Please select an AI model" 
+                    !selectedProvider
+                      ? "Please select an AI provider"
+                      : !selectedModel
+                        ? "Please select an AI model"
                         : isExtracting
                           ? "Extraction in progress..."
                           : "Start extraction"

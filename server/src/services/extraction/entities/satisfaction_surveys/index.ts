@@ -12,8 +12,10 @@ import { resolveSourceDocumentIdStrict } from '../../base/SourceDocumentResolver
 import { extractionCacheService } from '../../cache'
 import type { PoolClient } from 'pg'
 import type { PersistenceResult } from '../../base/Persistence'
+import { randomUUID } from 'crypto'
 
 export interface SatisfactionSurvey {
+  survey_id?: string
   stakeholder_id?: string
   stakeholder_name?: string
   survey_date?: string
@@ -24,6 +26,31 @@ export interface SatisfactionSurvey {
   themes?: string[]
   source_document?: string
   source_document_id?: string
+}
+
+function isUuid(value?: string | null): boolean {
+  if (!value) return false
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+}
+
+function normalizeSurveyDate(value?: string | null): string | null {
+  if (!value || typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+
+  const lowered = trimmed.toLowerCase()
+  if (['tbd', 'n/a', 'na', 'not specified', 'unknown', 'none', 'pending', 'ongoing', 'yyyy-mm-dd'].includes(lowered)) {
+    return null
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed
+  const parsed = Date.parse(trimmed)
+  if (Number.isNaN(parsed)) return null
+  return new Date(parsed).toISOString().slice(0, 10)
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value))
 }
 
 export async function extractSatisfactionSurveys(
@@ -181,34 +208,87 @@ export async function saveSatisfactionSurveys(
   try {
     await client.query('DELETE FROM satisfaction_surveys WHERE project_id = $1', [projectId])
 
+    const columnResult = await client.query(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_name = 'satisfaction_surveys'`
+    )
+
+    const availableColumns = new Set<string>(
+      columnResult.rows.map((row: { column_name: string }) => row.column_name)
+    )
+
+    const insertColumns = [
+      'survey_id',
+      'id',
+      'project_id',
+      'stakeholder_id',
+      'stakeholder_name',
+      'survey_date',
+      'survey_type',
+      'nps_score',
+      'overall_satisfaction_score',
+      'satisfaction_score',
+      'sentiment',
+      'feedback_summary',
+      'summary',
+      'feedback_themes',
+      'themes',
+      'response_categories',
+      'verbatim_feedback',
+      'improvement_suggestions',
+      'source_document_id',
+      'created_by'
+    ].filter((column) => availableColumns.has(column))
+
+    if (insertColumns.length === 0) {
+      throw new Error('satisfaction_surveys table has no expected columns for extraction insert')
+    }
+
     const values: any[] = []
     const placeholders: string[] = []
 
     entities.forEach((e, index) => {
-      const offset = index * 11
-      placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11})`
-      )
+      const offset = index * insertColumns.length
+      placeholders.push(`(${insertColumns.map((_, i) => `$${offset + i + 1}`).join(', ')})`)
 
-      values.push(
-        projectId,
-        e.stakeholder_id || null,
-        e.stakeholder_name || null,
-        e.survey_date || null,
-        e.nps_score ?? null,
-        e.satisfaction_score ?? null,
-        e.sentiment || null,
-        e.feedback_summary || null,
-        e.themes || [],
-        e.source_document_id || null,
-        userId
-      )
+      const generatedId = randomUUID()
+      const normalizedSurveyDate = normalizeSurveyDate(e.survey_date)
+      const rawNps = typeof e.nps_score === 'number' ? e.nps_score : null
+      const rawSatisfaction = typeof e.satisfaction_score === 'number' ? e.satisfaction_score : null
+      const normalizedNps = rawNps === null ? null : Math.round(clamp(rawNps, -100, 100))
+      const normalizedSatisfaction = rawSatisfaction === null ? null : Number(clamp(rawSatisfaction, 0, 9.99).toFixed(2))
+      const rowData: Record<string, any> = {
+        survey_id: e.survey_id || generatedId,
+        id: generatedId,
+        project_id: projectId,
+        stakeholder_id: isUuid(e.stakeholder_id) ? e.stakeholder_id : null,
+        stakeholder_name: e.stakeholder_name || 'Unknown stakeholder',
+        survey_date: normalizedSurveyDate || new Date().toISOString().slice(0, 10),
+        survey_type: 'custom',
+        nps_score: normalizedNps,
+        overall_satisfaction_score: normalizedSatisfaction === null ? null : Number(clamp(normalizedSatisfaction <= 5 ? normalizedSatisfaction : normalizedSatisfaction / 2, 1, 5).toFixed(2)),
+        satisfaction_score: normalizedSatisfaction,
+        sentiment: e.sentiment || null,
+        feedback_summary: e.feedback_summary || null,
+        summary: e.feedback_summary || null,
+        feedback_themes: e.themes || [],
+        themes: e.themes || [],
+        response_categories: {},
+        verbatim_feedback: e.feedback_summary || null,
+        improvement_suggestions: [],
+        source_document_id: e.source_document_id || null,
+        created_by: userId
+      }
+
+      insertColumns.forEach((column) => {
+        values.push(rowData[column] ?? null)
+      })
     })
 
     await client.query(
       `INSERT INTO satisfaction_surveys (
-        project_id, stakeholder_id, stakeholder_name, survey_date, nps_score,
-        satisfaction_score, sentiment, feedback_summary, themes, source_document_id, created_by
+        ${insertColumns.join(', ')}
       )
       VALUES ${placeholders.join(', ')}`,
       values

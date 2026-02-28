@@ -107,7 +107,10 @@ class DocumentGenerationService {
         project,
         template,
         provider: request.provider,
-        model: request.model
+        model: request.model,
+        projectId: request.projectId,
+        userId: request.userId,
+        templateId: request.templateId,
       })
 
       if (!generationPlan || !generationPlan.sections || generationPlan.sections.length === 0) {
@@ -132,7 +135,10 @@ class DocumentGenerationService {
           contextItems: customContextItems,
           provider: request.provider,
           model: request.model,
-          temperature: request.temperature
+          temperature: request.temperature,
+          projectId: request.projectId,
+          userId: request.userId,
+          templateId: request.templateId,
         })
       })
 
@@ -189,6 +195,9 @@ class DocumentGenerationService {
     template: TemplateContext | null;
     provider: string;
     model?: string;
+    projectId: string;
+    userId: string;
+    templateId?: string;
   }) {
     // We define the Zod schema representing the JSON we want the AI to return.
     const planSchema = z.object({
@@ -223,7 +232,10 @@ class DocumentGenerationService {
         model: params.model,
         temperature: 0.1, // Low temperature for deterministic planning
         schema: planSchema,
-        traceName: 'agentic-doc-gen-plan'
+        traceName: 'agentic-doc-gen-plan',
+        projectId: params.projectId,
+        userId: params.userId,
+        template_id: params.templateId,
       })
       return result.object
     } catch (e: any) {
@@ -260,6 +272,9 @@ class DocumentGenerationService {
     provider: string;
     model?: string;
     temperature?: number;
+    projectId: string;
+    userId: string;
+    templateId?: string;
   }) {
     let sectionPrompt = `You are an expert technical writer drafting a specific section of a ${params.project.framework} document.\n\n`
 
@@ -306,7 +321,10 @@ class DocumentGenerationService {
       provider: params.provider,
       model: params.model,
       temperature: params.temperature || 0.5, // Slightly lower temperature for drafting facts
-      traceName: 'agentic-doc-gen-draft'
+      traceName: `agentic-doc-gen-draft-${params.order + 1}`,
+      projectId: params.projectId,
+      userId: params.userId,
+      template_id: params.templateId,
     }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
     return {

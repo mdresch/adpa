@@ -157,6 +157,15 @@ export const gkgSyncDocumentJobDataSchema = baseJobDataSchema.keys({
 })
 
 /**
+ * GKG Full Reconcile Job Data Schema
+ */
+export const gkgReconcileJobDataSchema = baseJobDataSchema.keys({
+  jobId: Joi.string().uuid().optional(),
+  cleanup: Joi.boolean().optional(),
+  batchSize: Joi.number().integer().min(100).max(5000).optional(),
+})
+
+/**
  * Map of job types to their validation schemas
  */
 const jobTypeSchemaMap: Partial<Record<JobType, Joi.ObjectSchema>> = {
@@ -172,6 +181,7 @@ const jobTypeSchemaMap: Partial<Record<JobType, Joi.ObjectSchema>> = {
   'gkg-bootstrap': gkgBootstrapJobDataSchema,
   'gkg-sync-project': gkgSyncProjectJobDataSchema,
   'gkg-sync-document': gkgSyncDocumentJobDataSchema,
+  'gkg-reconcile': gkgReconcileJobDataSchema,
 }
 
 /**
@@ -314,6 +324,7 @@ export function validateJobType(type: string): JobType {
     'gkg-bootstrap',
     'gkg-sync-project',
     'gkg-sync-document',
+    'gkg-reconcile',
   ]
 
   if (normalizedType.startsWith('extract-entity-')) {

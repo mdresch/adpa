@@ -36,6 +36,39 @@ function normalizeBoolean(value: unknown): boolean {
   return ['true', 'yes', 'y', '1'].includes(normalized)
 }
 
+function normalizeActionType(value?: string | null): string {
+  const normalized = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_')
+
+  const map: Record<string, string> = {
+    meeting: 'meeting',
+    email: 'email',
+    workshop: 'workshop',
+    presentation: 'presentation',
+    survey: 'survey',
+    training: 'training',
+    consultation: 'consultation',
+    review: 'review',
+    approval: 'approval',
+    notification: 'notification',
+    communication: 'communication',
+    engagement: 'engagement',
+    feedback: 'feedback',
+    feedback_session: 'feedback',
+    update: 'update',
+    status_update: 'update',
+    interview: 'consultation',
+    webinar: 'presentation',
+    town_hall: 'meeting',
+    briefing: 'presentation',
+    demo: 'presentation',
+    announcement: 'notification',
+    report: 'communication',
+    focus_group: 'consultation'
+  }
+
+  return map[normalized] || 'other'
+}
+
 export async function extractEngagementActions(
   context: ExtractionContext,
   options: { temperature?: number; maxTokens?: number } = {}
@@ -205,7 +238,7 @@ export async function saveEngagementActions(
         isValidUUID(e.action_id) ? e.action_id : null, // Validate UUID
         isValidUUID(e.stakeholder_id) ? e.stakeholder_id : null, // Validate UUID
         e.stakeholder_name || null,
-        e.action_type || null,
+        normalizeActionType(e.action_type),
         e.description || null,
         e.planned_date ? normalizeDate(e.planned_date) : null,
         e.actual_date ? normalizeDate(e.actual_date) : null,

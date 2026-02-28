@@ -2,26 +2,31 @@ import { consumeStream, convertToModelMessages, createUIMessageStream, createUIM
 import { randomUUID } from 'crypto'
 import { researcher } from '@/lib/morphic/agents/researcher'
 import { isTracingEnabled } from '@/lib/morphic/utils/telemetry'
-import { getLangfuseClient } from '@/lib/morphic/utils/langfuse-client'
+import { getLangfuseClient, isLangfuseEnabled } from '@/lib/morphic/utils/langfuse-client'
 import { stripReasoningParts } from './helpers/strip-reasoning-parts'
 import { BaseStreamConfig } from './types'
 
 export async function createEphemeralChatStreamResponse(config: BaseStreamConfig): Promise<Response> {
     const { message, model, abortSignal, searchMode, modelType, knowledgeEnabled } = config
-    let parentTraceId = isTracingEnabled() ? randomUUID() : undefined
+    const traceDebugEnabled = process.env.LANGFUSE_DEBUG_TRACING === 'true'
+    let parentTraceId = (isTracingEnabled() || isLangfuseEnabled()) ? randomUUID() : undefined
 
     // Initialize Langfuse trace
     const langfuse = getLangfuseClient()
     let langfuseTrace: any = null
-    if (langfuse && parentTraceId) {
+    if (langfuse) {
         langfuseTrace = langfuse.trace({
-            id: parentTraceId,
+            ...(parentTraceId ? { id: parentTraceId } : {}),
             name: `morphic-ephemeral-${searchMode || 'adaptive'}`,
             sessionId: `ephemeral-${parentTraceId}`,
             userId: 'anonymous-guest',
             metadata: { searchMode, modelType, modelId: model ? `${model.providerId}:${model.id}` : 'unknown' },
             tags: ['morphic', 'ephemeral', searchMode || 'adaptive']
         })
+
+        if (traceDebugEnabled) {
+            console.info(`[Langfuse][TraceDebug] ephemeral trace created traceId=${parentTraceId || 'auto'} mode=${searchMode || 'adaptive'}`)
+        }
     }
 
     const stream = createUIMessageStream<UIMessage>({
@@ -55,7 +60,20 @@ export async function createEphemeralChatStreamResponse(config: BaseStreamConfig
                 throw error
             } finally {
                 if (langfuse) {
-                    langfuse.flushAsync().catch(() => { })
+                    if (traceDebugEnabled) {
+                        console.info(`[Langfuse][TraceDebug] ephemeral flush start traceId=${parentTraceId || 'auto'}`)
+                    }
+                    langfuse.flushAsync()
+                        .then(() => {
+                            if (traceDebugEnabled) {
+                                console.info(`[Langfuse][TraceDebug] ephemeral flush success traceId=${parentTraceId || 'auto'}`)
+                            }
+                        })
+                        .catch((error) => {
+                            if (traceDebugEnabled) {
+                                console.error(`[Langfuse][TraceDebug] ephemeral flush failed traceId=${parentTraceId || 'auto'}`, error)
+                            }
+                        })
                 }
             }
         }

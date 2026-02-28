@@ -7,13 +7,11 @@ diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.ERROR)
  * OpenTelemetry Instrumentation for adpa-morphic (Next.js frontend)
  * 
  * NOTE: AI generation tracing is handled by the native Langfuse SDK
- * (see lib/morphic/utils/langfuse-client.ts). The OTLP exporter has been
- * disabled because Langfuse's OTLP endpoint returns 404 for auto-instrumented
- * HTTP/fetch spans, flooding the console with errors.
+ * (see lib/morphic/utils/langfuse-client.ts).
  * 
- * To re-enable OTLP export for a different collector (e.g. Jaeger, Grafana),
- * set OTLP_ENDPOINT in .env and uncomment the SDK initialization below.
+ * SDK-only mode: ENABLE_LANGFUSE_TRACING=false disables OTLP telemetry/reporting
+ * while ENABLE_LANGFUSE_NATIVE_SDK=true keeps native Langfuse SDK tracing enabled.
  */
 
-console.log('[Instrumentation] Native Langfuse SDK is used for AI tracing (OTLP auto-instrumentation disabled)')
+console.log('[Instrumentation] Langfuse SDK-only mode active (OTLP telemetry/reporting disabled)')
 

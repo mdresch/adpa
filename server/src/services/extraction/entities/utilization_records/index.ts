@@ -25,6 +25,23 @@ export interface UtilizationRecord {
   source_document_id?: string
 }
 
+function isUuid(value?: string | null): boolean {
+  if (!value) return false
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+}
+
+function normalizeDateFromPeriod(period?: string): string {
+  const fallback = new Date().toISOString().slice(0, 10)
+  if (!period) return fallback
+  if (/^\d{4}-\d{2}-\d{2}$/.test(period)) return period
+  if (/^\d{4}-\d{2}$/.test(period)) return `${period}-01`
+  const parsed = new Date(period)
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toISOString().slice(0, 10)
+  }
+  return fallback
+}
+
 export async function extractUtilizationRecords(
   context: ExtractionContext,
   options: { temperature?: number; maxTokens?: number } = {}
@@ -179,33 +196,63 @@ export async function saveUtilizationRecords(
   try {
     await client.query('DELETE FROM utilization_records WHERE project_id = $1', [projectId])
 
+    const columnResult = await client.query<{ column_name: string }>(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'utilization_records'`
+    )
+
+    const availableColumns = new Set(columnResult.rows.map(row => row.column_name))
+
+    const insertColumns = [
+      'project_id',
+      'resource_id',
+      'resource_name',
+      'period',
+      'record_date',
+      'planned_utilization_pct',
+      'actual_utilization_pct',
+      'variance_pct',
+      'notes',
+      'source_document_id',
+      'created_by'
+    ].filter(column => availableColumns.has(column))
+
+    if (insertColumns.length === 0) {
+      throw new Error('utilization_records table has no expected columns for extraction insert')
+    }
+
     const values: any[] = []
     const placeholders: string[] = []
 
     entities.forEach((e, index) => {
-      const offset = index * 10
-      placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10})`
-      )
+      const offset = index * insertColumns.length
+      placeholders.push(`(${insertColumns.map((_, i) => `$${offset + i + 1}`).join(', ')})`)
 
-      values.push(
-        projectId,
-        e.resource_id || null,
-        e.resource_name || null,
-        e.period || null,
-        e.planned_utilization_pct ?? null,
-        e.actual_utilization_pct ?? null,
-        e.variance_pct ?? null,
-        e.notes || null,
-        e.source_document_id || null,
-        userId
-      )
+      const normalizedDate = normalizeDateFromPeriod(e.period)
+      const rowData: Record<string, unknown> = {
+        project_id: projectId,
+        resource_id: isUuid(e.resource_id) ? e.resource_id : null,
+        resource_name: e.resource_name || (!isUuid(e.resource_id) ? e.resource_id : null) || null,
+        period: e.period || null,
+        record_date: normalizedDate,
+        planned_utilization_pct: e.planned_utilization_pct ?? null,
+        actual_utilization_pct: e.actual_utilization_pct ?? null,
+        variance_pct: e.variance_pct ?? null,
+        notes: e.notes || null,
+        source_document_id: isUuid(e.source_document_id) ? e.source_document_id : null,
+        created_by: userId
+      }
+
+      insertColumns.forEach((column) => {
+        values.push(rowData[column] ?? null)
+      })
     })
 
     await client.query(
       `INSERT INTO utilization_records (
-        project_id, resource_id, resource_name, period, planned_utilization_pct,
-        actual_utilization_pct, variance_pct, notes, source_document_id, created_by
+        ${insertColumns.join(', ')}
       )
       VALUES ${placeholders.join(', ')}`,
       values

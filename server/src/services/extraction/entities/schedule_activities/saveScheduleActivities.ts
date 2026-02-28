@@ -7,6 +7,21 @@ import type { PoolClient } from 'pg'
 import type { PersistenceResult } from '../../base/Persistence'
 import type { ScheduleActivity } from './types'
 
+function normalizeTimestamp(value?: string | null): string | null {
+    if (!value || typeof value !== 'string') return null
+    const trimmed = value.trim()
+    if (!trimmed) return null
+
+    const lowered = trimmed.toLowerCase()
+    if (['tbd', 'n/a', 'na', 'not specified', 'unknown', 'none', 'pending', 'ongoing', 'yyyy-mm-dd'].includes(lowered)) {
+        return null
+    }
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return `${trimmed}T00:00:00.000Z`
+    const parsed = Date.parse(trimmed)
+    return Number.isNaN(parsed) ? null : new Date(parsed).toISOString()
+}
+
 export async function saveScheduleActivities(
     client: PoolClient,
     projectId: string,
@@ -36,8 +51,8 @@ export async function saveScheduleActivities(
                 e.name || '',
                 e.description || null,
                 e.wbs_code || null,
-                e.start_date || null,
-                e.end_date || null,
+                normalizeTimestamp(e.start_date),
+                normalizeTimestamp(e.end_date),
                 e.duration_days || null,
                 e.status || 'Not Started',
                 e.percent_complete || 0,

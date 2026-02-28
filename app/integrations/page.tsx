@@ -123,6 +123,11 @@ export default function Integrations() {
     clientSecret: "",
     // Notion-specific fields
     integrationToken: "",
+    // Neo4j-specific fields
+    neo4jUri: "",
+    neo4jDatabase: "neo4j",
+    neo4jUsername: "neo4j",
+    neo4jPassword: "",
   })
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [creatingIntegration, setCreatingIntegration] = useState(false)
@@ -157,6 +162,10 @@ export default function Integrations() {
       clientId: "",
       clientSecret: "",
       integrationToken: "",
+      neo4jUri: "",
+      neo4jDatabase: "neo4j",
+      neo4jUsername: "neo4j",
+      neo4jPassword: "",
     })
   }
 
@@ -249,6 +258,31 @@ export default function Integrations() {
             integration_token: newIntegration.integrationToken.trim(),
             apiKey: newIntegration.integrationToken.trim(), // Support both formats
           }
+          break
+
+        case "neo4j":
+          if (!newIntegration.neo4jUri) {
+            toast.error("Please enter Neo4j URI")
+            setCreatingIntegration(false)
+            return
+          }
+          configData.configuration = {
+            uri: newIntegration.neo4jUri.trim(),
+            database: (newIntegration.neo4jDatabase || "neo4j").trim(),
+            username: (newIntegration.neo4jUsername || "neo4j").trim(),
+            source: "manual-add-integration",
+          }
+          configData.credentials = {
+            username: (newIntegration.neo4jUsername || "neo4j").trim(),
+            password: newIntegration.neo4jPassword?.trim() || "",
+          }
+          break
+
+        case "mongodb":
+          configData.configuration = {
+            source: "manual-add-integration",
+          }
+          configData.credentials = {}
           break
 
         case "github":
@@ -660,7 +694,7 @@ export default function Integrations() {
         return
       }
 
-      const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+      const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:5000/api'
 
       // Check if we have an existing integration to test with stored credentials
       const jiraIntegrationToTest = existingJiraIntegration || realIntegrations.find((i: any) => i.type === "jira")
@@ -1180,7 +1214,7 @@ export default function Integrations() {
       }
 
       // Call API directly on port 5000 to bypass Next.js proxy
-      const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+      const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:5000/api'
       const response = await fetch(`${apiBaseUrl}/integrations/${notionIntegration.id}/sync`, {
         method: "POST",
         headers: {
@@ -1333,6 +1367,8 @@ export default function Integrations() {
                           <option value="jira">Atlassian Jira</option>
                           <option value="sharepoint">Microsoft SharePoint</option>
                           <option value="notion">Notion</option>
+                          <option value="mongodb">MongoDB Vector Store</option>
+                          <option value="neo4j">Neo4j</option>
                           <option value="adobe">Adobe Document Services</option>
                           <option value="github">GitHub</option>
                           <option value="gitlab">GitLab</option>
@@ -1466,6 +1502,62 @@ export default function Integrations() {
                             Just give it a name to enable synchronization.
                           </p>
                         </div>
+                      )}
+
+                      {/* Neo4j-specific fields */}
+                      {newIntegration.type === "neo4j" && (
+                        <>
+                          <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="neo4j-uri" className="text-right">
+                              URI <span className="text-red-500">*</span>
+                            </Label>
+                            <Input
+                              id="neo4j-uri"
+                              placeholder="neo4j+s://xxxx.databases.neo4j.io"
+                              className="col-span-3"
+                              value={newIntegration.neo4jUri}
+                              onChange={(e) => handleNewIntegrationChange("neo4jUri", e.target.value)}
+                              required
+                            />
+                          </div>
+                          <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="neo4j-db" className="text-right">
+                              Database
+                            </Label>
+                            <Input
+                              id="neo4j-db"
+                              placeholder="neo4j"
+                              className="col-span-3"
+                              value={newIntegration.neo4jDatabase}
+                              onChange={(e) => handleNewIntegrationChange("neo4jDatabase", e.target.value)}
+                            />
+                          </div>
+                          <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="neo4j-user" className="text-right">
+                              Username
+                            </Label>
+                            <Input
+                              id="neo4j-user"
+                              placeholder="neo4j"
+                              className="col-span-3"
+                              value={newIntegration.neo4jUsername}
+                              onChange={(e) => handleNewIntegrationChange("neo4jUsername", e.target.value)}
+                            />
+                          </div>
+                          <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="neo4j-password" className="text-right">
+                              Password
+                            </Label>
+                            <Input
+                              id="neo4j-password"
+                              type="password"
+                              placeholder="optional if env-managed"
+                              className="col-span-3"
+                              value={newIntegration.neo4jPassword}
+                              onChange={(e) => handleNewIntegrationChange("neo4jPassword", e.target.value)}
+                            />
+                          </div>
+                        </>
                       )}
 
                       {/* Confluence-specific fields */}

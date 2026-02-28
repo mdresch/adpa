@@ -87,9 +87,16 @@ export class PineconeService {
 
     this.indexName = config?.indexName || process.env.PINECONE_INDEX_NAME || 'adpa-rag-index';
 
-    // Explicitly use the index host if provided. This is crucial for serverless indexes 
-    // where the SDK might default to the wrong endpoint or fail to resolve it.
-    const host = config?.indexHost || process.env.PINECONE_INDEX_HOST;
+    const normalizedConfigHost = typeof config?.indexHost === 'string' ? config.indexHost.trim() : undefined;
+    const normalizedEnvHost = typeof process.env.PINECONE_INDEX_HOST === 'string'
+      ? process.env.PINECONE_INDEX_HOST.trim()
+      : undefined;
+
+    // If config is provided and omits host, prefer auto-discovery instead of falling back to env host.
+    const host = config
+      ? (normalizedConfigHost || undefined)
+      : (normalizedEnvHost || undefined);
+
     if (host) {
       this.index = this.pc.index(this.indexName, host);
     } else {

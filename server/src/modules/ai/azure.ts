@@ -1,6 +1,6 @@
 // import { generateText } from 'ai'; // Temporarily disabled
 // import { createAzure } from '@ai-sdk/azure'; // Temporarily disabled
-import { isTracingEnabled } from '../../tracing'
+import { isTracingEnabled, isNativeLangfuseEnabled } from '../../tracing'
 import { Langfuse } from 'langfuse'
 
 const langfuse = new Langfuse({
@@ -162,7 +162,7 @@ export class AzureConnector {
       }
 
       // Create Langfuse trace and generation
-      langfuseTrace = isTracingEnabled() ? langfuse.trace({
+      langfuseTrace = isNativeLangfuseEnabled() ? langfuse.trace({
         name: `azure-ai-generate`,
         metadata: { provider: providerName, deployment },
         tags: ['azure', deployment]

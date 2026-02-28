@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import * as React from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -141,29 +141,29 @@ export default function JobMonitorPage() {
   const { isConnected } = useWebSocket()
   const jobUpdates = useJobUpdates()
 
-  const [searchTerm, setSearchTerm] = useState("")
-  const [statusFilter, setStatusFilter] = useState("all")
-  const [selectedJob, setSelectedJob] = useState<string | null>(null)
-  const [selectedWorker, setSelectedWorker] = useState<string | null>(null)
-  const [viewingLogs, setViewingLogs] = useState<string | null>(null)
-  const [jobs, setJobs] = useState<Job[]>([])
-  const [queues, setQueues] = useState<any[]>([])
-  const [workers, setWorkers] = useState<any[]>([])
-  const [metrics, setMetrics] = useState<any>({})
-  const [loading, setLoading] = useState(true)
-  const [loadingQueues, setLoadingQueues] = useState(true)
-  const [loadingWorkers, setLoadingWorkers] = useState(true)
+  const [searchTerm, setSearchTerm] = React.useState("")
+  const [statusFilter, setStatusFilter] = React.useState("all")
+  const [selectedJob, setSelectedJob] = React.useState<string | null>(null)
+  const [selectedWorker, setSelectedWorker] = React.useState<string | null>(null)
+  const [viewingLogs, setViewingLogs] = React.useState<string | null>(null)
+  const [jobs, setJobs] = React.useState<Job[]>([])
+  const [queues, setQueues] = React.useState<any[]>([])
+  const [workers, setWorkers] = React.useState<any[]>([])
+  const [metrics, setMetrics] = React.useState<any>({})
+  const [loading, setLoading] = React.useState(true)
+  const [loadingQueues, setLoadingQueues] = React.useState(true)
+  const [loadingWorkers, setLoadingWorkers] = React.useState(true)
 
-  // Fetch jobs
-  useEffect(() => {
+  // Fetch aggregate metrics
+  React.useEffect(() => {
     const fetchJobs = async () => {
       try {
         // Check if user is admin/super_admin - if so, fetch all jobs
         const userRole = user?.role?.toLowerCase()
         const isAdminOrSuperAdmin = userRole === 'admin' || userRole === 'super_admin'
         const canViewAllJobs = isAdminOrSuperAdmin || hasPermission('jobs.admin')
-        
-        const response = await apiClient.getJobs({ 
+
+        const response = await apiClient.getJobs({
           limit: 50,
           allUsers: canViewAllJobs // Use admin endpoint if user has permission
         })
@@ -187,7 +187,7 @@ export default function JobMonitorPage() {
             providerAssignments: job.metadata?.providerAssignments || []
           }
         }))
-        
+
         setJobs(mappedJobs)
       } catch (error) {
         console.error("Failed to fetch jobs:", error)
@@ -204,8 +204,8 @@ export default function JobMonitorPage() {
     return () => clearInterval(interval)
   }, [])
 
-  // Fetch queue statistics
-  useEffect(() => {
+  // Fetch worker statistics
+  React.useEffect(() => {
     const fetchQueues = async () => {
       try {
         const response = await apiClient.request('/queue-stats/overview', { suppressNotFoundError: true } as any)
@@ -228,8 +228,8 @@ export default function JobMonitorPage() {
     return () => clearInterval(interval)
   }, [])
 
-  // Fetch worker statistics
-  useEffect(() => {
+  // Fetch aggregate metrics
+  React.useEffect(() => {
     const fetchWorkers = async () => {
       try {
         const response = await apiClient.request('/queue-stats/workers', { suppressNotFoundError: true } as any)
@@ -252,8 +252,8 @@ export default function JobMonitorPage() {
     return () => clearInterval(interval)
   }, [])
 
-  // Fetch aggregate metrics
-  useEffect(() => {
+  // Update jobs with real-time data from WebSocket
+  React.useEffect(() => {
     const fetchMetrics = async () => {
       try {
         const response = await apiClient.request('/queue-stats/metrics', { suppressNotFoundError: true } as any)
@@ -261,7 +261,7 @@ export default function JobMonitorPage() {
       } catch (error: any) {
         // Gracefully handle unavailable metrics endpoint
         if (error?.status !== 404 && error?.message !== 'Failed to fetch') {
-        console.error("Failed to fetch queue metrics:", error)
+          console.error("Failed to fetch queue metrics:", error)
         }
       }
     }
@@ -273,8 +273,8 @@ export default function JobMonitorPage() {
     return () => clearInterval(interval)
   }, [])
 
-  // Update jobs with real-time data from WebSocket
-  useEffect(() => {
+  // Listen for real-time job progress updates
+  React.useEffect(() => {
     setJobs(prevJobs =>
       prevJobs.map(job => {
         const update = jobUpdates[job.id]
@@ -286,254 +286,252 @@ export default function JobMonitorPage() {
     )
   }, [jobUpdates])
 
-  // Listen for real-time job progress updates
-  useEffect(() => {
+  React.useEffect(() => {
     const socket = apiClient.getSocket()
-    
-    if (socket) {
-      // Listen for job progress updates
-      socket.on('job:status', (data: any) => {
-        setJobs(prevJobs =>
-          prevJobs.map(job =>
-            job.id === data.jobId
-              ? {
-                  ...job,
-                  status: data.status,
-                  progress: data.progress || job.progress
-                }
-              : job
-          )
-        )
-      })
+    if (!socket) return
 
-      // Listen for job completion
-      socket.on('job:completed', (data: any) => {
-        setJobs(prevJobs =>
-          prevJobs.map(job =>
-            job.id === data.jobId
-              ? {
-                  ...job,
-                  status: 'completed',
-                  progress: 100,
-                  completedTime: new Date().toISOString()
-                }
-              : job
-          )
-        )
-      })
-
-      // Listen for job failure
-      socket.on('job:failed', (data: any) => {
-        setJobs(prevJobs =>
-          prevJobs.map(job =>
-            job.id === data.jobId
-              ? {
-                  ...job,
-                  status: 'failed',
-                  error: data.error,
-                  completedTime: new Date().toISOString()
-                }
-              : job
-          )
-        )
-      })
-
-      // Listen for job cancellation so cancelled jobs disappear from the
-      // "Active Jobs in Progress" strip immediately without waiting for
-      // the next polling refresh.
-      socket.on('job:cancelled', (data: any) => {
-        setJobs(prevJobs =>
-          prevJobs.map(job =>
-            job.id === data.jobId
-              ? {
-                  ...job,
-                  status: 'cancelled',
-                  completedTime: new Date().toISOString()
-                }
-              : job
-          )
-        )
-      })
-      
-      // Listen for step-by-step updates (process-flow compression progress)
-      socket.on('job:step-update', (data: any) => {
-        setJobs(prevJobs =>
-          prevJobs.map(job =>
-            job.id === data.jobId
-              ? {
-                  ...job,
-                  progress: data.progress || job.progress,
-                  projectName: data.projectName || job.projectName,
-                  documentName: data.documentName || job.documentName,
-                  metadata: {
-                    ...job.metadata,
-                    currentStep: data.currentStep,
-                    compressionProgress: data.compressionProgress,
-                    currentDocument: data.currentDocument,
-                    activeDocuments: data.activeDocuments || [],
-                    providerAssignments: data.providerAssignments || [],
-                    parallelCount: data.parallelCount || 0
-                  }
-                }
-              : job
-          )
-        )
-      })
-
-      return () => {
-        socket.off('job:status')
-        socket.off('job:completed')
-        socket.off('job:failed')
-        socket.off('job:cancelled')
-        socket.off('job:step-update')
-      }
-    }
-  }, [])
-
-  const filteredJobs = jobs.filter((job) => {
-    const matchesSearch = (job.name || job.id).toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesStatus = statusFilter === "all" || job.status === statusFilter
-    return matchesSearch && matchesStatus
+  // Listen for job progress updates
+  socket.on('job:status', (data: any) => {
+    setJobs(prevJobs =>
+      prevJobs.map(job =>
+        job.id === data.jobId
+          ? {
+            ...job,
+            status: data.status,
+            progress: data.progress || job.progress
+          }
+          : job
+      )
+    )
   })
 
-  // Separate pending jobs for special display
-  const pendingJobs = filteredJobs.filter(j => j.status === 'pending' || j.status === 'queued')
-  const otherJobs = filteredJobs.filter(j => j.status !== 'pending' && j.status !== 'queued')
+  // Listen for job completion
+  socket.on('job:completed', (data: any) => {
+    setJobs(prevJobs =>
+      prevJobs.map(job =>
+        job.id === data.jobId
+          ? {
+            ...job,
+            status: 'completed',
+            progress: 100,
+            completedTime: new Date().toISOString()
+          }
+          : job
+      )
+    )
+  })
 
-  // Calculate stats from real data or metrics
-  const stats = {
-    totalJobs: metrics.totalJobs || jobs.length,
-    runningJobs: metrics.totalActive || jobs.filter((j) => {
-      // Only count as running if:
-      // 1. Status is processing/running
-      // 2. No error message (error means it's actually failed)
-      // 3. Started recently (not stuck)
-      const hasError = j.error || j.error_message
-      const isOld = j.startTime && new Date(j.startTime).getTime() < Date.now() - 30 * 60 * 1000 // 30 minutes
-      return (j.status === "processing" || j.status === "running") && !hasError && !isOld
-    }).length,
-    completedJobs: metrics.totalCompleted || jobs.filter((j) => j.status === "completed").length,
-    failedJobs: metrics.totalFailed || jobs.filter((j) => j.status === "failed").length,
-    queuedJobs: metrics.totalWaiting || jobs.filter((j) => j.status === "pending").length,
-    activeWorkers: metrics.activeWorkers || workers.filter((w) => w.status === "active").length,
-    successRate: metrics.successRate || 0,
-    queueHealth: metrics.queueHealth || 'unknown'
+  // Listen for job failure
+  socket.on('job:failed', (data: any) => {
+    setJobs(prevJobs =>
+      prevJobs.map(job =>
+        job.id === data.jobId
+          ? {
+            ...job,
+            status: 'failed',
+            error: data.error,
+            completedTime: new Date().toISOString()
+          }
+          : job
+      )
+    )
+  })
+
+  // Listen for job cancellation so cancelled jobs disappear from the
+  // "Active Jobs in Progress" strip immediately without waiting for
+  // the next polling refresh.
+  socket.on('job:cancelled', (data: any) => {
+    setJobs(prevJobs =>
+      prevJobs.map(job =>
+        job.id === data.jobId
+          ? {
+            ...job,
+            status: 'cancelled',
+            completedTime: new Date().toISOString()
+          }
+          : job
+      )
+    )
+  })
+
+  // Listen for step-by-step updates (process-flow compression progress)
+  socket.on('job:step-update', (data: any) => {
+    setJobs(prevJobs =>
+      prevJobs.map(job =>
+        job.id === data.jobId
+          ? {
+            ...job,
+            progress: data.progress || job.progress,
+            projectName: data.projectName || job.projectName,
+            documentName: data.documentName || job.documentName,
+            metadata: {
+              ...job.metadata,
+              currentStep: data.currentStep,
+              compressionProgress: data.compressionProgress,
+              currentDocument: data.currentDocument,
+              activeDocuments: data.activeDocuments || [],
+              providerAssignments: data.providerAssignments || [],
+              parallelCount: data.parallelCount || 0
+            }
+          }
+          : job
+      )
+    )
+  })
+
+  return () => {
+    socket.off('job:status')
+    socket.off('job:completed')
+    socket.off('job:failed')
+    socket.off('job:cancelled')
+    socket.off('job:step-update')
   }
+  }, [])
 
-  return (
-    <div className="flex h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/30 dark:from-slate-900 dark:via-blue-900/20 dark:to-purple-900/20">
-      <Sidebar />
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <Header />
-        <main className="flex-1 overflow-auto">
-          <div className="container mx-auto px-6 py-8">
-            <PageTransition>
-              <AnimatedLayout className="space-y-8">
-                {/* Header */}
-                <div className="flex flex-col space-y-4 md:flex-row md:items-center md:justify-between md:space-y-0">
-                  <div>
-                    <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-blue-800 bg-clip-text text-transparent">
-                      Job Monitor
-                    </h1>
-                    <p className="text-muted-foreground mt-2">
-                      Monitor and manage background jobs, queues, and workers
-                    </p>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={async () => {
-                        try {
-                          // Use correct endpoint and HTTP method; previous implementation
-                          // accidentally treated 'POST' as the path, causing a 404 on /api/POST.
-                          const result = await apiClient.request('/jobs/cleanup', { method: 'POST' }) as any
-                          toast.success(`Cleaned up ${result.cleanedCount || 0} stuck cancelled jobs`)
-                          window.location.reload()
-                        } catch (error) {
-                          toast.error('Failed to cleanup cancelled jobs')
-                        }
-                      }}
-                    >
-                      <Trash className="h-4 w-4 mr-2" />
-                      Clean Cancelled
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={async () => {
-                        try {
-                          await apiClient.request('/jobs/clean-stalled', { method: 'POST' })
-                          toast.success('Stalled jobs cleaned')
-                          window.location.reload()
-                        } catch (error) {
-                          toast.error('Failed to clean stalled jobs')
-                        }
-                      }}
-                    >
-                      <AlertTriangle className="h-4 w-4 mr-2" />
-                      Clean Stalled
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={async () => {
-                        try {
-                          const result = await apiClient.request('/jobs/clean-orphaned-pending', { method: 'POST' }) as any
-                          const msg = result.requeuedCount > 0 
-                            ? `Re-queued ${result.requeuedCount} orphaned jobs` 
-                            : result.cleanedCount > 0 
-                              ? `Cleaned ${result.cleanedCount} orphaned jobs`
-                              : 'No orphaned pending jobs found'
-                          toast.success(msg)
-                          window.location.reload()
-                        } catch (error) {
-                          toast.error('Failed to clean orphaned pending jobs')
-                        }
-                      }}
-                    >
-                      <Clock className="h-4 w-4 mr-2" />
-                      Fix Orphaned
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={async () => {
-                        try {
-                          const result = await apiClient.request('/jobs/retry-all-failed', { method: 'POST' }) as any
-                          toast.success(`Retried ${result.retriedCount} failed jobs`)
-                          window.location.reload()
-                        } catch (error) {
-                          toast.error('Failed to retry jobs')
-                        }
-                      }}
-                    >
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                      Retry All Failed
-                    </Button>
-                  </div>
+const filteredJobs = jobs.filter((job) => {
+  const matchesSearch = (job.name || job.id).toLowerCase().includes(searchTerm.toLowerCase())
+  const matchesStatus = statusFilter === "all" || job.status === statusFilter
+  return matchesSearch && matchesStatus
+})
+
+// Separate pending jobs for special display
+const pendingJobs = filteredJobs.filter(j => j.status === 'pending' || j.status === 'queued')
+const otherJobs = filteredJobs.filter(j => j.status !== 'pending' && j.status !== 'queued')
+
+// Calculate stats from real data or metrics
+const stats = {
+  totalJobs: metrics.totalJobs || jobs.length,
+  runningJobs: metrics.totalActive || jobs.filter((j) => {
+    // Only count as running if:
+    // 1. Status is processing/running
+    // 2. No error message (error means it's actually failed)
+    // 3. Started recently (not stuck)
+    const hasError = j.error || j.error_message
+    const isOld = j.startTime && new Date(j.startTime).getTime() < Date.now() - 30 * 60 * 1000 // 30 minutes
+    return (j.status === "processing" || j.status === "running") && !hasError && !isOld
+  }).length,
+  completedJobs: metrics.totalCompleted || jobs.filter((j) => j.status === "completed").length,
+  failedJobs: metrics.totalFailed || jobs.filter((j) => j.status === "failed").length,
+  queuedJobs: metrics.totalWaiting || jobs.filter((j) => j.status === "pending").length,
+  activeWorkers: metrics.activeWorkers || workers.filter((w) => w.status === "active").length,
+  successRate: metrics.successRate || 0,
+  queueHealth: metrics.queueHealth || 'unknown'
+}
+
+return (
+  <div className="flex h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/30 dark:from-slate-900 dark:via-blue-900/20 dark:to-purple-900/20">
+    <Sidebar />
+    <div className="flex-1 flex flex-col overflow-hidden">
+      <Header />
+      <main className="flex-1 overflow-auto">
+        <div className="container mx-auto px-6 py-8">
+          <PageTransition>
+            <AnimatedLayout className="space-y-8">
+              {/* Header */}
+              <div className="flex flex-col space-y-4 md:flex-row md:items-center md:justify-between md:space-y-0">
+                <div>
+                  <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-blue-800 bg-clip-text text-transparent">
+                    Job Monitor
+                  </h1>
+                  <p className="text-muted-foreground mt-2">
+                    Monitor and manage background jobs, queues, and workers
+                  </p>
                 </div>
+                <div className="flex items-center space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      try {
+                        // Use correct endpoint and HTTP method; previous implementation
+                        // accidentally treated 'POST' as the path, causing a 404 on /api/POST.
+                        const result = await apiClient.request('/jobs/cleanup', { method: 'POST' }) as any
+                        toast.success(`Cleaned up ${result.cleanedCount || 0} stuck cancelled jobs`)
+                        window.location.reload()
+                      } catch (error) {
+                        toast.error('Failed to cleanup cancelled jobs')
+                      }
+                    }}
+                  >
+                    <Trash className="h-4 w-4 mr-2" />
+                    Clean Cancelled
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      try {
+                        await apiClient.request('/jobs/clean-stalled', { method: 'POST' })
+                        toast.success('Stalled jobs cleaned')
+                        window.location.reload()
+                      } catch (error) {
+                        toast.error('Failed to clean stalled jobs')
+                      }
+                    }}
+                  >
+                    <AlertTriangle className="h-4 w-4 mr-2" />
+                    Clean Stalled
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      try {
+                        const result = await apiClient.request('/jobs/clean-orphaned-pending', { method: 'POST' }) as any
+                        const msg = result.requeuedCount > 0
+                          ? `Re-queued ${result.requeuedCount} orphaned jobs`
+                          : result.cleanedCount > 0
+                            ? `Cleaned ${result.cleanedCount} orphaned jobs`
+                            : 'No orphaned pending jobs found'
+                        toast.success(msg)
+                        window.location.reload()
+                      } catch (error) {
+                        toast.error('Failed to clean orphaned pending jobs')
+                      }
+                    }}
+                  >
+                    <Clock className="h-4 w-4 mr-2" />
+                    Fix Orphaned
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      try {
+                        const result = await apiClient.request('/jobs/retry-all-failed', { method: 'POST' }) as any
+                        toast.success(`Retried ${result.retriedCount} failed jobs`)
+                        window.location.reload()
+                      } catch (error) {
+                        toast.error('Failed to retry jobs')
+                      }
+                    }}
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Retry All Failed
+                  </Button>
+                </div>
+              </div>
 
-                {/* Stats Cards */}
-                {loading ? (
-                  <AnimatedGrid className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6">
-                    {[...Array(6)].map((_, i) => (
-                      <AnimatedGridItem key={i}>
-                        <Card className="glass border-0 shadow-lg">
-                          <CardContent className="p-6">
-                            <div className="flex items-center justify-between">
-                              <div className="space-y-2">
-                                <Skeleton className="h-4 w-20" />
-                                <Skeleton className="h-8 w-12" />
-                              </div>
-                              <Skeleton className="h-8 w-8 rounded-full" />
+              {/* Stats Cards */}
+              {loading ? (
+                <AnimatedGrid className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6">
+                  {[...Array(6)].map((_, i) => (
+                    <AnimatedGridItem key={i}>
+                      <Card className="glass border-0 shadow-lg">
+                        <CardContent className="p-6">
+                          <div className="flex items-center justify-between">
+                            <div className="space-y-2">
+                              <Skeleton className="h-4 w-20" />
+                              <Skeleton className="h-8 w-12" />
                             </div>
-                          </CardContent>
-                        </Card>
-                      </AnimatedGridItem>
-                    ))}
-                  </AnimatedGrid>
-                ) : (
+                            <Skeleton className="h-8 w-8 rounded-full" />
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </AnimatedGridItem>
+                  ))}
+                </AnimatedGrid>
+              ) : (
                 <AnimatedGrid className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6">
                   <AnimatedGridItem>
                     <Card className="glass border-0 shadow-lg hover-lift">
@@ -619,688 +617,687 @@ export default function JobMonitorPage() {
                     </Card>
                   </AnimatedGridItem>
                 </AnimatedGrid>
-                )}
+              )}
 
-                {/* Real-Time Active Jobs Status Bar */}
-                {jobs.filter(j => j.status === 'processing' || j.status === 'running').length > 0 && (
-                  <Card className="glass border-0 shadow-lg border-l-4 border-l-blue-500 animate-fade-in">
-                    <CardHeader>
-                      <CardTitle className="flex items-center space-x-2 text-lg">
-                        <Activity className="h-5 w-5 text-blue-500 animate-pulse" />
-                        <span>Active Jobs in Progress</span>
-                        <Badge className="bg-blue-500">{jobs.filter(j => {
-                          const hasError = j.error || j.error_message
-                          const isOld = j.startTime && new Date(j.startTime).getTime() < Date.now() - 30 * 60 * 1000
-                          return (j.status === 'processing' || j.status === 'running') && !hasError && !isOld
-                        }).length}</Badge>
-                      </CardTitle>
-                      <CardDescription>Real-time progress tracking with live updates</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      {jobs
-                        .filter(j => {
-                          // Only show as active if no error and not stuck
-                          const hasError = j.error || j.error_message
-                          const isOld = j.startTime && new Date(j.startTime).getTime() < Date.now() - 30 * 60 * 1000 // 30 minutes
-                          return (j.status === 'processing' || j.status === 'running') && j.progress >= 0 && !hasError && !isOld
-                        })
-                        .map(job => (
-                          <div key={job.id} className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 transition-all duration-300">
-                            <div className="flex items-center justify-between mb-2">
-                              <div className="flex-1">
-                                <p className="font-semibold text-sm">{job.name}</p>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  {job.worker && job.worker !== 'Unassigned' ? `Worker: ${job.worker.substring(0, 25)}...` : '⏳ Waiting for worker assignment...'}
-                                </p>
-                              </div>
-                              <div className="text-right">
-                                <p className="text-2xl font-bold text-blue-600">{job.progress}%</p>
-                                <p className="text-xs text-muted-foreground font-medium">
-                                  {job.progress <= 10 && "⚡ Starting job..."}
-                                  {job.progress > 10 && job.progress <= 30 && "📚 Gathering context..."}
-                                  {job.progress > 30 && job.progress <= 55 && "🤖 AI generating..."}
-                                  {job.progress > 55 && job.progress <= 90 && "⚙️ Processing..."}
-                                  {job.progress > 90 && job.progress < 100 && "✨ Finalizing..."}
-                                </p>
-                              </div>
+              {/* Real-Time Active Jobs Status Bar */}
+              {jobs.filter(j => j.status === 'processing' || j.status === 'running').length > 0 && (
+                <Card className="glass border-0 shadow-lg border-l-4 border-l-blue-500 animate-fade-in">
+                  <CardHeader>
+                    <CardTitle className="flex items-center space-x-2 text-lg">
+                      <Activity className="h-5 w-5 text-blue-500 animate-pulse" />
+                      <span>Active Jobs in Progress</span>
+                      <Badge className="bg-blue-500">{jobs.filter(j => {
+                        const hasError = j.error || j.error_message
+                        const isOld = j.startTime && new Date(j.startTime).getTime() < Date.now() - 30 * 60 * 1000
+                        return (j.status === 'processing' || j.status === 'running') && !hasError && !isOld
+                      }).length}</Badge>
+                    </CardTitle>
+                    <CardDescription>Real-time progress tracking with live updates</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {jobs
+                      .filter(j => {
+                        // Only show as active if no error and not stuck
+                        const hasError = j.error || j.error_message
+                        const isOld = j.startTime && new Date(j.startTime).getTime() < Date.now() - 30 * 60 * 1000 // 30 minutes
+                        return (j.status === 'processing' || j.status === 'running') && j.progress >= 0 && !hasError && !isOld
+                      })
+                      .map(job => (
+                        <div key={job.id} className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 transition-all duration-300">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex-1">
+                              <p className="font-semibold text-sm">{job.name}</p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {job.worker && job.worker !== 'Unassigned' ? `Worker: ${job.worker.substring(0, 25)}...` : '⏳ Waiting for worker assignment...'}
+                              </p>
                             </div>
-                            <Progress value={job.progress} className="h-3 transition-all duration-500" />
-                            <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-                              <span>Queue: {job.queue}</span>
-                              <span>Type: {job.type}</span>
+                            <div className="text-right">
+                              <p className="text-2xl font-bold text-blue-600">{job.progress}%</p>
+                              <p className="text-xs text-muted-foreground font-medium">
+                                {job.progress <= 10 && "⚡ Starting job..."}
+                                {job.progress > 10 && job.progress <= 30 && "📚 Gathering context..."}
+                                {job.progress > 30 && job.progress <= 55 && "🤖 AI generating..."}
+                                {job.progress > 55 && job.progress <= 90 && "⚙️ Processing..."}
+                                {job.progress > 90 && job.progress < 100 && "✨ Finalizing..."}
+                              </p>
                             </div>
                           </div>
-                        ))}
-                    </CardContent>
-                  </Card>
-                )}
-
-                {/* Main Content */}
-                <Card className="glass border-0 shadow-lg">
-                  <CardHeader>
-                    <div className="flex flex-col space-y-4 md:flex-row md:items-center md:justify-between md:space-y-0">
-                      <div>
-                        <CardTitle>Job Management</CardTitle>
-                        <CardDescription>Monitor and control background jobs and processes</CardDescription>
-                      </div>
-                      <div className="flex items-center space-x-4">
-                        <div className="relative">
-                          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                          <Input
-                            placeholder="Search jobs..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="pl-10 w-64"
-                          />
+                          <Progress value={job.progress} className="h-3 transition-all duration-500" />
+                          <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+                            <span>Queue: {job.queue}</span>
+                            <span>Type: {job.type}</span>
+                          </div>
                         </div>
-                        <Select value={statusFilter} onValueChange={setStatusFilter}>
-                          <SelectTrigger className="w-32">
-                            <Filter className="h-4 w-4 mr-2" />
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">All Status</SelectItem>
-                            <SelectItem value="running">Running</SelectItem>
-                            <SelectItem value="completed">Completed</SelectItem>
-                            <SelectItem value="failed">Failed</SelectItem>
-                            <SelectItem value="cancelled">Cancelled</SelectItem>
-                            <SelectItem value="queued">Queued</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <Tabs defaultValue="jobs" className="space-y-6">
-                      <TabsList className="grid w-full grid-cols-3">
-                        <TabsTrigger value="jobs">Jobs</TabsTrigger>
-                        <TabsTrigger value="queues">Queues</TabsTrigger>
-                        <TabsTrigger value="workers">Workers</TabsTrigger>
-                      </TabsList>
+                      ))}
+                  </CardContent>
+                </Card>
+              )}
 
-                      <TabsContent value="jobs" className="space-y-4">
-                        {/* Pending Jobs Alert */}
-                        {pendingJobs.length > 0 && (
-                          <Card className="border-yellow-500/50 bg-yellow-50/50 dark:bg-yellow-900/10">
-                            <CardHeader className="pb-3">
-                              <div className="flex items-center justify-between">
-                                <CardTitle className="flex items-center gap-2 text-yellow-700 dark:text-yellow-400">
-                                  <AlertCircle className="h-5 w-5" />
-                                  Pending Jobs ({pendingJobs.length})
-                                </CardTitle>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="text-yellow-700 border-yellow-500 hover:bg-yellow-100 dark:text-yellow-400 dark:hover:bg-yellow-900/30"
-                                  onClick={async () => {
-                                    try {
-                                      const result = await apiClient.request('/jobs/clean-orphaned-pending', { method: 'POST' }) as any
-                                      const msg = result.requeuedCount > 0 
-                                        ? `Re-queued ${result.requeuedCount} orphaned jobs` 
-                                        : result.cleanedCount > 0 
-                                          ? `Cleaned ${result.cleanedCount} orphaned jobs`
-                                          : 'No orphaned pending jobs found'
-                                      toast.success(msg)
-                                      window.location.reload()
-                                    } catch (error) {
-                                      toast.error('Failed to fix orphaned jobs')
-                                    }
-                                  }}
-                                >
-                                  <RefreshCw className="h-4 w-4 mr-1" />
-                                  Fix All Orphaned
-                                </Button>
+              {/* Main Content */}
+              <Card className="glass border-0 shadow-lg">
+                <CardHeader>
+                  <div className="flex flex-col space-y-4 md:flex-row md:items-center md:justify-between md:space-y-0">
+                    <div>
+                      <CardTitle>Job Management</CardTitle>
+                      <CardDescription>Monitor and control background jobs and processes</CardDescription>
+                    </div>
+                    <div className="flex items-center space-x-4">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Search jobs..."
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          className="pl-10 w-64"
+                        />
+                      </div>
+                      <Select value={statusFilter} onValueChange={setStatusFilter}>
+                        <SelectTrigger className="w-32">
+                          <Filter className="h-4 w-4 mr-2" />
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Status</SelectItem>
+                          <SelectItem value="running">Running</SelectItem>
+                          <SelectItem value="completed">Completed</SelectItem>
+                          <SelectItem value="failed">Failed</SelectItem>
+                          <SelectItem value="cancelled">Cancelled</SelectItem>
+                          <SelectItem value="queued">Queued</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <Tabs defaultValue="jobs" className="space-y-6">
+                    <TabsList className="grid w-full grid-cols-3">
+                      <TabsTrigger value="jobs">Jobs</TabsTrigger>
+                      <TabsTrigger value="queues">Queues</TabsTrigger>
+                      <TabsTrigger value="workers">Workers</TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="jobs" className="space-y-4">
+                      {/* Pending Jobs Alert */}
+                      {pendingJobs.length > 0 && (
+                        <Card className="border-yellow-500/50 bg-yellow-50/50 dark:bg-yellow-900/10">
+                          <CardHeader className="pb-3">
+                            <div className="flex items-center justify-between">
+                              <CardTitle className="flex items-center gap-2 text-yellow-700 dark:text-yellow-400">
+                                <AlertCircle className="h-5 w-5" />
+                                Pending Jobs ({pendingJobs.length})
+                              </CardTitle>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-yellow-700 border-yellow-500 hover:bg-yellow-100 dark:text-yellow-400 dark:hover:bg-yellow-900/30"
+                                onClick={async () => {
+                                  try {
+                                    const result = await apiClient.request('/jobs/clean-orphaned-pending', { method: 'POST' }) as any
+                                    const msg = result.requeuedCount > 0
+                                      ? `Re-queued ${result.requeuedCount} orphaned jobs`
+                                      : result.cleanedCount > 0
+                                        ? `Cleaned ${result.cleanedCount} orphaned jobs`
+                                        : 'No orphaned pending jobs found'
+                                    toast.success(msg)
+                                    window.location.reload()
+                                  } catch (error) {
+                                    toast.error('Failed to fix orphaned jobs')
+                                  }
+                                }}
+                              >
+                                <RefreshCw className="h-4 w-4 mr-1" />
+                                Fix All Orphaned
+                              </Button>
+                            </div>
+                            <CardDescription>
+                              <div className="space-y-1">
+                                <span>Jobs waiting to be processed. Jobs pending &gt;5 minutes may be orphaned (not in queue).</span>
+                                {pendingJobs.some((j: { queue?: string; type?: string }) => (j.queue === "gkg-sync" || String(j.type || "").startsWith("gkg-"))) && (
+                                  <p className="text-amber-700 dark:text-amber-400 text-sm mt-2">
+                                    <strong>GKG jobs</strong> are processed by the same backend that serves the API. Restart the backend (process on port 5000) so the gkg-sync consumer runs, then use &quot;Retry&quot; on each job.
+                                  </p>
+                                )}
                               </div>
-                              <CardDescription>
-                                <div className="space-y-1">
-                                  <span>Jobs waiting to be processed. Jobs pending &gt;5 minutes may be orphaned (not in queue).</span>
-                                  {pendingJobs.some((j: { queue?: string; type?: string }) => (j.queue === "gkg-sync" || String(j.type || "").startsWith("gkg-"))) && (
-                                    <p className="text-amber-700 dark:text-amber-400 text-sm mt-2">
-                                      <strong>GKG jobs</strong> are processed by the same backend that serves the API. Restart the backend (process on port 5000) so the gkg-sync consumer runs, then use &quot;Retry&quot; on each job.
-                                    </p>
-                                  )}
-                                </div>
-                              </CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-3">
-                              {pendingJobs.map((job) => {
-                                const createdAt = job.queuedTime || job.startTime
-                                const ageMinutes = createdAt 
-                                  ? Math.floor((Date.now() - new Date(createdAt).getTime()) / 1000 / 60)
-                                  : 0
-                                const isOld = ageMinutes > 5
-                                const isVeryOld = ageMinutes > 15
-                                
-                                return (
-                                  <div 
-                                    key={job.id} 
-                                    className={`p-4 rounded-lg border ${
-                                      isVeryOld 
-                                        ? 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700' 
-                                        : isOld 
-                                          ? 'bg-yellow-100 dark:bg-yellow-900/20 border-yellow-300 dark:border-yellow-700' 
-                                          : 'bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-800'
+                            </CardDescription>
+                          </CardHeader>
+                          <CardContent className="space-y-3">
+                            {pendingJobs.map((job) => {
+                              const createdAt = job.queuedTime || job.startTime
+                              const ageMinutes = createdAt
+                                ? Math.floor((Date.now() - new Date(createdAt).getTime()) / 1000 / 60)
+                                : 0
+                              const isOld = ageMinutes > 5
+                              const isVeryOld = ageMinutes > 15
+
+                              return (
+                                <div
+                                  key={job.id}
+                                  className={`p-4 rounded-lg border ${isVeryOld
+                                      ? 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700'
+                                      : isOld
+                                        ? 'bg-yellow-100 dark:bg-yellow-900/20 border-yellow-300 dark:border-yellow-700'
+                                        : 'bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-800'
                                     }`}
-                                  >
-                                    <div className="flex items-start justify-between gap-4">
-                                      <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2">
-                                          <Clock className={`h-4 w-4 flex-shrink-0 ${isVeryOld ? 'text-red-500' : 'text-yellow-600'}`} />
-                                          <p className="font-medium text-sm truncate">{job.name}</p>
+                                >
+                                  <div className="flex items-start justify-between gap-4">
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-2">
+                                        <Clock className={`h-4 w-4 flex-shrink-0 ${isVeryOld ? 'text-red-500' : 'text-yellow-600'}`} />
+                                        <p className="font-medium text-sm truncate">{job.name}</p>
+                                      </div>
+                                      <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                                        <div><span className="font-medium">Type:</span> {job.type}</div>
+                                        <div><span className="font-medium">Queue:</span> {job.queue || 'unknown'}</div>
+                                        <div><span className="font-medium">Age:</span> <span className={isOld ? 'text-yellow-700 dark:text-yellow-400 font-semibold' : ''}>{ageMinutes} min</span></div>
+                                        <div><span className="font-medium">ID:</span> <span className="font-mono text-[10px]">{job.id.slice(0, 8)}...</span></div>
+                                      </div>
+                                      {isVeryOld && (
+                                        <div className="mt-2 p-2 rounded bg-red-100 dark:bg-red-900/30 border border-red-200 dark:border-red-800">
+                                          <p className="text-xs text-red-700 dark:text-red-400 font-medium">
+                                            🚨 Likely orphaned - Job not in queue. Click "Retry" to re-queue or "Cancel" to remove.
+                                          </p>
                                         </div>
-                                        <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                                          <div><span className="font-medium">Type:</span> {job.type}</div>
-                                          <div><span className="font-medium">Queue:</span> {job.queue || 'unknown'}</div>
-                                          <div><span className="font-medium">Age:</span> <span className={isOld ? 'text-yellow-700 dark:text-yellow-400 font-semibold' : ''}>{ageMinutes} min</span></div>
-                                          <div><span className="font-medium">ID:</span> <span className="font-mono text-[10px]">{job.id.slice(0, 8)}...</span></div>
+                                      )}
+                                      {isOld && !isVeryOld && (
+                                        <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-2">
+                                          ⚠️ Pending for {ageMinutes} min - may be stuck or orphaned
+                                        </p>
+                                      )}
+                                    </div>
+                                    <div className="flex flex-col gap-2">
+                                      <Button
+                                        variant={isOld ? "default" : "outline"}
+                                        size="sm"
+                                        className={isOld ? "bg-yellow-600 hover:bg-yellow-700 text-white" : ""}
+                                        onClick={async () => {
+                                          try {
+                                            const result = await apiClient.request(`/jobs/${job.id}/retry`, { method: 'POST' }) as any
+                                            toast.success(`Job re-queued: ${result.newJobId?.slice(0, 8)}...`)
+                                            window.location.reload()
+                                          } catch (error: any) {
+                                            toast.error(error?.message || 'Failed to retry job')
+                                          }
+                                        }}
+                                      >
+                                        <RefreshCw className="h-3 w-3 mr-1" />
+                                        Retry
+                                      </Button>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="text-red-600 border-red-300 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                        onClick={async () => {
+                                          try {
+                                            await apiClient.request(`/jobs/${job.id}/cancel`, { method: 'POST' })
+                                            toast.success('Job cancelled')
+                                            window.location.reload()
+                                          } catch (error: any) {
+                                            toast.error(error?.message || 'Failed to cancel job')
+                                          }
+                                        }}
+                                      >
+                                        <XCircle className="h-3 w-3 mr-1" />
+                                        Cancel
+                                      </Button>
+                                    </div>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </CardContent>
+                        </Card>
+                      )}
+
+                      <div className="space-y-4">
+                        {otherJobs.map((job, index) => (
+                          <AnimatedGridItemWithDelay
+                            key={job.id}
+                            className="animate-fade-in-up"
+                            animationDelay={index * 100}
+                          >
+                            <Card className="border border-slate-200 dark:border-slate-700 hover-lift">
+                              <CardContent className="p-6">
+                                <div className="flex items-start justify-between">
+                                  <div className="flex-1 space-y-3">
+                                    <div className="flex items-center space-x-3">
+                                      <div className={`p-2 rounded-lg border ${getStatusColor(job.status)}`}>
+                                        {getStatusIcon(job.status)}
+                                      </div>
+                                      <div className="flex-1">
+                                        <h3 className="font-semibold text-lg">{job.name}</h3>
+                                        <div className="flex items-center gap-2 mt-1">
+                                          <p className="text-sm text-muted-foreground">ID: {job.id}</p>
+                                          {job.projectName && (
+                                            <>
+                                              <span className="text-muted-foreground">•</span>
+                                              <p className="text-sm text-blue-600 dark:text-blue-400">
+                                                📁 {job.projectName}
+                                              </p>
+                                            </>
+                                          )}
+                                          {job.documentName && (
+                                            <>
+                                              <span className="text-muted-foreground">•</span>
+                                              <p className="text-sm text-purple-600 dark:text-purple-400">
+                                                📄 {job.documentName}
+                                              </p>
+                                            </>
+                                          )}
                                         </div>
-                                        {isVeryOld && (
-                                          <div className="mt-2 p-2 rounded bg-red-100 dark:bg-red-900/30 border border-red-200 dark:border-red-800">
-                                            <p className="text-xs text-red-700 dark:text-red-400 font-medium">
-                                              🚨 Likely orphaned - Job not in queue. Click "Retry" to re-queue or "Cancel" to remove.
-                                            </p>
+                                      </div>
+                                      <Badge variant="outline" className={getPriorityColor(job.priority)}>
+                                        {job.priority}
+                                      </Badge>
+                                      <Badge variant="outline">{job.queue}</Badge>
+                                    </div>
+
+                                    {(job.status === "running" || job.status === "processing") && job.progress > 0 && job.progress < 100 && (
+                                      <div className="space-y-2">
+                                        <div className="flex items-center justify-between text-sm">
+                                          <span className="flex items-center space-x-2">
+                                            <Activity className="h-3 w-3 animate-pulse text-blue-500" />
+                                            <span>Progress</span>
+                                          </span>
+                                          <span className="font-semibold text-blue-600">{job.progress}%</span>
+                                        </div>
+                                        <Progress value={job.progress} className="h-2" />
+                                        <p className="text-xs text-muted-foreground">
+                                          {/* Show current step if available (process-flow jobs) */}
+                                          {(job.metadata as any)?.currentStep || (
+                                            <>
+                                              {job.progress <= 10 && "Starting job..."}
+                                              {job.progress > 10 && job.progress <= 30 && "Gathering context..."}
+                                              {job.progress > 30 && job.progress <= 55 && "AI generating content... (long documents may take 2–5 min)"}
+                                              {job.progress > 55 && job.progress <= 90 && "Processing response..."}
+                                              {job.progress > 90 && job.progress < 100 && "Finalizing..."}
+                                            </>
+                                          )}
+                                        </p>
+
+                                        {/* Show compression progress for process-flow jobs */}
+                                        {(job.metadata as any)?.compressionProgress && (
+                                          <div className="mt-2 space-y-2">
+                                            <div className="flex items-center justify-between text-xs">
+                                              <span className="text-muted-foreground">Document Compression</span>
+                                              <span className="font-medium text-blue-600">
+                                                {(job.metadata as any).compressionProgress.current}/
+                                                {(job.metadata as any).compressionProgress.total}
+                                              </span>
+                                            </div>
+                                            <Progress
+                                              value={(job.metadata as any).compressionProgress.percentage}
+                                              className="h-1.5"
+                                            />
+
+                                            {/* Show parallel processing indicator */}
+                                            {(job.metadata as any)?.parallelCount > 1 && (
+                                              <div className="flex items-center gap-2 text-xs">
+                                                <Badge variant="secondary" className="text-xs">
+                                                  ⚡ {(job.metadata as any).parallelCount} parallel
+                                                </Badge>
+                                                <span className="text-muted-foreground">
+                                                  {(job.metadata as any).parallelCount}x faster
+                                                </span>
+                                              </div>
+                                            )}
+
+                                            {/* Show provider assignments for AI compression */}
+                                            {(job.metadata as any)?.providerAssignments && (job.metadata as any).providerAssignments.length > 0 && (
+                                              <div className="space-y-2 mt-2 p-3 rounded-lg bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/20 dark:to-purple-950/20 border border-blue-200 dark:border-blue-800">
+                                                <p className="text-xs font-semibold text-blue-700 dark:text-blue-300 flex items-center gap-1">
+                                                  <Activity className="h-3 w-3 animate-pulse" />
+                                                  AI Provider Work Queue ({(job.metadata as any).providerAssignments.length} active)
+                                                </p>
+                                                <div className="space-y-2 max-h-40 overflow-y-auto">
+                                                  {(job.metadata as any).providerAssignments.map((assignment: any, idx: number) => (
+                                                    <div key={idx} className="flex items-center gap-2 text-xs p-2 rounded-md bg-white dark:bg-slate-900 border border-blue-100 dark:border-blue-900 shadow-sm">
+                                                      <div className="flex items-center gap-2 flex-1">
+                                                        <Badge variant="outline" className="text-[10px] px-1.5 py-0.5 font-mono bg-gradient-to-r from-blue-500 to-purple-500 text-white border-0">
+                                                          {assignment.provider}
+                                                        </Badge>
+                                                        <div className="flex-1 min-w-0">
+                                                          <p className="truncate text-blue-900 dark:text-blue-100 font-medium">
+                                                            Doc #{assignment.docIndex}: {assignment.name}
+                                                          </p>
+                                                        </div>
+                                                      </div>
+                                                      <div className="flex items-center gap-1 text-muted-foreground whitespace-nowrap">
+                                                        <Clock className="h-3 w-3" />
+                                                        {assignment.duration}s
+                                                      </div>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                                <p className="text-[10px] text-muted-foreground italic text-center pt-1 border-t border-blue-200 dark:border-blue-800">
+                                                  Each provider processes documents independently with automatic failover
+                                                </p>
+                                              </div>
+                                            )}
+
+                                            {/* Fallback: Show active documents (old format) */}
+                                            {!(job.metadata as any)?.providerAssignments && (job.metadata as any)?.activeDocuments && (job.metadata as any).activeDocuments.length > 0 && (
+                                              <div className="space-y-1 mt-2 p-2 rounded-lg bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800">
+                                                <p className="text-xs font-semibold text-blue-700 dark:text-blue-300 flex items-center gap-1">
+                                                  <Activity className="h-3 w-3 animate-pulse" />
+                                                  Processing {(job.metadata as any).activeDocuments.length} document{(job.metadata as any).activeDocuments.length > 1 ? 's' : ''} now:
+                                                </p>
+                                                <div className="space-y-1 max-h-32 overflow-y-auto">
+                                                  {(job.metadata as any).activeDocuments.slice(0, 10).map((doc: any, idx: number) => (
+                                                    <div key={idx} className="flex items-center justify-between text-xs p-1.5 rounded bg-white dark:bg-slate-900 border border-blue-100 dark:border-blue-900">
+                                                      <span className="truncate flex-1 text-blue-900 dark:text-blue-100">
+                                                        {idx + 1}. {doc.name}
+                                                      </span>
+                                                      <span className="text-muted-foreground ml-2 whitespace-nowrap">
+                                                        {doc.duration}s
+                                                      </span>
+                                                    </div>
+                                                  ))}
+                                                  {(job.metadata as any).activeDocuments.length > 10 && (
+                                                    <p className="text-xs text-muted-foreground text-center">
+                                                      +{(job.metadata as any).activeDocuments.length - 10} more...
+                                                    </p>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            )}
+
+                                            {/* Fallback to single document display */}
+                                            {(!job.metadata as any)?.activeDocuments && (job.metadata as any)?.currentDocument?.documentName && (
+                                              <p className="text-xs text-muted-foreground italic truncate">
+                                                Compressing: {(job.metadata as any).currentDocument.documentName}
+                                              </p>
+                                            )}
                                           </div>
                                         )}
-                                        {isOld && !isVeryOld && (
-                                          <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-2">
-                                            ⚠️ Pending for {ageMinutes} min - may be stuck or orphaned
-                                          </p>
-                                        )}
                                       </div>
-                                      <div className="flex flex-col gap-2">
-                                        <Button
-                                          variant={isOld ? "default" : "outline"}
-                                          size="sm"
-                                          className={isOld ? "bg-yellow-600 hover:bg-yellow-700 text-white" : ""}
-                                          onClick={async () => {
+                                    )}
+
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                      <div>
+                                        <p className="text-muted-foreground">Started</p>
+                                        <p className="font-medium">
+                                          {job.startTime
+                                            ? new Date(job.startTime).toLocaleTimeString()
+                                            : "Not started"}
+                                        </p>
+                                      </div>
+                                      <div>
+                                        <p className="text-muted-foreground">Worker</p>
+                                        <p className="font-medium">{job.worker || "Unassigned"}</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-muted-foreground">Type</p>
+                                        <p className="font-medium">{job.type.replace("_", " ")}</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-muted-foreground">Status</p>
+                                        <Badge variant="outline" className={getStatusColor(job.status)}>
+                                          {job.status}
+                                        </Badge>
+                                      </div>
+                                    </div>
+
+                                    {job.error && (
+                                      <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                                        <div className="flex items-center space-x-2">
+                                          <AlertTriangle className="h-4 w-4 text-red-500" />
+                                          <p className="text-sm text-red-700 dark:text-red-300">{job.error}</p>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button variant="ghost" size="sm">
+                                        <MoreHorizontal className="h-4 w-4" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                      <DropdownMenuItem
+                                        onSelect={(e) => {
+                                          e.preventDefault()
+                                          setSelectedJob(prev => (prev === job.id ? null : job.id))
+                                        }}
+                                      >
+                                        View Details
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        onSelect={(e) => {
+                                          e.preventDefault()
+                                          setViewingLogs(prev => (prev === job.id ? null : job.id))
+                                        }}
+                                      >
+                                        <FileText className="h-4 w-4 mr-2" />
+                                        View Logs
+                                      </DropdownMenuItem>
+                                      {(job.status === "failed" || job.status === "processing" || job.status === "cancelled") && (
+                                        <DropdownMenuItem
+                                          onSelect={async (e) => {
+                                            e.preventDefault()
                                             try {
                                               const result = await apiClient.request(`/jobs/${job.id}/retry`, { method: 'POST' }) as any
-                                              toast.success(`Job re-queued: ${result.newJobId?.slice(0, 8)}...`)
+                                              toast.success(`Job retried! New job: ${result.newJobId?.substring(0, 8)}...`)
                                               window.location.reload()
-                                            } catch (error: any) {
-                                              toast.error(error?.message || 'Failed to retry job')
+                                            } catch (error) {
+                                              toast.error('Failed to retry job')
                                             }
                                           }}
                                         >
-                                          <RefreshCw className="h-3 w-3 mr-1" />
-                                          Retry
-                                        </Button>
-                                        <Button
-                                          variant="outline"
-                                          size="sm"
-                                          className="text-red-600 border-red-300 hover:bg-red-50 dark:hover:bg-red-900/20"
-                                          onClick={async () => {
+                                          <RefreshCw className="h-4 w-4 mr-2" />
+                                          {job.status === "processing" ? "Retry Stuck Job" : job.status === "cancelled" ? "Retry Cancelled Job" : "Retry Job"}
+                                        </DropdownMenuItem>
+                                      )}
+                                      {(job.status === "pending" || job.status === "processing") && (
+                                        <DropdownMenuItem
+                                          onSelect={async (e) => {
+                                            e.preventDefault()
                                             try {
                                               await apiClient.request(`/jobs/${job.id}/cancel`, { method: 'POST' })
-                                              toast.success('Job cancelled')
+                                              toast.success('Job cancelled successfully')
                                               window.location.reload()
                                             } catch (error: any) {
                                               toast.error(error?.message || 'Failed to cancel job')
                                             }
                                           }}
+                                          className="text-red-600"
                                         >
-                                          <XCircle className="h-3 w-3 mr-1" />
-                                          Cancel
-                                        </Button>
-                                      </div>
-                                    </div>
-                                  </div>
-                                )
-                              })}
-                            </CardContent>
-                          </Card>
-                        )}
-                        
-                        <div className="space-y-4">
-                          {otherJobs.map((job, index) => (
-                            <AnimatedGridItemWithDelay
-                              key={job.id}
-                              className="animate-fade-in-up"
-                              animationDelay={index * 100}
-                            >
-                              <Card className="border border-slate-200 dark:border-slate-700 hover-lift">
-                                <CardContent className="p-6">
-                                  <div className="flex items-start justify-between">
-                                    <div className="flex-1 space-y-3">
-                                      <div className="flex items-center space-x-3">
-                                        <div className={`p-2 rounded-lg border ${getStatusColor(job.status)}`}>
-                                          {getStatusIcon(job.status)}
-                                        </div>
-                                        <div className="flex-1">
-                                          <h3 className="font-semibold text-lg">{job.name}</h3>
-                                          <div className="flex items-center gap-2 mt-1">
-                                          <p className="text-sm text-muted-foreground">ID: {job.id}</p>
-                                            {job.projectName && (
-                                              <>
-                                                <span className="text-muted-foreground">•</span>
-                                                <p className="text-sm text-blue-600 dark:text-blue-400">
-                                                  📁 {job.projectName}
-                                                </p>
-                                              </>
-                                            )}
-                                            {job.documentName && (
-                                              <>
-                                                <span className="text-muted-foreground">•</span>
-                                                <p className="text-sm text-purple-600 dark:text-purple-400">
-                                                  📄 {job.documentName}
-                                                </p>
-                                              </>
-                                            )}
-                                          </div>
-                                        </div>
-                                        <Badge variant="outline" className={getPriorityColor(job.priority)}>
-                                          {job.priority}
-                                        </Badge>
-                                        <Badge variant="outline">{job.queue}</Badge>
-                                      </div>
+                                          <XCircle className="h-4 w-4 mr-2" />
+                                          Cancel Job
+                                        </DropdownMenuItem>
+                                      )}
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                </div>
+                              </CardContent>
+                            </Card>
+                            {selectedJob === job.id && (
+                              <div className="mt-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-white/60 dark:bg-slate-900/40 p-4">
+                                <h4 className="font-semibold mb-4">Job Details</h4>
 
-                                      {(job.status === "running" || job.status === "processing") && job.progress > 0 && job.progress < 100 && (
-                                        <div className="space-y-2">
-                                          <div className="flex items-center justify-between text-sm">
-                                            <span className="flex items-center space-x-2">
-                                              <Activity className="h-3 w-3 animate-pulse text-blue-500" />
-                                              <span>Progress</span>
-                                            </span>
-                                            <span className="font-semibold text-blue-600">{job.progress}%</span>
-                                          </div>
-                                          <Progress value={job.progress} className="h-2" />
-                                          <p className="text-xs text-muted-foreground">
-                                            {/* Show current step if available (process-flow jobs) */}
-                                            {(job.metadata as any)?.currentStep || (
-                                              <>
-                                            {job.progress <= 10 && "Starting job..."}
-                                            {job.progress > 10 && job.progress <= 30 && "Gathering context..."}
-                                            {job.progress > 30 && job.progress <= 55 && "AI generating content... (long documents may take 2–5 min)"}
-                                            {job.progress > 55 && job.progress <= 90 && "Processing response..."}
-                                            {job.progress > 90 && job.progress < 100 && "Finalizing..."}
-                                              </>
-                                            )}
-                                          </p>
-                                          
-                                          {/* Show compression progress for process-flow jobs */}
-                                          {(job.metadata as any)?.compressionProgress && (
-                                            <div className="mt-2 space-y-2">
-                                              <div className="flex items-center justify-between text-xs">
-                                                <span className="text-muted-foreground">Document Compression</span>
-                                                <span className="font-medium text-blue-600">
-                                                  {(job.metadata as any).compressionProgress.current}/
-                                                  {(job.metadata as any).compressionProgress.total}
-                                                </span>
-                                              </div>
-                                              <Progress 
-                                                value={(job.metadata as any).compressionProgress.percentage} 
-                                                className="h-1.5" 
-                                              />
-                                              
-                                              {/* Show parallel processing indicator */}
-                                              {(job.metadata as any)?.parallelCount > 1 && (
-                                                <div className="flex items-center gap-2 text-xs">
-                                                  <Badge variant="secondary" className="text-xs">
-                                                    ⚡ {(job.metadata as any).parallelCount} parallel
-                                                  </Badge>
-                                                  <span className="text-muted-foreground">
-                                                    {(job.metadata as any).parallelCount}x faster
-                                                  </span>
-                                                </div>
-                                              )}
-                                              
-                                              {/* Show provider assignments for AI compression */}
-                                              {(job.metadata as any)?.providerAssignments && (job.metadata as any).providerAssignments.length > 0 && (
-                                                <div className="space-y-2 mt-2 p-3 rounded-lg bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/20 dark:to-purple-950/20 border border-blue-200 dark:border-blue-800">
-                                                  <p className="text-xs font-semibold text-blue-700 dark:text-blue-300 flex items-center gap-1">
-                                                    <Activity className="h-3 w-3 animate-pulse" />
-                                                    AI Provider Work Queue ({(job.metadata as any).providerAssignments.length} active)
-                                                  </p>
-                                                  <div className="space-y-2 max-h-40 overflow-y-auto">
-                                                    {(job.metadata as any).providerAssignments.map((assignment: any, idx: number) => (
-                                                      <div key={idx} className="flex items-center gap-2 text-xs p-2 rounded-md bg-white dark:bg-slate-900 border border-blue-100 dark:border-blue-900 shadow-sm">
-                                                        <div className="flex items-center gap-2 flex-1">
-                                                          <Badge variant="outline" className="text-[10px] px-1.5 py-0.5 font-mono bg-gradient-to-r from-blue-500 to-purple-500 text-white border-0">
-                                                            {assignment.provider}
-                                                          </Badge>
-                                                          <div className="flex-1 min-w-0">
-                                                            <p className="truncate text-blue-900 dark:text-blue-100 font-medium">
-                                                              Doc #{assignment.docIndex}: {assignment.name}
-                                                            </p>
-                                                          </div>
-                                                        </div>
-                                                        <div className="flex items-center gap-1 text-muted-foreground whitespace-nowrap">
-                                                          <Clock className="h-3 w-3" />
-                                                          {assignment.duration}s
-                                                        </div>
-                                                      </div>
-                                                    ))}
-                                                  </div>
-                                                  <p className="text-[10px] text-muted-foreground italic text-center pt-1 border-t border-blue-200 dark:border-blue-800">
-                                                    Each provider processes documents independently with automatic failover
-                                                  </p>
-                                                </div>
-                                              )}
-                                              
-                                              {/* Fallback: Show active documents (old format) */}
-                                              {!(job.metadata as any)?.providerAssignments && (job.metadata as any)?.activeDocuments && (job.metadata as any).activeDocuments.length > 0 && (
-                                                <div className="space-y-1 mt-2 p-2 rounded-lg bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800">
-                                                  <p className="text-xs font-semibold text-blue-700 dark:text-blue-300 flex items-center gap-1">
-                                                    <Activity className="h-3 w-3 animate-pulse" />
-                                                    Processing {(job.metadata as any).activeDocuments.length} document{(job.metadata as any).activeDocuments.length > 1 ? 's' : ''} now:
-                                                  </p>
-                                                  <div className="space-y-1 max-h-32 overflow-y-auto">
-                                                    {(job.metadata as any).activeDocuments.slice(0, 10).map((doc: any, idx: number) => (
-                                                      <div key={idx} className="flex items-center justify-between text-xs p-1.5 rounded bg-white dark:bg-slate-900 border border-blue-100 dark:border-blue-900">
-                                                        <span className="truncate flex-1 text-blue-900 dark:text-blue-100">
-                                                          {idx + 1}. {doc.name}
-                                                        </span>
-                                                        <span className="text-muted-foreground ml-2 whitespace-nowrap">
-                                                          {doc.duration}s
-                                                        </span>
-                                                      </div>
-                                                    ))}
-                                                    {(job.metadata as any).activeDocuments.length > 10 && (
-                                                      <p className="text-xs text-muted-foreground text-center">
-                                                        +{(job.metadata as any).activeDocuments.length - 10} more...
-                                                      </p>
-                                                    )}
-                                                  </div>
-                                                </div>
-                                              )}
-                                              
-                                              {/* Fallback to single document display */}
-                                              {(!job.metadata as any)?.activeDocuments && (job.metadata as any)?.currentDocument?.documentName && (
-                                                <p className="text-xs text-muted-foreground italic truncate">
-                                                  Compressing: {(job.metadata as any).currentDocument.documentName}
-                                                </p>
-                                              )}
-                                            </div>
-                                          )}
+                                {/* Basic Info */}
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm mb-4">
+                                  <div>
+                                    <p className="text-muted-foreground">Job ID</p>
+                                    <p className="font-mono text-xs break-all">{job.id}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-muted-foreground">Queue</p>
+                                    <p className="font-medium">{job.queue || "-"}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-muted-foreground">Priority</p>
+                                    <p className="font-medium capitalize">{job.priority}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-muted-foreground">Started</p>
+                                    <p className="font-medium">{job.startTime ? new Date(job.startTime).toLocaleString() : "-"}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-muted-foreground">Completed</p>
+                                    <p className="font-medium">{job.completedTime ? new Date(job.completedTime).toLocaleString() : "-"}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-muted-foreground">Status</p>
+                                    <p className="font-medium capitalize">{job.status}</p>
+                                  </div>
+                                </div>
+
+                                {/* AI-Specific Metadata */}
+                                {(job as any).metadata && (job as any).metadata.provider && (
+                                  <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                                    <h5 className="text-sm font-semibold mb-3">AI Processing Details</h5>
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                                      <div>
+                                        <p className="text-muted-foreground">Provider</p>
+                                        <p className="font-medium">{(job as any).metadata.provider || "-"}</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-muted-foreground">Model</p>
+                                        <p className="font-medium">{(job as any).metadata.model || "-"}</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-muted-foreground">Temperature</p>
+                                        <p className="font-medium">{(job as any).metadata.temperature || "-"}</p>
+                                      </div>
+                                      {(job as any).metadata.tokens && (
+                                        <div>
+                                          <p className="text-muted-foreground">Tokens Used</p>
+                                          <p className="font-medium">{(job as any).metadata.tokens.total_tokens || (job as any).metadata.tokens.totalTokens || "-"}</p>
                                         </div>
                                       )}
-
-                                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                      {(job as any).metadata.template_name && (
                                         <div>
-                                          <p className="text-muted-foreground">Started</p>
-                                          <p className="font-medium">
-                                            {job.startTime
-                                              ? new Date(job.startTime).toLocaleTimeString()
-                                              : "Not started"}
-                                          </p>
+                                          <p className="text-muted-foreground">Template</p>
+                                          <p className="font-medium">{(job as any).metadata.template_name}</p>
                                         </div>
+                                      )}
+                                      {(job as any).metadata.document_id && (
                                         <div>
-                                          <p className="text-muted-foreground">Worker</p>
-                                          <p className="font-medium">{job.worker || "Unassigned"}</p>
-                                        </div>
-                                        <div>
-                                          <p className="text-muted-foreground">Type</p>
-                                          <p className="font-medium">{job.type.replace("_", " ")}</p>
-                                        </div>
-                                        <div>
-                                          <p className="text-muted-foreground">Status</p>
-                                          <Badge variant="outline" className={getStatusColor(job.status)}>
-                                            {job.status}
-                                          </Badge>
-                                        </div>
-                                      </div>
-
-                                      {job.error && (
-                                        <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                                          <div className="flex items-center space-x-2">
-                                            <AlertTriangle className="h-4 w-4 text-red-500" />
-                                            <p className="text-sm text-red-700 dark:text-red-300">{job.error}</p>
-                                          </div>
+                                          <p className="text-muted-foreground">Generated Document</p>
+                                          <a
+                                            href={`/projects/${(job as any).metadata.project_id}/documents/${(job as any).metadata.document_id}`}
+                                            className="font-medium text-blue-600 hover:underline"
+                                          >
+                                            View Document
+                                          </a>
                                         </div>
                                       )}
                                     </div>
+                                  </div>
+                                )}
+                                {job.logs && job.logs.length > 0 && (
+                                  <div className="mt-4">
+                                    <p className="text-sm text-muted-foreground mb-2">Logs</p>
+                                    <div className="max-h-56 overflow-auto rounded-md bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 p-3 text-xs space-y-1">
+                                      {job.logs.map((line, i) => (
+                                        <pre key={i} className="whitespace-pre-wrap break-words">{line}</pre>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                                {job.error && (
+                                  <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm">
+                                    <div className="flex items-center space-x-2">
+                                      <AlertTriangle className="h-4 w-4 text-red-500" />
+                                      <p className="text-red-700 dark:text-red-300">{job.error}</p>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
 
-                                    <DropdownMenu>
-                                      <DropdownMenuTrigger asChild>
-                                        <Button variant="ghost" size="sm">
-                                          <MoreHorizontal className="h-4 w-4" />
-                                        </Button>
-                                      </DropdownMenuTrigger>
-                                      <DropdownMenuContent align="end">
-                                        <DropdownMenuItem
-                                          onSelect={(e) => {
-                                            e.preventDefault()
-                                            setSelectedJob(prev => (prev === job.id ? null : job.id))
-                                          }}
-                                        >
-                                          View Details
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem
-                                          onSelect={(e) => {
-                                            e.preventDefault()
-                                            setViewingLogs(prev => (prev === job.id ? null : job.id))
-                                          }}
-                                        >
-                                          <FileText className="h-4 w-4 mr-2" />
-                                          View Logs
-                                        </DropdownMenuItem>
-                                        {(job.status === "failed" || job.status === "processing" || job.status === "cancelled") && (
-                                          <DropdownMenuItem
-                                            onSelect={async (e) => {
-                                              e.preventDefault()
-                                              try {
-                                                const result = await apiClient.request(`/jobs/${job.id}/retry`, { method: 'POST' }) as any
-                                                toast.success(`Job retried! New job: ${result.newJobId?.substring(0, 8)}...`)
-                                                window.location.reload()
-                                              } catch (error) {
-                                                toast.error('Failed to retry job')
-                                              }
-                                            }}
-                                          >
-                                            <RefreshCw className="h-4 w-4 mr-2" />
-                                            {job.status === "processing" ? "Retry Stuck Job" : job.status === "cancelled" ? "Retry Cancelled Job" : "Retry Job"}
-                                          </DropdownMenuItem>
-                                        )}
-                                        {(job.status === "pending" || job.status === "processing") && (
-                                          <DropdownMenuItem
-                                            onSelect={async (e) => {
-                                              e.preventDefault()
-                                              try {
-                                                await apiClient.request(`/jobs/${job.id}/cancel`, { method: 'POST' })
-                                                toast.success('Job cancelled successfully')
-                                                window.location.reload()
-                                              } catch (error: any) {
-                                                toast.error(error?.message || 'Failed to cancel job')
-                                              }
-                                            }}
-                                            className="text-red-600"
-                                          >
-                                            <XCircle className="h-4 w-4 mr-2" />
-                                            Cancel Job
-                                          </DropdownMenuItem>
-                                        )}
-                                      </DropdownMenuContent>
-                                    </DropdownMenu>
+                            {/* Logs Viewer - Terminal Style */}
+                            {viewingLogs === job.id && (
+                              <div className="mt-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-900 p-0 overflow-hidden">
+                                <div className="flex items-center justify-between bg-slate-800 px-4 py-2 border-b border-slate-700">
+                                  <div className="flex items-center gap-2">
+                                    <div className="flex gap-1.5">
+                                      <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                                      <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                                      <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                                    </div>
+                                    <span className="text-xs font-mono text-slate-300">Job Logs: {job.id.substring(0, 13)}...</span>
                                   </div>
-                                </CardContent>
-                              </Card>
-                              {selectedJob === job.id && (
-                                <div className="mt-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-white/60 dark:bg-slate-900/40 p-4">
-                                  <h4 className="font-semibold mb-4">Job Details</h4>
-                                  
-                                  {/* Basic Info */}
-                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm mb-4">
-                                    <div>
-                                      <p className="text-muted-foreground">Job ID</p>
-                                      <p className="font-mono text-xs break-all">{job.id}</p>
-                                    </div>
-                                    <div>
-                                      <p className="text-muted-foreground">Queue</p>
-                                      <p className="font-medium">{job.queue || "-"}</p>
-                                    </div>
-                                    <div>
-                                      <p className="text-muted-foreground">Priority</p>
-                                      <p className="font-medium capitalize">{job.priority}</p>
-                                    </div>
-                                    <div>
-                                      <p className="text-muted-foreground">Started</p>
-                                      <p className="font-medium">{job.startTime ? new Date(job.startTime).toLocaleString() : "-"}</p>
-                                    </div>
-                                    <div>
-                                      <p className="text-muted-foreground">Completed</p>
-                                      <p className="font-medium">{job.completedTime ? new Date(job.completedTime).toLocaleString() : "-"}</p>
-                                    </div>
-                                    <div>
-                                      <p className="text-muted-foreground">Status</p>
-                                      <p className="font-medium capitalize">{job.status}</p>
-                                    </div>
-                                  </div>
-                                  
-                                  {/* AI-Specific Metadata */}
-                                  {(job as any).metadata && (job as any).metadata.provider && (
-                                    <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                                      <h5 className="text-sm font-semibold mb-3">AI Processing Details</h5>
-                                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-                                        <div>
-                                          <p className="text-muted-foreground">Provider</p>
-                                          <p className="font-medium">{(job as any).metadata.provider || "-"}</p>
-                                        </div>
-                                        <div>
-                                          <p className="text-muted-foreground">Model</p>
-                                          <p className="font-medium">{(job as any).metadata.model || "-"}</p>
-                                        </div>
-                                        <div>
-                                          <p className="text-muted-foreground">Temperature</p>
-                                          <p className="font-medium">{(job as any).metadata.temperature || "-"}</p>
-                                        </div>
-                                        {(job as any).metadata.tokens && (
-                                          <div>
-                                            <p className="text-muted-foreground">Tokens Used</p>
-                                            <p className="font-medium">{(job as any).metadata.tokens.total_tokens || (job as any).metadata.tokens.totalTokens || "-"}</p>
-                                          </div>
-                                        )}
-                                        {(job as any).metadata.template_name && (
-                                          <div>
-                                            <p className="text-muted-foreground">Template</p>
-                                            <p className="font-medium">{(job as any).metadata.template_name}</p>
-                                          </div>
-                                        )}
-                                        {(job as any).metadata.document_id && (
-                                          <div>
-                                            <p className="text-muted-foreground">Generated Document</p>
-                                            <a 
-                                              href={`/projects/${(job as any).metadata.project_id}/documents/${(job as any).metadata.document_id}`}
-                                              className="font-medium text-blue-600 hover:underline"
-                                            >
-                                              View Document
-                                            </a>
-                                          </div>
-                                        )}
-                                      </div>
-                                    </div>
-                                  )}
-                                  {job.logs && job.logs.length > 0 && (
-                                    <div className="mt-4">
-                                      <p className="text-sm text-muted-foreground mb-2">Logs</p>
-                                      <div className="max-h-56 overflow-auto rounded-md bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 p-3 text-xs space-y-1">
-                                        {job.logs.map((line, i) => (
-                                          <pre key={i} className="whitespace-pre-wrap break-words">{line}</pre>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  )}
-                                  {job.error && (
-                                    <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm">
-                                      <div className="flex items-center space-x-2">
-                                        <AlertTriangle className="h-4 w-4 text-red-500" />
-                                        <p className="text-red-700 dark:text-red-300">{job.error}</p>
-                                      </div>
-                                    </div>
-                                  )}
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 text-slate-400 hover:text-white"
+                                    onClick={() => setViewingLogs(null)}
+                                  >
+                                    <XCircle className="h-4 w-4" />
+                                  </Button>
                                 </div>
-                              )}
-                              
-                              {/* Logs Viewer - Terminal Style */}
-                              {viewingLogs === job.id && (
-                                <div className="mt-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-900 p-0 overflow-hidden">
-                                  <div className="flex items-center justify-between bg-slate-800 px-4 py-2 border-b border-slate-700">
-                                    <div className="flex items-center gap-2">
-                                      <div className="flex gap-1.5">
-                                        <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                                        <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-                                        <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                                      </div>
-                                      <span className="text-xs font-mono text-slate-300">Job Logs: {job.id.substring(0, 13)}...</span>
+
+                                <div className="p-4 max-h-96 overflow-auto font-mono text-xs">
+                                  {/* Job execution logs */}
+                                  {job.logs && job.logs.length > 0 ? (
+                                    <div className="space-y-1">
+                                      {job.logs.map((log: any, idx: number) => (
+                                        <div key={idx} className="text-green-400">
+                                          <span className="text-slate-500">[{new Date().toLocaleTimeString()}]</span>
+                                          <span className="ml-2">{log}</span>
+                                        </div>
+                                      ))}
                                     </div>
-                                    <Button 
-                                      variant="ghost" 
-                                      size="sm"
-                                      className="h-6 text-slate-400 hover:text-white"
-                                      onClick={() => setViewingLogs(null)}
-                                    >
-                                      <XCircle className="h-4 w-4" />
-                                    </Button>
-                                  </div>
-                                  
-                                  <div className="p-4 max-h-96 overflow-auto font-mono text-xs">
-                                    {/* Job execution logs */}
-                                    {job.logs && job.logs.length > 0 ? (
-                                      <div className="space-y-1">
-                                        {job.logs.map((log: any, idx: number) => (
-                                          <div key={idx} className="text-green-400">
-                                            <span className="text-slate-500">[{new Date().toLocaleTimeString()}]</span>
-                                            <span className="ml-2">{log}</span>
+                                  ) : (
+                                    <div className="text-slate-400 space-y-1">
+                                      <div><span className="text-slate-500">[{job.queuedTime ? new Date(job.queuedTime).toLocaleTimeString() : '--:--:--'}]</span> <span className="text-blue-400">INFO</span> Job queued: {job.type}</div>
+                                      {job.startTime && (
+                                        <div><span className="text-slate-500">[{new Date(job.startTime).toLocaleTimeString()}]</span> <span className="text-green-400">INFO</span> Job started by worker: {job.worker}</div>
+                                      )}
+                                      {(job.metadata as any)?.currentStep && (
+                                        <div><span className="text-slate-500">[{new Date().toLocaleTimeString()}]</span> <span className="text-cyan-400">INFO</span> {(job.metadata as any).currentStep}</div>
+                                      )}
+                                      {(job.metadata as any)?.activeDocuments?.length > 0 && (
+                                        <>
+                                          <div className="text-yellow-400 mt-2">
+                                            <span className="text-slate-500">[{new Date().toLocaleTimeString()}]</span> <span className="text-yellow-400">INFO</span> Parallel processing: {(job.metadata as any).activeDocuments.length} documents
                                           </div>
-                                        ))}
-                                      </div>
-                                    ) : (
-                                      <div className="text-slate-400 space-y-1">
-                                        <div><span className="text-slate-500">[{job.queuedTime ? new Date(job.queuedTime).toLocaleTimeString() : '--:--:--'}]</span> <span className="text-blue-400">INFO</span> Job queued: {job.type}</div>
-                                        {job.startTime && (
-                                          <div><span className="text-slate-500">[{new Date(job.startTime).toLocaleTimeString()}]</span> <span className="text-green-400">INFO</span> Job started by worker: {job.worker}</div>
-                                        )}
-                                        {(job.metadata as any)?.currentStep && (
-                                          <div><span className="text-slate-500">[{new Date().toLocaleTimeString()}]</span> <span className="text-cyan-400">INFO</span> {(job.metadata as any).currentStep}</div>
-                                        )}
-                                        {(job.metadata as any)?.activeDocuments?.length > 0 && (
-                                          <>
-                                            <div className="text-yellow-400 mt-2">
-                                              <span className="text-slate-500">[{new Date().toLocaleTimeString()}]</span> <span className="text-yellow-400">INFO</span> Parallel processing: {(job.metadata as any).activeDocuments.length} documents
+                                          {(job.metadata as any).activeDocuments.slice(0, 10).map((doc: any, idx: number) => (
+                                            <div key={idx} className="text-slate-400 ml-4">
+                                              <span className="text-slate-600">└─</span> [{idx + 1}] {doc.name} <span className="text-cyan-400">({doc.duration}s)</span>
                                             </div>
-                                            {(job.metadata as any).activeDocuments.slice(0, 10).map((doc: any, idx: number) => (
-                                              <div key={idx} className="text-slate-400 ml-4">
-                                                <span className="text-slate-600">└─</span> [{idx + 1}] {doc.name} <span className="text-cyan-400">({doc.duration}s)</span>
-                                              </div>
-                                            ))}
-                                          </>
-                                        )}
-                                        {job.progress > 0 && job.progress < 100 && (
-                                          <div><span className="text-slate-500">[{new Date().toLocaleTimeString()}]</span> <span className="text-cyan-400">INFO</span> Progress: {job.progress}%</div>
-                                        )}
-                                        {job.status === 'completed' && job.completedTime && (
-                                          <div><span className="text-slate-500">[{new Date(job.completedTime).toLocaleTimeString()}]</span> <span className="text-green-400">SUCCESS</span> Job completed successfully</div>
-                                        )}
-                                        {job.status === 'failed' && job.error && (
-                                          <div><span className="text-slate-500">[{job.completedTime ? new Date(job.completedTime).toLocaleTimeString() : '--:--:--'}]</span> <span className="text-red-400">ERROR</span> {job.error}</div>
-                                        )}
-                                        {job.status === 'cancelled' && (
-                                          <div><span className="text-slate-500">[{job.completedTime ? new Date(job.completedTime).toLocaleTimeString() : '--:--:--'}]</span> <span className="text-yellow-400">WARN</span> Job cancelled by user</div>
-                                        )}
-                                      </div>
-                                    )}
-                                  </div>
+                                          ))}
+                                        </>
+                                      )}
+                                      {job.progress > 0 && job.progress < 100 && (
+                                        <div><span className="text-slate-500">[{new Date().toLocaleTimeString()}]</span> <span className="text-cyan-400">INFO</span> Progress: {job.progress}%</div>
+                                      )}
+                                      {job.status === 'completed' && job.completedTime && (
+                                        <div><span className="text-slate-500">[{new Date(job.completedTime).toLocaleTimeString()}]</span> <span className="text-green-400">SUCCESS</span> Job completed successfully</div>
+                                      )}
+                                      {job.status === 'failed' && job.error && (
+                                        <div><span className="text-slate-500">[{job.completedTime ? new Date(job.completedTime).toLocaleTimeString() : '--:--:--'}]</span> <span className="text-red-400">ERROR</span> {job.error}</div>
+                                      )}
+                                      {job.status === 'cancelled' && (
+                                        <div><span className="text-slate-500">[{job.completedTime ? new Date(job.completedTime).toLocaleTimeString() : '--:--:--'}]</span> <span className="text-yellow-400">WARN</span> Job cancelled by user</div>
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
-                              )}
-                            </AnimatedGridItemWithDelay>
-                          ))}
-                        </div>
-                      </TabsContent>
+                              </div>
+                            )}
+                          </AnimatedGridItemWithDelay>
+                        ))}
+                      </div>
+                    </TabsContent>
 
-                      <TabsContent value="queues" className="space-y-4">
-                        <QueueDashboard />
-                      </TabsContent>
+                    <TabsContent value="queues" className="space-y-4">
+                      <QueueDashboard />
+                    </TabsContent>
 
-                      <TabsContent value="workers" className="space-y-4">
-                        <WorkerStatus />
-                      </TabsContent>
-                    </Tabs>
-                  </CardContent>
-                </Card>
-              </AnimatedLayout>
-            </PageTransition>
-          </div>
-        </main>
-      </div>
+                    <TabsContent value="workers" className="space-y-4">
+                      <WorkerStatus />
+                    </TabsContent>
+                  </Tabs>
+                </CardContent>
+              </Card>
+            </AnimatedLayout>
+          </PageTransition>
+        </div>
+      </main>
     </div>
-  )
+  </div>
+)
 }

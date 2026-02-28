@@ -12,7 +12,7 @@ import { v4 as uuidv4 } from 'uuid'
 
 import { researcher } from '@/lib/morphic/agents/researcher'
 import { isTracingEnabled } from '@/lib/morphic/utils/telemetry'
-import { getLangfuseClient } from '@/lib/morphic/utils/langfuse-client'
+import { getLangfuseClient, isLangfuseEnabled } from '@/lib/morphic/utils/langfuse-client'
 
 import { loadChatWithMessages as loadChat, upsertMessage, createChat } from '../db/actions'
 import { generateChatTitle } from '../agents/title-generator'
@@ -94,14 +94,15 @@ export async function createChatStreamResponse(
 
     // Create parent trace ID and Langfuse trace
     let parentTraceId: string | undefined
+    const traceDebugEnabled = process.env.LANGFUSE_DEBUG_TRACING === 'true'
     const langfuse = getLangfuseClient()
     let langfuseTrace: any = null
-    if (isTracingEnabled()) {
+    if (isTracingEnabled() || isLangfuseEnabled()) {
         parentTraceId = uuidv4()
     }
     if (langfuse) {
         langfuseTrace = langfuse.trace({
-            id: parentTraceId,
+            ...(parentTraceId ? { id: parentTraceId } : {}),
             name: `morphic-search-${searchMode || 'adaptive'}`,
             sessionId: chatId,
             userId: userId || 'anonymous',
@@ -115,6 +116,10 @@ export async function createChatStreamResponse(
             },
             tags: ['morphic', searchMode || 'adaptive', model?.providerId || 'unknown']
         })
+
+        if (traceDebugEnabled) {
+            console.info(`[Langfuse][TraceDebug] trace created chatId=${chatId} traceId=${parentTraceId || 'auto'} mode=${searchMode || 'adaptive'}`)
+        }
     }
 
     // Cache check
@@ -409,8 +414,17 @@ export async function createChatStreamResponse(
                 // Flush Langfuse traces
                 if (langfuse) {
                     try {
+                        if (traceDebugEnabled) {
+                            console.info(`[Langfuse][TraceDebug] flush start chatId=${chatId} traceId=${parentTraceId || 'auto'}`)
+                        }
                         await langfuse.flushAsync()
+                        if (traceDebugEnabled) {
+                            console.info(`[Langfuse][TraceDebug] flush success chatId=${chatId} traceId=${parentTraceId || 'auto'}`)
+                        }
                     } catch (e) {
+                        if (traceDebugEnabled) {
+                            console.error(`[Langfuse][TraceDebug] flush failed chatId=${chatId} traceId=${parentTraceId || 'auto'}`, e)
+                        }
                         console.error('[Langfuse] Error flushing traces:', e)
                     }
                 }

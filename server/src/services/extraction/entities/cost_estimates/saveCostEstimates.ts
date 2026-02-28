@@ -7,6 +7,16 @@ import type { PoolClient } from 'pg'
 import type { PersistenceResult } from '../../base/Persistence'
 import type { CostEstimate } from './types'
 
+function coerceNumeric(value: unknown, defaultValue: number = 0): number {
+    if (typeof value === 'number' && Number.isFinite(value)) return value
+    if (typeof value === 'string') {
+        const cleaned = value.replace(/[^\d.-]/g, '')
+        const parsed = Number(cleaned)
+        if (Number.isFinite(parsed)) return parsed
+    }
+    return defaultValue
+}
+
 export async function saveCostEstimates(
     client: PoolClient,
     projectId: string,
@@ -34,9 +44,9 @@ export async function saveCostEstimates(
                 projectId,
                 e.item_name || '',
                 e.wbs_code || null,
-                e.estimated_cost || 0,
+                coerceNumeric(e.estimated_cost, 0),
                 e.basis_of_estimate || null,
-                e.contingency_buffer || 0,
+                coerceNumeric(e.contingency_buffer, 0),
                 e.confidence_level || null,
                 e.source_document_id || null,
                 userId

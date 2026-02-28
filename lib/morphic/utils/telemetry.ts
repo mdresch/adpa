@@ -1,5 +1,5 @@
 /**
- * Check if Langfuse tracing is enabled
+ * Check if OTLP-based tracing is enabled
  * Default: false
  */
 export function isTracingEnabled(): boolean {

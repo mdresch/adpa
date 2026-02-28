@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import React from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,6 +11,8 @@ import { toast } from '@/lib/notify'
 import { sendNotification } from '@/lib/notifications'
 import { apiClient } from "@/lib/api"
 import { Loader2, ExternalLink, CheckCircle2, XCircle, Network, RefreshCw } from "lucide-react"
+
+const { useState, useEffect } = React as any
 
 interface IntegrationSettings {
   confluence: {
@@ -50,23 +52,52 @@ const defaultSettings: IntegrationSettings = {
   settings: {}
 }
 
-type GkgAction = "idle" | "bootstrap" | "sync-project"
+type GkgAction = "idle" | "activate" | "bootstrap" | "sync-project" | "reconcile-dry" | "reconcile-cleanup"
+
+interface GkgRecentStatsResponse {
+  status: string
+  summary: {
+    total: number
+    completed: number
+    failed: number
+    cleanupRuns: number
+    avgDurationMs: number | null
+    totalStaleUnits: number
+  }
+  recent: Array<{
+    jobId: string
+    status: string
+    cleanup: boolean
+    batchSize: number | null
+    createdAt: string
+    completedAt: string | null
+    failedAt: string | null
+    durationMs: number | null
+    errorMessage: string | null
+    staleCounts: { semanticUnits?: number } | null
+    deletedNodes: { semanticUnits?: number } | null
+    deletedEdges: { semanticUnitExtractedFrom?: number } | null
+  }>
+}
 
 export function IntegrationsTab({ projectId }: IntegrationsTabProps) {
-  const [settings, setSettings] = useState<IntegrationSettings | null>(null)
+  const [settings, setSettings] = useState(null as IntegrationSettings | null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [localSettings, setLocalSettings] = useState<IntegrationSettings>(defaultSettings)
-  const [gkgAction, setGkgAction] = useState<GkgAction>("idle")
+  const [localSettings, setLocalSettings] = useState(defaultSettings as IntegrationSettings)
+  const [gkgAction, setGkgAction] = useState("idle" as GkgAction)
+  const [gkgRecentStats, setGkgRecentStats] = useState(null as GkgRecentStatsResponse | null)
+  const [loadingGkgStats, setLoadingGkgStats] = useState(false)
 
   useEffect(() => {
     fetchSettings()
+    fetchGkgRecentStats()
   }, [projectId])
 
   const fetchSettings = async () => {
     try {
       setLoading(true)
-      const data = await apiClient.get(`/projects/${projectId}/integrations`)
+      const data: any = await apiClient.get(`/projects/${projectId}/integrations`)
       
       // Normalize the response to ensure proper structure
       const normalizedData: IntegrationSettings = {
@@ -137,7 +168,7 @@ export function IntegrationsTab({ projectId }: IntegrationsTabProps) {
   }
 
   const updateConfluence = (updates: Partial<IntegrationSettings['confluence']>) => {
-    setLocalSettings(prev => {
+    setLocalSettings((prev: IntegrationSettings) => {
       const current = prev || defaultSettings
       return {
         ...current,
@@ -147,7 +178,7 @@ export function IntegrationsTab({ projectId }: IntegrationsTabProps) {
   }
 
   const updateJira = (updates: Partial<IntegrationSettings['jira']>) => {
-    setLocalSettings(prev => {
+    setLocalSettings((prev: IntegrationSettings) => {
       const current = prev || defaultSettings
       return {
         ...current,
@@ -156,12 +187,25 @@ export function IntegrationsTab({ projectId }: IntegrationsTabProps) {
     })
   }
 
+  const fetchGkgRecentStats = async () => {
+    try {
+      setLoadingGkgStats(true)
+      const stats = await apiClient.get<GkgRecentStatsResponse>("/gkg/reconcile/recent?limit=8")
+      setGkgRecentStats(stats)
+    } catch {
+      setGkgRecentStats(null)
+    } finally {
+      setLoadingGkgStats(false)
+    }
+  }
+
   const handleGkgBootstrap = async () => {
     try {
       setGkgAction("bootstrap")
       const res = await apiClient.post<{ jobId: string; status: string; type: string }>("/gkg/sync", { bootstrap: true })
       sendNotification({ type: "success", title: "GKG Bootstrap", message: `Job enqueued: ${(res as { jobId?: string })?.jobId ?? "ok"}`, announce: true })
       toast.success("GKG bootstrap job enqueued")
+      await fetchGkgRecentStats()
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { error?: string } }; message?: string })?.response?.data?.error
         ?? (err as { message?: string })?.message
@@ -183,6 +227,7 @@ export function IntegrationsTab({ projectId }: IntegrationsTabProps) {
       const res = await apiClient.post<{ jobId: string; status: string; type: string; projectId: string }>("/gkg/sync", { projectId })
       sendNotification({ type: "success", title: "GKG Sync", message: `Project sync enqueued: ${(res as { jobId?: string })?.jobId ?? "ok"}`, announce: true })
       toast.success("GKG project sync job enqueued")
+      await fetchGkgRecentStats()
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { error?: string } }; message?: string })?.response?.data?.error
         ?? (err as { message?: string })?.message
@@ -193,6 +238,65 @@ export function IntegrationsTab({ projectId }: IntegrationsTabProps) {
       } else {
         toast.error(String(msg))
       }
+    } finally {
+      setGkgAction("idle")
+    }
+  }
+
+  const handleQueueReconcile = async (cleanup: boolean) => {
+    try {
+      setGkgAction(cleanup ? "reconcile-cleanup" : "reconcile-dry")
+      const res = await apiClient.post<{ jobId: string }>("/gkg/reconcile/queue", {
+        cleanup,
+        batchSize: 1000,
+      })
+
+      sendNotification({
+        type: "success",
+        title: cleanup ? "GKG Cleanup" : "GKG Drift Scan",
+        message: `Reconcile job enqueued: ${(res as { jobId?: string })?.jobId ?? "ok"}`,
+        announce: true,
+      })
+      toast.success(cleanup ? "GKG cleanup job enqueued" : "GKG drift scan job enqueued")
+      await fetchGkgRecentStats()
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } }; message?: string })?.response?.data?.error
+        ?? (err as { message?: string })?.message
+        ?? "GKG reconcile enqueue failed"
+      toast.error(String(msg))
+    } finally {
+      setGkgAction("idle")
+    }
+  }
+
+  const handleActivateNeo4jAndGkg = async () => {
+    try {
+      setGkgAction("activate")
+      const res = await apiClient.post<{
+        status: string
+        integrationId: string
+        activated: boolean
+        enqueuedJobs: Array<{ type: string; jobId: string }>
+      }>("/gkg/activate", {
+        projectId,
+        bootstrap: true,
+        syncProject: true,
+      })
+
+      const jobsCount = Array.isArray(res?.enqueuedJobs) ? res.enqueuedJobs.length : 0
+      sendNotification({
+        type: "success",
+        title: "Neo4j + GKG Activated",
+        message: `Integration active. ${jobsCount} maintenance job(s) enqueued.`,
+        announce: true,
+      })
+      toast.success("Neo4j integration activated and GKG jobs enqueued")
+      await fetchGkgRecentStats()
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } }; message?: string })?.response?.data?.error
+        ?? (err as { message?: string })?.message
+        ?? "Neo4j/GKG activation failed"
+      toast.error(String(msg))
     } finally {
       setGkgAction("idle")
     }
@@ -273,7 +377,7 @@ export function IntegrationsTab({ projectId }: IntegrationsTabProps) {
                     id="confluence-space-key"
                     placeholder="e.g., ADPA"
                     value={safeLocalSettings.confluence?.spaceKey || ""}
-                    onChange={(e) => updateConfluence({ spaceKey: e.target.value || null })}
+                    onChange={(e: any) => updateConfluence({ spaceKey: e.target.value || null })}
                   />
                   <p className="text-sm text-muted-foreground">
                     Override the default Confluence space for this project
@@ -286,7 +390,7 @@ export function IntegrationsTab({ projectId }: IntegrationsTabProps) {
                     id="confluence-parent-page"
                     placeholder="e.g., 123456789"
                     value={safeLocalSettings.confluence?.parentPageId || ""}
-                    onChange={(e) => updateConfluence({ parentPageId: e.target.value || null })}
+                    onChange={(e: any) => updateConfluence({ parentPageId: e.target.value || null })}
                   />
                   <p className="text-sm text-muted-foreground">
                     Create documents under a specific parent page
@@ -353,7 +457,7 @@ export function IntegrationsTab({ projectId }: IntegrationsTabProps) {
                     id="jira-project-key"
                     placeholder="e.g., PROJ"
                     value={safeLocalSettings.jira?.projectKey || ""}
-                    onChange={(e) => updateJira({ projectKey: e.target.value || null })}
+                    onChange={(e: any) => updateJira({ projectKey: e.target.value || null })}
                   />
                   <p className="text-sm text-muted-foreground">
                     Override the default Jira project key for this project
@@ -366,7 +470,7 @@ export function IntegrationsTab({ projectId }: IntegrationsTabProps) {
                     id="jira-issue-type"
                     placeholder="e.g., Task, Story, Bug"
                     value={safeLocalSettings.jira?.issueType || ""}
-                    onChange={(e) => updateJira({ issueType: e.target.value || null })}
+                    onChange={(e: any) => updateJira({ issueType: e.target.value || null })}
                   />
                 </div>
 
@@ -376,7 +480,7 @@ export function IntegrationsTab({ projectId }: IntegrationsTabProps) {
                     id="jira-priority"
                     placeholder="e.g., High, Medium, Low"
                     value={safeLocalSettings.jira?.priority || ""}
-                    onChange={(e) => updateJira({ priority: e.target.value || null })}
+                    onChange={(e: any) => updateJira({ priority: e.target.value || null })}
                   />
                 </div>
 
@@ -413,6 +517,24 @@ export function IntegrationsTab({ projectId }: IntegrationsTabProps) {
         <CardContent className="space-y-4">
           <div className="flex flex-wrap gap-2">
             <Button
+              variant="default"
+              size="sm"
+              onClick={handleActivateNeo4jAndGkg}
+              disabled={gkgAction !== "idle"}
+            >
+              {gkgAction === "activate" ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Activating...
+                </>
+              ) : (
+                <>
+                  <Network className="h-4 w-4 mr-2" />
+                  Auto-Activate Neo4j + GKG
+                </>
+              )}
+            </Button>
+            <Button
               variant="outline"
               size="sm"
               onClick={handleGkgBootstrap}
@@ -448,10 +570,117 @@ export function IntegrationsTab({ projectId }: IntegrationsTabProps) {
                 </>
               )}
             </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => handleQueueReconcile(false)}
+              disabled={gkgAction !== "idle"}
+            >
+              {gkgAction === "reconcile-dry" ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Queued...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Queue Drift Scan
+                </>
+              )}
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => handleQueueReconcile(true)}
+              disabled={gkgAction !== "idle"}
+            >
+              {gkgAction === "reconcile-cleanup" ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Queued...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Queue Cleanup
+                </>
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={fetchGkgRecentStats}
+              disabled={loadingGkgStats || gkgAction !== "idle"}
+            >
+              {loadingGkgStats ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Refreshing...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Refresh Recent Stats
+                </>
+              )}
+            </Button>
           </div>
           <p className="text-sm text-muted-foreground">
-            Bootstrap seeds reference nodes (GovernanceDomain, MaturityLevel). Sync this project pushes Project, Documents, and SemanticUnits to Neo4j.
+            Bootstrap seeds reference nodes (GovernanceDomain, MaturityLevel). Sync pushes this project to Neo4j. Drift Scan and Cleanup run full queued reconciliation for large graphs.
           </p>
+
+          <Separator />
+
+          <div className="space-y-2">
+            <div className="text-sm font-medium">Recent Reconcile Statistics</div>
+            {!gkgRecentStats ? (
+              <p className="text-sm text-muted-foreground">No recent reconcile runs found.</p>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-2 text-xs md:grid-cols-4">
+                  <div className="rounded border p-2">
+                    <div className="text-muted-foreground">Total</div>
+                    <div className="font-semibold">{gkgRecentStats.summary.total}</div>
+                  </div>
+                  <div className="rounded border p-2">
+                    <div className="text-muted-foreground">Completed</div>
+                    <div className="font-semibold">{gkgRecentStats.summary.completed}</div>
+                  </div>
+                  <div className="rounded border p-2">
+                    <div className="text-muted-foreground">Failed</div>
+                    <div className="font-semibold">{gkgRecentStats.summary.failed}</div>
+                  </div>
+                  <div className="rounded border p-2">
+                    <div className="text-muted-foreground">Cleanup Runs</div>
+                    <div className="font-semibold">{gkgRecentStats.summary.cleanupRuns}</div>
+                  </div>
+                </div>
+
+                <div className="max-h-44 space-y-1 overflow-auto rounded border p-2 text-xs">
+                  {gkgRecentStats.recent.slice(0, 6).map((job: any) => (
+                    <div key={job.jobId} className="flex items-center justify-between gap-2">
+                      <span className="truncate text-muted-foreground">{job.jobId.slice(0, 8)}…</span>
+                      <span>{job.cleanup ? "cleanup" : "scan"}</span>
+                      <span className={job.status === "failed" ? "text-red-500" : "text-green-600"}>{job.status}</span>
+                      <span>
+                        {job.durationMs != null ? `${Math.round(job.durationMs / 1000)}s` : "-"}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-6 px-2 text-[11px]"
+                        onClick={() => {
+                          window.open(`/jobs?jobId=${encodeURIComponent(job.jobId)}`, "_blank")
+                        }}
+                      >
+                        View Job
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         </CardContent>
       </Card>
     </div>

@@ -18,10 +18,20 @@ export interface CapacityForecast {
   role?: string
   available_hours?: number | null
   demand_hours?: number | null
+  forecasted_demand_hours?: number | null
   gap_hours?: number | null
   notes?: string
   source_document?: string
   source_document_id?: string
+}
+
+function normalizeIsoDate(value?: string | null): string | null {
+  if (!value || typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (!trimmed || /^yyyy-mm(-dd)?$/i.test(trimmed)) return null
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed
+  if (/^\d{4}-\d{2}$/.test(trimmed)) return `${trimmed}-01`
+  return null
 }
 
 export async function extractCapacityForecasts(
@@ -109,7 +119,8 @@ export async function extractCapacityForecasts(
     const normalized: CapacityForecast[] = rawEntities.map((entity: CapacityForecast) => ({
       ...entity,
       available_hours: coerceNumber(entity?.available_hours),
-      demand_hours: coerceNumber(entity?.demand_hours),
+      demand_hours: coerceNumber(entity?.demand_hours ?? entity?.forecasted_demand_hours),
+      forecasted_demand_hours: coerceNumber(entity?.forecasted_demand_hours ?? entity?.demand_hours),
       gap_hours: coerceNumber(entity?.gap_hours)
     }))
 
@@ -177,31 +188,82 @@ export async function saveCapacityForecasts(
   try {
     await client.query('DELETE FROM capacity_forecasts WHERE project_id = $1', [projectId])
 
+    const columnResult = await client.query(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_name = 'capacity_forecasts'`
+    )
+
+    const availableColumns = new Set<string>(
+      columnResult.rows.map((row: { column_name: string }) => row.column_name)
+    )
+
+    const insertColumns = [
+      'project_id',
+      'period',
+      'forecast_date',
+      'role',
+      'skill_level',
+      'available_hours',
+      'available_capacity_hours',
+      'demand_hours',
+      'forecasted_demand_hours',
+      'gap_hours',
+      'capacity_gap_hours',
+      'utilization_forecast_pct',
+      'notes',
+      'assumptions',
+      'mitigation_plan',
+      'description',
+      'source_document_id',
+      'created_by'
+    ].filter((column) => availableColumns.has(column))
+
+    if (insertColumns.length === 0) {
+      throw new Error('capacity_forecasts table has no expected columns for extraction insert')
+    }
+
     const values: any[] = []
     const placeholders: string[] = []
 
     entities.forEach((e, index) => {
-      const offset = index * 8
-      placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8})`
-      )
+      const offset = index * insertColumns.length
+      placeholders.push(`(${insertColumns.map((_, i) => `$${offset + i + 1}`).join(', ')})`)
 
-      values.push(
-        projectId,
-        e.role || null,
-        e.available_hours ?? null,
-        e.demand_hours ?? null,
-        e.gap_hours ?? null,
-        e.notes || null,
-        e.source_document_id || null,
-        userId
-      )
+      const periodDate = normalizeIsoDate(e.period)
+      const fallbackDate = new Date().toISOString().slice(0, 10)
+      const demandHours = e.demand_hours ?? e.forecasted_demand_hours ?? 0
+      const availableHours = e.available_hours ?? 0
+      const gapHours = e.gap_hours ?? (availableHours - demandHours)
+      const rowData: Record<string, any> = {
+        project_id: projectId,
+        period: e.period || null,
+        forecast_date: periodDate || fallbackDate,
+        role: e.role || 'General',
+        skill_level: 'all',
+        available_hours: availableHours,
+        available_capacity_hours: availableHours,
+        demand_hours: demandHours,
+        forecasted_demand_hours: demandHours,
+        gap_hours: gapHours,
+        capacity_gap_hours: gapHours,
+        utilization_forecast_pct: availableHours > 0 ? Math.max(0, Math.min(100, (demandHours / availableHours) * 100)) : null,
+        notes: e.notes || null,
+        assumptions: [],
+        mitigation_plan: e.notes || null,
+        description: e.notes || null,
+        source_document_id: e.source_document_id || null,
+        created_by: userId
+      }
+
+      insertColumns.forEach((column) => {
+        values.push(rowData[column] ?? null)
+      })
     })
 
     await client.query(
       `INSERT INTO capacity_forecasts (
-        project_id, role, available_hours, demand_hours, gap_hours,
-        notes, source_document_id, created_by
+        ${insertColumns.join(', ')}
       )
       VALUES ${placeholders.join(', ')}`,
       values

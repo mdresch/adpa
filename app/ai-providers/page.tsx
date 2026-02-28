@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useState } from "react"
+import * as React from "react"
 import { toast } from '@/lib/notify'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -48,13 +48,13 @@ export default function AIProviders() {
   const apiUrl = (path: string) => getApiUrlUtil(path)
 
   // Initialize API client with token
-  useEffect(() => {
+  React.useEffect(() => {
     const token = localStorage.getItem('token')
     if (token && !(apiClient as any).token) {
       ; (apiClient as any).setToken(token)
     }
   }, [])
-  const [providers, setProviders] = useState<Array<{
+  const [providers, setProviders] = React.useState<Array<{
     id: string
     name: string
     type: string
@@ -62,10 +62,10 @@ export default function AIProviders() {
     endpoint: string
     enabled: boolean
   }>>([])
-  const [loading, setLoading] = useState(false)
-  const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({})
-  const [error, setError] = useState<string | null>(null)
-  const [ollamaModels, setOllamaModels] = useState<Array<{
+  const [loading, setLoading] = React.useState(false)
+  const [actionLoading, setActionLoading] = React.useState<Record<string, boolean>>({})
+  const [error, setError] = React.useState<string | null>(null)
+  const [ollamaModels, setOllamaModels] = React.useState<Array<{
     name: string
     size: number
     digest: string
@@ -73,7 +73,7 @@ export default function AIProviders() {
   }>>([])
 
   // Testing suite state
-  const [healthMetrics, setHealthMetrics] = useState<Array<{
+  const [healthMetrics, setHealthMetrics] = React.useState<Array<{
     providerId: string
     providerName: string
     providerType: string
@@ -84,8 +84,8 @@ export default function AIProviders() {
     lastTested: string
     recommendations: string[]
   }>>([])
-  const [testing, setTesting] = useState(false)
-  const [testResults, setTestResults] = useState<Array<{
+  const [testing, setTesting] = React.useState(false)
+  const [testResults, setTestResults] = React.useState<Array<{
     providerId: string
     testName: string
     status: string
@@ -94,10 +94,10 @@ export default function AIProviders() {
   }>>([])
 
   // Add dialog state
-  const [addDialogOpen, setAddDialogOpen] = useState(false)
+  const [addDialogOpen, setAddDialogOpen] = React.useState(false)
 
   // Real usage analytics state
-  const [usageAnalytics, setUsageAnalytics] = useState<{
+  const [usageAnalytics, setUsageAnalytics] = React.useState<{
     summary?: {
       totalRequests: number
       totalTokens: number
@@ -114,10 +114,10 @@ export default function AIProviders() {
     }>
   }>({})
 
-  const [formState, setFormState] = useState<{
+  const [formState, setFormState] = React.useState<{
     id: string
     name: string
-    type: "" | "openai" | "google" | "azure" | "mistral" | "groq" | "anthropic" | "deepseek" | "moonshot" | "xai" | "copilot"
+    type: "" | "openai" | "google" | "azure" | "mistral" | "groq" | "anthropic" | "deepseek" | "moonshot" | "xai" | "copilot" | "ollama"
     apiKey: string
     endpoint: string
     priority: number
@@ -151,11 +151,11 @@ export default function AIProviders() {
     region: "",
     authorizationType: "api-key"
   })
-  const [formErrors, setFormErrors] = useState<Record<string, string>>({})
+  const [formErrors, setFormErrors] = React.useState<Record<string, string>>({})
 
   // Delete confirmation
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
+  const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false)
+  const [deleteTarget, setDeleteTarget] = React.useState<{ id: string; name: string } | null>(null)
 
   const resetForm = () =>
     setFormState({
@@ -194,12 +194,12 @@ export default function AIProviders() {
 
     if (!providerType) {
       errs.type = "Please select a provider. Priorities and failover are configured in Failover Settings."
-    } else if (!["openai", "google", "azure", "mistral", "groq", "anthropic", "deepseek", "moonshot", "xai", "copilot"].includes(providerType)) {
+    } else if (!["openai", "google", "azure", "mistral", "groq", "anthropic", "deepseek", "moonshot", "xai", "copilot", "ollama"].includes(providerType)) {
       errs.type = "Unsupported provider type for creation."
     }
 
     // Skip API key validation until a provider is selected, and for Ollama (no key required), or when editing
-    if (uiType && !state.id) {
+    if (uiType && uiType !== 'ollama' && !state.id) {
       if (!state.apiKey || state.apiKey.trim().length < 16) {
         errs.apiKey = "API key looks too short. Paste the full key (min 16 chars)."
       }
@@ -256,14 +256,14 @@ export default function AIProviders() {
   }
 
   // run validation live when the form changes
-  useEffect(() => {
+  React.useEffect(() => {
     validateForm()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formState])
 
   // Load Ollama models on component mount
   /*
-  useEffect(() => {
+  React.useEffect(() => {
     loadOllamaModels().then(models => {
       setOllamaModels(models)
     })
@@ -553,7 +553,7 @@ export default function AIProviders() {
     }
   }
 
-  useEffect(() => {
+  React.useEffect(() => {
     loadProviders()
     loadHealthDashboard()
     loadUsageAnalytics()
@@ -829,6 +829,7 @@ export default function AIProviders() {
                                   <SelectItem value="xai">xAI (Grok)</SelectItem>
 
                                   <SelectItem value="copilot">GitHub Copilot</SelectItem>
+                                  <SelectItem value="ollama">Ollama (Local AI)</SelectItem>
                                 </SelectContent>
                               </Select>
                             </div>
@@ -885,6 +886,7 @@ export default function AIProviders() {
                                   <SelectItem value="xai">xAI (Grok)</SelectItem>
 
                                   <SelectItem value="copilot">GitHub Copilot</SelectItem>
+                                  <SelectItem value="ollama">Ollama (Local AI)</SelectItem>
                                 </SelectContent>
                               </Select>
                             </div>
@@ -1369,7 +1371,7 @@ export default function AIProviders() {
                               <div className="w-full bg-muted rounded-full h-2">
                                 <div
                                   className={`h-2 rounded-full transition-all ${provider.type === 'groq' ? 'bg-green-500' :
-                                      provider.type === 'google' ? 'bg-blue-500' : 'bg-yellow-500'
+                                    provider.type === 'google' ? 'bg-blue-500' : 'bg-yellow-500'
                                     }`}
                                   style={{
                                     width: provider.type === 'groq' ? '95%' :
@@ -1760,8 +1762,8 @@ export default function AIProviders() {
                               <div className="flex items-center justify-between mb-2">
                                 <div className="flex items-center gap-3">
                                   <div className={`w-3 h-3 rounded-full ${index === 0 ? 'bg-blue-500' :
-                                      index === 1 ? 'bg-green-500' :
-                                        index === 2 ? 'bg-purple-500' : 'bg-orange-500'
+                                    index === 1 ? 'bg-green-500' :
+                                      index === 2 ? 'bg-purple-500' : 'bg-orange-500'
                                     }`} />
                                   <span className="font-medium">{providerStat.provider_name}</span>
                                   <Badge variant="outline" className="text-xs capitalize">{providerStat.provider_type}</Badge>
@@ -1775,8 +1777,8 @@ export default function AIProviders() {
                               <div className="w-full bg-muted rounded-full h-2.5">
                                 <div
                                   className={`h-2.5 rounded-full transition-all ${index === 0 ? 'bg-blue-500' :
-                                      index === 1 ? 'bg-green-500' :
-                                        index === 2 ? 'bg-purple-500' : 'bg-orange-500'
+                                    index === 1 ? 'bg-green-500' :
+                                      index === 2 ? 'bg-purple-500' : 'bg-orange-500'
                                     }`}
                                   style={{ width: `${percentage}%` }}
                                 ></div>

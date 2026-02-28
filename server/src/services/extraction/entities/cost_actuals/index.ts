@@ -12,8 +12,15 @@ import { resolveSourceDocumentIdStrict } from '../../base/SourceDocumentResolver
 import { extractionCacheService } from '../../cache'
 import type { PoolClient } from 'pg'
 import type { PersistenceResult } from '../../base/Persistence'
+import { randomUUID } from 'crypto'
+
+function isUuid(value?: string | null): boolean {
+  if (!value) return false
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+}
 
 export interface CostActual {
+  cost_actual_id?: string
   period?: string
   category?: string
   wbs_code?: string
@@ -185,34 +192,91 @@ export async function saveCostActuals(
   try {
     await client.query('DELETE FROM cost_actuals WHERE project_id = $1', [projectId])
 
+    const columnResult = await client.query(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_name = 'cost_actuals'`
+    )
+
+    const availableColumns = new Set<string>(
+      columnResult.rows.map((row: { column_name: string }) => row.column_name)
+    )
+
+    const insertColumns = [
+      'cost_actual_id',
+      'id',
+      'project_id',
+      'period',
+      'period_label',
+      'reporting_period',
+      'cost_date',
+      'actual_date',
+      'period_start_date',
+      'period_end_date',
+      'period_start',
+      'period_end',
+      'category',
+      'wbs_code',
+      'planned_amount',
+      'actual_amount',
+      'variance',
+      'variance_pct',
+      'cumulative_actual',
+      'source_document_id',
+      'created_by'
+    ].filter((column) => availableColumns.has(column))
+
+    if (insertColumns.length === 0) {
+      throw new Error('cost_actuals table has no expected columns for extraction insert')
+    }
+
     const values: any[] = []
     const placeholders: string[] = []
 
     entities.forEach((e, index) => {
-      const offset = index * 11
-      placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11})`
-      )
+      const offset = index * insertColumns.length
+      placeholders.push(`(${insertColumns.map((_, i) => `$${offset + i + 1}`).join(', ')})`)
 
-      values.push(
-        projectId,
-        e.period || null,
-        e.category || null,
-        e.wbs_code || null,
-        e.planned_amount ?? null,
-        e.actual_amount ?? null,
-        e.variance ?? null,
-        e.variance_pct ?? null,
-        e.cumulative_actual ?? null,
-        e.source_document_id || null,
-        userId
-      )
+      const generatedId = randomUUID()
+      const fallbackDate = new Date().toISOString().slice(0, 10)
+      const normalizedPeriodDate = e.period && /^\d{4}-\d{2}-\d{2}$/.test(e.period)
+        ? e.period
+        : e.period && /^\d{4}-\d{2}$/.test(e.period)
+          ? `${e.period}-01`
+          : fallbackDate
+
+      const rowData: Record<string, any> = {
+        cost_actual_id: e.cost_actual_id || generatedId,
+        id: generatedId,
+        project_id: projectId,
+        period: e.period || null,
+        period_label: e.period || null,
+        reporting_period: e.period || null,
+        cost_date: normalizedPeriodDate,
+        actual_date: normalizedPeriodDate,
+        period_start_date: normalizedPeriodDate,
+        period_end_date: normalizedPeriodDate,
+        period_start: normalizedPeriodDate,
+        period_end: normalizedPeriodDate,
+        category: e.category || null,
+        wbs_code: e.wbs_code || null,
+        planned_amount: e.planned_amount ?? null,
+        actual_amount: e.actual_amount ?? null,
+        variance: e.variance ?? null,
+        variance_pct: e.variance_pct ?? null,
+        cumulative_actual: e.cumulative_actual ?? null,
+        source_document_id: isUuid(e.source_document_id) ? e.source_document_id : null,
+        created_by: userId
+      }
+
+      insertColumns.forEach((column) => {
+        values.push(rowData[column] ?? null)
+      })
     })
 
     await client.query(
       `INSERT INTO cost_actuals (
-        project_id, period, category, wbs_code, planned_amount, actual_amount,
-        variance, variance_pct, cumulative_actual, source_document_id, created_by
+        ${insertColumns.join(', ')}
       )
       VALUES ${placeholders.join(', ')}`,
       values

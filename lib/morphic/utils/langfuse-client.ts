@@ -7,7 +7,7 @@ let langfuseInstance: Langfuse | null = null
  * Returns null if tracing is disabled or credentials are missing.
  */
 export function getLangfuseClient(): Langfuse | null {
-    if (process.env.ENABLE_LANGFUSE_TRACING !== 'true') return null
+    if (process.env.ENABLE_LANGFUSE_NATIVE_SDK === 'false') return null
     if (!process.env.LANGFUSE_PUBLIC_KEY || !process.env.LANGFUSE_SECRET_KEY) return null
 
     if (!langfuseInstance) {
@@ -26,7 +26,7 @@ export function getLangfuseClient(): Langfuse | null {
  * Check if Langfuse tracing is enabled (convenience re-export).
  */
 export function isLangfuseEnabled(): boolean {
-    return process.env.ENABLE_LANGFUSE_TRACING === 'true'
+    return process.env.ENABLE_LANGFUSE_NATIVE_SDK !== 'false'
         && !!process.env.LANGFUSE_PUBLIC_KEY
         && !!process.env.LANGFUSE_SECRET_KEY
 }

@@ -11,7 +11,7 @@ import type { ContextRetrievalRequest } from '../modules/contextRetrieval/types'
 
 export interface UniversalSearchRequest {
   query: string
-  types?: string[] // Filter: ['project', 'document', 'template', 'user']
+  types?: string[] // Filter: ['portfolio','program','project','document','task','checklist_item','todo','template','user']
   frameworks?: string[]
   authors?: string[] // Filter by author names
   tags?: string[] // Filter by tags
@@ -25,7 +25,7 @@ export interface UniversalSearchRequest {
 
 export interface SearchResult {
   id: string
-  type: 'project' | 'document' | 'template' | 'user'
+  type: 'portfolio' | 'program' | 'project' | 'document' | 'task' | 'checklist_item' | 'todo' | 'template' | 'user'
   title: string
   description: string
   content_preview: string
@@ -39,6 +39,424 @@ export interface SearchResult {
   relevance_score: number
   project_id?: string // For documents
   project_name?: string // For documents
+}
+
+const OPEN_TODO_STATUSES = new Set([
+  'planned',
+  'scheduled',
+  'in-progress',
+  'in_progress',
+  'on-hold',
+  'on_hold',
+  'blocked',
+  'pending',
+  'open',
+  'todo'
+])
+
+function isTodoStatus(status?: string): boolean {
+  if (!status) return true
+  return OPEN_TODO_STATUSES.has(status.toLowerCase())
+}
+
+export async function searchPortfolios(
+  request: UniversalSearchRequest,
+  userId: string
+): Promise<SearchResult[]> {
+  try {
+    let query = `
+      SELECT
+        pg.id,
+        pg.portfolio_name as title,
+        pg.description,
+        pg.status,
+        pg.created_at,
+        pg.updated_at,
+        u.name as author,
+        u.id as author_id
+      FROM portfolio_governance pg
+      LEFT JOIN users u ON pg.owner_id = u.id
+      WHERE (pg.portfolio_name ILIKE $1 OR coalesce(pg.description, '') ILIKE $1)
+        AND (
+          pg.owner_id = $2
+          OR pg.created_by = $2
+          OR EXISTS (SELECT 1 FROM users WHERE id = $2 AND role = 'admin')
+        )
+    `
+
+    const params: any[] = [`%${request.query}%`, userId]
+    let paramCount = 2
+
+    if (request.authors && request.authors.length > 0) {
+      paramCount++
+      query += ` AND u.name = ANY($${paramCount}::text[])`
+      params.push(request.authors)
+    }
+
+    if (request.dateRange?.start) {
+      paramCount++
+      query += ` AND pg.created_at >= $${paramCount}`
+      params.push(request.dateRange.start)
+    }
+
+    if (request.dateRange?.end) {
+      paramCount++
+      query += ` AND pg.created_at <= $${paramCount}`
+      params.push(request.dateRange.end)
+    }
+
+    query += ` ORDER BY pg.updated_at DESC LIMIT $${++paramCount}`
+    params.push(request.limit || 20)
+
+    const result = await pool.query(query, params)
+    const queryLower = request.query.toLowerCase()
+
+    return result.rows.map((row: any) => ({
+      id: row.id,
+      type: 'portfolio' as const,
+      title: row.title || 'Untitled Portfolio',
+      description: row.description || '',
+      content_preview: (row.description || '').substring(0, 200),
+      author: row.author || 'Unknown',
+      author_id: row.author_id || '',
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      tags: row.status ? [row.status] : [],
+      status: row.status,
+      relevance_score: calculateKeywordRelevance(
+        { title: row.title || '', description: row.description || '' },
+        queryLower
+      )
+    }))
+  } catch (error: any) {
+    logger.error('[SEARCH-PORTFOLIOS] Search failed:', error)
+    return []
+  }
+}
+
+export async function searchPrograms(
+  request: UniversalSearchRequest,
+  userId: string
+): Promise<SearchResult[]> {
+  try {
+    let query = `
+      SELECT
+        pr.id,
+        pr.name as title,
+        pr.description,
+        pr.status,
+        pr.created_at,
+        pr.updated_at,
+        u.name as author,
+        u.id as author_id
+      FROM programs pr
+      LEFT JOIN users u ON pr.owner_id = u.id
+      WHERE (pr.name ILIKE $1 OR coalesce(pr.description, '') ILIKE $1)
+        AND (
+          pr.owner_id = $2
+          OR EXISTS (
+            SELECT 1
+            FROM projects p
+            WHERE p.program_id = pr.id
+              AND (
+                p.owner_id = $2
+                OR $2::text = ANY(SELECT jsonb_array_elements_text(p.team_members))
+              )
+          )
+          OR EXISTS (SELECT 1 FROM users WHERE id = $2 AND role = 'admin')
+        )
+    `
+
+    const params: any[] = [`%${request.query}%`, userId]
+    let paramCount = 2
+
+    if (request.frameworks && request.frameworks.length > 0) {
+      paramCount++
+      query += `
+        AND EXISTS (
+          SELECT 1 FROM projects p2
+          WHERE p2.program_id = pr.id
+            AND p2.framework = ANY($${paramCount}::text[])
+        )
+      `
+      params.push(request.frameworks)
+    }
+
+    if (request.authors && request.authors.length > 0) {
+      paramCount++
+      query += ` AND u.name = ANY($${paramCount}::text[])`
+      params.push(request.authors)
+    }
+
+    if (request.dateRange?.start) {
+      paramCount++
+      query += ` AND pr.created_at >= $${paramCount}`
+      params.push(request.dateRange.start)
+    }
+
+    if (request.dateRange?.end) {
+      paramCount++
+      query += ` AND pr.created_at <= $${paramCount}`
+      params.push(request.dateRange.end)
+    }
+
+    query += ` ORDER BY pr.updated_at DESC LIMIT $${++paramCount}`
+    params.push(request.limit || 20)
+
+    const result = await pool.query(query, params)
+    const queryLower = request.query.toLowerCase()
+
+    return result.rows.map((row: any) => ({
+      id: row.id,
+      type: 'program' as const,
+      title: row.title || 'Untitled Program',
+      description: row.description || '',
+      content_preview: (row.description || '').substring(0, 200),
+      author: row.author || 'Unknown',
+      author_id: row.author_id || '',
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      tags: row.status ? [row.status] : [],
+      status: row.status,
+      relevance_score: calculateKeywordRelevance(
+        { title: row.title || '', description: row.description || '' },
+        queryLower
+      )
+    }))
+  } catch (error: any) {
+    logger.error('[SEARCH-PROGRAMS] Search failed:', error)
+    return []
+  }
+}
+
+export async function searchProjectTasks(
+  request: UniversalSearchRequest,
+  userId: string
+): Promise<SearchResult[]> {
+  try {
+    let query = `
+      SELECT
+        t.id,
+        t.task_name as title,
+        t.description,
+        t.status,
+        t.priority,
+        t.phase,
+        t.category,
+        t.created_at,
+        t.updated_at,
+        p.id as project_id,
+        p.name as project_name,
+        p.framework,
+        u.name as author,
+        u.id as author_id
+      FROM project_tasks t
+      JOIN projects p ON t.project_id = p.id
+      LEFT JOIN users u ON t.created_by = u.id
+      WHERE (t.task_name ILIKE $1 OR coalesce(t.description, '') ILIKE $1 OR coalesce(t.wbs_code, '') ILIKE $1)
+        AND (
+          p.owner_id = $2
+          OR $2::text = ANY(SELECT jsonb_array_elements_text(p.team_members))
+          OR EXISTS (SELECT 1 FROM users WHERE id = $2 AND role = 'admin')
+        )
+    `
+
+    const params: any[] = [`%${request.query}%`, userId]
+    let paramCount = 2
+
+    if (request.frameworks && request.frameworks.length > 0) {
+      paramCount++
+      query += ` AND p.framework = ANY($${paramCount}::text[])`
+      params.push(request.frameworks)
+    }
+
+    if (request.authors && request.authors.length > 0) {
+      paramCount++
+      query += ` AND u.name = ANY($${paramCount}::text[])`
+      params.push(request.authors)
+    }
+
+    if (request.dateRange?.start) {
+      paramCount++
+      query += ` AND t.created_at >= $${paramCount}`
+      params.push(request.dateRange.start)
+    }
+
+    if (request.dateRange?.end) {
+      paramCount++
+      query += ` AND t.created_at <= $${paramCount}`
+      params.push(request.dateRange.end)
+    }
+
+    query += ` ORDER BY t.updated_at DESC LIMIT $${++paramCount}`
+    params.push(request.limit || 20)
+
+    const result = await pool.query(query, params)
+    const queryLower = request.query.toLowerCase()
+
+    return result.rows.map((row: any) => ({
+      id: row.id,
+      type: 'task' as const,
+      title: row.title || 'Untitled Task',
+      description: row.description || '',
+      content_preview: (row.description || '').substring(0, 200),
+      author: row.author || 'Unknown',
+      author_id: row.author_id || '',
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      tags: [row.priority, row.phase, row.category].filter(Boolean),
+      framework: row.framework,
+      status: row.status,
+      project_id: row.project_id,
+      project_name: row.project_name,
+      relevance_score: calculateKeywordRelevance(
+        { title: row.title || '', description: row.description || '' },
+        queryLower
+      )
+    }))
+  } catch (error: any) {
+    logger.error('[SEARCH-TASKS] Search failed:', error)
+    return []
+  }
+}
+
+export async function searchChecklistItems(
+  request: UniversalSearchRequest,
+  userId: string
+): Promise<SearchResult[]> {
+  try {
+    let query = `
+      SELECT
+        ci.id,
+        ci.item_name as title,
+        ci.description,
+        CASE
+          WHEN ci.is_completed = TRUE THEN 'completed'
+          WHEN ci.is_blocked = TRUE THEN 'blocked'
+          ELSE 'pending'
+        END as status,
+        ci.priority,
+        ci.category,
+        ci.created_at,
+        ci.updated_at,
+        t.id as task_id,
+        t.task_name,
+        p.id as project_id,
+        p.name as project_name,
+        p.framework,
+        COALESCE(au.name, u.name) as author,
+        COALESCE(au.id, u.id) as author_id
+      FROM checklist_items ci
+      JOIN project_tasks t ON ci.task_id = t.id
+      JOIN projects p ON t.project_id = p.id
+      LEFT JOIN users u ON ci.created_by = u.id
+      LEFT JOIN users au ON ci.assigned_user_id = au.id
+      WHERE (ci.item_name ILIKE $1 OR coalesce(ci.description, '') ILIKE $1)
+        AND (
+          p.owner_id = $2
+          OR $2::text = ANY(SELECT jsonb_array_elements_text(p.team_members))
+          OR EXISTS (SELECT 1 FROM users WHERE id = $2 AND role = 'admin')
+        )
+    `
+
+    const params: any[] = [`%${request.query}%`, userId]
+    let paramCount = 2
+
+    if (request.frameworks && request.frameworks.length > 0) {
+      paramCount++
+      query += ` AND p.framework = ANY($${paramCount}::text[])`
+      params.push(request.frameworks)
+    }
+
+    if (request.authors && request.authors.length > 0) {
+      paramCount++
+      query += ` AND COALESCE(au.name, u.name) = ANY($${paramCount}::text[])`
+      params.push(request.authors)
+    }
+
+    if (request.dateRange?.start) {
+      paramCount++
+      query += ` AND ci.created_at >= $${paramCount}`
+      params.push(request.dateRange.start)
+    }
+
+    if (request.dateRange?.end) {
+      paramCount++
+      query += ` AND ci.created_at <= $${paramCount}`
+      params.push(request.dateRange.end)
+    }
+
+    query += ` ORDER BY ci.updated_at DESC LIMIT $${++paramCount}`
+    params.push(request.limit || 20)
+
+    const result = await pool.query(query, params)
+    const queryLower = request.query.toLowerCase()
+
+    return result.rows.map((row: any) => ({
+      id: row.id,
+      type: 'checklist_item' as const,
+      title: row.title || 'Untitled Checklist Item',
+      description: row.description || '',
+      content_preview: `${row.task_name || 'Task'} • ${(row.description || '').substring(0, 160)}`,
+      author: row.author || 'Unknown',
+      author_id: row.author_id || '',
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      tags: [row.priority, row.category].filter(Boolean),
+      framework: row.framework,
+      status: row.status,
+      project_id: row.project_id,
+      project_name: row.project_name,
+      relevance_score: calculateKeywordRelevance(
+        { title: row.title || '', description: row.description || '' },
+        queryLower
+      )
+    }))
+  } catch (error: any) {
+    logger.error('[SEARCH-CHECKLIST] Search failed:', error)
+    return []
+  }
+}
+
+export async function searchTodos(
+  request: UniversalSearchRequest,
+  userId: string
+): Promise<SearchResult[]> {
+  try {
+    const [tasks, checklistItems] = await Promise.all([
+      searchProjectTasks({ ...request, limit: Math.max(request.limit || 20, 50) }, userId),
+      searchChecklistItems({ ...request, limit: Math.max(request.limit || 20, 50) }, userId)
+    ])
+
+    const taskTodos = tasks
+      .filter(task => isTodoStatus(task.status))
+      .map(task => ({
+        ...task,
+        id: `todo-task-${task.id}`,
+        type: 'todo' as const,
+        title: `[Task] ${task.title}`,
+        content_preview: task.content_preview || task.description,
+        tags: [...task.tags, 'task']
+      }))
+
+    const checklistTodos = checklistItems
+      .filter(item => isTodoStatus(item.status))
+      .map(item => ({
+        ...item,
+        id: `todo-checklist-${item.id}`,
+        type: 'todo' as const,
+        title: `[Checklist] ${item.title}`,
+        content_preview: item.content_preview || item.description,
+        tags: [...item.tags, 'checklist']
+      }))
+
+    return [...taskTodos, ...checklistTodos]
+      .sort((a, b) => b.relevance_score - a.relevance_score)
+      .slice(0, request.limit || 20)
+  } catch (error: any) {
+    logger.error('[SEARCH-TODOS] Search failed:', error)
+    return []
+  }
 }
 
 // Initialize ContextRetrievalService with default config
