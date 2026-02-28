@@ -11,7 +11,6 @@ import { createMistral } from "@ai-sdk/mistral"
 import { createOpenAI } from "@ai-sdk/openai"
 import { createXai } from "@ai-sdk/xai"
 import { createDeepSeek } from "@ai-sdk/deepseek"
-import { wrapAISDK } from "langsmith/experimental/vercel"
 import OpenAI from "openai"  // Native OpenAI SDK for Moonshot
 import Anthropic from "@anthropic-ai/sdk"  // Native Anthropic SDK
 import { logger } from "../utils/logger"
@@ -26,7 +25,17 @@ const langfuse = new Langfuse({
   baseUrl: process.env.LANGFUSE_BASE_URL || "https://cloud.langfuse.com"
 });
 
-const { generateText: tracedGenerateText } = wrapAISDK(ai)
+let tracedGenerateText = ai.generateText
+
+try {
+  const { wrapAISDK } = require("langsmith/experimental/vercel")
+  const wrapped = wrapAISDK(ai)
+  if (wrapped?.generateText) {
+    tracedGenerateText = wrapped.generateText
+  }
+} catch {
+  logger.warn("LangSmith Vercel wrapper unavailable; continuing without LangSmith tracing wrapper")
+}
 
 export interface AIProvider {
   name: string
