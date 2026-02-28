@@ -197,3 +197,54 @@
 * [User Personas](projects/adpa-playbook/05-user-personas.md)
 * [Communications Management Plan](projects/adpa-playbook/06-communications-management-plan.md)
 * [Integration Management Plan](projects/adpa-playbook/07-integration-management-plan.md)
+
+# Summary
+
+* [Introduction](README.md)
+* [Feature List](docs/feature-list.md)
+
+## 🛠️ Features
+
+* [Overview](docs/features/README.md)
+
+### 📄 Document Processing
+
+* [Overview](docs/features/document-processing/README.md)
+* [Ingestion](docs/features/document-processing/ingest.md)
+* [Parsing (OCR & Layout)](docs/features/document-processing/parse.md)
+* [Classification](docs/features/document-processing/classify.md)
+* [Extraction](docs/features/document-processing/extract.md)
+
+### 🤖 AI Engine
+
+* [Overview](docs/features/ai-engine/README.md)
+* [LLM Observability (Langfuse)](docs/features/ai-engine/llm-observability.md)
+* [Prompt Management](docs/features/ai-engine/prompt-management.md)
+
+### 🔄 Workflow
+
+* [Overview](docs/features/workflow/README.md)
+* [Human-in-the-Loop](docs/features/workflow/human-in-the-loop.md)
+* [Task Automation (Kaneo)](docs/features/workflow/task-automation.md)
+* [Audit Log](docs/features/workflow/audit.md)
+
+### 📈 Analytics
+
+* [Overview](docs/features/analytics/README.md)
+* [Dashboards](docs/features/analytics/dashboards.md)
+
+### 🔗 Integrations
+
+* [Overview](docs/features/integrations/README.md)
+* [eSignature](docs/features/integrations/esignature.md)
+* [Digital Twins](docs/features/integrations/digital-twins.md)
+
+### ⚖️ Compliance
+
+* [Overview](docs/features/compliance/README.md)
+* [Data Governance](docs/features/compliance/data-governance.md)
+* [GDPR/CCPA Compliance](docs/features/compliance/gdpr-ccpa.md)
+
+## 🔧 Configuration
+
+* [book.json](book.json)

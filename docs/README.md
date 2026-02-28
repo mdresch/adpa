@@ -384,3 +384,25 @@ For questions about documentation or to report issues:
 **Documentation Version:** 2.0.0  
 **Total Documents:** 150+
 
+# Advanced Document Processing & Analytics (ADPA)
+
+Welcome to the ADPA Documentation.
+
+ADPA is a modern, AI-driven platform for processing, analyzing, and transforming unstructured documents into structured, actionable insights.
+
+## 🔑 Key Documentation Links
+
+- **[📄 Feature List](feature-list.md)**: A comprehensive overview of all integrated ADPA capabilities.
+- **[🛠️ Feature Details](features/README.md)**: Deep-dive documentation for each feature area.
+- **[🏗️ Architecture](architecture.md)**: High-level system design and components (Coming Soon).
+
+## 👥 Who is this for?
+
+- **Developers**: See the **[Developer Reference](features/ai-engine/README.md)** and API guides.
+- **Product Managers**: Review the **[Feature List](feature-list.md)** to understand current and planned capabilities.
+- **Operations & Compliance**: Review the **[Compliance](features/compliance/README.md)** and **[Audit](features/workflow/audit.md)** sections.
+
+---
+
+For technical support, please contact the ADPA Team.
+
