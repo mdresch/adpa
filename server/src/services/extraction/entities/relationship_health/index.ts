@@ -10,6 +10,7 @@ import { parseAIResponse, coerceArray, coerceNumber } from '../../base/Parser'
 import { buildExtractionPrompt } from '../../base/PromptBuilder'
 import { resolveSourceDocumentIdStrict } from '../../base/SourceDocumentResolver'
 import { extractionCacheService } from '../../cache'
+import { normalizeDate } from '../../base/Persistence'
 import type { PoolClient } from 'pg'
 import type { PersistenceResult } from '../../base/Persistence'
 
@@ -200,13 +201,23 @@ export async function saveRelationshipHealth(
     await client.query('DELETE FROM relationship_health WHERE project_id = $1', [projectId])
 
     const columnResult = await client.query(
-      `SELECT column_name
+      `SELECT column_name, data_type, udt_name
        FROM information_schema.columns
-       WHERE table_name = 'relationship_health'`
+       WHERE table_schema = 'public'
+         AND table_name = 'relationship_health'`
     )
 
     const availableColumns = new Set<string>(
       columnResult.rows.map((row: { column_name: string }) => row.column_name)
+    )
+    const jsonColumns = new Set<string>(
+      columnResult.rows
+        .filter((row: { data_type?: string; udt_name?: string }) => {
+          const dt = (row.data_type || '').toLowerCase()
+          const udt = (row.udt_name || '').toLowerCase()
+          return dt === 'json' || dt === 'jsonb' || udt === 'json' || udt === 'jsonb'
+        })
+        .map((row: { column_name: string }) => row.column_name)
     )
 
     const insertColumns = [
@@ -239,7 +250,7 @@ export async function saveRelationshipHealth(
 
       const score = typeof e.health_score === 'number' ? e.health_score : null
       const relationshipStrength = normalizeRelationshipStrength(e.health_status)
-      const normalizedAssessmentDate = e.assessment_date || new Date().toISOString().slice(0, 10)
+      const normalizedAssessmentDate = normalizeDate(e.assessment_date) || new Date().toISOString().slice(0, 10)
       const normalizedStakeholderId = isUuid(e.stakeholder_id) ? e.stakeholder_id : null
       const normalizedStakeholderName = e.stakeholder_name || (normalizedStakeholderId ? null : e.stakeholder_id) || null
       const rowData: Record<string, unknown> = {
@@ -260,7 +271,12 @@ export async function saveRelationshipHealth(
       }
 
       insertColumns.forEach((column) => {
-        values.push(rowData[column] ?? null)
+        const rawValue = rowData[column] ?? null
+        if (rawValue !== null && jsonColumns.has(column) && (Array.isArray(rawValue) || typeof rawValue === 'object')) {
+          values.push(JSON.stringify(rawValue))
+        } else {
+          values.push(rawValue)
+        }
       })
     })
 

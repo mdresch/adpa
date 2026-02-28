@@ -97,8 +97,72 @@ export function normalizeDate(value: any): string | null {
   }
   
   if (typeof value === 'string') {
-    // Try to parse and format
-    const date = new Date(value)
+    const trimmed = value.trim()
+    if (!trimmed) return null
+
+    const lowered = trimmed.toLowerCase()
+    if (
+      ['tbd', 'n/a', 'na', 'none', 'unknown', 'not specified', 'ongoing', 'yyyy-mm-dd'].includes(lowered)
+    ) {
+      return null
+    }
+
+    const directIso = trimmed.match(/(\d{4}-\d{2}-\d{2})/)
+    if (directIso) {
+      return directIso[1]
+    }
+
+    const monthDayYear = trimmed.match(
+      /(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+(\d{1,2}),?\s+(\d{4})/i
+    )
+    if (monthDayYear) {
+      const [, monthName, dayRaw, year] = monthDayYear
+      const monthMap: Record<string, string> = {
+        jan: '01', january: '01',
+        feb: '02', february: '02',
+        mar: '03', march: '03',
+        apr: '04', april: '04',
+        may: '05',
+        jun: '06', june: '06',
+        jul: '07', july: '07',
+        aug: '08', august: '08',
+        sep: '09', sept: '09', september: '09',
+        oct: '10', october: '10',
+        nov: '11', november: '11',
+        dec: '12', december: '12'
+      }
+      const month = monthMap[monthName.toLowerCase()]
+      if (month) {
+        const day = dayRaw.padStart(2, '0')
+        return `${year}-${month}-${day}`
+      }
+    }
+
+    const monthYear = trimmed.match(
+      /^(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+(\d{4})$/i
+    )
+    if (monthYear) {
+      const [, monthName, year] = monthYear
+      const monthMap: Record<string, string> = {
+        jan: '01', january: '01',
+        feb: '02', february: '02',
+        mar: '03', march: '03',
+        apr: '04', april: '04',
+        may: '05',
+        jun: '06', june: '06',
+        jul: '07', july: '07',
+        aug: '08', august: '08',
+        sep: '09', sept: '09', september: '09',
+        oct: '10', october: '10',
+        nov: '11', november: '11',
+        dec: '12', december: '12'
+      }
+      const month = monthMap[monthName.toLowerCase()]
+      if (month) return `${year}-${month}-01`
+    }
+
+    // Try to parse and format as a fallback
+    const date = new Date(trimmed)
     if (!isNaN(date.getTime())) {
       return date.toISOString().split('T')[0]
     }

@@ -755,17 +755,28 @@ class ApiClient {
       return data as T
     } catch (error) {
       const apiError = error as ApiError
+      const nativeError = error as Error
       // Don't log expected errors if suppressNotFoundError is set
       // Suppresses: 404 (not found), 401/403 (auth errors - user not logged in)
       const shouldSuppressLog = options.suppressNotFoundError &&
         (apiError?.status === 404 || apiError?.status === 401 || apiError?.status === 403)
 
       if (!shouldSuppressLog) {
+        const statusCode = apiError?.status || apiError?.response?.status
+        const isNetworkError = !statusCode
         // Log error with better formatting
         const errorDetails = apiError?.response?.data || apiError?.data || apiError?.message || error
+        const errorMessage =
+          typeof errorDetails === 'string'
+            ? errorDetails
+            : (nativeError?.message || JSON.stringify(errorDetails))
+
         console.error(`API request failed: ${endpoint}`, {
-          status: apiError?.status || apiError?.response?.status,
-          message: typeof errorDetails === 'string' ? errorDetails : JSON.stringify(errorDetails),
+          url,
+          status: statusCode,
+          networkError: isNetworkError,
+          message: errorMessage,
+          errorName: nativeError?.name,
           error
         })
       }

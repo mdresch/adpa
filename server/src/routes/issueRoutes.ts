@@ -203,11 +203,13 @@ Guidelines:
         const availableProviders = await aiService.getAvailableProviders()
         const activeProviders = availableProviders.filter(p => p.is_active)
 
+        const preferredProvider = activeProviders.length > 0 ? activeProviders[0].type : 'ollama'
         if (activeProviders.length === 0) {
-          throw new Error('No active AI providers configured. Please configure at least one AI provider in Settings.')
+          log.warn('[ISSUES-SUGGEST-RESOLUTION] No active DB providers found, using local fallback provider', {
+            fallbackProvider: preferredProvider
+          })
         }
 
-        const preferredProvider = activeProviders[0].type
         log.info('[ISSUES-SUGGEST-RESOLUTION] Using AI provider system', {
           preferredProvider,
           totalActiveProviders: activeProviders.length

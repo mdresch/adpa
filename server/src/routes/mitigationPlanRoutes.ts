@@ -258,12 +258,14 @@ Guidelines:
         const availableProviders = await aiService.getAvailableProviders()
         const activeProviders = availableProviders.filter(p => p.is_active)
 
+        // Use the highest priority active provider, or local fallback when none are active
+        const preferredProvider = activeProviders.length > 0 ? activeProviders[0].type : 'ollama'
         if (activeProviders.length === 0) {
-          throw new Error('No active AI providers configured. Please configure at least one AI provider in Settings.')
+          log.warn('[MITIGATION-PLANS-SUGGEST] No active DB providers found, using local fallback provider', {
+            fallbackProvider: preferredProvider
+          })
         }
 
-        // Use the highest priority active provider as preferred
-        const preferredProvider = activeProviders[0].type
         log.info('[MITIGATION-PLANS-SUGGEST] Using AI provider system', {
           preferredProvider,
           totalActiveProviders: activeProviders.length,

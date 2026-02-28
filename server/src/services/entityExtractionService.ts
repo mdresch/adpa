@@ -208,7 +208,10 @@ export class EntityExtractionService {
       const activeProviders = availableProviders.filter(p => p.is_active)
       
       if (activeProviders.length === 0) {
-        throw new Error('No active AI providers configured')
+        logger.warn('[ENTITY-EXTRACTION] No active AI providers configured in database, using local fallback provider', {
+          fallbackProvider: 'ollama'
+        })
+        return { provider: 'ollama', model: requestedModel }
       }
       
       // Use first active provider - let AI service handle model selection
@@ -226,8 +229,8 @@ export class EntityExtractionService {
       }
     } catch (error) {
       logger.error('[ENTITY-EXTRACTION] Error selecting AI provider:', error)
-      // Fallback to OpenAI if selection fails - AI service will handle model selection
-      return { provider: 'openai' }
+      // Fallback to local provider if selection fails
+      return { provider: 'ollama', model: requestedModel }
     }
   }
 

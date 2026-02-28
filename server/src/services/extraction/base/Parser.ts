@@ -21,6 +21,14 @@ export function parseAIResponse(content: string): any {
   })
   
   let cleanedContent = content.trim()
+
+  // If the response is prose with embedded JSON, try to isolate JSON payload first.
+  if (!cleanedContent.startsWith('{') && !cleanedContent.startsWith('[')) {
+    const embeddedJson = extractEmbeddedJson(cleanedContent)
+    if (embeddedJson) {
+      cleanedContent = embeddedJson
+    }
+  }
   
   // Remove markdown code blocks if present
   if (cleanedContent.includes('```')) {
@@ -93,9 +101,58 @@ export function parseAIResponse(content: string): any {
         fixError: fixError.message,
         contentPreview: cleanedContent.substring(0, 500)
       })
-      throw new Error(`Failed to parse AI response: ${parseError.message}`)
+      return {}
     }
   }
+}
+
+/**
+ * Extract the first balanced JSON object/array from mixed prose.
+ */
+function extractEmbeddedJson(content: string): string | null {
+  const firstObject = content.indexOf('{')
+  const firstArray = content.indexOf('[')
+  const startCandidates = [firstObject, firstArray].filter((i) => i >= 0)
+  if (startCandidates.length === 0) return null
+
+  const start = Math.min(...startCandidates)
+  const opening = content[start]
+  const closing = opening === '{' ? '}' : ']'
+
+  let depth = 0
+  let inString = false
+  let escapeNext = false
+
+  for (let i = start; i < content.length; i++) {
+    const ch = content[i]
+
+    if (escapeNext) {
+      escapeNext = false
+      continue
+    }
+
+    if (ch === '\\') {
+      escapeNext = true
+      continue
+    }
+
+    if (ch === '"') {
+      inString = !inString
+      continue
+    }
+
+    if (inString) continue
+
+    if (ch === opening) depth++
+    if (ch === closing) {
+      depth--
+      if (depth === 0) {
+        return content.substring(start, i + 1)
+      }
+    }
+  }
+
+  return null
 }
 
 /**
@@ -289,11 +346,31 @@ function salvageIncompleteJson(content: string): string | null {
  * Coerce value to number if possible
  */
 export function coerceNumber(value: any): number | null {
-  if (typeof value === 'number') return value
-  if (typeof value === 'string') {
-    const parsed = parseFloat(value)
-    return isNaN(parsed) ? null : parsed
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null
   }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) return null
+
+    // Handle common placeholders
+    if (/^(n\/?a|na|none|null|unknown|tbd|not\s+specified)$/i.test(trimmed)) {
+      return null
+    }
+
+    // Handle ranges like "from 28% to 80%" -> 80
+    const rangeMatch = trimmed.match(/(?:from|between)\s+[\d.,]+\s*(?:%|percent)?\s*(?:to|and)\s+([\d.,]+)/i)
+    const normalizedInput = rangeMatch ? rangeMatch[1] : trimmed
+
+    // Extract first numeric token while tolerating symbols like ≥, ≤, ±, currency, etc.
+    const numericToken = normalizedInput.match(/-?[\d.,]+(?:e[+-]?\d+)?/i)?.[0]
+    if (!numericToken) return null
+
+    const parsed = parseFloat(numericToken.replace(/,/g, ''))
+    return Number.isFinite(parsed) ? parsed : null
+  }
+
   return null
 }
 

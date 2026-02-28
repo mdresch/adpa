@@ -532,7 +532,10 @@ export class ProjectDataExtractionService {
       const activeProviders = availableProviders.filter(p => p.is_active)
 
       if (activeProviders.length === 0) {
-        throw new Error('No active AI providers configured')
+        logger.warn('[EXTRACTION] No active AI providers configured in database, using local fallback provider', {
+          fallbackProvider: 'ollama'
+        })
+        return { provider: 'ollama', model: requestedModel }
       }
 
       // Use first active provider - let AI service handle model selection
@@ -550,8 +553,8 @@ export class ProjectDataExtractionService {
       }
     } catch (error) {
       logger.error('[EXTRACTION] Error selecting AI provider:', error)
-      // Fallback to OpenAI if selection fails - AI service will handle model selection
-      return { provider: 'openai' }
+      // Fallback to local provider if selection fails
+      return { provider: 'ollama', model: requestedModel }
     }
   }
 
@@ -4420,9 +4423,9 @@ Output valid JSON object with "performance_actuals" array only.`
       // fall through to other handlers if conversion failed
     }
 
-    // Check if it's already a valid YYYY-MM-DD date BEFORE trying quarter conversion
-    // This prevents valid dates from being passed to convertQuarterDate which logs warnings
-    if (isValidDate(trimmed)) {
+    // Check if it's already a strict YYYY-MM-DD date BEFORE trying quarter conversion.
+    // Avoid passing natural-language strings (e.g. "July 2026") through unchanged.
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed) && isValidDate(trimmed)) {
       return trimmed
     }
 
@@ -8877,7 +8880,8 @@ Output valid JSON object with "performance_actuals" array only.`
     // Validate entity_type enum
     const validEntityTypes = new Set(['milestone', 'deliverable', 'activity', 'phase', 'resource'])
 
-    // Deduplicate performance actuals by entity_type + entity_name + measurement_date (AI sometimes extracts same actual multiple times)
+    // Deduplicate performance actuals by measurement_date to match DB unique constraint
+    // (project_id, measurement_date)
     const deduplicatedMap = new Map<string, PerformanceActual>()
 
     performanceActuals.forEach(actual => {
@@ -8889,7 +8893,7 @@ Output valid JSON object with "performance_actuals" array only.`
         return
       }
 
-      const key = `${entityType}:${actual.entity_name.trim().toLowerCase()}:${normalizedMeasurementDate}`
+      const key = normalizedMeasurementDate
 
       if (!deduplicatedMap.has(key)) {
         deduplicatedMap.set(key, actual)
@@ -8898,7 +8902,9 @@ Output valid JSON object with "performance_actuals" array only.`
         const existing = deduplicatedMap.get(key)!
         const merged: PerformanceActual = {
           ...existing,
+          entity_type: actual.entity_type || existing.entity_type,
           entity_id: actual.entity_id || existing.entity_id,
+          entity_name: actual.entity_name || existing.entity_name,
           planned_start_date: actual.planned_start_date || existing.planned_start_date,
           actual_start_date: actual.actual_start_date || existing.actual_start_date,
           planned_end_date: actual.planned_end_date || existing.planned_end_date,
@@ -8913,7 +8919,7 @@ Output valid JSON object with "performance_actuals" array only.`
           notes: actual.notes || existing.notes
         }
         deduplicatedMap.set(key, merged)
-        logger.debug(`[EXTRACTION-PERFORMANCE_ACTUALS] Merged duplicate performance actual: "${actual.entity_name}" (${entityType}, ${normalizedMeasurementDate})`)
+        logger.debug(`[EXTRACTION-PERFORMANCE_ACTUALS] Merged duplicate performance actual for measurement date ${normalizedMeasurementDate}`)
       }
     })
 
@@ -9016,7 +9022,10 @@ Output valid JSON object with "performance_actuals" array only.`
         measurement_date, measurement_method, measured_by, notes
       )
       VALUES ${placeholders.join(', ')}
-      ON CONFLICT (project_id, entity_type, entity_name, measurement_date) DO UPDATE SET
+      ON CONFLICT (project_id, measurement_date) DO UPDATE SET
+        entity_type = COALESCE(EXCLUDED.entity_type, performance_actuals.entity_type),
+        entity_id = COALESCE(EXCLUDED.entity_id, performance_actuals.entity_id),
+        entity_name = COALESCE(EXCLUDED.entity_name, performance_actuals.entity_name),
         planned_start_date = COALESCE(EXCLUDED.planned_start_date, performance_actuals.planned_start_date),
         actual_start_date = COALESCE(EXCLUDED.actual_start_date, performance_actuals.actual_start_date),
         planned_end_date = COALESCE(EXCLUDED.planned_end_date, performance_actuals.planned_end_date),

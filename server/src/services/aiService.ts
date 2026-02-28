@@ -49,6 +49,7 @@ export interface AIGenerateRequest {
   userId?: string
   projectId?: string
   documentId?: string
+  documentVersion?: string | number
   // Rich tracing metadata (optional)
   aiCallType?: string
   requestedGeneration?: string
@@ -58,6 +59,8 @@ export interface AIGenerateRequest {
   templateRecommendation?: boolean
   riskMitigationPlan?: boolean
   riskName?: string
+  template_version?: string | number
+  metadata?: Record<string, any>
 }
 
 export interface AIGenerateResponse {
@@ -79,12 +82,69 @@ interface ProviderBackoffState {
   nextRetryTime: number
 }
 
+const LOCAL_FALLBACK_PROVIDER = 'ollama'
+
+interface ActiveProviderRow {
+  provider_type: string
+  api_key_encrypted?: string | null
+  configuration?: Record<string, any> | null
+}
+
 class AIService {
   private providerBackoff: Map<string, ProviderBackoffState> = new Map()
   private readonly INITIAL_BACKOFF_MS = 1000 // 1 second
   private readonly MAX_BACKOFF_MS = 60000 // 60 seconds
   private readonly BACKOFF_MULTIPLIER = 2
   private readonly BACKOFF_JITTER = 0.1 // 10% jitter
+
+  private isModelCompatibleWithProvider(providerType: string, model?: string): boolean {
+    if (!model) return true
+
+    const modelLower = model.toLowerCase().trim()
+    if (!modelLower) return true
+
+    const providerModelFamilies: Record<string, string[]> = {
+      openai: ['gpt-', 'o1-', 'o3-', 'o4-', 'text-'],
+      google: ['gemini-', 'palm-'],
+      groq: ['llama', 'mixtral', 'gemma'],
+      mistral: ['mistral-', 'codestral-', 'pixtral-', 'magistral-'],
+      anthropic: ['claude-'],
+      azure: ['gpt-', 'text-'],
+      deepseek: ['deepseek-'],
+      moonshot: ['kimi-', 'moonshot-'],
+      xai: ['grok-'],
+      copilot: ['copilot-'],
+      ollama: ['llama', 'mistral', 'phi', 'gemma', 'qwen', 'mixtral', 'codellama', 'deepseek-r1']
+    }
+
+    const families = providerModelFamilies[providerType]
+    if (!families || families.length === 0) return true
+
+    if (providerType === 'ollama' && modelLower.includes(':')) {
+      return true
+    }
+
+    return families.some((prefix) => modelLower.startsWith(prefix))
+  }
+
+  private getProviderDefaultModel(providerType: string): string | undefined {
+    if (providerType === 'ollama') {
+      return process.env.OLLAMA_MODEL || this.getModelsForProvider(providerType)[0] || 'llama3.1'
+    }
+    return this.getModelsForProvider(providerType)[0]
+  }
+
+  private normalizeModelForProvider(providerType: string, model?: string): string | undefined {
+    if (!model) {
+      return this.getProviderDefaultModel(providerType)
+    }
+
+    if (this.isModelCompatibleWithProvider(providerType, model)) {
+      return model
+    }
+
+    return this.getProviderDefaultModel(providerType)
+  }
 
   constructor() {
     logger.info("AI Service initialized - will fetch AI Gateway key from database")
@@ -150,6 +210,7 @@ class AIService {
       userId: request.userId || null,
       projectId: request.projectId || null,
       documentId: request.documentId || null,
+      documentVersion: request.documentVersion ?? null,
       provider: context.provider,
       model: context.model,
       callPath: context.callPath,
@@ -163,6 +224,8 @@ class AIService {
       riskMitigationPlan: request.riskMitigationPlan ?? false,
       riskName: request.riskName || null,
       traceName: request.traceName || null,
+      templateVersion: request.template_version ?? null,
+      customMetadata: request.metadata || null,
     }
   }
 
@@ -233,6 +296,10 @@ class AIService {
    * Check if provider is available (not in backoff period)
    */
   private isProviderAvailable(provider: string): boolean {
+    if (provider === LOCAL_FALLBACK_PROVIDER) {
+      return true
+    }
+
     const backoffState = this.providerBackoff.get(provider)
 
     if (!backoffState) {
@@ -288,24 +355,58 @@ class AIService {
   private async getActiveProviders(): Promise<string[]> {
     try {
       const result = await pool.query(
-        `SELECT provider_type 
+        `SELECT provider_type, api_key_encrypted, configuration
          FROM ai_providers 
          WHERE is_active = true 
          ORDER BY priority ASC, name ASC`
       )
 
       if (!result || !result.rows) {
-        logger.warn('AI Service: getActiveProviders query returned no result, returning default list')
-        return ['google', 'mistral', 'groq']
+        logger.warn('AI Service: getActiveProviders query returned no result, using local fallback provider')
+        return [LOCAL_FALLBACK_PROVIDER]
       }
 
-      const providers = result.rows.map(row => row.provider_type)
+      const rows = (result.rows || []) as ActiveProviderRow[]
+
+      const isPlaceholderApiKey = (key?: string | null): boolean => {
+        if (!key) return false
+        const normalized = key.toLowerCase().trim()
+        return (
+          normalized.includes('your-openai-api-key') ||
+          normalized.includes('your-openai-key') ||
+          /^your-[a-z0-9_-]*key$/i.test(normalized) ||
+          normalized.includes('replace-me') ||
+          normalized.includes('changeme')
+        )
+      }
+
+      const filteredRows = rows.filter((row) => {
+        if (row.provider_type !== 'openai') {
+          return true
+        }
+
+        const cfg = row.configuration || {}
+        const openaiApiKey = cfg.apiKey || cfg.api_key || this.decryptApiKey(row.api_key_encrypted || undefined)
+        if (isPlaceholderApiKey(openaiApiKey)) {
+          logger.warn('[AI-FALLBACK] Skipping OpenAI provider with placeholder API key', {
+            provider: row.provider_type
+          })
+          return false
+        }
+
+        return true
+      })
+
+      const providers = Array.from(new Set([
+        ...filteredRows.map(row => row.provider_type),
+        LOCAL_FALLBACK_PROVIDER
+      ]))
       logger.info(`📋 [AI-FALLBACK] Active providers available: ${providers.join(', ')}`)
       return providers
     } catch (error) {
       logger.error('Failed to get active providers:', error)
-      // Return default fallback list if DB query fails
-      return ['google', 'mistral', 'groq']
+      // Always keep local provider available even if DB query fails
+      return [LOCAL_FALLBACK_PROVIDER]
     }
   }
 
@@ -330,6 +431,10 @@ class AIService {
       if (availableProviders.length === 0) {
         logger.info('⚠️ [AI-FALLBACK] None of the requested fallback providers are active, falling back to all active providers')
         availableProviders = activeProvidersFromDb
+      }
+
+      if (!availableProviders.includes(LOCAL_FALLBACK_PROVIDER)) {
+        availableProviders.push(LOCAL_FALLBACK_PROVIDER)
       }
     } else {
       availableProviders = activeProvidersFromDb
@@ -357,6 +462,11 @@ class AIService {
       logger.info(`⏸️ [AI-BACKOFF] Skipped ${skipped} provider(s) in backoff period`)
     }
 
+    if (providers.length === 0) {
+      logger.warn('⚠️ [AI-FALLBACK] All providers filtered out, forcing local fallback provider (ollama)')
+      providers = [LOCAL_FALLBACK_PROVIDER]
+    }
+
     // Auto-disable providers with insufficient funds
     const autoDisableProvider = async (providerType: string, reason: string) => {
       try {
@@ -376,10 +486,6 @@ class AIService {
       }
     }
 
-    if (providers.length === 0) {
-      throw new Error('All active providers are currently in backoff period. Please try again later.')
-    }
-
     logger.info(`🔄 [AI-FALLBACK] Provider chain (active only): ${providers.join(' → ')}`)
 
     let lastError: Error | null = null
@@ -390,7 +496,22 @@ class AIService {
         attemptsWithBackoff++
         logger.info(`🔄 [AI-FALLBACK] Trying provider: ${provider} (attempt ${attemptsWithBackoff}/${providers.length})`)
 
-        const result = await this.generate({ ...request, provider })
+        const normalizedModel = this.normalizeModelForProvider(provider, request.model)
+        if (request.model && normalizedModel && normalizedModel !== request.model) {
+          logger.warn('[AI-FALLBACK] Adjusting incompatible model for provider', {
+            provider,
+            originalModel: request.model,
+            adjustedModel: normalizedModel
+          })
+        }
+
+        const providerRequest: AIGenerateRequest = {
+          ...request,
+          provider,
+          model: normalizedModel
+        }
+
+        const result = await this.generate(providerRequest)
 
         // Success! Reset backoff for this provider
         this.resetProviderBackoff(provider)
@@ -427,9 +548,19 @@ class AIService {
           errorMessageLower.includes('model not found') ||
           errorMessageLower.includes('model:') && errorMessageLower.includes('not found')
 
+        const isInvalidCredentials =
+          errorMessageLower.includes('incorrect api key provided') ||
+          errorMessageLower.includes('invalid_api_key') ||
+          errorMessageLower.includes('invalid api key') ||
+          errorMessageLower.includes('unauthorized') ||
+          error.statusCode === 401
+
         if (isInsufficientFunds) {
           logger.error(`💳 [AI-CREDITS] Provider ${provider} has insufficient funds/credits or capacity exceeded`)
           await autoDisableProvider(provider, `Insufficient capacity: ${errorMessage}`)
+        } else if (isInvalidCredentials) {
+          logger.error(`🔐 [AI-AUTH] Provider ${provider} has invalid credentials`)
+          await autoDisableProvider(provider, `Invalid credentials: ${errorMessage}`)
         } else if (isModelNotFound) {
           logger.warn(`🔍 [AI-FALLBACK] Provider ${provider} model not found - will try next provider`)
           // Don't disable provider for model errors - just try next one
@@ -550,12 +681,15 @@ class AIService {
         });
       }
 
-      if (providerResult.rows.length === 0) {
+      const providerRow = providerResult.rows[0]
+      const providerType = providerRow?.provider_type || (request.provider === LOCAL_FALLBACK_PROVIDER ? LOCAL_FALLBACK_PROVIDER : null)
+      if (!providerType) {
         logger.error('❌ [AI-SERVICE] Provider not found:', request.provider)
         throw new Error(`Provider not found or inactive: ${request.provider}`)
       }
 
-      const providerType = providerResult.rows[0].provider_type
+      const providerConfiguration = providerRow?.configuration || {}
+      const providerApiKeyEncrypted = providerRow?.api_key_encrypted
       logger.debug('[AI-SERVICE] Provider type:', providerType)
 
       // OPTIMIZATION: Skip AI Gateway for providers not natively supported
@@ -569,7 +703,7 @@ class AIService {
         logger.info(`🔄 [AI-SERVICE] Provider ${providerType} not in AI Gateway - using direct API`)
 
         // Get direct API key from provider configuration OR encrypted field
-        const directApiKey = providerResult.rows[0].configuration?.apiKey || this.decryptApiKey(providerResult.rows[0].api_key_encrypted)
+        const directApiKey = providerConfiguration?.apiKey || this.decryptApiKey(providerApiKeyEncrypted)
 
         if (!directApiKey) {
           throw new Error(`Direct ${providerType} API key not found in provider configuration or database`)
@@ -1487,12 +1621,12 @@ class AIService {
           logger.info('🔄 [AI-SERVICE] Falling back to direct Ollama...')
 
           // Ollama doesn't require API key for local connections
-          const ollamaEndpoint = providerResult.rows[0].configuration?.endpoint ||
-            providerResult.rows[0].configuration?.baseURL ||
+          const ollamaEndpoint = providerConfiguration?.endpoint ||
+            providerConfiguration?.baseURL ||
             'http://localhost:11434'
 
-          // Use the model specified in request, or default to llama3.1
-          const modelName = request.model || 'llama3.1:latest'
+          const defaultOllamaModel = providerConfiguration?.default_model || process.env.OLLAMA_MODEL || this.getModelsForProvider('ollama')[0] || 'llama3.1'
+          const modelName = this.normalizeModelForProvider('ollama', request.model) || defaultOllamaModel
 
           logger.debug('[AI-SERVICE] Using Ollama native API', { endpoint: ollamaEndpoint, model: modelName })
 
@@ -1600,8 +1734,8 @@ class AIService {
           logger.info('🔄 [AI-SERVICE] Falling back to direct OpenAI...')
 
           // Get direct API key - be robust about lookup
-          const config = providerResult.rows[0].configuration || {}
-          const directApiKey = config.apiKey || config.api_key || this.decryptApiKey(providerResult.rows[0].api_key_encrypted)
+          const config = providerConfiguration || {}
+          const directApiKey = config.apiKey || config.api_key || this.decryptApiKey(providerApiKeyEncrypted)
 
           if (!directApiKey) {
             throw new Error('Direct OpenAI API key not found in provider configuration or database')

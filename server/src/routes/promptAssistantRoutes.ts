@@ -4,6 +4,7 @@
  */
 
 import { Router } from 'express'
+import Joi from 'joi'
 import { authMiddleware } from '../middleware/auth'
 import { validate } from '../middleware/validation'
 import { PromptAssistantService } from '../services/promptAssistantService'
@@ -16,13 +17,18 @@ const promptAssistant = new PromptAssistantService()
  * POST /api/prompt-assistant/suggest
  * Generate AI-powered prompt suggestions
  */
-router.post('/suggest', authMiddleware, validate({
-  body: {
-    templateType: 'string|required',
-    methodology: 'string',
-    context: 'object|required'
-  }
-}), async (req, res) => {
+router.post('/suggest', authMiddleware, validate(Joi.object({
+    templateType: Joi.string().required(),
+    methodology: Joi.string().allow('', null).optional(),
+    templateId: Joi.string().uuid().optional(),
+    templateVersion: Joi.number().integer().min(1).optional(),
+    context: Joi.object({
+      projectType: Joi.string().allow('', null).optional(),
+      industry: Joi.string().allow('', null).optional(),
+      documentPurpose: Joi.string().allow('', null).optional(),
+      targetAudience: Joi.string().allow('', null).optional(),
+    }).required()
+  })), async (req, res) => {
   try {
     const suggestion = await promptAssistant.suggestPrompt(req.body)
     res.json({ success: true, data: suggestion })
@@ -39,13 +45,27 @@ router.post('/suggest', authMiddleware, validate({
  * POST /api/prompt-assistant/optimize
  * Optimize an existing prompt
  */
-router.post('/optimize', authMiddleware, validate({
-  body: {
-    currentPrompt: 'string|required',
-    issues: 'array|required',
-    context: 'object|required'
-  }
-}), async (req, res) => {
+router.post('/optimize', authMiddleware, validate(Joi.object({
+    currentPrompt: Joi.string().max(50000).required(),
+    issues: Joi.array().items(
+      Joi.object({
+        type: Joi.string().valid('error', 'warning', 'suggestion').required(),
+        message: Joi.string().required(),
+        position: Joi.number().optional(),
+        severity: Joi.number().optional(),
+      })
+    ).required(),
+    templateType: Joi.string().allow('', null).optional(),
+    methodology: Joi.string().allow('', null).optional(),
+    templateId: Joi.string().uuid().optional(),
+    templateVersion: Joi.number().integer().min(1).optional(),
+    context: Joi.object({
+      projectType: Joi.string().allow('', null).optional(),
+      industry: Joi.string().allow('', null).optional(),
+      documentPurpose: Joi.string().allow('', null).optional(),
+      targetAudience: Joi.string().allow('', null).optional(),
+    }).required()
+  })), async (req, res) => {
   try {
     const optimized = await promptAssistant.optimizePrompt(req.body)
     res.json({ success: true, data: optimized })
@@ -62,11 +82,9 @@ router.post('/optimize', authMiddleware, validate({
  * POST /api/prompt-assistant/score
  * Score a prompt on quality dimensions
  */
-router.post('/score', authMiddleware, validate({
-  body: {
-    prompt: 'string|required'
-  }
-}), async (req, res) => {
+router.post('/score', authMiddleware, validate(Joi.object({
+    prompt: Joi.string().max(50000).required()
+  })), async (req, res) => {
   try {
     const score = await promptAssistant.scorePrompt(req.body.prompt)
     res.json({ success: true, data: score })

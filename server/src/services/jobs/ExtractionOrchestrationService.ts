@@ -1555,10 +1555,25 @@ export class ExtractionOrchestrationService {
 
           // Update message with WBS import summary
           const wbsSummary = `Auto-WBS: ${importResult.tasksCreated} tasks created/updated.`
-          await db.query(
-            `UPDATE jobs SET message = message || $1 WHERE id = $2`,
-            [`\n${wbsSummary}`, jobId]
+          const messageColumnResult = await db.query(
+            `SELECT column_name
+             FROM information_schema.columns
+             WHERE table_schema = 'public'
+               AND table_name = 'jobs'
+               AND column_name IN ('message', 'status_message')
+             ORDER BY CASE WHEN column_name = 'message' THEN 0 ELSE 1 END
+             LIMIT 1`
           )
+
+          const messageColumn = messageColumnResult.rows[0]?.column_name as string | undefined
+          if (messageColumn === 'message' || messageColumn === 'status_message') {
+            await db.query(
+              `UPDATE jobs SET ${messageColumn} = COALESCE(${messageColumn}, '') || $1 WHERE id = $2`,
+              [`\n${wbsSummary}`, jobId]
+            )
+          } else {
+            log.warn('[EXTRACTION-PARENT] Skipping WBS summary append: no message/status_message column on jobs table')
+          }
         }
       } catch (importErr: any) {
         log.warn(`[EXTRACTION-PARENT] Auto-WBS import failed (non-fatal): ${importErr?.message || importErr}`)

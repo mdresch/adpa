@@ -11,6 +11,8 @@ import { aiService } from './aiService'
 export interface PromptSuggestionRequest {
   templateType: string
   methodology: string
+  templateId?: string
+  templateVersion?: number
   context: {
     projectType?: string
     industry?: string
@@ -22,6 +24,10 @@ export interface PromptSuggestionRequest {
 export interface PromptOptimizationRequest {
   currentPrompt: string
   issues: PromptIssue[]
+  templateType?: string
+  methodology?: string
+  templateId?: string
+  templateVersion?: number
   context: PromptSuggestionRequest['context']
 }
 
@@ -52,14 +58,40 @@ export interface PromptSuggestion {
   context_requirements: string[]
   expected_output_format: string
   confidence: number
+  ai_provider_used?: string
+  ai_model_used?: string
 }
 
 export class PromptAssistantService {
+  private async getPreferredProviderConfig(): Promise<{ provider: string; model: string }> {
+    const providerResult = await pool.query(
+      "SELECT provider_type, default_model FROM ai_providers WHERE is_active = true ORDER BY priority ASC LIMIT 1"
+    )
+
+    return {
+      provider: providerResult.rows[0]?.provider_type || 'openai',
+      model: providerResult.rows[0]?.default_model || 'gpt-4o'
+    }
+  }
+
+  private parseJsonResponse(content: string): any {
+    try {
+      return JSON.parse(content)
+    } catch (parseError) {
+      const jsonMatch = content.match(/\{[\s\S]*\}/)
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0])
+      }
+      throw parseError
+    }
+  }
+
   /**
    * Generate AI-powered prompt suggestions based on template type and context
    */
   async suggestPrompt(request: PromptSuggestionRequest): Promise<PromptSuggestion> {
     try {
+      const preferred = await this.getPreferredProviderConfig()
       const contextPrompt = this.buildContextPrompt(request)
       
       const aiPrompt = `You are an expert prompt engineer for project management documentation.
@@ -85,31 +117,35 @@ Return a JSON object with:
   "confidence": 0.95
 }`
 
-      const response = await aiService.generate({
+      const response = await aiService.generateWithFallback({
         prompt: aiPrompt,
-        provider: 'openai',
-        model: 'gpt-4',
+        provider: preferred.provider,
+        model: preferred.model,
         temperature: 0.3,
-        max_tokens: 2000
+        max_tokens: 2000,
+        traceName: `prompt-assistant-suggest-${request.templateType || 'unknown'}`,
+        aiCallType: 'prompt_assistant_suggest',
+        template_id: request.templateId,
+        template_name: request.templateType,
+        template_version: request.templateVersion,
+        metadata: {
+          requestType: 'suggest',
+          methodology: request.methodology || null,
+          projectType: request.context?.projectType || null,
+          industry: request.context?.industry || null,
+          documentPurpose: request.context?.documentPurpose || null,
+          targetAudience: request.context?.targetAudience || null,
+        }
       })
 
-      let suggestion
-      try {
-        suggestion = JSON.parse(response.content)
-      } catch (parseError) {
-        // Fallback: extract JSON from response
-        const jsonMatch = response.content.match(/\{[\s\S]*\}/)
-        if (jsonMatch) {
-          suggestion = JSON.parse(jsonMatch[0])
-        } else {
-          throw new Error('Failed to parse AI response as JSON')
-        }
-      }
+      const suggestion = this.parseJsonResponse(response.content)
       
       // Validate and enhance the suggestion
       return {
         ...suggestion,
-        system_prompt: this.enhancePrompt(suggestion.system_prompt, request)
+        system_prompt: this.enhancePrompt(suggestion.system_prompt, request),
+        ai_provider_used: response.providerUsed || response.provider,
+        ai_model_used: response.model
       }
     } catch (error) {
       logger.error('Error generating prompt suggestion', { error, request })
@@ -122,6 +158,7 @@ Return a JSON object with:
    */
   async optimizePrompt(request: PromptOptimizationRequest): Promise<PromptSuggestion> {
     try {
+      const preferred = await this.getPreferredProviderConfig()
       const issuesPrompt = request.issues.map(issue => 
         `${issue.type.toUpperCase()}: ${issue.message}`
       ).join('\n')
@@ -153,27 +190,35 @@ Return a JSON object with:
   "confidence": 0.95
 }`
 
-      const response = await aiService.generate({
+      const response = await aiService.generateWithFallback({
         prompt: aiPrompt,
-        provider: 'openai',
-        model: 'gpt-4',
+        provider: preferred.provider,
+        model: preferred.model,
         temperature: 0.2,
-        max_tokens: 2000
+        max_tokens: 2000,
+        traceName: `prompt-assistant-optimize-${request.templateType || 'unknown'}`,
+        aiCallType: 'prompt_assistant_optimize',
+        template_id: request.templateId,
+        template_name: request.templateType || 'unknown',
+        template_version: request.templateVersion,
+        metadata: {
+          requestType: 'optimize',
+          issueCount: request.issues?.length || 0,
+          methodology: request.methodology || null,
+          projectType: request.context?.projectType || null,
+          industry: request.context?.industry || null,
+          documentPurpose: request.context?.documentPurpose || null,
+          targetAudience: request.context?.targetAudience || null,
+        }
       })
 
-      let optimized
-      try {
-        optimized = JSON.parse(response.content)
-      } catch (parseError) {
-        const jsonMatch = response.content.match(/\{[\s\S]*\}/)
-        if (jsonMatch) {
-          optimized = JSON.parse(jsonMatch[0])
-        } else {
-          throw new Error('Failed to parse AI response as JSON')
-        }
-      }
+      const optimized = this.parseJsonResponse(response.content)
 
-      return optimized
+      return {
+        ...optimized,
+        ai_provider_used: response.providerUsed || response.provider,
+        ai_model_used: response.model
+      }
     } catch (error) {
       logger.error('Error optimizing prompt', { error, request })
       throw new Error('Failed to optimize prompt')
@@ -314,15 +359,21 @@ Return a JSON object with:
   }
 
   // Private helper methods
-  private buildContextPrompt(request: PromptSuggestionRequest): string {
+  private buildContextPrompt(request: PromptSuggestionRequest | PromptSuggestionRequest['context']): string {
     const context = []
-    
-    if (request.templateType) context.push(`Template Type: ${request.templateType}`)
-    if (request.methodology) context.push(`Methodology: ${request.methodology}`)
-    if (request.context.projectType) context.push(`Project Type: ${request.context.projectType}`)
-    if (request.context.industry) context.push(`Industry: ${request.context.industry}`)
-    if (request.context.documentPurpose) context.push(`Purpose: ${request.context.documentPurpose}`)
-    if (request.context.targetAudience) context.push(`Audience: ${request.context.targetAudience}`)
+
+    const hasTopLevelFields = (payload: PromptSuggestionRequest | PromptSuggestionRequest['context']): payload is PromptSuggestionRequest => {
+      return typeof (payload as PromptSuggestionRequest).templateType === 'string' || typeof (payload as PromptSuggestionRequest).methodology === 'string'
+    }
+
+    const contextSource = hasTopLevelFields(request) ? request.context : request
+
+    if (hasTopLevelFields(request) && request.templateType) context.push(`Template Type: ${request.templateType}`)
+    if (hasTopLevelFields(request) && request.methodology) context.push(`Methodology: ${request.methodology}`)
+    if (contextSource.projectType) context.push(`Project Type: ${contextSource.projectType}`)
+    if (contextSource.industry) context.push(`Industry: ${contextSource.industry}`)
+    if (contextSource.documentPurpose) context.push(`Purpose: ${contextSource.documentPurpose}`)
+    if (contextSource.targetAudience) context.push(`Audience: ${contextSource.targetAudience}`)
     
     return context.join('\n')
   }

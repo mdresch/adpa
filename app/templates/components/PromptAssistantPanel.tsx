@@ -65,6 +65,8 @@ interface PromptAssistantPanelProps {
   onPromptChange: (prompt: string) => void
   templateType: string
   methodology: string
+  templateId?: string
+  templateVersion?: number
   context: {
     projectType?: string
     industry?: string
@@ -78,6 +80,8 @@ export default function PromptAssistantPanel({
   onPromptChange,
   templateType,
   methodology,
+  templateId,
+  templateVersion,
   context
 }: PromptAssistantPanelProps) {
   const [score, setScore] = useState<PromptScore | null>(null)
@@ -120,6 +124,8 @@ export default function PromptAssistantPanel({
       const response = await apiClient.post('/prompt-assistant/suggest', {
         templateType,
         methodology,
+        templateId,
+        templateVersion,
         context
       })
       setSuggestion(response.data)
@@ -144,6 +150,10 @@ export default function PromptAssistantPanel({
       const response = await apiClient.post('/prompt-assistant/optimize', {
         currentPrompt,
         issues,
+        templateType,
+        methodology,
+        templateId,
+        templateVersion,
         context
       })
       

@@ -44,6 +44,8 @@ interface TemplateOptimizationSuggestion {
   }
   tokens?: number
   cost?: number
+  analyzerProvider?: string
+  analyzerModel?: string
 }
 
 export class TemplateOptimizationService {
@@ -212,7 +214,9 @@ Always respond with valid JSON only.`
         expected_quality_gain: parsed.expected_quality_gain || 10,
         changes_summary: parsed.changes_summary || { system_prompt_changes: [], content_changes: [], key_improvements: [] },
         tokens: totalTokens,
-        cost: estimatedCost
+        cost: estimatedCost,
+        analyzerProvider: result.providerUsed || result.provider,
+        analyzerModel: result.model
       }
     } catch (error) {
       logger.error('[TEMPLATE-OPT] Failed to parse AI optimization response', {
@@ -402,8 +406,8 @@ Make the system prompt crystal-clear and the template structure easy for AI to f
           }
         }]),
         `AI-generated optimization triggered by quality regression: ${scoreBefore}% → ${scoreAfter}% (-${scoreBefore - scoreAfter}%)`,
-        'google',
-        'gemini-2.0-flash-exp',
+        optimization.analyzerProvider || 'unknown',
+        optimization.analyzerModel || 'unknown',
         optimization.tokens || 0,
         optimization.cost || 0
       ]

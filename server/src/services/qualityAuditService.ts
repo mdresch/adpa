@@ -47,7 +47,81 @@ interface QualityAuditResult {
   auditPerformed?: boolean
 }
 
+interface QualityAuditTraceContext {
+  projectId: string | null
+  documentId: string
+  documentVersion: string | number | null
+  templateId: string | null
+  templateVersion: string | number | null
+}
+
+const NO_AUDIT_DIMENSIONAL_SCORES: QualityDimensionalScores = {
+  completeness: 70,
+  consistency: 70,
+  professionalQuality: 70,
+  standardsCompliance: 70,
+  accuracy: 80,
+  contextRelevance: 80
+}
+
 class QualityAuditService {
+  private async buildAuditTraceContext(
+    documentId: string,
+    projectContext: Record<string, unknown>
+  ): Promise<QualityAuditTraceContext> {
+    const projectIdFromContext =
+      typeof projectContext.id === 'string'
+        ? projectContext.id
+        : (typeof projectContext.project_id === 'string' ? projectContext.project_id : null)
+
+    try {
+      const result = await pool.query(
+        `SELECT d.project_id,
+                d.version,
+                d.semantic_version,
+                d.template_id,
+                t.prompt_version
+         FROM documents d
+         LEFT JOIN templates t ON d.template_id = t.id
+         WHERE d.id = $1
+         LIMIT 1`,
+        [documentId]
+      )
+
+      const row = result.rows[0]
+      if (!row) {
+        return {
+          projectId: projectIdFromContext,
+          documentId,
+          documentVersion: null,
+          templateId: null,
+          templateVersion: null
+        }
+      }
+
+      return {
+        projectId: row.project_id || projectIdFromContext,
+        documentId,
+        documentVersion: row.semantic_version || row.version || null,
+        templateId: row.template_id || null,
+        templateVersion: row.prompt_version ?? 1
+      }
+    } catch (error: unknown) {
+      logger.warn('[QUALITY-AUDIT] Failed to build trace context, using fallback metadata', {
+        documentId,
+        error: error instanceof Error ? error.message : String(error)
+      })
+
+      return {
+        projectId: projectIdFromContext,
+        documentId,
+        documentVersion: null,
+        templateId: null,
+        templateVersion: null
+      }
+    }
+  }
+
   /**
    * Perform comprehensive quality audit on a generated document
    */
@@ -81,30 +155,22 @@ class QualityAuditService {
       const auditJobId = await this.createAuditJob(documentId, userId)
 
       // 2. Perform AI-powered multi-dimensional analysis
+      const traceContext = await this.buildAuditTraceContext(documentId, projectContext)
+
       const analysisResults = await this.performAnalysis(
         documentContent,
         documentType,
-        projectContext
+        projectContext,
+        traceContext,
+        userId
       )
 
-      // 3. Calculate overall score (weighted average) - only if audit was performed
-      const dimensionalScores = this.extractDimensionalScores(analysisResults)
+      // 3. Calculate overall score (weighted average)
       const auditPerformed = analysisResults.audit_performed !== false
-      
-      let overallScore: number | null = null
-      let overallGrade: string | null = null
-      let qualityLevel: string | null = null
-      
-      if (auditPerformed) {
-        overallScore = this.calculateOverallScore(dimensionalScores)
-        overallGrade = this.calculateGrade(overallScore)
-        qualityLevel = this.getQualityLevel(overallScore)
-      } else {
-        // No audit performed - keep values as null
-        overallScore = null
-        overallGrade = null
-        qualityLevel = null
-      }
+      const dimensionalScores = this.extractDimensionalScores(analysisResults, auditPerformed)
+      const overallScore = this.calculateOverallScore(dimensionalScores)
+      const overallGrade = this.calculateGrade(overallScore)
+      const qualityLevel = this.getQualityLevel(overallScore)
 
       // 4. Extract findings, issues, and recommendations
       const findings = this.extractFindings(analysisResults)
@@ -230,7 +296,7 @@ class QualityAuditService {
       )
       const templateId = docResult.rows[0]?.template_id
 
-      if (templateId) {
+      if (templateId && auditPerformed) {
         // Get previous audit for same template
         const previousAudit = await pool.query(
           `SELECT qa.*
@@ -336,8 +402,12 @@ class QualityAuditService {
   private async performAnalysis(
     documentContent: string,
     documentType: string,
-    projectContext: Record<string, unknown>
+    projectContext: Record<string, unknown>,
+    traceContext: QualityAuditTraceContext,
+    userId: string
   ): Promise<Record<string, unknown>> {
+    const traceName = `quality-audit-${traceContext.documentId}-${Date.now()}`
+
     const analysisPrompt = this.buildAnalysisPrompt(
       documentContent,
       documentType,
@@ -347,10 +417,12 @@ class QualityAuditService {
     const systemPrompt = this.getSystemPrompt()
 
     logger.info('[QUALITY-AUDIT] Calling AI for quality analysis', {
+      traceName,
       documentType,
       contentLength: documentContent.length,
       provider: 'google',
-      model: 'gemini-2.5-flash'
+      model: 'gemini-2.5-flash',
+      traceContext
     })
 
     try {
@@ -360,7 +432,23 @@ class QualityAuditService {
         prompt: analysisPrompt, // User prompt (required)
         system_prompt: systemPrompt, // System prompt (optional, snake_case)
         temperature: 0.3, // Lower temperature for consistent analysis
-        max_tokens: 4000 // Max tokens (snake_case to match interface)
+        max_tokens: 4000, // Max tokens (snake_case to match interface)
+        traceName,
+        userId,
+        projectId: traceContext.projectId || undefined,
+        documentId: traceContext.documentId,
+        documentVersion: traceContext.documentVersion || undefined,
+        template_id: traceContext.templateId || undefined,
+        template_version: traceContext.templateVersion || undefined,
+        aiCallType: 'quality_audit',
+        metadata: {
+          project_id: traceContext.projectId,
+          document_id: traceContext.documentId,
+          document_version: traceContext.documentVersion,
+          template_id: traceContext.templateId,
+          template_version: traceContext.templateVersion,
+          document_type: documentType
+        }
       })
 
       logger.info('[QUALITY-AUDIT] AI response received', {
@@ -650,8 +738,20 @@ Remember: Your audit helps improve future document generation, so be detailed an
         cleaned = cleaned.substring(0, cleaned.length - 3)
       }
       
-      const parsed = JSON.parse(cleaned.trim())
-      return parsed
+      const trimmed = cleaned.trim()
+      try {
+        const parsed = JSON.parse(trimmed)
+        return parsed
+      } catch {
+        // Retry with minimal sanitization for malformed escape sequences from LLM output
+        const sanitized = trimmed
+          .replace(/[\u0000-\u001F]+/g, ' ')
+          .replace(/\\(?!["\\\/bfnrtu])/g, '\\\\')
+
+        const parsed = JSON.parse(sanitized)
+        logger.warn('[QUALITY-AUDIT] Parsed AI response after JSON sanitization')
+        return parsed
+      }
     } catch (error) {
       logger.error('[QUALITY-AUDIT] Failed to parse AI response', {
         error: error instanceof Error ? error.message : String(error),
@@ -666,7 +766,14 @@ Remember: Your audit helps improve future document generation, so be detailed an
   /**
    * Extract dimensional scores from analysis
    */
-  private extractDimensionalScores(analysisResults: Record<string, unknown>): QualityDimensionalScores {
+  private extractDimensionalScores(
+    analysisResults: Record<string, unknown>,
+    auditPerformed = true
+  ): QualityDimensionalScores {
+    if (!auditPerformed) {
+      return { ...NO_AUDIT_DIMENSIONAL_SCORES }
+    }
+
     return {
       completeness: this.validateScore(analysisResults.completeness, 70),
       consistency: this.validateScore(analysisResults.consistency, 70),
@@ -773,11 +880,14 @@ Remember: Your audit helps improve future document generation, so be detailed an
   /**
    * Generate actionable recommendations
    */
-  private extractRecommendations(analysisResults: Record<string, unknown>, overallScore: number): string[] {
+  private extractRecommendations(analysisResults: Record<string, unknown>, overallScore: number | null): string[] {
     const recommendations = Array.isArray(analysisResults.recommendations) ? analysisResults.recommendations as string[] : []
 
     // Add score-specific recommendations
     const scoreRecommendations: string[] = []
+    if (overallScore === null) {
+      return recommendations
+    }
     
     if (overallScore < 70) {
       scoreRecommendations.push('CRITICAL: Overall quality is below acceptable standards. Consider re-generation with improved prompts or different AI provider.')
@@ -893,7 +1003,10 @@ Remember: Your audit helps improve future document generation, so be detailed an
       ]
     )
 
-    const auditId = result.rows[0].id
+    const auditId = result.rows?.[0]?.id
+    if (!auditId) {
+      throw new Error('Failed to persist quality audit: no audit ID returned from INSERT')
+    }
 
     // Update document's generation_metadata with compliance metrics if calculated
     if (auditData.complianceMetrics) {
@@ -1026,7 +1139,7 @@ Remember: Your audit helps improve future document generation, so be detailed an
     }
 
     // Trigger low-quality notification if score below 70%
-    if (auditData.overallScore < 70) {
+    if (auditData.overallScore !== null && auditData.overallScore < 70) {
       this.triggerLowQualityNotification(auditData.documentId, auditData.overallScore, auditData.issues).catch(err => {
         logger.error('[QUALITY-AUDIT] Failed to trigger low-quality notification', {
           documentId: auditData.documentId,

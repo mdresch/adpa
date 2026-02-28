@@ -25,6 +25,8 @@ export interface CapacityForecast {
   source_document_id?: string
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
 function normalizeIsoDate(value?: string | null): string | null {
   if (!value || typeof value !== 'string') return null
   const trimmed = value.trim()
@@ -32,6 +34,13 @@ function normalizeIsoDate(value?: string | null): string | null {
   if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed
   if (/^\d{4}-\d{2}$/.test(trimmed)) return `${trimmed}-01`
   return null
+}
+
+function asUuidOrNull(value?: string | null): string | null {
+  if (!value || typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  return UUID_PATTERN.test(trimmed) ? trimmed : null
 }
 
 export async function extractCapacityForecasts(
@@ -223,10 +232,34 @@ export async function saveCapacityForecasts(
       throw new Error('capacity_forecasts table has no expected columns for extraction insert')
     }
 
+    const deduplicatedMap = new Map<string, CapacityForecast>()
+    entities.forEach((entity) => {
+      const forecastDate = normalizeIsoDate(entity.period) || new Date().toISOString().slice(0, 10)
+      const role = entity.role?.trim() || 'General'
+      const skillLevel = 'all'
+      const key = `${forecastDate}:${role.toLowerCase()}:${skillLevel.toLowerCase()}`
+      if (!deduplicatedMap.has(key)) {
+        deduplicatedMap.set(key, entity)
+        return
+      }
+
+      const existing = deduplicatedMap.get(key)!
+      deduplicatedMap.set(key, {
+        ...existing,
+        available_hours: entity.available_hours ?? existing.available_hours,
+        demand_hours: entity.demand_hours ?? existing.demand_hours,
+        forecasted_demand_hours: entity.forecasted_demand_hours ?? existing.forecasted_demand_hours,
+        gap_hours: entity.gap_hours ?? existing.gap_hours,
+        notes: entity.notes || existing.notes,
+        source_document_id: asUuidOrNull(entity.source_document_id) || asUuidOrNull(existing.source_document_id)
+      })
+    })
+    const deduplicatedEntities = Array.from(deduplicatedMap.values())
+
     const values: any[] = []
     const placeholders: string[] = []
 
-    entities.forEach((e, index) => {
+    deduplicatedEntities.forEach((e, index) => {
       const offset = index * insertColumns.length
       placeholders.push(`(${insertColumns.map((_, i) => `$${offset + i + 1}`).join(', ')})`)
 
@@ -235,11 +268,12 @@ export async function saveCapacityForecasts(
       const demandHours = e.demand_hours ?? e.forecasted_demand_hours ?? 0
       const availableHours = e.available_hours ?? 0
       const gapHours = e.gap_hours ?? (availableHours - demandHours)
+      const normalizedRole = e.role?.trim() || 'General'
       const rowData: Record<string, any> = {
         project_id: projectId,
         period: e.period || null,
         forecast_date: periodDate || fallbackDate,
-        role: e.role || 'General',
+        role: normalizedRole,
         skill_level: 'all',
         available_hours: availableHours,
         available_capacity_hours: availableHours,
@@ -252,7 +286,7 @@ export async function saveCapacityForecasts(
         assumptions: [],
         mitigation_plan: e.notes || null,
         description: e.notes || null,
-        source_document_id: e.source_document_id || null,
+        source_document_id: asUuidOrNull(e.source_document_id),
         created_by: userId
       }
 
@@ -261,15 +295,44 @@ export async function saveCapacityForecasts(
       })
     })
 
+    const canUpsertByKey = ['project_id', 'forecast_date', 'role', 'skill_level'].every(column =>
+      insertColumns.includes(column)
+    )
+
+    const updatableColumns = [
+      'period',
+      'available_hours',
+      'available_capacity_hours',
+      'demand_hours',
+      'forecasted_demand_hours',
+      'gap_hours',
+      'capacity_gap_hours',
+      'utilization_forecast_pct',
+      'notes',
+      'assumptions',
+      'mitigation_plan',
+      'description',
+      'source_document_id'
+    ].filter((column) => insertColumns.includes(column))
+
+    const conflictClause = canUpsertByKey
+      ? `
+      ON CONFLICT (project_id, forecast_date, role, skill_level) DO UPDATE SET
+        ${updatableColumns
+          .map((column) => `${column} = COALESCE(EXCLUDED.${column}, capacity_forecasts.${column})`)
+          .join(',\n        ')}
+      `
+      : ''
+
     await client.query(
       `INSERT INTO capacity_forecasts (
         ${insertColumns.join(', ')}
       )
-      VALUES ${placeholders.join(', ')}`,
+      VALUES ${placeholders.join(', ')}${conflictClause}`,
       values
     )
 
-    return { saved: entities.length, skipped: 0, failed: 0 }
+    return { saved: deduplicatedEntities.length, skipped: entities.length - deduplicatedEntities.length, failed: 0 }
   } catch (error: unknown) {
     logger.error('[EXTRACTION-CAPACITY-FORECASTS] Failed to save', {
       projectId,

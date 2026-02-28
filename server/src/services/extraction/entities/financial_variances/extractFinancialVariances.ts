@@ -6,11 +6,12 @@ import { logger } from '../../../../utils/logger'
 import { aiService } from '../../../aiService'
 import type { ExtractionContext } from '../../base/ExtractionContext'
 import type { ExtractionResult } from '../../base/ExtractionResult'
-import { parseAIResponse } from '../../base/Parser'
+import { parseAIResponse, coerceNumber } from '../../base/Parser'
 import { buildExtractionPrompt } from '../../base/PromptBuilder'
 import { resolveSourceDocumentIdStrict } from '../../base/SourceDocumentResolver'
 import { extractionCacheService } from '../../cache'
 import type { FinancialVariance } from './types'
+import { normalizeDate } from '../../base/Persistence'
 
 export async function extractFinancialVariances(
     context: ExtractionContext,
@@ -103,6 +104,12 @@ export async function extractFinancialVariances(
         const validEntities: FinancialVariance[] = []
 
         rawEntities.forEach((entity: any) => {
+            entity.report_date = normalizeDate(entity.report_date) || undefined
+            entity.cv_value = coerceNumber(entity.cv_value) ?? undefined
+            entity.cpi_value = coerceNumber(entity.cpi_value) ?? undefined
+            entity.eac_value = coerceNumber(entity.eac_value) ?? undefined
+            entity.etc_value = coerceNumber(entity.etc_value) ?? undefined
+
             const resolution = resolveSourceDocumentIdStrict(
                 entity,
                 context,

@@ -195,6 +195,14 @@ export async function saveResourcePool(
   try {
     await client.query('DELETE FROM resources WHERE project_id = $1', [projectId])
 
+    const columnResult = await client.query<{ column_name: string }>(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'resources'`
+    )
+    const availableColumns = new Set(columnResult.rows.map(row => row.column_name))
+
     const dedupedEntities = Array.from(
       entities.reduce((acc, entry, index) => {
         const fallbackName = `Unknown resource ${index + 1}`
@@ -212,35 +220,58 @@ export async function saveResourcePool(
     const values: any[] = []
     const placeholders: string[] = []
 
-    dedupedEntities.forEach((e, index) => {
-      const offset = index * 14
-      placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14})`
-      )
+    const insertColumns = [
+      'project_id',
+      'name',
+      'type',
+      'description',
+      'allocation',
+      'cost_estimate',
+      'skills',
+      'role',
+      'availability_pct',
+      'cost_rate',
+      'capacity_hours',
+      'location',
+      'source_document_id',
+      'created_at',
+      'updated_at'
+    ].filter((column) => availableColumns.has(column))
 
-      values.push(
-        projectId,
-        e.resource_name || '',
-        normalizeResourceType(e.resource_type),
-        null, // description (not available from resource_pool)
-        e.availability_pct ? String(e.availability_pct) : null, // allocation
-        e.cost_rate || null, // cost_estimate
-        e.skills || [],
-        e.role || null,
-        e.availability_pct || null,
-        e.cost_rate || null,
-        e.location || null,
-        isValidUUID(e.source_document_id) ? e.source_document_id : null,
-        new Date().toISOString(), // created_at
-        new Date().toISOString()  // updated_at
-      )
+    if (insertColumns.length === 0) {
+      throw new Error('resources table has no expected columns for resource_pool insert')
+    }
+
+    dedupedEntities.forEach((e, index) => {
+      const offset = index * insertColumns.length
+      placeholders.push(`(${insertColumns.map((_, i) => `$${offset + i + 1}`).join(', ')})`)
+
+      const rowData: Record<string, any> = {
+        project_id: projectId,
+        name: e.resource_name || '',
+        type: normalizeResourceType(e.resource_type),
+        description: null,
+        allocation: e.availability_pct != null ? String(e.availability_pct) : null,
+        cost_estimate: e.cost_rate || null,
+        skills: e.skills || [],
+        role: e.role || null,
+        availability_pct: e.availability_pct || null,
+        cost_rate: e.cost_rate || null,
+        capacity_hours: e.capacity_hours || null,
+        location: e.location || null,
+        source_document_id: isValidUUID(e.source_document_id) ? e.source_document_id : null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }
+
+      insertColumns.forEach((column) => {
+        values.push(rowData[column] ?? null)
+      })
     })
 
     await client.query(
       `INSERT INTO resources (
-        project_id, name, type, description, allocation, cost_estimate, 
-        skills, role, availability_pct, cost_rate, location,
-        source_document_id, created_at, updated_at
+        ${insertColumns.join(', ')}
       )
       VALUES ${placeholders.join(', ')}`,
       values

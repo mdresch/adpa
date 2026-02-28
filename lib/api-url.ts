@@ -8,7 +8,12 @@
  * @returns Full API base URL (e.g., "https://example.com/api")
  */
 export function getApiBaseUrl(): string {
-  const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:5000"
+  const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' ? '/api' : 'http://127.0.0.1:5000')
+
+  if (rawApiUrl === '/api') {
+    return '/api'
+  }
+
   // Remove trailing slashes and /api if present, then add /api once
   const cleanUrl = rawApiUrl.replace(/\/api\/?$/, '').replace(/\/$/, '')
   return `${cleanUrl}/api`
@@ -19,7 +24,7 @@ export function getApiBaseUrl(): string {
  * @returns WebSocket base URL (e.g., "https://example.com")
  */
 export function getWsUrl(): string {
-  const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:5000"
+  const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://127.0.0.1:5000')
   // Remove trailing slashes and /api if present
   return rawApiUrl.replace(/\/api\/?$/, '').replace(/\/$/, '')
 }

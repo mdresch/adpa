@@ -6,6 +6,7 @@ import { logger } from '../../../../utils/logger'
 import type { PoolClient } from 'pg'
 import type { PersistenceResult } from '../../base/Persistence'
 import type { ScheduleActivity } from './types'
+import { isValidUUID } from '../../base/Persistence'
 
 function normalizeTimestamp(value?: string | null): string | null {
     if (!value || typeof value !== 'string') return null
@@ -36,40 +37,58 @@ export async function saveScheduleActivities(
         // Delete existing records for this project
         await client.query('DELETE FROM schedule_activities WHERE project_id = $1', [projectId])
 
+        const columnResult = await client.query<{ column_name: string }>(
+            `SELECT column_name
+             FROM information_schema.columns
+             WHERE table_schema = 'public'
+               AND table_name = 'schedule_activities'`
+        )
+        const availableColumns = new Set(columnResult.rows.map(row => row.column_name))
+
+        const insertColumns = [
+            'project_id', 'activity_id', 'name', 'description',
+            'wbs_code', 'start_date', 'end_date', 'duration_days',
+            'status', 'percent_complete', 'assigned_to', 'dependencies',
+            'is_critical', 'source_document_id', 'created_by'
+        ].filter(column => availableColumns.has(column))
+
+        if (insertColumns.length === 0) {
+            throw new Error('schedule_activities table has no expected columns for extraction insert')
+        }
+
         const values: any[] = []
         const placeholders: string[] = []
 
         entities.forEach((e, index) => {
-            const offset = index * 15
-            placeholders.push(
-                `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14}, $${offset + 15})`
-            )
+            const offset = index * insertColumns.length
+            placeholders.push(`(${insertColumns.map((_, i) => `$${offset + i + 1}`).join(', ')})`)
 
-            values.push(
-                projectId,
-                e.activity_id || null,
-                e.name || '',
-                e.description || null,
-                e.wbs_code || null,
-                normalizeTimestamp(e.start_date),
-                normalizeTimestamp(e.end_date),
-                e.duration_days || null,
-                e.status || 'Not Started',
-                e.percent_complete || 0,
-                e.assigned_to || [],
-                e.dependencies || [],
-                e.is_critical || false,
-                e.source_document_id || null,
-                userId
-            )
+            const rowData: Record<string, any> = {
+                project_id: projectId,
+                activity_id: e.activity_id || null,
+                name: e.name || '',
+                description: e.description || null,
+                wbs_code: e.wbs_code || null,
+                start_date: normalizeTimestamp(e.start_date),
+                end_date: normalizeTimestamp(e.end_date),
+                duration_days: e.duration_days || null,
+                status: e.status || 'Not Started',
+                percent_complete: e.percent_complete || 0,
+                assigned_to: e.assigned_to || [],
+                dependencies: e.dependencies || [],
+                is_critical: e.is_critical || false,
+                source_document_id: isValidUUID(e.source_document_id) ? e.source_document_id : null,
+                created_by: userId
+            }
+
+            insertColumns.forEach((column) => {
+                values.push(rowData[column] ?? null)
+            })
         })
 
         await client.query(
             `INSERT INTO schedule_activities (
-        project_id, activity_id, name, description, 
-        wbs_code, start_date, end_date, duration_days, 
-        status, percent_complete, assigned_to, dependencies, 
-        is_critical, source_document_id, created_by
+        ${insertColumns.join(', ')}
       )
       VALUES ${placeholders.join(', ')}`,
             values

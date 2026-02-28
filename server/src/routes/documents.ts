@@ -1561,33 +1561,39 @@ router.post("/project/:projectId",
             // Don't fail the document creation if counter update fails
           }
 
-          // 🔧 FIX: Also increment template's validation_count and success_count
-          // This was previously only done for AI-generated documents, causing counters to get stuck
+          // Update validation counters only when a real quality score is available
           try {
-            // Default quality score of 0.85 (85%) for manually created documents
-            // This marks them as successful since default quality_threshold is 0.70 (70%)
-            const qualityScore = 0.85
+            const generationMeta: any = generationMetadata || {}
+            const rawQualityScore = generationMeta?.quality_score
+            const qualityScore = typeof rawQualityScore === 'number'
+              ? rawQualityScore
+              : (typeof rawQualityScore === 'string' ? Number.parseFloat(rawQualityScore) : Number.NaN)
 
-            await pool.query(
-              'SELECT update_template_validation($1, $2, $3)',
-              [template_id, qualityScore, req.user?.id]
-            )
+            if (Number.isFinite(qualityScore)) {
+              await pool.query(
+                'SELECT update_template_validation($1, $2, $3)',
+                [template_id, qualityScore, req.user?.id]
+              )
 
-            log.info('✅ Template validation counters incremented', {
-              template_id,
-              quality_score: qualityScore
-            })
+              log.info('✅ Template validation counters incremented', {
+                template_id,
+                quality_score: qualityScore
+              })
 
-            // Clear template cache so UI shows updated metrics immediately
-            try {
-              const { cache } = require('../utils/redis')
-              await cache.del(`template:${template_id}`)
-              log.info('🔄 Template cache cleared for fresh metrics display')
-            } catch (cacheError) {
-              log.warn('Failed to clear template cache:', cacheError)
+              try {
+                const { cache } = require('../utils/redis')
+                await cache.del(`template:${template_id}`)
+                log.info('🔄 Template cache cleared for fresh metrics display')
+              } catch (cacheError) {
+                log.warn('Failed to clear template cache:', cacheError)
+              }
+            } else {
+              log.info('ℹ️ Skipping template validation counter update (no real quality score)', {
+                template_id
+              })
             }
           } catch (validationError) {
-            log.error('⚠️ Failed to increment template validation counters:', {
+            log.error('⚠️ Failed to update template validation counters:', {
               template_id,
               error: validationError.message
             })

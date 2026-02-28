@@ -61,6 +61,8 @@ interface ImprovementSuggestionData {
   priority: string
   analysisTokens: number
   analysisCost: number
+  analyzerProvider?: string
+  analyzerModel?: string
 }
 
 interface TemplateQualityMetrics {
@@ -215,7 +217,7 @@ class TemplateImprovementService {
       return
     }
 
-    const { improvements, tokens, cost } = aiAnalysisResult
+    const { improvements, tokens, cost, providerUsed, modelUsed } = aiAnalysisResult
 
     // 7. Calculate expected quality gain
     const expectedGain = this.estimateQualityGain(qualityMetrics, improvements)
@@ -246,7 +248,9 @@ class TemplateImprovementService {
       expectedGain,
       priority,
       analysisTokens: tokens,
-      analysisCost: cost
+      analysisCost: cost,
+      analyzerProvider: providerUsed,
+      analyzerModel: modelUsed
     })
 
     // 9. Notify template owner if high/critical priority
@@ -329,7 +333,9 @@ class TemplateImprovementService {
         expectedGain: 10, // Arbitrary estimate for static improvements
         priority: 'medium',
         analysisTokens: totalTokens,
-        analysisCost: cost
+        analysisCost: cost,
+        analyzerProvider: result.providerUsed || result.provider,
+        analyzerModel: result.model
       })
 
     } catch (error) {
@@ -510,7 +516,7 @@ Identify 3-5 structural improvements. Focus on:
     qualityMetrics: TemplateQualityMetrics,
     commonIssues: QualityIssue[],
     issueFrequency: IssueFrequency
-  ): Promise<{ improvements: ImprovementItem[], tokens: number, cost: number }> {
+  ): Promise<{ improvements: ImprovementItem[], tokens: number, cost: number, providerUsed?: string, modelUsed?: string }> {
     const analysisPrompt = this.buildImprovementPrompt(
       template,
       qualityMetrics,
@@ -564,7 +570,9 @@ Identify 3-5 structural improvements. Focus on:
         return {
           improvements: parsed.improvements || [],
           tokens: totalTokens,
-          cost: estimatedCost
+          cost: estimatedCost,
+          providerUsed: result.providerUsed || result.provider,
+          modelUsed: result.model
         }
       } catch (parseError) {
         logger.error('[TEMPLATE-IMPROVEMENT] Failed to parse AI response JSON', {
@@ -575,7 +583,9 @@ Identify 3-5 structural improvements. Focus on:
         return {
           improvements: [],
           tokens: totalTokens,
-          cost: estimatedCost
+          cost: estimatedCost,
+          providerUsed: result.providerUsed || result.provider,
+          modelUsed: result.model
         }
       }
     } catch (error) {
@@ -587,7 +597,9 @@ Identify 3-5 structural improvements. Focus on:
       return {
         improvements: [],
         tokens: 0,
-        cost: 0
+        cost: 0,
+        providerUsed: undefined,
+        modelUsed: undefined
       }
     }
   }
@@ -765,8 +777,8 @@ Focus on the most impactful improvements. Be specific and actionable.`
         data.improvements[0]?.rationale || 'See individual improvements for details',
         data.expectedGain,
         data.priority,
-        'google',
-        'gemini-2.5-flash',
+        data.analyzerProvider || 'unknown',
+        data.analyzerModel || 'unknown',
         data.analysisTokens || 0,
         data.analysisCost || 0
       ]

@@ -245,6 +245,16 @@ export async function saveCostActuals(
           ? `${e.period}-01`
           : fallbackDate
 
+      const plannedAmount = e.planned_amount ?? null
+      const actualAmount = e.actual_amount ?? plannedAmount ?? e.cumulative_actual ?? 0
+      const varianceAmount = e.variance ?? (plannedAmount !== null ? actualAmount - plannedAmount : null)
+      const variancePct =
+        e.variance_pct ??
+        (plannedAmount && plannedAmount !== 0 && varianceAmount !== null
+          ? (varianceAmount / plannedAmount) * 100
+          : null)
+      const cumulativeActual = e.cumulative_actual ?? actualAmount
+
       const rowData: Record<string, any> = {
         cost_actual_id: e.cost_actual_id || generatedId,
         id: generatedId,
@@ -260,11 +270,11 @@ export async function saveCostActuals(
         period_end: normalizedPeriodDate,
         category: e.category || null,
         wbs_code: e.wbs_code || null,
-        planned_amount: e.planned_amount ?? null,
-        actual_amount: e.actual_amount ?? null,
-        variance: e.variance ?? null,
-        variance_pct: e.variance_pct ?? null,
-        cumulative_actual: e.cumulative_actual ?? null,
+        planned_amount: plannedAmount,
+        actual_amount: actualAmount,
+        variance: varianceAmount,
+        variance_pct: variancePct,
+        cumulative_actual: cumulativeActual,
         source_document_id: isUuid(e.source_document_id) ? e.source_document_id : null,
         created_by: userId
       }

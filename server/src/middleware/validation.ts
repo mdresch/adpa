@@ -193,7 +193,7 @@ export const schemas = {
     is_public: Joi.boolean().default(false),
     template_scope: Joi.string().valid("standard", "company", "user").default("user"),
     company_id: Joi.string().uuid().allow(null, '').optional(),
-    system_prompt: Joi.string().max(5000).optional(),
+    system_prompt: Joi.string().max(50000).optional(),
     prompt_build_up: Joi.object().unknown(true).optional(),
     template_paragraphs: Joi.array().items(Joi.object({
       section_name: Joi.string().required(),

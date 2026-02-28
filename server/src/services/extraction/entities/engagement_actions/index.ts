@@ -69,6 +69,26 @@ function normalizeActionType(value?: string | null): string {
   return map[normalized] || 'other'
 }
 
+async function getAllowedActionTypes(client: PoolClient): Promise<string[] | null> {
+  const result = await client.query(
+    `SELECT pg_get_constraintdef(c.oid) AS constraint_def
+     FROM pg_constraint c
+     JOIN pg_class t ON c.conrelid = t.oid
+     JOIN pg_namespace n ON t.relnamespace = n.oid
+     WHERE t.relname = 'engagement_actions'
+       AND n.nspname = 'public'
+       AND c.conname ILIKE '%action_type%'
+       AND c.contype = 'c'
+     LIMIT 1`
+  )
+
+  const constraintDef: string | undefined = result.rows[0]?.constraint_def
+  if (!constraintDef) return null
+
+  const matches = [...constraintDef.matchAll(/'([^']+)'/g)].map((m) => m[1].toLowerCase())
+  return matches.length > 0 ? matches : null
+}
+
 export async function extractEngagementActions(
   context: ExtractionContext,
   options: { temperature?: number; maxTokens?: number } = {}
@@ -224,36 +244,74 @@ export async function saveEngagementActions(
   try {
     await client.query('DELETE FROM engagement_actions WHERE project_id = $1', [projectId])
 
+    const allowedActionTypes = await getAllowedActionTypes(client)
+    const columnResult = await client.query<{ column_name: string }>(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'engagement_actions'`
+    )
+    const availableColumns = new Set(columnResult.rows.map(row => row.column_name))
+
+    const insertColumns = [
+      'project_id',
+      'action_id',
+      'stakeholder_id',
+      'stakeholder_name',
+      'action_type',
+      'description',
+      'planned_date',
+      'actual_date',
+      'outcome',
+      'follow_up_required',
+      'status',
+      'source_document_id',
+      'created_by'
+    ].filter(column => availableColumns.has(column))
+
+    if (insertColumns.length === 0) {
+      throw new Error('engagement_actions table has no expected columns for extraction insert')
+    }
+
     const values: any[] = []
     const placeholders: string[] = []
 
     entities.forEach((e, index) => {
-      const offset = index * 13
-      placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13})`
-      )
+      const offset = index * insertColumns.length
+      placeholders.push(`(${insertColumns.map((_, i) => `$${offset + i + 1}`).join(', ')})`)
 
-      values.push(
-        projectId,
-        isValidUUID(e.action_id) ? e.action_id : null, // Validate UUID
-        isValidUUID(e.stakeholder_id) ? e.stakeholder_id : null, // Validate UUID
-        e.stakeholder_name || null,
-        normalizeActionType(e.action_type),
-        e.description || null,
-        e.planned_date ? normalizeDate(e.planned_date) : null,
-        e.actual_date ? normalizeDate(e.actual_date) : null,
-        e.outcome || null,
-        e.follow_up_required ?? false,
-        e.status || null,
-        e.source_document_id || null,
-        userId
-      )
+      const normalizedActionType = normalizeActionType(e.action_type)
+      const safeActionType =
+        !allowedActionTypes || allowedActionTypes.length === 0
+          ? normalizedActionType
+          : (allowedActionTypes.includes(normalizedActionType)
+              ? normalizedActionType
+              : (allowedActionTypes[0] || 'other'))
+
+      const rowData: Record<string, any> = {
+        project_id: projectId,
+        action_id: isValidUUID(e.action_id) ? e.action_id : null,
+        stakeholder_id: isValidUUID(e.stakeholder_id) ? e.stakeholder_id : null,
+        stakeholder_name: e.stakeholder_name || null,
+        action_type: safeActionType,
+        description: e.description || null,
+        planned_date: e.planned_date ? normalizeDate(e.planned_date) : null,
+        actual_date: e.actual_date ? normalizeDate(e.actual_date) : null,
+        outcome: e.outcome || null,
+        follow_up_required: e.follow_up_required ?? false,
+        status: e.status ? String(e.status).toLowerCase().trim() : null,
+        source_document_id: isValidUUID(e.source_document_id) ? e.source_document_id : null,
+        created_by: userId
+      }
+
+      insertColumns.forEach((column) => {
+        values.push(rowData[column] ?? null)
+      })
     })
 
     await client.query(
       `INSERT INTO engagement_actions (
-        project_id, action_id, stakeholder_id, stakeholder_name, action_type, description,
-        planned_date, actual_date, outcome, follow_up_required, status, source_document_id, created_by
+        ${insertColumns.join(', ')}
       )
       VALUES ${placeholders.join(', ')}`,
       values

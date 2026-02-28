@@ -832,6 +832,7 @@ OUTPUT FOCUS: Real data from THIS specific project only.`}
                             onPromptChange={setSystemPrompt}
                             templateType={templateCategory}
                             methodology={templateFramework}
+                            templateVersion={2}
                             context={{
                               projectType: "general",
                               industry: "technology",

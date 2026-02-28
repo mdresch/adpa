@@ -10,6 +10,7 @@ import { parseAIResponse, coerceNumber } from '../../base/Parser'
 import { buildExtractionPrompt } from '../../base/PromptBuilder'
 import { resolveSourceDocumentIdStrict } from '../../base/SourceDocumentResolver'
 import { extractionCacheService } from '../../cache'
+import { normalizeDate } from '../../base/Persistence'
 import type { PoolClient } from 'pg'
 import type { PersistenceResult } from '../../base/Persistence'
 
@@ -170,6 +171,8 @@ export async function extractRiskAssessments(
 }
 
 const PROB_IMPACT = new Set(['very_high', 'high', 'medium', 'low', 'very_low'])
+const DEFAULT_PROB_IMPACT = 'medium'
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 function normalizeProbImpact(v: unknown): string | null {
   if (!v) return null
@@ -179,6 +182,39 @@ function normalizeProbImpact(v: unknown): string | null {
     veryhigh: 'very_high', verylow: 'very_low'
   }
   return map[s] ?? null
+}
+
+function normalizeProbImpactToInteger(v: unknown): number | null {
+  if (v === null || v === undefined) return null
+
+  if (typeof v === 'number' && Number.isFinite(v)) {
+    if (v >= 0 && v <= 1) return Math.round(v * 100)
+    return Math.round(v)
+  }
+
+  const normalized = normalizeProbImpact(v)
+  if (normalized) {
+    const map: Record<string, number> = {
+      very_low: 1,
+      low: 2,
+      medium: 3,
+      high: 4,
+      very_high: 5
+    }
+    return map[normalized] ?? 3
+  }
+
+  const parsed = coerceNumber(v)
+  if (parsed === null) return null
+  if (parsed >= 0 && parsed <= 1) return Math.round(parsed * 100)
+  return Math.round(parsed)
+}
+
+function asUuidOrNull(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  return UUID_PATTERN.test(trimmed) ? trimmed : null
 }
 
 export async function saveRiskAssessments(
@@ -192,13 +228,19 @@ export async function saveRiskAssessments(
   }
 
   try {
-    const columnResult = await client.query<{ column_name: string }>(
-      `SELECT column_name
+    const columnResult = await client.query<{ column_name: string; data_type: string; udt_name: string }>(
+      `SELECT column_name, data_type, udt_name
        FROM information_schema.columns
        WHERE table_schema = 'public'
          AND table_name = 'risk_assessments'`
     )
     const columnSet = new Set(columnResult.rows.map(row => row.column_name))
+    const columnTypeMap = new Map(
+      columnResult.rows.map(row => [
+        row.column_name,
+        `${row.data_type}|${row.udt_name}`.toLowerCase()
+      ])
+    )
 
     const pickColumn = (options: string[]): string | null => {
       for (const option of options) {
@@ -207,6 +249,25 @@ export async function saveRiskAssessments(
         }
       }
       return null
+    }
+
+    const isUuidColumn = (columnName: string | null): boolean => {
+      if (!columnName) return false
+      const type = columnTypeMap.get(columnName)
+      return type ? type.includes('uuid') : false
+    }
+
+    const isNumericLikeColumn = (columnName: string | null): boolean => {
+      if (!columnName) return false
+      const type = columnTypeMap.get(columnName) || ''
+      return (
+        type.includes('integer') ||
+        type.includes('bigint') ||
+        type.includes('smallint') ||
+        type.includes('numeric') ||
+        type.includes('double') ||
+        type.includes('real')
+      )
     }
 
     const riskIdColumn = pickColumn(['risk_id', 'risk_identifier'])
@@ -226,19 +287,41 @@ export async function saveRiskAssessments(
     ]
 
     if (riskIdColumn) {
-      columnOrder.push({ name: riskIdColumn, value: (e) => e.risk_id || null })
+      columnOrder.push({
+        name: riskIdColumn,
+        value: (e) => (isUuidColumn(riskIdColumn) ? asUuidOrNull(e.risk_id) : (e.risk_id || null))
+      })
     }
     if (riskTitleColumn) {
       columnOrder.push({ name: riskTitleColumn, value: (e) => e.risk_title || null })
     }
     if (assessmentDateColumn) {
-      columnOrder.push({ name: assessmentDateColumn, value: (e) => e.assessment_date || new Date().toISOString() })
+      columnOrder.push({
+        name: assessmentDateColumn,
+        value: (e) => normalizeDate(e.assessment_date) || new Date().toISOString().split('T')[0]
+      })
     }
     if (probabilityColumn) {
-      columnOrder.push({ name: probabilityColumn, value: (e) => normalizeProbImpact(e.probability) })
+      columnOrder.push({
+        name: probabilityColumn,
+        value: (e) => {
+          if (isNumericLikeColumn(probabilityColumn)) {
+            return normalizeProbImpactToInteger(e.probability)
+          }
+          return normalizeProbImpact(e.probability) ?? DEFAULT_PROB_IMPACT
+        }
+      })
     }
     if (impactColumn) {
-      columnOrder.push({ name: impactColumn, value: (e) => normalizeProbImpact(e.impact) })
+      columnOrder.push({
+        name: impactColumn,
+        value: (e) => {
+          if (isNumericLikeColumn(impactColumn)) {
+            return normalizeProbImpactToInteger(e.impact)
+          }
+          return normalizeProbImpact(e.impact) ?? DEFAULT_PROB_IMPACT
+        }
+      })
     }
     if (detectabilityColumn) {
       columnOrder.push({ name: detectabilityColumn, value: (e) => e.detectability ?? null })
@@ -253,7 +336,7 @@ export async function saveRiskAssessments(
       columnOrder.push({ name: notesColumn, value: (e) => e.notes || null })
     }
     if (sourceDocumentColumn) {
-      columnOrder.push({ name: sourceDocumentColumn, value: (e) => e.source_document_id || null })
+      columnOrder.push({ name: sourceDocumentColumn, value: (e) => asUuidOrNull(e.source_document_id) })
     }
     if (createdByColumn) {
       columnOrder.push({ name: createdByColumn, value: () => userId })
