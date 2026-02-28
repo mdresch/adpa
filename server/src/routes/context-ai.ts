@@ -505,9 +505,17 @@ router.post("/providers", async (req, res) => {
     const { name, provider_type, api_key, configuration } = req.body
 
     // Validate required fields
-    if (!name || !provider_type || !api_key) {
+    if (!name || !provider_type) {
       return res.status(400).json({
-        error: "Missing required fields: name, provider_type, api_key"
+        error: "Missing required fields: name, provider_type"
+      })
+    }
+
+    // For most providers an API key is required. Ollama is a special case:
+    // it runs locally and does not use an API key.
+    if (provider_type !== "ollama" && !api_key) {
+      return res.status(400).json({
+        error: "Missing required field: api_key (not required for provider_type 'ollama')"
       })
     }
 
@@ -521,8 +529,8 @@ router.post("/providers", async (req, res) => {
       return res.status(400).json({ error: "Provider name already exists" })
     }
 
-    // Encrypt API key
-    const encryptedApiKey = Buffer.from(api_key).toString("base64")
+    // Encrypt API key when provided. For Ollama this will be an empty string.
+    const encryptedApiKey = api_key ? Buffer.from(api_key).toString("base64") : ""
 
     const id = uuidv4()
 

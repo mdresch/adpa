@@ -154,11 +154,15 @@ const allowedOrigins = [
   "http://localhost:3000",                    // Local development
   "http://localhost:3001",                    // Alternative local port
   process.env.FRONTEND_URL,                   // Configured frontend URL
+  process.env.CORS_ORIGIN,                    // Configured CORS origin
+  ...(process.env.ADDITIONAL_ALLOWED_ORIGINS
+    ? process.env.ADDITIONAL_ALLOWED_ORIGINS.split(',').map(o => o.trim())
+    : []),
   /https:\/\/.*\.vercel\.app$/,               // All Vercel preview deployments
   /https:\/\/adpa.*\.vercel\.app$/,           // ADPA Vercel deployments
   "https://adpa.vercel.app",                  // Production Vercel domain
   "https://adpa-production.up.railway.app",   // Railway frontend (if accessing directly)
-]
+].filter(Boolean) as (string | RegExp)[]
 
 app.use(
   cors({

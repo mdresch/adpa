@@ -50,18 +50,22 @@ export default function AIProviders() {
   // Initialize API client with token
   React.useEffect(() => {
     const token = localStorage.getItem('token')
-    if (token && !(apiClient as any).token) {
-      ; (apiClient as any).setToken(token)
+    if (token) {
+      apiClient.setToken(token)
     }
   }, [])
-  const [providers, setProviders] = React.useState<Array<{
+  interface Provider {
     id: string
     name: string
     type: string
     priority: number
     endpoint: string
     enabled: boolean
-  }>>([])
+    models: string[]
+    default_model?: string
+  }
+
+  const [providers, setProviders] = React.useState<Provider[]>([])
   const [loading, setLoading] = React.useState(false)
   const [actionLoading, setActionLoading] = React.useState<Record<string, boolean>>({})
   const [error, setError] = React.useState<string | null>(null)
@@ -439,7 +443,7 @@ export default function AIProviders() {
 
         // Update the provider in the local state immediately for better UX
         setProviders(prev => prev.map(p =>
-          p.id === id ? { ...p, enabled: response.is_active, status: response.is_active ? 'active' : 'inactive' } : p
+          p.id === id ? { ...p, enabled: response.is_active } : p
         ))
 
         toast.success(response.message || `Provider ${response.is_active ? 'activated' : 'deactivated'}`)
@@ -509,7 +513,9 @@ export default function AIProviders() {
         type: p.type,
         priority: p.configuration?.priority || 1, // Get priority from configuration or default to 1
         endpoint: p.configuration?.endpoint || '',
-        enabled: p.is_active
+        enabled: p.is_active,
+        models: p.models || [],
+        default_model: p.default_model
       }))
       setProviders(normalized)
 
@@ -827,9 +833,8 @@ export default function AIProviders() {
                                   <SelectItem value="deepseek">DeepSeek AI</SelectItem>
                                   <SelectItem value="moonshot">Moonshot AI (Kimi)</SelectItem>
                                   <SelectItem value="xai">xAI (Grok)</SelectItem>
-
+                                  <SelectItem value="ollama">Ollama (Local)</SelectItem>
                                   <SelectItem value="copilot">GitHub Copilot</SelectItem>
-                                  <SelectItem value="ollama">Ollama (Local AI)</SelectItem>
                                 </SelectContent>
                               </Select>
                             </div>
@@ -884,9 +889,8 @@ export default function AIProviders() {
                                   <SelectItem value="deepseek">DeepSeek AI</SelectItem>
                                   <SelectItem value="moonshot">Moonshot AI (Kimi)</SelectItem>
                                   <SelectItem value="xai">xAI (Grok)</SelectItem>
-
+                                  <SelectItem value="ollama">Ollama (Local)</SelectItem>
                                   <SelectItem value="copilot">GitHub Copilot</SelectItem>
-                                  <SelectItem value="ollama">Ollama (Local AI)</SelectItem>
                                 </SelectContent>
                               </Select>
                             </div>
@@ -1160,8 +1164,8 @@ export default function AIProviders() {
                         <div className="space-y-3">
                           <div className="grid grid-cols-2 gap-4">
                             <div>
-                              <Label className="text-sm font-medium">Model</Label>
-                              <p className="text-sm text-muted-foreground mt-1">{provider.type}</p>
+                              <Label className="text-sm font-medium">Model Type</Label>
+                              <p className="text-sm text-muted-foreground mt-1 capitalize">{provider.type}</p>
                             </div>
                             <div>
                               <Label className="text-sm font-medium">Priority</Label>
@@ -1175,11 +1179,24 @@ export default function AIProviders() {
                               <p className="text-sm text-muted-foreground mt-1">Not available</p>
                             </div>
                             <div>
-                              <Label className="text-sm font-medium">API Key</Label>
+                              <Label className="text-sm font-medium">Models Sync</Label>
                               <div className="flex items-center space-x-2 mt-1">
-                                <Badge variant="secondary">
-                                  Configured
+                                <Badge variant={provider.models.length > 0 ? "default" : "outline"} className="text-xs">
+                                  {provider.models.length} Synced
                                 </Badge>
+                                {provider.type === 'ollama' && provider.models.length === 0 && (
+                                  <Button
+                                    variant="link"
+                                    size="sm"
+                                    className="h-auto p-0 text-xs"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      window.location.href = `/ai-providers/${provider.id}#discover`;
+                                    }}
+                                  >
+                                    Discover
+                                  </Button>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -1605,14 +1622,14 @@ export default function AIProviders() {
                                   setFormState({
                                     id: provider.id,
                                     name: provider.name,
-                                    type: provider.type as any,
+                                    type: provider.type,
                                     apiKey: "",
                                     endpoint: provider.endpoint,
                                     priority: provider.priority || (index + 1),
                                     enabled: provider.enabled,
                                     resourceName: "",
                                     deploymentName: "",
-                                    apiVersion: "",
+                                    apiVersion: "2024-12-01-preview",
                                     tenantId: "",
                                     clientId: "",
                                     clientSecret: "",

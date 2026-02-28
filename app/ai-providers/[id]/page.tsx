@@ -2083,20 +2083,33 @@ export default function AIProviderDetails() {
                                       </p>
                                     )}
 
-                                    {(model.context_window || model.capabilities) && (
-                                      <div className="flex flex-wrap gap-2 ml-6 mt-2">
-                                        {model.context_window && (
-                                          <Badge variant="outline" className="text-xs">
-                                            {model.context_window.toLocaleString()} tokens
-                                          </Badge>
-                                        )}
-                                        {model.capabilities?.map((cap: string) => (
-                                          <Badge key={cap} variant="outline" className="text-xs">
-                                            {cap}
-                                          </Badge>
-                                        ))}
-                                      </div>
-                                    )}
+                                    <div className="flex flex-wrap gap-2 ml-6 mt-2">
+                                      {model.size && (
+                                        <Badge variant="outline" className="text-xs bg-blue-50/50">
+                                          {(model.size / (1024 * 1024 * 1024)).toFixed(2)} GB
+                                        </Badge>
+                                      )}
+                                      {model.details?.parameter_size && (
+                                        <Badge variant="outline" className="text-xs bg-green-50/50">
+                                          {model.details.parameter_size}
+                                        </Badge>
+                                      )}
+                                      {model.details?.family && (
+                                        <Badge variant="outline" className="text-xs bg-purple-50/50">
+                                          {model.details.family}
+                                        </Badge>
+                                      )}
+                                      {model.context_window && (
+                                        <Badge variant="outline" className="text-xs">
+                                          {model.context_window.toLocaleString()} tokens
+                                        </Badge>
+                                      )}
+                                      {model.capabilities?.map((cap: string) => (
+                                        <Badge key={cap} variant="outline" className="text-xs">
+                                          {cap}
+                                        </Badge>
+                                      ))}
+                                    </div>
                                   </div>
 
                                   <Button
