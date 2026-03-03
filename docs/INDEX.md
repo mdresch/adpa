@@ -1,7 +1,9 @@
 # 📚 ADPA Documentation Index
 
-**Last Updated:** February 10, 2026
+**Last Updated:** March 2, 2026
 **Total Files:** 1149 files
+
+> Roadmap status note: treat `roadmap/README.md` and `roadmap/ROADMAP_COMPLETION_ANALYSIS.md` as authoritative for current implementation status. Files under `roadmap/archive/` are historical records.
 
 ---
 
@@ -1311,6 +1313,7 @@
 - [SEARCH_DIALOG_IMPLEMENTATION.md](./roadmap/SEARCH_DIALOG_IMPLEMENTATION.md)
 - [SEARCH_DIALOG_QUICK_START.md](./roadmap/SEARCH_DIALOG_QUICK_START.md)
 - [SMART_DOCUMENT_VERSIONING.md](./roadmap/SMART_DOCUMENT_VERSIONING.md)
+- [UNLIMITED_DOCUMENT_EXTRACTION_MVP_PLAN.md](./roadmap/UNLIMITED_DOCUMENT_EXTRACTION_MVP_PLAN.md)
 - [SPRINT_1_COMPLETION_STATUS.md](./roadmap/SPRINT_1_COMPLETION_STATUS.md)
 - [SPRINT_2_IMPLEMENTATION_PLAN.md](./roadmap/SPRINT_2_IMPLEMENTATION_PLAN.md)
 - [STAKEHOLDER_ENGAGEMENT_MOMENTUM.md](./roadmap/STAKEHOLDER_ENGAGEMENT_MOMENTUM.md)

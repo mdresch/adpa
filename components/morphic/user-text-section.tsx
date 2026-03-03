@@ -87,55 +87,65 @@ export const UserTextSection: React.FC<UserTextSectionProps> = ({
 
     return (
         <CollapsibleMessage role="user">
-            <div
-                className="flex-1 break-words w-full group outline-hidden relative"
-                tabIndex={0}
-            >
-                {isEditing ? (
-                    <div className="flex flex-col gap-2">
-                        <TextareaAutosize
-                            value={editedContent}
-                            onChange={e => setEditedContent(e.target.value)}
-                            autoFocus
-                            onCompositionStart={handleCompositionStart}
-                            onCompositionEnd={handleCompositionEnd}
-                            onKeyDown={handleTextareaKeyDown}
-                            className="resize-none flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-hidden disabled:cursor-not-allowed disabled:opacity-50"
-                            minRows={2}
-                            maxRows={10}
-                        />
-                        <div className="flex justify-end gap-2">
-                            <Button variant="secondary" size="sm" onClick={handleCancelClick}>
-                                Cancel
-                            </Button>
-                            <Button size="sm" onClick={handleSaveClick}>
-                                Save
-                            </Button>
+            <div className="flex-1 break-words w-full">
+                {/* Header showing "Your Question" */}
+                <div className="text-sm font-semibold text-foreground/70 mb-2 flex items-center gap-2">
+                    <span className="text-primary">❓</span>
+                    <span>Your Question</span>
+                </div>
+                
+                <div
+                    className="group outline-hidden relative"
+                    tabIndex={0}
+                >
+                    {isEditing ? (
+                        <div className="flex flex-col gap-2">
+                            <TextareaAutosize
+                                value={editedContent}
+                                onChange={e => setEditedContent(e.target.value)}
+                                autoFocus
+                                onCompositionStart={handleCompositionStart}
+                                onCompositionEnd={handleCompositionEnd}
+                                onKeyDown={handleTextareaKeyDown}
+                                className="resize-none flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-hidden disabled:cursor-not-allowed disabled:opacity-50"
+                                minRows={2}
+                                maxRows={10}
+                            />
+                            <div className="flex justify-end gap-2">
+                                <Button variant="secondary" size="sm" onClick={handleCancelClick}>
+                                    Cancel
+                                </Button>
+                                <Button size="sm" onClick={handleSaveClick}>
+                                    Save
+                                </Button>
+                            </div>
                         </div>
-                    </div>
-                ) : (
-                    <div className="relative">
-                        <div className="pr-10">{content}</div>
-                        <div
-                            className={cn(
-                                'absolute top-0 right-0 transition-opacity',
-                                'opacity-0',
-                                'group-focus-within:opacity-100',
-                                'md:opacity-0',
-                                'md:group-hover:opacity-100'
-                            )}
-                        >
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="rounded-full h-7 w-7"
-                                onClick={handleEditClick}
+                    ) : (
+                        <div className="relative">
+                            <div className="pr-10 text-base leading-relaxed">
+                                {content || <span className="text-muted-foreground italic">No message content</span>}
+                            </div>
+                            <div
+                                className={cn(
+                                    'absolute top-0 right-0 transition-opacity',
+                                    'opacity-0',
+                                    'group-focus-within:opacity-100',
+                                    'md:opacity-0',
+                                    'md:group-hover:opacity-100'
+                                )}
                             >
-                                <Pencil className="size-3.5" />
-                            </Button>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="rounded-full h-7 w-7"
+                                    onClick={handleEditClick}
+                                >
+                                    <Pencil className="size-3.5" />
+                                </Button>
+                            </div>
                         </div>
-                    </div>
-                )}
+                    )}
+                </div>
             </div>
         </CollapsibleMessage>
     )

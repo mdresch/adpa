@@ -1,10 +1,13 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { pool } from '@/server/src/database/connection';
+import { pool, connectDatabase } from '@/server/src/database/connection';
 import { logger } from '@/server/src/utils/logger';
 
 export async function POST(req: Request) {
+    // Initialize database connection (safe to call multiple times)
+    await connectDatabase();
+
     try {
         const { email, password } = await req.json();
 

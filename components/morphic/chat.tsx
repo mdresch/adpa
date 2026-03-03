@@ -27,16 +27,27 @@ interface ChatSection {
     assistantMessages: UIMessage[]
 }
 
+interface ContextPreviewState {
+    loading: boolean
+    query?: string
+    totalResults?: number
+    sources?: Array<{ title: string; relevanceScore?: number }>
+    followUpSuggestions?: string[]
+    error?: string
+}
+
 export function Chat({
     id: providedId,
     savedMessages = [],
     query,
-    isGuest = false
+    isGuest = false,
+    enableRagContextPanel = false
 }: {
     id?: string
     savedMessages?: UIMessage[]
     query?: string
     isGuest?: boolean
+    enableRagContextPanel?: boolean
 }) {
     const router = useRouter()
     const [chatId, setChatId] = useState(() => providedId || generateId())
@@ -57,6 +68,7 @@ export function Chat({
     const [isAtBottom, setIsAtBottom] = useState(true)
     const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
     const [input, setInput] = useState('')
+    const [contextPreview, setContextPreview] = useState<ContextPreviewState | null>(null)
     const [errorModal, setErrorModal] = useState<{
         open: boolean
         type: 'rate-limit' | 'auth' | 'forbidden' | 'general'
@@ -327,6 +339,55 @@ export function Chat({
         const uploaded = uploadedFiles.filter(f => f.status === 'uploaded')
 
         if (input.trim() || uploaded.length > 0) {
+            const inputText = input.trim()
+
+            if (enableRagContextPanel && inputText.length >= 2 && !isGuest) {
+                const authToken = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+
+                if (!authToken) {
+                    setContextPreview({
+                        loading: false,
+                        query: inputText,
+                        error: 'Authentication token not available for context fetch'
+                    })
+                } else {
+                setContextPreview({
+                    loading: true,
+                    query: inputText
+                })
+
+                fetch('/api/rag/context-assembly', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({ query: inputText })
+                })
+                    .then(async response => {
+                        const data = await response.json()
+                        if (!response.ok || !data?.success) {
+                            throw new Error(data?.error || 'Failed to load context')
+                        }
+
+                        setContextPreview({
+                            loading: false,
+                            query: inputText,
+                            totalResults: data.totalResults || 0,
+                            sources: data.sources || [],
+                            followUpSuggestions: data.followUpSuggestions || []
+                        })
+                    })
+                    .catch((error: any) => {
+                        setContextPreview({
+                            loading: false,
+                            query: inputText,
+                            error: error?.message || 'Context unavailable'
+                        })
+                    })
+                }
+            }
+
             const parts: any[] = []
 
             if (input.trim()) {
@@ -385,6 +446,41 @@ export function Chat({
             onDragLeave={dragHandlers.handleDragLeave}
             onDrop={dragHandlers.handleDrop}
         >
+            {enableRagContextPanel && contextPreview && (
+                <div className="mx-auto mt-3 w-full max-w-4xl px-4">
+                    <div className="rounded-md border bg-card p-3 text-sm text-foreground">
+                        <div className="font-medium">Knowledge Graph Context</div>
+                        <div className="mt-1 text-muted-foreground">
+                            {contextPreview.loading
+                                ? `Analyzing connections for \"${contextPreview.query || ''}\"...`
+                                : contextPreview.error
+                                    ? `Context unavailable: ${contextPreview.error}`
+                                    : `${contextPreview.totalResults || 0} relevant results found for \"${contextPreview.query || ''}\".`}
+                        </div>
+
+                        {!contextPreview.loading && !contextPreview.error && (
+                            <div className="mt-2 space-y-1 text-muted-foreground">
+                                {contextPreview.sources && contextPreview.sources.length > 0 && (
+                                    <div>
+                                        Top sources: {contextPreview.sources
+                                            .slice(0, 3)
+                                            .map(source => source.title)
+                                            .join(', ')}
+                                    </div>
+                                )}
+                                {contextPreview.followUpSuggestions && contextPreview.followUpSuggestions.length > 0 && (
+                                    <div>
+                                        Suggested follow-ups: {contextPreview.followUpSuggestions
+                                            .slice(0, 2)
+                                            .join(' • ')}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
             <ChatMessages
                 sections={sections}
                 onQuerySelect={onQuerySelect}

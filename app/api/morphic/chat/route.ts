@@ -10,6 +10,9 @@ import { selectModel } from '@/lib/morphic/utils/model-selection'
 import { perfLog, perfTime } from '@/lib/morphic/utils/perf-logging'
 import { resetAllCounters } from '@/lib/morphic/utils/perf-tracking'
 import { isProviderEnabled } from '@/lib/morphic/utils/registry'
+import { getTextFromParts } from '@/lib/morphic/utils/message-utils'
+import aiSearchRAGService from '@/services/aiSearchRAGService'
+import { connectDatabase } from '@/server/src/database/connection'
 
 import { SearchMode } from '@/lib/morphic/types/search'
 
@@ -18,6 +21,9 @@ export const maxDuration = 300
 export async function POST(req: Request) {
     const startTime = performance.now()
     const abortSignal = req.signal
+
+    // Initialize database connection (safe to call multiple times)
+    await connectDatabase()
 
     // Reset counters for new request (development only)
     if (process.env.ENABLE_PERF_LOGGING === 'true') {
@@ -127,6 +133,29 @@ export async function POST(req: Request) {
             `createChatStreamResponse - Start: model=${selectedModel.providerId}:${selectedModel.id}, searchMode=${searchMode}, modelType=${modelType}`
         )
 
+        let assistedContext: string | undefined
+        if (trigger === 'submit-message' && message && userId && searchMode === 'adaptive') {
+            try {
+                const queryText = getTextFromParts(message.parts)?.trim()
+                if (queryText && queryText.length >= 2) {
+                    const context = await aiSearchRAGService.assembleContext({
+                        query: queryText,
+                        limit: 10,
+                        offset: 0,
+                        sortBy: 'relevance',
+                        includeRelationships: true,
+                        relationshipDepth: 2,
+                        includeKnowledgeBase: knowledgeEnabled,
+                        maxContextItems: 8
+                    }, userId)
+
+                    assistedContext = context.contextPrompt
+                }
+            } catch (error) {
+                console.warn('[MORPHIC] Assisted context assembly failed:', error)
+            }
+        }
+
         // Note: createEphemeralChatStreamResponse is skipped for now, handling guest as normal chat stream 
         // unless explicitly needed. 
         const response = await createChatStreamResponse({
@@ -141,7 +170,8 @@ export async function POST(req: Request) {
             searchMode,
             modelType: modelType as any,
             knowledgeEnabled,
-            ragScope
+            ragScope,
+            assistedContext
         })
 
         perfTime('createChatStreamResponse resolved', streamStart)

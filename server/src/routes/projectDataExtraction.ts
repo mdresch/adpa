@@ -12,8 +12,41 @@ import { pool } from '../database/connection'
 import { extractionQueue } from '../services/queueService'
 import { PMBOK_DOMAINS } from '@/types/pmbok'
 import { listDomainExtractionConfigs } from '@/modules/context'
+import {
+  createInitialBatchProgressMeta,
+  normalizeBatchingConfig,
+} from '../services/extraction/batchPlanner'
+import type { ExtractionBatchProgressMeta } from '../services/jobs/types'
 
 const router = express.Router()
+
+function parseJsonObject(value: unknown): Record<string, unknown> | null {
+  if (!value) return null
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>
+  }
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value)
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>
+      }
+    } catch (_error) {
+      return null
+    }
+  }
+  return null
+}
+
+function getProgressMetaFromJobData(value: unknown): ExtractionBatchProgressMeta | null {
+  const data = parseJsonObject(value)
+  if (!data) return null
+  const progressMeta = data.progressMeta
+  if (!progressMeta || typeof progressMeta !== 'object' || Array.isArray(progressMeta)) {
+    return null
+  }
+  return progressMeta as ExtractionBatchProgressMeta
+}
 
 /**
  * GET /api/project-data-extraction/domains
@@ -47,7 +80,10 @@ const extractSchema = Joi.object({
   domains: Joi.array()
     .items(Joi.string().valid(...PMBOK_DOMAINS))
     .max(PMBOK_DOMAINS.length)
-    .optional()
+    .optional(),
+  batchingEnabled: Joi.boolean().optional(),
+  maxBatchTokens: Joi.number().integer().min(1000).max(200000).optional(),
+  maxDocsPerBatch: Joi.number().integer().min(1).max(500).optional(),
 })
 
 router.post(
@@ -56,18 +92,47 @@ router.post(
   validate(extractSchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { projectId, aiProvider, aiModel, documentIds, domains } = req.body
+      const {
+        projectId,
+        aiProvider,
+        aiModel,
+        documentIds,
+        domains,
+        batchingEnabled,
+        maxBatchTokens,
+        maxDocsPerBatch,
+      } = req.body
       const userId = (req as any).user?.id
       const normalizedDomains: string[] =
         Array.isArray(domains) && domains.length > 0
           ? Array.from(new Set(domains))
           : [...PMBOK_DOMAINS]
+      const normalizedBatchingConfig = normalizeBatchingConfig({
+        batchingEnabled,
+        maxBatchTokens,
+        maxDocsPerBatch,
+      })
+      const progressMeta = createInitialBatchProgressMeta({
+        totalDocuments: Array.isArray(documentIds) ? documentIds.length : 0,
+        config: normalizedBatchingConfig,
+      })
+
+      const extractionJobData = {
+        projectId,
+        aiProvider,
+        aiModel,
+        documentIds,
+        domains: normalizedDomains,
+        ...normalizedBatchingConfig,
+        progressMeta,
+      }
 
       logger.info('[EXTRACTION-API] Extraction requested', {
         projectId,
         userId,
         provider: aiProvider || 'default',
-        domains: normalizedDomains
+        domains: normalizedDomains,
+        batching: normalizedBatchingConfig,
       })
 
       // Create job record
@@ -79,7 +144,7 @@ router.post(
         [
           'project-data-extraction',
           'pending',
-          JSON.stringify({ projectId, aiProvider, aiModel, documentIds, domains: normalizedDomains }),
+          JSON.stringify(extractionJobData),
           userId,
           projectId
         ]
@@ -95,7 +160,8 @@ router.post(
         aiProvider,
         aiModel,
         documentIds,
-        domains: normalizedDomains
+        domains: normalizedDomains,
+        ...normalizedBatchingConfig,
       })
 
       logger.info('[EXTRACTION-API] Extraction job enqueued', { jobId, projectId })
@@ -105,7 +171,9 @@ router.post(
         jobId,
         message: 'Project data extraction started. This may take a few minutes.',
         estimatedTime: '2-5 minutes',
-        domains: normalizedDomains
+        domains: normalizedDomains,
+        batching: normalizedBatchingConfig,
+        progressMeta,
       })
     } catch (error: unknown) {
       logger.error('[EXTRACTION-API] Extraction failed', {
@@ -306,7 +374,7 @@ router.get(
       const { jobId } = req.params
 
       const result = await pool!.query(
-        `SELECT id, type, status, progress, result, error_message, created_at, started_at, completed_at
+        `SELECT id, type, status, progress, result, error_message, data, created_at, started_at, completed_at
          FROM jobs
          WHERE id = $1`,
         [jobId]
@@ -320,6 +388,7 @@ router.get(
       }
 
       const job = result.rows[0]
+      const progressMeta = getProgressMetaFromJobData(job.data)
 
       res.json({
         success: true,
@@ -333,7 +402,8 @@ router.get(
           createdAt: job.created_at,
           startedAt: job.started_at,
           completedAt: job.completed_at
-        }
+        },
+        progressMeta,
       })
     } catch (error: unknown) {
       logger.error('[EXTRACTION-API] Status check failed', {

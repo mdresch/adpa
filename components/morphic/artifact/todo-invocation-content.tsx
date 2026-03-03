@@ -8,9 +8,9 @@ interface TodoInvocationContentProps {
 }
 
 export function TodoInvocationContent({ part }: TodoInvocationContentProps) {
-    const todos = part.output?.todos || part.input?.todos || []
-    const completedCount = part.output?.completedCount
-    const totalCount = part.output?.totalCount
+    const todos = ((part.output as unknown as { todos?: unknown[] })?.todos || (part.input as unknown as { todos?: unknown[] })?.todos || []) as Array<{ id: string; content: string; status: 'pending' | 'in_progress' | 'completed'; priority: 'high' | 'medium' | 'low'; timestamp: string }>
+    const completedCount = (part.output as unknown as { completedCount?: number })?.completedCount
+    const totalCount = (part.output as unknown as { totalCount?: number })?.totalCount
 
     if (part.state === 'output-error') {
         return (
@@ -22,7 +22,7 @@ export function TodoInvocationContent({ part }: TodoInvocationContentProps) {
 
     const message =
         part.output && 'message' in part.output
-            ? (part.output.message as string | undefined)
+            ? ((part.output as unknown as { message?: string }).message as string | undefined)
             : undefined
 
     return (

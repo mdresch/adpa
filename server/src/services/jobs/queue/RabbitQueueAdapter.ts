@@ -95,6 +95,15 @@ export class RabbitQueueAdapter extends EventEmitter implements IQueue {
   private readonly maxLength: number | undefined
   private readonly dlqMaxLength: number | undefined
 
+  private normalizeJobType(jobType: string): string {
+    switch (jobType) {
+      case 'project-data-extraction':
+        return 'extract-project-data'
+      default:
+        return jobType
+    }
+  }
+
   constructor(options: RabbitQueueAdapterOptions) {
     super()
     this.queueName = options.queueName
@@ -272,7 +281,8 @@ export class RabbitQueueAdapter extends EventEmitter implements IQueue {
             const queueJob = new RabbitQueueJob(msg, this.channel, this.queueName, payload)
             this.emit('active', queueJob)
 
-            const runHandler = this.handlers.get(jobType)
+            const normalizedJobType = this.normalizeJobType(String(jobType))
+            const runHandler = this.handlers.get(normalizedJobType)
             if (!runHandler) {
               console.warn('[RABBIT] No handler for jobType', jobType, 'on queue', this.queueName)
               try {

@@ -15,6 +15,12 @@ const databaseUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL
 console.log(`🔍 DATABASE_URL check: ${databaseUrl ? `Found (${databaseUrl.substring(0, 30)}...)` : 'Not found'}`)
 console.log(`🔍 NODE_ENV: ${process.env.NODE_ENV || 'undefined (defaulting to development)'}`)
 
+// timeouts and retry defaults can be configured via environment variables
+const DEFAULT_DB_CONN_TIMEOUT_MS = parseInt(process.env.DB_CONN_TIMEOUT_MS || '30000', 10)
+const DEFAULT_DB_QUERY_TIMEOUT_MS = parseInt(process.env.DB_QUERY_TIMEOUT_MS || '15000', 10)
+const DEFAULT_DB_MAX_RETRIES_PER_METHOD = parseInt(process.env.DB_MAX_RETRIES_PER_METHOD || '1', 10)
+// Later code may bump these values when making manual connection attempts
+
 // Connection methods for **non-DATABASE_URL** environments.
 // IMPORTANT: Docker-specific hosts are intentionally **not** included because
 // the ADPA project now uses Supabase/PostgreSQL directly (no Docker in dev).
@@ -78,7 +84,20 @@ const createPool = (host: string) => {
   })
 }
 
-let pool: Pool | null = null // Initialize lazily to prevent hanging on module load
+let internalPool: Pool | null = null
+let connectionPromise: Promise<void> | null = null
+
+// Backward-compatible export for existing code that imports { pool }
+// This provides lazy initialization - the pool getter will throw if accessed before connection
+export const pool = new Proxy({} as Pool, {
+  get(_target, prop) {
+    if (!internalPool) {
+      throw new Error(`Database not connected. Property '${String(prop)}' accessed before connectDatabase() completed.`)
+    }
+    return (internalPool as any)[prop]
+  }
+})
+
 // Circuit breaker for DB to avoid hammering DB when it's unstable
 const dbBreaker = new CircuitBreaker(3, 30000) // open after 3 failures, reset after 30s
 
@@ -132,215 +151,227 @@ function patchPoolQuery(p: Pool) {
 }
 
 export function getDatabasePool(): Pool {
-  if (!pool) {
-    throw new Error("Database pool not initialized. Call connectDatabase() before accessing the pool.")
+  if (!internalPool) {
+    // Return a null object pattern instead of throwing to prevent crashes
+    // Services should handle null pools gracefully
+    console.warn('[DB-GUARD] getDatabasePool called but pool not ready yet')
+    throw new Error("Database pool not initialized. Call connectDatabase() and await it before accessing the pool.")
   }
-  return pool
+  return internalPool
 }
 
-export async function connectDatabase() {
-  const maxRetriesPerMethod = 1 // Reduced retries for Railway timeout
+// Safe accessor that won't throw
+export function getDatabasePoolSafe(): Pool | null {
+  return internalPool
+}
+
+export async function connectDatabase(): Promise<void> {
+  // If a connection is already in progress, wait for it
+  if (connectionPromise) {
+    console.log('⏳ Database connection already in progress, waiting...')
+    await connectionPromise
+    return
+  }
+
+  // If already connected, return immediately
+  if (internalPool) {
+    console.log('✅ Database already connected, reusing existing pool')
+    return
+  }
+
+  // Create a new connection promise
+  connectionPromise = connectDatabaseInternal()
+    .finally(() => {
+      // Clear the promise once connection attempt completes
+      connectionPromise = null
+    })
+
+  await connectionPromise
+}
+
+async function connectDatabaseInternal(): Promise<void> {
+  // retry configuration: can be tuned via env vars (e.g. DB_MAX_RETRIES_PER_METHOD)
+  const maxRetriesPerMethod = DEFAULT_DB_MAX_RETRIES_PER_METHOD // Reduced retries for Railway timeout by default
   const retryDelay = 3000 // Reduced to 3 seconds
+
+  console.log(`🔧 DB config: connect timeout=${DEFAULT_DB_CONN_TIMEOUT_MS}ms, query timeout=${DEFAULT_DB_QUERY_TIMEOUT_MS}ms, max retries per method=${maxRetriesPerMethod}`)
 
   // If DATABASE_URL is provided, try it first
   if (databaseUrl) {
-    console.log(`🔌 Trying database connection via DATABASE_URL`)
+    for (let attempt = 1; attempt <= maxRetriesPerMethod; attempt++) {
+      console.log(`🔌 Trying database connection via DATABASE_URL (attempt ${attempt}/${maxRetriesPerMethod})`)
 
-    // Parse connection string to extract components
-    // This allows us to force IPv4 by explicitly setting the family option
-    let poolConfig: PoolConfig & { family?: number } = {
-      ssl: buildSslConfig(databaseUrl),
-      max: 50,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 30000,
-    }
-
-    // Parse URL and handle IPv4/IPv6 resolution
-    try {
-      const dbUrl = new URL(databaseUrl)
-
-      // For Supabase, prefer connection pooler (port 6543) which has better IPv4 support
-      // If using direct connection (port 5432), try to resolve to IPv4 first
-      const isDirectConnection = dbUrl.port === '5432' || !dbUrl.port
-      const isPoolerConnection =
-        dbUrl.port === '6543' ||
-        dbUrl.searchParams.has('pgbouncer') ||
-        dbUrl.hostname.includes('pooler.supabase.com')
-
-      if (isDirectConnection) {
-        // Try to resolve to IPv4 for direct connections
-        try {
-          console.log(`🔧 Resolving ${dbUrl.hostname} to IPv4 address (A records only)...`)
-          const addresses = await dnsResolve4(dbUrl.hostname)
-
-          if (addresses && addresses.length > 0) {
-            const ipv4Address = addresses[0]
-            console.log(`✅ Resolved to IPv4: ${ipv4Address}`)
-
-            poolConfig = {
-              ...poolConfig,
-              host: ipv4Address, // Use resolved IPv4 address instead of hostname
-              port: parseInt(dbUrl.port) || 5432,
-              database: dbUrl.pathname.slice(1).split('?')[0],
-              user: dbUrl.username,
-              password: dbUrl.password,
-            }
-          } else {
-            throw new Error(`No IPv4 addresses found for hostname: ${dbUrl.hostname}`)
-          }
-        } catch (ipv4Error: any) {
-          // If IPv4 resolution fails, suggest using pooler instead
-          console.warn('⚠️  Could not resolve hostname to IPv4:', ipv4Error?.message || ipv4Error)
-          console.warn('💡 TIP: Use connection pooler (port 6543) for better IPv4 compatibility')
-          console.warn('   Example: postgresql://postgres:password@host:6543/db?pgbouncer=true')
-
-          // Fall through to use hostname (might resolve to IPv6)
-          throw ipv4Error
-        }
-      } else {
-        // For pooler connections, use hostname directly (pooler handles IPv4/IPv6)
-        const poolerType = dbUrl.hostname.includes('pooler.supabase.com') ? 'Supabase Transaction Pooler' : 'Connection Pooler'
-        console.log(`🔧 Using ${poolerType} (port ${dbUrl.port}) - using hostname directly`)
-        console.log(`   Hostname: ${dbUrl.hostname}`)
-        console.log(`   Username: ${dbUrl.username}`)
-        poolConfig = {
-          ...poolConfig,
-          host: dbUrl.hostname,
-          port: parseInt(dbUrl.port) || 6543,
-          database: dbUrl.pathname.slice(1).split('?')[0],
-          user: dbUrl.username,
-          password: dbUrl.password,
-        }
+      // Parse connection string to extract components
+      // This allows us to force IPv4 by explicitly setting the family option
+      let poolConfig: PoolConfig & { family?: number } = {
+        ssl: buildSslConfig(databaseUrl),
+        max: 50,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: DEFAULT_DB_CONN_TIMEOUT_MS,
       }
-    } catch (e: any) {
-      // Fallback: Parse connection string manually
-      console.warn('⚠️  Could not resolve hostname, parsing connectionString with SSL config:', e?.message || e)
+
+      // Parse URL and handle IPv4/IPv6 resolution
       try {
         const dbUrl = new URL(databaseUrl)
-        poolConfig = {
-          host: dbUrl.hostname,
-          port: parseInt(dbUrl.port) || 5432,
-          database: dbUrl.pathname.slice(1).split('?')[0],
-          user: dbUrl.username,
-          password: dbUrl.password,
-          ssl: buildSslConfig(databaseUrl),
-          max: 50,
-          idleTimeoutMillis: 30000,
-          connectionTimeoutMillis: 30000,
+
+        // For Supabase, prefer connection pooler (port 6543) which has better IPv4 support
+        // If using direct connection (port 5432), try to resolve to IPv4 first
+        const isDirectConnection = dbUrl.port === '5432' || !dbUrl.port
+        const isPoolerConnection =
+          dbUrl.port === '6543' ||
+          dbUrl.searchParams.has('pgbouncer') ||
+          dbUrl.hostname.includes('pooler.supabase.com')
+
+        if (isDirectConnection) {
+          // Try to resolve to IPv4 for direct connections
+          try {
+            console.log(`🔧 Resolving ${dbUrl.hostname} to IPv4 address (A records only)...`)
+            const addresses = await dnsResolve4(dbUrl.hostname)
+
+            if (addresses && addresses.length > 0) {
+              const ipv4Address = addresses[0]
+              console.log(`✅ Resolved to IPv4: ${ipv4Address}`)
+
+              poolConfig = {
+                ...poolConfig,
+                host: ipv4Address, // Use resolved IPv4 address instead of hostname
+                port: parseInt(dbUrl.port) || 5432,
+                database: dbUrl.pathname.slice(1).split('?')[0],
+                user: dbUrl.username,
+                password: dbUrl.password,
+              }
+            } else {
+              throw new Error(`No IPv4 addresses found for hostname: ${dbUrl.hostname}`)
+            }
+          } catch (ipv4Error: any) {
+            // If IPv4 resolution fails, suggest using pooler instead
+            console.warn('⚠️  Could not resolve hostname to IPv4:', ipv4Error?.message || ipv4Error)
+            console.warn('💡 TIP: Use connection pooler (port 6543) for better IPv4 compatibility')
+            console.warn('   Example: postgresql://postgres:password@host:6543/db?pgbouncer=true')
+
+            // Fall through to use hostname (might resolve to IPv6)
+            throw ipv4Error
+          }
+        } else {
+          // For pooler connections, use hostname directly (pooler handles IPv4/IPv6)
+          const poolerType = dbUrl.hostname.includes('pooler.supabase.com') ? 'Supabase Transaction Pooler' : 'Connection Pooler'
+          console.log(`🔧 Using ${poolerType} (port ${dbUrl.port}) - using hostname directly`)
+          console.log(`   Hostname: ${dbUrl.hostname}`)
+          console.log(`   Username: ${dbUrl.username}`)
+          poolConfig = {
+            ...poolConfig,
+            host: dbUrl.hostname,
+            port: parseInt(dbUrl.port) || 6543,
+            database: dbUrl.pathname.slice(1).split('?')[0],
+            user: dbUrl.username,
+            password: dbUrl.password,
+          }
         }
-        console.log(`🔧 Using parsed connection with SSL to: ${dbUrl.hostname}:${dbUrl.port}`)
-      } catch (parseError) {
-        // Last resort: use connectionString as-is
-        console.error('⚠️  Could not parse DATABASE_URL, using raw connectionString')
-        poolConfig.connectionString = databaseUrl
+      } catch (e: any) {
+        // Fallback: Parse connection string manually
+        console.warn('⚠️  Could not resolve hostname, parsing connectionString with SSL config:', e?.message || e)
+        try {
+          const dbUrl = new URL(databaseUrl)
+          poolConfig = {
+            host: dbUrl.hostname,
+            port: parseInt(dbUrl.port) || 5432,
+            database: dbUrl.pathname.slice(1).split('?')[0],
+            user: dbUrl.username,
+            password: dbUrl.password,
+            ssl: buildSslConfig(databaseUrl),
+            max: 50,
+            idleTimeoutMillis: 30000,
+            connectionTimeoutMillis: DEFAULT_DB_CONN_TIMEOUT_MS,
+          }
+          console.log(`🔧 Using parsed connection with SSL to: ${dbUrl.hostname}:${dbUrl.port}`)
+        } catch (parseError) {
+          // Last resort: use connectionString as-is
+          console.error('⚠️  Could not parse DATABASE_URL, using raw connectionString')
+          poolConfig.connectionString = databaseUrl
+        }
       }
-    }
 
-    const testPool = new Pool(poolConfig)
+      const testPool = new Pool(poolConfig)
 
-    // Increase max listeners to prevent MaxListenersExceededWarning
-    // This can happen when multiple connection attempts are made
-    testPool.setMaxListeners(20)
+      // Increase max listeners to prevent MaxListenersExceededWarning
+      // This can happen when multiple connection attempts are made
+      testPool.setMaxListeners(20)
 
-    try {
-      const client = await Promise.race([
-        testPool.connect(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Database connection timeout')), 30000)) // Increased to 30s
-      ]) as any
-      await Promise.race([
-        client.query("SELECT NOW()"),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Database query timeout')), 15000)) // Increased to 15s
-      ])
-      client.release()
-
-      pool = testPool
-      // Patch pool.query to avoid unhandled promise rejections from direct calls
-      try { patchPoolQuery(pool) } catch (e) { }
-      try { attachPoolErrorHandler(pool) } catch (e) { }
-      logger.info(`✅ Database connected successfully via DATABASE_URL`)
-
-      // Diagnostic: estimate expected queue concurrency by scanning queueService.ts
       try {
-        const fs = await import('fs')
-        const path = await import('path')
-        const queueFile = path.resolve(__dirname, '..', 'services', 'queueService.ts')
-        if (fs.existsSync(queueFile)) {
-          const content = fs.readFileSync(queueFile, 'utf8')
-          // Match .process(<name>, <concurrency>, ...) where name can be quoted or template literal
-          const processCallRegex = /\.process\(\s*(?:[`'"])[^`'"`]+(?:[`'"`])\s*,\s*(\d+)/g
-          let match
-          let total = 0
-          let found = 0
-          while ((match = processCallRegex.exec(content)) !== null) {
-            const c = parseInt(match[1], 10)
-            if (!Number.isNaN(c)) {
-              total += c
-              found++
+        const client = await Promise.race([
+          testPool.connect(),
+          new Promise<never>((_, reject) => 
+            setTimeout(() => reject(new Error('Database connection timeout')), DEFAULT_DB_CONN_TIMEOUT_MS)
+          )
+        ])
+        
+        await Promise.race([
+          client.query("SELECT NOW()"),
+          new Promise<never>((_, reject) => 
+            setTimeout(() => reject(new Error('Database query timeout')), DEFAULT_DB_QUERY_TIMEOUT_MS)
+          )
+        ])
+        client.release()
+
+        internalPool = testPool
+        patchPoolQuery(internalPool)
+        attachPoolErrorHandler(internalPool)
+        logger.info(`✅ Database connected successfully via DATABASE_URL`)
+
+        // Diagnostic: estimate expected queue concurrency by scanning queueService.ts
+        try {
+          const fs = await import('fs')
+          const path = await import('path')
+          const queueFile = path.resolve(__dirname, '..', 'services', 'queueService.ts')
+          if (fs.existsSync(queueFile)) {
+            const content = fs.readFileSync(queueFile, 'utf8')
+            // Match .process(<name>, <concurrency>, ...) where name can be quoted or template literal
+            const processCallRegex = /\.process\(\s*(?:[`'"])[^`'"`]+(?:[`'"`])\s*,\s*(\d+)/g
+            let match
+            let total = 0
+            let found = 0
+            while ((match = processCallRegex.exec(content)) !== null) {
+              const c = parseInt(match[1], 10)
+              if (!Number.isNaN(c)) {
+                total += c
+                found++
+              }
+            }
+
+            // Also count .process calls without explicit concurrency => default 1
+            const processNoConcurrencyRegex = /\.process\(\s*(?:[`'"])[^`'"`]+(?:[`'"`])\s*,\s*async|\.process\(\s*(?:[`'"])[^`'"`]+(?:[`'"`])\s*,\s*\(/g
+            const noConcurMatches = content.match(processNoConcurrencyRegex)
+            const noConcurCount = noConcurMatches ? noConcurMatches.length : 0
+
+            const expectedConcurrency = total + noConcurCount
+
+            const poolMax = (internalPool as any)?.options?.max || Number(process.env.PG_MAX) || 20
+
+            if (expectedConcurrency && poolMax < expectedConcurrency) {
+              logger.warn(`[DB-CONCURRENCY] Pool max (${poolMax}) is less than estimated queue concurrency (${expectedConcurrency}).`)
+              logger.warn('  Suggestion: reduce per-queue concurrency, split workers, or increase pool max in connection.ts or via env PG_MAX.')
+            } else {
+              logger.info(`[DB-CONCURRENCY] Pool max (${poolMax}) >= estimated queue concurrency (${expectedConcurrency}).`)
             }
           }
-
-          // Also count .process calls without explicit concurrency => default 1
-          const processNoConcurrencyRegex = /\.process\(\s*(?:[`'"])[^`'"`]+(?:[`'"`])\s*,\s*async|\.process\(\s*(?:[`'"])[^`'"`]+(?:[`'"`])\s*,\s*\(/g
-          const noConcurMatches = content.match(processNoConcurrencyRegex)
-          const noConcurCount = noConcurMatches ? noConcurMatches.length : 0
-
-          const expectedConcurrency = total + noConcurCount
-
-          const poolMax = (pool as any)?.options?.max || Number(process.env.PG_MAX) || 20
-
-          if (expectedConcurrency && poolMax < expectedConcurrency) {
-            logger.warn(`[DB-CONCURRENCY] Pool max (${poolMax}) is less than estimated queue concurrency (${expectedConcurrency}).`)
-            logger.warn('  Suggestion: reduce per-queue concurrency, split workers, or increase pool max in connection.ts or via env PG_MAX.')
-          } else {
-            logger.info(`[DB-CONCURRENCY] Pool max (${poolMax}) >= estimated queue concurrency (${expectedConcurrency}).`)
-          }
+        } catch (diagErr) {
+          logger.debug('Could not run DB concurrency diagnostic', { error: (diagErr as any).message })
         }
-      } catch (diagErr) {
-        logger.debug('Could not run DB concurrency diagnostic', { error: (diagErr as any).message })
-      }
-      return
-    } catch (error) {
-      console.error(`❌ DATABASE_URL connection error:`, error)
-      logger.error(`Database connection via DATABASE_URL failed:`, {
-        error: error.message,
-        code: error.code,
-        detail: error.detail,
-        stack: error.stack
-      })
+        return
+      } catch (error: any) {
+        logger.warn(`Database connection attempt ${attempt} failed via DATABASE_URL:`, {
+          error: error?.message,
+          code: error?.code
+        })
 
-      // Quick-retry for self-signed certs / dev environments: retry with insecure TLS
-      const errMsg = (error && (error.message || '')).toLowerCase()
-      const shouldRetryInsecure = !!process.env.ADPA_ALLOW_INSECURE_TLS || errMsg.includes('self-signed') || errMsg.includes('self signed') || errMsg.includes('certificate')
-      if (shouldRetryInsecure) {
-        try {
-          logger.warn('Retrying DATABASE_URL connection with insecure TLS (ADPA_ALLOW_INSECURE_TLS) due to certificate error')
-          const insecurePoolConfig = { ...poolConfig, ssl: { rejectUnauthorized: false } }
-          const insecurePool = new Pool(insecurePoolConfig)
-          insecurePool.setMaxListeners(20)
-
-          const client = await Promise.race([
-            insecurePool.connect(),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Database connection timeout (insecure retry)')), 30000))
-          ]) as any
-
-          await Promise.race([
-            client.query("SELECT NOW()"),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Database query timeout (insecure retry)')), 15000))
-          ])
-          client.release()
-
-          pool = insecurePool
-          try { patchPoolQuery(pool) } catch (e) { }
-          try { attachPoolErrorHandler(pool) } catch (e) { }
-          logger.info('✅ Database connected successfully via DATABASE_URL (insecure TLS)')
-          return
-        } catch (insecureErr) {
-          logger.error('Retry with insecure TLS failed:', insecureErr?.message || insecureErr)
-          try { await insecureErr?.end?.() } catch (e) { }
+        if (attempt < maxRetriesPerMethod) {
+          logger.info(`Retrying database connection in ${retryDelay}ms...`)
+          await new Promise(resolve => setTimeout(resolve, retryDelay))
+        } else {
+          // Clean up the test pool before moving to fallback methods
+          await testPool.end().catch(() => { })
         }
       }
-
-      await testPool.end().catch(() => { })
     }
   }
 
@@ -366,19 +397,23 @@ export async function connectDatabase() {
 
         const client = await Promise.race([
           testPool.connect(),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Database connection timeout')), 10000))
-        ]) as any
-        logger.info("Database client acquired, testing connection...")
+          new Promise<never>((_, reject) => 
+            setTimeout(() => reject(new Error('Database connection timeout')), 10000)
+          )
+        ])
+        
         await Promise.race([
           client.query("SELECT NOW()"),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Database query timeout')), 5000))
+          new Promise<never>((_, reject) => 
+            setTimeout(() => reject(new Error('Database query timeout')), 5000)
+          )
         ])
         client.release()
 
         // If successful, update the global pool and return
-        pool = testPool
-        try { patchPoolQuery(pool) } catch (e) { }
-        try { attachPoolErrorHandler(pool) } catch (e) { }
+        internalPool = testPool
+        patchPoolQuery(internalPool)
+        attachPoolErrorHandler(internalPool)
         logger.info(`Database connection established successfully via ${method.description}`)
         return
       } catch (error) {
@@ -405,12 +440,10 @@ export async function connectDatabase() {
   throw new Error("Unable to connect to database using any available method")
 }
 
-export { pool }
-
-export function getDbCircuitState() {
+export function getDbCircuitState(): string {
   try {
     return dbBreaker.getState()
-  } catch (e) {
+  } catch {
     return 'unknown'
   }
 }

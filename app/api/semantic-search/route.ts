@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getAuthenticatedUser, unauthorizedResponse } from '@/lib/auth-utils'
 import { searchDocuments, type UniversalSearchRequest } from '@/server/src/services/searchService'
+import { connectDatabase } from '@/server/src/database/connection'
 import { logger } from '@/server/src/utils/logger'
 
 type SearchMode = 'semantic' | 'keyword' | 'hybrid'
@@ -15,6 +16,9 @@ function toSearchMode(value: string | null): SearchMode {
 export async function POST(req: Request) {
   const user = await getAuthenticatedUser(req)
   if (!user) return unauthorizedResponse()
+
+  // Initialize database connection (safe to call multiple times)
+  await connectDatabase()
 
   try {
     const body = await req.json()

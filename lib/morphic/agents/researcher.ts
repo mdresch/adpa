@@ -81,7 +81,8 @@ export function createResearcher({
     modelType,
     knowledgeEnabled = false,
     userId,
-    ragScope
+    ragScope,
+    assistedContext
 }: {
     model: string
     modelConfig?: Model
@@ -92,6 +93,7 @@ export function createResearcher({
     knowledgeEnabled?: boolean
     userId?: string
     ragScope?: RAGScope
+    assistedContext?: string
 }) {
     try {
         const currentDate = new Date().toLocaleString()
@@ -170,9 +172,13 @@ export function createResearcher({
         } as ResearcherTools
 
         // Create ToolLoopAgent with all configuration
+        const assistedContextInstructions = assistedContext
+            ? `\n\nADPA_ASSISTED_CONTEXT_START\n${assistedContext}\nADPA_ASSISTED_CONTEXT_END\nUse this assisted context as primary internal evidence for your response.`
+            : ''
+
         const agent = new ToolLoopAgent({
             model: getModel(model),
-            instructions: `${systemPrompt}\nCurrent date and time: ${currentDate}`,
+            instructions: `${systemPrompt}\nCurrent date and time: ${currentDate}${assistedContextInstructions}`,
             tools,
             activeTools: activeToolsList,
             stopWhen: stepCountIs(maxSteps),
@@ -191,6 +197,7 @@ export function createResearcher({
                     searchMode,
                     modelType: modelType || 'default',
                     knowledgeEnabled,
+                    hasAssistedContext: !!assistedContext,
                     ...(parentTraceId && {
                         langfuseTraceId: parentTraceId,
                         langfuseUpdateParent: false

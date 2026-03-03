@@ -75,53 +75,7 @@ export default function PMBOK6Page() {
   const [selectedProcess, setSelectedProcess] = React.useState<Process | null>(null)
   const [detailDialogOpen, setDetailDialogOpen] = React.useState(false)
 
-  fetchData()
-}, [isAuthenticated])
-if (!isAuthenticated) return
-
-const fetchData = async () => {
-  try {
-    setLoading(true)
-    const token = localStorage.getItem("auth_token")
-
-    // Fetch process groups
-    const groupsResponse = await fetch(getApiUrl("/pmbok6/process-groups"), {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-    })
-    if (groupsResponse.ok) {
-      const groupsData = await groupsResponse.json()
-      setProcessGroups(groupsData.data || [])
-    }
-
-    // Fetch knowledge areas
-    const areasResponse = await fetch(getApiUrl("/pmbok6/knowledge-areas"), {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-    })
-    if (areasResponse.ok) {
-      const areasData = await areasResponse.json()
-      setKnowledgeAreas(areasData.data || [])
-    }
-
-    // Fetch processes
-    await fetchProcesses()
-  } catch (error) {
-    console.error("Failed to fetch PMBOK 6 data:", error)
-    toast.error("Failed to load PMBOK 6 processes")
-  } finally {
-    setLoading(false)
-  }
-}
-
-fetchData()
-  }, [isAuthenticated])
-
-const fetchProcesses = async () => {
+  const fetchProcesses = async () => {
   try {
     const token = localStorage.getItem("auth_token")
     const params = new URLSearchParams()
@@ -158,6 +112,48 @@ const fetchProcesses = async () => {
     toast.error("Failed to load processes")
   }
 }
+
+const fetchData = async () => {
+  try {
+    setLoading(true)
+    const token = localStorage.getItem("auth_token")
+
+    const groupsResponse = await fetch(getApiUrl("/pmbok6/process-groups"), {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    })
+    if (groupsResponse.ok) {
+      const groupsData = await groupsResponse.json()
+      setProcessGroups(groupsData.data || [])
+    }
+
+    const areasResponse = await fetch(getApiUrl("/pmbok6/knowledge-areas"), {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    })
+    if (areasResponse.ok) {
+      const areasData = await areasResponse.json()
+      setKnowledgeAreas(areasData.data || [])
+    }
+
+    await fetchProcesses()
+  } catch (error) {
+    console.error("Failed to fetch PMBOK 6 data:", error)
+    toast.error("Failed to load PMBOK 6 processes")
+  } finally {
+    setLoading(false)
+  }
+}
+
+React.useEffect(() => {
+  if (isAuthenticated) {
+    fetchData()
+  }
+}, [isAuthenticated])
 
 React.useEffect(() => {
   if (isAuthenticated) {

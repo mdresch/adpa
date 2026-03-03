@@ -2,7 +2,8 @@ import express from "express"
 import bcrypt from "bcryptjs"
 import jwt from "jsonwebtoken"
 import { v4 as uuidv4 } from "uuid"
-import { pool } from "../database/connection"
+import { safeQuery } from "../database/helpers"
+import { getDatabasePoolSafe } from "../database/connection"
 import { logger, childLogger } from "../utils/logger"
 
 // Static module-level logger for module-load events
@@ -67,6 +68,13 @@ const ADMIN_PERMISSIONS = {
 // Register
 router.post("/register", async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId })
+  const pool = getDatabasePoolSafe()
+  
+  if (!pool) {
+    log.error('Database not available for registration')
+    return res.status(503).json({ error: "Service temporarily unavailable" })
+  }
+  
   const client = await pool.connect()
   
   try {
@@ -278,7 +286,7 @@ router.post("/login", async (req, res) => {
     // Get user - try with metadata and company_id, join with companies to get company name
     let result
     try {
-      result = await pool.query(
+      result = await safeQuery(
         `SELECT 
           u.id, u.email, u.password_hash, u.name, u.role, u.permissions, u.is_active, 
           u.metadata, u.company_id,
@@ -294,7 +302,7 @@ router.post("/login", async (req, res) => {
         log.warn('Metadata or company_id column not found, querying without them')
         try {
           // Try with company_id but without metadata
-          result = await pool.query(
+          result = await safeQuery(
             `SELECT 
               u.id, u.email, u.password_hash, u.name, u.role, u.permissions, u.is_active,
               u.company_id,
@@ -310,7 +318,7 @@ router.post("/login", async (req, res) => {
         } catch (err2: any) {
           // If company_id also doesn't exist, query without both
           if (err2.message?.includes('column "company_id"') || err2.code === '42703') {
-            result = await pool.query(
+            result = await safeQuery(
               "SELECT id, email, password_hash, name, role, permissions, is_active FROM users WHERE email = $1",
               [email],
             )
@@ -360,7 +368,7 @@ router.post("/login", async (req, res) => {
     })
 
     // Update last login
-    await pool.query("UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1", [user.id])
+    await safeQuery("UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1", [user.id])
 
   log.info(`User logged in: ${email}`)
 
@@ -370,7 +378,7 @@ router.post("/login", async (req, res) => {
     }
 
     // Normalize metadata for response
-    let normalizedMetadata = {}
+    let normalizedMetadata: any = {}
     if (user.metadata) {
       if (typeof user.metadata === 'string') {
         try {
@@ -414,7 +422,7 @@ router.get("/me", authenticateToken, async (req, res) => {
     // Try to query with metadata and company_id, join with companies to get company name
     let result
     try {
-      result = await pool.query(
+      result = await safeQuery(
         `SELECT 
           u.id, u.email, u.name, u.role, u.permissions, u.avatar_url, u.created_at, 
           u.metadata, u.company_id,
@@ -429,7 +437,7 @@ router.get("/me", authenticateToken, async (req, res) => {
         log.warn('Metadata or company_id column not found, querying without them for /me')
         try {
           // Try with company_id but without metadata
-          result = await pool.query(
+          result = await safeQuery(
             `SELECT 
               u.id, u.email, u.name, u.role, u.permissions, u.avatar_url, u.created_at,
               u.company_id,
@@ -445,7 +453,7 @@ router.get("/me", authenticateToken, async (req, res) => {
         } catch (err2: any) {
           // If company_id also doesn't exist, query without both
           if (err2.message?.includes('column "company_id"') || err2.code === '42703') {
-            result = await pool.query(
+            result = await safeQuery(
               "SELECT id, email, name, role, permissions, avatar_url, created_at FROM users WHERE id = $1",
               [req.user?.id?.toString()],
             )
@@ -541,14 +549,14 @@ router.post("/demo", async (req, res) => {
     const demoPassword = process.env.DEMO_PASSWORD || "admin123"
 
     // Check if user exists
-    const existing = await pool.query("SELECT id, email, name, role, permissions, is_active FROM users WHERE email = $1", [demoEmail])
+    const existing = await safeQuery("SELECT id, email, name, role, permissions, is_active FROM users WHERE email = $1", [demoEmail])
     let user
 
     if (existing.rows.length === 0) {
       // Create demo admin user
       const saltRounds = 12
       const passwordHash = await bcrypt.hash(demoPassword, saltRounds)
-      const created = await pool.query(
+      const created = await safeQuery(
         `INSERT INTO users (email, password_hash, name, role, permissions, is_active)
          VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING id, email, name, role, permissions, is_active, created_at`,
@@ -589,7 +597,7 @@ router.post("/change-password", authenticateToken, async (req, res) => {
     }
 
     // Get user's current password hash
-    const userResult = await pool.query(
+    const userResult = await safeQuery(
       "SELECT password_hash FROM users WHERE id = $1",
       [userId]
     )
@@ -612,7 +620,7 @@ router.post("/change-password", authenticateToken, async (req, res) => {
     const newPasswordHash = await bcrypt.hash(newPassword, saltRounds)
 
     // Update password
-    await pool.query(
+    await safeQuery(
       "UPDATE users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
       [newPasswordHash, userId]
     )

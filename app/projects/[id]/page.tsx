@@ -1544,10 +1544,81 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
 
   // Fetch AI providers for document generation
   const fetchAIProviders = async () => {
+    const normalizeModels = (provider: any): string[] => {
+      const toModelArray = (value: any): string[] => {
+        if (!value) return []
+
+        if (Array.isArray(value)) {
+          return value
+            .map((item: any) => {
+              if (typeof item === 'string') return item.trim()
+              if (item && typeof item === 'object') {
+                return (item.id || item.name || item.model || '').toString().trim()
+              }
+              return ''
+            })
+            .filter((model: string) => model.length > 0)
+        }
+
+        if (typeof value === 'string') {
+          const trimmed = value.trim()
+          if (!trimmed) return []
+
+          if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+            try {
+              return toModelArray(JSON.parse(trimmed))
+            } catch {
+              return []
+            }
+          }
+
+          return trimmed.includes(',')
+            ? trimmed.split(',').map((part) => part.trim()).filter((part) => part.length > 0)
+            : [trimmed]
+        }
+
+        return []
+      }
+
+      const candidateSources = [
+        provider?.models,
+        provider?.available_models,
+        provider?.configuration?.models,
+        provider?.configuration?.available_models,
+      ]
+
+      for (const source of candidateSources) {
+        const models = toModelArray(source)
+        if (models.length > 0) {
+          return Array.from(new Set(models))
+        }
+      }
+
+      return []
+    }
+
     try {
       const providers = await apiClient.getAIProviders()
-      setAiProviders(providers || [])
-      console.log('📊 AI Providers loaded:', providers?.length || 0)
+      const normalizedProviders = (providers || []).map((provider: any) => ({
+        ...provider,
+        models: normalizeModels(provider),
+      }))
+
+      setAiProviders(normalizedProviders)
+      console.log('📊 AI Providers loaded:', normalizedProviders.length)
+
+      const activeProviders = normalizedProviders.filter((provider: any) => provider.is_active)
+      if (activeProviders.length > 0) {
+        const currentProvider = activeProviders.find((provider: any) => provider.name === selectedProvider)
+        const providerToUse = currentProvider || activeProviders[0]
+        setSelectedProvider(providerToUse.name)
+
+        if (providerToUse.models && providerToUse.models.length > 0) {
+          setSelectedModel(providerToUse.models[0])
+        } else {
+          setSelectedModel('')
+        }
+      }
     } catch (error) {
       console.error("Failed to fetch AI providers:", error)
       setAiProviders([])

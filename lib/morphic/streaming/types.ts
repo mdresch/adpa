@@ -24,5 +24,6 @@ export interface BaseStreamConfig {
     modelType?: ModelType
     knowledgeEnabled?: boolean
     ragScope?: RAGScope
+    assistedContext?: string
 }
 

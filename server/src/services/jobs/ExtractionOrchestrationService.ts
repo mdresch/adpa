@@ -563,7 +563,18 @@ export class ExtractionOrchestrationService {
     }
     const ws = deps?.websocket || io
     const log = deps?.logger || logger
-    const { jobId, projectId, userId, aiProvider, aiModel, documentIds, domains } = job.data as ExtendedExtractionJobData
+    const {
+      jobId,
+      projectId,
+      userId,
+      aiProvider,
+      aiModel,
+      documentIds,
+      domains,
+      batchingEnabled,
+      maxBatchTokens,
+      maxDocsPerBatch
+    } = job.data as ExtendedExtractionJobData
     const selectedDomains = normalizeDomains(domains)
     const entityTypesForRun = resolveEntityTypesForDomains(selectedDomains)
     const { workerId, updateJobStatus } = options
@@ -604,6 +615,9 @@ export class ExtractionOrchestrationService {
         userId,
         documentIds,
         domains: selectedDomains,
+        batchingEnabled,
+        maxBatchTokens,
+        maxDocsPerBatch,
         autoTriggered: (job.data as ExtendedExtractionJobData).autoTriggered || false,
         sourceDocumentId: (job.data as ExtendedExtractionJobData).sourceDocumentId
       })
@@ -640,6 +654,9 @@ export class ExtractionOrchestrationService {
           aiProvider,
           aiModel,
           documentIds,
+          batchingEnabled,
+          maxBatchTokens,
+          maxDocsPerBatch,
           entityType,
           entityIndex: index,
           totalEntities: entityTypesForRun.length
@@ -1195,7 +1212,8 @@ export class ExtractionOrchestrationService {
             communication_logs: countsJson.communication_logs || 0,
             satisfaction_surveys: countsJson.satisfaction_surveys || 0,
             stakeholder_issues: countsJson.stakeholder_issues || 0,
-            relationship_health: countsJson.relationship_health || 0
+            relationship_health: countsJson.relationship_health || 0,
+            dt_assets: countsJson.dt_assets || 0
           }]
         }
       } catch (error: unknown) {
@@ -1233,10 +1251,11 @@ export class ExtractionOrchestrationService {
           safeCount('onboarding_offboarding'), safeCount('risk_assessments'), safeCount('risk_response_plans'),
           safeCount('risk_triggers'), safeCount('risk_reviews'), safeCount('contingency_reserves'),
           safeCount('risk_metrics'), safeCount('engagement_actions'), safeCount('communication_logs'),
-          safeCount('satisfaction_surveys'), safeCount('stakeholder_issues'), safeCount('relationship_health')
+          safeCount('satisfaction_surveys'), safeCount('stakeholder_issues'), safeCount('relationship_health'),
+          safeCount('dt_assets')
         ])
         const fallbackTime = Date.now() - fallbackStartTime
-        log.warn(`[EXTRACTION-PARENT] Fallback queries completed in ${fallbackTime}ms (63 queries)`, { projectId })
+        log.warn(`[EXTRACTION-PARENT] Fallback queries completed in ${fallbackTime}ms (64 queries)`, { projectId })
 
         // Convert to object format for compatibility
         countResult = {
@@ -1261,7 +1280,8 @@ export class ExtractionOrchestrationService {
             onboarding_offboarding: countQueries[51], risk_assessments: countQueries[52], risk_response_plans: countQueries[53],
             risk_triggers: countQueries[54], risk_reviews: countQueries[55], contingency_reserves: countQueries[56],
             risk_metrics: countQueries[57], engagement_actions: countQueries[58], communication_logs: countQueries[59],
-            satisfaction_surveys: countQueries[60], stakeholder_issues: countQueries[61], relationship_health: countQueries[62]
+            satisfaction_surveys: countQueries[60], stakeholder_issues: countQueries[61], relationship_health: countQueries[62],
+            dt_assets: countQueries[63]
           }]
         }
       }
@@ -1342,7 +1362,8 @@ export class ExtractionOrchestrationService {
         communicationLogs: parseInt(row.communication_logs) || 0,
         satisfactionSurveys: parseInt(row.satisfaction_surveys) || 0,
         stakeholderIssues: parseInt(row.stakeholder_issues) || 0,
-        relationshipHealth: parseInt(row.relationship_health) || 0
+        relationshipHealth: parseInt(row.relationship_health) || 0,
+        dtAssets: parseInt(row.dt_assets) || 0
       }
 
       const entityCountLookup = Object.entries(ENTITY_COUNT_KEY_MAP).reduce(

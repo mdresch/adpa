@@ -7,6 +7,7 @@ import { pool } from '../database/connection'
 import { logger } from '../utils/logger'
 import { ContextRetrievalService } from '../modules/contextRetrieval/contextRetrievalService'
 import { getQdrantConfig } from '../modules/contextRetrieval/config/qdrantConfig'
+import { semanticSearchService } from './semanticSearchService'
 import type { ContextRetrievalRequest } from '../modules/contextRetrieval/types'
 
 export interface UniversalSearchRequest {
@@ -25,7 +26,7 @@ export interface UniversalSearchRequest {
 
 export interface SearchResult {
   id: string
-  type: 'portfolio' | 'program' | 'project' | 'document' | 'task' | 'checklist_item' | 'todo' | 'template' | 'user'
+  type: 'portfolio' | 'program' | 'project' | 'document' | 'task' | 'checklist_item' | 'todo' | 'template' | 'user' | 'knowledge_base'
   title: string
   description: string
   content_preview: string
@@ -1067,6 +1068,160 @@ export async function searchUsers(
 }
 
 /**
+ * Search Knowledge Base with semantic and keyword scoring
+ * Integrates with pgvector embeddings for semantic similarity
+ */
+export async function searchKnowledgeBase(
+  request: UniversalSearchRequest
+): Promise<SearchResult[]> {
+  try {
+    // Try semantic search first if embeddings are available
+    const kbResults: SearchResult[] = []
+    const limit = request.limit || 20
+    const offset = request.offset || 0
+
+    // Check if semantic search is configured (VOYAGE_API_KEY present)
+    const voyageApiKeyMissing = !process.env.VOYAGE_API_KEY
+    
+    // Check if we have embeddings
+    const embeddingCheckResult = await pool.query(`
+      SELECT COUNT(*) as count
+      FROM knowledge_base_entries
+      WHERE embedding IS NOT NULL
+    `)
+
+    const hasEmbeddings = parseInt(embeddingCheckResult.rows[0].count) > 0
+
+    if (hasEmbeddings && request.useSemanticSearch !== false && !voyageApiKeyMissing) {
+      try {
+        // Generate query embedding
+        const queryEmbedding = await semanticSearchService.embedQuery(request.query)
+        
+        // Search using vector similarity
+        const vectorStr = `[${queryEmbedding.join(',')}]`
+        const semanticResults = await pool.query(`
+          SELECT 
+            id,
+            title,
+            description,
+            category,
+            embedding <=> $1::vector AS cosine_distance,
+            (1 - (embedding <=> $1::vector) / 2) AS semantic_score,
+            semantic_keywords,
+            created_at,
+            updated_at
+          FROM knowledge_base_entries
+          WHERE embedding IS NOT NULL
+          ORDER BY embedding <=> $1::vector
+          LIMIT $2
+          OFFSET $3
+        `, [vectorStr, limit, offset])
+
+        // Calculate hybrid scores
+        const results = semanticResults.rows.map((row: any) => {
+          const queryLower = request.query.toLowerCase()
+          const keywordScore = calculateKeywordRelevance(
+            {
+              title: row.title,
+              description: row.description,
+              semantic_keywords: row.semantic_keywords
+            },
+            queryLower
+          )
+
+          // Hybrid scoring: 50% semantic + 25% keyword + 15% recency + 10% category
+          const recencyDays = (Date.now() - new Date(row.updated_at).getTime()) / (1000 * 60 * 60 * 24)
+          const recencyBoost = Math.max(0, 1 - (recencyDays / 365))
+          const categoryBoost = row.category === 'best_practice' ? 1.0 : 0.8
+
+          const hybridScore = 
+            0.5 * row.semantic_score +
+            0.25 * keywordScore +
+            0.15 * recencyBoost +
+            0.1 * categoryBoost
+
+          return {
+            id: row.id,
+            type: 'knowledge_base' as const,
+            title: row.title,
+            description: row.description || '',
+            content_preview: row.description?.substring(0, 200) || '',
+            author: 'Knowledge Base',
+            author_id: '',
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+            tags: row.semantic_keywords || [],
+            framework: row.category,
+            relevance_score: hybridScore,
+            status: 'published'
+          }
+        })
+
+        return results
+      } catch (error: any) {
+        logger.debug('[KB-SEARCH] Semantic search failed (attempting keyword fallback):', error.message)
+      }
+    } else if (voyageApiKeyMissing && request.useSemanticSearch !== false) {
+      logger.debug('[KB-SEARCH] VOYAGE_API_KEY not configured; using keyword-only search')
+    }
+
+    // Keyword-only fallback
+    let query = `
+      SELECT 
+        id,
+        title,
+        description,
+        category,
+        semantic_keywords,
+        created_at,
+        updated_at
+      FROM knowledge_base_entries
+      WHERE (
+        title ILIKE $1 OR 
+        description ILIKE $1 OR 
+        semantic_keywords @> ARRAY[$1::text]
+      )
+      ORDER BY created_at DESC
+      LIMIT $2
+      OFFSET $3
+    `
+
+    const keywordResults = await pool.query(query, [`%${request.query}%`, limit, offset])
+    
+    return keywordResults.rows.map((row: any) => {
+      const keywordScore = calculateKeywordRelevance(
+        {
+          title: row.title,
+          description: row.description,
+          semantic_keywords: row.semantic_keywords
+        },
+        request.query.toLowerCase()
+      )
+
+      return {
+        id: row.id,
+        type: 'knowledge_base' as const,
+        title: row.title,
+        description: row.description || '',
+        content_preview: row.description?.substring(0, 200) || '',
+        author: 'Knowledge Base',
+        author_id: '',
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        tags: row.semantic_keywords || [],
+        framework: row.category,
+        relevance_score: keywordScore,
+        status: 'published'
+      }
+    })
+
+  } catch (error: any) {
+    logger.error('[KB-SEARCH] Search failed:', error)
+    return []
+  }
+}
+
+/**
  * Calculate semantic relevance score for results
  */
 async function calculateSemanticRelevance(
@@ -1090,10 +1245,11 @@ async function calculateSemanticRelevance(
 }
 
 /**
- * Calculate keyword-based relevance score
+ * Calculate keyword-based relevance score with semantic enhancement
+ * Uses caching to avoid repeated API calls
  */
 function calculateKeywordRelevance(
-  item: { title: string; description?: string },
+  item: { title: string; description?: string; semantic_keywords?: string[] },
   queryLower: string
 ): number {
   const titleLower = item.title.toLowerCase()
@@ -1118,17 +1274,92 @@ function calculateKeywordRelevance(
     score += 0.4
   }
   
-  // Word matches
+  // Word matches - improved scoring
   const queryWords = queryLower.split(/\s+/).filter(w => w.length > 2)
   const titleWords = titleLower.split(/\s+/)
   const descWords = descLower.split(/\s+/)
+  const semanticKeywords = (item.semantic_keywords || []).map(k => k.toLowerCase())
   
   queryWords.forEach(word => {
-    if (titleWords.includes(word)) score += 0.2
-    if (descWords.includes(word)) score += 0.1
+    if (titleWords.includes(word)) score += 0.3
+    if (descWords.includes(word)) score += 0.15
+    if (semanticKeywords.some(k => k.includes(word))) score += 0.25
   })
   
+  // Phrase matching (better than individual words)
+  const titleHasPhrase = titleLower.includes(queryLower)
+  const descHasPhrase = descLower.includes(queryLower)
+  if (titleHasPhrase || descHasPhrase) score += 0.2
+  
   return Math.min(1.0, score)
+}
+
+/**
+ * Calculate semantic relevance using embeddings
+ * Returns score between 0-1 based on vector similarity
+ * Caches embeddings to avoid redundant API calls
+ */
+async function calculateSemanticRelevanceScore(
+  queryEmbedding: number[] | null,
+  itemEmbedding: number[] | null
+): Promise<number> {
+  if (!queryEmbedding || !itemEmbedding) {
+    return 0 // Cannot calculate without embeddings
+  }
+  
+  // Calculate cosine similarity
+  let dotProduct = 0
+  let magnitude1 = 0
+  let magnitude2 = 0
+  
+  for (let i = 0; i < queryEmbedding.length; i++) {
+    dotProduct += queryEmbedding[i] * itemEmbedding[i]
+    magnitude1 += queryEmbedding[i] * queryEmbedding[i]
+    magnitude2 += itemEmbedding[i] * itemEmbedding[i]
+  }
+  
+  const magnitudes = Math.sqrt(magnitude1) * Math.sqrt(magnitude2)
+  if (magnitudes === 0) return 0
+  
+  const cosineSimilarity = dotProduct / magnitudes
+  // Normalize from [-1, 1] to [0, 1]
+  return (cosineSimilarity + 1) / 2
+}
+
+/**
+ * Calculate semantic relevance for knowledge base entries
+ */
+async function buildKnowledgeBaseSemanticScores(
+  entries: any[],
+  queryEmbedding: number[] | null
+): Promise<Map<string, number>> {
+  const scoreMap = new Map<string, number>()
+  
+  if (!queryEmbedding) {
+    entries.forEach(e => scoreMap.set(e.id, 0))
+    return scoreMap
+  }
+  
+  try {
+    for (const entry of entries) {
+      if (entry.embedding) {
+        // Parse embedding from pgvector format if needed
+        const itemEmbed = typeof entry.embedding === 'string' 
+          ? JSON.parse(entry.embedding) 
+          : entry.embedding
+        
+        const score = await calculateSemanticRelevanceScore(queryEmbedding, itemEmbed)
+        scoreMap.set(entry.id, score)
+      } else {
+        scoreMap.set(entry.id, 0)
+      }
+    }
+  } catch (error: any) {
+    logger.warn(`[SEARCH] Failed to calculate semantic scores: ${error.message}`)
+    entries.forEach(e => scoreMap.set(e.id, 0))
+  }
+  
+  return scoreMap
 }
 
 /**
@@ -1151,7 +1382,8 @@ function calculateRecencyBoost(updatedAt: string): number {
 
 /**
  * Calculate hybrid search score combining multiple signals
- * Formula: (0.6 × Semantic) + (0.2 × Keyword) + (0.1 × Recency) + (0.1 × Framework Match)
+ * Formula: (0.5 × Semantic) + (0.25 × Keyword) + (0.15 × Recency) + (0.1 × Framework Match)
+ * This heavily weights semantic similarity for more relevant results
  */
 function calculateHybridScore(
   semanticScore: number,
@@ -1159,10 +1391,11 @@ function calculateHybridScore(
   recencyBoost: number,
   frameworkMatch: boolean
 ): number {
-  const semanticWeight = 0.6
-  const keywordWeight = 0.2
-  const recencyWeight = 0.1
-  const frameworkWeight = 0.1
+  // Updated weights for better semantic search results
+  const semanticWeight = 0.5    // Higher weight for semantic similarity
+  const keywordWeight = 0.25    // Secondary weight for exact matches
+  const recencyWeight = 0.15    // Moderate weight for freshness
+  const frameworkWeight = 0.1   // Lower weight for framework match
   
   return (
     semanticWeight * semanticScore +

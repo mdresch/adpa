@@ -272,44 +272,43 @@ export default function DocumentUploadPage() {
   };
 
   // Handle file selection - must be defined before useCallback hooks that use it
-}
-  }, []);
-const newFiles: UploadedFile[] = [];
-const warnings: string[] = [];
+  const handleFilesSelected = React.useCallback((selectedFiles: File[]) => {
+    const newFiles: UploadedFile[] = [];
+    const warnings: string[] = [];
 
-selectedFiles.forEach(file => {
-  const sizeCheck = checkFileSize(file);
-  if (!sizeCheck.isValid) {
-    warnings.push(sizeCheck.warning || '');
-    return; // Skip invalid files
-  }
-  if (sizeCheck.warning) {
-    warnings.push(sizeCheck.warning);
-  }
+    selectedFiles.forEach(file => {
+      const sizeCheck = checkFileSize(file);
+      if (!sizeCheck.isValid) {
+        warnings.push(sizeCheck.warning || '');
+        return;
+      }
+      if (sizeCheck.warning) {
+        warnings.push(sizeCheck.warning);
+      }
 
-  newFiles.push({
-    file,
-    id: Math.random().toString(36).substring(7),
-    status: 'pending',
-    progress: 0
-  });
-});
+      newFiles.push({
+        file,
+        id: Math.random().toString(36).substring(7),
+        status: 'pending',
+        progress: 0
+      });
+    });
 
-if (warnings.length > 0) {
-  warnings.forEach(warning => {
-    if (warning) {
-      toast.warning(warning, { duration: 5000 });
+    if (warnings.length > 0) {
+      warnings.forEach(warning => {
+        if (warning) {
+          toast.warning(warning, { duration: 5000 });
+        }
+      });
     }
-  });
-}
 
-if (newFiles.length > 0) {
-  setFiles(prev => [...prev, ...newFiles]);
-}
+    if (newFiles.length > 0) {
+      setFiles(prev => [...prev, ...newFiles]);
+    }
 
-if (selectedFiles.length > newFiles.length) {
-  toast.error(`${selectedFiles.length - newFiles.length} file(s) were rejected due to size limits`);
-}
+    if (selectedFiles.length > newFiles.length) {
+      toast.error(`${selectedFiles.length - newFiles.length} file(s) were rejected due to size limits`);
+    }
   }, []);
 
 // Handle drag events - ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURNS

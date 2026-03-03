@@ -8,5 +8,6 @@ export * from './base'
 export * from './cache'
 export * from './ExtractionRegistry'
 export * from './ExtractionOrchestrator'
+export * from './batchPlanner'
 export * from './entities/work_items'
 

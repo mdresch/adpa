@@ -88,16 +88,49 @@ export interface BaselineExtractionJobData extends BaseJobData {
 }
 
 /**
+ * Extraction batching controls
+ */
+export interface ExtractionBatchingConfig {
+  batchingEnabled?: boolean
+  maxBatchTokens?: number
+  maxDocsPerBatch?: number
+}
+
+/**
+ * Batch-aware extraction progress metadata
+ */
+export interface ExtractionBatchProgressMeta {
+  activeEntityType?: string | null
+  totalDocuments: number
+  processedDocuments: number
+  totalBatches: number
+  currentBatch: number
+  estimatedRemainingSeconds?: number | null
+  batching: {
+    enabled: boolean
+    maxBatchTokens: number
+    maxDocsPerBatch: number
+  }
+  updatedAt: string
+}
+
+/**
  * Project Data Extraction Job Data
  */
-export interface ProjectDataExtractionJobData extends BaseJobData {
+export interface ProjectDataExtractionJobData extends BaseJobData, ExtractionBatchingConfig {
   projectId: string
+  parentJobId?: string
+  entityType?: string
+  entityIndex?: number
+  totalEntities?: number
+  sourceJobId?: string
   aiProvider?: string
   aiModel?: string
   fallbackProvider?: string
   fallbackModel?: string
   documentIds?: string[]
   domains?: string[]
+  progressMeta?: ExtractionBatchProgressMeta | null
 }
 
 /**

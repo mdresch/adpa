@@ -12,6 +12,12 @@ This document outlines the strategic roadmap for the ADPA platform, focusing on 
 
 **Goal**: Implement enterprise-grade version control to prevent "Document Clutter" and maintain clear audit trails during AI regeneration.
 
+### 2. Unlimited Documents Extraction MVP
+**Status**: Planned | **Priority**: HIGH  
+**File**: [`UNLIMITED_DOCUMENT_EXTRACTION_MVP_PLAN.md`](./UNLIMITED_DOCUMENT_EXTRACTION_MVP_PLAN.md)
+
+**Goal**: Support extraction for large project libraries (50-200+ documents) with smart batching, batch progress, and scalable document selection UX.
+
 ---
 
 ## 🏛️ Strategic Foundations (Portfolio & Program Management)

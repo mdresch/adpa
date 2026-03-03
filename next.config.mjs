@@ -40,14 +40,9 @@ const nextConfig = {
       },
     ];
   },
-  experimental: {
-    turbopack: {
-      root: '.',
-    },
-  },
 }
 
-export default withSentryConfig(nextConfig, {
+const sentryConfig = {
   // For all available options, see:
   // https://www.npmjs.com/package/@sentry/webpack-plugin#options
 
@@ -83,4 +78,10 @@ export default withSentryConfig(nextConfig, {
       removeDebugLogging: true,
     },
   },
-});
+};
+
+const isCI = process.env.CI === 'true' || process.env.CI === '1';
+
+export default isCI
+  ? withSentryConfig(nextConfig, sentryConfig)
+  : nextConfig;

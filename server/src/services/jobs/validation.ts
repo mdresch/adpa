@@ -56,11 +56,31 @@ export const baselineExtractionJobDataSchema = baseJobDataSchema.keys({
   fallback_model: Joi.string().optional(),
 })
 
+const extractionProgressMetaSchema = Joi.object({
+  activeEntityType: Joi.string().allow(null).optional(),
+  totalDocuments: Joi.number().integer().min(0).required(),
+  processedDocuments: Joi.number().integer().min(0).required(),
+  totalBatches: Joi.number().integer().min(0).required(),
+  currentBatch: Joi.number().integer().min(0).required(),
+  estimatedRemainingSeconds: Joi.number().integer().min(0).allow(null).optional(),
+  batching: Joi.object({
+    enabled: Joi.boolean().required(),
+    maxBatchTokens: Joi.number().integer().min(1000).max(200000).required(),
+    maxDocsPerBatch: Joi.number().integer().min(1).max(500).required(),
+  }).required(),
+  updatedAt: Joi.string().isoDate().required(),
+}).optional()
+
 /**
  * Project Data Extraction Job Data Schema
  */
 export const projectDataExtractionJobDataSchema = baseJobDataSchema.keys({
   projectId: Joi.string().uuid().required(),
+  parentJobId: Joi.string().uuid().optional(),
+  entityType: Joi.string().optional(),
+  entityIndex: Joi.number().integer().min(0).optional(),
+  totalEntities: Joi.number().integer().min(1).optional(),
+  sourceJobId: Joi.string().uuid().optional(),
   aiProvider: Joi.string().optional(),
   aiModel: Joi.string().optional(),
   fallbackProvider: Joi.string().optional(),
@@ -70,6 +90,10 @@ export const projectDataExtractionJobDataSchema = baseJobDataSchema.keys({
     .items(Joi.string().valid(...PMBOK_DOMAINS))
     .max(PMBOK_DOMAINS.length)
     .optional(),
+  batchingEnabled: Joi.boolean().optional(),
+  maxBatchTokens: Joi.number().integer().min(1000).max(200000).optional(),
+  maxDocsPerBatch: Joi.number().integer().min(1).max(500).optional(),
+  progressMeta: extractionProgressMetaSchema,
 })
 
 /**

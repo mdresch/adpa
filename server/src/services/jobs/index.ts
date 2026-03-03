@@ -13,6 +13,8 @@ export type {
   JobStatus,
   QueueName,
   BaseJobData,
+  ExtractionBatchingConfig,
+  ExtractionBatchProgressMeta,
   AIGenerationJobData,
   DocumentConversionJobData,
   BaselineExtractionJobData,

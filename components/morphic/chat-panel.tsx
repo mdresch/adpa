@@ -19,6 +19,7 @@ import { Button } from './ui/button'
 import { IconBlinkingLogo } from './ui/icons'
 import { UploadedFileList } from './uploaded-file-list'
 
+
 const INPUT_UPDATE_DELAY_MS = 10
 
 interface ChatPanelProps {
@@ -59,8 +60,8 @@ export function ChatPanel({
     isGuest = false
 }: ChatPanelProps) {
     const router = useRouter()
-    const inputRef = useRef<HTMLTextAreaElement>(null)
-    const isFirstRender = useRef(true)
+    const inputRef: React.MutableRefObject<HTMLTextAreaElement | null> = useRef(null)
+    const isFirstRender: React.MutableRefObject<boolean> = useRef(true)
     const [isComposing, setIsComposing] = useState(false)
     const [enterDisabled, setEnterDisabled] = useState(false)
     const [isInputFocused, setIsInputFocused] = useState(false)
@@ -221,14 +222,23 @@ export function ChatPanel({
                                             status: 'uploading'
                                         }))
                                         setUploadedFiles(prev => [...prev, ...newFiles])
+                                        
+                                        const authToken = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+                                        
                                         await Promise.all(
                                             newFiles.map(async uf => {
                                                 const formData = new FormData()
                                                 formData.append('file', uf.file)
                                                 formData.append('chatId', chatId)
                                                 try {
+                                                    const headers: HeadersInit = {}
+                                                    if (authToken) {
+                                                        headers['Authorization'] = `Bearer ${authToken}`
+                                                    }
+                                                    
                                                     const res = await fetch('/api/upload', {
                                                         method: 'POST',
+                                                        headers,
                                                         body: formData
                                                     })
 
@@ -326,3 +336,4 @@ export function ChatPanel({
         </div>
     )
 }
+

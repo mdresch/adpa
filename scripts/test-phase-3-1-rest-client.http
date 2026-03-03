@@ -1,0 +1,391 @@
+###
+### Phase 3.1 Assisted Search - REST Client Examples
+### Compatible with: REST Client (VS Code), Insomnia, PostMan
+###
+### Usage:
+###   1. Install REST Client extension in VS Code
+###   2. Set @token = your-jwt-token below
+###   3. Right-click on any request and select "Send Request"
+###   4. View response in "Response" tab
+###
+
+### ============================================================
+### CONFIGURATION
+### ============================================================
+
+@baseUrl = http://localhost:5000
+@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI0MmNhNzMzMy1iMzdlLTRlMWItYmQ1MC1hYzA0YWJkN2U2ODIiLCJlbWFpbCI6Im1lbm5vLmRyZXNjaGVyQGdtYWlsLmNvbSIsImlhdCI6MTc3MjQ5NTkxOCwiZXhwIjoxNzcyNTgyMzE4fQ.aLmq3cHeYmX-5MSISL2W2eJ5EkH0yc_K8BUUmLgX2q4
+@contentType = application/json
+
+### ============================================================
+### TEST 1: Context Assembly - Strategic Query
+### ============================================================
+### Returns enriched context without AI generation
+### Good for: Previewing knowledge graph before user submits query
+
+POST {{baseUrl}}/api/rag/context-assembly HTTP/1.1
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "query": "What is our AI adoption strategy?",
+  "limit": 10,              
+  "offset": 0,
+  "includeRelationships": true,
+  "relationshipDepth": 2
+}
+
+
+### ============================================================
+### TEST 2: Context Assembly - Risk Analysis
+### ============================================================
+
+POST {{baseUrl}}/api/rag/context-assembly HTTP/1.1
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "query": "Which portfolios have the highest risk?",
+  "limit": 10,
+  "offset": 0,
+  "includeRelationships": true,
+  "relationshipDepth": 2
+}
+
+
+### ============================================================
+### TEST 3: Assisted Search (JSON) - With AI Answer
+### ============================================================
+### Returns context + AI-generated answer as JSON
+### Good for: Full response at once, simpler parsing
+
+POST {{baseUrl}}/api/rag/assisted-search HTTP/1.1
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "query": "How should we prioritize our AI transformation roadmap?",
+  "limit": 8,
+  "offset": 0,
+  "includeAnswer": true,
+  "stream": false,
+  "provider": "google",
+  "includeRelationships": true,
+  "relationshipDepth": 2
+}
+
+
+### ============================================================
+### TEST 4: Assisted Search (JSON) - Dependencies
+### ============================================================
+
+POST {{baseUrl}}/api/rag/assisted-search HTTP/1.1
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "query": "What are the dependencies between our major programs?",
+  "limit": 8,
+  "offset": 0,
+  "includeAnswer": true,
+  "stream": false,
+  "includeRelationships": true,
+  "relationshipDepth": 2
+}
+
+
+### ============================================================
+### TEST 5: Assisted Search (Streaming) - Real-time Tokens
+### ============================================================
+### Returns context + streams answer tokens via Server-Sent Events
+### Good for: Real-time display, long responses, better UX
+### Note: REST Client will show streaming chunks as they arrive
+
+POST {{baseUrl}}/api/rag/assisted-search HTTP/1.1
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "query": "Summarize our key strategic initiatives and their business impact",
+  "limit": 8,
+  "offset": 0,
+  "includeAnswer": true,
+  "stream": true,
+  "includeRelationships": true,
+  "relationshipDepth": 2
+}
+
+
+### ============================================================
+### TEST 6: Custom Provider Override - Ollama
+### ============================================================
+### Force specific AI provider/model for testing fallback behavior
+
+POST {{baseUrl}}/api/rag/assisted-search HTTP/1.1
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "query": "What is our technology roadmap?",
+  "limit": 8,
+  "offset": 0,
+  "includeAnswer": true,
+  "stream": false,
+  "provider": "ollama",
+  "model": "llama2"
+}
+
+
+### ============================================================
+### TEST 7: Limited Results - Quick Response
+### ============================================================
+### Smaller result set for faster context assembly
+
+POST {{baseUrl}}/api/rag/context-assembly HTTP/1.1
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "query": "Digital transformation initiatives",
+  "limit": 3,
+  "offset": 0,
+  "includeRelationships": false
+}
+
+
+### ============================================================
+### TEST 8: Pagination - Page 2
+### ============================================================
+### Skip first 5 results, get next 5
+
+POST {{baseUrl}}/api/rag/context-assembly HTTP/1.1
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "query": "transformation initiative",
+  "limit": 5,
+  "offset": 5,
+  "includeRelationships": true
+}
+
+
+### ============================================================
+### TEST 9: Deep Relationships - Extended Context
+### ============================================================
+### relationshipDepth: 3 includes further relationships in enrichment
+
+POST {{baseUrl}}/api/rag/context-assembly HTTP/1.1
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "query": "digital transformation",
+  "limit": 5,
+  "offset": 0,
+  "includeRelationships": true,
+  "relationshipDepth": 3
+}
+
+
+### ============================================================
+### TEST 10: Shallow Relationships - Fast Lightweight Context
+### ============================================================
+### relationshipDepth: 1 for minimal enrichment
+
+POST {{baseUrl}}/api/rag/context-assembly HTTP/1.1
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "query": "digital transformation",
+  "limit": 5,
+  "offset": 0,
+  "includeRelationships": true,
+  "relationshipDepth": 1
+}
+
+
+### ============================================================
+### TEST 11: Entity Type Filtering - Only Projects
+### ============================================================
+### Focus search on specific entity types
+
+POST {{baseUrl}}/api/rag/context-assembly HTTP/1.1
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "query": "cloud migration",
+  "limit": 10,
+  "offset": 0,
+  "types": ["project"],
+  "includeRelationships": true
+}
+
+
+### ============================================================
+### TEST 12: Custom System Prompt - Override Instructions
+### ============================================================
+### Inject custom instructions for AI response generation
+
+POST {{baseUrl}}/api/rag/assisted-search HTTP/1.1
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "query": "What is our top AI risk?",
+  "limit": 8,
+  "offset": 0,
+  "includeAnswer": true,
+  "stream": false,
+  "systemPrompt": "You are a risk management expert. Focus on identifying mitigation strategies."
+}
+
+
+### ============================================================
+### NEGATIVE TEST 1: Missing Authentication
+### ============================================================
+### Should return 401 Unauthorized
+
+POST {{baseUrl}}/api/rag/context-assembly HTTP/1.1
+Content-Type: {{contentType}}
+
+{
+  "query": "test"
+}
+
+
+### ============================================================
+### NEGATIVE TEST 2: Empty Query
+### ============================================================
+### Should return 400 Bad Request - query is required
+
+POST {{baseUrl}}/api/rag/context-assembly HTTP/1.1
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "query": "",
+  "limit": 10
+}
+
+
+### ============================================================
+### NEGATIVE TEST 3: Invalid Token
+### ============================================================
+### Should return 401 Unauthorized
+
+POST {{baseUrl}}/api/rag/context-assembly HTTP/1.1
+Authorization: Bearer invalid-token-xyz
+Content-Type: {{contentType}}
+
+{
+  "query": "test query",
+  "limit": 10
+}
+
+
+### ============================================================
+### HEALTH CHECK
+### ============================================================
+
+GET {{baseUrl}}/health HTTP/1.1
+
+
+### ============================================================
+### TIPS FOR USING REST CLIENT
+### ============================================================
+###
+### 1. Update @token variable:
+###    Click the REST Client settings and add:
+###    "rest-client.environmentVariables": {
+###      "$shared": {
+###        "token": "your-actual-jwt-token"
+###      }
+###    }
+###
+### 2. View response timeline:
+###    Right-click response → Copy
+###    Look at response time metrics
+###
+### 3. Test different response modes:
+###    • Set stream: false for full JSON
+###    • Set stream: true to see SSE chunks
+###
+### 4. Check response headers:
+###    Click "Headers" tab in response panel
+###    For streaming: Content-Type: text/event-stream
+###
+### 5. Measure latency:
+###    Watch "Response Time" in bottom status bar
+###    Expected: 300-500ms for context, 1-3s with AI
+###
+### 6. Debug with custom headers:
+###    Add: X-Debug-Mode: true
+###    Check server logs for [RAG] debug output
+###
+### 7. Batch test multiple queries:
+###    Select multiple requests and run with Ctrl+Alt+L
+###
+
+POST {{baseUrl}}/api/rag/assisted-search
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "query": "How should we prioritize our AI transformation roadmap?",
+  "includeAnswer": true,
+  "stream": false
+}
+### TEST 3: Assisted Search (JSON) - With AI Answer
+POST {{baseUrl}}/api/rag/assisted-search HTTP/1.1
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "query": "How should we prioritize our AI transformation roadmap?",
+  "limit": 8,
+  "offset": 0,
+  "includeAnswer": true,
+  "stream": false,
+  "includeRelationships": true,
+  "relationshipDepth": 2,
+  "provider": "google"
+}
+
+### TEST 4: Assisted Search (JSON) - Dependencies
+
+POST {{baseUrl}}/api/rag/assisted-search HTTP/1.1
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "query": "How should we prioritize our AI transformation roadmap?",
+  "limit": 8,
+  "includeAnswer": true,
+  "stream": false,
+  "provider": "google"
+}
+
+### TEST 5: Assisted Search (Streaming) - Real-time Tokens
+
+POST {{baseUrl}}/api/rag/assisted-search HTTP/1.1
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "query": "How should we implement AI transformation?",
+  "includeKnowledgeBase": true,
+  "limit": 20,
+  "maxContextItems": 8
+}
+
+### TEST 6: Custom Provider Override - Ollama
+POST {{baseUrl}}/api/rag/assisted-search HTTP/1.1
+Content-Type: {{contentType}}
+Authorization: Bearer {{token}}
+
+{
+  "query": "How should we implement AI transformation?"
+}

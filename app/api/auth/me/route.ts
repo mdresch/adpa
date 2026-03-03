@@ -1,11 +1,14 @@
 import { NextResponse } from 'next/server';
 import { getAuthenticatedUser, unauthorizedResponse } from '@/lib/auth-utils';
-import { pool } from '@/server/src/database/connection';
+import { pool, connectDatabase } from '@/server/src/database/connection';
 import { logger } from '@/server/src/utils/logger';
 
 export async function GET(req: Request) {
     const authUser = await getAuthenticatedUser(req);
     if (!authUser) return unauthorizedResponse();
+
+    // Initialize database connection (safe to call multiple times)
+    await connectDatabase();
 
     try {
         const result = await pool.query(

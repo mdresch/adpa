@@ -14,93 +14,99 @@ import { createDeepSeek } from "@ai-sdk/deepseek"
 import OpenAI from "openai"  // Native OpenAI SDK for Moonshot
 import Anthropic from "@anthropic-ai/sdk"  // Native Anthropic SDK
 import { logger } from "../utils/logger"
-import { pool } from "../database/connection"
+import { getDatabasePoolSafe } from '../database/connection'
+import { safeQuery, isDatabaseReady } from '../database/helpers'
 import AnalyticsTrackingService from "./analyticsTrackingService"
-import { isTracingEnabled, isNativeLangfuseEnabled } from "../tracing"
-import { Langfuse } from "langfuse"
 
-const langfuse = new Langfuse({
-  publicKey: process.env.LANGFUSE_PUBLIC_KEY,
-  secretKey: process.env.LANGFUSE_SECRET_KEY,
-  baseUrl: process.env.LANGFUSE_BASE_URL || "https://cloud.langfuse.com"
-});
-
-let tracedGenerateText = ai.generateText
-
-try {
-  const { wrapAISDK } = require("langsmith/experimental/vercel")
-  const wrapped = wrapAISDK(ai)
-  if (wrapped?.generateText) {
-    tracedGenerateText = wrapped.generateText
-  }
-} catch {
-  logger.warn("LangSmith Vercel wrapper unavailable; continuing without LangSmith tracing wrapper")
-}
-
-export interface AIProvider {
-  name: string
-  type: "openai" | "google" | "azure" | "mistral" | "groq" | "anthropic" | "deepseek" | "moonshot" | "xai" | "ollama"
-  apiKey: string
-  configuration?: any
-}
-
-export interface AIGenerateRequest {
-  prompt: string
-  provider: string
-  model?: string
-  temperature?: number
-  max_tokens?: number
-  template_id?: string
-  variables?: Record<string, any>
-  system_prompt?: string
-  traceName?: string
-  // Analytics tracking (optional)
+// Type definitions for AI service requests and responses
+interface AIGenerateRequest {
   userId?: string
   projectId?: string
   documentId?: string
-  documentVersion?: string | number
-  // Rich tracing metadata (optional)
+  documentVersion?: number
+  provider: string
+  model?: string
+  prompt: string
+  system_prompt?: string
+  template_id?: string
+  template_name?: string
+  template_version?: number
+  variables?: Record<string, any>
+  temperature?: number
+  max_tokens?: number
   aiCallType?: string
   requestedGeneration?: string
-  template_name?: string
-  entityName?: string
-  entityType?: string
   templateRecommendation?: boolean
   riskMitigationPlan?: boolean
+  entityName?: string
+  entityType?: string
   riskName?: string
-  template_version?: string | number
+  traceName?: string
   metadata?: Record<string, any>
 }
 
-export interface AIGenerateResponse {
+interface AIGenerateResponse {
   content: string
   provider: string
   model: string
-  usage?: {
+  usage: {
     prompt_tokens: number
     completion_tokens: number
     total_tokens: number
   }
-  metadata?: any
 }
 
-interface ProviderBackoffState {
+// Provider configuration types
+interface ActiveProviderRow {
+  provider_type: string
+  api_key_encrypted?: string
+  configuration?: Record<string, any>
+}
+
+// Backoff state tracking
+interface BackoffState {
   provider: string
   failureCount: number
   lastFailureTime: number
   nextRetryTime: number
 }
 
+// Local fallback provider constant
 const LOCAL_FALLBACK_PROVIDER = 'ollama'
 
-interface ActiveProviderRow {
-  provider_type: string
-  api_key_encrypted?: string | null
-  configuration?: Record<string, any> | null
+// Remove the module-level getDatabasePool() call
+// DO NOT: const pool = getDatabasePool() // This runs at import time!
+
+// Get pool at query time to ensure database is ready
+const getPool = () => getDatabasePoolSafe()
+
+// Import langfuse for tracing (optional, falls back gracefully)
+let langfuse: any = null
+let isNativeLangfuseEnabled = () => false
+let isTracingEnabled = () => false
+let tracedGenerateText = async (params: any) => {
+  const { model, messages, prompt, temperature, maxOutputTokens } = params
+  if (messages) {
+    return await model.generateText({ messages, temperature, maxTokenTokens: maxOutputTokens })
+  }
+  return await model.generateText({ prompt, temperature, maxOutputTokens })
+}
+
+try {
+  const runtimeRequire = eval('require') as NodeRequire
+  const langfuseModule = runtimeRequire('../utils/langfuse')
+  langfuse = langfuseModule.langfuse
+  isNativeLangfuseEnabled = langfuseModule.isNativeLangfuseEnabled
+  isTracingEnabled = langfuseModule.isTracingEnabled
+  tracedGenerateText = langfuseModule.tracedGenerateText
+} catch (e) {
+  // Langfuse optional - continue without it
+  logger.debug('[AI-SERVICE] Langfuse not available, tracing disabled')
 }
 
 class AIService {
-  private providerBackoff: Map<string, ProviderBackoffState> = new Map()
+  private providerBackoff: Map<string, BackoffState> = new Map()
+  private providers: Map<string, any> = new Map()
   private readonly INITIAL_BACKOFF_MS = 1000 // 1 second
   private readonly MAX_BACKOFF_MS = 60000 // 60 seconds
   private readonly BACKOFF_MULTIPLIER = 2
@@ -153,6 +159,79 @@ class AIService {
     }
 
     return this.getProviderDefaultModel(providerType)
+  }
+
+  private async getOllamaInstalledModels(ollamaEndpoint: string): Promise<string[]> {
+    try {
+      const tagsResponse = await fetch(`${ollamaEndpoint}/api/tags`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+      })
+
+      if (!tagsResponse.ok) {
+        return []
+      }
+
+      const tagsData = await tagsResponse.json() as { models?: Array<{ name?: string; model?: string }> }
+      const installedModels = (tagsData.models || [])
+        .map(model => model.name || model.model)
+        .filter((name): name is string => typeof name === 'string' && name.trim().length > 0)
+
+      return Array.from(new Set(installedModels))
+    } catch (error) {
+      logger.warn('[AI-SERVICE] Failed to fetch installed Ollama models from /api/tags, continuing with configured defaults')
+      return []
+    }
+  }
+
+  private buildOllamaModelCandidates(preferredModel: string | undefined, fallbackModel: string, installedModels: string[]): string[] {
+    const candidates: string[] = []
+    const hasInstalledModels = installedModels.length > 0
+    const installedModelSet = new Set(installedModels)
+
+    const resolveToInstalledModel = (model?: string): string | undefined => {
+      if (!model) return undefined
+      const normalized = model.trim()
+      if (!normalized) return undefined
+
+      if (!hasInstalledModels) {
+        return normalized
+      }
+
+      if (installedModelSet.has(normalized)) {
+        return normalized
+      }
+
+      if (!normalized.includes(':')) {
+        const taggedVariant = installedModels.find(installed => installed.startsWith(`${normalized}:`))
+        if (taggedVariant) {
+          return taggedVariant
+        }
+      }
+
+      return undefined
+    }
+
+    const addCandidate = (model?: string) => {
+      const resolvedModel = resolveToInstalledModel(model)
+      if (!resolvedModel) return
+
+      if (!candidates.includes(resolvedModel)) {
+        candidates.push(resolvedModel)
+      }
+    }
+
+    addCandidate(preferredModel)
+    addCandidate(process.env.OLLAMA_MODEL)
+    addCandidate(fallbackModel)
+
+    if (hasInstalledModels) {
+      installedModels.forEach(addCandidate)
+    } else {
+      this.getModelsForProvider('ollama').forEach(addCandidate)
+    }
+
+    return candidates
   }
 
   constructor() {
@@ -243,7 +322,7 @@ class AIService {
     if (!templateId) return undefined
 
     try {
-      const result = await pool.query(
+      const result = await getPool()?.query(
         "SELECT name FROM templates WHERE id = $1 LIMIT 1",
         [templateId]
       )
@@ -258,30 +337,53 @@ class AIService {
     }
   }
 
-  async initializeProviders() {
+  async initializeProviders(): Promise<void> {
     try {
-      // With AI Gateway, we don't need to initialize individual provider clients
-      // Just verify we have active providers in the database
-      const result = await pool.query(
-        "SELECT COUNT(*) as count FROM ai_providers WHERE is_active = true"
-      )
-
-      if (!result || !result.rows) {
-        logger.warn('AI Service: initializeProviders query returned no result')
+      // Check if database is ready before querying
+      if (!isDatabaseReady()) {
+        logger.warn('[AI] Database not ready during provider initialization, using defaults')
+        // Load default providers without DB lookup
+        this.loadDefaultProviders()
         return
       }
 
-      const count = parseInt(result.rows[0]?.count || '0')
-      logger.info(`AI Gateway ready. ${count} provider(s) configured in database`)
-    } catch (error) {
-      logger.error("Failed to check AI providers:", error)
+      // FIX: Use correct column names from ai_providers table schema
+      const result = await safeQuery<{ 
+        provider_type: string
+        is_active: boolean
+        configuration: any 
+      }>(
+        'SELECT provider_type, is_active, configuration FROM ai_providers WHERE is_active = true'
+      )
+
+      if (result.rowCount === 0) {
+        logger.info('[AI] No enabled providers in database, using defaults')
+        this.loadDefaultProviders()
+        return
+      }
+
+      // Initialize providers from database
+      for (const row of result.rows) {
+        this.providers.set(row.provider_type, row.configuration)
+      }
+
+      logger.info(`[AI] Initialized ${result.rowCount} providers from database`)
+    } catch (error: any) {
+      logger.error('Failed to initialize AI providers:', error)
+      // Fallback to defaults on error
+      this.loadDefaultProviders()
     }
   }
 
-  // AI Gateway doesn't require provider-specific initialization
-  // This method is kept for compatibility but does nothing
-  async addProvider(provider: AIProvider) {
-    logger.info(`Provider ${provider.name} (${provider.type}) registered in database`)
+  private loadDefaultProviders(): void {
+    // Load default provider configuration from environment
+    if (process.env.OPENAI_API_KEY) {
+      this.providers.set('openai', { apiKey: process.env.OPENAI_API_KEY })
+    }
+    if (process.env.ANTHROPIC_API_KEY) {
+      this.providers.set('anthropic', { apiKey: process.env.ANTHROPIC_API_KEY })
+    }
+    logger.info(`[AI] Loaded ${this.providers.size} default providers from environment`)
   }
 
   /**
@@ -363,7 +465,13 @@ class AIService {
    */
   private async getActiveProviders(): Promise<string[]> {
     try {
-      const result = await pool.query(
+      const dbPool = getPool()
+      if (!dbPool) {
+        logger.warn('AI Service: Database pool not available, using local fallback provider')
+        return [LOCAL_FALLBACK_PROVIDER]
+      }
+      
+      const result = await dbPool.query(
         `SELECT provider_type, api_key_encrypted, configuration
          FROM ai_providers 
          WHERE is_active = true 
@@ -479,7 +587,7 @@ class AIService {
     // Auto-disable providers with insufficient funds
     const autoDisableProvider = async (providerType: string, reason: string) => {
       try {
-        await pool.query(
+        await getPool()?.query(
           `UPDATE ai_providers 
            SET is_active = false, 
                updated_at = CURRENT_TIMESTAMP
@@ -653,10 +761,16 @@ class AIService {
     let langfuseGeneration: any = null;
 
     try {
+      const dbPool = getPool()
+      if (!dbPool) {
+        logger.error('❌ [AI-SERVICE] Database pool not available for provider lookup')
+        throw new Error('Database pool not available')
+      }
+      
       // Get provider type from database to build the model ID
       logger.debug('[AI-SERVICE] Looking up provider type')
       // Try to find provider by provider_type first (e.g., "mistral", "openai"), then by name
-      const providerResult = await pool.query(
+      const providerResult = await dbPool.query(
         "SELECT provider_type, api_key_encrypted, configuration FROM ai_providers WHERE (provider_type = $1 OR LOWER(name) = LOWER($1)) AND is_active = true LIMIT 1",
         [request.provider]
       )
@@ -1253,12 +1367,14 @@ class AIService {
           const genAI = new GoogleGenerativeAI(directApiKey)
 
           // Map deprecated/unavailable models to current working ones
-          // Note: gemini-1.5-flash and gemini-1.5-pro are stable and confirmed working
+          // Note: gemini-2.0-flash is stable and confirmed working with v1beta API
           const modelMap: Record<string, string> = {
-            'gemini-pro': 'gemini-1.5-flash',
-            'gemini-pro-vision': 'gemini-1.5-flash',
-            'gemini-1.0-pro': 'gemini-1.5-flash',
-            'gemini-1.0-pro-vision': 'gemini-1.5-flash',
+            'gemini-pro': 'gemini-2.0-flash',
+            'gemini-pro-vision': 'gemini-2.0-flash',
+            'gemini-1.0-pro': 'gemini-2.0-flash',
+            'gemini-1.0-pro-vision': 'gemini-2.0-flash',
+            'gemini-1.5-flash': 'gemini-2.0-flash',
+            'gemini-1.5-pro': 'gemini-2.0-flash',
             'gemini-2.0-flash-exp': 'gemini-2.0-flash',
             'gemini-2.5-flash': 'gemini-2.0-flash',
             'gemini-2.5-pro': 'gemini-2.0-flash',
@@ -1270,7 +1386,7 @@ class AIService {
           const modelName = modelMap[requestedModel] || requestedModel
 
           // Validate model name (ensure it's a current model that works in v1beta API)
-          const validModels = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash', 'gemini-2.0-flash-exp']
+          const validModels = ['gemini-2.0-flash', 'gemini-2.0-flash-exp']
           const finalModel = validModels.includes(modelName) ? modelName : 'gemini-2.0-flash'
 
           // Log model mapping for debugging
@@ -1635,11 +1751,23 @@ class AIService {
             'http://localhost:11434'
 
           const defaultOllamaModel = providerConfiguration?.default_model || process.env.OLLAMA_MODEL || this.getModelsForProvider('ollama')[0] || 'llama3.1'
-          const modelName = this.normalizeModelForProvider('ollama', request.model) || defaultOllamaModel
+          const preferredOllamaModel = this.normalizeModelForProvider('ollama', request.model) || defaultOllamaModel
+          const installedOllamaModels = await this.getOllamaInstalledModels(ollamaEndpoint)
+          const ollamaModelCandidates = this.buildOllamaModelCandidates(preferredOllamaModel, defaultOllamaModel, installedOllamaModels)
 
-          logger.debug('[AI-SERVICE] Using Ollama native API', { endpoint: ollamaEndpoint, model: modelName })
+          logger.debug('[AI-SERVICE] Using Ollama native API', {
+            endpoint: ollamaEndpoint,
+            preferredModel: preferredOllamaModel,
+            installedModels: installedOllamaModels,
+            candidateCount: ollamaModelCandidates.length
+          })
 
-          try {
+          let lastOllamaError: Error | null = null
+
+          for (let modelIndex = 0; modelIndex < ollamaModelCandidates.length; modelIndex++) {
+            const modelName = ollamaModelCandidates[modelIndex]
+
+            try {
             // Build messages for Ollama chat API
             const messages = [
               ...(systemMessage ? [{ role: 'system', content: systemMessage }] : []),
@@ -1663,6 +1791,14 @@ class AIService {
 
             if (!ollamaResponse.ok) {
               const errorText = await ollamaResponse.text()
+              const errorTextLower = errorText.toLowerCase()
+              const modelNotFound = ollamaResponse.status === 404 && errorTextLower.includes('model') && errorTextLower.includes('not found')
+
+              if (modelNotFound && modelIndex < ollamaModelCandidates.length - 1) {
+                logger.warn(`[AI-SERVICE] Ollama model "${modelName}" not found, trying next candidate`)
+                continue
+              }
+
               throw new Error(`Ollama API error (${ollamaResponse.status}): ${errorText}`)
             }
 
@@ -1728,14 +1864,28 @@ class AIService {
                 total_tokens: totalTokens,
               },
             }
-          } catch (ollamaError: any) {
-            if (ollamaError.cause?.code === 'ECONNREFUSED') {
+            } catch (ollamaError: any) {
+            if (ollamaError?.cause?.code === 'ECONNREFUSED') {
               logger.warn('⚠️ [AI-SERVICE] Ollama connection refused - ensure Ollama is running locally')
               throw new Error('Ollama service unavailable (ECONNREFUSED)')
             }
+
+            const errorMessage = ollamaError?.message || 'Unknown Ollama error'
+            const errorMessageLower = errorMessage.toLowerCase()
+            const isModelNotFound = errorMessageLower.includes('model') && errorMessageLower.includes('not found')
+
+            if (isModelNotFound && modelIndex < ollamaModelCandidates.length - 1) {
+              logger.warn(`[AI-SERVICE] Ollama model "${modelName}" unavailable, trying next candidate`)
+              continue
+            }
+
+            lastOllamaError = ollamaError instanceof Error ? ollamaError : new Error(errorMessage)
             logger.error('[AI-SERVICE] Ollama native API failed:', ollamaError)
-            throw new Error(`Ollama generation failed: ${ollamaError.message}`)
+            break
+            }
           }
+
+          throw new Error(`Ollama generation failed: ${lastOllamaError?.message || 'No compatible Ollama model available'}`)
         }
 
         // FALLBACK: Try direct OpenAI
@@ -2133,7 +2283,7 @@ class AIService {
   async getAvailableProviders(): Promise<Array<{ name: string; type: string; models: string[]; is_active: boolean; id: string; configuration: any; usage_stats?: any; default_model?: string; created_at?: string; updated_at?: string }>> {
     try {
       logger.debug("[AI] Getting available providers")
-      const result = await pool.query(
+      const result = await getPool()?.query(
         `SELECT 
           id, name, provider_type, configuration, is_active, 
           usage_stats, available_models, default_model,
@@ -2231,7 +2381,7 @@ class AIService {
 
   async updateUsageStats(provider: string, usage: any) {
     try {
-      await pool.query(
+      await getPool()?.query(
         `
         UPDATE ai_providers 
         SET usage_stats = jsonb_set(
@@ -2265,7 +2415,7 @@ class AIService {
   ) {
     try {
       // Get provider details (try by name or provider_type in one query)
-      const providerResult = await pool.query(
+      const providerResult = await getPool()?.query(
         'SELECT id, provider_type, name FROM ai_providers WHERE (name = $1 OR provider_type = $1) AND is_active = true LIMIT 1',
         [providerName]
       )
@@ -2340,7 +2490,7 @@ class AIService {
    */
   private async getTemplateSystemPrompt(templateId: string): Promise<string | null> {
     try {
-      const result = await pool.query(
+      const result = await getPool()?.query(
         "SELECT system_prompt, content FROM templates WHERE id = $1",
         [templateId]
       )

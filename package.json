@@ -284,7 +284,7 @@
     "tsx": "^4.20.5",
     "typescript": "^5.9.3"
   },
-  "packageManager": "pnpm@10.24.0",
+  "packageManager": "pnpm@10.30.3",
   "pnpm": {
     "overrides": {
       "qs": "^6.14.1",

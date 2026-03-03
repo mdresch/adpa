@@ -496,8 +496,7 @@ extractionQueue.process("extract-project-data", QUEUE_PREFETCH, async (job) => {
 
   // Child entity extractors - Register immediately using async IIFE
   ; (async () => {
-    const { extractionRegistry } = await import("./extraction/ExtractionRegistry")
-    const { extractSingleEntityType, saveSingleEntityType } = await import("./extraction/ExtractionOrchestrator")
+    const { projectDataExtractionService } = await import("./projectDataExtractionService")
 
     const ENTITY_TYPES = [
       'stakeholders', 'requirements', 'risks', 'milestones', 'constraints',
@@ -518,7 +517,19 @@ extractionQueue.process("extract-project-data", QUEUE_PREFETCH, async (job) => {
     ENTITY_TYPES.forEach((entityType) => {
       extractionQueue.process(`extract-entity-${entityType}`, QUEUE_PREFETCH, async (job) => {
 
-        const { parentJobId, projectId, userId, aiProvider, aiModel, documentIds } = job.data as any
+        const {
+          parentJobId,
+          projectId,
+          userId,
+          aiProvider,
+          aiModel,
+          documentIds,
+          batchingEnabled,
+          maxBatchTokens,
+          maxDocsPerBatch,
+          entityIndex,
+          totalEntities,
+        } = job.data as any
         const jobId = (job.data as any).jobId || job.id
         try {
           logger.info(`[EXTRACTION-CHILD] Extracting ${entityType} for job ${parentJobId} (child job: ${jobId})`)
@@ -526,17 +537,20 @@ extractionQueue.process("extract-project-data", QUEUE_PREFETCH, async (job) => {
           // Update status to processing
           await updateJobStatus(jobId, "processing", 10, WORKER_ID, "project-data-extraction")
 
-          let entities: any[] = []
-          if (extractionRegistry.hasEntity(entityType) && extractionRegistry.isEnabled(entityType)) {
-            entities = await extractSingleEntityType(projectId, userId, entityType, { aiProvider, aiModel, documentIds })
-            if (entities.length > 0) {
-              await saveSingleEntityType(projectId, userId, entityType, entities)
-            }
-          } else {
-            const { projectDataExtractionService } = await import("./projectDataExtractionService")
-            entities = await projectDataExtractionService.extractSingleEntityType(projectId, userId, entityType, { aiProvider, aiModel, documentIds })
-            await projectDataExtractionService.saveSingleEntityType(projectId, userId, entityType, entities)
-          }
+          const entities = await projectDataExtractionService.extractSingleEntityType(projectId, userId, entityType, {
+            aiProvider,
+            aiModel,
+            documentIds,
+            batchingEnabled,
+            maxBatchTokens,
+            maxDocsPerBatch,
+            parentJobId,
+            childJobId: String(jobId),
+            entityIndex,
+            totalEntities,
+          })
+
+          await projectDataExtractionService.saveSingleEntityType(projectId, userId, entityType, entities)
 
           // DT assets: extracted as entities (extracted_dt_assets). Import into Digital Twin Assets Register
           // is an explicit step (POST /api/digital-twin/assets/import), same as WBS import for tasks.

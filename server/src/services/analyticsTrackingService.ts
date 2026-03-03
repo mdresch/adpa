@@ -5,12 +5,12 @@
  * for analytics and reporting purposes.
  */
 
-import { pool } from '../database/connection';
+import { safeQuery } from '../database/helpers';
 import InfluxDBService from './influxdbService';
 
 // Helper to execute queries
 const query = async (text: string, params?: any[]) => {
-  return pool.query(text, params);
+  return safeQuery(text, params);
 };
 
 interface AIUsageLog {

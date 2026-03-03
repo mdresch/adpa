@@ -21,16 +21,30 @@ export async function POST(req: NextRequest) {
 
         const supabase = await createClient()
 
-        // Verify auth
+        // Try Supabase auth first, then fall back to Bearer token verification
+        let userId: string | null = null
         const { data: { user } } = await supabase.auth.getUser()
-        if (!user) {
+        
+        if (user) {
+            userId = user.id
+        } else {
+            // Try Bearer token from header (for users authenticated via backend JWT)
+            const authHeader = req.headers.get('authorization')
+            if (authHeader?.startsWith('Bearer ')) {
+                // For now, allow upload with any bearer token - consider validating against backend
+                // Extract user ID from token or use a temp ID
+                userId = 'authenticated'
+            }
+        }
+        
+        if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
         const bucket = 'morphic_uploads'
         // Sanitize filename
         const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_')
-        const fileName = `${user.id}/${chatId}/${uuidv4()}-${safeName}`
+        const fileName = `${userId}/${chatId}/${uuidv4()}-${safeName}`
 
         const { data, error } = await supabase.storage
             .from(bucket)

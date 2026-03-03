@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState, type Ref } from 'react'
 import { cn } from '@/lib/morphic/utils'
 import { SidebarTrigger, useSidebar } from '../ui/sidebar'
 import { InspectorDrawer } from '../inspector/inspector-drawer'
@@ -37,7 +37,7 @@ export function ChatArtifactContainer({
     children: React.ReactNode
 }) {
     const { state } = useArtifact()
-    const containerRef = useRef<HTMLDivElement>(null)
+    const containerRef: Ref<HTMLDivElement | null> = useRef(null)
     const [width, setWidth] = useState(DEFAULT_WIDTH)
     const [isResizing, setIsResizing] = useState(false)
     const { open, isMobile: isMobileSidebar } = useSidebar()
@@ -78,7 +78,7 @@ export function ChatArtifactContainer({
                 const { allowedMin, allowedMax } = getAllowedWidthBounds(
                     entry.contentRect.width
                 )
-                setWidth(prev => Math.min(Math.max(prev, allowedMin), allowedMax))
+                setWidth((prev: number) => Math.min(Math.max(prev, allowedMin), allowedMax))
             }
         })
         ro.observe(el)

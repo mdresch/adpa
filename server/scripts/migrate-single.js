@@ -41,6 +41,7 @@ const migrationMap = {
     '019': { file: '019_opportunities.sql', description: 'Opportunities' },
     '020': { file: '020_risk_responses.sql', description: 'Risk Responses' },
     '021': { file: '021_performance_actuals.sql', description: 'Performance Actuals' },
+    '221': { file: '221_add_business_value_score_if_missing.sql', description: 'Add Business Value Score Column to Knowledge Base' },
     '356': { file: '356_add_materialized_status_to_risks.sql', description: 'Add Materialized Status to Risks' },
     '357': { file: '357_add_issue_id_to_mitigation_plans.sql', description: 'Add Issue ID to Mitigation Plans' },
     '358': { file: '358_fix_extraction_errors.sql', description: 'Fix Extraction Errors' },

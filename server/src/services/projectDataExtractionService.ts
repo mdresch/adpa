@@ -18,6 +18,8 @@ import { ExtractionContext } from './extraction/base/ExtractionContext'
 import type { ExtractionDocument, ExtractionResult as ModuleExtractionResult } from './extraction/base/ExtractionResult'
 import type { PersistenceResult } from './extraction/base/Persistence'
 import type { PoolClient } from 'pg'
+import { normalizeBatchingConfig, planDocumentBatches } from './extraction/batchPlanner'
+import type { ExtractionBatchingConfig, ExtractionBatchProgressMeta } from './jobs/types'
 
 type ModuleExtractor = (
   context: ExtractionContext,
@@ -30,6 +32,24 @@ type ModuleSaver = (
   userId: string,
   entities: unknown[]
 ) => Promise<PersistenceResult>
+
+type ExtractionSourceDocument = {
+  id: string
+  title: string
+  content: string
+  template_name?: string
+}
+
+interface SingleEntityExtractionOptions extends ExtractionBatchingConfig {
+  aiProvider?: string
+  aiModel?: string
+  documentIds?: string[]
+  parentJobId?: string
+  childJobId?: string
+  entityIndex?: number
+  totalEntities?: number
+  _skipBatchingInternal?: boolean
+}
 
 interface ExtractionResult {
   stakeholders: Stakeholder[]
@@ -283,6 +303,7 @@ interface Activity {
   deliverable?: string
   effort_estimate?: number
   effort_unit?: 'hours' | 'days' | 'story_points'
+  source_document_id?: string
 }
 
 interface TeamAgreement {
@@ -937,7 +958,7 @@ export class ProjectDataExtractionService {
   private async getProjectDocuments(
     projectId: string,
     documentIds?: string[]
-  ): Promise<Array<{ id: string; title: string; content: string; template_name?: string }>> {
+  ): Promise<ExtractionSourceDocument[]> {
     try {
       // Ensure pool is connected before querying
       if (!pool) {
@@ -9056,6 +9077,128 @@ Output valid JSON object with "performance_actuals" array only.`
     )
   }
 
+  private getBatchEntityDedupeKey(entity: unknown): string {
+    if (entity === null || entity === undefined) {
+      return 'null'
+    }
+
+    if (typeof entity !== 'object') {
+      return String(entity)
+    }
+
+    const record = entity as Record<string, unknown>
+    const primary =
+      record.name ||
+      record.title ||
+      record.item_name ||
+      record.activity_name ||
+      record.entity_name ||
+      record.success_criterion_name
+    const source = record.source_document_id || record.source_document
+
+    if (primary) {
+      return `${String(primary).trim().toLowerCase()}::${source ? String(source).trim().toLowerCase() : ''}`
+    }
+
+    try {
+      const sortedKeys = Object.keys(record).sort()
+      return JSON.stringify(record, sortedKeys)
+    } catch (_error) {
+      return String(source || Object.keys(record).sort().join('|'))
+    }
+  }
+
+  private dedupeEntitiesAcrossBatches(entities: any[]): any[] {
+    const seen = new Set<string>()
+    const deduped: any[] = []
+
+    for (const entity of entities) {
+      const key = this.getBatchEntityDedupeKey(entity)
+      if (seen.has(key)) {
+        continue
+      }
+      seen.add(key)
+      deduped.push(entity)
+    }
+
+    return deduped
+  }
+
+  private async upsertParentProgressMeta(params: {
+    parentJobId?: string
+    entityType: string
+    totalDocuments: number
+    processedDocuments: number
+    totalBatches: number
+    currentBatch: number
+    batchingConfig: Required<ExtractionBatchingConfig>
+    startedAtMs: number
+  }): Promise<void> {
+    const {
+      parentJobId,
+      entityType,
+      totalDocuments,
+      processedDocuments,
+      totalBatches,
+      currentBatch,
+      batchingConfig,
+      startedAtMs
+    } = params
+
+    if (!parentJobId) {
+      return
+    }
+
+    if (!pool) {
+      logger.warn('[EXTRACTION-PROGRESS] Skipping progressMeta update: database pool is not initialized', {
+        parentJobId,
+        entityType
+      })
+      return
+    }
+
+    const elapsedSeconds = Math.max(1, Math.floor((Date.now() - startedAtMs) / 1000))
+    const safeProcessed = Math.max(0, Math.min(processedDocuments, totalDocuments))
+    const remainingDocuments = Math.max(0, totalDocuments - safeProcessed)
+    const docsPerSecond = safeProcessed / elapsedSeconds
+    const estimatedRemainingSeconds =
+      remainingDocuments > 0 && docsPerSecond > 0
+        ? Math.ceil(remainingDocuments / docsPerSecond)
+        : remainingDocuments > 0
+          ? null
+          : 0
+
+    const progressMeta: ExtractionBatchProgressMeta = {
+      activeEntityType: entityType,
+      totalDocuments,
+      processedDocuments: safeProcessed,
+      totalBatches,
+      currentBatch: Math.min(Math.max(currentBatch, 0), totalBatches),
+      estimatedRemainingSeconds,
+      batching: {
+        enabled: batchingConfig.batchingEnabled,
+        maxBatchTokens: batchingConfig.maxBatchTokens || 0,
+        maxDocsPerBatch: batchingConfig.maxDocsPerBatch || 0
+      },
+      updatedAt: new Date().toISOString()
+    }
+
+    try {
+      await pool.query(
+        `UPDATE jobs
+         SET data = COALESCE(data, '{}'::jsonb) || $2::jsonb
+         WHERE id = $1`,
+        [parentJobId, JSON.stringify({ progressMeta })]
+      )
+    } catch (error: unknown) {
+      logger.warn('[EXTRACTION-PROGRESS] Failed to update parent progressMeta', {
+        parentJobId,
+        entityType,
+        error: error instanceof Error ? error.message : String(error)
+      })
+    }
+  }
+
   /**
    * Extract a single entity type (for resilient child job processing)
    */
@@ -9063,11 +9206,7 @@ Output valid JSON object with "performance_actuals" array only.`
     projectId: string,
     userId: string,
     entityType: string,
-    options: {
-      aiProvider?: string
-      aiModel?: string
-      documentIds?: string[]
-    } = {}
+    options: SingleEntityExtractionOptions = {}
   ): Promise<any[]> {
     // Get best provider/model using centralized fallback mechanism
     const { provider: bestProvider, model: bestModel } = await this.getBestAIProviderAndModel(
@@ -9081,6 +9220,7 @@ Output valid JSON object with "performance_actuals" array only.`
       aiProvider: bestProvider,
       aiModel: bestModel
     }
+    const isInternalBatchRun = options._skipBatchingInternal === true
 
     const documents = await this.getProjectDocuments(projectId, options.documentIds)
 
@@ -9100,6 +9240,17 @@ Output valid JSON object with "performance_actuals" array only.`
       return []
     }
 
+    const extractionStartedAt = Date.now()
+    const normalizedBatchingConfig = normalizeBatchingConfig({
+      batchingEnabled: options.batchingEnabled,
+      maxBatchTokens: options.maxBatchTokens,
+      maxDocsPerBatch: options.maxDocsPerBatch
+    })
+    const batchPlan = planDocumentBatches(
+      documents.map((doc) => ({ id: doc.id, content: doc.content })),
+      normalizedBatchingConfig
+    )
+
     // Build document context and check cache
     const documentContext = this.buildDocumentContext(documents)
 
@@ -9113,6 +9264,18 @@ Output valid JSON object with "performance_actuals" array only.`
 
     if (cached) {
       logger.info(`[EXTRACTION-${entityType.toUpperCase()}] ✅ Using cached result (${cached.length} entities)`)
+      if (!isInternalBatchRun) {
+        await this.upsertParentProgressMeta({
+          parentJobId: options.parentJobId,
+          entityType,
+          totalDocuments: documents.length,
+          processedDocuments: documents.length,
+          totalBatches: Math.max(1, batchPlan.totalBatches),
+          currentBatch: Math.max(1, batchPlan.totalBatches),
+          batchingConfig: normalizedBatchingConfig,
+          startedAtMs: extractionStartedAt
+        })
+      }
       return cached
     }
 
@@ -9124,11 +9287,103 @@ Output valid JSON object with "performance_actuals" array only.`
       totalContentChars: documents.reduce((sum, d) => sum + (d.content?.length || 0), 0)
     })
 
+    if (!isInternalBatchRun && batchPlan.batchingEnabled && batchPlan.totalBatches > 1) {
+      logger.info(`[EXTRACTION-${entityType.toUpperCase()}] Executing batched extraction`, {
+        projectId,
+        entityType,
+        totalDocuments: batchPlan.totalDocuments,
+        totalBatches: batchPlan.totalBatches,
+        oversizedDocuments: batchPlan.oversizedDocumentIds.length,
+        maxBatchTokens: normalizedBatchingConfig.maxBatchTokens,
+        maxDocsPerBatch: normalizedBatchingConfig.maxDocsPerBatch
+      })
+
+      await this.upsertParentProgressMeta({
+        parentJobId: options.parentJobId,
+        entityType,
+        totalDocuments: batchPlan.totalDocuments,
+        processedDocuments: 0,
+        totalBatches: batchPlan.totalBatches,
+        currentBatch: 0,
+        batchingConfig: normalizedBatchingConfig,
+        startedAtMs: extractionStartedAt
+      })
+
+      const aggregatedEntities: any[] = []
+      let processedDocuments = 0
+
+      for (const batch of batchPlan.batches) {
+        const batchEntities = await this.extractSingleEntityType(projectId, userId, entityType, {
+          ...options,
+          aiProvider: bestProvider,
+          aiModel: bestModel,
+          documentIds: batch.documentIds,
+          parentJobId: undefined,
+          _skipBatchingInternal: true
+        })
+
+        if (Array.isArray(batchEntities) && batchEntities.length > 0) {
+          aggregatedEntities.push(...batchEntities)
+        }
+
+        processedDocuments += batch.documentIds.length
+        await this.upsertParentProgressMeta({
+          parentJobId: options.parentJobId,
+          entityType,
+          totalDocuments: batchPlan.totalDocuments,
+          processedDocuments,
+          totalBatches: batchPlan.totalBatches,
+          currentBatch: batch.batchNumber,
+          batchingConfig: normalizedBatchingConfig,
+          startedAtMs: extractionStartedAt
+        })
+      }
+
+      const dedupedEntities = this.dedupeEntitiesAcrossBatches(aggregatedEntities)
+      if (dedupedEntities.length !== aggregatedEntities.length) {
+        logger.info(`[EXTRACTION-${entityType.toUpperCase()}] Deduplicated batch results`, {
+          before: aggregatedEntities.length,
+          after: dedupedEntities.length
+        })
+      }
+
+      if (dedupedEntities.length > 0) {
+        try {
+          await aiCacheService.set(
+            projectId,
+            documentContext,
+            entityType,
+            dedupedEntities,
+            bestProvider,
+            bestModel
+          )
+          logger.info(`[EXTRACTION-${entityType.toUpperCase()}] Cached deduplicated batched result (${dedupedEntities.length} entities)`)
+        } catch (cacheError: any) {
+          logger.warn(`[EXTRACTION-${entityType.toUpperCase()}] Failed to cache batched results: ${cacheError?.message || cacheError}`)
+        }
+      }
+
+      return dedupedEntities
+    }
+
     // Build documentMap and documentList for source document traceability
     const documentMap = this.buildDocumentMap(documents)
     const documentList = this.buildDocumentList(documents)
 
     let entities: any[]
+
+    if (!isInternalBatchRun) {
+      await this.upsertParentProgressMeta({
+        parentJobId: options.parentJobId,
+        entityType,
+        totalDocuments: documents.length,
+        processedDocuments: 0,
+        totalBatches: Math.max(1, batchPlan.totalBatches),
+        currentBatch: 0,
+        batchingConfig: normalizedBatchingConfig,
+        startedAtMs: extractionStartedAt
+      })
+    }
 
     try {
       // Check if entity type is registered in extraction registry first
@@ -9141,6 +9396,18 @@ Output valid JSON object with "performance_actuals" array only.`
           // Cache the result
           if (entities && entities.length > 0) {
             await aiCacheService.set(projectId, documentContext, entityType, entities, bestProvider, bestModel)
+          }
+          if (!isInternalBatchRun) {
+            await this.upsertParentProgressMeta({
+              parentJobId: options.parentJobId,
+              entityType,
+              totalDocuments: documents.length,
+              processedDocuments: documents.length,
+              totalBatches: Math.max(1, batchPlan.totalBatches),
+              currentBatch: Math.max(1, batchPlan.totalBatches),
+              batchingConfig: normalizedBatchingConfig,
+              startedAtMs: extractionStartedAt
+            })
           }
           return entities
         }
@@ -9347,6 +9614,19 @@ Output valid JSON object with "performance_actuals" array only.`
         // Don't fail extraction if caching fails
         logger.warn(`[EXTRACTION-${entityType.toUpperCase()}] Failed to cache results: ${cacheError?.message || cacheError}`)
       }
+    }
+
+    if (!isInternalBatchRun) {
+      await this.upsertParentProgressMeta({
+        parentJobId: options.parentJobId,
+        entityType,
+        totalDocuments: documents.length,
+        processedDocuments: documents.length,
+        totalBatches: Math.max(1, batchPlan.totalBatches),
+        currentBatch: Math.max(1, batchPlan.totalBatches),
+        batchingConfig: normalizedBatchingConfig,
+        startedAtMs: extractionStartedAt
+      })
     }
 
     return entities || []

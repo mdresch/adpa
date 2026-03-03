@@ -6,7 +6,9 @@ import {
     useCallback,
     useContext,
     useEffect,
-    useReducer
+    useReducer,
+    type Context,
+    type FC
 } from 'react'
 
 import { useSidebar } from '@/components/morphic/ui/sidebar'

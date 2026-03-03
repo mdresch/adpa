@@ -79,10 +79,16 @@ export function RenderMessage({
     citationMaps
 }: Props) {
     if (message.role === 'user') {
+        // Extract text from parts array or use content field
+        const userText = message.content || 
+            (message.parts as MessagePart[] | undefined)?.find(
+                (p): p is { type: 'text'; text: string } => p.type === 'text'
+            )?.text || ''
+        
         return (
             <div className="flex flex-col gap-2">
                 <UserTextSection
-                    content={message.content}
+                    content={userText}
                     messageId={messageId}
                     onUpdateMessage={onUpdateMessage}
                 />

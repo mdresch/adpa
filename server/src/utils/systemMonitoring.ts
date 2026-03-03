@@ -1,8 +1,8 @@
 import os from 'os';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { pool } from '../database/connection';
 import { logger } from './logger';
+import { safeQuery, isDatabaseReady } from '../database/helpers';
 
 const execPromise = promisify(exec);
 
@@ -11,57 +11,66 @@ const execPromise = promisify(exec);
  * Collects system-wide resource metrics and stores them in the database
  */
 export class SystemMonitoring {
-    private static interval: NodeJS.Timeout | null = null;
+    private static lastCpuUsage = process.cpuUsage();
+    private static lastCheck = Date.now();
     private static lastNetworkStats: { bytesReceived: number; bytesSent: number; time: number } | null = null;
+    private static interval: NodeJS.Timeout | null = null;
+
+    /**
+     * Start periodic system-wide monitoring (alias for startMonitoring)
+     */
+    static start(intervalMs: number = 60000): void {
+        this.startMonitoring(intervalMs);
+    }
 
     /**
      * Start periodic system-wide monitoring
      */
-    static start(intervalMs: number = 60000) { // Default 1 minute
-        // Don't start interval in Vercel/Serverless environments as it won't persist
-        if (process.env.VERCEL === '1' || process.env.AWS_LAMBDA_FUNCTION_NAME) {
-            logger.info('SystemMonitoring: Environment is serverless, skipping periodic background collection.');
-            // Still collect once for initial data
-            this.collectAndStore().catch(err => logger.error('Initial system metrics collection failed:', err));
-            return;
-        }
-
-        if (this.interval) {
-            this.stop();
-        }
-
+    static startMonitoring(intervalMs: number = 60000): NodeJS.Timeout {
+        logger.info('✅ System and worker resource monitoring started');
+        
         this.interval = setInterval(async () => {
             await this.collectAndStore();
         }, intervalMs);
-
-        // Initial collection
-        this.collectAndStore().catch(err => logger.error('Initial system metrics collection failed:', err));
+        
+        return this.interval;
     }
 
     /**
      * Collect and store metrics in the database
      */
-    private static async collectAndStore() {
+    static async collectAndStore(): Promise<void> {
         try {
-            const metrics = await this.collectAllMetrics();
+            // Skip if database not ready
+            if (!isDatabaseReady()) {
+                logger.debug('[METRICS] Database not ready, skipping metrics storage')
+                return
+            }
 
-            await pool.query(
+            const metrics = await this.collectMetrics()
+            
+            // Insert metrics following actual schema from system_metrics table:
+            // Columns: id (auto), cpu_usage_percent, memory_usage_percent, 
+            //          disk_usage_percent, network_usage_percent, recorded_at (auto)
+            await safeQuery(
                 `INSERT INTO system_metrics (
-                    cpu_usage_percent,
-                    memory_usage_percent,
-                    disk_usage_percent,
-                    network_usage_percent,
-                    recorded_at
-                ) VALUES ($1, $2, $3, $4, NOW())`,
+                  cpu_usage_percent,
+                  memory_usage_percent,
+                  disk_usage_percent,
+                  network_usage_percent
+                 ) VALUES ($1, $2, $3, $4)`,
                 [
                     metrics.cpu,
                     metrics.memory,
                     metrics.disk,
-                    metrics.network
+                    0 // network_usage_percent - collect if needed in future
                 ]
-            );
-        } catch (error) {
-            logger.error('Failed to collect and store system metrics:', error);
+            )
+        } catch (error: any) {
+            // Don't throw - metrics collection failures shouldn't break main flow
+            logger.debug('[METRICS] Failed to store system metrics', { 
+                error: error?.message 
+            })
         }
     }
 
@@ -72,6 +81,7 @@ export class SystemMonitoring {
         if (this.interval) {
             clearInterval(this.interval);
             this.interval = null;
+            logger.info('🛑 System monitoring stopped');
         }
     }
 
@@ -225,5 +235,14 @@ export class SystemMonitoring {
             logger.debug('SystemMonitoring: Network usage collection failed');
         }
         return 0;
+    }
+
+    private static async collectMetrics() {
+        const cpu = await this.getAverageCpuUsage();
+        const memory = await this.getMemoryUsage();
+        const disk = await this.getDiskUsage();
+        const network = await this.getNetworkUsage();
+
+        return { cpu, memory, disk, network, timestamp: new Date(), connections: 0 };
     }
 }

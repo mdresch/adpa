@@ -8,6 +8,7 @@ import { authenticateToken } from '../middleware/auth'
 import { logger } from '../utils/logger'
 import { pool } from '../database/connection'
 import { Parser } from 'json2csv'
+import { semanticSearchService } from '../services/semanticSearchService'
 
 const router = express.Router()
 
@@ -341,6 +342,354 @@ router.get(
         error: error instanceof Error ? error.message : String(error)
       })
       next(error)
+    }
+  }
+)
+
+/**
+ * ============================================================================
+ * SEMANTIC SEARCH MANAGEMENT ENDPOINTS
+ * ============================================================================
+ */
+
+/**
+ * POST /api/admin/semantic-search/generate
+ * Generate embeddings for knowledge base entries
+ */
+router.post(
+  '/semantic-search/generate',
+  authenticateToken,
+  requireAdmin,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { entryIds, force } = req.body
+
+      logger.info('[ADMIN-ROUTES] Generating embeddings...', { entryIds, force })
+
+      const result = await semanticSearchService.generateKnowledgeBaseEmbeddings(entryIds)
+
+      res.json({
+        success: result.success,
+        data: {
+          processedCount: result.processedCount,
+          failedCount: result.failedCount,
+          message: result.message
+        }
+      })
+    } catch (error) {
+      logger.error('[ADMIN-ROUTES] Embedding generation failed:', error)
+      next(error)
+    }
+  }
+)
+
+/**
+ * GET /api/admin/semantic-search/status
+ * Get status of semantic search system
+ */
+router.get(
+  '/semantic-search/status',
+  authenticateToken,
+  requireAdmin,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await pool.query(`
+        SELECT 
+          COUNT(*) as total_entries,
+          SUM(CASE WHEN embedding IS NOT NULL THEN 1 ELSE 0 END) as embedded_entries,
+          MAX(embedding_generated_at) as last_generated,
+          COUNT(DISTINCT embedding_model) as embedding_models
+        FROM knowledge_base_entries
+      `)
+
+      const stats = result.rows[0]
+      const embeddedPercent = stats.total_entries > 0
+        ? Math.round((stats.embedded_entries / stats.total_entries) * 100)
+        : 0
+
+      res.json({
+        success: true,
+        data: {
+          total_entries: parseInt(stats.total_entries),
+          embedded_entries: parseInt(stats.embedded_entries || 0),
+          embedded_percentage: embeddedPercent,
+          last_generated: stats.last_generated,
+          models: stats.embedding_models
+        }
+      })
+    } catch (error) {
+      logger.error('[ADMIN-ROUTES] Status check failed:', error)
+      next(error)
+    }
+  }
+)
+
+/**
+ * POST /api/admin/semantic-search/test-query
+ * Test semantic search with a query
+ */
+router.post(
+  '/semantic-search/test-query',
+  authenticateToken,
+  requireAdmin,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { query, limit = 5 } = req.body
+
+      if (!query) {
+        return res.status(400).json({
+          success: false,
+          error: 'Query is required'
+        })
+      }
+
+      logger.info('[ADMIN-ROUTES] Testing semantic query:', { query, limit })
+
+      const results = await semanticSearchService.semanticSearch(query, limit)
+
+      res.json({
+        success: true,
+        data: {
+          query,
+          results: results.map(r => ({
+            id: r.id,
+            title: r.title,
+            description: r.description.substring(0, 150),
+            semantic_score: r.semantic_score.toFixed(3)
+          }))
+        }
+      })
+    } catch (error) {
+      logger.error('[ADMIN-ROUTES] Test query failed:', error)
+      next(error)
+    }
+  }
+)
+
+/**
+ * POST /api/admin/semantic-search/import-documents
+ * Bulk import documents as knowledge base entries
+ */
+router.post(
+  '/semantic-search/import-documents',
+  authenticateToken,
+  requireAdmin,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { limit = 0, offset = 0 } = req.body  // limit=0 means ALL
+
+      logger.info('[ADMIN-ROUTES] Bulk importing documents to KB', { limit, offset })
+
+      // Get documents without KB entries (check by title to avoid duplicates)
+      let query = `
+        SELECT 
+          d.id,
+          d.title,
+          COALESCE(d.content, '') as description,
+          d.project_id,
+          d.created_at,
+          d.content
+        FROM documents d
+        WHERE d.title IS NOT NULL
+          AND d.project_id IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM knowledge_base_entries kb 
+            WHERE kb.title = d.title AND kb.project_id = d.project_id
+          )
+        ORDER BY d.created_at DESC
+      `
+      
+      const params: any[] = []
+      
+      if (limit > 0) {
+        query += ` LIMIT $1 OFFSET $2`
+        params.push(limit, offset)
+      }
+
+      const docsResult = await pool.query(query, params)
+      const documents = docsResult.rows
+      logger.info(`[ADMIN-ROUTES] Found ${documents.length} documents to import`)
+
+      if (documents.length === 0) {
+        return res.json({
+          success: true,
+          data: {
+            imported: 0,
+            failed: 0,
+            message: 'No new documents to import',
+            nextOffset: offset
+          }
+        })
+      }
+
+      let imported = 0
+      let failed = 0
+      const failedDocs: any[] = []
+
+      // Create KB entries for each document
+      for (const doc of documents) {
+        try {
+          const improvedApproach = {
+            description: doc.description || 'Document content',
+            implementation_details: doc.content ? doc.content.substring(0, 500) : '',
+            tools_used: [],
+            techniques: []
+          }
+          
+          const replicationGuide = {
+            steps: ['Review the original document for context and details'],
+            prerequisites: [],
+            resources_needed: [],
+            estimated_effort: 'Unknown',
+            risks: []
+          }
+
+          await pool.query(`
+            INSERT INTO knowledge_base_entries (
+              project_id,
+              entry_type,
+              category,
+              title,
+              description,
+              improved_approach,
+              replication_guide,
+              created_by,
+              status
+            ) VALUES (
+              $1,
+              'lesson_learned',
+              'best_practice',
+              $2,
+              $3,
+              $4,
+              $5,
+              $6,
+              'draft'
+            )
+          `, [
+            doc.project_id,
+            doc.title,
+            doc.description || 'Imported from document',
+            JSON.stringify(improvedApproach),
+            JSON.stringify(replicationGuide),
+            'system'
+          ])
+
+          imported++
+        } catch (error: any) {
+          logger.error(`[ADMIN-ROUTES] Failed to import doc ${doc.id}: ${error.message}`)
+          failed++
+          failedDocs.push({ id: doc.id, error: error.message })
+        }
+      }
+
+      logger.info(`[ADMIN-ROUTES] Import batch complete: ${imported} imported, ${failed} failed`)
+
+      res.json({
+        success: failed === 0,
+        data: {
+          imported,
+          failed,
+          failedDocs: failed > 0 ? failedDocs : undefined,
+          message: `Imported ${imported}/${documents.length} documents`,
+          nextOffset: offset + (limit > 0 ? limit : 0),
+          totalProcessed: imported + failed
+        }
+      })
+    } catch (error) {
+      logger.error('[ADMIN-ROUTES] Bulk import failed:', error)
+      next(error)
+    }
+  }
+)
+
+/**
+ * POST /api/admin/semantic-search/generate-all
+ * Generate embeddings for all KB entries without embeddings
+ */
+router.post(
+  '/semantic-search/generate-all',
+  authenticateToken,
+  requireAdmin,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      logger.info('[ADMIN-ROUTES] Starting full embedding generation')
+
+      const result = await semanticSearchService.generateKnowledgeBaseEmbeddings()
+
+      res.json({
+        success: result.success,
+        data: result
+      })
+    } catch (error) {
+      logger.error('[ADMIN-ROUTES] Embedding generation failed:', error)
+      next(error)
+    }
+  }
+)
+
+/**
+ * GET /api/admin/semantic-search/diagnostics
+ * Check document and KB entry state for debugging
+ */
+router.get(
+  '/semantic-search/diagnostics',
+  authenticateToken,
+  requireAdmin,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      // Count queries
+      const docCount = await pool.query('SELECT COUNT(*) as count FROM documents')
+      const docWithName = await pool.query('SELECT COUNT(*) as count FROM documents WHERE title IS NOT NULL AND project_id IS NOT NULL')
+      const kbCount = await pool.query('SELECT COUNT(*) as count FROM knowledge_base_entries')
+      const kbWithEmbed = await pool.query('SELECT COUNT(*) as count FROM knowledge_base_entries WHERE embedding IS NOT NULL')
+      
+      const docsWithoutKB = await pool.query(`
+        SELECT COUNT(DISTINCT d.id) as count
+        FROM documents d
+        WHERE d.title IS NOT NULL
+          AND d.project_id IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM knowledge_base_entries kb 
+            WHERE kb.title = d.title AND kb.project_id = d.project_id
+          )
+      `)
+
+      const sampleDocs = await pool.query(`
+        SELECT id, title, created_at
+        FROM documents 
+        WHERE title IS NOT NULL
+        ORDER BY created_at DESC
+        LIMIT 5
+      `)
+
+      const sampleKB = await pool.query(`
+        SELECT id, title, embedding IS NOT NULL as has_embedding, created_at
+        FROM knowledge_base_entries
+        ORDER BY created_at DESC
+        LIMIT 5
+      `)
+
+      res.json({
+        success: true,
+        data: {
+          statistics: {
+            total_documents: parseInt(docCount.rows[0].count),
+            documents_with_name_and_project: parseInt(docWithName.rows[0].count),
+            total_kb_entries: parseInt(kbCount.rows[0].count),
+            kb_with_embeddings: parseInt(kbWithEmbed.rows[0].count),
+            documents_without_kb: parseInt(docsWithoutKB.rows[0].count)
+          },
+          sample_documents: sampleDocs.rows,
+          sample_kb_entries: sampleKB.rows
+        }
+      })
+    } catch (error: any) {
+      logger.error('[ADMIN-ROUTES] Diagnostics failed:', error)
+      res.status(500).json({
+        success: false,
+        error: error.message
+      })
     }
   }
 )

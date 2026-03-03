@@ -116,6 +116,7 @@ import okrRoutes from "./routes/okrRoutes"
 import promptAssistantRoutes from "./routes/promptAssistantRoutes"
 import signatureRoutes from "./routes/signatures"
 import searchRoutes from "./routes/search"
+import gkgEnrichedSearchRoutes from "./routes/gkgEnrichedSearch"
 import mitigationPlanRoutes from "./routes/mitigationPlanRoutes"
 import pmbok6Routes from "./routes/pmbok6Routes"
 import reviewRoutes from "./routes/reviewRoutes"
@@ -352,6 +353,7 @@ app.use("/api/okrs", okrRoutes)
 app.use("/api/prompt-assistant", promptAssistantRoutes)
 app.use("/api/signatures", signatureRoutes)
 app.use("/api/search", searchRoutes)
+app.use("/api/search", gkgEnrichedSearchRoutes)
 app.use("/api/mitigation-plans", mitigationPlanRoutes)
 app.use("/api/pmbok6", pmbok6Routes)
 app.use("/api", reviewRoutes)

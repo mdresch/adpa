@@ -1,10 +1,13 @@
 # Job Monitor Enhancement - Worker & Queue Visibility
 
-**Status**: 🔵 Planned  
+**Status**: ✅ Completed (December 18, 2025)  
 **Priority**: Medium  
 **Estimated Effort**: Small-Medium (3-5 days)  
 **Dependencies**: Background Job Queue System (✅ Completed)  
 **Target Release**: Q1 2026
+
+> Historical note: This document describes the original implementation scope.
+> Current implementation is live in `app/jobs/*` and `server/src/routes/queue-stats.ts`.
 
 ---
 
@@ -627,6 +630,6 @@ export function WorkerStatus() {
 ---
 
 **Created**: October 31, 2025  
-**Status**: 🔵 Ready for Implementation  
-**Next Steps**: Review with team, prioritize in sprint planning
+**Status**: ✅ Implemented (historical planning record)  
+**Next Steps**: None (reference only)
 

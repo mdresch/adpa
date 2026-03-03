@@ -26,6 +26,7 @@
     "migrate:019": "node scripts/migrate-single.js 019",
     "migrate:020": "node scripts/migrate-single.js 020",
     "migrate:021": "node scripts/migrate-single.js 021",
+    "migrate:221": "node scripts/migrate-single.js 221",
     "migrate:030": "node scripts/migrate-030-heartbeats.js",
     "migrate:031": "node scripts/migrate-031-system-metrics.js",
     "migrate:058": "node scripts/run-migration-058.js",
@@ -78,6 +79,10 @@
     "migrate:671": "ts-node -r tsconfig-paths/register scripts/run-migration-671.ts",
     "migrate:672": "ts-node -r tsconfig-paths/register scripts/run-migration-672.ts",
     "migrate:673": "ts-node -r tsconfig-paths/register scripts/run-migration-673.ts",
+    "migrate:230": "node scripts/migrate-230.js",
+    "semantic-search:init": "node scripts/semantic-search-init.js",
+    "semantic-search:generate": "node scripts/generate-embeddings.ts",
+    "semantic-search:test": "ts-node -r tsconfig-paths/register scripts/test-semantic-search.ts",
     "verify:risk-dedup": "ts-node -r tsconfig-paths/register scripts/verify-risk-deduplication.ts",
     "verify:requirements-dedup": "ts-node -r tsconfig-paths/register scripts/verify-requirements-deduplication.ts",
     "verify:milestones-dedup": "ts-node -r tsconfig-paths/register scripts/verify-milestones-deduplication.ts",
@@ -192,6 +197,7 @@
     }
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@types/amqp-connection-manager": "^2.0.12",
     "@types/amqplib": "^0.10.8",
     "@types/bcryptjs": "^2.4.6",

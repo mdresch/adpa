@@ -47,7 +47,8 @@ export async function createChatStreamResponse(
         abortSignal,
         isNewChat,
         knowledgeEnabled,
-        ragScope
+        ragScope,
+        assistedContext
     } = config
 
     // Verify that chatId is provided
@@ -112,6 +113,7 @@ export async function createChatStreamResponse(
                 modelType,
                 modelId: model ? `${model.providerId}:${model.id}` : 'unknown',
                 knowledgeEnabled,
+                hasAssistedContext: !!assistedContext,
                 trigger
             },
             tags: ['morphic', searchMode || 'adaptive', model?.providerId || 'unknown']
@@ -213,7 +215,8 @@ export async function createChatStreamResponse(
                             modelType,
                             knowledgeEnabled,
                             userId,
-                            ragScope
+                            ragScope,
+                            assistedContext
                         })
 
                         const signedMessages = await signInternalFileUrls(messagesToModel, currentModelId)

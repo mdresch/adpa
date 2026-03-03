@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAuthenticatedUser, unauthorizedResponse } from '@/lib/auth-utils';
-import { pool } from '@/server/src/database/connection';
+import { pool, connectDatabase } from '@/server/src/database/connection';
 import { logger } from '@/server/src/utils/logger';
 
 export async function GET(
@@ -9,6 +9,9 @@ export async function GET(
 ) {
     const user = await getAuthenticatedUser(req);
     if (!user) return unauthorizedResponse();
+
+    // Initialize database connection (safe to call multiple times)
+    await connectDatabase();
 
     const projectId = params.id;
 

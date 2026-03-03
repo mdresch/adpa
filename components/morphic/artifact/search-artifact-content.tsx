@@ -15,8 +15,10 @@ export function SearchArtifactContent({ tool }: { tool: ToolPart<'search'> }) {
     // Handle streaming output states
     const output = tool.state === 'output-available' ? tool.output : undefined
     const searchResults: TypeSearchResults | undefined =
-        output?.state === 'complete' ? output : undefined
-    const query = tool.input?.query
+        output?.state === 'complete' && 'results' in output && 'images' in output
+            ? (output as unknown as TypeSearchResults)
+            : undefined
+    const query = (tool.input as { query?: string } | undefined)?.query
 
     const hasResults =
         searchResults &&
@@ -52,8 +54,7 @@ export function SearchArtifactContent({ tool }: { tool: ToolPart<'search'> }) {
             {searchResults.videos && searchResults.videos.length > 0 && (
                 <Section title="Videos">
                     <VideoSearchResults
-                        results={createVideoSearchResults(searchResults, query)}
-                        displayMode="artifact"
+                        results={createVideoSearchResults(searchResults, query || '')}
                     />
                 </Section>
             )}

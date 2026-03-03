@@ -48,6 +48,7 @@ Local development setup, Docker configuration, and migration guides.
 - **Local Development:**
   - `LOCAL_DEVELOPMENT_SUCCESS.md` - Local environment setup
   - `QUICK_RESTART_GUIDE.md` - Quick restart procedures
+  - `AGENT_HANDOVER_GETTING_STARTED.md` - New-agent onboarding handover
   - `manual-migration-guide.md` - Manual migration instructions
   
 - **Template Configuration:**
@@ -272,6 +273,8 @@ Security-related documentation, cleanup procedures, and best practices.
 ### Roadmap
 **Path:** `roadmap/`
 
+**Status source of truth:** For current roadmap status, use `roadmap/README.md` and `roadmap/ROADMAP_COMPLETION_ANALYSIS.md`. Some files under `roadmap/archive/` are historical snapshots and may contain outdated planned/completed labels.
+
 Project roadmap, phase implementations, and future planning.
 
 - **Current Roadmap:**
@@ -344,6 +347,7 @@ Deprecated, duplicate, or superseded documentation files.
 
 **Plan future work:**
 - Roadmap: `roadmap/ROADMAP_v2.1.0.md`
+- Unlimited extraction MVP plan: `roadmap/UNLIMITED_DOCUMENT_EXTRACTION_MVP_PLAN.md`
 - Future improvements: `roadmap/FUTURE_IMPROVEMENTS.md`
 
 ---
@@ -380,7 +384,7 @@ For questions about documentation or to report issues:
 
 ---
 
-**Last Updated:** October 15, 2025  
+**Last Updated:** March 2, 2026  
 **Documentation Version:** 2.0.0  
 **Total Documents:** 150+
 
