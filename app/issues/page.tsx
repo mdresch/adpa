@@ -325,8 +325,8 @@ export default function IssuesPage() {
     { name: 'Low', value: stats.low_issues, color: '#3b82f6' },
   ].filter(item => item.value > 0) : []
 
-  const [workflowVisibleForId, setWorkflowVisibleForId] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState("all")
+  const [workflowVisibleForId, setWorkflowVisibleForId] = React.useState<string | null>(null)
+  const [activeTab, setActiveTab] = React.useState("all")
 
   if (authLoading) {
     return (
