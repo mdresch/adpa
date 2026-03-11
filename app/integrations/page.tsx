@@ -62,6 +62,7 @@ export default function Integrations() {
   const [integrations, setIntegrations] = useState<any[]>([])
   const [realIntegrations, setRealIntegrations] = useState<any[]>([])
   const [allIntegrations, setAllIntegrations] = useState<any[]>([])
+  const [healthChecks, setHealthChecks] = useState<Record<string, { status: 'healthy' | 'unhealthy' | 'checking'; message?: string }>>({})
 
   // SharePoint configuration state
   const [sharepointConfig, setSharepointConfig] = useState({
@@ -352,6 +353,14 @@ export default function Integrations() {
     }
   }, [user])
 
+  // Perform health checks for all active integrations
+  // NOTE: Disabled until backend health check endpoint is implemented
+  // useEffect(() => {
+  //   if (realIntegrations.length > 0 && user) {
+  //     performHealthChecks()
+  //   }
+  // }, [realIntegrations, user])
+
   const loadProjects = async () => {
     try {
       const response = await apiClient.getProjects({ page: 1, pageSize: 100 })
@@ -559,6 +568,11 @@ export default function Integrations() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const performHealthChecks = async () => {
+    console.log('Health checks disabled - endpoint not implemented')
+    return
   }
 
   const formatRelativeTime = (dateString: string) => {
@@ -1736,12 +1750,12 @@ export default function Integrations() {
                     <Card key={integration.id}>
                       <CardHeader>
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-4">
-                            <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
+                          <div className="flex items-center space-x-4 flex-1">
+                            <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
                               <ExternalLink className="h-6 w-6 text-primary" />
                             </div>
-                            <div>
-                              <CardTitle className="flex items-center space-x-2">
+                            <div className="flex-1 min-w-0">
+                              <CardTitle className="flex items-center space-x-2 flex-wrap">
                                 <span>{integration.name}</span>
                                 <Badge
                                   variant={
@@ -1755,12 +1769,12 @@ export default function Integrations() {
                                   {integration.status}
                                 </Badge>
                               </CardTitle>
-                              <CardDescription>
+                              <CardDescription className="mt-1">
                                 {integration.baseUrl} • Last sync: {integration.lastSync}
                               </CardDescription>
                             </div>
                           </div>
-                          <div className="flex items-center space-x-2">
+                          <div className="flex items-center space-x-2 flex-shrink-0">
                             <Switch
                               checked={integration.enabled}
                               onCheckedChange={(checked: boolean) => handleToggleIntegration(integration, checked)}
@@ -2792,7 +2806,7 @@ export default function Integrations() {
                     </div>
                   </CardContent>
                 </Card>
-              </TabsContent >
+              </TabsContent>
 
               <TabsContent value="adobe" className="space-y-4">
                 <Card>
@@ -2906,10 +2920,10 @@ export default function Integrations() {
                   integrationId={realIntegrations.find(i => i.type === "neo4j")?.id || null}
                 />
               </TabsContent>
-            </Tabs >
-          </div >
-        </main >
-      </div >
+            </Tabs>
+          </div>
+        </main>
+      </div>
       <MongoDBSyncDialog
         open={mongoSyncDialogOpen}
         onOpenChange={setMongoSyncDialogOpen}
@@ -2920,6 +2934,6 @@ export default function Integrations() {
           toast.success("MongoDB sync completed successfully")
         }}
       />
-    </div >
+    </div>
   )
 }
