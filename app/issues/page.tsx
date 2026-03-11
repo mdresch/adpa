@@ -1,6 +1,6 @@
 "use client"
 
-import * as React from "react"
+import React, { useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -88,28 +88,28 @@ export default function IssuesPage() {
   const { user, loading: authLoading } = useAuth()
   const { isConnected } = useWebSocket()
 
-  const [issues, setIssues] = React.useState<Issue[]>([])
-  const [stats, setStats] = React.useState<IssueStats | null>(null)
-  const [loading, setLoading] = React.useState(true)
-  const [selectedProject, setSelectedProject] = React.useState<string>("")
-  const [projects, setProjects] = React.useState<Array<{ id: string; name: string }>>([])
+  const [issues, setIssues] = useState<Issue[]>([])
+  const [stats, setStats] = useState<IssueStats | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [selectedProject, setSelectedProject] = useState<string>("")
+  const [projects, setProjects] = useState<Array<{ id: string; name: string }>>([])
 
   // Filters
-  const [statusFilter, setStatusFilter] = React.useState<string[]>([])
-  const [priorityFilter, setPriorityFilter] = React.useState<string[]>([])
-  const [categoryFilter, setCategoryFilter] = React.useState<string[]>([])
-  const [searchQuery, setSearchQuery] = React.useState("")
+  const [statusFilter, setStatusFilter] = useState<string[]>([])
+  const [priorityFilter, setPriorityFilter] = useState<string[]>([])
+  const [categoryFilter, setCategoryFilter] = useState<string[]>([])
+  const [searchQuery, setSearchQuery] = useState("")
 
   // Dialog states
-  const [createDialogOpen, setCreateDialogOpen] = React.useState(false)
-  const [editDialogOpen, setEditDialogOpen] = React.useState(false)
-  const [selectedIssue, setSelectedIssue] = React.useState<Issue | null>(null)
-  const [suggestionsDialogOpen, setSuggestionsDialogOpen] = React.useState(false)
-  const [aiSuggestions, setAiSuggestions] = React.useState<any[]>([])
-  const [loadingSuggestions, setLoadingSuggestions] = React.useState(false)
+  const [createDialogOpen, setCreateDialogOpen] = useState(false)
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null)
+  const [suggestionsDialogOpen, setSuggestionsDialogOpen] = useState(false)
+  const [aiSuggestions, setAiSuggestions] = useState<any[]>([])
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false)
 
   // Form states
-  const [formData, setFormData] = React.useState({
+  const [formData, setFormData] = useState({
     title: "",
     description: "",
     category: "technical" as Issue['category'],
@@ -325,8 +325,8 @@ export default function IssuesPage() {
     { name: 'Low', value: stats.low_issues, color: '#3b82f6' },
   ].filter(item => item.value > 0) : []
 
-  const [workflowVisibleForId, setWorkflowVisibleForId] = React.useState<string | null>(null)
-  const [activeTab, setActiveTab] = React.useState("all")
+  const [workflowVisibleForId, setWorkflowVisibleForId] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState("all")
 
   if (authLoading) {
     return (

@@ -2,6 +2,7 @@
  * Save Risks
  * 
  * Persists risks to the database with deduplication, normalization, and validation.
+ * Uses idempotency keys (SHA-256) for safe re-runs and retry scenarios.
  * Handles enum mapping for probability and impact fields, with validation to prevent text injection.
  */
 
@@ -9,6 +10,7 @@ import { logger } from '../../../../utils/logger'
 import type { PoolClient } from 'pg'
 import type { PersistenceResult } from '../../base/Persistence'
 import type { Risk } from './types'
+import { generateRiskIdempotencyKey } from '../../IdempotencyKeyService'
 
 /**
  * Normalize impact value to database enum
@@ -25,10 +27,10 @@ function normalizeImpact(rawImpact: string | undefined): 'high' | 'medium' | 'lo
     'low': 'low',
     'very_low': 'low'
   }
-  
+
   if (!rawImpact) return 'medium'
   const raw = String(rawImpact).toLowerCase().trim()
-  
+
   // Check if impact looks like it might be mitigation_strategy or other text (too long)
   if (raw.length <= 10 && impactMap[raw]) {
     return impactMap[raw]
@@ -56,10 +58,10 @@ function normalizeProbability(rawProbability: string | undefined): 'high' | 'med
     'low': 'low',
     'very_low': 'low'
   }
-  
+
   if (!rawProbability) return 'medium'
   const raw = String(rawProbability).toLowerCase().trim()
-  
+
   // Check if probability looks like it might be mitigation_strategy or other text (too long)
   if (raw.length <= 10 && probabilityMap[raw]) {
     return probabilityMap[raw]
@@ -73,19 +75,20 @@ function normalizeProbability(rawProbability: string | undefined): 'high' | 'med
 }
 
 /**
- * Deduplicate risks by title
+ * Deduplicate risks by idempotency key within batch
  */
 function deduplicateRisks(risks: Risk[]): Risk[] {
   const deduplicatedMap = new Map<string, Risk>()
-  
+
   risks.forEach(risk => {
-    const normalizedTitle = risk.title.trim().toLowerCase()
-    
-    if (!deduplicatedMap.has(normalizedTitle)) {
-      deduplicatedMap.set(normalizedTitle, risk)
+    // Use title as fallback key if idempotency_key not yet present
+    const dedupKey = risk.title.trim().toLowerCase()
+
+    if (!deduplicatedMap.has(dedupKey)) {
+      deduplicatedMap.set(dedupKey, risk)
     } else {
       // Duplicate found - merge details (keep most detailed version)
-      const existing = deduplicatedMap.get(normalizedTitle)!
+      const existing = deduplicatedMap.get(dedupKey)!
       const merged: Risk = {
         ...existing,
         description: risk.description || existing.description,
@@ -96,11 +99,11 @@ function deduplicateRisks(risks: Risk[]): Risk[] {
         contingency_plan: risk.contingency_plan || existing.contingency_plan,
         owner: risk.owner || existing.owner
       }
-      deduplicatedMap.set(normalizedTitle, merged)
+      deduplicatedMap.set(dedupKey, merged)
       logger.debug(`[EXTRACTION-RISKS] Merged duplicate risk: "${risk.title}"`)
     }
   })
-  
+
   return Array.from(deduplicatedMap.values())
 }
 
@@ -132,29 +135,38 @@ export async function saveRisks(
     const placeholders: string[] = []
 
     uniqueRisks.forEach((r, index) => {
-      const offset = index * 14
+      const offset = index * 15
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14}, $${offset + 15})`
       )
-      
+
       // Normalize enum values with validation
       const mappedProbability = normalizeProbability(r.probability)
       const mappedImpact = normalizeImpact(r.impact)
-      
+
       // IMPORTANT: risk_level is organizational level ('project', 'program', 'portfolio', 'systemic'), NOT severity
       // For extracted risks from documents, risk_level should always be 'project'
       const riskLevel = 'project' // Extracted risks are always project-level
-      
+
+      // Generate idempotency key for safe re-runs
+      const idempotencyKey = generateRiskIdempotencyKey(projectId, {
+        title: r.title,
+        category: r.category,
+        probability: mappedProbability,
+        impact: mappedImpact
+      })
+
       // Resolve source_document_id
       const sourceDocumentId = r.source_document_id || null
-      
+
       logger.debug(`[EXTRACTION-RISKS] Final risk values`, {
         title: r.title,
         probability: mappedProbability,
         impact: mappedImpact,
-        risk_level: riskLevel // Always 'project' for extracted risks
+        risk_level: riskLevel,
+        idempotencyKey: idempotencyKey.substring(0, 16)
       })
-      
+
       values.push(
         projectId,
         r.title || '',        // name column (required, comes first)
@@ -169,19 +181,20 @@ export async function saveRisks(
         'identified',        // status column (default for extracted risks)
         r.title || '',       // title column (duplicate of name for compatibility)
         userId,              // created_by
-        sourceDocumentId     // source_document_id
+        sourceDocumentId,    // source_document_id
+        idempotencyKey       // idempotency_key (NEW in Phase 1.5)
       )
     })
 
-    // Execute bulk insert
+    // Execute bulk insert with idempotency key conflict handling (matches partial unique index)
     await client.query(
       `INSERT INTO risks (
         project_id, name, description, category, probability, impact, risk_level,
         mitigation_strategy, contingency_plan, owner, status, title,
-        created_by, source_document_id
+        created_by, source_document_id, idempotency_key
       )
       VALUES ${placeholders.join(', ')}
-      ON CONFLICT (project_id, name) DO UPDATE SET
+      ON CONFLICT (project_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO UPDATE SET
         description = EXCLUDED.description,
         category = EXCLUDED.category,
         probability = EXCLUDED.probability,
@@ -197,7 +210,11 @@ export async function saveRisks(
       values
     )
 
-    logger.info(`[EXTRACTION] Saved ${uniqueRisks.length} risks (deduplicated from ${risks.length})`)
+    logger.info(`[EXTRACTION] Saved ${uniqueRisks.length} risks (deduplicated from ${risks.length})`, {
+      projectId,
+      saved: uniqueRisks.length,
+      skipped: skippedCount
+    })
 
     return {
       saved: uniqueRisks.length,
@@ -209,7 +226,7 @@ export async function saveRisks(
       projectId,
       error: error instanceof Error ? error.message : String(error)
     })
-    
+
     return {
       saved: 0,
       skipped: 0,
@@ -218,4 +235,3 @@ export async function saveRisks(
     }
   }
 }
-

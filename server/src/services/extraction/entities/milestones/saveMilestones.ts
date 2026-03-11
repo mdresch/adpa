@@ -29,26 +29,33 @@ function normalizeStatus(rawStatus: string | undefined): 'planned' | 'in_progres
     'delayed': 'delayed',
     'overdue': 'delayed'
   }
-  
+
   if (!rawStatus) return 'planned'
   const normalized = rawStatus.toLowerCase().trim()
   return statusMap[normalized] || 'planned'
 }
 
+import { generateMilestoneIdempotencyKey } from '../../IdempotencyKeyService'
+
 /**
- * Deduplicate milestones by name
+ * Deduplicate milestones by idempotency key
  */
-function deduplicateMilestones(milestones: Milestone[]): Milestone[] {
+function deduplicateMilestones(projectId: string, milestones: Milestone[]): Milestone[] {
   const deduplicatedMap = new Map<string, Milestone>()
-  
+
   milestones.forEach(milestone => {
-    const normalizedName = milestone.name.trim().toLowerCase()
-    
-    if (!deduplicatedMap.has(normalizedName)) {
-      deduplicatedMap.set(normalizedName, milestone)
+    const idempotencyKey = generateMilestoneIdempotencyKey(projectId, {
+      name: milestone.name,
+      planned_date: milestone.due_date
+    })
+
+    if (!deduplicatedMap.has(idempotencyKey)) {
+      // Add hash to the object for later use in save
+      (milestone as any).idempotency_key = idempotencyKey
+      deduplicatedMap.set(idempotencyKey, milestone)
     } else {
-      // Duplicate found - merge details (keep most detailed version)
-      const existing = deduplicatedMap.get(normalizedName)!
+      // Duplicate found - merge details
+      const existing = deduplicatedMap.get(idempotencyKey)!
       const merged: Milestone = {
         ...existing,
         description: milestone.description || existing.description,
@@ -57,11 +64,11 @@ function deduplicateMilestones(milestones: Milestone[]): Milestone[] {
         deliverables: milestone.deliverables?.length ? milestone.deliverables : existing.deliverables,
         dependencies: milestone.dependencies?.length ? milestone.dependencies : existing.dependencies
       }
-      deduplicatedMap.set(normalizedName, merged)
-      logger.debug(`[EXTRACTION-MILESTONES] Merged duplicate milestone: "${milestone.name}"`)
+        ; (merged as any).idempotency_key = idempotencyKey
+      deduplicatedMap.set(idempotencyKey, merged)
     }
   })
-  
+
   return Array.from(deduplicatedMap.values())
 }
 
@@ -81,7 +88,7 @@ export async function saveMilestones(
 
   try {
     // Deduplicate milestones
-    const uniqueMilestones = deduplicateMilestones(milestones)
+    const uniqueMilestones = deduplicateMilestones(projectId, milestones)
     const skippedCount = milestones.length - uniqueMilestones.length
 
     if (skippedCount > 0) {
@@ -93,45 +100,45 @@ export async function saveMilestones(
     const placeholders: string[] = []
 
     uniqueMilestones.forEach((m, index) => {
-      const offset = index * 7
+      const offset = index * 8
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8})`
       )
-      
+
       // Normalize status
       const mappedStatus = normalizeStatus(m.status)
-      
-      // Convert quarter dates like '2025-Q4' to actual dates using utility function
-      // due_date is NOT NULL, so provide a default date if missing (1 year from now)
+
+      // Date normalization
       let dueDate = convertQuarterDate(m.due_date)
       if (!dueDate) {
-        // Default to 1 year from now if no date provided
         const defaultDate = new Date()
         defaultDate.setFullYear(defaultDate.getFullYear() + 1)
         dueDate = defaultDate.toISOString().split('T')[0]
       }
-      
+
       // Resolve source_document_id
       const sourceDocumentId = m.source_document_id || null
-      
+
       values.push(
         projectId,
         m.name,
         m.description,
         dueDate,
-        mappedStatus,  // Use mapped status value
+        mappedStatus,
         sourceDocumentId,
-        userId
+        userId,
+        (m as any).idempotency_key
       )
     })
 
     // Execute bulk insert
     await client.query(
       `INSERT INTO milestones (
-        project_id, name, description, due_date, status, source_document_id, created_by
+        project_id, name, description, due_date, status, source_document_id, created_by, idempotency_key
       )
       VALUES ${placeholders.join(', ')}
-      ON CONFLICT (project_id, name) DO UPDATE SET
+      ON CONFLICT (project_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO UPDATE SET
+        name = EXCLUDED.name,
         description = EXCLUDED.description,
         due_date = EXCLUDED.due_date,
         status = EXCLUDED.status,
@@ -152,7 +159,7 @@ export async function saveMilestones(
       projectId,
       error: error instanceof Error ? error.message : String(error)
     })
-    
+
     return {
       saved: 0,
       skipped: 0,

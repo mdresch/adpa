@@ -1,19 +1,21 @@
-;(async function(){ try{ await (require('../../lib/db')).initDb() } catch(e){} })();
+; (async function () { try { await (require('../../lib/db')).initDb() } catch (e) { } })();
 /**
  * Extraction Orchestrator
  * 
  * Coordinates entity extraction using the registry.
- * Handles errors, partial success, and maintains queue contract compatibility.
+ * Handles errors, partial success, maintains queue contract compatibility,
+ * and logs failures to the dead-letter table for recovery.
  */
 
 import { logger } from '../../utils/logger'
 import { pool } from '../../database/connection'
 import type { PoolClient } from 'pg'
-import type { ExtractionDocument, ExtractionOptions } from './base/ExtractionResult'
+import type { ExtractionDocument, ExtractionOptions, ExtractionResult } from './base/ExtractionResult'
 import { ExtractionContext } from './base/ExtractionContext'
 import { extractionRegistry } from './ExtractionRegistry'
 import type { EntityExtractor, EntitySaver } from './ExtractionRegistry'
 import type { PersistenceResult } from './base/Persistence'
+import { deadLetterService } from './DeadLetterService'
 
 /**
  * Get project documents for extraction
@@ -67,7 +69,7 @@ async function getProjectDocuments(
 }
 
 /**
- * Extract a single entity type
+ * Extract a single entity type (returns only entities for backward compatibility)
  */
 export async function extractSingleEntityType(
   projectId: string,
@@ -75,16 +77,37 @@ export async function extractSingleEntityType(
   entityType: string,
   options: ExtractionOptions = {}
 ): Promise<any[]> {
+  const result = await extractSingleEntityTypeDetailed(projectId, userId, entityType, options)
+  return result.entities
+}
+
+/**
+ * Extract a single entity type with full results and stats
+ */
+export async function extractSingleEntityTypeDetailed(
+  projectId: string,
+  userId: string,
+  entityType: string,
+  options: ExtractionOptions = {}
+): Promise<ExtractionResult<any>> {
+  let correlationId: string | undefined
+
   try {
     // Check if entity is registered and enabled
     if (!extractionRegistry.hasEntity(entityType)) {
       logger.warn(`[EXTRACTION-ORCHESTRATOR] Entity type not registered: ${entityType}`)
-      return []
+      return {
+        entities: [], rejectedCount: 0, skippedCount: 0,
+        stats: { totalExtracted: 0, afterDeduplication: 0, afterSourceResolution: 0, finalCount: 0, cacheHit: false, durationMs: 0, provider: 'none', model: 'none' }
+      }
     }
 
     if (!extractionRegistry.isEnabled(entityType)) {
       logger.info(`[EXTRACTION-ORCHESTRATOR] Entity type disabled via feature flag: ${entityType}`)
-      return []
+      return {
+        entities: [], rejectedCount: 0, skippedCount: 0,
+        stats: { totalExtracted: 0, afterDeduplication: 0, afterSourceResolution: 0, finalCount: 0, cacheHit: false, durationMs: 0, provider: 'none', model: 'none' }
+      }
     }
 
     // Get documents
@@ -92,22 +115,38 @@ export async function extractSingleEntityType(
 
     if (documents.length === 0) {
       logger.warn(`[EXTRACTION-${entityType.toUpperCase()}] No documents found - cannot extract entities`)
-      return []
+      return {
+        entities: [], rejectedCount: 0, skippedCount: 0,
+        stats: {
+          totalExtracted: 0, afterDeduplication: 0, afterSourceResolution: 0, finalCount: 0,
+          cacheHit: false, durationMs: 0, provider: 'none', model: 'none'
+        }
+      }
     }
 
-    // Create context
+    // Create context (includes correlationId generation)
     const context = new ExtractionContext(projectId, userId, documents, options)
+    correlationId = context.correlationId
 
     // Get extractor
     const extractor = extractionRegistry.getExtractor(entityType)
     if (!extractor) {
-      logger.error(`[EXTRACTION-ORCHESTRATOR] No extractor found for: ${entityType}`)
-      return []
+      logger.error(`[EXTRACTION-ORCHESTRATOR] No extractor found for: ${entityType}`, {
+        correlationId
+      })
+      return {
+        entities: [], rejectedCount: 0, skippedCount: 0,
+        stats: {
+          totalExtracted: 0, afterDeduplication: 0, afterSourceResolution: 0, finalCount: 0,
+          cacheHit: false, durationMs: 0, provider: 'none', model: 'none', correlationId
+        }
+      }
     }
 
     // Extract entities
     logger.info(`[EXTRACTION-${entityType.toUpperCase()}] Starting extraction`, {
       projectId,
+      correlationId,
       documentCount: documents.length,
       provider: context.provider,
       model: context.model
@@ -120,19 +159,50 @@ export async function extractSingleEntityType(
 
     logger.info(`[EXTRACTION-${entityType.toUpperCase()}] Extraction completed`, {
       projectId,
+      correlationId,
       entityCount: result.entities.length,
       rejectedCount: result.rejectedCount,
       cacheHit: result.stats.cacheHit,
       durationMs: result.stats.durationMs
     })
 
-    return result.entities
+    return result
   } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    const stackTrace = error instanceof Error ? error.stack : undefined
+
     logger.error(`[EXTRACTION-${entityType.toUpperCase()}] Extraction failed`, {
       projectId,
-      error: error instanceof Error ? error.message : String(error)
+      correlationId,
+      error: errorMessage
     })
-    return []
+
+    // Log to dead-letter table for recovery
+    try {
+      await deadLetterService.logFailure({
+        projectId,
+        entityType,
+        errorMessage,
+        stackTrace: stackTrace ? { message: stackTrace } : undefined,
+        correlationId,
+        status: 'pending'
+      })
+    } catch (dlError: unknown) {
+      logger.error('[EXTRACTION-ORCHESTRATOR] Failed to log to dead-letter', {
+        projectId,
+        correlationId,
+        error: dlError instanceof Error ? dlError.message : String(dlError)
+      })
+      // Don't re-throw; extraction already failed, don't fail again on DL logging
+    }
+
+    return {
+      entities: [], rejectedCount: 0, skippedCount: 0,
+      stats: {
+        totalExtracted: 0, afterDeduplication: 0, afterSourceResolution: 0, finalCount: 0,
+        cacheHit: false, durationMs: 0, provider: 'none', model: 'none', correlationId
+      }
+    }
   }
 }
 
@@ -143,7 +213,8 @@ export async function saveSingleEntityType(
   projectId: string,
   userId: string,
   entityType: string,
-  entities: any[]
+  entities: any[],
+  correlationId?: string
 ): Promise<PersistenceResult> {
   if (!pool) {
     throw new Error('Database pool not initialized')
@@ -156,7 +227,9 @@ export async function saveSingleEntityType(
 
     // Check if entity is registered
     if (!extractionRegistry.hasEntity(entityType)) {
-      logger.warn(`[EXTRACTION-ORCHESTRATOR] Entity type not registered: ${entityType}`)
+      logger.warn(`[EXTRACTION-ORCHESTRATOR] Entity type not registered: ${entityType}`, {
+        correlationId
+      })
       await client.query('ROLLBACK')
       return { saved: 0, skipped: 0, failed: 0 }
     }
@@ -164,20 +237,24 @@ export async function saveSingleEntityType(
     // Get saver
     const saver = extractionRegistry.getSaver(entityType)
     if (!saver) {
-      logger.error(`[EXTRACTION-ORCHESTRATOR] No saver found for: ${entityType}`)
+      logger.error(`[EXTRACTION-ORCHESTRATOR] No saver found for: ${entityType}`, {
+        correlationId
+      })
       await client.query('ROLLBACK')
       return { saved: 0, skipped: 0, failed: 0 }
     }
 
     // Save entities
     logger.info(`[EXTRACTION-${entityType.toUpperCase()}] Saving ${entities.length} entities`, {
-      projectId
+      projectId,
+      correlationId
     })
 
     const result = await saver(client, projectId, userId, entities)
 
     logger.info(`[EXTRACTION-${entityType.toUpperCase()}] Save completed`, {
       projectId,
+      correlationId,
       saved: result.saved,
       skipped: result.skipped,
       failed: result.failed
@@ -191,10 +268,33 @@ export async function saveSingleEntityType(
     return result
   } catch (error: unknown) {
     await client.query('ROLLBACK')
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    const stackTrace = error instanceof Error ? error.stack : undefined
+
     logger.error(`[EXTRACTION-${entityType.toUpperCase()}] Save failed`, {
       projectId,
-      error: error instanceof Error ? error.message : String(error)
+      correlationId,
+      error: errorMessage
     })
+
+    // Log to dead-letter table
+    try {
+      await deadLetterService.logFailure({
+        projectId,
+        entityType,
+        errorMessage,
+        stackTrace: stackTrace ? { message: stackTrace } : undefined,
+        correlationId,
+        status: 'pending'
+      })
+    } catch (dlError: unknown) {
+      logger.error('[EXTRACTION-ORCHESTRATOR] Failed to log save failure to dead-letter', {
+        projectId,
+        correlationId,
+        error: dlError instanceof Error ? dlError.message : String(dlError)
+      })
+    }
+
     throw error
   } finally {
     client.release()
@@ -209,17 +309,37 @@ export async function extractAndSaveEntityType(
   userId: string,
   entityType: string,
   options: ExtractionOptions = {}
-): Promise<{ extracted: number; saved: number; rejected: number }> {
-  const entities = await extractSingleEntityType(projectId, userId, entityType, options)
+): Promise<{ extracted: number; saved: number; rejected: number; correlationId?: string }> {
+  let correlationId: string | undefined
 
-  if (entities.length > 0) {
-    await saveSingleEntityType(projectId, userId, entityType, entities)
-  }
+  try {
+    // Create context to get correlationId
+    const documents = await getProjectDocuments(projectId, options.documentIds)
+    if (documents.length === 0) {
+      return { extracted: 0, saved: 0, rejected: 0 }
+    }
 
-  return {
-    extracted: entities.length,
-    saved: entities.length,
-    rejected: 0 // Rejected entities are filtered out during extraction
+    const context = new ExtractionContext(projectId, userId, documents, options)
+    correlationId = context.correlationId
+
+    const entities = await extractSingleEntityType(projectId, userId, entityType, options)
+
+    if (entities.length > 0) {
+      await saveSingleEntityType(projectId, userId, entityType, entities, correlationId)
+    }
+
+    return {
+      extracted: entities.length,
+      saved: entities.length,
+      rejected: 0,
+      correlationId
+    }
+  } catch (error: unknown) {
+    logger.error(`[EXTRACTION-ORCHESTRATOR] Extract and save failed for ${entityType}`, {
+      projectId,
+      correlationId,
+      error: error instanceof Error ? error.message : String(error)
+    })
+    return { extracted: 0, saved: 0, rejected: 0, correlationId }
   }
 }
-

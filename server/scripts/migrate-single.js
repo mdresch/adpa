@@ -80,7 +80,9 @@ const migrationMap = {
     '394': { file: '394_add_missing_extraction_columns.sql', description: 'Add Missing Columns for Resource Pool, Onboarding Offboarding, and Risk Triggers' },
     '395': { file: '395_enhance_lessons_learned_schema.sql', description: 'Enhance Lessons Learned Schema' },
     '400': { file: '400_align_hierarchy_and_checklists.sql', description: 'Align Hierarchy and Formalize Checklist Items' },
-    '407': { file: '407_create_file_assets.sql', description: 'Create File Assets Table' }
+    '407': { file: '407_create_file_assets.sql', description: 'Create File Assets Table' },
+    '409': { file: '409_extraction_failures_table.sql', description: 'Extraction Failures Table' },
+    '410': { file: '410_add_extraction_idempotency_keys.sql', description: 'Add Extraction Idempotency Keys' }
 };
 
 const migration = migrationMap[migrationNumber];
@@ -143,7 +145,7 @@ async function applyMigration() {
         console.log(`🚀 Applying migration ${migrationNumber}: ${migration.description}`);
 
         // Read the migration file
-        const migrationPath = path.join(__dirname, '../migrations', migration.file);
+        const migrationPath = path.join(__dirname, '../src/database/migrations', migration.file);
 
         if (!fs.existsSync(migrationPath)) {
             console.error(`❌ Migration file not found: ${migrationPath}`);

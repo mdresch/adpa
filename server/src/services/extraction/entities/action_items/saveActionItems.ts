@@ -1,11 +1,8 @@
-/**
- * Save Action Items
- */
-
 import { logger } from '../../../../utils/logger'
 import type { PoolClient } from 'pg'
 import type { PersistenceResult } from '../../base/Persistence'
 import type { ActionItem } from './types'
+import { generateGenericIdempotencyKey } from '../../IdempotencyKeyService'
 
 export async function saveActionItems(
     client: PoolClient,
@@ -18,17 +15,19 @@ export async function saveActionItems(
     }
 
     try {
-        // Delete existing records for this project
-        await client.query('DELETE FROM action_items WHERE project_id = $1', [projectId])
-
         const values: any[] = []
         const placeholders: string[] = []
 
         entities.forEach((e, index) => {
-            const offset = index * 10
+            const offset = index * 11
             placeholders.push(
-                `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10})`
+                `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11})`
             )
+
+            const idempotencyKey = generateGenericIdempotencyKey(projectId, 'action_item', {
+                item_id: e.item_id || '',
+                description: e.description || ''
+            })
 
             values.push(
                 projectId,
@@ -40,17 +39,28 @@ export async function saveActionItems(
                 e.due_date || null,
                 e.completion_date || null,
                 e.source_document_id || null,
-                userId
+                userId,
+                idempotencyKey
             )
         })
 
         await client.query(
             `INSERT INTO action_items (
-        project_id, item_id, description, owner, 
-        priority, status, due_date, completion_date,
-        source_document_id, created_by
-      )
-      VALUES ${placeholders.join(', ')}`,
+                project_id, item_id, description, owner, 
+                priority, status, due_date, completion_date,
+                source_document_id, created_by, idempotency_key
+            )
+            VALUES ${placeholders.join(', ')}
+            ON CONFLICT (project_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO UPDATE SET
+                item_id = EXCLUDED.item_id,
+                description = EXCLUDED.description,
+                owner = EXCLUDED.owner,
+                priority = EXCLUDED.priority,
+                status = EXCLUDED.status,
+                due_date = EXCLUDED.due_date,
+                completion_date = EXCLUDED.completion_date,
+                source_document_id = COALESCE(EXCLUDED.source_document_id, action_items.source_document_id),
+                updated_at = CURRENT_TIMESTAMP`,
             values
         )
 

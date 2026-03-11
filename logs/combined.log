@@ -1086,3 +1086,96 @@
 {"level":"info","message":"[EXTRACTION-STAKEHOLDERS] 💾 Cached 1 entities for future use","service":"adpa-backend","timestamp":"2026-03-03T06:51:48.775Z"}
 {"level":"info","message":"[EXTRACTION-STAKEHOLDERS] Cached deduplicated batched result (5 entities)","service":"adpa-backend","timestamp":"2026-03-03T06:51:48.775Z"}
 {"level":"info","message":"[REDIS] Disconnected","service":"adpa-backend","timestamp":"2026-03-03T06:51:48.777Z"}
+{"level":"warn","message":"[INFLUXDB] Disabled - missing INFLUXDB_TOKEN or INFLUXDB_DATABASE","service":"adpa-backend","timestamp":"2026-03-03T14:38:40.296Z"}
+{"level":"info","message":"AI Service initialized - will fetch AI Gateway key from database","service":"adpa-backend","timestamp":"2026-03-03T14:38:40.303Z"}
+{"level":"info","message":"[REDIS] Creating new Redis client","service":"adpa-backend","timestamp":"2026-03-03T14:38:40.460Z","url":"redis://localhost:6379"}
+{"database":"adpa_db","host":"localhost","level":"info","message":"Attempting to connect to database (attempt 1/1) via Environment hostname (localhost)...","port":5432,"service":"adpa-backend","timeout":"30 seconds","timestamp":"2026-03-03T14:38:40.475Z","user":"postgres"}
+{"documentTitles":["Doc 1","Doc 2","Doc 3","Doc 4","Doc 5"],"entityType":"stakeholders","level":"info","message":"[EXTRACTION-STAKEHOLDERS] Retrieved 5 documents for extraction","model":"mock-model","projectId":"project-batch-test","provider":"mock-provider","service":"adpa-backend","timestamp":"2026-03-03T14:38:40.485Z","totalContentLength":3720}
+{"documentCount":5,"level":"info","message":"[EXTRACTION-STAKEHOLDERS] ❌ Cache miss, calling AI...","model":"mock-model","provider":"mock-provider","service":"adpa-backend","timestamp":"2026-03-03T14:38:40.486Z","totalContentChars":3720}
+{"entityType":"stakeholders","level":"info","maxBatchTokens":100000,"maxDocsPerBatch":2,"message":"[EXTRACTION-STAKEHOLDERS] Executing batched extraction","oversizedDocuments":0,"projectId":"project-batch-test","service":"adpa-backend","timestamp":"2026-03-03T14:38:40.486Z","totalBatches":3,"totalDocuments":5}
+{"documentIds":["d1","d2"],"documentTitles":["Doc 1","Doc 2"],"entityType":"stakeholders","level":"info","message":"[EXTRACTION-STAKEHOLDERS] Retrieved 2 documents for extraction","model":"mock-model","projectId":"project-batch-test","provider":"mock-provider","service":"adpa-backend","timestamp":"2026-03-03T14:38:40.487Z","totalContentLength":1320}
+{"documentCount":2,"level":"info","message":"[EXTRACTION-STAKEHOLDERS] ❌ Cache miss, calling AI...","model":"mock-model","provider":"mock-provider","service":"adpa-backend","timestamp":"2026-03-03T14:38:40.487Z","totalContentChars":1320}
+{"code":"ECONNREFUSED","errno":-4078,"error":"connect ECONNREFUSED ::1:5432","level":"warn","message":"Database connection attempt 1 failed via Environment hostname (localhost):","service":"adpa-backend","syscall":"connect","timestamp":"2026-03-03T14:38:40.501Z"}
+{"database":"adpa_db","host":"localhost","level":"info","message":"Attempting to connect to database (attempt 1/1) via Localhost fallback...","port":5432,"service":"adpa-backend","timeout":"30 seconds","timestamp":"2026-03-03T14:38:40.502Z","user":"postgres"}
+{"level":"error","message":"[REDIS] ❌ Error:","service":"adpa-backend","timestamp":"2026-03-03T14:38:40.503Z"}
+{"level":"warn","message":"[REDIS] ⚠️  Connection closed","service":"adpa-backend","timestamp":"2026-03-03T14:38:40.504Z"}
+{"level":"info","message":"[REDIS] 🔄 Reconnecting...","service":"adpa-backend","timestamp":"2026-03-03T14:38:40.504Z"}
+{"level":"info","message":"[EXTRACTION-STAKEHOLDERS] 💾 Cached 2 entities for future use","service":"adpa-backend","timestamp":"2026-03-03T14:38:40.505Z"}
+{"documentIds":["d3","d4"],"documentTitles":["Doc 3","Doc 4"],"entityType":"stakeholders","level":"info","message":"[EXTRACTION-STAKEHOLDERS] Retrieved 2 documents for extraction","model":"mock-model","projectId":"project-batch-test","provider":"mock-provider","service":"adpa-backend","timestamp":"2026-03-03T14:38:40.505Z","totalContentLength":1440}
+{"documentCount":2,"level":"info","message":"[EXTRACTION-STAKEHOLDERS] ❌ Cache miss, calling AI...","model":"mock-model","provider":"mock-provider","service":"adpa-backend","timestamp":"2026-03-03T14:38:40.506Z","totalContentChars":1440}
+{"code":"ECONNREFUSED","errno":-4078,"error":"connect ECONNREFUSED ::1:5432","level":"warn","message":"Database connection attempt 1 failed via Localhost fallback:","service":"adpa-backend","syscall":"connect","timestamp":"2026-03-03T14:38:40.511Z"}
+{"level":"error","message":"All database connection methods failed","service":"adpa-backend","timestamp":"2026-03-03T14:38:40.511Z"}
+{"level":"info","message":"[EXTRACTION-STAKEHOLDERS] 💾 Cached 2 entities for future use","service":"adpa-backend","timestamp":"2026-03-03T14:38:40.512Z"}
+{"documentIds":["d5"],"documentTitles":["Doc 5"],"entityType":"stakeholders","level":"info","message":"[EXTRACTION-STAKEHOLDERS] Retrieved 1 documents for extraction","model":"mock-model","projectId":"project-batch-test","provider":"mock-provider","service":"adpa-backend","timestamp":"2026-03-03T14:38:40.512Z","totalContentLength":960}
+{"documentCount":1,"level":"info","message":"[EXTRACTION-STAKEHOLDERS] ❌ Cache miss, calling AI...","model":"mock-model","provider":"mock-provider","service":"adpa-backend","timestamp":"2026-03-03T14:38:40.512Z","totalContentChars":960}
+{"level":"info","message":"[EXTRACTION-STAKEHOLDERS] 💾 Cached 1 entities for future use","service":"adpa-backend","timestamp":"2026-03-03T14:38:40.514Z"}
+{"level":"info","message":"[EXTRACTION-STAKEHOLDERS] Cached deduplicated batched result (5 entities)","service":"adpa-backend","timestamp":"2026-03-03T14:38:40.514Z"}
+{"documentTitles":["Doc 1","Doc 2","Doc 3","Doc 4","Doc 5"],"entityType":"stakeholders","level":"info","message":"[EXTRACTION-STAKEHOLDERS] Retrieved 5 documents for extraction","model":"mock-model","projectId":"project-batch-test","provider":"mock-provider","service":"adpa-backend","timestamp":"2026-03-03T14:38:40.515Z","totalContentLength":3720}
+{"level":"info","message":"[EXTRACTION-STAKEHOLDERS] ✅ Using cached result (1 entities)","service":"adpa-backend","timestamp":"2026-03-03T14:38:40.515Z"}
+{"documentIds":["d1","d2"],"documentTitles":["Doc 1","Doc 2"],"entityType":"stakeholders","level":"info","message":"[EXTRACTION-STAKEHOLDERS] Retrieved 2 documents for extraction","model":"mock-model","projectId":"project-batch-test","provider":"mock-provider","service":"adpa-backend","timestamp":"2026-03-03T14:38:40.515Z","totalContentLength":1320}
+{"documentCount":2,"level":"info","message":"[EXTRACTION-STAKEHOLDERS] ❌ Cache miss, calling AI...","model":"mock-model","provider":"mock-provider","service":"adpa-backend","timestamp":"2026-03-03T14:38:40.515Z","totalContentChars":1320}
+{"level":"info","message":"[EXTRACTION-STAKEHOLDERS] 💾 Cached 2 entities for future use","service":"adpa-backend","timestamp":"2026-03-03T14:38:40.516Z"}
+{"level":"info","message":"[REDIS] Disconnected","service":"adpa-backend","timestamp":"2026-03-03T14:38:40.518Z"}
+{"level":"info","message":"AI Service initialized - will fetch AI Gateway key from database","service":"adpa-backend","timestamp":"2026-03-03T14:43:03.581Z"}
+{"level":"info","message":"[REDIS] Creating new Redis client","service":"adpa-backend","timestamp":"2026-03-03T14:43:03.699Z","url":"redis://default:***@turntable.proxy.rlwy.net:55348"}
+{"level":"info","message":"[REDIS] ✅ Connected","service":"adpa-backend","timestamp":"2026-03-03T14:43:04.050Z"}
+{"level":"info","message":"[REDIS] ✅ Ready","service":"adpa-backend","timestamp":"2026-03-03T14:43:04.468Z"}
+{"level":"info","message":"✅ Database connected successfully via DATABASE_URL","service":"adpa-backend","timestamp":"2026-03-03T14:43:06.299Z"}
+{"level":"info","message":"[DB-CONCURRENCY] Pool max (50) >= estimated queue concurrency (0).","service":"adpa-backend","timestamp":"2026-03-03T14:43:06.314Z"}
+{"documentTitles":["Integration Doc 1","Integration Doc 2","Integration Doc 3","Integration Doc 4","Integration Doc 5"],"entityType":"stakeholders","level":"info","message":"[EXTRACTION-STAKEHOLDERS] Retrieved 5 documents for extraction","model":"mock-model","projectId":"f9b79f24-e591-435c-82f9-041bc2a5906e","provider":"mock-provider","service":"adpa-backend","timestamp":"2026-03-03T14:43:07.199Z","totalContentLength":3720}
+{"documentCount":5,"level":"info","message":"[EXTRACTION-STAKEHOLDERS] ❌ Cache miss, calling AI...","model":"mock-model","provider":"mock-provider","service":"adpa-backend","timestamp":"2026-03-03T14:43:07.200Z","totalContentChars":3720}
+{"entityType":"stakeholders","level":"info","maxBatchTokens":100000,"maxDocsPerBatch":2,"message":"[EXTRACTION-STAKEHOLDERS] Executing batched extraction","oversizedDocuments":0,"projectId":"f9b79f24-e591-435c-82f9-041bc2a5906e","service":"adpa-backend","timestamp":"2026-03-03T14:43:07.201Z","totalBatches":3,"totalDocuments":5}
+{"documentIds":["int-d1","int-d2"],"documentTitles":["Integration Doc 1","Integration Doc 2"],"entityType":"stakeholders","level":"info","message":"[EXTRACTION-STAKEHOLDERS] Retrieved 2 documents for extraction","model":"mock-model","projectId":"f9b79f24-e591-435c-82f9-041bc2a5906e","provider":"mock-provider","service":"adpa-backend","timestamp":"2026-03-03T14:43:07.617Z","totalContentLength":1320}
+{"documentCount":2,"level":"info","message":"[EXTRACTION-STAKEHOLDERS] ❌ Cache miss, calling AI...","model":"mock-model","provider":"mock-provider","service":"adpa-backend","timestamp":"2026-03-03T14:43:07.617Z","totalContentChars":1320}
+{"level":"info","message":"[EXTRACTION-STAKEHOLDERS] 💾 Cached 2 entities for future use","service":"adpa-backend","timestamp":"2026-03-03T14:43:07.626Z"}
+{"documentIds":["int-d3","int-d4"],"documentTitles":["Integration Doc 3","Integration Doc 4"],"entityType":"stakeholders","level":"info","message":"[EXTRACTION-STAKEHOLDERS] Retrieved 2 documents for extraction","model":"mock-model","projectId":"f9b79f24-e591-435c-82f9-041bc2a5906e","provider":"mock-provider","service":"adpa-backend","timestamp":"2026-03-03T14:43:07.978Z","totalContentLength":1440}
+{"documentCount":2,"level":"info","message":"[EXTRACTION-STAKEHOLDERS] ❌ Cache miss, calling AI...","model":"mock-model","provider":"mock-provider","service":"adpa-backend","timestamp":"2026-03-03T14:43:07.979Z","totalContentChars":1440}
+{"level":"info","message":"[EXTRACTION-STAKEHOLDERS] 💾 Cached 2 entities for future use","service":"adpa-backend","timestamp":"2026-03-03T14:43:07.980Z"}
+{"documentIds":["int-d5"],"documentTitles":["Integration Doc 5"],"entityType":"stakeholders","level":"info","message":"[EXTRACTION-STAKEHOLDERS] Retrieved 1 documents for extraction","model":"mock-model","projectId":"f9b79f24-e591-435c-82f9-041bc2a5906e","provider":"mock-provider","service":"adpa-backend","timestamp":"2026-03-03T14:43:08.278Z","totalContentLength":960}
+{"documentCount":1,"level":"info","message":"[EXTRACTION-STAKEHOLDERS] ❌ Cache miss, calling AI...","model":"mock-model","provider":"mock-provider","service":"adpa-backend","timestamp":"2026-03-03T14:43:08.278Z","totalContentChars":960}
+{"level":"info","message":"[EXTRACTION-STAKEHOLDERS] 💾 Cached 1 entities for future use","service":"adpa-backend","timestamp":"2026-03-03T14:43:08.280Z"}
+{"level":"info","message":"[EXTRACTION-STAKEHOLDERS] Cached deduplicated batched result (5 entities)","service":"adpa-backend","timestamp":"2026-03-03T14:43:08.429Z"}
+{"level":"info","message":"[REDIS] Disconnected","service":"adpa-backend","timestamp":"2026-03-03T14:43:09.867Z"}
+{"level":"warn","message":"[REDIS] ⚠️  Connection closed","service":"adpa-backend","timestamp":"2026-03-03T14:43:09.868Z"}
+{"level":"warn","message":"[INFLUXDB] Disabled - missing INFLUXDB_TOKEN or INFLUXDB_DATABASE","service":"adpa-backend","timestamp":"2026-03-11T04:20:46.169Z"}
+{"level":"info","message":"AI Service initialized - will fetch AI Gateway key from database","service":"adpa-backend","timestamp":"2026-03-11T04:20:46.747Z"}
+{"level":"info","message":"AI Service initialized - will fetch AI Gateway key from database","service":"adpa-backend","timestamp":"2026-03-11T04:20:46.757Z"}
+{"level":"info","message":"✅ Database connected successfully via DATABASE_URL","service":"adpa-backend","timestamp":"2026-03-11T04:20:52.604Z"}
+{"level":"info","message":"[SemanticSearchService.embedQuery] Calling Voyage API for query: \"# Implementation Plan: Extraction Service Refactor...\"","service":"adpa-backend","timestamp":"2026-03-11T04:20:54.449Z"}
+{"level":"info","message":"[SemanticSearchService.embedQuery] Response received, embedding=SUCCESS (${embedding.length} dims)","service":"adpa-backend","timestamp":"2026-03-11T04:20:59.300Z"}
+{"level":"warn","message":"[GKG-SEARCH] Neo4j unavailable; graph enrichment disabled","service":"adpa-backend","timestamp":"2026-03-11T04:20:59.448Z"}
+{"level":"warn","message":"[GKG-SEARCH] Neo4j unavailable for getRelatedEntitiesByType; returning empty results","service":"adpa-backend","timestamp":"2026-03-11T04:20:59.458Z"}
+{"level":"warn","message":"[INFLUXDB] Disabled - missing INFLUXDB_TOKEN or INFLUXDB_DATABASE","service":"adpa-backend","timestamp":"2026-03-11T04:31:04.571Z"}
+{"level":"info","message":"AI Service initialized - will fetch AI Gateway key from database","service":"adpa-backend","timestamp":"2026-03-11T04:31:04.640Z"}
+{"level":"info","message":"AI Service initialized - will fetch AI Gateway key from database","service":"adpa-backend","timestamp":"2026-03-11T04:31:04.642Z"}
+{"level":"info","message":"✅ Database connected successfully via DATABASE_URL","service":"adpa-backend","timestamp":"2026-03-11T04:31:08.908Z"}
+{"level":"warn","message":"[INFLUXDB] Disabled - missing INFLUXDB_TOKEN or INFLUXDB_DATABASE","service":"adpa-backend","timestamp":"2026-03-11T04:43:34.062Z"}
+{"level":"info","message":"AI Service initialized - will fetch AI Gateway key from database","service":"adpa-backend","timestamp":"2026-03-11T04:43:34.130Z"}
+{"level":"info","message":"AI Service initialized - will fetch AI Gateway key from database","service":"adpa-backend","timestamp":"2026-03-11T04:43:34.131Z"}
+{"level":"info","message":"✅ Database connected successfully via DATABASE_URL","service":"adpa-backend","timestamp":"2026-03-11T04:43:38.746Z"}
+{"level":"warn","message":"[INFLUXDB] Disabled - missing INFLUXDB_TOKEN or INFLUXDB_DATABASE","service":"adpa-backend","timestamp":"2026-03-11T04:53:21.122Z"}
+{"level":"info","message":"AI Service initialized - will fetch AI Gateway key from database","service":"adpa-backend","timestamp":"2026-03-11T04:53:22.783Z"}
+{"level":"info","message":"AI Service initialized - will fetch AI Gateway key from database","service":"adpa-backend","timestamp":"2026-03-11T04:53:22.786Z"}
+{"level":"info","message":"✅ Database connected successfully via DATABASE_URL","service":"adpa-backend","timestamp":"2026-03-11T04:53:27.438Z"}
+{"level":"warn","message":"[INFLUXDB] Disabled - missing INFLUXDB_TOKEN or INFLUXDB_DATABASE","service":"adpa-backend","timestamp":"2026-03-11T09:15:14.014Z"}
+{"level":"info","message":"AI Service initialized - will fetch AI Gateway key from database","service":"adpa-backend","timestamp":"2026-03-11T09:15:14.265Z"}
+{"level":"info","message":"AI Service initialized - will fetch AI Gateway key from database","service":"adpa-backend","timestamp":"2026-03-11T09:15:14.267Z"}
+{"level":"info","message":"✅ Database connected successfully via DATABASE_URL","service":"adpa-backend","timestamp":"2026-03-11T09:15:15.100Z"}
+{"level":"warn","message":"[INFLUXDB] Disabled - missing INFLUXDB_TOKEN or INFLUXDB_DATABASE","service":"adpa-backend","timestamp":"2026-03-11T10:17:46.022Z"}
+{"level":"info","message":"AI Service initialized - will fetch AI Gateway key from database","service":"adpa-backend","timestamp":"2026-03-11T10:17:46.111Z"}
+{"level":"info","message":"AI Service initialized - will fetch AI Gateway key from database","service":"adpa-backend","timestamp":"2026-03-11T10:17:46.112Z"}
+{"error":"The server does not support SSL connections","level":"warn","message":"Database connection attempt 1 failed via DATABASE_URL:","service":"adpa-backend","timestamp":"2026-03-11T10:17:46.165Z"}
+{"database":"adpa","host":"localhost","level":"info","message":"Attempting to connect to database (attempt 1/1) via Environment hostname (localhost)...","port":"6432","service":"adpa-backend","timeout":"30 seconds","timestamp":"2026-03-11T10:17:46.168Z","user":"myuser"}
+{"error":"The server does not support SSL connections","level":"warn","message":"Database connection attempt 1 failed via Environment hostname (localhost):","service":"adpa-backend","timestamp":"2026-03-11T10:17:46.180Z"}
+{"database":"adpa","host":"localhost","level":"info","message":"Attempting to connect to database (attempt 1/1) via Localhost fallback...","port":"6432","service":"adpa-backend","timeout":"30 seconds","timestamp":"2026-03-11T10:17:46.184Z","user":"myuser"}
+{"error":"The server does not support SSL connections","level":"warn","message":"Database connection attempt 1 failed via Localhost fallback:","service":"adpa-backend","timestamp":"2026-03-11T10:17:46.199Z"}
+{"level":"error","message":"All database connection methods failed","service":"adpa-backend","timestamp":"2026-03-11T10:17:46.199Z"}
+{"level":"warn","message":"[INFLUXDB] Disabled - missing INFLUXDB_TOKEN or INFLUXDB_DATABASE","service":"adpa-backend","timestamp":"2026-03-11T10:22:53.137Z"}
+{"level":"info","message":"AI Service initialized - will fetch AI Gateway key from database","service":"adpa-backend","timestamp":"2026-03-11T10:22:53.204Z"}
+{"level":"info","message":"AI Service initialized - will fetch AI Gateway key from database","service":"adpa-backend","timestamp":"2026-03-11T10:22:53.205Z"}
+{"code":"08P01","error":"server login failed: wrong password type","level":"warn","message":"Database connection attempt 1 failed via DATABASE_URL:","service":"adpa-backend","timestamp":"2026-03-11T10:22:53.239Z"}
+{"database":"adpa","host":"localhost","level":"info","message":"Attempting to connect to database (attempt 1/1) via Environment hostname (localhost)...","port":"6432","service":"adpa-backend","timeout":"30 seconds","timestamp":"2026-03-11T10:22:53.241Z","user":"myuser"}
+{"error":"Database connection timeout","level":"warn","message":"Database connection attempt 1 failed via Environment hostname (localhost):","service":"adpa-backend","timestamp":"2026-03-11T10:23:03.246Z"}
+{"database":"adpa","host":"localhost","level":"info","message":"Attempting to connect to database (attempt 1/1) via Localhost fallback...","port":"6432","service":"adpa-backend","timeout":"30 seconds","timestamp":"2026-03-11T10:23:03.249Z","user":"myuser"}
+{"code":"08P01","error":"server login failed: wrong password type","level":"warn","message":"Database connection attempt 1 failed via Localhost fallback:","service":"adpa-backend","timestamp":"2026-03-11T10:23:05.581Z"}
+{"level":"error","message":"All database connection methods failed","service":"adpa-backend","timestamp":"2026-03-11T10:23:05.582Z"}

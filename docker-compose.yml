@@ -1,0 +1,100 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: adpa-postgres_db
+    restart: always
+    environment:
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: mypassword
+      POSTGRES_DB: adpa
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      # Direct PostgreSQL connection, bypasses PgBouncer
+      - "5432:5432"
+
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    container_name: adpa-pgbouncer
+    restart: always
+    environment:
+      # Database access details pointing to the postgres service
+      DB_HOST: postgres
+      DB_USER: myuser
+      DB_PASSWORD: mypassword
+      DB_NAME: adpa
+
+      # Connection pooler parameters
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: 1000
+      DEFAULT_POOL_SIZE: 20
+      AUTH_TYPE: md5
+    ports:
+      # Connections to this port will go through the pooler
+      - "6432:5432"
+    depends_on:
+      - postgres
+
+  redis:
+    image: redis:7-alpine
+    container_name: adpa-redis_cache
+    restart: always
+    # Enable snapshotting for persistence (saves every 60s if at least 1 key changed)
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+
+  rabbitmq:
+    # Using the 'management' tag so we get the web UI built-in
+    image: rabbitmq:3-management-alpine
+    container_name: adpa-rabbitmq_broker
+    restart: always
+    environment:
+      RABBITMQ_DEFAULT_USER: myuser
+      RABBITMQ_DEFAULT_PASS: mypassword
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    ports:
+      - "5672:5672" # Standard AMQP protocol port for application connections
+      - "15672:15672" # RabbitMQ Management Web UI port
+
+  neo4j:
+    image: neo4j:enterprise
+    container_name: adpa-neo4j_db
+    restart: always
+    environment:
+      NEO4J_AUTH: neo4j/mypassword
+      # Accept the Neo4j Enterprise licence for development use
+      NEO4J_ACCEPT_LICENSE_AGREEMENT: "eval"
+      # NEO4J_apoc_export_file_enabled: true
+      # NEO4J_apoc_import_file_enabled: true
+      # NEO4J_apoc_import_file_use__neo4j__config: true
+      # NEO4J_PLUGINS: '["apoc"]'
+    volumes:
+      - neo4j_data:/data
+    ports:
+      - "7474:7474" # HTTP port (for Neo4j Browser)
+      - "7687:7687" # Bolt port (for app connections)
+
+  mongodb:
+    image: mongo:6
+    container_name: adpa-mongodb
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: mypassword
+    volumes:
+      - mongodb_data:/data/db
+    ports:
+      - "27017:27017" # Standard MongoDB port
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:
+  neo4j_data:
+  mongodb_data:

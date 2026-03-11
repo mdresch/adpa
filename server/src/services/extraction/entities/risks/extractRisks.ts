@@ -32,6 +32,7 @@ export async function extractRisks(
   try {
     logger.info('[EXTRACTION-RISKS] Starting extraction', {
       projectId: context.projectId,
+      correlationId: context.correlationId,
       documentCount: context.documents.length
     })
 
@@ -41,13 +42,14 @@ export async function extractRisks(
       context.documentContext,
       'risks',
       context.provider,
-      context.model
+      context.model,
+      context.correlationId
     )
 
     if (cached && cached.length > 0) {
       logger.info(`[EXTRACTION-RISKS] ✅ Using cached result (${cached.length} entities)`)
       cacheHit = true
-      
+
       // Resolve source documents for cached entities
       const validRisks: Risk[] = []
       cached.forEach((risk: any) => {
@@ -57,7 +59,7 @@ export async function extractRisks(
           'RISKS',
           risk.title || 'Unnamed Risk'
         )
-        
+
         if (resolution.resolved) {
           validRisks.push(risk as Risk)
         } else {
@@ -79,13 +81,16 @@ export async function extractRisks(
           cacheHit: true,
           durationMs: Date.now() - startTime,
           provider: context.provider,
-          model: context.model
+          model: context.model,
+          correlationId: context.correlationId
         }
       }
     }
 
     // Cache miss - perform AI extraction
     logger.info(`[EXTRACTION-RISKS] ❌ Cache miss, calling AI...`, {
+      projectId: context.projectId,
+      correlationId: context.correlationId,
       provider: context.provider,
       model: context.model,
       documentCount: context.documents.length
@@ -143,7 +148,7 @@ export async function extractRisks(
 
     // Resolve source_document_id for each risk (STRICT: reject if missing)
     const validRisks: Risk[] = []
-    
+
     deduplicatedRisks.forEach((risk) => {
       const resolution = resolveSourceDocumentIdStrict(
         risk,
@@ -151,7 +156,7 @@ export async function extractRisks(
         'RISKS',
         risk.title || 'Unnamed Risk'
       )
-      
+
       if (resolution.resolved) {
         validRisks.push(risk)
       } else {
@@ -164,8 +169,11 @@ export async function extractRisks(
     if (rejectedCount > 0) {
       logger.warn(`[EXTRACTION-RISKS] REJECTED ${rejectedCount} risks without valid source_document_id (out of ${deduplicatedRisks.length} total)`)
     }
-    
-    logger.info(`[EXTRACTION-RISKS] Extracted ${validRisks.length} risks with valid source_document_id (${rejectedCount} rejected)`)
+
+    logger.info(`[EXTRACTION-RISKS] Extracted ${validRisks.length} risks with valid source_document_id (${rejectedCount} rejected)`, {
+      projectId: context.projectId,
+      correlationId: context.correlationId
+    })
 
     // Cache the result
     if (validRisks.length > 0) {
@@ -175,7 +183,8 @@ export async function extractRisks(
         'risks',
         validRisks,
         context.provider,
-        context.model
+        context.model,
+        context.correlationId
       )
     }
 
@@ -197,24 +206,12 @@ export async function extractRisks(
   } catch (error: unknown) {
     logger.error('[EXTRACTION-RISKS] Extraction failed', {
       projectId: context.projectId,
+      correlationId: context.correlationId,
       error: error instanceof Error ? error.message : String(error)
     })
-    
-    return {
-      entities: [],
-      rejectedCount: 0,
-      skippedCount: 0,
-      stats: {
-        totalExtracted: 0,
-        afterDeduplication: 0,
-        afterSourceResolution: 0,
-        finalCount: 0,
-        cacheHit,
-        durationMs: Date.now() - startTime,
-        provider: context.provider,
-        model: context.model
-      }
-    }
+
+    // Re-throw to trigger Orchestrator dead-letter logging andBull retry
+    throw error
   }
 }
 
@@ -223,10 +220,10 @@ export async function extractRisks(
  */
 function deduplicateRisksBatch(risks: Risk[]): Risk[] {
   const deduplicatedMap = new Map<string, Risk>()
-  
+
   risks.forEach(risk => {
     const normalizedTitle = risk.title.trim().toLowerCase()
-    
+
     if (!deduplicatedMap.has(normalizedTitle)) {
       deduplicatedMap.set(normalizedTitle, risk)
     } else {
@@ -246,7 +243,7 @@ function deduplicateRisksBatch(risks: Risk[]): Risk[] {
       logger.debug(`[EXTRACTION-RISKS] Merged duplicate risk: "${risk.title}"`)
     }
   })
-  
+
   return Array.from(deduplicatedMap.values())
 }
 

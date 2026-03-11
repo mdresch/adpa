@@ -23,6 +23,7 @@ export async function extractWBSNodes(
     try {
         logger.info('[EXTRACTION-WBS-NODES] Starting extraction', {
             projectId: context.projectId,
+            correlationId: context.correlationId,
             documentCount: context.documents.length
         })
 
@@ -32,7 +33,8 @@ export async function extractWBSNodes(
             context.documentContext,
             'wbs_nodes',
             context.provider,
-            context.model
+            context.model,
+            context.correlationId
         )
 
         if (cached && cached.length > 0) {
@@ -50,7 +52,8 @@ export async function extractWBSNodes(
                     cacheHit: true,
                     durationMs: Date.now() - startTime,
                     provider: context.provider,
-                    model: context.model
+                    model: context.model,
+                    correlationId: context.correlationId
                 }
             }
         }
@@ -127,7 +130,8 @@ export async function extractWBSNodes(
                 'wbs_nodes',
                 validEntities,
                 context.provider,
-                context.model
+                context.model,
+                context.correlationId
             )
         }
 
@@ -143,12 +147,14 @@ export async function extractWBSNodes(
                 cacheHit: false,
                 durationMs: Date.now() - startTime,
                 provider: context.provider,
-                model: context.model
+                model: context.model,
+                correlationId: context.correlationId
             }
         }
     } catch (error: unknown) {
         logger.error('[EXTRACTION-WBS-NODES] Extraction failed', {
             projectId: context.projectId,
+            correlationId: context.correlationId,
             error: error instanceof Error ? error.message : String(error)
         })
         throw error

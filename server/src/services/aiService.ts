@@ -223,11 +223,25 @@ class AIService {
 
     addCandidate(preferredModel)
     addCandidate(process.env.OLLAMA_MODEL)
-    addCandidate(fallbackModel)
 
     if (hasInstalledModels) {
-      installedModels.forEach(addCandidate)
+      const localInstalledModels = installedModels.filter(model => !model.toLowerCase().includes(':cloud'))
+      const cloudInstalledModels = installedModels.filter(model => model.toLowerCase().includes(':cloud'))
+      const fallbackModelIsCloud = fallbackModel.toLowerCase().includes(':cloud')
+
+      if (!fallbackModelIsCloud || localInstalledModels.length === 0) {
+        addCandidate(fallbackModel)
+      }
+
+      localInstalledModels.forEach(addCandidate)
+
+      if (fallbackModelIsCloud && localInstalledModels.length > 0) {
+        addCandidate(fallbackModel)
+      }
+
+      cloudInstalledModels.forEach(addCandidate)
     } else {
+      addCandidate(fallbackModel)
       this.getModelsForProvider('ollama').forEach(addCandidate)
     }
 
@@ -675,9 +689,12 @@ class AIService {
         if (isInsufficientFunds) {
           logger.error(`💳 [AI-CREDITS] Provider ${provider} has insufficient funds/credits or capacity exceeded`)
           await autoDisableProvider(provider, `Insufficient capacity: ${errorMessage}`)
-        } else if (isInvalidCredentials) {
+        } else if (isInvalidCredentials && provider !== 'ollama') {
           logger.error(`🔐 [AI-AUTH] Provider ${provider} has invalid credentials`)
           await autoDisableProvider(provider, `Invalid credentials: ${errorMessage}`)
+        } else if (isInvalidCredentials && provider === 'ollama') {
+          logger.warn('🔐 [AI-AUTH] Ollama returned unauthorized; keeping provider active to allow fallback to local models')
+          this.recordProviderFailure(provider)
         } else if (isModelNotFound) {
           logger.warn(`🔍 [AI-FALLBACK] Provider ${provider} model not found - will try next provider`)
           // Don't disable provider for model errors - just try next one
@@ -1367,7 +1384,7 @@ class AIService {
           const genAI = new GoogleGenerativeAI(directApiKey)
 
           // Map deprecated/unavailable models to current working ones
-          // Note: gemini-2.0-flash is stable and confirmed working with v1beta API
+          // Note: gemini-2.0-flash is stable and confirmed working with v1 API
           const modelMap: Record<string, string> = {
             'gemini-pro': 'gemini-2.0-flash',
             'gemini-pro-vision': 'gemini-2.0-flash',
@@ -1385,7 +1402,7 @@ class AIService {
           const requestedModel = request.model || 'gemini-2.0-flash'
           const modelName = modelMap[requestedModel] || requestedModel
 
-          // Validate model name (ensure it's a current model that works in v1beta API)
+          // Validate model name (ensure it's a current model that works in v1 API)
           const validModels = ['gemini-2.0-flash', 'gemini-2.0-flash-exp']
           const finalModel = validModels.includes(modelName) ? modelName : 'gemini-2.0-flash'
 
@@ -1873,9 +1890,17 @@ class AIService {
             const errorMessage = ollamaError?.message || 'Unknown Ollama error'
             const errorMessageLower = errorMessage.toLowerCase()
             const isModelNotFound = errorMessageLower.includes('model') && errorMessageLower.includes('not found')
+            const isOllamaCloudAuthError =
+              errorMessageLower.includes('unauthorized') &&
+              (errorMessageLower.includes('signin_url') || modelName.toLowerCase().includes(':cloud'))
 
             if (isModelNotFound && modelIndex < ollamaModelCandidates.length - 1) {
               logger.warn(`[AI-SERVICE] Ollama model "${modelName}" unavailable, trying next candidate`)
+              continue
+            }
+
+            if (isOllamaCloudAuthError && modelIndex < ollamaModelCandidates.length - 1) {
+              logger.warn(`[AI-SERVICE] Ollama cloud model "${modelName}" requires authentication, trying next local candidate`)
               continue
             }
 
@@ -2236,7 +2261,7 @@ class AIService {
       modelId = mappedModel
     }
 
-    // Validate model against valid models list for Google (v1beta API compatibility)
+    // Validate model against valid models list for Google (v1 API compatibility)
     if (providerType === 'google') {
       const validModels = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-exp']
       if (!validModels.includes(modelId)) {
@@ -2353,7 +2378,7 @@ class AIService {
       case "openai":
         return ["gpt-4o", "gpt-4-turbo", "gpt-4", "gpt-3.5-turbo", "gpt-5"]
       case "google":
-        // Only include models confirmed to work in v1beta API
+        // Only include models confirmed to work in v1 API
         return ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"]
       case "azure":
         return ["gpt-4", "gpt-35-turbo", "gpt-4-32k"]

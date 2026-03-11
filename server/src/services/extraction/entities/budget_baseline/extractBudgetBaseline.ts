@@ -23,6 +23,7 @@ export async function extractBudgetBaseline(
     try {
         logger.info('[EXTRACTION-BUDGET-BASELINE] Starting extraction', {
             projectId: context.projectId,
+            correlationId: context.correlationId,
             documentCount: context.documents.length
         })
 
@@ -32,7 +33,8 @@ export async function extractBudgetBaseline(
             context.documentContext,
             'budget_baseline',
             context.provider,
-            context.model
+            context.model,
+            context.correlationId
         )
 
         if (cached && cached.length > 0) {
@@ -50,7 +52,8 @@ export async function extractBudgetBaseline(
                     cacheHit: true,
                     durationMs: Date.now() - startTime,
                     provider: context.provider,
-                    model: context.model
+                    model: context.model,
+                    correlationId: context.correlationId
                 }
             }
         }
@@ -128,7 +131,8 @@ export async function extractBudgetBaseline(
                 'budget_baseline',
                 validEntities,
                 context.provider,
-                context.model
+                context.model,
+                context.correlationId
             )
         }
 
@@ -144,12 +148,14 @@ export async function extractBudgetBaseline(
                 cacheHit: false,
                 durationMs: Date.now() - startTime,
                 provider: context.provider,
-                model: context.model
+                model: context.model,
+                correlationId: context.correlationId
             }
         }
     } catch (error: unknown) {
         logger.error('[EXTRACTION-BUDGET-BASELINE] Extraction failed', {
             projectId: context.projectId,
+            correlationId: context.correlationId,
             error: error instanceof Error ? error.message : String(error)
         })
         throw error

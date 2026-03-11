@@ -32,7 +32,7 @@ function normalizeStatus(rawStatus: string | undefined): 'draft' | 'approved' | 
     'completed': 'implemented',
     'deferred': 'draft'
   }
-  
+
   if (!rawStatus) return 'draft'
   const normalized = rawStatus.toLowerCase().trim()
   return statusMap[normalized] || 'draft'
@@ -52,7 +52,7 @@ function normalizePriority(rawPriority: string | undefined): 'high' | 'medium' |
     'low': 'low',
     'very_low': 'low'
   }
-  
+
   if (!rawPriority) return 'medium'
   const normalized = rawPriority.toLowerCase().trim()
   return priorityMap[normalized] || 'medium'
@@ -71,26 +71,32 @@ function normalizeType(rawType: string | undefined): 'functional' | 'non_functio
     'business': 'business',
     'technical': 'technical'
   }
-  
+
   if (!rawType) return 'functional'
   const normalized = rawType.toLowerCase().trim()
   return typeMap[normalized] || 'functional'
 }
 
+import { generateRequirementIdempotencyKey } from '../../IdempotencyKeyService'
+
 /**
- * Deduplicate requirements by title
+ * Deduplicate requirements by idempotency key
  */
-function deduplicateRequirements(requirements: Requirement[]): Requirement[] {
+function deduplicateRequirements(projectId: string, requirements: Requirement[]): Requirement[] {
   const deduplicatedMap = new Map<string, Requirement>()
-  
+
   requirements.forEach(req => {
-    const normalizedTitle = req.title.trim().toLowerCase()
-    
-    if (!deduplicatedMap.has(normalizedTitle)) {
-      deduplicatedMap.set(normalizedTitle, req)
+    const idempotencyKey = generateRequirementIdempotencyKey(projectId, {
+      title: req.title,
+      description: req.description
+    })
+
+    if (!deduplicatedMap.has(idempotencyKey)) {
+      (req as any).idempotency_key = idempotencyKey
+      deduplicatedMap.set(idempotencyKey, req)
     } else {
-      // Duplicate found - merge details (keep most detailed version)
-      const existing = deduplicatedMap.get(normalizedTitle)!
+      // Duplicate found - merge details
+      const existing = deduplicatedMap.get(idempotencyKey)!
       const merged: Requirement = {
         ...existing,
         description: req.description || existing.description,
@@ -100,11 +106,11 @@ function deduplicateRequirements(requirements: Requirement[]): Requirement[] {
         acceptance_criteria: req.acceptance_criteria || existing.acceptance_criteria,
         source: req.source || existing.source
       }
-      deduplicatedMap.set(normalizedTitle, merged)
-      logger.debug(`[EXTRACTION-REQUIREMENTS] Merged duplicate requirement: "${req.title}"`)
+        ; (merged as any).idempotency_key = idempotencyKey
+      deduplicatedMap.set(idempotencyKey, merged)
     }
   })
-  
+
   return Array.from(deduplicatedMap.values())
 }
 
@@ -124,7 +130,7 @@ export async function saveRequirements(
 
   try {
     // Deduplicate requirements
-    const uniqueRequirements = deduplicateRequirements(requirements)
+    const uniqueRequirements = deduplicateRequirements(projectId, requirements)
     const skippedCount = requirements.length - uniqueRequirements.length
 
     if (skippedCount > 0) {
@@ -136,34 +142,34 @@ export async function saveRequirements(
     const placeholders: string[] = []
 
     uniqueRequirements.forEach((r, index) => {
-      const offset = index * 10
+      const offset = index * 11
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11})`
       )
-      
+
       // Convert acceptance_criteria string to array if it exists
       const acceptanceCriteria = normalizeAcceptanceCriteria(r.acceptance_criteria)
-      
+
       // Normalize enum values
       const mappedStatus = normalizeStatus(r.status)
       const mappedPriority = normalizePriority(r.priority)
       const mappedType = normalizeType(r.type)
-      
+
       // Resolve source_document_id
       const sourceDocumentId = r.source_document_id || null
-      
-      // Both title and name columns use the same value (title)
+
       values.push(
         projectId,
-        r.title,        // For title column
-        r.title,        // For name column (NOT NULL requirement)
+        r.title,
+        r.title,        // For name column
         r.description,
-        mappedType,     // Use mapped type value
-        mappedPriority, // Use mapped priority value
-        mappedStatus,   // Use mapped status value
+        mappedType,
+        mappedPriority,
+        mappedStatus,
         acceptanceCriteria,
         sourceDocumentId,
-        userId
+        userId,
+        (r as any).idempotency_key
       )
     })
 
@@ -171,11 +177,12 @@ export async function saveRequirements(
     await client.query(
       `INSERT INTO requirements (
         project_id, title, name, description, type, priority, status, 
-        acceptance_criteria, source_document_id, created_by
+        acceptance_criteria, source_document_id, created_by, idempotency_key
       )
       VALUES ${placeholders.join(', ')}
-      ON CONFLICT (project_id, name) DO UPDATE SET
+      ON CONFLICT (project_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO UPDATE SET
         title = EXCLUDED.title,
+        name = EXCLUDED.name,
         description = EXCLUDED.description,
         type = EXCLUDED.type,
         priority = EXCLUDED.priority,
@@ -198,7 +205,7 @@ export async function saveRequirements(
       projectId,
       error: error instanceof Error ? error.message : String(error)
     })
-    
+
     return {
       saved: 0,
       skipped: 0,

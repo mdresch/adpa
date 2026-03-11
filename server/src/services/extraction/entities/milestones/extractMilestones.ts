@@ -32,6 +32,7 @@ export async function extractMilestones(
   try {
     logger.info('[EXTRACTION-MILESTONES] Starting extraction', {
       projectId: context.projectId,
+      correlationId: context.correlationId,
       documentCount: context.documents.length
     })
 
@@ -41,13 +42,14 @@ export async function extractMilestones(
       context.documentContext,
       'milestones',
       context.provider,
-      context.model
+      context.model,
+      context.correlationId
     )
 
     if (cached && cached.length > 0) {
       logger.info(`[EXTRACTION-MILESTONES] ✅ Using cached result (${cached.length} entities)`)
       cacheHit = true
-      
+
       // Resolve source documents for cached entities
       const validMilestones: Milestone[] = []
       cached.forEach((milestone: any) => {
@@ -57,7 +59,7 @@ export async function extractMilestones(
           'MILESTONES',
           milestone.name || 'Unnamed Milestone'
         )
-        
+
         if (resolution.resolved) {
           validMilestones.push(milestone as Milestone)
         } else {
@@ -79,13 +81,16 @@ export async function extractMilestones(
           cacheHit: true,
           durationMs: Date.now() - startTime,
           provider: context.provider,
-          model: context.model
+          model: context.model,
+          correlationId: context.correlationId
         }
       }
     }
 
     // Cache miss - perform AI extraction
     logger.info(`[EXTRACTION-MILESTONES] ❌ Cache miss, calling AI...`, {
+      projectId: context.projectId,
+      correlationId: context.correlationId,
       provider: context.provider,
       model: context.model,
       documentCount: context.documents.length
@@ -153,7 +158,7 @@ ${basePrompt}`
 
     // Resolve source_document_id for each milestone (STRICT: reject if missing)
     const validMilestones: Milestone[] = []
-    
+
     deduplicatedMilestones.forEach((milestone) => {
       const resolution = resolveSourceDocumentIdStrict(
         milestone,
@@ -161,7 +166,7 @@ ${basePrompt}`
         'MILESTONES',
         milestone.name || 'Unnamed Milestone'
       )
-      
+
       if (resolution.resolved) {
         validMilestones.push(milestone)
       } else {
@@ -172,10 +177,16 @@ ${basePrompt}`
     afterSourceResolution = validMilestones.length
 
     if (rejectedCount > 0) {
-      logger.warn(`[EXTRACTION-MILESTONES] REJECTED ${rejectedCount} milestones without valid source_document_id (out of ${deduplicatedMilestones.length} total)`)
+      logger.warn(`[EXTRACTION-MILESTONES] REJECTED ${rejectedCount} milestones without valid source_document_id (out of ${deduplicatedMilestones.length} total)`, {
+        projectId: context.projectId,
+        correlationId: context.correlationId
+      })
     }
-    
-    logger.info(`[EXTRACTION-MILESTONES] Extracted ${validMilestones.length} milestones with valid source_document_id (${rejectedCount} rejected)`)
+
+    logger.info(`[EXTRACTION-MILESTONES] Extracted ${validMilestones.length} milestones with valid source_document_id (${rejectedCount} rejected)`, {
+      projectId: context.projectId,
+      correlationId: context.correlationId
+    })
 
     // Cache the result
     if (validMilestones.length > 0) {
@@ -185,7 +196,8 @@ ${basePrompt}`
         'milestones',
         validMilestones,
         context.provider,
-        context.model
+        context.model,
+        context.correlationId
       )
     }
 
@@ -207,24 +219,12 @@ ${basePrompt}`
   } catch (error: unknown) {
     logger.error('[EXTRACTION-MILESTONES] Extraction failed', {
       projectId: context.projectId,
+      correlationId: context.correlationId,
       error: error instanceof Error ? error.message : String(error)
     })
-    
-    return {
-      entities: [],
-      rejectedCount: 0,
-      skippedCount: 0,
-      stats: {
-        totalExtracted: 0,
-        afterDeduplication: 0,
-        afterSourceResolution: 0,
-        finalCount: 0,
-        cacheHit,
-        durationMs: Date.now() - startTime,
-        provider: context.provider,
-        model: context.model
-      }
-    }
+
+    // Re-throw to trigger Orchestrator dead-letter logging and Bull retry
+    throw error
   }
 }
 
@@ -233,10 +233,10 @@ ${basePrompt}`
  */
 function deduplicateMilestonesBatch(milestones: Milestone[]): Milestone[] {
   const deduplicatedMap = new Map<string, Milestone>()
-  
+
   milestones.forEach(milestone => {
     const normalizedName = milestone.name.trim().toLowerCase()
-    
+
     if (!deduplicatedMap.has(normalizedName)) {
       deduplicatedMap.set(normalizedName, milestone)
     } else {
@@ -254,7 +254,7 @@ function deduplicateMilestonesBatch(milestones: Milestone[]): Milestone[] {
       logger.debug(`[EXTRACTION-MILESTONES] Merged duplicate milestone: "${milestone.name}"`)
     }
   })
-  
+
   return Array.from(deduplicatedMap.values())
 }
 

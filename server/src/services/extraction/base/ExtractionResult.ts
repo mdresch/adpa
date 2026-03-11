@@ -39,6 +39,8 @@ export interface ExtractionStats {
   provider?: string
   /** AI model used */
   model?: string
+  /** Correlation ID for tracing */
+  correlationId?: string
 }
 
 /**
@@ -65,6 +67,8 @@ export interface ExtractionOptions {
   temperature?: number
   /** Maximum tokens for AI response */
   maxTokens?: number
+  /** Correlation ID for tracing the extraction run */
+  correlationId?: string
 }
 
 /**

@@ -32,6 +32,7 @@ export async function extractRequirements(
   try {
     logger.info('[EXTRACTION-REQUIREMENTS] Starting extraction', {
       projectId: context.projectId,
+      correlationId: context.correlationId,
       documentCount: context.documents.length
     })
 
@@ -41,13 +42,14 @@ export async function extractRequirements(
       context.documentContext,
       'requirements',
       context.provider,
-      context.model
+      context.model,
+      context.correlationId
     )
 
     if (cached && cached.length > 0) {
       logger.info(`[EXTRACTION-REQUIREMENTS] ✅ Using cached result (${cached.length} entities)`)
       cacheHit = true
-      
+
       // Resolve source documents for cached entities
       const validRequirements: Requirement[] = []
       cached.forEach((requirement: any) => {
@@ -57,7 +59,7 @@ export async function extractRequirements(
           'REQUIREMENTS',
           requirement.title || requirement.name || 'Unnamed Requirement'
         )
-        
+
         if (resolution.resolved) {
           validRequirements.push(requirement as Requirement)
         } else {
@@ -79,13 +81,16 @@ export async function extractRequirements(
           cacheHit: true,
           durationMs: Date.now() - startTime,
           provider: context.provider,
-          model: context.model
+          model: context.model,
+          correlationId: context.correlationId
         }
       }
     }
 
     // Cache miss - perform AI extraction
     logger.info(`[EXTRACTION-REQUIREMENTS] ❌ Cache miss, calling AI...`, {
+      projectId: context.projectId,
+      correlationId: context.correlationId,
       provider: context.provider,
       model: context.model,
       documentCount: context.documents.length
@@ -143,15 +148,15 @@ export async function extractRequirements(
 
     // Resolve source_document_id for each requirement (STRICT: reject if missing)
     const validRequirements: Requirement[] = []
-    
+
     deduplicatedRequirements.forEach((requirement) => {
       const resolution = resolveSourceDocumentIdStrict(
         requirement,
         context,
         'REQUIREMENTS',
-        requirement.title || requirement.name || 'Unnamed Requirement'
+        requirement.title || 'Unnamed Requirement'
       )
-      
+
       if (resolution.resolved) {
         validRequirements.push(requirement)
       } else {
@@ -162,10 +167,16 @@ export async function extractRequirements(
     afterSourceResolution = validRequirements.length
 
     if (rejectedCount > 0) {
-      logger.warn(`[EXTRACTION-REQUIREMENTS] REJECTED ${rejectedCount} requirements without valid source_document_id (out of ${deduplicatedRequirements.length} total)`)
+      logger.warn(`[EXTRACTION-REQUIREMENTS] REJECTED ${rejectedCount} requirements without valid source_document_id (out of ${deduplicatedRequirements.length} total)`, {
+        projectId: context.projectId,
+        correlationId: context.correlationId
+      })
     }
-    
-    logger.info(`[EXTRACTION-REQUIREMENTS] Extracted ${validRequirements.length} requirements with valid source_document_id (${rejectedCount} rejected)`)
+
+    logger.info(`[EXTRACTION-REQUIREMENTS] Extracted ${validRequirements.length} requirements with valid source_document_id (${rejectedCount} rejected)`, {
+      projectId: context.projectId,
+      correlationId: context.correlationId
+    })
 
     // Cache the result
     if (validRequirements.length > 0) {
@@ -175,7 +186,8 @@ export async function extractRequirements(
         'requirements',
         validRequirements,
         context.provider,
-        context.model
+        context.model,
+        context.correlationId
       )
     }
 
@@ -191,30 +203,19 @@ export async function extractRequirements(
         cacheHit: false,
         durationMs: Date.now() - startTime,
         provider: context.provider,
-        model: context.model
+        model: context.model,
+        correlationId: context.correlationId
       }
     }
   } catch (error: unknown) {
     logger.error('[EXTRACTION-REQUIREMENTS] Extraction failed', {
       projectId: context.projectId,
+      correlationId: context.correlationId,
       error: error instanceof Error ? error.message : String(error)
     })
-    
-    return {
-      entities: [],
-      rejectedCount: 0,
-      skippedCount: 0,
-      stats: {
-        totalExtracted: 0,
-        afterDeduplication: 0,
-        afterSourceResolution: 0,
-        finalCount: 0,
-        cacheHit,
-        durationMs: Date.now() - startTime,
-        provider: context.provider,
-        model: context.model
-      }
-    }
+
+    // Re-throw to trigger Orchestrator dead-letter logging and Bull retry
+    throw error
   }
 }
 
@@ -223,10 +224,10 @@ export async function extractRequirements(
  */
 function deduplicateRequirementsBatch(requirements: Requirement[]): Requirement[] {
   const deduplicatedMap = new Map<string, Requirement>()
-  
+
   requirements.forEach(req => {
     const normalizedTitle = req.title.trim().toLowerCase()
-    
+
     if (!deduplicatedMap.has(normalizedTitle)) {
       deduplicatedMap.set(normalizedTitle, req)
     } else {
@@ -245,7 +246,7 @@ function deduplicateRequirementsBatch(requirements: Requirement[]): Requirement[
       logger.debug(`[EXTRACTION-REQUIREMENTS] Merged duplicate requirement: "${req.title}"`)
     }
   })
-  
+
   return Array.from(deduplicatedMap.values())
 }
 

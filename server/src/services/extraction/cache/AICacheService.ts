@@ -16,7 +16,8 @@ export interface IExtractionCacheService {
     documentContext: string,
     entityType: string,
     aiProvider?: string,
-    aiModel?: string
+    aiModel?: string,
+    correlationId?: string
   ): Promise<any[] | null>
 
   set(
@@ -26,6 +27,7 @@ export interface IExtractionCacheService {
     entities: any[],
     aiProvider?: string,
     aiModel?: string,
+    correlationId?: string,
     ttl?: number
   ): Promise<void>
 
@@ -45,14 +47,16 @@ export class ExtractionCacheService implements IExtractionCacheService {
     documentContext: string,
     entityType: string,
     aiProvider?: string,
-    aiModel?: string
+    aiModel?: string,
+    correlationId?: string
   ): Promise<any[] | null> {
     return aiCacheService.get(
       projectId,
       documentContext,
       entityType,
       aiProvider,
-      aiModel
+      aiModel,
+      correlationId
     )
   }
 
@@ -66,6 +70,7 @@ export class ExtractionCacheService implements IExtractionCacheService {
     entities: any[],
     aiProvider?: string,
     aiModel?: string,
+    correlationId?: string,
     ttl?: number
   ): Promise<void> {
     return aiCacheService.set(
@@ -75,6 +80,7 @@ export class ExtractionCacheService implements IExtractionCacheService {
       entities,
       aiProvider,
       aiModel,
+      correlationId,
       ttl
     )
   }
@@ -91,4 +97,3 @@ export class ExtractionCacheService implements IExtractionCacheService {
  * Default cache service instance
  */
 export const extractionCacheService = new ExtractionCacheService()
-

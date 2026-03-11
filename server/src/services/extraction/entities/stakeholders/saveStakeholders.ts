@@ -10,6 +10,7 @@ import type { PoolClient } from 'pg'
 import type { PersistenceResult } from '../../base/Persistence'
 import { truncateString } from '../../base/Persistence'
 import type { Stakeholder } from './types'
+import { generateStakeholderIdempotencyKey } from '../../IdempotencyKeyService'
 
 /**
  * Normalize stakeholder name for deduplication
@@ -58,27 +59,27 @@ async function filterExistingStakeholders(
       `SELECT name FROM stakeholders WHERE project_id = $1`,
       [projectId]
     )
-    
+
     const existingStakeholders = existingStakeholdersResult.rows
-    
+
     if (existingStakeholders.length === 0) {
       return stakeholders
     }
-    
+
     // Create a set of normalized existing stakeholder names
     const existingNormalized = new Set<string>()
     existingStakeholders.forEach(existing => {
       const normalized = normalizeStakeholderName(existing.name)
       existingNormalized.add(normalized)
     })
-    
+
     // Filter out stakeholders that match existing ones
     const newStakeholders: Stakeholder[] = []
     let skippedCount = 0
-    
+
     stakeholders.forEach(stakeholder => {
       const normalized = normalizeStakeholderName(stakeholder.name)
-      
+
       if (existingNormalized.has(normalized)) {
         // Match found - skip this stakeholder (already exists)
         skippedCount++
@@ -88,11 +89,11 @@ async function filterExistingStakeholders(
         newStakeholders.push(stakeholder)
       }
     })
-    
+
     if (skippedCount > 0) {
       logger.info(`[DEDUP-DB] Skipped ${skippedCount} stakeholders that already exist in database (normalized name match)`)
     }
-    
+
     return newStakeholders
   } catch (error) {
     logger.warn(`[DEDUP-DB] Failed to check existing stakeholders, proceeding with all extracted stakeholders:`, error)
@@ -130,32 +131,31 @@ export async function saveStakeholders(
     const placeholders: string[] = []
 
     stakeholdersToSave.forEach((s, index) => {
-      const offset = index * 10
+      const offset = index * 11
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11})`
       )
-      
+
       // Truncate fields to match database constraints
       const name = s.name ? truncateString(s.name, 255) : 'Unnamed Stakeholder'
       const role = s.role ? truncateString(s.role, 100) : 'Stakeholder'
       // Email is NOT NULL in database, use placeholder if missing
       const email = s.email ? truncateString(s.email, 255) : generatePlaceholderEmail(name)
-      
+
       // Normalize influence_level and interest_level to valid enum values
       const interestLevel = normalizeLevel(s.interest_level)
       const influenceLevel = normalizeLevel(s.influence_level)
-      
+
       // Resolve source_document_id if available
       const sourceDocumentId = s.source_document_id || null
-      
-      // Log if truncation occurred
-      if (s.name && s.name.length > 255) {
-        logger.warn(`[EXTRACTION] Stakeholder name truncated from ${s.name.length} to 255 chars: "${s.name.substring(0, 50)}..."`)
-      }
-      if (s.role && s.role.length > 100) {
-        logger.warn(`[EXTRACTION] Stakeholder role truncated from ${s.role.length} to 100 chars: "${s.role.substring(0, 50)}..."`)
-      }
-      
+
+      // Generate idempotency key for safe re-runs
+      const idempotencyKey = generateStakeholderIdempotencyKey(projectId, {
+        name,
+        role,
+        organization: s.department || ''
+      })
+
       values.push(
         projectId,
         name,
@@ -166,7 +166,8 @@ export async function saveStakeholders(
         s.expectations || null,
         s.concerns || null,
         sourceDocumentId,
-        userId
+        userId,
+        idempotencyKey
       )
     })
 
@@ -174,10 +175,11 @@ export async function saveStakeholders(
     await client.query(
       `INSERT INTO stakeholders (
         project_id, name, role, email, interest_level, influence_level, 
-        expectations, concerns, source_document_id, created_by
+        expectations, concerns, source_document_id, created_by, idempotency_key
       )
       VALUES ${placeholders.join(', ')}
-      ON CONFLICT (project_id, name) DO UPDATE SET
+      ON CONFLICT (project_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO UPDATE SET
+        name = EXCLUDED.name,
         role = EXCLUDED.role,
         email = EXCLUDED.email,
         interest_level = EXCLUDED.interest_level,
@@ -201,7 +203,7 @@ export async function saveStakeholders(
       projectId,
       error: error instanceof Error ? error.message : String(error)
     })
-    
+
     return {
       saved: 0,
       skipped: 0,

@@ -23,6 +23,7 @@ export async function extractCostEstimates(
     try {
         logger.info('[EXTRACTION-COST-ESTIMATES] Starting extraction', {
             projectId: context.projectId,
+            correlationId: context.correlationId,
             documentCount: context.documents.length
         })
 
@@ -32,7 +33,8 @@ export async function extractCostEstimates(
             context.documentContext,
             'cost_estimates',
             context.provider,
-            context.model
+            context.model,
+            context.correlationId
         )
 
         if (cached && cached.length > 0) {
@@ -50,7 +52,8 @@ export async function extractCostEstimates(
                     cacheHit: true,
                     durationMs: Date.now() - startTime,
                     provider: context.provider,
-                    model: context.model
+                    model: context.model,
+                    correlationId: context.correlationId
                 }
             }
         }
@@ -124,7 +127,8 @@ export async function extractCostEstimates(
                 'cost_estimates',
                 validEntities,
                 context.provider,
-                context.model
+                context.model,
+                context.correlationId
             )
         }
 
@@ -140,12 +144,14 @@ export async function extractCostEstimates(
                 cacheHit: false,
                 durationMs: Date.now() - startTime,
                 provider: context.provider,
-                model: context.model
+                model: context.model,
+                correlationId: context.correlationId
             }
         }
     } catch (error: unknown) {
         logger.error('[EXTRACTION-COST-ESTIMATES] Extraction failed', {
             projectId: context.projectId,
+            correlationId: context.correlationId,
             error: error instanceof Error ? error.message : String(error)
         })
         throw error

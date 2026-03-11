@@ -32,6 +32,7 @@ export async function extractStakeholders(
   try {
     logger.info('[EXTRACTION-STAKEHOLDERS] Starting extraction', {
       projectId: context.projectId,
+      correlationId: context.correlationId,
       documentCount: context.documents.length
     })
 
@@ -41,13 +42,14 @@ export async function extractStakeholders(
       context.documentContext,
       'stakeholders',
       context.provider,
-      context.model
+      context.model,
+      context.correlationId
     )
 
     if (cached && cached.length > 0) {
       logger.info(`[EXTRACTION-STAKEHOLDERS] ✅ Using cached result (${cached.length} entities)`)
       cacheHit = true
-      
+
       // Resolve source documents for cached entities
       const validStakeholders: Stakeholder[] = []
       cached.forEach((stakeholder: any) => {
@@ -57,7 +59,7 @@ export async function extractStakeholders(
           'STAKEHOLDERS',
           stakeholder.name || 'Unnamed Stakeholder'
         )
-        
+
         if (resolution.resolved) {
           validStakeholders.push(stakeholder as Stakeholder)
         } else {
@@ -79,13 +81,16 @@ export async function extractStakeholders(
           cacheHit: true,
           durationMs: Date.now() - startTime,
           provider: context.provider,
-          model: context.model
+          model: context.model,
+          correlationId: context.correlationId
         }
       }
     }
 
     // Cache miss - perform AI extraction
     logger.info(`[EXTRACTION-STAKEHOLDERS] ❌ Cache miss, calling AI...`, {
+      projectId: context.projectId,
+      correlationId: context.correlationId,
       provider: context.provider,
       model: context.model,
       documentCount: context.documents.length
@@ -144,7 +149,7 @@ export async function extractStakeholders(
 
     // Resolve source_document_id for each stakeholder (STRICT: reject if missing)
     const validStakeholders: Stakeholder[] = []
-    
+
     deduplicatedStakeholders.forEach((stakeholder) => {
       const resolution = resolveSourceDocumentIdStrict(
         stakeholder,
@@ -152,7 +157,7 @@ export async function extractStakeholders(
         'STAKEHOLDERS',
         stakeholder.name || 'Unnamed Stakeholder'
       )
-      
+
       if (resolution.resolved) {
         validStakeholders.push(stakeholder)
       } else {
@@ -165,8 +170,11 @@ export async function extractStakeholders(
     if (rejectedCount > 0) {
       logger.warn(`[EXTRACTION-STAKEHOLDERS] REJECTED ${rejectedCount} stakeholders without valid source_document_id (out of ${deduplicatedStakeholders.length} total)`)
     }
-    
-    logger.info(`[EXTRACTION-STAKEHOLDERS] Extracted ${validStakeholders.length} stakeholders with valid source_document_id (${rejectedCount} rejected)`)
+
+    logger.info(`[EXTRACTION-STAKEHOLDERS] Extracted ${validStakeholders.length} stakeholders with valid source_document_id (${rejectedCount} rejected)`, {
+      projectId: context.projectId,
+      correlationId: context.correlationId
+    })
 
     // Cache the result
     if (validStakeholders.length > 0) {
@@ -176,7 +184,8 @@ export async function extractStakeholders(
         'stakeholders',
         validStakeholders,
         context.provider,
-        context.model
+        context.model,
+        context.correlationId
       )
     }
 
@@ -192,15 +201,17 @@ export async function extractStakeholders(
         cacheHit: false,
         durationMs: Date.now() - startTime,
         provider: context.provider,
-        model: context.model
+        model: context.model,
+        correlationId: context.correlationId
       }
     }
   } catch (error: unknown) {
     logger.error('[EXTRACTION-STAKEHOLDERS] Extraction failed', {
       projectId: context.projectId,
+      correlationId: context.correlationId,
       error: error instanceof Error ? error.message : String(error)
     })
-    
+
     // Re-throw to trigger Bull retry and provider fallback
     throw error
   }
@@ -225,23 +236,23 @@ function normalizeStakeholderName(name: string): string {
  */
 function deduplicateStakeholdersBatch(stakeholders: Stakeholder[]): Stakeholder[] {
   const seen = new Map<string, Stakeholder>()
-  
+
   stakeholders.forEach(stakeholder => {
     // Normalize name: lowercase, trim, remove parenthetical suffixes
     const normalized = normalizeStakeholderName(stakeholder.name)
-    
+
     if (!seen.has(normalized)) {
       // First occurrence - keep it
       seen.set(normalized, stakeholder)
     } else {
       // Duplicate found - merge information
       const existing = seen.get(normalized)!
-      
+
       // Keep the more detailed name (longer = more info)
       if (stakeholder.name.length > existing.name.length) {
         existing.name = stakeholder.name
       }
-      
+
       // Merge expectations and concerns
       if (stakeholder.expectations && !existing.expectations) {
         existing.expectations = stakeholder.expectations
@@ -249,15 +260,15 @@ function deduplicateStakeholdersBatch(stakeholders: Stakeholder[]): Stakeholder[
       if (stakeholder.concerns && !existing.concerns) {
         existing.concerns = stakeholder.concerns
       }
-      
+
       // Use higher interest/influence levels
       if (stakeholder.interest_level === 'high') existing.interest_level = 'high'
       if (stakeholder.influence_level === 'high') existing.influence_level = 'high'
-      
+
       logger.debug(`[DEDUP-BATCH] Merged "${stakeholder.name}" into "${existing.name}"`)
     }
   })
-  
+
   return Array.from(seen.values())
 }
 

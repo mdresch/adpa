@@ -15,6 +15,8 @@ export interface Stakeholder {
   interest_level: 'high' | 'medium' | 'low'
   /** Influence level on the project */
   influence_level: 'high' | 'medium' | 'low'
+  /** Department or organization */
+  department?: string
   /** Communication preference */
   communication_preference?: string
   /** What they expect from the project */
