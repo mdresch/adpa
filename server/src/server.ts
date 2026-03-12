@@ -132,6 +132,7 @@ import digitalTwinExportRoutes from "./routes/digital-twin-export"
 import digitalTwinAnalyticsRoutes from "./routes/digital-twin-analytics"
 import digitalTwinConnectorsRoutes from "./routes/digital-twin-connectors"
 import mediaRoutes from "./routes/mediaRoutes"
+import healthRoutes from "./routes/health"
 
 const app = express()
 const server = createServer(app)
@@ -216,14 +217,9 @@ import { analyticsMiddleware } from "./middleware/analyticsMiddleware"
 app.use(analyticsMiddleware)
 logger.info("📊 Analytics tracking middleware enabled")
 
-// Health check
-app.get("/health", (req, res) => {
-  res.json({
-    status: "OK",
-    timestamp: new Date().toISOString(),
-    version: process.env.npm_package_version || "1.0.0",
-  })
-})
+// Health checks (available at both root and /api)
+app.use("/health", healthRoutes)
+app.use("/api/health", healthRoutes)
 
 // Debug env (sanitized)
 app.get("/api/debug-env", (req, res) => {
@@ -524,4 +520,3 @@ else if (!process.argv[1] || process.argv[1].includes('server')) {
 
 
 export { app }
-

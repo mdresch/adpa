@@ -173,6 +173,220 @@ Tests cover:
 - Health checks
 - Shutdown procedures
 
+
+## Health Endpoints
+
+### Overview
+
+Comprehensive health check endpoints provide real-time monitoring of server and dependency status. These endpoints are suitable for load balancers, Kubernetes probes, and monitoring dashboards.
+
+### Available Endpoints
+
+#### 1. Basic Liveness Check
+**Endpoint:** \GET /health\ or \GET /api/health\
+
+Used by load balancers for basic "is the server up?" checks.
+
+**Response (200 OK):**
+\\\json
+{
+  "status": "healthy",
+  "timestamp": "2025-01-26T10:00:00.000Z",
+  "uptime": 3600
+}
+\\\
+
+#### 2. Kubernetes Readiness Probe
+**Endpoint:** \GET /health/ready\ or \GET /api/health/ready\
+
+Returns 200 only if server is ready to receive traffic. Checks critical dependencies (database, redis).
+
+**Response (200 OK - Ready):**
+\\\json
+{
+  "status": "healthy",
+  "timestamp": "2025-01-26T10:00:00.000Z",
+  "uptime": 3600,
+  "message": "Server is ready to receive traffic"
+}
+\\\
+
+**Response (503 Service Unavailable - Not Ready):**
+\\\json
+{
+  "status": "unhealthy",
+  "timestamp": "2025-01-26T10:00:00.000Z",
+  "uptime": 3600,
+  "message": "Server is not ready",
+  "failedDependencies": ["database"]
+}
+\\\
+
+#### 3. Kubernetes Liveness Probe
+**Endpoint:** \GET /health/live\ or \GET /api/health/live\
+
+Returns 200 if server is still running (not hung). Less strict than readiness - used to restart stuck instances.
+
+**Response (200 OK):**
+\\\json
+{
+  "status": "healthy",
+  "timestamp": "2025-01-26T10:00:00.000Z",
+  "uptime": 3600,
+  "message": "Server is alive"
+}
+\\\
+
+#### 4. Dependency Status
+**Endpoint:** \GET /health/dependencies\ or \GET /api/health/dependencies\
+
+Detailed health status of all registered dependencies.
+
+**Response (200 OK):**
+\\\json
+{
+  "status": "healthy",
+  "timestamp": "2025-01-26T10:00:00.000Z",
+  "uptime": 3600,
+  "summary": {
+    "total": 10,
+    "healthy": 10,
+    "unhealthy": 0,
+    "unknown": 0
+  },
+  "dependencies": [
+    {
+      "name": "Database",
+      "status": "healthy",
+      "latency": 45,
+      "lastCheck": "2025-01-26T10:00:00.000Z"
+    },
+    {
+      "name": "Redis",
+      "status": "healthy",
+      "latency": 12,
+      "lastCheck": "2025-01-26T10:00:00.000Z"
+    },
+    {
+      "name": "Neo4j",
+      "status": "healthy",
+      "latency": 234,
+      "lastCheck": "2025-01-26T10:00:00.000Z"
+    }
+  ]
+}
+\\\
+
+#### 5. Comprehensive System Health
+**Endpoint:** \GET /health/full\ or \GET /api/health/full\
+
+Most detailed response including system metrics. Best for dashboards and comprehensive monitoring.
+
+**Response (200 OK):**
+\\\json
+{
+  "status": "healthy",
+  "timestamp": "2025-01-26T10:00:00.000Z",
+  "uptime": 3600,
+  "version": "1.0.0",
+  "environment": "production",
+  "dependencies": [ ... ],
+  "systemMetrics": {
+    "memoryUsage": 65,
+    "uptime": 3600,
+    "pid": 12345
+  }
+}
+\\\
+
+### Kubernetes Integration
+
+Use these endpoints in your Kubernetes deployment manifest:
+
+\\\yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: adpa-server
+spec:
+  template:
+    spec:
+      containers:
+      - name: adpa
+        image: your-image:latest
+        
+        # Readiness probe - checks if ready for traffic
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 5000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        # Liveness probe - checks if process is hung
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 5000
+          initialDelaySeconds: 60
+          periodSeconds: 20
+          timeoutSeconds: 5
+          failureThreshold: 3
+\\\
+
+### Monitoring Integration
+
+#### Prometheus Scraping
+Add to your Prometheus \prometheus.yml\:
+
+\\\yaml
+scrape_configs:
+  - job_name: 'adpa-health'
+    static_configs:
+      - targets: ['localhost:5000']
+    metrics_path: '/health/full'
+    scrape_interval: 30s
+\\\
+
+#### Load Balancer Health Checks
+Configure your load balancer to use:
+- **Health Check URL:** \/health\ (basic) or \/health/ready\ (strict)
+- **Expected Status:** 200 OK
+- **Interval:** 10-30 seconds
+- **Timeout:** 5 seconds
+- **Unhealthy Threshold:** 3 consecutive failures
+
+### Implementation Details
+
+#### Dependency Health Tracking
+
+Each dependency reports health status during initialization:
+
+| Dependency | Critical | Timeout | Monitored |
+|-----------|----------|---------|-----------|
+| Database | Yes | 30s | ? Ping query |
+| Redis | No | 10s | ? PING command |
+| Neo4j | No | 10s | ? Query execution |
+| RabbitMQ | No | 10s | ? Partial |
+| AI Providers | No | 20s | ? Partial |
+| Workers | No | 15s | ? Partial |
+
+#### Status Codes
+
+- **200 OK**: Service is healthy and ready
+- **503 Service Unavailable**: Service is degraded or not ready
+- **500 Internal Server Error**: Health check itself failed
+
+### Best Practices
+
+1. **Use readiness probes for traffic routing** - Ensures traffic only goes to healthy instances
+2. **Use liveness probes for restart detection** - Restarts hung processes
+3. **Monitor dependency health** - Track \/health/dependencies\ for early warning
+4. **Set appropriate intervals** - 10-30 seconds typically sufficient
+5. **Log health check responses** - Useful for debugging issues
+
 ## Troubleshooting
 
 ### "Critical dependency failed" error
@@ -254,5 +468,6 @@ NODE_ENV=development NODE_TLS_REJECT_UNAUTHORIZED=0 npm run dev
 - [ ] Health check intervals during operation
 - [ ] Automatic retry logic with exponential backoff
 - [ ] Integration with Kubernetes readiness/liveness probes
+
 
 

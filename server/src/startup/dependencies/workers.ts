@@ -1,5 +1,6 @@
 import { Dependency } from "../dependencyGraph"
 import { logger } from "../../utils/logger"
+import { updateDependencyHealth } from "../../routes/health"
 
 export const workersDependency: Dependency = {
   name: "Workers",
@@ -26,17 +27,22 @@ export const workersDependency: Dependency = {
       if (!addJob) {
         throw new Error("Job queue service not available")
       }
+      updateDependencyHealth("Workers", "healthy")
     } catch (error) {
       logger.warn("Worker initialization warning:", error)
+      updateDependencyHealth("Workers", "unhealthy", 0, String(error))
       // Allow continues - not critical for basic API functioning
     }
   },
   validate: async () => {
     try {
       const { addJob } = require("../../services/queueService")
-      return typeof addJob === "function"
+      const healthy = typeof addJob === "function"
+      updateDependencyHealth("Workers", healthy ? "healthy" : "unhealthy")
+      return healthy
     } catch (error) {
       logger.warn("Worker validation failed:", error)
+      updateDependencyHealth("Workers", "unhealthy", 0, String(error))
       return false
     }
   },

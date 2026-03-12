@@ -4,6 +4,7 @@ import { safeQuery } from '../services/jobs/dbGuards'
 import { pool } from "../database/connection"
 import { SystemMonitoring } from "../utils/systemMonitoring"
 import { mongoVectorStore } from "../services/mongoVectorStore"
+import { initializeDependencyHealthTracking } from "../routes/health"
 
 /**
  * Updated server startup function that uses the Startup Dependency Graph.
@@ -20,6 +21,10 @@ export async function initializeServerWithDependencyGraph(
     // Initialize all dependencies using the dependency graph
     startupManager = new StartupManager()
     await startupManager.initialize()
+    // Initialize health endpoint dependency tracking
+    const depNames = startupManager.getDependencyNames()
+    initializeDependencyHealthTracking(depNames)
+    console.log(`✅ Health endpoint tracking initialized for ${depNames.length} dependencies`)
 
     // Auto-create document_summaries table if it doesn't exist
     try {
@@ -133,3 +138,4 @@ export async function initializeServerWithDependencyGraph(
     process.exit(1)
   }
 }
+

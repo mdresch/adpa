@@ -75,4 +75,12 @@ export class StartupManager {
   getGraph(): DependencyGraph {
     return this.graph
   }
+
+  /**
+   * Get list of all registered dependency names for health tracking
+   * Used by health endpoints to initialize dependency monitoring
+   */
+  getDependencyNames(): string[] {
+    return Array.from(this.graph.getStatuses().keys())
+  }
 }

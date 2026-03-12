@@ -1,5 +1,6 @@
 import { Dependency } from "../dependencyGraph"
 import { logger } from "../../utils/logger"
+import { updateDependencyHealth } from "../../routes/health"
 
 /**
  * RabbitMQ dependency - currently a placeholder for future use.
@@ -13,14 +14,17 @@ export const rabbitmqDependency: Dependency = {
     // RabbitMQ is not yet implemented in ADPA
     // This is a placeholder for future integration
     logger.debug("RabbitMQ dependency registered but not configured")
+    updateDependencyHealth("RabbitMQ", "healthy", 0, "Placeholder")
   },
   validate: async () => {
     // Skip validation if RabbitMQ is not configured
     if (!process.env.RABBITMQ_URL) {
+      updateDependencyHealth("RabbitMQ", "healthy", 0, "Not configured")
       return true
     }
     // For now, allow RabbitMQ to pass as it is a known optional placeholder
     logger.info("RabbitMQ is currently a placeholder - skipping deep validation")
+    updateDependencyHealth("RabbitMQ", "healthy", 0, "Placeholder validated")
     return true
   },
 }

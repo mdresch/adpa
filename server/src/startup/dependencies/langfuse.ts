@@ -1,6 +1,7 @@
 import { Dependency } from "../dependencyGraph"
 import { isTracingEnabled, initTracing } from "../../tracing"
 import { logger } from "../../utils/logger"
+import { updateDependencyHealth } from "../../routes/health"
 
 export const langfuseDependency: Dependency = {
   name: "Langfuse",
@@ -12,8 +13,10 @@ export const langfuseDependency: Dependency = {
       // but we can ensure it's ready here if needed.
       // Langfuse OTLP initialization is handled in tracing.ts
       logger.info("Langfuse tracing dependency registered")
+      updateDependencyHealth("Langfuse", "healthy")
     } catch (error) {
       logger.warn("Langfuse initialization warning:", error)
+      updateDependencyHealth("Langfuse", "unhealthy", 0, String(error))
     }
   },
   validate: async () => {
@@ -23,9 +26,11 @@ export const langfuseDependency: Dependency = {
     
     if (enabled && !hasKeys) {
       logger.warn("Langfuse tracing enabled but credentials missing")
+      updateDependencyHealth("Langfuse", "unhealthy", 0, "Tracing enabled but credentials missing")
       return false
     }
     
+    updateDependencyHealth("Langfuse", "healthy")
     return enabled ? hasKeys : true // If disabled, we consider it "ready" (skipped)
   },
 }
