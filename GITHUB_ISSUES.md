@@ -15,19 +15,19 @@ This file contains all issues structured by phase and epic. Copy these into your
   Create a deterministic startup initialization order using a dependency graph (DAG).
   
   **Acceptance Criteria**:
-  - [ ] Create `server/src/startup/dependencyGraph.ts`
-  - [ ] Define dependencies: database, redis, neo4j, rabbitmq, ai-providers, workers
-  - [ ] Each dependency has: name, init(), validate(), critical flag, timeout
-  - [ ] `initializeInOrder()` runs all deps in sequence
-  - [ ] Critical deps cause process.exit(1) if unstable
-  - [ ] Logs show clear status: ✅ ready, ⚠️ degraded, ❌ failed
-  - [ ] `npm run dev` completes without "waiting..." logs
+  - [x] Create `server/src/startup/dependencyGraph.ts`
+  - [x] Define dependencies: database, redis, neo4j, rabbitmq, ai-providers, workers
+  - [x] Each dependency has: name, init(), validate(), critical flag, timeout
+  - [x] `initializeInOrder()` runs all deps in sequence
+  - [x] Critical deps cause process.exit(1) if unstable
+  - [x] Logs show clear status: ✅ ready, ⚠️ degraded, ❌ failed
+  - [x] `npm run dev` completes without "waiting..." logs
   
   **Definition of Done**:
-  - [ ] Tests passing
-  - [ ] No "waiting..." logs in startup
-  - [ ] Code review approved
-  - [ ] Merged to main
+  - [x] Tests passing
+  - [x] No "waiting..." logs in startup
+  - [x] Code review approved
+  - [x] Merged to main
 
 ---
 
@@ -40,15 +40,15 @@ This file contains all issues structured by phase and epic. Copy these into your
   Add environment variable to control strict startup validation.
   
   **Acceptance Criteria**:
-  - [ ] Add `FAIL_FAST_MODE` to .env.development (default: false)
-  - [ ] Add `FAIL_FAST_MODE` to .env.production (default: true)
-  - [ ] Update .env.example with documentation
-  - [ ] Startup validation uses flag to determine behavior
+  - [x] Add `FAIL_FAST_MODE` to .env.development (default: false)
+  - [x] Add `FAIL_FAST_MODE` to .env.production (default: true)
+  - [x] Update .env.example with documentation
+  - [x] Startup validation uses flag to determine behavior
   
   **Definition of Done**:
-  - [ ] Configs documented
-  - [ ] Code review approved
-  - [ ] Merged to main
+  - [x] Configs documented
+  - [x] Code review approved
+  - [x] Merged to main
 
 ---
 
@@ -61,17 +61,17 @@ This file contains all issues structured by phase and epic. Copy these into your
   Ensure TLS verification is never disabled in production.
   
   **Acceptance Criteria**:
-  - [ ] Create `server/src/startup/validateConfig.ts`
-  - [ ] Startup throws error if `NODE_TLS_REJECT_UNAUTHORIZED=0` in production
-  - [ ] Update .env.development to document dev-only settings
-  - [ ] .env.production does NOT set the variable (default: 1)
-  - [ ] .env.example warns about production safety
-  - [ ] Startup validation runs before DB connection
+  - [x] Create `server/src/startup/validateConfig.ts`
+  - [x] Startup throws error if `NODE_TLS_REJECT_UNAUTHORIZED=0` in production
+  - [x] Update .env.development to document dev-only settings
+  - [x] .env.production does NOT set the variable (default: 1)
+  - [x] .env.example warns about production safety
+  - [x] Startup validation runs before DB connection
   
   **Definition of Done**:
-  - [ ] Tests passing
-  - [ ] Code review approved
-  - [ ] Merged to main
+  - [x] Tests passing
+  - [x] Code review approved
+  - [x] Merged to main
 
 ---
 
