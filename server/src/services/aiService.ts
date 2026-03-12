@@ -253,6 +253,13 @@ class AIService {
   }
 
   /**
+   * Get public access to providers Map (for health checks)
+   */
+  public getProviders(): Map<string, any> {
+    return this.providers
+  }
+
+  /**
    * Decrypt API key (simple base64 as used in aiProviderService)
    */
   private decryptApiKey(encryptedApiKey?: string): string | undefined {

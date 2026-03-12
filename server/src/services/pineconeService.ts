@@ -106,7 +106,8 @@ export class PineconeService {
     if (apiKey) {
       logger.info('Pinecone service initialized', {
         indexName: this.indexName,
-        host: host || 'auto'
+        host: host || 'auto',
+        model: 'llama-text-embed-v2'
       });
     }
   }
@@ -151,7 +152,12 @@ export class PineconeService {
         team_members: project.team_members || [],
         created_at: project.created_at || new Date().toISOString(),
         updated_at: project.updated_at || new Date().toISOString()
-      }));
+      })).filter(r => r.text.length > 0);
+
+      if (records.length === 0) {
+        logger.warn('Skipping projects upsert: No records with valid text content');
+        return { upsertedCount: 0 };
+      }
 
       logger.info('Generated records for integrated embedding', {
         recordsCount: records.length,
@@ -208,7 +214,12 @@ export class PineconeService {
         file_size: doc.file_size || 0,
         created_at: doc.created_at || new Date().toISOString(),
         updated_at: doc.updated_at || new Date().toISOString()
-      }));
+      })).filter(r => r.text.length > 0);
+
+      if (records.length === 0) {
+        logger.warn('Skipping documents upsert: No records with valid text content');
+        return { upsertedCount: 0 };
+      }
 
       logger.info('Generated records for integrated embedding', {
         recordsCount: records.length,
@@ -263,7 +274,12 @@ export class PineconeService {
         document_id: entity.document_id || '',
         project_id: entity.project_id || '',
         created_at: entity.created_at || new Date().toISOString()
-      }));
+      })).filter(r => r.text.length > 0);
+
+      if (records.length === 0) {
+        logger.warn('Skipping entities upsert: No records with valid text content');
+        return { upsertedCount: 0 };
+      }
 
       // Use upsert_records method with integrated embedding in the 'entities' namespace
       const result = await this.index.namespace('entities').upsertRecords({
@@ -346,52 +362,58 @@ export class PineconeService {
   }
 
   /**
-   * Simple text to embedding conversion (placeholder)
-   * In production, replace with VoyageAI embeddings
+   * Simple text to embedding conversion (legacy placeholder)
+   * Now replaced by integrated embeddings or Pinecone Inference
    */
   private textToEmbedding(text: string): number[] {
-    // Handle empty text
-    if (!text || text.trim().length === 0) {
-      text = 'empty content';
+    // This is no longer used for search, replaced by fetchQueryEmbedding
+    return new Array(1024).fill(0);
+  }
+
+  /**
+   * Generate embedding for search queries using Pinecone Inference
+   */
+  private async generateQueryEmbedding(query: string): Promise<number[]> {
+    if (!query || query.trim().length === 0) {
+      throw new Error('Input text must be non-empty for embedding generation');
     }
-
-    // Simple hash-based embedding for demonstration
-    // Replace with actual VoyageAI embeddings in production
-    const embedding = new Array(1024).fill(0);
-
-    for (let i = 0; i < text.length; i++) {
-      const charCode = text.charCodeAt(i);
-      const index = charCode % embedding.length;
-      embedding[index] = (embedding[index] + charCode / 1000) % 1;
-    }
-
-    // Add some variation to prevent all zeros
-    for (let i = 0; i < embedding.length; i++) {
-      if (embedding[i] === 0) {
-        embedding[i] = Math.sin(i + 1) * 0.1; // Add small non-zero values
+    try {
+      const result = await this.pc.inference.embed({
+        model: 'llama-text-embed-v2',
+        inputs: [query],
+        parameters: { inputType: 'query' }
+      });
+      
+      if (result && result[0] && result[0].values) {
+        return result[0].values as number[];
+      }
+      
+      throw new Error('No embedding returned from Pinecone Inference');
+    } catch (error) {
+      logger.error('Failed to generate query embedding via Pinecone Inference', {
+        error: (error as Error).message,
+        query: query.substring(0, 50)
+      });
+      // Fallback to VoyageAI if configured, otherwise throw
+      try {
+        const { voyageAIService } = await import('./voyageAIService');
+        return await voyageAIService.generateEmbedding(query, 'query', 'voyage-2');
+      } catch (err) {
+        throw error; // Re-throw original Pinecone error if VoyageAI fails too
       }
     }
-
-    // Normalize the embedding
-    const magnitude = Math.sqrt(embedding.reduce((sum, val) => sum + val * val, 0));
-    const normalizedEmbedding = magnitude > 0 ? embedding.map(val => val / magnitude) : embedding;
-
-    // Ensure no zeros remain
-    for (let i = 0; i < normalizedEmbedding.length; i++) {
-      if (normalizedEmbedding[i] === 0) {
-        normalizedEmbedding[i] = 0.0001; // Small non-zero value
-      }
-    }
-
-    return normalizedEmbedding;
   }
 
   /**
    * Search for similar items in Pinecone
    */
   async search(query: string, topK: number = 10, filter?: any, namespace?: string): Promise<any[]> {
+    if (!query || query.trim().length === 0) {
+      logger.warn('Search query is empty, skipping');
+      return [];
+    }
     try {
-      const queryVector = this.textToEmbedding(query.toLowerCase());
+      const queryVector = await this.generateQueryEmbedding(query.toLowerCase());
 
       const searchRequest: any = {
         vector: queryVector,
@@ -528,7 +550,9 @@ export class PineconeService {
             budget: project.budget || 0,
             created_at: project.created_at || new Date().toISOString(),
             updated_at: project.updated_at || new Date().toISOString()
-          }));
+          })).filter(r => r.text.length > 0);
+
+          if (records.length === 0) continue;
 
           try {
             const result = await this.index.namespace('projects').upsertRecords({ records });
@@ -595,7 +619,9 @@ export class PineconeService {
             file_size: doc.file_size || 0,
             created_at: doc.created_at || new Date().toISOString(),
             updated_at: doc.updated_at || new Date().toISOString()
-          }));
+          })).filter(r => r.text.length > 0);
+
+          if (records.length === 0) continue;
 
           try {
             const result = await this.index.namespace('documents').upsertRecords({ records });
@@ -662,7 +688,9 @@ export class PineconeService {
                   chunk_index: chunk.chunk_index || 0,
                   created_at: chunk.created_at || new Date().toISOString()
                 }
-              }));
+              })).filter(v => v.values && v.values.length > 0);
+
+              if (vectors.length === 0) continue;
 
               try {
                 await this.index.namespace('chunks').upsert(vectors);
