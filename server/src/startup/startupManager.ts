@@ -1,0 +1,78 @@
+import { DependencyGraph } from "./dependencyGraph"
+import {
+  databaseDependency,
+  redisDependency,
+  neo4jDependency,
+  rabbitmqDependency,
+  aiProvidersDependency,
+  workersDependency,
+  mongodbDependency,
+  pineconeDependency,
+  langfuseDependency,
+  securityValidationDependency,
+} from "./dependencies"
+import { logger } from "../utils/logger"
+
+/**
+ * Manages the complete server startup process using the dependency graph.
+ * This ensures all dependencies are initialized in the correct order
+ * and provides clear feedback on what failed.
+ */
+export class StartupManager {
+  private graph: DependencyGraph
+
+  constructor() {
+    this.graph = new DependencyGraph()
+    this.registerDependencies()
+  }
+
+  private registerDependencies(): void {
+    // Register all dependencies in order of criticality
+    this.graph.register(securityValidationDependency) // Security check MUST be first
+    this.graph.register(databaseDependency)
+    this.graph.register(redisDependency)
+    this.graph.register(neo4jDependency)
+    this.graph.register(rabbitmqDependency)
+    this.graph.register(aiProvidersDependency)
+    this.graph.register(workersDependency)
+    this.graph.register(mongodbDependency)
+    this.graph.register(pineconeDependency)
+    this.graph.register(langfuseDependency)
+  }
+
+  async initialize(): Promise<void> {
+    logger.info("🚀 Starting server initialization with dependency graph...")
+
+    try {
+      await this.graph.initialize()
+
+      // Print startup summary
+      console.log(this.graph.getSummary())
+
+      // Check if system is healthy (all critical deps ready)
+      if (!this.graph.isHealthy()) {
+        const failures = this.graph.getCriticalFailures()
+        throw new Error(
+          `Server startup failed: Critical dependencies failed: ${failures
+            .map((f) => f.name)
+            .join(", ")}`
+        )
+      }
+
+      logger.info("✅ All dependencies initialized successfully")
+    } catch (error) {
+      logger.error("❌ Startup initialization failed:", error)
+      throw error
+    }
+  }
+
+  async shutdown(): Promise<void> {
+    logger.info("🛑 Shutting down dependencies...")
+    await this.graph.shutdown()
+    logger.info("✅ All dependencies shut down successfully")
+  }
+
+  getGraph(): DependencyGraph {
+    return this.graph
+  }
+}
