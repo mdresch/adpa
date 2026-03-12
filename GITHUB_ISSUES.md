@@ -84,17 +84,17 @@ This file contains all issues structured by phase and epic. Copy these into your
   Add `/health/live` and `/health/ready` endpoints for orchestration.
   
   **Acceptance Criteria**:
-  - [ ] GET `/health/live` returns `{ status: 'live', timestamp, uptime }`
-  - [ ] GET `/health/ready` checks database, redis, neo4j
-  - [ ] Returns 200 if all ready, 503 if critical dep down
-  - [ ] Endpoints accessible without authentication
-  - [ ] Response time < 50ms
+  - [x] GET `/health/live` returns `{ status: 'live', timestamp, uptime }`
+  - [x] GET `/health/ready` checks database, redis, neo4j
+  - [x] Returns 200 if all ready, 503 if critical dep down
+  - [x] Endpoints accessible without authentication
+  - [x] Response time < 50ms
   
   **Definition of Done**:
-  - [ ] Tests passing
-  - [ ] Manually verified with curl
-  - [ ] Code review approved
-  - [ ] Merged to main
+  - [x] Tests passing
+  - [x] Manually verified with curl
+  - [x] Code review approved
+  - [x] Merged to main
 
 ---
 
