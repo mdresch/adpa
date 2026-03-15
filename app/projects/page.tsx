@@ -134,6 +134,14 @@ export default function Projects() {
     provider: "Groq AI",
     model: "llama-3.1-8b-instant",
     temperature: 0.7,
+    max_tokens: 4000,
+    project_id: "",
+    user_id: "",
+    document_ids: [],
+    include_integrations: false,
+    max_context_tokens: 2000,
+    context_priority: "",
+    custom_context: ""
   })
 
   // Generation progress tracking
@@ -440,14 +448,23 @@ export default function Projects() {
   // Handle generate document
   const handleGenerateDocument = (project: Project) => {
     setSelectedProjectForGeneration(project)
-    setDocumentGenerationForm({
+    const initialForm: DocumentGenerationForm = {
       name: `${project.name} - Generated Document`,
       template_id: "",
       prompt: `Generate a comprehensive document for the ${project.name} project using the ${project.framework} framework. Include project overview, objectives, timeline, and key deliverables.`,
       provider: "Groq AI",
       model: "llama-3.1-8b-instant",
-      temperature: 0.7
-    })
+      temperature: 0.7,
+      max_tokens: 4000,
+      project_id: project.id,
+      user_id: "",
+      document_ids: [],
+      include_integrations: false,
+      max_context_tokens: 2000,
+      context_priority: "",
+      custom_context: ""
+    }
+    setDocumentGenerationForm(initialForm)
     setGenerateDialogOpen(true)
     fetchTemplates()
   }
@@ -609,14 +626,23 @@ export default function Projects() {
       toast.success("Document generated successfully!")
       setGenerateDialogOpen(false)
       setSelectedProjectForGeneration(null)
-      setDocumentGenerationForm({
+      const resetForm: DocumentGenerationForm = {
         name: "",
         template_id: "",
         prompt: "",
         provider: "Groq AI",
         model: "llama-3.1-8b-instant",
         temperature: 0.7,
-      })
+        max_tokens: 4000,
+        project_id: "",
+        user_id: "",
+        document_ids: [],
+        include_integrations: false,
+        max_context_tokens: 2000,
+        context_priority: "",
+        custom_context: ""
+      }
+      setDocumentGenerationForm(resetForm)
       setGenerationProgress({ step: 0, totalSteps: 4, message: '', percentage: 0 })
     } catch (error) {
       const totalDuration = Date.now() - startTime

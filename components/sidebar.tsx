@@ -34,22 +34,32 @@ import {
   Building2,
   FileDown,
   MessageSquare,
+  Brain,
 } from "lucide-react"
 
-const navigation = [
+interface NavItem {
+  name: string
+  href: string
+  icon: React.ComponentType<{ className?: string }>
+  badge?: boolean
+  adminOnly?: boolean
+}
+
+const navigation: NavItem[] = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "Projects", href: "/projects", icon: FolderOpen },
   { name: "Resource Capacity", href: "/capacity", icon: Gauge },
-  // { name: "Approvals", href: "/approvals", icon: CheckCircle, badge: true }, // Temporarily hidden for testing
+  { name: "Approvals", href: "/approvals", icon: CheckCircle, badge: true },
   { name: "Search", href: "/search", icon: Search },
   { name: "AI Providers", href: "/ai-providers", icon: Zap, adminOnly: true },
+  { name: "AI Model Settings", href: "/settings/ai-models", icon: Brain, adminOnly: true },
   { name: "AI Analytics", href: "/ai-analytics", icon: TrendingUp },
   { name: "AI Search", href: "/ai-search", icon: MessageSquare },
   { name: "Integrations", href: "/integrations", icon: LinkIcon, adminOnly: true },
   { name: "Templates", href: "/templates", icon: FileText },
 
   { name: "Template Builder", href: "/templates/builder", icon: Layers, adminOnly: true },
-  // { name: "PMBOK 6 Processes", href: "/pmbok6", icon: BookOpen }, // Temporarily hidden for testing
+  { name: "PMBOK 6 Processes", href: "/pmbok6", icon: BookOpen },
   { name: "Process Flow Workflow", href: "/process-flow", icon: Workflow, adminOnly: true },
   { name: "Users & Roles", href: "/users", icon: Users, adminOnly: true },
   { name: "Companies", href: "/companies", icon: Building2, adminOnly: true },
@@ -59,21 +69,24 @@ const navigation = [
   { name: "System Settings", href: "/settings", icon: Settings, adminOnly: true },
 ]
 
-export function Sidebar() {
+interface SidebarProps {
+  className?: string
+}
+
+export function Sidebar({ className }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false)
   const [pendingCount, setPendingCount] = useState(0)
   const pathname = usePathname()
   const { user, logout } = useAuth()
 
-  // Temporarily disabled - Approvals menu item is hidden for testing
-  // useEffect(() => {
-  //   if (user) {
-  //     fetchPendingApprovals()
-  //     // Refresh every 30 seconds
-  //     const interval = setInterval(fetchPendingApprovals, 30000)
-  //     return () => clearInterval(interval)
-  //   }
-  // }, [user])
+  useEffect(() => {
+    if (user) {
+      fetchPendingApprovals()
+      // Refresh every 30 seconds
+      const interval = setInterval(fetchPendingApprovals, 30000)
+      return () => clearInterval(interval)
+    }
+  }, [user])
 
   const fetchPendingApprovals = async () => {
     try {
@@ -93,6 +106,7 @@ export function Sidebar() {
       className={cn(
         "flex flex-col h-screen bg-gradient-to-b from-slate-50 to-white dark:from-slate-900 dark:to-slate-800 border-r border-slate-200 dark:border-slate-700 transition-all duration-300 ease-in-out shadow-xl",
         collapsed ? "w-16" : "w-64",
+        className
       )}
     >
       {/* Header */}
@@ -128,7 +142,7 @@ export function Sidebar() {
       <ScrollArea className="flex-1 px-3 py-6 custom-scrollbar">
         <nav className="space-y-2">
           {navigation
-            .filter((item: any) => {
+            .filter((item: NavItem) => {
               // Hide admin-only items for non-admin/super-admin users
               // Super admin has all admin privileges
               const isAdminOrSuperAdmin = user?.role === "admin" || user?.role === "super_admin"

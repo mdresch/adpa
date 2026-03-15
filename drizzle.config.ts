@@ -5,6 +5,6 @@ export default defineConfig({
     out: './drizzle/morphic',
     dialect: 'postgresql',
     dbCredentials: {
-        url: process.env.MORPHIC_DATABASE_URL || process.env.DATABASE_URL!,
+        url: process.env.MORPHIC_DATABASE_URL!,
     },
 })

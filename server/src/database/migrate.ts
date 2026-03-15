@@ -3,13 +3,8 @@ dotenv.config()
 
 import { readFileSync } from "fs"
 import { join, dirname } from "path"
-import { fileURLToPath } from "url"
 import { connectDatabase, getDatabasePool } from "./connection"
 import { logger } from "../utils/logger"
-
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
-
 async function runMigrations() {
   try {
     logger.info("Starting database migrations...")
@@ -273,6 +268,22 @@ async function runMigrations() {
       }
     } catch (error) {
       logger.warn("file_assets migration failed (may already be applied):", error)
+    }
+
+    // Run performance_indices migration (Phase 5)
+    try {
+      const perfMigrationPath = join(__dirname, "migrations", "050_performance_indices.sql")
+      const perfMigration = readFileSync(perfMigrationPath, "utf-8")
+      const perfCheck = await pool.query("SELECT id FROM migrations WHERE name = $1", ["050_performance_indices"])
+      if (perfCheck.rows.length === 0) {
+        await pool.query(perfMigration)
+        await pool.query("INSERT INTO migrations (name) VALUES ($1)", ["050_performance_indices"])
+        logger.info("Performance indices migration completed")
+      } else {
+        logger.info("Performance indices migration already applied")
+      }
+    } catch (error) {
+      logger.warn("Performance indices migration failed:", error)
     }
 
     logger.info("Database migrations completed successfully")

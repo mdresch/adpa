@@ -6,11 +6,11 @@ import * as relations from './relations'
 
 const isDevelopment = process.env.NODE_ENV === 'development'
 
-const connectionString = process.env.MORPHIC_DATABASE_URL || process.env.DATABASE_URL
+const connectionString = process.env.MORPHIC_DATABASE_URL
 const isProduction = process.env.NODE_ENV === 'production'
 
 if (!connectionString) {
-    throw new Error('MORPHIC_DATABASE_URL or DATABASE_URL environment variable is not set')
+    throw new Error('MORPHIC_DATABASE_URL environment variable is not set')
 }
 
 const sslConfig =

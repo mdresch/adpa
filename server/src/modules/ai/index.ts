@@ -6,6 +6,18 @@
 
 export { openaiConnector } from './openai'
 export { googleConnector } from './google'
+export { ollamaConnector } from './ollama'
+export { FallbackExecutor } from './FallbackExecutor'
+
+export type {
+  FallbackChain,
+  FallbackChainEntry,
+  FallbackRunner,
+  FallbackRunnerResult,
+  FallbackAuditEntry,
+  FallbackAuditLogger,
+  FallbackRunResult,
+} from './FallbackExecutor'
 
 export type {
   OpenAIConfig,
@@ -22,3 +34,11 @@ export type {
   GoogleResponse,
   GoogleError
 } from './google'
+
+export type {
+  OllamaConfig,
+  OllamaProvider,
+  OllamaRequest,
+  OllamaResponse,
+  OllamaModelId,
+} from './ollama'

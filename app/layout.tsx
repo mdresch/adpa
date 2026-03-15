@@ -28,9 +28,10 @@ const roboto = Roboto({
 })
 
 export const metadata: Metadata = {
-  title: "ADPA Admin Portal",
-  description: "Advanced Document Processing & Automation Framework - Administration Portal",
-  generator: 'v0.dev'
+  title: "ADPA Intelligence Platform | Unified Project & Document Automation",
+  description:
+    "ADPA is a next-generation platform for intelligent project management, document extraction, and real-time analytics. Empower your team with AI-driven workflows, secure collaboration, and seamless automation—all in one place.",
+  generator: "ADPA Platform Suite v2.0 (Next.js)"
 }
 
 export default function RootLayout({

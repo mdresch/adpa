@@ -22,7 +22,7 @@ export default function DashboardLoading() {
             </div>
 
             {/* Stats Cards Skeleton */}
-            <SkeletonStats count={4} />
+            <SkeletonStats items={4} />
 
             {/* AI Providers Chart Skeleton */}
             <SkeletonChart />

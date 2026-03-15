@@ -39,6 +39,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import { ModelCard } from "@/components/ai/ModelCard"
 
 interface ProviderDetails {
   id: string
@@ -334,6 +335,43 @@ export default function AIProviderDetails() {
       toast.error(err?.message || "Failed to add model")
     } finally {
       setAddingModel(false)
+    }
+  }
+
+  const goToDiscoverTab = () => {
+    const tabs = document.querySelector('[role="tablist"]')
+    const discoverTab = Array.from(tabs?.querySelectorAll('[role="tab"]') || [])
+      .find(tab => tab.textContent?.includes('Model Discovery'))
+    if (discoverTab instanceof HTMLElement) {
+      discoverTab.click()
+    }
+  }
+
+  const handleToggleModelActive = async (model: Model) => {
+    const modelId = model.id || model.name
+    if (!modelId) {
+      return
+    }
+
+    try {
+      await apiClient.updateModelConfiguration(providerId, modelId, {
+        modelId,
+        modelName: model.name || modelId,
+        is_active: !model.is_active,
+        contextWindow: model.contextWindow,
+        maxTokens: model.maxTokens,
+        temperature: model.temperature,
+        topP: model.topP,
+        frequencyPenalty: model.frequencyPenalty,
+        presencePenalty: model.presencePenalty,
+        configuration: (model as any).configuration || {}
+      })
+
+      toast.success(`Model ${!model.is_active ? 'activated' : 'deactivated'} successfully`)
+      await loadProviderModels()
+    } catch (error: any) {
+      console.error('Failed to toggle model status:', error)
+      toast.error(error?.message || 'Failed to toggle model status')
     }
   }
 
@@ -770,98 +808,120 @@ export default function AIProviderDetails() {
               </TabsList>
 
               <TabsContent value="models" className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-semibold">Available Models</h3>
-                  <Button onClick={() => router.push(`#discover`)}>
-                    <Zap className="h-4 w-4 mr-2" />
-                    Discover More Models
-                  </Button>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold">Models</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Manage configured models for {provider.name}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="outline" onClick={() => setAddModelDialogOpen(true)}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Model
+                    </Button>
+                    <Button onClick={goToDiscoverTab}>
+                      <Zap className="h-4 w-4 mr-2" />
+                      Discover Models
+                    </Button>
+                  </div>
                 </div>
 
-                {/* Show provider.models (from available_models column) */}
-                {provider?.models && provider.models.length > 0 ? (
+                {models.length > 0 ? (
                   <div className="space-y-4">
-                    {/* Default Model Card */}
-                    <Card className="border-2 border-primary">
-                      <CardHeader className="pb-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <CardTitle className="text-lg">{provider.default_model || provider.models[0]}</CardTitle>
-                            <Badge variant="default">Default</Badge>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <span>Default model:</span>
+                      <Badge variant="secondary">
+                        {provider.default_model || models[0]?.name || models[0]?.id}
+                      </Badge>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      {models.map((model) => {
+                        const modelId = model.id || model.name
+                        const modelName = model.name || modelId
+                        const isDefault = modelId === (provider.default_model || models[0]?.name || models[0]?.id)
+
+                        return (
+                          <div key={modelId} className="relative">
+                            {isDefault && (
+                              <Badge variant="secondary" className="absolute left-3 top-3 z-10">
+                                Default
+                              </Badge>
+                            )}
+                            <div className="absolute right-3 top-3 z-10 flex items-center gap-2 rounded-full bg-background/80 px-2 py-1 text-xs">
+                              <span className="text-muted-foreground">Active</span>
+                              <Switch
+                                checked={model.is_active}
+                                onCheckedChange={() => handleToggleModelActive(model)}
+                              />
+                            </div>
+                            <ModelCard
+                              model={{
+                                id: modelId,
+                                name: modelName,
+                                display_name: modelName,
+                                provider: { name: provider.name },
+                                is_active: model.is_active,
+                                context_length: model.contextWindow,
+                                success_rate: (model as any).usage_stats?.success_rate
+                              }}
+                              onConfigure={() => router.push(`/ai-providers/${providerId}/model/${encodeURIComponent(modelId)}`)}
+                              onRemove={() => setDeleteModelDialogOpen(modelId)}
+                            />
                           </div>
-                          <CheckCircle className="h-5 w-5 text-primary" />
-                        </div>
-                      </CardHeader>
-                      <CardContent>
-                        <p className="text-sm text-muted-foreground mb-4">
-                          This is the default model used when no specific model is requested.
-                        </p>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            size="sm"
-                            onClick={() => router.push(`/ai-providers/${providerId}/model/${encodeURIComponent(provider.default_model || provider.models[0])}`)}
-                          >
-                            View Details
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    {/* Other Models */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {provider.models
-                        .filter(modelId => modelId !== provider.default_model)
-                        .map((modelId) => (
-                          <Card key={modelId}>
-                            <CardHeader className="pb-3">
-                              <CardTitle className="text-lg font-mono">{modelId}</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                              <p className="text-xs text-muted-foreground mb-4">
-                                Available for use with {provider.name}
-                              </p>
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  size="sm"
-                                  onClick={() => router.push(`/ai-providers/${providerId}/model/${encodeURIComponent(modelId)}`)}
-                                >
-                                  View Details
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="destructive"
-                                  onClick={async (e: React.MouseEvent) => {
-                                    e.stopPropagation()
-                                    if (confirm(`Are you sure you want to remove "${modelId}" from available models?`)) {
-                                      try {
-                                        // Remove model from available_models array
-                                        const updatedModels = provider.models.filter(m => m !== modelId)
-
-                                        await apiClient.request(`/context-ai/providers/${providerId}/configure`, {
-                                          method: 'POST',
-                                          body: JSON.stringify({
-                                            configuration: {
-                                              ...provider.configuration,
-                                              available_models: updatedModels
-                                            }
-                                          })
-                                        })
-
-                                        toast.success(`Model "${modelId}" removed successfully`)
-                                        await loadProviderDetails()
-                                      } catch (error: any) {
-                                        console.error('Failed to remove model:', error)
-                                        toast.error(error?.message || 'Failed to remove model')
+                        )
+                      })}
+                    </div>
+                  </div>
+                ) : provider?.models && provider.models.length > 0 ? (
+                  <div className="space-y-4">
+                    <div className="text-sm text-muted-foreground">
+                      These models are available from discovery but are not yet configured.
+                    </div>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      {provider.models.map((modelId) => {
+                        const isDefault = modelId === (provider.default_model || provider.models[0])
+                        return (
+                          <div key={modelId} className="relative">
+                            {isDefault && (
+                              <Badge variant="secondary" className="absolute left-3 top-3 z-10">
+                                Default
+                              </Badge>
+                            )}
+                            <ModelCard
+                              model={{
+                                id: modelId,
+                                name: modelId,
+                                display_name: modelId,
+                                provider: { name: provider.name },
+                                is_active: true
+                              }}
+                              onConfigure={() => router.push(`/ai-providers/${providerId}/model/${encodeURIComponent(modelId)}`)}
+                              onRemove={() => {
+                                if (confirm(`Are you sure you want to remove "${modelId}" from available models?`)) {
+                                  const updatedModels = provider.models.filter(m => m !== modelId)
+                                  apiClient.request(`/context-ai/providers/${providerId}/configure`, {
+                                    method: 'POST',
+                                    body: JSON.stringify({
+                                      configuration: {
+                                        ...provider.configuration,
+                                        available_models: updatedModels
                                       }
-                                    }
-                                  }}
-                                >
-                                  <Trash2 className="h-3 w-3" />
-                                </Button>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        ))}
+                                    })
+                                  }).then(async () => {
+                                    toast.success(`Model "${modelId}" removed successfully`)
+                                    await loadProviderDetails()
+                                  }).catch((error: any) => {
+                                    console.error('Failed to remove model:', error)
+                                    toast.error(error?.message || 'Failed to remove model')
+                                  })
+                                }
+                              }}
+                            />
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
                 ) : (
@@ -871,14 +931,7 @@ export default function AIProviderDetails() {
                     <p className="text-muted-foreground mb-4">
                       Use Model Discovery to find and sync available models from {provider?.name}.
                     </p>
-                    <Button onClick={() => {
-                      const tabs = document.querySelector('[role="tablist"]')
-                      const discoverTab = Array.from(tabs?.querySelectorAll('[role="tab"]') || [])
-                        .find(tab => tab.textContent?.includes('Model Discovery'))
-                      if (discoverTab instanceof HTMLElement) {
-                        discoverTab.click()
-                      }
-                    }}>
+                    <Button onClick={goToDiscoverTab}>
                       <Zap className="h-4 w-4 mr-2" />
                       Go to Model Discovery
                     </Button>
