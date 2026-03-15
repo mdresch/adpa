@@ -5,7 +5,7 @@
 CREATE TABLE IF NOT EXISTS document_context_priorities (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
-    template_id UUID NOT NULL REFERENCES document_templates(id) ON DELETE CASCADE,
+    template_id UUID NOT NULL REFERENCES templates(id) ON DELETE CASCADE,
     priority_level INTEGER NOT NULL CHECK (priority_level >= 1 AND priority_level <= 10),
     context_weight DECIMAL(5,2) NOT NULL CHECK (context_weight >= 0.0 AND context_weight <= 1.0),
     value_added_score DECIMAL(5,2) NOT NULL CHECK (value_added_score >= 0.0 AND value_added_score <= 10.0),
@@ -19,8 +19,8 @@ CREATE TABLE IF NOT EXISTS document_context_priorities (
 -- Template Creation Dependencies Table
 CREATE TABLE IF NOT EXISTS template_creation_dependencies (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    parent_template_id UUID NOT NULL REFERENCES document_templates(id) ON DELETE CASCADE,
-    child_template_id UUID NOT NULL REFERENCES document_templates(id) ON DELETE CASCADE,
+    parent_template_id UUID NOT NULL REFERENCES templates(id) ON DELETE CASCADE,
+    child_template_id UUID NOT NULL REFERENCES templates(id) ON DELETE CASCADE,
     dependency_type VARCHAR(50) NOT NULL CHECK (dependency_type IN ('prerequisite', 'sequential', 'parallel', 'optional', 'conditional')),
     dependency_strength DECIMAL(5,2) NOT NULL CHECK (dependency_strength >= 0.0 AND dependency_strength <= 1.0),
     context_inheritance BOOLEAN DEFAULT true,
@@ -34,9 +34,9 @@ CREATE TABLE IF NOT EXISTS template_creation_dependencies (
 -- Context Injection Rules Table
 CREATE TABLE IF NOT EXISTS context_injection_rules (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    template_id UUID NOT NULL REFERENCES document_templates(id) ON DELETE CASCADE,
+    template_id UUID NOT NULL REFERENCES templates(id) ON DELETE CASCADE,
     source_document_id UUID REFERENCES documents(id) ON DELETE CASCADE,
-    source_template_id UUID REFERENCES document_templates(id) ON DELETE CASCADE,
+    source_template_id UUID REFERENCES templates(id) ON DELETE CASCADE,
     injection_condition VARCHAR(100) NOT NULL,
     injection_method VARCHAR(50) NOT NULL CHECK (injection_method IN ('full', 'summary', 'extract', 'reference', 'metadata')),
     context_filter JSONB DEFAULT '{}',
@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS document_context_relationships (
 CREATE TABLE IF NOT EXISTS context_value_assessments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
-    template_id UUID NOT NULL REFERENCES document_templates(id) ON DELETE CASCADE,
+    template_id UUID NOT NULL REFERENCES templates(id) ON DELETE CASCADE,
     assessor_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     relevance_score DECIMAL(5,2) NOT NULL CHECK (relevance_score >= 0.0 AND relevance_score <= 10.0),
     completeness_score DECIMAL(5,2) NOT NULL CHECK (completeness_score >= 0.0 AND completeness_score <= 10.0),
@@ -82,7 +82,7 @@ CREATE TABLE IF NOT EXISTS context_value_assessments (
 CREATE TABLE IF NOT EXISTS context_building_sessions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     session_name VARCHAR(255) NOT NULL,
-    target_template_id UUID NOT NULL REFERENCES document_templates(id) ON DELETE CASCADE,
+    target_template_id UUID NOT NULL REFERENCES templates(id) ON DELETE CASCADE,
     session_owner_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     session_status VARCHAR(50) NOT NULL CHECK (session_status IN ('draft', 'active', 'completed', 'archived')) DEFAULT 'draft',
     context_strategy JSONB DEFAULT '{}',
@@ -121,11 +121,22 @@ CREATE INDEX IF NOT EXISTS idx_context_building_sessions_owner ON context_buildi
 CREATE INDEX IF NOT EXISTS idx_context_building_sessions_status ON context_building_sessions(session_status);
 
 -- Create triggers for updated_at timestamps
+DROP TRIGGER IF EXISTS update_document_context_priorities_updated_at ON document_context_priorities;
 CREATE TRIGGER update_document_context_priorities_updated_at BEFORE UPDATE ON document_context_priorities FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_template_creation_dependencies_updated_at ON template_creation_dependencies;
 CREATE TRIGGER update_template_creation_dependencies_updated_at BEFORE UPDATE ON template_creation_dependencies FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_context_injection_rules_updated_at ON context_injection_rules;
 CREATE TRIGGER update_context_injection_rules_updated_at BEFORE UPDATE ON context_injection_rules FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_document_context_relationships_updated_at ON document_context_relationships;
 CREATE TRIGGER update_document_context_relationships_updated_at BEFORE UPDATE ON document_context_relationships FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_context_value_assessments_updated_at ON context_value_assessments;
 CREATE TRIGGER update_context_value_assessments_updated_at BEFORE UPDATE ON context_value_assessments FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_context_building_sessions_updated_at ON context_building_sessions;
 CREATE TRIGGER update_context_building_sessions_updated_at BEFORE UPDATE ON context_building_sessions FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Create view for context building dashboard
@@ -142,7 +153,7 @@ SELECT
     COUNT(DISTINCT cir.id) as injection_rules_count,
     COUNT(DISTINCT cbs.id) as active_sessions_count,
     MAX(cbs.updated_at) as last_session_update
-FROM document_templates dt
+FROM templates dt
 LEFT JOIN document_context_priorities dcp ON dt.id = dcp.template_id AND dcp.is_active = true
 LEFT JOIN template_creation_dependencies tcd ON dt.id = tcd.parent_template_id AND tcd.is_active = true
 LEFT JOIN context_injection_rules cir ON dt.id = cir.template_id AND cir.is_active = true
@@ -199,7 +210,7 @@ BEGIN
             dt.name as template_name,
             'target'::VARCHAR(50) as dependency_type,
             1.0::DECIMAL(5,2) as dependency_strength
-        FROM document_templates dt
+        FROM templates dt
         WHERE dt.id = template_id_param
         
         UNION ALL
@@ -213,7 +224,7 @@ BEGIN
             tcd.dependency_strength
         FROM dependency_chain dc
         JOIN template_creation_dependencies tcd ON dc.template_id = tcd.parent_template_id
-        JOIN document_templates dt ON tcd.child_template_id = dt.id
+        JOIN templates dt ON tcd.child_template_id = dt.id
         WHERE tcd.is_active = true
         AND dc.level < 10  -- Prevent infinite recursion
     )

@@ -11,53 +11,35 @@ import { createServer } from "http"
 import { initSocketIO } from "./socket"
 
 import { errorHandler } from "./middleware/errorHandler"
-import requestIdMiddleware from "./middleware/requestId"
-import { logger } from "./utils/logger"
+import { correlationIdMiddleware } from "./middleware/correlationId";
+import { logger } from "./utils/logger";
+import pinoHttp from "pino-http";
 import jwt from "jsonwebtoken"
 import { pool } from "./database/connection"
-import { safeQuery, safeUpdate } from './services/jobs/dbGuards'
+import { safeQuery } from './services/jobs/dbGuards'
 import { initializeServerWithDependencyGraph } from "./startup/serverBootstrap"
 
 // Routes
-import authRoutes from "./routes/auth"
-import projectRoutes from "./routes/projects"
-import projectSettingsRoutes from "./routes/projectSettings"
-import programRoutes from "./routes/programRoutes"
-import documentRoutes from "./routes/documents"
-import projectDataExtractionRoutes from "./routes/projectDataExtraction"
-import userRoutes from "./routes/users"
-import companiesRoutes from "./routes/companies"
-import aiRoutes from "./routes/ai"
-import aiCopilotRoutes from "./routes/ai-copilot"
-import aiProvidersRoutes from "./routes/ai-providers"
-import aiFailoverRoutes from "./routes/ai-failover"
-import analyticsRoutes from "./routes/analytics"
+import projectsModuleRoutes from "./modules/projects/routes"
 import jobRoutes from "./routes/jobs"
 import jobsDiagnosticsRoutes from "./routes/jobs-diagnostics"
 import queueStatsRoutes from "./routes/queue-stats"
-import metricsRoutes from "./routes/metrics"
 import securityRoutes from "./routes/security"
-import integrationRoutes from "./routes/integrations"
-import confluenceRoutes from "./routes/confluenceRoutes"
-import githubRoutes from "./routes/githubRoutes"
-import sharepointRoutes from "./routes/sharepointRoutes"
-import ibabsRoutes from "./routes/ibabsRoutes"
-import dynamics365GuidesRoutes from "./routes/dynamics365GuidesRoutes"
-import templateRoutes from "./routes/templates"
-import templateAnalyticsRoutes from "./routes/template-analytics"
+// retired legacy routes handled by modular registry
 import { documentTemplateRoutes } from "./modules/documentTemplates"
 import { documentGeneratorRoutes } from "./modules/documentGenerator"
+import authModuleRoutes from "./modules/auth/routes"
+import identityModuleRoutes from "./modules/identity/routes"
+import portfolioModuleRoutes from "./modules/portfolio/routes"
+import executionModuleRoutes from "./modules/execution/routes"
+import templatesModuleRoutes from "./modules/templates/routes"
+import intelligenceModuleRoutes from "./modules/intelligence/routes"
+import integrationsModuleRoutes from "./modules/integrations/routes"
 import adobePdfRoutes from "./routes/adobe-pdf"
 import { createDocumentFormatRoutes } from "./routes/document-formats"
 import contextAiRoutes from "./routes/context-ai"
 import contextRoutes from "./routes/contextRoutes"
 import costManagementRoutes from "./routes/costManagement"
-import tasksRoutes from "./routes/tasks"
-import resourceCapacityRoutes from "./routes/resourceCapacityRoutes"
-// import ecsAiRoutes from "./routes/ecs-ai"
-// import quantumStabilityRoutes from "./routes/quantum-stability"
-// import speedOfLightRoutes from "./routes/speed-of-light"
-// import monteCarloProofRoutes from "./routes/monte-carlo-proof"
 // Optional: AI Provider Testing routes (skip if module absent)
 let aiProviderTestingRoutes: any | null = null
 try {
@@ -67,11 +49,7 @@ try {
 } catch (e) {
   // This is expected if the file is ignored in production
 }
-// import azureAIFoundryRoutes from "./routes/azure-ai-foundry"
 import processFlowRoutes from "./routes/process-flow"
-import aiModelsRoutes from "./routes/ai-models"
-import aiAnalyticsRoutes from "./routes/ai-analytics"
-import extractionAnalyticsRoutes from "./routes/extraction-analytics"
 import stakeholderRoutes from "./routes/stakeholders"
 import skillsRoutes from "./routes/skills"
 import competenciesRoutes from "./routes/competencies"
@@ -80,7 +58,7 @@ import compressionRoutes from "./routes/compression"
 import contextInjectionRoutes from "./routes/context-injection"
 import pipelineRoutes from "./routes/pipeline"
 import documentGenerationRoutes from "./routes/documentGeneration"
-import templateStatsRoutes from "./routes/template-stats"
+// Retired legacy template stats
 import settingsRoutes from "./routes/settings"
 import jiraLinkageRoutes from "./routes/jiraLinkage"
 import baselinesRoutes from "./routes/baselines"
@@ -96,7 +74,6 @@ import adminRoutes from "./routes/adminRoutes"
 import ragRoutes from "./routes/ragRoutes"
 
 import assessmentExportRoutes from "./routes/assessmentExportRoutes"
-import portfolioAssessmentRoutes from "./routes/portfolioAssessmentRoutes"
 import executiveDashboardRoutes from "./routes/executive-dashboard"
 import projectSimilarityRoutes from "./routes/projectSimilarity"
 import notificationsRoutes from "./routes/notifications"
@@ -114,16 +91,11 @@ import gkgEnrichedSearchRoutes from "./routes/gkgEnrichedSearch"
 import mitigationPlanRoutes from "./routes/mitigationPlanRoutes"
 import pmbok6Routes from "./routes/pmbok6Routes"
 import reviewRoutes from "./routes/reviewRoutes"
-import issueRoutes from "./routes/issueRoutes"
-import riskReportingRoutes from "./routes/riskReportingRoutes"
-import portfolioFinancialRoutes from "./routes/portfolioFinancial"
-import taskCostRoutes from "./routes/taskCosts"
 import developmentApproachRoutes from "./routes/developmentApproachRoutes"
 import lessonsLearnedRoutes from "./routes/lessonsLearnedRoutes"
 import developmentApproachModuleRoutes from "./modules/developmentApproach/routes"
 import contextOrchestratorRoutes from "./routes/contextOrchestrator"
 import uxDocumentationRoutes from "./routes/uxDocumentationRoutes"
-import playbookRoutes from "./routes/playbookRoutes"
 import digitalTwinAssetsRoutes from "./routes/digital-twin-assets"
 import digitalTwinEventsRoutes from "./routes/digital-twin-events"
 import digitalTwinTriggersRoutes from "./routes/digital-twin-triggers"
@@ -133,6 +105,7 @@ import digitalTwinAnalyticsRoutes from "./routes/digital-twin-analytics"
 import digitalTwinConnectorsRoutes from "./routes/digital-twin-connectors"
 import mediaRoutes from "./routes/mediaRoutes"
 import healthRoutes from "./routes/health"
+import { registerRoutes } from "./routes/registry"
 
 const app = express()
 const server = createServer(app)
@@ -189,8 +162,11 @@ app.use(
     allowedHeaders: ['Content-Type', 'Authorization'],
   }),
 )
-// assign a request id to each incoming request
-app.use(requestIdMiddleware)
+// Use pino-http for automatic request logging
+app.use(pinoHttp({ logger: logger as any }));
+
+// Use correlation ID middleware for request tracking
+app.use(correlationIdMiddleware);
 // JSON parser - skip multipart/form-data requests (handled by multer)
 app.use((req, res, next) => {
   const contentType = req.headers['content-type'] || ''
@@ -236,66 +212,47 @@ app.get("/api/debug-env", (req, res) => {
 // API Routes
 console.log("🔧 Registering API routes...")
 
-// Debug middleware for auth routes (must be before route registration)
-app.use("/api/auth", (req, res, next) => {
-  console.log(`🔍 Auth route called: ${req.method} ${req.path}`)
-  next()
-})
+// retired legacy auth routes - now handled by modular registry (/api/v1/auth)
+// Aliased here for legacy frontend compatibility (Phase 3 compatibility layer)
+app.use("/api/auth", authModuleRoutes[0].router)
+app.use("/api/users", (req, res, next) => { req.url = '/users' + req.url; next(); }, identityModuleRoutes[0].router) 
+app.use("/api/companies", (req, res, next) => { req.url = '/companies' + req.url; next(); }, identityModuleRoutes[0].router)
+app.use("/api/projects", projectsModuleRoutes[0].router)
+app.use("/api", identityModuleRoutes[0].router) // Mounts /users and /companies
+app.use("/api", executionModuleRoutes[0].router) // Mounts /issues, /tasks, /risks, /playbooks under /api
+app.use("/api/portfolios", portfolioModuleRoutes[0].router)
+app.use("/api/portfolio", portfolioModuleRoutes[0].router)
+app.use("/api/portfolio-domains", (req, res, next) => { req.url = '/domains' + req.url; next(); }, portfolioModuleRoutes[0].router)
+app.use("/api/portfolio-assessment", (req, res, next) => { req.url = '/assessment' + req.url; next(); }, portfolioModuleRoutes[0].router)
+app.use("/api/templates", templatesModuleRoutes)
+app.use("/api/template-analytics", templatesModuleRoutes)
+app.use("/api/template-stats", (req, res, next) => { req.url = '/statistics' + req.url; next(); }, templatesModuleRoutes)
+app.use("/api/analytics", intelligenceModuleRoutes[0].router)
+app.use("/api/integrations", integrationsModuleRoutes[0].router)
 
-app.use("/api/auth", authRoutes)
-console.log("✅ Auth routes registered")
 
-app.use("/api/projects", projectRoutes)
-app.use("/api/projects", require("./routes/projectIntegrationRoutes").default)
-app.use("/api/projects", projectSettingsRoutes)
-app.use("/api/programs", programRoutes)
-app.use("/api/documents", documentRoutes)
-app.use("/api/project-data-extraction", projectDataExtractionRoutes)
+console.log("✅ Legacy compatibility routes registered (Bridge Layer Active)")
+
+// Modular routes are automatically discovered and registered via registerRoutes(app) below
+
 app.use("/api/document-generation", documentGenerationRoutes)
-app.use("/api/users", userRoutes)
-app.use("/api/companies", companiesRoutes)
-app.use("/api/ai", aiRoutes)
-app.use("/api/ai/copilot", aiCopilotRoutes)
-app.use("/api/ai-providers", aiProvidersRoutes)
-app.use("/api/ai-failover", aiFailoverRoutes)
-app.use("/api/analytics", analyticsRoutes)
 app.use("/api/jobs", jobRoutes)
 app.use("/api/jobs/diagnostics", jobsDiagnosticsRoutes)
 app.use("/api/queue-stats", queueStatsRoutes)
-app.use("/metrics", metricsRoutes) // Prometheus metrics endpoint (no /api prefix for standard Prometheus scraping)
 app.use("/api/security", securityRoutes)
-app.use("/api/integrations/confluence", confluenceRoutes)
-app.use("/api/integrations/github", githubRoutes)
-app.use("/api/integrations", integrationRoutes)
-app.use("/api/integrations/confluence", confluenceRoutes)
-app.use("/api/integrations/github", githubRoutes)
-app.use("/api/integrations/sharepoint", sharepointRoutes)
-app.use("/api/integrations/ibabs", ibabsRoutes)
-app.use("/api/dynamics365-guides", dynamics365GuidesRoutes)
-app.use("/api/templates", templateRoutes)
-app.use("/api/template-analytics", templateAnalyticsRoutes)
+// Retired legacy templates routes handled by bridge layer
 app.use("/api/cost-management", costManagementRoutes)
-app.use("/api/tasks", tasksRoutes)
-app.use("/api/resource-capacity", resourceCapacityRoutes)
-app.use("/api/template-stats", templateStatsRoutes)
+// retired legacy template stats handled by bridge layer
 app.use("/api/document-templates", documentTemplateRoutes)
 app.use("/api/document-generator", documentGeneratorRoutes)
 app.use("/api/adobe-pdf", adobePdfRoutes)
 app.use("/api/documents", createDocumentFormatRoutes(pool))
 app.use("/api/context-ai", contextAiRoutes)
 app.use("/api/contexts", contextRoutes)
-// app.use("/api/ecs-ai", ecsAiRoutes)
-// app.use("/api/quantum-stability", quantumStabilityRoutes)
-// app.use("/api/speed-of-light", speedOfLightRoutes)
-// app.use("/api/monte-carlo-proof", monteCarloProofRoutes)
 if (aiProviderTestingRoutes) {
   app.use("/api/ai-provider-testing", aiProviderTestingRoutes)
 }
-// app.use("/api/azure-ai-foundry", azureAIFoundryRoutes)
 app.use("/api/process-flow", processFlowRoutes)
-app.use("/api/ai-models", aiModelsRoutes)
-app.use("/api/ai-analytics", aiAnalyticsRoutes)
-app.use("/api/extraction-analytics", extractionAnalyticsRoutes)
 app.use("/api/stakeholders", stakeholderRoutes)
 app.use("/api/skills", skillsRoutes)
 app.use("/api/competencies", competenciesRoutes)
@@ -317,16 +274,12 @@ app.use("/api/digital-twin/analytics", digitalTwinAnalyticsRoutes)
 app.use("/api/digital-twin-connectors", digitalTwinConnectorsRoutes)
 app.use("/api/entities", entityBaselineRoutes)
 app.use("/api/emergency-meetings", emergencyMeetingsRoutes)
-app.use("/api/baseline-updates", baselineUpdatesRoutes)
 app.use("/api/escalation", escalationRoutes)
 app.use("/api/quality-audits", qualityAuditRoutes)
 app.use("/api/admin", adminRoutes)
 app.use("/api/onboarding", documentUploadRoutes)
-app.use("/api/assessment", assessmentExportRoutes)
-app.use("/api/portfolio-assessment", portfolioAssessmentRoutes)
 app.use("/api/executive-dashboard", executiveDashboardRoutes)
 app.use("/api/rag", ragRoutes)
-app.use("/api/analytics", analyticsRoutes)
 app.use("/api/projects", projectSimilarityRoutes)
 app.use("/api/projects", developmentApproachRoutes)
 app.use("/api/development-approach", developmentApproachModuleRoutes)
@@ -346,19 +299,19 @@ app.use("/api/search", searchRoutes)
 app.use("/api/search", gkgEnrichedSearchRoutes)
 app.use("/api/mitigation-plans", mitigationPlanRoutes)
 app.use("/api/pmbok6", pmbok6Routes)
-app.use("/api", reviewRoutes)
-app.use("/api/issues", issueRoutes)
-app.use("/api/risks", riskReportingRoutes)
-app.use("/api/portfolios", require("./routes/portfolioRoutes").default)
-app.use("/api/portfolio", portfolioFinancialRoutes)
-app.use("/api/tasks", taskCostRoutes)
-app.use("/api/portfolio-domains", require("./routes/portfolioDomains").default)
+// Retired legacy execution and portfolio routes handled by bridge layer
 app.use("/api/lessons", lessonsLearnedRoutes)
 app.use("/api/context-orchestrator", contextOrchestratorRoutes)
 app.use("/api/ux-documentation", uxDocumentationRoutes)
-app.use("/api/playbooks", playbookRoutes)
+// Playbooks retired (execution domain)
 
 console.log("✅ All API routes registered (including approvals, notifications, email notifications, knowledge base, assessment, executive dashboard, performance actuals, team agreements, OKRs, signatures, search, PMBOK 6, review scheduling, UX documentation, playbooks, and playbook generation)")
+
+// Register new Modular routes (Phase 3)
+registerRoutes(app).catch(err => {
+  console.error("❌ Failed to register modular routes:", err)
+  logger.error(err, "❌ Failed to register modular routes")
+})
 
 // WebSocket connection handling
 io.on("connection", (socket) => {
@@ -385,10 +338,10 @@ io.on("connection", (socket) => {
             decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key')
           } catch (jwtError: any) {
             // JWT malformed, expired, or invalid - reject immediately
-            logger.warn('WebSocket JWT validation failed', {
+            logger.warn({
               error: jwtError.message,
               room
-            })
+            }, 'WebSocket JWT validation failed')
             socket.emit('join:error', {
               room,
               message: 'Invalid or expired token. Please log out and log back in.',
@@ -433,7 +386,7 @@ io.on("connection", (socket) => {
               try {
                 teamMembers = JSON.parse(teamMembers)
               } catch (parseError) {
-                logger.warn(`Failed to parse team_members for project ${projectId}:`, parseError)
+                logger.warn(parseError, `Failed to parse team_members for project ${projectId}:`)
                 teamMembers = []
               }
             }
@@ -470,7 +423,7 @@ io.on("connection", (socket) => {
             socket.emit('join:error', { room, message: 'Access denied' })
           }
         } catch (err) {
-          logger.error('Socket auth error:', err)
+          logger.error(err, 'Socket auth error:')
           socket.emit('join:error', { room, message: 'Authentication failed' })
         }
       } else {
@@ -480,7 +433,7 @@ io.on("connection", (socket) => {
         socket.emit('join:ok', { room })
       }
     } catch (err) {
-      logger.error('Error during join handling:', err)
+      logger.error(err, 'Error during join handling:')
       socket.emit('join:error', { room, message: 'Internal server error' })
     }
   })

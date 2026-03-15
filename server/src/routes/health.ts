@@ -80,15 +80,38 @@ export function updateDependencyHealth(
 }
 
 /**
+ * Persist health check result to database
+ */
+async function logHealthCheck(status: string, metadata: any = {}) {
+  try {
+    await safeQuery(
+      pool,
+      'INSERT INTO health_checks (status, metadata) VALUES ($1, $2)',
+      [status, JSON.stringify(metadata)]
+    )
+  } catch (err) {
+    // Non-blocking: just log the error
+    logger.error('[HEALTH] Failed to persist health check result', { error: String(err) })
+  }
+}
+
+/**
  * GET /health
  * Basic liveness check - responds with 200 if server is up
  * Used by load balancers and basic monitoring
  */
-router.get("/health", (req: Request, res: Response) => {
+router.get("/", async (req: Request, res: Response) => {
+  const status = "healthy";
+  const uptime = process.uptime();
+  const timestamp = new Date().toISOString();
+
+  // Fire-and-forget logging (awaited for deterministic tests)
+  await logHealthCheck(status, { uptime, caller: req.ip });
+
   res.status(200).json({
-    status: "healthy",
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
+    status,
+    timestamp,
+    uptime,
   } as HealthStatus)
 })
 
@@ -97,7 +120,7 @@ router.get("/health", (req: Request, res: Response) => {
  * Kubernetes readiness probe
  * Returns 200 only if server is ready to receive traffic (all critical dependencies healthy)
  */
-router.get("/health/ready", async (req: Request, res: Response) => {
+router.get("/ready", async (req: Request, res: Response) => {
   try {
     // Check critical dependencies (align with Issue 608 AC: Database, Redis, Neo4j)
     const criticalDeps = ["Database", "Redis", "Neo4j"]
@@ -159,7 +182,7 @@ router.get("/health/ready", async (req: Request, res: Response) => {
  * Returns 200 if server is still running (not hung/crashed)
  * Less strict than readiness - used to restart hung instances
  */
-router.get("/health/live", (req: Request, res: Response) => {
+router.get("/live", (req: Request, res: Response) => {
   try {
     // Simple check - if we can respond, we're alive
     res.status(200).json({
@@ -184,7 +207,7 @@ router.get("/health/live", (req: Request, res: Response) => {
  * Detailed dependency health status
  * Shows status of all registered dependencies
  */
-router.get("/health/dependencies", (req: Request, res: Response) => {
+router.get("/dependencies", (req: Request, res: Response) => {
   try {
     const dependencies = Array.from(dependencyHealth.values())
     const healthyCount = dependencies.filter(d => d.status === "healthy").length
@@ -226,7 +249,7 @@ router.get("/health/dependencies", (req: Request, res: Response) => {
  * Comprehensive system health including metrics
  * Most detailed response, suitable for dashboards
  */
-router.get("/health/full", async (req: Request, res: Response) => {
+router.get("/full", async (req: Request, res: Response) => {
   try {
     const dependencies = Array.from(dependencyHealth.values())
     const unhealthyCount = dependencies.filter(d => d.status === "unhealthy").length

@@ -88,7 +88,7 @@ const getRedisClient = () => {
     if (!isConnecting) {
       logger.info("Triggering background Redis reconnection...")
       connectRedis().catch(err => {
-        logger.error("Background Redis reconnection failed:", err)
+        logger.error(err, "Background Redis reconnection failed:")
       })
     }
     return null // Return null so callers can degrade gracefully while we reconnect
@@ -100,7 +100,7 @@ const getRedisClient = () => {
     // The server should have called connectRedis() at startup.
     if (!isConnecting) {
       connectRedis().catch(err => {
-        logger.error("Initial background Redis connection failed:", err)
+        logger.error(err, "Initial background Redis connection failed:")
       })
     }
     return null
@@ -131,7 +131,7 @@ export async function connectRedis() {
 
           // Attach event listeners
           testClient.on("error", (err: any) => {
-            logger.error("Redis Client Error:", err)
+            logger.error(err, "Redis Client Error:")
           })
           testClient.on("connect", () => {
             logger.info("Redis client connected")

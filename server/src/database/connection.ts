@@ -8,12 +8,10 @@ import CircuitBreaker from "../utils/circuitBreaker"
 import dns from "dns"
 import { promisify } from "util"
 
-const dnsResolve4 = promisify(dns.resolve4)
+const dnsLookup = promisify(dns.lookup)
 
-// Check if DATABASE_URL is provided (Railway, Heroku, etc.)
-const databaseUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL
-console.log(`🔍 DATABASE_URL check: ${databaseUrl ? `Found (${databaseUrl.substring(0, 30)}...)` : 'Not found'}`)
-console.log(`🔍 NODE_ENV: ${process.env.NODE_ENV || 'undefined (defaulting to development)'}`)
+// Helper to get current database URL (allows dynamic updates in tests)
+const getDatabaseUrl = () => process.env.DATABASE_URL || process.env.POSTGRES_URL
 
 // timeouts and retry defaults can be configured via environment variables
 const DEFAULT_DB_CONN_TIMEOUT_MS = parseInt(process.env.DB_CONN_TIMEOUT_MS || '30000', 10)
@@ -44,6 +42,12 @@ export function buildSslConfig(target?: string) {
     return { rejectUnauthorized: false }
   }
 
+  // Disable SSL for local connections
+  const isLocal = target?.includes('localhost') || target?.includes('127.0.0.1')
+  if (isLocal) {
+    return false
+  }
+
   if (process.env.DB_SSL === "true") {
     return { rejectUnauthorized: shouldRejectUnauthorized() }
   }
@@ -52,16 +56,17 @@ export function buildSslConfig(target?: string) {
 }
 
 const createPool = (host: string) => {
+  const currentDbUrl = getDatabaseUrl()
   // If DATABASE_URL is provided, use it directly
-  if (databaseUrl && host === connectionMethods[0].host) {
+  if (currentDbUrl && host === connectionMethods[0].host) {
     console.log('Using DATABASE_URL connection string')
     return new Pool({
-      connectionString: databaseUrl,
+      connectionString: currentDbUrl,
       // SSL configuration for Supabase/Azure:
       // - Supabase uses PgBouncer (connection pooler) which causes cert chain issues
       // - Disable cert validation for Supabase (trusted provider)
       // - For custom databases, enable validation unless explicitly disabled
-      ssl: buildSslConfig(databaseUrl),
+      ssl: buildSslConfig(currentDbUrl),
       max: 50,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 10000,
@@ -94,9 +99,40 @@ export const pool = new Proxy({} as Pool, {
     if (!internalPool) {
       throw new Error(`Database not connected. Property '${String(prop)}' accessed before connectDatabase() completed.`)
     }
+
+    // Special handling for pool.connect() when internalPool is actually a transaction client
+    if (prop === 'connect' && !(internalPool instanceof Pool)) {
+      return async (callback?: (err: Error | null, client: any, release: () => void) => void) => {
+        const mockClient = internalPool as any;
+        const mockRelease = () => { /* no-op for transaction client */ };
+        
+        if (callback) {
+          callback(null, mockClient, mockRelease);
+          return;
+        }
+        
+        // Return a client-like object that has a release method
+        return Object.create(mockClient, {
+          release: { value: mockRelease },
+          query: { value: (text: any, params: any) => mockClient.query(text, params) }
+        });
+      };
+    }
+
     return (internalPool as any)[prop]
   }
 })
+
+/**
+ * For testing purposes: allows overriding the internal pool with a transaction client or a different pool.
+ */
+export function setInternalPool(p: Pool | any) {
+  internalPool = p
+}
+
+export function getInternalPool(): Pool | null {
+  return internalPool
+}
 
 // Circuit breaker for DB to avoid hammering DB when it's unstable
 const dbBreaker = new CircuitBreaker(3, 30000) // open after 3 failures, reset after 30s
@@ -138,11 +174,10 @@ function patchPoolQuery(p: Pool) {
           dbBreaker.recordSuccess()
           return res
         } catch (err: any) {
-          console.error('[DB-GUARD] Unhandled pool.query error:', JSON.stringify(err, Object.getOwnPropertyNames(err)));
           logger.error('[DB-GUARD] Unhandled pool.query error', { sql: text, params, message: err?.message, stack: err?.stack })
           // record failure and possibly open circuit
           dbBreaker.recordFailure()
-          return { rows: [], rowCount: 0 }
+          throw err // Re-throw to allow callers (like migration runner) to catch it
         }
       }
   } catch (err) {
@@ -194,17 +229,21 @@ async function connectDatabaseInternal(): Promise<void> {
   const maxRetriesPerMethod = DEFAULT_DB_MAX_RETRIES_PER_METHOD // Reduced retries for Railway timeout by default
   const retryDelay = 3000 // Reduced to 3 seconds
 
+  const currentDbUrl = getDatabaseUrl()
+  console.log(`🔍 DATABASE_URL check: ${currentDbUrl ? `Found (${currentDbUrl.substring(0, 30)}...)` : 'Not found'}`)
+  console.log(`🔍 NODE_ENV: ${process.env.NODE_ENV || 'undefined (defaulting to development)'}`)
   console.log(`🔧 DB config: connect timeout=${DEFAULT_DB_CONN_TIMEOUT_MS}ms, query timeout=${DEFAULT_DB_QUERY_TIMEOUT_MS}ms, max retries per method=${maxRetriesPerMethod}`)
 
   // If DATABASE_URL is provided, try it first
-  if (databaseUrl) {
+  if (currentDbUrl) {
+    console.log(`🔌 Attempting connection via DATABASE_URL...`)
     for (let attempt = 1; attempt <= maxRetriesPerMethod; attempt++) {
       console.log(`🔌 Trying database connection via DATABASE_URL (attempt ${attempt}/${maxRetriesPerMethod})`)
 
       // Parse connection string to extract components
       // This allows us to force IPv4 by explicitly setting the family option
       let poolConfig: PoolConfig & { family?: number } = {
-        ssl: buildSslConfig(databaseUrl),
+        ssl: buildSslConfig(currentDbUrl),
         max: 50,
         idleTimeoutMillis: 30000,
         connectionTimeoutMillis: DEFAULT_DB_CONN_TIMEOUT_MS,
@@ -212,11 +251,12 @@ async function connectDatabaseInternal(): Promise<void> {
 
       // Parse URL and handle IPv4/IPv6 resolution
       try {
-        const dbUrl = new URL(databaseUrl)
+        const dbUrl = new URL(currentDbUrl)
 
         // For Supabase, prefer connection pooler (port 6543) which has better IPv4 support
         // If using direct connection (port 5432), try to resolve to IPv4 first
-        const isDirectConnection = dbUrl.port === '5432' || !dbUrl.port
+        const isLocal = dbUrl.hostname === 'localhost' || dbUrl.hostname === '127.0.0.1'
+        const isDirectConnection = dbUrl.port === '5432' || !dbUrl.port || isLocal || dbUrl.port === '5433'
         const isPoolerConnection =
           dbUrl.port === '6543' ||
           dbUrl.searchParams.has('pgbouncer') ||
@@ -225,11 +265,11 @@ async function connectDatabaseInternal(): Promise<void> {
         if (isDirectConnection) {
           // Try to resolve to IPv4 for direct connections
           try {
-            console.log(`🔧 Resolving ${dbUrl.hostname} to IPv4 address (A records only)...`)
-            const addresses = await dnsResolve4(dbUrl.hostname)
+            console.log(`🔧 Resolving ${dbUrl.hostname} via dns.lookup...`)
+            const { address } = await dnsLookup(dbUrl.hostname, { family: 4 })
 
-            if (addresses && addresses.length > 0) {
-              const ipv4Address = addresses[0]
+            if (address) {
+              const ipv4Address = address
               console.log(`✅ Resolved to IPv4: ${ipv4Address}`)
 
               poolConfig = {
@@ -271,14 +311,14 @@ async function connectDatabaseInternal(): Promise<void> {
         // Fallback: Parse connection string manually
         console.warn('⚠️  Could not resolve hostname, parsing connectionString with SSL config:', e?.message || e)
         try {
-          const dbUrl = new URL(databaseUrl)
+          const dbUrl = new URL(currentDbUrl)
           poolConfig = {
             host: dbUrl.hostname,
             port: parseInt(dbUrl.port) || 5432,
             database: dbUrl.pathname.slice(1).split('?')[0],
             user: dbUrl.username,
             password: dbUrl.password,
-            ssl: buildSslConfig(databaseUrl),
+            ssl: buildSslConfig(currentDbUrl),
             max: 50,
             idleTimeoutMillis: 30000,
             connectionTimeoutMillis: DEFAULT_DB_CONN_TIMEOUT_MS,
@@ -287,7 +327,7 @@ async function connectDatabaseInternal(): Promise<void> {
         } catch (parseError) {
           // Last resort: use connectionString as-is
           console.error('⚠️  Could not parse DATABASE_URL, using raw connectionString')
-          poolConfig.connectionString = databaseUrl
+          poolConfig.connectionString = currentDbUrl
         }
       }
 
@@ -298,6 +338,7 @@ async function connectDatabaseInternal(): Promise<void> {
       testPool.setMaxListeners(20)
 
       try {
+        console.log(`📡 Connecting to ${poolConfig.host || poolConfig.connectionString} as ${poolConfig.user}...`)
         const client = await Promise.race([
           testPool.connect(),
           new Promise<never>((_, reject) => 
@@ -312,6 +353,7 @@ async function connectDatabaseInternal(): Promise<void> {
           )
         ])
         client.release()
+        console.log(`✅ DATABASE_URL connection successful on attempt ${attempt}`)
 
         internalPool = testPool
         patchPoolQuery(internalPool)
@@ -359,6 +401,7 @@ async function connectDatabaseInternal(): Promise<void> {
         }
         return
       } catch (error: any) {
+        console.warn(`⚠️ DATABASE_URL attempt ${attempt} failed: ${error.message}`)
         logger.warn(`Database connection attempt ${attempt} failed via DATABASE_URL:`, {
           error: error?.message,
           code: error?.code
@@ -369,7 +412,7 @@ async function connectDatabaseInternal(): Promise<void> {
           await new Promise(resolve => setTimeout(resolve, retryDelay))
         } else {
           // Clean up the test pool before moving to fallback methods
-          await testPool.end().catch(() => { })
+          if (testPool) await testPool.end().catch(() => { })
         }
       }
     }

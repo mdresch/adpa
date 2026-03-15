@@ -72,7 +72,7 @@ class AIProviderService {
    * Initialize the AI provider service
    */
   async initialize(): Promise<void> {
-    if (this.initialized) return
+    if (this.initialized && this.providers.size > 0) return
 
     try {
       logger.info('Initializing AI Provider Service...')
@@ -385,6 +385,22 @@ class AIProviderService {
    */
   private decryptApiKey(encryptedApiKey: string): string {
     return Buffer.from(encryptedApiKey, 'base64').toString('utf-8')
+  }
+
+  /**
+   * TEST UTILITY: Set a provider instance directly (bypass DB)
+   */
+  setProvider(name: string, provider: AIProvider): void {
+    this.providers.set(name, provider)
+    this.initialized = true // Mark as initialized if we're injecting mocks
+  }
+
+  /**
+   * TEST UTILITY: Clear all providers
+   */
+  clearProviders(): void {
+    this.providers.clear()
+    this.initialized = false
   }
 }
 

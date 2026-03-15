@@ -48,6 +48,7 @@ export const aiProvidersDependency: Dependency = {
     }
   },
   validate: async () => {
+    const startTime = Date.now()
     try {
       // Check if at least one AI provider is available
       const providers = (aiService as any).getProviders?.()

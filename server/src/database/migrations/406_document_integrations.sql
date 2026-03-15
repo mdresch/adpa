@@ -58,7 +58,7 @@ CREATE TRIGGER trigger_document_integrations_updated_at
 CREATE OR REPLACE VIEW v_dynamics365_guides_sync AS
 SELECT 
   d.id AS document_id,
-  d.title AS document_title,
+  d.name AS document_title,
   d.project_id,
   p.name AS project_name,
   di.external_id AS guide_id,

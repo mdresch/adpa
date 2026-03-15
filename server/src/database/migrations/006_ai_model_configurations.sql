@@ -103,6 +103,6 @@ FROM ai_providers ap
 WHERE ap.is_active = true
 ON CONFLICT (provider_id, model_id) DO NOTHING;
 
--- Grant permissions
-GRANT SELECT, INSERT, UPDATE, DELETE ON ai_model_configurations TO postgres;
-GRANT SELECT ON ai_model_configurations_with_provider TO postgres;
+-- Grant permissions (Disabled for test environment compatibility)
+-- GRANT SELECT, INSERT, UPDATE, DELETE ON ai_model_configurations TO postgres;
+-- GRANT SELECT ON ai_model_configurations_with_provider TO postgres;

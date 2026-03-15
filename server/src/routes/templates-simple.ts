@@ -28,7 +28,7 @@ router.get("/", authenticateToken, async (req, res) => {
       },
     })
   } catch (error) {
-    log.error("Get templates error:", error)
+    log.error(error, "Get templates error:")
     res.status(500).json({ error: "Internal server error" })
   }
 })
@@ -50,7 +50,7 @@ router.get("/:id", authenticateToken, async (req, res) => {
 
     res.json({ template: result.rows[0] })
   } catch (error) {
-    log.error("Get template error:", error)
+    log.error(error, "Get template error:")
     res.status(500).json({ error: "Internal server error" })
   }
 })

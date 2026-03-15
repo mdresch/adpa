@@ -107,11 +107,22 @@ CREATE INDEX IF NOT EXISTS idx_context_building_sessions_owner ON context_buildi
 CREATE INDEX IF NOT EXISTS idx_context_building_sessions_status ON context_building_sessions(session_status);
 
 -- Create triggers for updated_at timestamps
+DROP TRIGGER IF EXISTS update_document_context_priorities_updated_at ON document_context_priorities;
 CREATE TRIGGER update_document_context_priorities_updated_at BEFORE UPDATE ON document_context_priorities FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_template_creation_dependencies_updated_at ON template_creation_dependencies;
 CREATE TRIGGER update_template_creation_dependencies_updated_at BEFORE UPDATE ON template_creation_dependencies FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_context_injection_rules_updated_at ON context_injection_rules;
 CREATE TRIGGER update_context_injection_rules_updated_at BEFORE UPDATE ON context_injection_rules FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_document_context_relationships_updated_at ON document_context_relationships;
 CREATE TRIGGER update_document_context_relationships_updated_at BEFORE UPDATE ON document_context_relationships FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_context_value_assessments_updated_at ON context_value_assessments;
 CREATE TRIGGER update_context_value_assessments_updated_at BEFORE UPDATE ON context_value_assessments FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_context_building_sessions_updated_at ON context_building_sessions;
 CREATE TRIGGER update_context_building_sessions_updated_at BEFORE UPDATE ON context_building_sessions FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Create view for context building dashboard

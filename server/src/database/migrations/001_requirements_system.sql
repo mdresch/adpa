@@ -2,6 +2,11 @@
 -- Foundation tables for ECS system
 
 -- Requirements Table
+-- Requirements Table
+ALTER TABLE requirements ADD COLUMN IF NOT EXISTS document_id UUID REFERENCES documents(id) ON DELETE CASCADE;
+ALTER TABLE requirements ADD COLUMN IF NOT EXISTS requirement_type VARCHAR(50);
+ALTER TABLE requirements ADD COLUMN IF NOT EXISTS priority INTEGER;
+
 CREATE TABLE IF NOT EXISTS requirements (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     title VARCHAR(255) NOT NULL,

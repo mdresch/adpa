@@ -73,7 +73,7 @@ export async function createIngestionSource(
     ]
   );
   const row = res.rows[0];
-  logger.info('Digital Twin ingestion source created', { sourceId: row.id, projectId, name: row.name });
+  logger.info({ sourceId: row.id, projectId, name: row.name }, 'Digital Twin ingestion source created');
   return parseSource(row);
 }
 
@@ -146,9 +146,9 @@ export async function startSync(sourceId: string): Promise<void> {
   try {
     const { connectorManager } = await import('./connectors/connectorManager');
     await connectorManager.startConnector(source);
-    logger.info('Digital Twin ingestion sync started', { sourceId });
+    logger.info({ sourceId }, 'Digital Twin ingestion sync started');
   } catch (error: any) {
-    logger.error('Failed to start connector', { sourceId, error: error.message });
+    logger.error({ sourceId, error: error.message }, 'Failed to start connector');
     await pool().query(
       `UPDATE digital_twin_ingestion_sources
        SET last_error = $1, sync_status = 'error', updated_at = CURRENT_TIMESTAMP
@@ -174,9 +174,9 @@ export async function pauseSync(sourceId: string): Promise<void> {
   try {
     const { connectorManager } = await import('./connectors/connectorManager');
     await connectorManager.stopConnector(sourceId);
-    logger.info('Digital Twin ingestion sync paused', { sourceId });
+    logger.info({ sourceId }, 'Digital Twin ingestion sync paused');
   } catch (error: any) {
-    logger.error('Failed to stop connector', { sourceId, error: error.message });
+    logger.error({ sourceId, error: error.message }, 'Failed to stop connector');
     // Don't throw - we've already updated the DB
   }
 }

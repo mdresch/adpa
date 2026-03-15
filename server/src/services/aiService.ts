@@ -19,7 +19,7 @@ import { safeQuery, isDatabaseReady } from '../database/helpers'
 import AnalyticsTrackingService from "./analyticsTrackingService"
 
 // Type definitions for AI service requests and responses
-interface AIGenerateRequest {
+export interface AIGenerateRequest {
   userId?: string
   projectId?: string
   documentId?: string
@@ -45,7 +45,7 @@ interface AIGenerateRequest {
   metadata?: Record<string, any>
 }
 
-interface AIGenerateResponse {
+export interface AIGenerateResponse {
   content: string
   provider: string
   model: string

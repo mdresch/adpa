@@ -22,8 +22,87 @@ security:
 tags:
   - name: Document Templates
     description: Operations for managing document templates
+  - name: Health
+    description: System health and monitoring endpoints
 
 paths:
+  /health:
+    get:
+      summary: Basic liveness check
+      description: Returns a simple health status. Used by load balancers.
+      tags: [Health]
+      responses:
+        '200':
+          description: Server is communicating
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+  /health/live:
+    get:
+      summary: Kubernetes liveness probe
+      description: Returns status 'live' if the process is responsive.
+      tags: [Health]
+      responses:
+        '200':
+          description: Process is alive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LivenessStatus'
+
+  /health/ready:
+    get:
+      summary: Kubernetes readiness probe
+      description: Checks critical dependencies (DB, Redis, Neo4j).
+      tags: [Health]
+      responses:
+        '200':
+          description: All critical dependencies are healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+        '503':
+          description: One or more critical dependencies are unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+  /health/dependencies:
+    get:
+      summary: Detailed dependency health
+      description: Returns status for all registered system dependencies.
+      tags: [Health]
+      responses:
+        '200':
+          description: Dependency report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DependencyHealthReport'
+
+  /health/full:
+    get:
+      summary: Comprehensive system health
+      description: Returns full health status including all dependencies and system metrics.
+      tags: [Health]
+      responses:
+        '200':
+          description: Full system health report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FullHealthResponse'
+        '503':
+          description: Critical failure in system health
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FullHealthResponse'
+
   /document-templates:
     get:
       summary: Get paginated list of document templates
@@ -410,6 +489,117 @@ components:
       bearerFormat: JWT
 
   schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        timestamp:
+          type: string
+          format: date-time
+        uptime:
+          type: integer
+        message:
+          type: string
+        failedDependencies:
+          type: array
+          items:
+            type: string
+      required: [status, timestamp, uptime]
+
+    LivenessStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          example: live
+        timestamp:
+          type: string
+          format: date-time
+        uptime:
+          type: integer
+        message:
+          type: string
+      required: [status, timestamp, uptime]
+
+    DependencyHealth:
+      type: object
+      properties:
+        name:
+          type: string
+        status:
+          type: string
+          enum: [healthy, unhealthy, unknown]
+        latency:
+          type: integer
+        lastCheck:
+          type: string
+          format: date-time
+        error:
+          type: string
+      required: [name, status, latency, lastCheck]
+
+    DependencyHealthReport:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        timestamp:
+          type: string
+          format: date-time
+        uptime:
+          type: integer
+        summary:
+          type: object
+          properties:
+            total:
+              type: integer
+            healthy:
+              type: integer
+            unhealthy:
+              type: integer
+            unknown:
+              type: integer
+        dependencies:
+          type: array
+          items:
+            $ref: '#/components/schemas/DependencyHealth'
+      required: [status, timestamp, uptime, summary, dependencies]
+
+    FullHealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        timestamp:
+          type: string
+          format: date-time
+        uptime:
+          type: integer
+        version:
+          type: string
+        environment:
+          type: string
+        dependencies:
+          type: array
+          items:
+            $ref: '#/components/schemas/DependencyHealth'
+        systemMetrics:
+          type: object
+          properties:
+            memoryUsage:
+              type: integer
+              description: Heap usage percentage
+            uptime:
+              type: integer
+              description: Process uptime in seconds
+            pid:
+              type: integer
+      required: [status, timestamp, uptime, dependencies, systemMetrics]
+
     DocumentTemplate:
       type: object
       properties:

@@ -42,14 +42,14 @@ export async function ingestEvent(data: DigitalTwinEventInput) {
       const { evaluateTriggerRules } = await import('./digitalTwinTriggerService')
       // Fire and forget (or could await if critical)
       evaluateTriggerRules(event.asset_id, event.asset_id, event.id, event.event_type)
-        .catch(err => logger.error('Failed to evaluate triggers', { error: err.message, eventId: event.id }))
+        .catch(err => logger.error({ error: err.message, eventId: event.id }, 'Failed to evaluate triggers'))
     } catch (err) {
-      logger.error('Failed to import digitalTwinTriggerService', { error: err })
+      logger.error({ error: err }, 'Failed to import digitalTwinTriggerService')
     }
 
     return event
   } catch (error) {
-    logger.error('digitalTwinEventService.ingestEvent error', { error })
+    logger.error({ error }, 'digitalTwinEventService.ingestEvent error')
     throw error
   }
 }
@@ -62,7 +62,7 @@ export async function getEventsByAsset(assetId: string, limit = 50) {
     )
     return res.rows
   } catch (error) {
-    logger.error('digitalTwinEventService.getEventsByAsset error', { error })
+    logger.error({ error }, 'digitalTwinEventService.getEventsByAsset error')
     throw error
   }
 }
@@ -78,7 +78,7 @@ export async function getEventById(id: string) {
     )
     return res.rows[0] || null
   } catch (error) {
-    logger.error('digitalTwinEventService.getEventById error', { error })
+    logger.error({ error }, 'digitalTwinEventService.getEventById error')
     throw error
   }
 }
@@ -91,7 +91,7 @@ export async function getPendingEvents(limit = 100) {
     )
     return res.rows
   } catch (error) {
-    logger.error('digitalTwinEventService.getPendingEvents error', { error })
+    logger.error({ error }, 'digitalTwinEventService.getPendingEvents error')
     throw error
   }
 }
@@ -103,7 +103,7 @@ export async function updateEventStatus(eventId: string, status: string, error?:
       [status, error, eventId]
     )
   } catch (error) {
-    logger.error('digitalTwinEventService.updateEventStatus error', { error })
+    logger.error({ error }, 'digitalTwinEventService.updateEventStatus error')
     throw error
   }
 }
@@ -121,7 +121,7 @@ export async function processEvent(eventId: string) {
 
     await updateEventStatus(eventId, 'completed');
   } catch (error) {
-    logger.error('digitalTwinEventService.processEvent error', { error });
+    logger.error({ error }, 'digitalTwinEventService.processEvent error')
     await updateEventStatus(eventId, 'failed', error instanceof Error ? error.message : String(error));
     throw error;
   }
@@ -136,7 +136,7 @@ export async function retryFailedEvent(eventId: string) {
     }
     return processEvent(eventId);
   } catch (error) {
-    logger.error('digitalTwinEventService.retryFailedEvent error', { error });
+    logger.error({ error }, 'digitalTwinEventService.retryFailedEvent error')
     throw error;
   }
 }

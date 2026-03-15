@@ -123,7 +123,7 @@ export async function createTriggerRule(
     ]
   );
   const row = res.rows[0];
-  logger.info('Digital Twin trigger rule created', { ruleId: row.id, projectId, name: row.name });
+  logger.info({ ruleId: row.id, projectId, name: row.name }, 'Digital Twin trigger rule created');
   return parseRule(row);
 }
 
@@ -252,9 +252,9 @@ export async function evaluateTriggerRules(
         attempts: 3,
         backoff: { type: 'exponential', delay: 3000 },
       });
-      logger.debug('Digital Twin document trigger queued for processing', { triggerId: tr.id });
+      logger.debug({ triggerId: tr.id }, 'Digital Twin document trigger queued for processing');
     } catch (error: any) {
-      logger.error('Failed to queue trigger for processing', { triggerId: tr.id, error: error.message });
+      logger.error({ triggerId: tr.id, error: error.message }, 'Failed to queue trigger for processing');
       // Don't throw - trigger is still created, just not queued
     }
   }
@@ -421,11 +421,11 @@ Generate a comprehensive document that reflects the current state of this Digita
       [document.id, triggerId]
     );
 
-    logger.info('Digital Twin document trigger processed', {
+    logger.info({
       triggerId,
       documentId: document.id,
       assetId: trigger.asset_id,
-    });
+    }, 'Digital Twin document trigger processed');
 
     return { id: document.id, name: document.name };
   } catch (error: any) {
@@ -436,7 +436,7 @@ Generate a comprehensive document that reflects the current state of this Digita
        WHERE id = $1`,
       [triggerId, msg]
     );
-    logger.error('Digital Twin document trigger processing failed', { triggerId, error: msg });
+    logger.error({ triggerId, error: msg }, 'Digital Twin document trigger processing failed');
     throw error;
   }
 }

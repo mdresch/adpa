@@ -2,6 +2,14 @@
 -- Created: 2024-01-20
 -- Description: Creates stakeholders table with PMBOK 7th edition parameters
 
+ALTER TABLE stakeholders ADD COLUMN IF NOT EXISTS engagement_approach VARCHAR(50);
+ALTER TABLE stakeholders ADD COLUMN IF NOT EXISTS communication_frequency VARCHAR(20);
+ALTER TABLE stakeholders ADD COLUMN IF NOT EXISTS stakeholder_type VARCHAR(20);
+ALTER TABLE stakeholders ADD COLUMN IF NOT EXISTS stakeholder_category VARCHAR(20);
+ALTER TABLE stakeholders ADD COLUMN IF NOT EXISTS expectations TEXT;
+ALTER TABLE stakeholders ADD COLUMN IF NOT EXISTS potential_impact TEXT;
+ALTER TABLE stakeholders ADD COLUMN IF NOT EXISTS department VARCHAR(255);
+
 CREATE TABLE IF NOT EXISTS stakeholders (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,

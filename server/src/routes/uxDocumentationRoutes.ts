@@ -73,7 +73,7 @@ router.post(
             ]
           )
         } catch (dbError) {
-          logger.warn('Failed to save UX documentation to database', dbError)
+          logger.warn(dbError, 'Failed to save UX documentation to database')
           // Don't fail the request if saving fails
         }
       }
@@ -83,11 +83,11 @@ router.post(
         data: documentation
       })
     } catch (error: any) {
-      logger.error('Failed to generate UX documentation', {
+      logger.error({
         error: error.message,
         stack: error.stack,
         user_id: (req as any).user?.id
-      })
+      }, 'Failed to generate UX documentation')
       next(error)
     }
   }
@@ -122,10 +122,10 @@ router.get(
         }
       })
     } catch (error: any) {
-      logger.error('Failed to get daily activities', {
+      logger.error({
         error: error.message,
         stack: error.stack
-      })
+      }, 'Failed to get daily activities')
       next(error)
     }
   }
@@ -188,10 +188,10 @@ router.get(
         }
       })
     } catch (error: any) {
-      logger.error('Failed to get UX documentation templates', {
+      logger.error({
         error: error.message,
         stack: error.stack
-      })
+      }, 'Failed to get UX documentation templates')
       next(error)
     }
   }

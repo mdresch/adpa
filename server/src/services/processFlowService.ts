@@ -1791,7 +1791,7 @@ class ProcessFlowService {
         const qualityMetrics = analyzeDocumentQuality(finalContent, tempMetadata, compressedDocuments.length)
         
         // Add quality and compliance metrics to generation_metadata
-        generationMetadata.qualityMetrics = {
+        (generationMetadata as any).qualityMetrics = {
           overallQuality: qualityMetrics.overallQuality,
           completeness: qualityMetrics.completeness,
           structureScore: qualityMetrics.structureScore,
@@ -1804,18 +1804,9 @@ class ProcessFlowService {
           standardsCompliance: qualityMetrics.standardsCompliance,
           complexityScore: qualityMetrics.complexityScore,
           recommendations: qualityMetrics.recommendations
-        }
+        };
         
-        generationMetadata.complianceMetrics = {
-          pmbokGuide: qualityMetrics.complianceMetrics.pmbokGuide,
-          gdpr: qualityMetrics.complianceMetrics.gdpr,
-          hipaa: qualityMetrics.complianceMetrics.hipaa,
-          soc2: qualityMetrics.complianceMetrics.soc2,
-          industryStandards: qualityMetrics.complianceMetrics.industryStandards,
-          bestPractices: qualityMetrics.complianceMetrics.bestPractices,
-          templateAdherence: qualityMetrics.complianceMetrics.templateAdherence,
-          overallComplianceRating: qualityMetrics.complianceMetrics.overallComplianceRating
-        }
+        (generationMetadata as any).complianceMetrics = qualityMetrics.complianceMetrics;
       } catch (metricsError) {
         logger.warn('Failed to calculate compliance metrics:', metricsError)
         // Continue without metrics rather than failing the document save

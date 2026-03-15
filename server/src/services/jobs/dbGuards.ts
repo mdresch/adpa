@@ -1,5 +1,5 @@
 const db = require('../../lib/db')
-;(async function(){ try{ await db.initDb() } catch(e){} })();
+// Top-level init removed to allow controlled initialization in tests
 import type { Pool } from 'pg'
 import { logger } from '../../utils/logger'
 
@@ -15,7 +15,7 @@ export async function safeQuery(pool: Pool | null, sql: string, params: any[] = 
   }
 
   try {
-    return await db.query(sql, params)
+    return await pool.query(sql, params)
   } catch (err: any) {
     logger.error('[DB-GUARD] Database query failed', { sql, params, message: err?.message })
     return null

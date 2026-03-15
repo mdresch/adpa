@@ -66,11 +66,11 @@ export class UXDocumentationService {
     const startTime = Date.now()
 
     try {
-      logger.info(`Generating UX documentation: ${documentationId}`, {
+      logger.info({
         user_id: userId,
         document_type: request.document_type,
         target_audience: request.target_audience
-      })
+      }, `Generating UX documentation: ${documentationId}`)
 
       // Gather daily activities from system
       const dailyActivities = await this.gatherDailyActivities(request)
@@ -102,14 +102,14 @@ export class UXDocumentationService {
       }
 
       const duration = Date.now() - startTime
-      logger.info(`UX documentation generated successfully: ${documentationId}`, {
+      logger.info({
         duration_ms: duration,
         word_count: wordCount
-      })
+      }, `UX documentation generated successfully: ${documentationId}`)
 
       return response
-    } catch (error) {
-      logger.error(`Failed to generate UX documentation: ${documentationId}`, error)
+    } catch (error: any) {
+      logger.error({ error: error.message }, `Failed to generate UX documentation: ${documentationId}`)
       throw error
     }
   }
@@ -138,9 +138,9 @@ export class UXDocumentationService {
       }
 
       return activities
-    } catch (error) {
-      logger.error('Failed to gather daily activities', error)
-      return this.getDefaultDailyActivities(request.target_audience)
+    } catch (error: any) {
+      logger.error({ error: error.message }, 'Failed to gather daily activities');
+      return await this.getDefaultDailyActivities(request.target_audience);
     }
   }
 
@@ -198,8 +198,8 @@ export class UXDocumentationService {
       }
 
       return activities
-    } catch (error) {
-      logger.error('Failed to get project activities', error)
+    } catch (error: any) {
+      logger.error({ error: error.message }, 'Failed to get project activities')
       return []
     }
   }
@@ -343,8 +343,8 @@ export class UXDocumentationService {
   /**
    * Get default daily activities if gathering fails
    */
-  private getDefaultDailyActivities(targetAudience: string): DailyActivity[] {
-    return this.getSystemDailyActivities(targetAudience)
+  private async getDefaultDailyActivities(targetAudience: string): Promise<DailyActivity[]> {
+    return await this.getSystemDailyActivities(targetAudience)
   }
 
   /**

@@ -82,7 +82,8 @@ const migrationMap = {
     '400': { file: '400_align_hierarchy_and_checklists.sql', description: 'Align Hierarchy and Formalize Checklist Items' },
     '407': { file: '407_create_file_assets.sql', description: 'Create File Assets Table' },
     '409': { file: '409_extraction_failures_table.sql', description: 'Extraction Failures Table' },
-    '410': { file: '410_add_extraction_idempotency_keys.sql', description: 'Add Extraction Idempotency Keys' }
+    '410': { file: '410_add_extraction_idempotency_keys.sql', description: 'Add Extraction Idempotency Keys' },
+    '411': { file: '411_health_checks.sql', description: 'Health Checks Table' }
 };
 
 const migration = migrationMap[migrationNumber];

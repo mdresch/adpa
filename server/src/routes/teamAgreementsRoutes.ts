@@ -158,11 +158,11 @@ router.get(
         count: agreements.length
       })
     } catch (error: any) {
-      log.error('[TeamAgreementsAPI] Error getting agreements:', {
+      log.error({
         error: error.message,
         stack: error.stack,
         projectId: req.params.projectId
-      })
+      }, '[TeamAgreementsAPI] Error getting agreements:')
       res.status(500).json({
         success: false,
         error: 'Failed to get team agreements',
@@ -201,7 +201,7 @@ router.get(
         data: agreement
       })
     } catch (error) {
-      log.error('[TeamAgreementsAPI] Error getting agreement:', error)
+      log.error(error, '[TeamAgreementsAPI] Error getting agreement:')
       res.status(500).json({
         success: false,
         error: 'Failed to get team agreement'
@@ -257,7 +257,7 @@ router.post(
         data: agreement
       })
     } catch (error) {
-      log.error('[TeamAgreementsAPI] Error creating agreement:', error)
+      log.error(error, '[TeamAgreementsAPI] Error creating agreement:')
       res.status(500).json({
         success: false,
         error: 'Failed to create team agreement',
@@ -305,7 +305,7 @@ router.put(
         data: agreement
       })
     } catch (error) {
-      log.error('[TeamAgreementsAPI] Error updating agreement:', error)
+      log.error(error, '[TeamAgreementsAPI] Error updating agreement:')
       res.status(500).json({
         success: false,
         error: 'Failed to update team agreement',
@@ -352,7 +352,7 @@ router.delete(
         message: 'Team agreement deleted successfully'
       })
     } catch (error) {
-      log.error('[TeamAgreementsAPI] Error deleting agreement:', error)
+      log.error(error, '[TeamAgreementsAPI] Error deleting agreement:')
       res.status(500).json({
         success: false,
         error: 'Failed to delete team agreement',
@@ -414,7 +414,7 @@ router.post(
         data: adherenceLog
       })
     } catch (error) {
-      log.error('[TeamAgreementsAPI] Error recording adherence:', error)
+      log.error(error, '[TeamAgreementsAPI] Error recording adherence:')
       res.status(500).json({
         success: false,
         error: 'Failed to record adherence',
@@ -456,7 +456,7 @@ router.get(
         count: adherenceLog.length
       })
     } catch (error) {
-      log.error('[TeamAgreementsAPI] Error getting adherence log:', error)
+      log.error(error, '[TeamAgreementsAPI] Error getting adherence log:')
       res.status(500).json({
         success: false,
         error: 'Failed to get adherence log'
@@ -503,7 +503,7 @@ router.post(
         data: agreement
       })
     } catch (error) {
-      log.error('[TeamAgreementsAPI] Error recording violation:', error)
+      log.error(error, '[TeamAgreementsAPI] Error recording violation:')
       res.status(500).json({
         success: false,
         error: 'Failed to record violation',

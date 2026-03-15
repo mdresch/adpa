@@ -209,6 +209,21 @@ export const queueService = new Proxy({} as ReturnType<typeof createQueueService
 
 export { getQueueServiceInstance }
 
+/**
+ * TEST UTILITY: Set the queue service instance directly
+ */
+export function setQueueService(instance: ReturnType<typeof createQueueService>): void {
+  queueServiceInstance = instance
+}
+
+/**
+ * TEST UTILITY: Reset the queue service instance (force re-initialization)
+ */
+export function resetQueueService(): void {
+  queueServiceInstance = null
+}
+
+
 export async function initializeQueues(): Promise<void> {
   logger.info("Queues initialized (RabbitMQ)")
 }
@@ -259,7 +274,7 @@ import("./documentUploadService").then(({ processUploadedFile }) => {
     try {
       return await processUploadedFile(job as any)
     } catch (err) {
-      logger.error("[WORKER] document-upload processing error", err)
+      logger.error(err, "[WORKER] document-upload processing error")
       throw err
     }
   })
@@ -403,7 +418,7 @@ processFlowQueue.process("process-flow", QUEUE_PREFETCH, async (job) => {
     })
     logger.info(`Process-flow job completed: ${jobId}`)
   } catch (error: any) {
-    logger.error(`Process-flow job failed: ${jobId}`, error)
+    logger.error(error, `Process-flow job failed: ${jobId}`)
     if (dbPool) {
       await safeUpdate(dbPool,
         `UPDATE jobs 
@@ -435,7 +450,7 @@ regenerationQueue.process("document-regeneration", QUEUE_PREFETCH, async (job) =
     logger.info(`Document regeneration job completed: ${jobId}`)
     return { success: true, jobId }
   } catch (error) {
-    logger.error(`Document regeneration job failed: ${jobId}`, error)
+    logger.error(error, `Document regeneration job failed: ${jobId}`)
     await updateJobStatus(jobId, "failed", 0, WORKER_ID, "document-regeneration", error instanceof Error ? error.message : String(error))
     throw error
   }
@@ -445,7 +460,7 @@ regenerationQueue.on("completed", (job, result) => {
   logger.info(`Regeneration job completed: ${job.id}`)
 })
 regenerationQueue.on("failed", (job, err) => {
-  logger.error(`Regeneration job failed: ${job.id}`, err)
+  logger.error(err, `Regeneration job failed: ${job.id}`)
 })
 
 // Confluence publishing
@@ -454,7 +469,7 @@ confluenceQueue.process("publish-to-confluence", QUEUE_PREFETCH, async (job) => 
     const { PublishToConfluenceJobService } = await import("./jobs/PublishToConfluenceJobService")
     return await PublishToConfluenceJobService.processJob(job as any)
   } catch (error) {
-    logger.error(`[PUBLISH-CONFLUENCE] Job failed: ${job.id}`, error)
+    logger.error(error, `[PUBLISH-CONFLUENCE] Job failed: ${job.id}`)
     throw error
   }
 })
@@ -463,7 +478,7 @@ confluenceQueue.on("completed", (job, result) => {
   logger.info(`Confluence publishing job completed: ${job.id}`, { pageUrl: (result as any)?.pageUrl })
 })
 confluenceQueue.on("failed", (job, err) => {
-  logger.error(`Confluence publishing job failed: ${job.id}`, err)
+  logger.error(err, `Confluence publishing job failed: ${job.id}`)
 })
 
 // Quality Audit
@@ -478,14 +493,14 @@ qualityAuditQueue.process("quality-audit", QUEUE_PREFETCH, async (job) => {
     logger.info(`[QUALITY-AUDIT-JOB] Quality audit completed: ${jobId}`, { overallScore: (auditResult as any).overallScore, grade: (auditResult as any).overallGrade })
     return { success: true, auditResult, jobId }
   } catch (error) {
-    logger.error(`[QUALITY-AUDIT-JOB] Quality audit job failed: ${jobId}`, error)
+    logger.error(error, `[QUALITY-AUDIT-JOB] Quality audit job failed: ${jobId}`)
     await updateJobStatus(jobId, "failed", 0, WORKER_ID, "quality-audit")
     throw error
   }
 })
 
 qualityAuditQueue.on("completed", (job, result) => logger.info(`Quality audit job completed: ${job.id}`))
-qualityAuditQueue.on("failed", (job, err) => logger.error(`Quality audit job failed: ${job.id}`, err))
+qualityAuditQueue.on("failed", (job, err) => logger.error(err, `Quality audit job failed: ${job.id}`))
 
 // Project Data Extraction parent
 extractionQueue.process("extract-project-data", QUEUE_PREFETCH, async (job) => {
@@ -562,7 +577,7 @@ extractionQueue.process("extract-project-data", QUEUE_PREFETCH, async (job) => {
 
 
         } catch (error: any) {
-          logger.error(`[EXTRACTION-CHILD] Failed to extract ${entityType}: ${error.message}`, {
+          logger.error({
             parentJobId,
             entityType,
             projectId,
@@ -570,13 +585,13 @@ extractionQueue.process("extract-project-data", QUEUE_PREFETCH, async (job) => {
             stack: error.stack,
             provider: aiProvider,
             model: aiModel,
-          })
+          }, `[EXTRACTION-CHILD] Failed to extract ${entityType}: ${error.message}`)
 
           try {
             // Update status to failed
             await updateJobStatus(jobId, "failed", 0, WORKER_ID, "project-data-extraction", error.message)
           } catch (updateErr) {
-            logger.error(`[EXTRACTION-CHILD] Failed to update job status to failed: ${jobId}`, updateErr)
+            logger.error(updateErr, `[EXTRACTION-CHILD] Failed to update job status to failed: ${jobId}`)
           }
 
           throw error
@@ -598,7 +613,7 @@ import("./digitalTwinEventService").then(({ processEvent }) => {
       logger.info(`[WORKER] Digital Twin event processed successfully: ${eventId}`)
       return { eventId, status: 'completed' }
     } catch (error: any) {
-      logger.error(`[WORKER] Digital Twin event processing failed: ${eventId}`, { error: error.message })
+      logger.error({ error: error.message, eventId }, `[WORKER] Digital Twin event processing failed: ${eventId}`)
       throw error
     }
   })
@@ -615,7 +630,7 @@ import("./digitalTwinTriggerService").then(({ processDocumentTrigger }) => {
       logger.info(`[WORKER] Digital Twin document trigger processed successfully: ${triggerId}`, { documentId: document?.id })
       return { triggerId, documentId: document?.id, status: 'completed' }
     } catch (error: any) {
-      logger.error(`[WORKER] Digital Twin trigger processing failed: ${triggerId}`, { error: error.message })
+      logger.error({ error: error.message, triggerId }, `[WORKER] Digital Twin trigger processing failed: ${triggerId}`)
       throw error
     }
   })
@@ -722,7 +737,7 @@ import("./digitalTwinTriggerService").then(({ processDocumentTrigger }) => {
       console.log("✅ GKG sync processors registered for queue: gkg-sync")
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      logger.error("[GKG] Failed to register GKG sync processors", { error: msg })
+      logger.error({ error: msg }, "[GKG] Failed to register GKG sync processors")
       console.error("[GKG] Failed to register GKG sync processors:", msg)
     }
   })()

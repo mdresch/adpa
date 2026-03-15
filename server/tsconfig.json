@@ -54,6 +54,9 @@
       ],
       "@root-types/*": [
         "../../types/*"
+      ],
+      "@/infrastructure/*": [
+        "src/infrastructure/*"
       ]
     },
     "typeRoots": [

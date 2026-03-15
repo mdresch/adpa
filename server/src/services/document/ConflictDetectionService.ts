@@ -143,11 +143,11 @@ export class ConflictDetectionService {
                     };
             }
         } catch (error) {
-            logger.error(`Failed to detect template conflicts: ${error}`, {
+            logger.error({
                 templateId,
                 projectId,
                 error: error instanceof Error ? error.message : String(error)
-            });
+            }, `Failed to detect template conflicts: ${error}`);
             // If we can't determine conflicts, assume no conflict to avoid blocking
             return { conflict: false };
         }
@@ -230,20 +230,20 @@ export class ConflictDetectionService {
                 resolutionOptions: conflictResult.resolutionOptions
             });
 
-            logger.info(`Created conflict record: ${conflictId}`, {
+            logger.info({
                 templateId,
                 projectId,
                 conflictId
-            });
+            }, `Created conflict record: ${conflictId}`);
 
             return conflictId;
         } catch (error) {
-            logger.error(`Failed to create conflict record: ${error}`, {
+            logger.error({
                 conflictId,
                 templateId,
                 projectId,
                 error: error instanceof Error ? error.message : String(error)
-            });
+            }, `Failed to create conflict record: ${error}`);
             throw error;
         }
     }
@@ -353,19 +353,19 @@ export class ConflictDetectionService {
                 resolvedBy: options.userId
             });
 
-            logger.info(`Resolved conflict: ${conflictId} using ${resolutionMethod}`, {
+            logger.info({
                 conflictId,
                 resolutionMethod,
                 documentId: conflict.document_id
-            });
+            }, `Resolved conflict: ${conflictId} using ${resolutionMethod}`);
 
             return result;
         } catch (error) {
             await client.query('ROLLBACK');
-            logger.error(`Failed to resolve conflict: ${error}`, {
+            logger.error({
                 conflictId,
                 error: error instanceof Error ? error.message : String(error)
-            });
+            }, `Failed to resolve conflict: ${error}`);
             throw error;
         } finally {
             client.release();
