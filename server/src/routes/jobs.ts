@@ -7,6 +7,7 @@ import Joi from "joi"
 import { logger, childLogger } from "../utils/logger"
 import { getJobStatus, cancelJob, addJob } from "../services/queueService"
 import { v4 as uuidv4 } from "uuid"
+import { JobType } from "../services/jobs/types"
 import AnalyticsTrackingService from "../services/analyticsTrackingService"
 
 const router = express.Router()
@@ -378,11 +379,12 @@ router.post("/:id/cancel",
 
       const cancelled = await cancelJob(id)
 
-      if (cancelled) {
+      try {
+        await cancelJob(id)
         const log = childLogger({ requestId: (req as any).requestId })
         log.info(`Job cancelled: ${id} by ${req.user?.email}`)
         res.json({ message: "Job cancelled successfully" })
-      } else {
+      } catch (cancelError) {
         res.status(500).json({ error: "Failed to cancel job" })
       }
     } catch (error) {
@@ -766,7 +768,7 @@ router.post(
       )
       
       // Add new job to queue with normalized type
-      await addJob(normalizedJobType, newJobData)
+      await addJob(normalizedJobType as JobType, newJobData)
       
       log.info(`Job ${id} retried as ${newJobId}`, { 
         originalType: job.type, 

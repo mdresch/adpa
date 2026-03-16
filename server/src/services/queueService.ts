@@ -510,6 +510,7 @@ extractionQueue.process("extract-project-data", QUEUE_PREFETCH, async (job) => {
 })
 
   // Child entity extractors - Register immediately using async IIFE
+  if (process.env.NODE_ENV !== 'test') {
   ; (async () => {
     const { projectDataExtractionService } = await import("./projectDataExtractionService")
 
@@ -602,8 +603,10 @@ extractionQueue.process("extract-project-data", QUEUE_PREFETCH, async (job) => {
 
     logger.info(`[QUEUE] Registered ${ENTITY_TYPES.length} entity extraction processors on extractionQueue (Rabbit)`)
   })()
+  }
 
 // Digital Twin Event Processing
+if (process.env.NODE_ENV !== 'test') {
 import("./digitalTwinEventService").then(({ processEvent }) => {
   digitalTwinEventQueue.process("process-event", QUEUE_PREFETCH, async (job) => {
     const { eventId } = job.data as { eventId: string }
@@ -619,8 +622,10 @@ import("./digitalTwinEventService").then(({ processEvent }) => {
   })
   logger.info(`[QUEUE] Registered process-event processor on digitalTwinEventQueue (Rabbit) with worker ID: ${WORKER_ID}`)
 })
+}
 
 // Digital Twin Document Trigger Processing
+if (process.env.NODE_ENV !== 'test') {
 import("./digitalTwinTriggerService").then(({ processDocumentTrigger }) => {
   digitalTwinTriggerQueue.process("process-trigger", QUEUE_PREFETCH, async (job) => {
     const { triggerId } = job.data as { triggerId: string }
@@ -636,8 +641,10 @@ import("./digitalTwinTriggerService").then(({ processDocumentTrigger }) => {
   })
   logger.info(`[QUEUE] Registered process-trigger processor on digitalTwinTriggerQueue (Rabbit) with worker ID: ${WORKER_ID}`)
 })
+}
 
   // GKG sync processing
+  if (process.env.NODE_ENV !== 'test') {
   ; (async () => {
     try {
       console.log("[GKG] Registering GKG sync processors...")
@@ -741,6 +748,7 @@ import("./digitalTwinTriggerService").then(({ processDocumentTrigger }) => {
       console.error("[GKG] Failed to register GKG sync processors:", msg)
     }
   })()
+  }
 
 // Export Redis client for legacy consumers
 export { redisClient }

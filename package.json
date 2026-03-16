@@ -169,6 +169,7 @@
     "input-otp": "latest",
     "inquirer": "^9.2.0",
     "ioredis": "^5.9.0",
+    "jest-mock-extended": "^4.0.0",
     "joi": "latest",
     "js-yaml": "^4.1.1",
     "json2csv": "6.0.0-alpha.2",

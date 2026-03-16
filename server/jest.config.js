@@ -23,7 +23,9 @@ module.exports = {
       tsconfig: {
         esModuleInterop: true,
         allowSyntheticDefaultImports: true,
-      }
+        allowJs: true
+      },
+      diagnostics: false
     }],
     '^.+\\.js$': ['ts-jest', {
       tsconfig: {

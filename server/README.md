@@ -54,12 +54,28 @@ npm install
 
 2. **Environment Setup**
 \`\`\`bash
+```bash
 cp .env.example .env
 # Edit .env with your configuration
-\`\`\`
+```
+
+## 🧪 Testing
+
+The server uses Jest for testing. We have implemented a stabilized test harness that isolates top-level side effects.
+
+- **[Testing Guide](file:///d:/Source/adpa/server/docs/TESTING_GUIDE.md)**: Detailed documentation on architecture, mocks, and guards.
+- **Health Check**: Run `.\scripts\verify-test-env.ps1` to verify your test environment.
+
+```bash
+# Run all tests
+npm test
+
+# Run integration tests (with Docker)
+npm run test:integration
+```
 
 3. **Database Setup**
-\`\`\`bash
+```bash
 # Create database
 createdb adpa_db
 
@@ -68,12 +84,12 @@ npm run migrate
 
 # Seed with demo data
 npm run seed
-\`\`\`
+```
 
 4. **Start Development Server**
-\`\`\`bash
+```bash
 npm run dev
-\`\`\`
+```
 
 The server will start on `http://localhost:5000`
 

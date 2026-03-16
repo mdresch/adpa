@@ -5,11 +5,11 @@ services:
     environment:
       POSTGRES_USER: test_user
       POSTGRES_PASSWORD: test_pass
-      POSTGRES_DB: test_template
+      POSTGRES_DB: adpa_test_db
     ports:
       - "5433:5432"  # Non-standard to avoid dev env collision
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U test_user -d test_db"]
+      test: ["CMD-SHELL", "pg_isready -U test_user -d adpa_test_db"]
       interval: 2s
       timeout: 5s
       retries: 5
