@@ -277,7 +277,7 @@ router.post("/ai-gateway", authenticateToken, requireRole(['admin', 'super_admin
          is_encrypted = true,
          updated_by = $2,
          updated_at = CURRENT_TIMESTAMP`,
-      [encryptedKey, req.user?.id || 'system']
+      [encryptedKey, (req as any).user?.id || 'system']
     )
 
     // Also store the enabled flag
@@ -289,10 +289,10 @@ router.post("/ai-gateway", authenticateToken, requireRole(['admin', 'super_admin
          setting_value = $1,
          updated_by = $2,
          updated_at = CURRENT_TIMESTAMP`,
-      [enabled.toString(), req.user?.id || 'system']
+      [enabled.toString(), (req as any).user?.id || 'system']
     )
 
-    logger.info(`AI Gateway settings updated by user ${req.user?.email}`)
+    logger.info(`AI Gateway settings updated by user ${(req as any).user?.email}`)
 
     res.json({ 
       message: "AI Gateway settings saved successfully",

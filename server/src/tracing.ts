@@ -172,4 +172,6 @@ export async function shutdownTracing(): Promise<void> {
 }
 
 // Auto-initialize if this module is imported
-initTracing()
+if (process.env.NODE_ENV !== 'test') {
+  initTracing()
+}

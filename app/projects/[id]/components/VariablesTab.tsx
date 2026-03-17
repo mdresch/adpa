@@ -5,12 +5,8 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Settings, Copy, Database, Lightbulb } from "lucide-react"
 import { toast } from '@/lib/notify'
-import { Project } from "@/lib/api"
+import { Project, ExtendedProject } from "@/lib/api"
 
-interface ExtendedProject extends Project {
-  settings?: Record<string, unknown>
-  metadata?: Record<string, unknown>
-}
 
 interface Document {
   id: string

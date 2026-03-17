@@ -44,6 +44,8 @@ export interface ProjectTask {
   phase?: string
   category?: string
   priority?: string
+  percentComplete?: number
+  goalId?: string
   // Optional details returned by the details endpoint
   assignedUserId?: string | null
   assignedUserName?: string | null
@@ -88,6 +90,7 @@ export interface CreateTaskInput {
   priority?: string
   phase?: string
   parentTaskId?: string
+  goalId?: string
 }
 
 /**
@@ -119,14 +122,16 @@ export async function createTask(
         planned_start_date,
         planned_end_date,
         status,
-        created_by
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        created_by,
+        goal_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       RETURNING 
         id,
         task_number as "taskNumber",
         task_name as "taskName",
         estimated_hours as "estimatedHours",
-        status
+        status,
+        goal_id as "goalId"
     `, [
       input.projectId,
       input.parentTaskId,
@@ -138,7 +143,8 @@ export async function createTask(
       input.plannedStartDate,
       input.plannedEndDate,
       'planned',
-      userId
+      userId,
+      input.goalId
     ])
     
     const task = result.rows[0]
@@ -380,7 +386,7 @@ export async function getTaskById(taskId: string): Promise<ProjectTask | null> {
       assignedUserId: primaryAssignment?.userId ?? null,
       assignedUserName: primaryAssignment?.userName ?? null,
       status: task.status,
-      percent_complete: task.percent_complete ? Number(task.percent_complete) : 0,
+      percentComplete: task.percent_complete ? Number(task.percent_complete) : 0,
       priority: task.priority || undefined,
       phase: task.phase || undefined,
       category: task.category || undefined,
@@ -1217,3 +1223,82 @@ export async function getSkillGapsForTask(taskId: string): Promise<any[]> {
   }
 }
 
+/**
+ * Decompose a task into sub-tasks using AI
+ * This is recursive decomposition for complex work items
+ */
+export async function decomposeTask(
+  taskId: string,
+  userId: string
+): Promise<{ subtasksCreated: number; plan: string }> {
+  try {
+    const task = await getTaskById(taskId)
+    if (!task) throw new Error('Task not found')
+    
+    // 1. Research existing project context
+    const projectResult = await pool.query('SELECT name, description FROM projects WHERE id = $1', [task.projectId])
+    const project = projectResult.rows[0]
+    
+    // 2. Call AI Service to generate decomposition plan
+    const aiService = new (require('./aiService').AIService)()
+    const prompt = `
+      You are an expert Project Manager. Decompose the following project task into smaller, actionable sub-tasks.
+      
+      Project: ${project.name}
+      Parent Task: ${task.taskName}
+      Task Description: ${task.description}
+      Priority: ${task.priority}
+      Phase: ${task.phase}
+      
+      Please provide a structured plan in JSON format:
+      {
+        "plan_summary": "Recursive strategy for this task",
+        "subtasks": [
+          {
+            "name": "Sub-task Name",
+            "description": "Sub-task description",
+            "estimated_hours": 4,
+            "priority": "medium"
+          }
+        ]
+      }
+    `
+    
+    const aiResponse = await aiService.generateWithFallback({
+      provider: 'openai',
+      model: 'gpt-4o',
+      prompt: prompt,
+      system_prompt: 'You are an expert in task decomposition. Respond ONLY with valid JSON.'
+    })
+    
+    const decomposition = JSON.parse(aiResponse.content)
+    let subtasksCreatedCount = 0
+    
+    // 3. Create sub-tasks
+    if (decomposition.subtasks && Array.isArray(decomposition.subtasks)) {
+      for (const subtaskData of decomposition.subtasks) {
+        await createTask({
+          projectId: task.projectId,
+          parentTaskId: taskId,
+          taskName: subtaskData.name,
+          description: subtaskData.description,
+          estimatedHours: subtaskData.estimated_hours,
+          priority: subtaskData.priority,
+          phase: task.phase,
+          goalId: task.goalId // Use same goal link as parent
+        }, userId)
+        subtasksCreatedCount++
+      }
+    }
+    
+    logger.info('Task decomposition successful', { taskId, userId, subtasksCreated: subtasksCreatedCount })
+    
+    return {
+      subtasksCreated: subtasksCreatedCount,
+      plan: decomposition.plan_summary
+    }
+  } catch (error) {
+    logger.error('decomposeTask error', { error, taskId })
+    throw error
+  }
+}

@@ -1,30 +1,52 @@
 // JS/TS wrapper for PMBOK process agent using project AIService
-import { runProcessWithAI } from './aiUtil'
+import { BaseAgent, AgentObservation } from '../agents/BaseAgent'
 import { PMBOK6_PROCESSES } from '../../../../types/pmbok6-data'
 
-export class PMBOKProcessAgent {
+export class PMBOKProcessAgent extends BaseAgent {
   code: string
   name: string
   description: string
   inputs: string[]
-  tools: string[]
+  pmbokTools: string[]
   outputs: string[]
   knowledgeArea: string
 
   constructor(code: string, name: string, description: string, inputs: string[], tools: string[], outputs: string[], knowledgeArea: string) {
+    super()
+
     this.code = code
     this.name = name
     this.description = description
     this.inputs = inputs
-    this.tools = tools
+    this.pmbokTools = tools
     this.outputs = outputs
     this.knowledgeArea = knowledgeArea
+
+    this.systemPrompt = `You are a PMBOK Process Specialist executing the ${code} (${name}) process.
+Knowledge Area: ${knowledgeArea}
+Description: ${description}
+Standard Inputs: ${inputs.join(', ')}
+Standard Tools & Techniques: ${tools.join(', ')}
+Standard Outputs: ${outputs.join(', ')}
+
+Your goal is to execute this process correctly and produce the required outputs based on the provided data.`
   }
 
-  async run(data: any, userId?: string, projectId?: string, documentId?: string) {
-    // Compose a prompt for this process
-    const prompt = `You are executing PMBOK process ${this.code} (${this.name}).\nDescription: ${this.description}\nInputs: ${JSON.stringify(this.inputs)}\nTools: ${JSON.stringify(this.tools)}\nOutputs: ${JSON.stringify(this.outputs)}\nContext: ${JSON.stringify(data)}\nPlease perform this process and return the result.`
-    return runProcessWithAI(this.code, prompt, userId, projectId, documentId)
+  protected constructPrompt(goal: string, context: any, history: AgentObservation[]): string {
+    const historyLog = history
+      .map(o => `[${o.type.toUpperCase()}] ${o.content}`)
+      .join('\n')
+
+    return `
+Process: ${this.name} (${this.code})
+Goal: ${goal}
+Available Information: ${JSON.stringify(context)}
+
+History:
+${historyLog}
+
+Plan your next step. You can think, use a tool, or provide the final answer.
+`
   }
 }
 
@@ -48,3 +70,4 @@ export function createPmbokAgents(): Record<string, PMBOKProcessAgent> {
 
   return agents
 }
+

@@ -806,5 +806,25 @@ router.get('/:id/skill-gaps',
   }
 )
 
+/**
+ * POST /api/tasks/:id/decompose
+ * AI-driven task decomposition into smaller sub-tasks
+ */
+router.post('/:id/decompose',
+  authenticateToken,
+  requirePermission('projects.manage'),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const userId = (req as any).user?.id
+      const result = await taskManagementService.decomposeTask(req.params.id, userId)
+      res.json({ success: true, data: result })
+    } catch (error) {
+      log.error('Task decomposition failed', error)
+      res.status(500).json({ error: 'Failed to decompose task' })
+    }
+  }
+)
+
 export default router
 

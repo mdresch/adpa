@@ -99,6 +99,9 @@ interface EntityCounts {
   relationshipHealth: number
 }
 
+// AI Provider type for selection
+type AIProviderType = "" | "google" | "openai" | "azure" | "mistral" | "groq" | "anthropic" | "deepseek" | "moonshot" | "xai" | "copilot" | "ollama"
+
 export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtractionProps) {
   const router = useRouter()
   const [showExtractionDialog, setShowExtractionDialog] = useState(false)
@@ -111,8 +114,8 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
 
   // AI Provider selection
   const [aiProviders, setAiProviders] = useState<any[]>([])
-  const [selectedProvider, setSelectedProvider] = useState("google")
-  const [selectedModel, setSelectedModel] = useState("gemini-2.0-flash-exp")
+  const [selectedProvider, setSelectedProvider] = useState<AIProviderType>("ollama")
+  const [selectedModel, setSelectedModel] = useState("llama3")
   const [selectedDocuments, setSelectedDocuments] = useState<string[]>([])
 
   // WBS Import

@@ -35,6 +35,7 @@ const DEFAULT_CHAT_TITLE = 'Untitled'
 export async function createChatStreamResponse(
     config: BaseStreamConfig
 ): Promise<Response> {
+    console.log('[MORPHIC-STREAM] createChatStreamResponse started', { chatId: config.chatId, userId: config.userId });
     const {
         message,
         model,
@@ -436,9 +437,16 @@ export async function createChatStreamResponse(
 
         return createUIMessageStreamResponse({ stream, consumeSseStream: consumeStream })
 
-    } catch (error) {
-        console.error('Stream execution error:', error)
-        return new Response('Internal Server Error', { status: 500 })
+    } catch (error: any) {
+        console.error('[MORPHIC-STREAM] Stream execution error:', error);
+        return new Response(JSON.stringify({ 
+            error: 'Internal Stream Error', 
+            details: error.message || 'Unknown error',
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        }), { 
+            status: 500,
+            headers: { 'Content-Type': 'application/json' }
+        })
     }
 }
 

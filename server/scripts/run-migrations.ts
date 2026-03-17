@@ -1,17 +1,12 @@
 /**
  * Database Migration Runner
- * Cross-platform Node.js script to run SQL migrations
- * 
- * Usage:
- *   npm run migrate              # Run all pending migrations
- *   npm run migrate 058          # Run specific migration by number
- *   npm run migrate --all        # Force re-run all migrations
+ * Consolidates all migrations into a clean baseline + incremental updates
  */
 
-const db = require('../src/lib/db');
 import * as fs from 'fs';
 import * as path from 'path';
 import * as dotenv from 'dotenv';
+import db from '../src/lib/db';
 
 // Load environment variables
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
@@ -19,15 +14,23 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 // Bypass SSL certificate validation for cloud databases
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false
-});
-
 interface MigrationFile {
   number: number;
+  name: string;
   filename: string;
   filepath: string;
+}
+
+/**
+ * Drops and recreates the public schema to start fresh
+ */
+async function resetPublicSchema() {
+  console.log('🧨 Resetting public schema...');
+  await db.query('DROP SCHEMA public CASCADE');
+  await db.query('CREATE SCHEMA public');
+  await db.query('GRANT ALL ON SCHEMA public TO postgres');
+  await db.query('GRANT ALL ON SCHEMA public TO public');
+  console.log('✅ Public schema reset successfully\n');
 }
 
 /**
@@ -44,11 +47,13 @@ function getMigrationFiles(): MigrationFile[] {
   const files = fs.readdirSync(migrationsDir)
     .filter(file => file.endsWith('.sql'))
     .map(file => {
+      // Matches both 000_baseline.sql and 001_some_migration.sql
       const match = file.match(/^(\d+)_(.+)\.sql$/);
       if (!match) return null;
       
       return {
         number: parseInt(match[1]),
+        name: match[2],
         filename: file,
         filepath: path.join(migrationsDir, file)
       };
@@ -81,7 +86,7 @@ async function isMigrationExecuted(migrationNumber: number): Promise<boolean> {
     'SELECT 1 FROM schema_migrations WHERE migration_number = $1',
     [migrationNumber]
   );
-  return result.rows.length > 0;
+  return result && result.rows && result.rows.length > 0;
 }
 
 /**
@@ -108,7 +113,6 @@ async function runMigration(migration: MigrationFile, force: boolean = false) {
   console.log(`\n🔄 Running migration: ${migration.filename}`);
   
   try {
-    // Read SQL file
     const sql = fs.readFileSync(migration.filepath, 'utf8');
     
     // Execute migration
@@ -124,7 +128,7 @@ async function runMigration(migration: MigrationFile, force: boolean = false) {
     
   } catch (error) {
     console.error(`❌ Failed to execute ${migration.filename}:`);
-    console.error(error);
+    console.error(error.message || error);
     return { success: false, skipped: false, error };
   }
 }
@@ -133,46 +137,32 @@ async function runMigration(migration: MigrationFile, force: boolean = false) {
  * Main migration runner
  */
 async function runMigrations() {
-  console.log('🚀 Database Migration Runner\n');
+  console.log('🚀 ADPA Database Migration Runner\n');
   console.log('=' .repeat(60));
   
   try {
-    // Test database connection
-    console.log('🔌 Testing database connection...');
-    await db.query('SELECT 1');
-    console.log('✅ Database connected successfully\n');
-
-    // Ensure migrations tracking table exists
-    console.log('📋 Setting up migrations tracking...');
-    await ensureMigrationsTable();
-    console.log('✅ Migrations tracking ready\n');
-
     // Get command line arguments
     const args = process.argv.slice(2);
+    const isReset = args.includes('--reset');
     const forceAll = args.includes('--all') || args.includes('-a');
-    const specificMigration = args.find(arg => !arg.startsWith('-'));
+    
+    // Initialize DB
+    await db.initDb();
+
+    if (isReset) {
+      await resetPublicSchema();
+    }
+
+    // Ensure migrations tracking table exists
+    await ensureMigrationsTable();
 
     // Get all migration files
     const migrations = getMigrationFiles();
-    console.log(`📁 Found ${migrations.length} migration files\n`);
+    console.log(`📁 Found ${migrations.length} migration files`);
 
     if (migrations.length === 0) {
       console.log('⚠️  No migration files found');
       return;
-    }
-
-    // Filter migrations if specific one requested
-    let migrationsToRun = migrations;
-    if (specificMigration) {
-      const migrationNumber = parseInt(specificMigration);
-      migrationsToRun = migrations.filter(m => m.number === migrationNumber);
-      
-      if (migrationsToRun.length === 0) {
-        console.error(`❌ Migration ${specificMigration} not found`);
-        process.exit(1);
-      }
-      
-      console.log(`🎯 Running specific migration: ${migrationsToRun[0].filename}\n`);
     }
 
     // Run migrations
@@ -180,7 +170,7 @@ async function runMigrations() {
     let skippedCount = 0;
     let failedCount = 0;
 
-    for (const migration of migrationsToRun) {
+    for (const migration of migrations) {
       const result = await runMigration(migration, forceAll);
       
       if (result.success) {
@@ -204,9 +194,9 @@ async function runMigrations() {
     console.log(`❌ Failed:   ${failedCount}`);
     
     if (failedCount === 0) {
-      console.log('\n🎉 All migrations completed successfully!');
+      console.log('\n🎉 Database is up to date!');
     } else {
-      console.log('\n⚠️  Some migrations failed. Please check errors above.');
+      console.log('\n⚠️  Migration failed. Please check errors above.');
       process.exit(1);
     }
 
@@ -215,10 +205,9 @@ async function runMigrations() {
     console.error(error);
     process.exit(1);
   } finally {
-    try { await db.end() } catch (e) {}
+    await db.end();
   }
 }
 
 // Run migrations
 runMigrations();
-

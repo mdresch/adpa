@@ -3,7 +3,6 @@
 import * as React from "react"
 
 import Link from "next/link"
-// @ts-expect-error - useParams is available in Next.js 14
 import { useParams, useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -33,7 +32,7 @@ import { ComplianceSecurityTab } from "./components/ComplianceSecurityTab"
 import { IntegrationsTab } from "./components/IntegrationsTab"
 import { DigitalTwinAnalyticsTab } from "./components/DigitalTwinAnalyticsTab"
 import { TemplateConflictDialog } from "@/components/document/TemplateConflictDialog"
-import { apiClient, Project, Template } from "@/lib/api"
+import { apiClient, Project, Template, ExtendedProject } from "@/lib/api"
 import { useAuth } from "@/contexts/AuthContext"
 import { useWebSocket } from "@/contexts/WebSocketContext"
 import { toast } from '@/lib/notify'
@@ -143,6 +142,7 @@ interface Document {
 interface Stakeholder {
   id: string
   project_id: string
+  user_id?: string
   name?: string
   role: string
   department?: string
@@ -161,18 +161,16 @@ interface Stakeholder {
   updated_at: string
 }
 
-// Extended Project interface to include settings and metadata
-interface ExtendedProject extends Project {
-  settings?: any
-  metadata?: any
-}
 
 // CR-2026-001: Baseline Management Component - extracted to components/BaselineManagement.tsx
+
+// AI Provider type for selection
+type AIProviderType = "" | "google" | "openai" | "azure" | "mistral" | "groq" | "anthropic" | "deepseek" | "moonshot" | "xai" | "copilot" | "ollama"
 
 export default function ProjectDetail() {
   const params = useParams()
   const searchParams = useSearchParams()
-  const projectId = params?.id as string
+  const projectId = Array.isArray(params?.id) ? params.id[0] : params?.id as string
   const router = useRouter()
   const { isAuthenticated } = useAuth()
   const { joinRoom, leaveRoom } = useWebSocket()
@@ -238,8 +236,8 @@ export default function ProjectDetail() {
 
   // AI Provider selection for document generation
   const [aiProviders, setAiProviders] = React.useState<any[]>([])
-  const [selectedProvider, setSelectedProvider] = React.useState("OpenAI")
-  const [selectedModel, setSelectedModel] = React.useState("gpt-4o")
+  const [selectedProvider, setSelectedProvider] = React.useState<AIProviderType>("ollama")
+  const [selectedModel, setSelectedModel] = React.useState("llama3")
   const [aiTemperature, setAiTemperature] = React.useState(0.7)
   const [updating, setUpdating] = React.useState(false)
 
@@ -393,21 +391,34 @@ export default function ProjectDetail() {
     }
   }
 
+  interface DocumentStatsResponse {
+    stats: {
+      total_documents: string | number;
+      published_documents: string | number;
+      draft_documents: string | number;
+      review_documents: string | number;
+      total_word_count: string | number | null;
+      average_quality_score: string | number | null;
+    };
+  }
+
   // Fetch document statistics (total counts by status)
   const fetchDocumentStats = async () => {
     try {
-      const stats = await apiClient.request(`/documents/project/${projectId}/stats`)
+      const response = await apiClient.request<DocumentStatsResponse>(`/documents/project/${projectId}/stats`)
+      const statsData = response.stats;
+      
       setDocumentStats({
-        totalDocuments: stats.totalDocuments || 0,
+        totalDocuments: Number(statsData.total_documents) || 0,
         counts: {
-          draft: stats.counts?.draft || stats.byStatus?.draft || 0,
-          published: stats.counts?.published || stats.byStatus?.published || 0,
-          review: stats.counts?.underReview || stats.byStatus?.review || 0,
-          archived: stats.counts?.archived || stats.byStatus?.archived || 0,
-        }
+          draft: Number(statsData.draft_documents) || 0,
+          published: Number(statsData.published_documents) || 0,
+          review: Number(statsData.review_documents) || 0,
+          archived: 0, // Not provided by stats endpoint directly
+        },
       })
     } catch (error) {
-      console.error("Failed to fetch document stats:", error)
+      console.error("Error fetching document stats:", error)
       // Fallback to paginated count if stats fail
       setDocumentStats({
         totalDocuments: documentsPagination.total || 0,
@@ -1218,18 +1229,19 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
           priority_rank: index + 1,
           character_count: charCount,
           word_count: wordCount,
-          reading_time_minutes: readingTimeMinutes
+          reading_time_minutes: readingTimeMinutes,
+          is_project_context: false
         }
       })
 
       // 🆕 Add project context as a source document if project context is used
       // Project context is always used (name, description, framework, team, budget, timeline)
-      if (project && (project.name || project.description || project.framework)) {
+      if (project?.name || project?.description || project?.framework) {
         const projectContextEntry = {
           id: `project_context:${projectId}`, // Unique identifier for project context
           title: `Project Context: ${projectName}`,
           type: 'Project Context',
-          template_id: null,
+          template_id: undefined,
           status: 'active',
           url: `/projects/${projectId}`, // Link to project page
           lifecycle_phase: 0, // Project context is foundational (phase 0)
@@ -1263,8 +1275,8 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
             documents_used_as_context: relevantDocs.length,
             project_context_used: true, // Project context is always used
             stakeholders_available: stakeholders?.length || 0,
-            custom_settings_count: hasSettings ? Object.keys(project.settings).length : 0,
-            custom_metadata_count: hasMetadata ? Object.keys(project.metadata).length : 0,
+            custom_settings_count: hasSettings ? Object.keys(project?.settings || {}).length : 0,
+            custom_metadata_count: hasMetadata ? Object.keys(project?.metadata || {}).length : 0,
             estimated_context_tokens: Math.round(aiPrompt.length / 4)
           }
         } : {
@@ -1275,8 +1287,8 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
             documents_used_as_context: relevantDocs.length,
             project_context_used: true, // Project context is always used
             stakeholders_available: stakeholders?.length || 0,
-            custom_settings_count: hasSettings ? Object.keys(project.settings).length : 0,
-            custom_metadata_count: hasMetadata ? Object.keys(project.metadata).length : 0,
+            custom_settings_count: hasSettings ? Object.keys(project?.settings || {}).length : 0,
+            custom_metadata_count: hasMetadata ? Object.keys(project?.metadata || {}).length : 0,
             estimated_context_tokens: Math.round(aiPrompt.length / 4)
           }
         }
@@ -2038,11 +2050,10 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
   const fetchUsers = async () => {
     try {
       setLoadingUsers(true)
-      const usersList = await apiClient.getUsers()
+      const response = await apiClient.getUsers()
       // Handle different response formats
-      const usersArray = Array.isArray(usersList) ? usersList :
-        Array.isArray(usersList?.users) ? usersList.users :
-          Array.isArray(usersList?.data) ? usersList.data : []
+      const usersArray = Array.isArray(response) ? response :
+        (response as any)?.users || (response as any)?.data || []
       setUsers(usersArray)
     } catch (error) {
       console.error("Failed to fetch users:", error)
@@ -2171,8 +2182,9 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
         if (!hasUserId) {
           // Try to find a user by email
           try {
-            const users = await apiClient.getUsers()
-            const matchingUser = users.find((u: any) =>
+            const response = await apiClient.getUsers()
+            const users = Array.isArray(response) ? response : (response as any).users || []
+            const matchingUser = (users as any[]).find((u: any) =>
               u.email?.toLowerCase() === stakeholderForm.email.toLowerCase()
             )
 

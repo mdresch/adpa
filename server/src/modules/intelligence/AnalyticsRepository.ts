@@ -37,11 +37,73 @@ export class AnalyticsRepository {
       WHERE user_id = $1 AND action = 'ai_generate'
     `, [userId]);
 
+    const recentActivity = await db.query(`
+      SELECT 
+        activity_type as action,
+        description as details,
+        created_at as time,
+        CASE 
+          WHEN activity_category = 'success' THEN 'emerald'
+          WHEN activity_category = 'info' THEN 'blue'
+          WHEN activity_category = 'error' THEN 'red'
+          WHEN activity_category = 'warning' THEN 'purple'
+          ELSE 'slate'
+        END as color
+      FROM user_activity_logs
+      WHERE user_id = $1
+      ORDER BY created_at DESC
+      LIMIT 5
+    `, [userId]);
+
+    const aiPerformance = await db.query(`
+      SELECT 
+        COALESCE(AVG(response_time_ms), 0) as avg_response_time_ms,
+        COALESCE((COUNT(*) FILTER (WHERE success = true)::FLOAT / NULLIF(COUNT(*), 0) * 100), 0) as success_rate
+      FROM ai_usage_logs
+      WHERE user_id = $1
+    `, [userId]);
+
     return {
       projects: projectStats.rows[0],
       documents: documentStats.rows[0],
-      ai: aiStats.rows[0]
+      ai: aiStats.rows[0],
+      recent_activity: recentActivity.rows,
+      ai_performance: aiPerformance.rows[0]
     };
+  }
+
+  async getRecentActivity(userId: string, limit: number = 10, client?: PoolClient) {
+    const db = client || this.pool;
+    const result = await db.query(`
+      SELECT 
+        activity_type as action,
+        description as details,
+        created_at as time,
+        CASE 
+          WHEN activity_category = 'success' THEN 'emerald'
+          WHEN activity_category = 'info' THEN 'blue'
+          WHEN activity_category = 'error' THEN 'red'
+          WHEN activity_category = 'warning' THEN 'purple'
+          ELSE 'slate'
+        END as color
+      FROM user_activity_logs
+      WHERE user_id = $1
+      ORDER BY created_at DESC
+      LIMIT $2
+    `, [userId, limit]);
+    return result.rows;
+  }
+
+  async getAIPerformance(userId: string, client?: PoolClient) {
+    const db = client || this.pool;
+    const result = await db.query(`
+      SELECT 
+        COALESCE(AVG(response_time_ms), 0) as avg_response_time_ms,
+        COALESCE((COUNT(*) FILTER (WHERE success = true)::FLOAT / NULLIF(COUNT(*), 0) * 100), 0) as success_rate
+      FROM ai_usage_logs
+      WHERE user_id = $1
+    `, [userId]);
+    return result.rows[0];
   }
 
   async getSystemWideStats(interval: string, client?: PoolClient) {
@@ -55,7 +117,7 @@ export class AnalyticsRepository {
         (SELECT COUNT(*) FROM documents WHERE DATE(created_at) = CURRENT_DATE) as documents_today,
         (SELECT COUNT(*) FROM templates WHERE is_public = true) as public_templates,
         (SELECT COUNT(*) FROM jobs WHERE created_at >= NOW() - INTERVAL '${interval}') as jobs_period,
-        (SELECT COUNT(*) FROM audit_logs WHERE action = 'ai_generate' AND created_at >= NOW() - INTERVAL '${interval}') as ai_generations_period
+        (SELECT COUNT(*) FROM ai_usage_logs WHERE request_type = 'ai_generate' AND created_at >= NOW() - INTERVAL '${interval}') as ai_generations_period
     `);
     return stats.rows[0];
   }

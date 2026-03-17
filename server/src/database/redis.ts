@@ -54,9 +54,11 @@ export function getRedis(): Redis {
 }
 
 /**
- * Export singleton instance
+ * Export singleton instance (lazily initialized in tests to avoid connection hangs)
  */
-export const redis = getRedis()
+export const redis = process.env.NODE_ENV === 'test' 
+  ? (null as unknown as Redis) 
+  : getRedis()
 
 /**
  * Disconnect Redis (for graceful shutdown)

@@ -52,9 +52,13 @@ export async function withRLS<T>(
             // Execute the callback with the transaction
             return await callback(tx)
         })
-    } catch (error) {
-        // Log the full error for debugging
-        console.error('[DB:RLS] Error executing transaction:', error)
+    } catch (error: any) {
+        // Log the full error with stack for debugging
+        console.error(`[DB:RLS] Error executing transaction for user ${userId}:`, {
+            message: error.message,
+            stack: error.stack,
+            code: error.code
+        })
 
         // Check for RLS policy violations
         const errorMessage = error instanceof Error ? error.message : String(error)

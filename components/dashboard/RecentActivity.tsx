@@ -17,6 +17,18 @@ export function RecentActivity({ activities }: RecentActivityProps) {
     purple: "bg-purple-500",
   }
 
+  const formatTime = (time: string | Date) => {
+    if (!time) return ""
+    const date = new Date(time)
+    const now = new Date()
+    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000)
+
+    if (diffInSeconds < 60) return "Just now"
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`
+    return date.toLocaleDateString()
+  }
+
   return (
     <Card className="glass border-0 shadow-xl hover:shadow-2xl transition-all duration-300">
       <CardHeader>
@@ -45,7 +57,7 @@ export function RecentActivity({ activities }: RecentActivityProps) {
                 <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{activity.action}</p>
                 <p className="text-xs text-slate-500 dark:text-slate-400">{activity.details}</p>
                 <p className="text-[10px] text-slate-400 dark:text-slate-500 flex items-center pt-1 font-medium">
-                  {activity.time}
+                  {formatTime(activity.time)}
                 </p>
               </div>
             </motion.div>

@@ -85,11 +85,17 @@ module.exports = async () => {
     if (adminPool) await adminPool.end();
   }
 
-  // Apply Base Schema
+  // Apply Base Schema - use schema-dev.sql (cloned from dev database)
+  let schemaFile = path.join(serverDir, 'schema-dev.sql');
+  if (!fs.existsSync(schemaFile)) {
+    // Fallback to src/database schema if available
+    schemaFile = path.join(serverDir, 'src/database/schema.sql');
+  }
+  
   let templatePool;
   try {
     templatePool = await connectWithFallbacks(templateDbName);
-    const schemaSql = fs.readFileSync(path.join(serverDir, 'src/database/schema.sql'), 'utf8');
+    const schemaSql = fs.readFileSync(schemaFile, 'utf8');
     await templatePool.query(schemaSql);
   } catch (err) {
     throw err;
@@ -104,6 +110,37 @@ module.exports = async () => {
     env: { ...process.env, DATABASE_URL: templateDbUrl },
     stdio: 'inherit'
   });
+
+  // Apply minimal seed data (companies, ai_providers)
+  let seedPool;
+  try {
+    seedPool = await connectWithFallbacks(templateDbName);
+    const seedFile = path.join(serverDir, 'data-seed.sql');
+    if (fs.existsSync(seedFile)) {
+      const seedSql = fs.readFileSync(seedFile, 'utf8');
+      await seedPool.query(seedSql);
+      console.log('[GLOBAL-SETUP] Seed data applied');
+    }
+  } catch (err) {
+    console.warn('[GLOBAL-SETUP] Seed data apply failed (continuing):', err.message);
+  } finally {
+    if (seedPool) await seedPool.end();
+  }
+
+  // Seed test users for authentication tests
+  const seedUsersScript = path.join(serverDir, 'scripts/seed-test-users.js');
+  if (fs.existsSync(seedUsersScript)) {
+    try {
+      execSync(`node ${seedUsersScript}`, {
+        cwd: serverDir,
+        env: { ...process.env, DATABASE_URL: templateDbUrl },
+        stdio: 'ignore'
+      });
+      console.log('[GLOBAL-SETUP] Test users seeded');
+    } catch (err) {
+      console.warn('[GLOBAL-SETUP] Test users seeding failed (continuing):', err.message);
+    }
+  }
 
   // Small delay for port binding to stabilize on Windows
   await new Promise(r => setTimeout(r, 1000));

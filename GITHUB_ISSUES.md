@@ -717,6 +717,75 @@ This file contains all issues structured by phase and epic. Copy these into your
   - [ ] Code review approved
   - [ ] Merged to main
 
+
+---
+
+### Issue 5.5: Setup Playwright E2E Infrastructure
+- **Phase**: 5
+- **Priority**: High
+- **Story Points**: 3
+- **Assignee**: QA Lead
+- **Description**:
+  Initialize Playwright with browser contexts and Docker networking configuration.
+  
+  **Acceptance Criteria**:
+  - [ ] Install `@playwright/test`
+  - [ ] Create `playwright.config.ts` for Dockerized environment
+  - [ ] Configure global setup/teardown for database resets
+  - [ ] Add `npm run test:e2e` scripts
+  - [ ] Setup API request fixtures for contract testing
+  
+  **Definition of Done**:
+  - [ ] Playwright runs against local Docker containers
+  - [ ] Sample test passes
+  - [ ] Code review approved
+  - [ ] Merged to main
+
+---
+
+### Issue 5.6: Implement Core E2E Flows (Auth & Dashboard)
+- **Phase**: 5
+- **Priority**: High
+- **Story Points**: 5
+- **Assignee**: QA Lead
+- **Description**:
+  Verify critical user journeys: Login, Logout, and Dashboard navigation.
+  
+  **Acceptance Criteria**:
+  - [ ] E2E: Successful login with valid credentials
+  - [ ] E2E: Logout clears session/tokens
+  - [ ] E2E: Protected routes redirect to login
+  - [ ] E2E: Dashboard loads with project stats
+  - [ ] No flaky test failures
+  
+  **Definition of Done**:
+  - [ ] All E2E flows pass in CI environment
+  - [ ] Video/Trace captures working on failure
+  - [ ] Code review approved
+  - [ ] Merged to main
+
+---
+
+### Issue 5.7: Integrate Playwright with CI/CD
+- **Phase**: 5
+- **Priority**: High
+- **Story Points**: 2
+- **Assignee**: DevOps Engineer
+- **Description**:
+  Add E2E validation as a gate in the GitHub Actions pipeline.
+  
+  **Acceptance Criteria**:
+  - [ ] Update `deploy.yml` with E2E test job
+  - [ ] Upload Playwright HTML reports as artifacts on failure
+  - [ ] Configure shard support for parallel execution
+  - [ ] Fail build if E2E coverage decreases
+  
+  **Definition of Done**:
+  - [ ] CI pipeline successfully runs E2E suite
+  - [ ] HTML reports accessible from GitHub UI
+  - [ ] Code review approved
+  - [ ] Merged to main
+
 ---
 
 ## Summary

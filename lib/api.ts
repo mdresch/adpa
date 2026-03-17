@@ -50,6 +50,11 @@ export interface Project {
   portfolio_name?: string
 }
 
+export interface ExtendedProject extends Project {
+  settings?: any
+  metadata?: any
+}
+
 export interface Program {
   id: string
   name: string
@@ -1182,11 +1187,11 @@ class ApiClient {
 
   // Users endpoints
   async getUsers() {
-    return this.request<any[]>("/users")
+    return this.request<{ users: User[], pagination: any }>("/users")
   }
 
   async getUser(id: string) {
-    return this.request<any>(`/users/${id}`)
+    return this.request<{ user: User }>(`/users/${id}`)
   }
 
   async updateUser(id: string, userData: any) {

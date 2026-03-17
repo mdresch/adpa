@@ -72,6 +72,9 @@ import qualityAuditRoutes from "./routes/qualityAuditRoutes"
 import documentUploadRoutes from "./routes/documentUploadRoutes"
 import adminRoutes from "./routes/adminRoutes"
 import ragRoutes from "./routes/ragRoutes"
+import tasksRoutes from "./routes/tasks"
+import goalsRoutes from "./routes/goals"
+import agentsRoutes from "./routes/agents"
 
 import assessmentExportRoutes from "./routes/assessmentExportRoutes"
 import executiveDashboardRoutes from "./routes/executive-dashboard"
@@ -105,6 +108,10 @@ import digitalTwinAnalyticsRoutes from "./routes/digital-twin-analytics"
 import digitalTwinConnectorsRoutes from "./routes/digital-twin-connectors"
 import mediaRoutes from "./routes/mediaRoutes"
 import healthRoutes from "./routes/health"
+import aiProvidersRoutes from "./routes/ai-providers"
+import documentModuleRoutes from "./modules/documents/routes"
+import analysisModuleRoutes from "./modules/analysis/routes"
+import projectModuleRoutes from "./modules/projects/routes"
 import { registerRoutes } from "./routes/registry"
 
 const app = express()
@@ -229,6 +236,15 @@ app.use("/api/template-analytics", templatesModuleRoutes)
 app.use("/api/template-stats", (req, res, next) => { req.url = '/statistics' + req.url; next(); }, templatesModuleRoutes)
 app.use("/api/analytics", intelligenceModuleRoutes[0].router)
 app.use("/api/integrations", integrationsModuleRoutes[0].router)
+app.use("/api/documents", documentModuleRoutes[0].router)
+app.use("/api/project-data-extraction", (req, res, next) => {
+  // Map /:projectId/summary to /summary/:projectId
+  const summaryMatch = req.url.match(/^\/([^/]+)\/summary$/)
+  if (summaryMatch) {
+    req.url = `/summary/${summaryMatch[1]}`
+  }
+  next()
+}, analysisModuleRoutes[0].router)
 
 
 console.log("✅ Legacy compatibility routes registered (Bridge Layer Active)")
@@ -283,7 +299,12 @@ app.use("/api/rag", ragRoutes)
 app.use("/api/projects", projectSimilarityRoutes)
 app.use("/api/projects", developmentApproachRoutes)
 app.use("/api/development-approach", developmentApproachModuleRoutes)
+app.use("/api/tasks", tasksRoutes)
+app.use("/api/goals", goalsRoutes)
+app.use("/api/agents", agentsRoutes)
 app.use("/api/media", mediaRoutes)
+app.use("/api/ai-providers", aiProvidersRoutes)
+app.use("/api/ai", aiProvidersRoutes)
 console.log("✅ All API routes registered")
 app.use("/api/notifications", notificationsRoutes)
 app.use("/api/email-notifications", emailNotificationsRoutes)

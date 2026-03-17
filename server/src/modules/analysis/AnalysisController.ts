@@ -28,6 +28,7 @@ import { childLogger } from '../../utils/logger';
 import { makeKey, getCache, setCache } from '../../utils/cache';
 import { listDomainExtractionConfigs } from '@/modules/context';
 import { PMBOK_DOMAINS } from '@/types/pmbok';
+import { ENTITY_DOMAIN_WEIGHTS } from '../../types/entity-domain-weights';
 import { createInitialBatchProgressMeta, normalizeBatchingConfig } from '../../services/extraction/batchPlanner';
 
 export class AnalysisController {
@@ -352,13 +353,64 @@ export class AnalysisController {
         { key: 'requirements', name: 'requirements' },
         { key: 'risks', name: 'risks' },
         { key: 'milestones', name: 'milestones' },
-        { key: 'activities', name: 'activities' }
-        // Add more as needed or dynamic list from queueService
+        { key: 'activities', name: 'activities' },
+        { key: 'deliverables', name: 'deliverables' },
+        { key: 'constraints', name: 'constraints' },
+        { key: 'success_criteria', name: 'success_criteria' },
+        { key: 'best_practices', name: 'best_practices' },
+        { key: 'team_agreements', name: 'team_agreements' },
+        { key: 'development_approaches', name: 'development_approaches' },
+        { key: 'work_items', name: 'work_items' },
+        { key: 'performance_actuals', name: 'performance_actuals' }
       ];
 
       const entityCounts = await this.repository.getProjectEntityCounts(projectId, tables);
-      res.json({ success: true, projectId, entityCounts });
+      
+      // Calculate PMBOK 8 Domain Counts based on weights
+      const pmbok8DomainCounts: Record<string, number> = {
+        stakeholders: 0,
+        team: 0,
+        development_approach: 0,
+        planning: 0,
+        project_work: 0,
+        delivery: 0,
+        measurement: 0,
+        uncertainty: 0
+      };
+
+      let totalEntities = 0;
+
+      Object.entries(entityCounts).forEach(([entityType, count]) => {
+        totalEntities += count;
+        const weights = ENTITY_DOMAIN_WEIGHTS[entityType] || [];
+        weights.forEach(w => {
+          if (pmbok8DomainCounts[w.domain] !== undefined) {
+            pmbok8DomainCounts[w.domain] += count * w.weight;
+          }
+        });
+      });
+
+      // Map snake_case domains to camelCase expected by frontend
+      const formattedDomainCounts = {
+        team: Math.round(pmbok8DomainCounts.team),
+        developmentApproach: Math.round(pmbok8DomainCounts.development_approach),
+        projectWork: Math.round(pmbok8DomainCounts.project_work),
+        measurement: Math.round(pmbok8DomainCounts.measurement),
+        uncertainty: Math.round(pmbok8DomainCounts.uncertainty),
+        stakeholders: Math.round(pmbok8DomainCounts.stakeholders),
+        planning: Math.round(pmbok8DomainCounts.planning),
+        delivery: Math.round(pmbok8DomainCounts.delivery)
+      };
+
+      res.json({ 
+        success: true, 
+        projectId, 
+        entityCounts, 
+        pmbok8DomainCounts: formattedDomainCounts,
+        totalEntities
+      });
     } catch (error) {
+      this.logger.error('Summary fetch failed', { error });
       res.status(500).json({ error: 'Summary fetch failed' });
     }
   };

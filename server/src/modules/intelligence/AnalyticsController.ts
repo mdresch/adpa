@@ -17,7 +17,6 @@ export class AnalyticsController {
       if (cached) return res.json(cached);
 
       const stats = await this.repository.getDashboardStats(userId);
-      // ... recent activity and performance would go here ...
       
       const result = {
         ...stats,

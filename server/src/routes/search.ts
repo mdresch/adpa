@@ -25,6 +25,7 @@ import { pool } from '../database/connection'
 import { cache } from '../utils/redis'
 import AnalyticsTrackingService from '../services/analyticsTrackingService'
 import crypto from 'crypto'
+import { discoveryService } from '../services/discoveryService'
 
 const router = Router()
 
@@ -274,6 +275,39 @@ router.post(
       res.status(500).json({
         success: false,
         error: 'Search failed',
+        message: error.message
+      })
+    }
+  }
+)
+
+/**
+ * POST /api/search/discovery
+ * AI-driven discovery search (internal + external)
+ */
+router.post(
+  '/discovery',
+  authenticateToken,
+  validate(Joi.object({
+    query: Joi.string().required().min(2).max(500),
+    source: Joi.string().valid('all', 'internal', 'external').default('all'),
+    limit: Joi.number().min(1).max(50).default(10)
+  })),
+  async (req: Request, res: Response) => {
+    try {
+      const { query, source, limit } = req.body
+      const results = await discoveryService.search(query, { source, limit })
+      res.json({
+        success: true,
+        data: {
+          results
+        }
+      })
+    } catch (error: any) {
+      logger.error('[SEARCH-DISCOVERY] Discovery failed:', error)
+      res.status(500).json({
+        success: false,
+        error: 'Discovery search failed',
         message: error.message
       })
     }

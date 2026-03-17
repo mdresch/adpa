@@ -35,6 +35,8 @@ export async function POST(req: Request) {
         const { message, messages, chatId, trigger, messageId, ragScope } = body
         const isNewChat = !!body.isNewChat
 
+        console.log(`[MORPHIC-API] Received request: chatId=${chatId}, trigger=${trigger}, isNewChat=${isNewChat}`)
+
         perfLog(
             `API Route - Start: chatId=${chatId}, trigger=${trigger}, isNewChat=${isNewChat}`
         )
@@ -42,6 +44,7 @@ export async function POST(req: Request) {
         // Handle different triggers using AI SDK standard values
         if (trigger === 'regenerate-message') {
             if (!messageId) {
+                console.error('[MORPHIC-API] Missing messageId for regeneration')
                 return new Response('messageId is required for regeneration', {
                     status: 400,
                     statusText: 'Bad Request'
@@ -49,6 +52,7 @@ export async function POST(req: Request) {
             }
         } else if (trigger === 'submit-message') {
             if (!message) {
+                console.error('[MORPHIC-API] Missing message for submission')
                 return new Response('message is required for submission', {
                     status: 400,
                     statusText: 'Bad Request'
@@ -57,11 +61,14 @@ export async function POST(req: Request) {
         }
 
         const authStart = performance.now()
+        console.log('[MORPHIC-API] Checking auth...')
         const userId = await getCurrentUserId()
         perfTime('Auth completed', authStart)
+        console.log(`[MORPHIC-API] Auth checked: userId=${userId}`)
 
         const isGuest = !userId
         if (isGuest && process.env.ENABLE_GUEST_CHAT !== 'true') {
+            console.warn('[MORPHIC-API] Guest chat disabled and user not authenticated')
             return new Response('Authentication required', {
                 status: 401,
                 statusText: 'Unauthorized'
@@ -74,11 +81,19 @@ export async function POST(req: Request) {
                 forwardedFor.split(',')[0]?.trim() ||
                 req.headers.get('x-real-ip') ||
                 null
+            console.log(`[MORPHIC-API] Enforcing guest limit for IP: ${ip}`)
             const guestLimitResponse = await checkAndEnforceGuestLimit(ip)
-            if (guestLimitResponse) return guestLimitResponse
+            if (guestLimitResponse) {
+                console.warn('[MORPHIC-API] Guest limit exceeded')
+                return guestLimitResponse
+            }
         } else {
+            console.log(`[MORPHIC-API] Enforcing overall limit for user: ${userId}`)
             const overallLimitResponse = await checkAndEnforceOverallChatLimit(userId)
-            if (overallLimitResponse) return overallLimitResponse
+            if (overallLimitResponse) {
+                console.warn('[MORPHIC-API] Overall limit exceeded')
+                return overallLimitResponse
+            }
         }
 
         const cookieStore = await cookies()
@@ -105,12 +120,15 @@ export async function POST(req: Request) {
             : cookieStore
 
         // Select the appropriate model based on model type preference and search mode
+        console.log('[MORPHIC-API] Selecting model...')
         const selectedModel = selectModel({
             cookieStore: modelCookieStore,
             searchMode
         })
+        console.log(`[MORPHIC-API] Selected model: ${selectedModel.providerId}:${selectedModel.id}`)
 
         if (!isProviderEnabled(selectedModel.providerId)) {
+            console.error(`[MORPHIC-API] Provider not enabled: ${selectedModel.providerId}`)
             return new Response(
                 `Selected provider is not enabled ${selectedModel.providerId}`,
                 {
@@ -136,6 +154,7 @@ export async function POST(req: Request) {
         let assistedContext: string | undefined
         if (trigger === 'submit-message' && message && userId && searchMode === 'adaptive') {
             try {
+                console.log('[MORPHIC-API] Assembling assisted context...')
                 const queryText = getTextFromParts(message.parts)?.trim()
                 if (queryText && queryText.length >= 2) {
                     const context = await aiSearchRAGService.assembleContext({
@@ -150,14 +169,14 @@ export async function POST(req: Request) {
                     }, userId)
 
                     assistedContext = context.contextPrompt
+                    console.log('[MORPHIC-API] Assisted context assembled')
                 }
             } catch (error) {
                 console.warn('[MORPHIC] Assisted context assembly failed:', error)
             }
         }
 
-        // Note: createEphemeralChatStreamResponse is skipped for now, handling guest as normal chat stream 
-        // unless explicitly needed. 
+        console.log('[MORPHIC-API] Creating chat stream response...')
         const response = await createChatStreamResponse({
             message,
             model: selectedModel,
@@ -175,6 +194,7 @@ export async function POST(req: Request) {
         })
 
         perfTime('createChatStreamResponse resolved', streamStart)
+        console.log('[MORPHIC-API] Stream response created')
 
             // Track analytics event (non-blocking)
             ; (async () => {
@@ -205,24 +225,26 @@ export async function POST(req: Request) {
             })()
 
         if (chatId && userId) {
-            revalidateTag(`chat-${chatId}`, 'max') // This is valid for on-demand revalidation.
-            // But to be safe, let's use revalidatePath as well or instead if that's what's intended.
-            // Actually, the warning said "without the second argument is now deprecated". 
-            // This usually applies to revalidatePath(path, type). revalidateTag(tag) takes one arg.
-            // Maybe it means revalidateTag(tag, opts)? No.
-            // Let's assume the user meant revalidatePath if the warning persists. 
-            // For now, I'll keep revalidateTag but also add revalidatePath for the specific page.
+            revalidateTag(`chat-${chatId}`, 'max') 
         }
 
         const totalTime = performance.now() - startTime
         perfLog(`Total API route time: ${totalTime.toFixed(2)}ms`)
+        console.log(`[MORPHIC-API] Complete: ${totalTime.toFixed(2)}ms`)
 
         return response
-    } catch (error) {
-        console.error('API route error:', error)
-        return new Response('Error processing your request', {
-            status: 500,
-            statusText: 'Internal Server Error'
-        })
+    } catch (error: any) {
+        console.error('[MORPHIC-API] ERROR:', error)
+        return new Response(
+            JSON.stringify({ 
+                error: 'Error processing your request', 
+                details: error.message,
+                stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+            }), 
+            {
+                status: 500,
+                headers: { 'Content-Type': 'application/json' }
+            }
+        )
     }
 }

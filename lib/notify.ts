@@ -3,37 +3,41 @@ import { sendNotification } from './notifications'
 // Minimal local fallback for toast API to avoid hard dependency on `sonner` in CI/build.
 // If `sonner` is present in node_modules the bundler will still pick it up when used elsewhere.
 const sonnerToast = {
-  success: (msg: string) => {
+  success: (msg: string, description?: string) => {
     if (typeof window !== 'undefined' && (window as any).toast) {
-      try { (window as any).toast.success(msg) } catch { /* ignore */ }
+      try { (window as any).toast.success(msg, { description }) } catch { /* ignore */ }
     } else {
       // eslint-disable-next-line no-console
-      console.log('[toast success]', msg)
+      console.log('[toast success]', msg, description ? `(${description})` : '')
     }
   },
-  error: (msg: string) => {
+  error: (msg: string, description?: string) => {
     if (typeof window !== 'undefined' && (window as any).toast) {
-      try { (window as any).toast.error(msg) } catch { /* ignore */ }
+      try { (window as any).toast.error(msg, { description }) } catch { /* ignore */ }
     } else {
       // eslint-disable-next-line no-console
-      console.error('[toast error]', msg)
+      console.error('[toast error]', msg, description ? `(${description})` : '')
     }
   },
   // fallback callable
-  default: (msg: string) => {
+  default: (msg: string, description?: string) => {
     // eslint-disable-next-line no-console
-    console.log('[toast]', msg)
+    console.log('[toast]', msg, description ? `(${description})` : '')
   }
 }
 
-type NotifyArgs = {
+
+export interface ToastOptions {
   title?: string
-  message: string
+  description?: string
   announce?: boolean
+  suppressAdapter?: boolean
+  duration?: number
 }
 
-const wrap = (type: 'success' | 'error' | 'info' | 'warning') => (message: string, opts?: { title?: string; announce?: boolean; suppressAdapter?: boolean }) => {
+const wrap = (type: 'success' | 'error' | 'info' | 'warning') => (message: string, opts?: ToastOptions) => {
   const title = opts?.title ?? (type === 'success' ? 'Success' : type === 'error' ? 'Error' : 'Notification')
+  const description = opts?.description
   const announce = opts?.announce ?? true
   
   // Filter out room join notifications - they should not appear as toasts
@@ -53,7 +57,7 @@ const wrap = (type: 'success' | 'error' | 'info' | 'warning') => (message: strin
   // send to notifications center unless explicitly suppressed
   if (!opts?.suppressAdapter) {
     try {
-      sendNotification({ type, title, message, announce })
+      sendNotification({ type, title, message, description, announce })
     } catch (e) {
       // non-fatal
       // eslint-disable-next-line no-console
@@ -61,9 +65,9 @@ const wrap = (type: 'success' | 'error' | 'info' | 'warning') => (message: strin
     }
   }
   // show the toast using available adapter (or fallback)
-  if (type === 'success') return sonnerToast.success(message)
-  if (type === 'error') return sonnerToast.error(message)
-  return sonnerToast.default(message)
+  if (type === 'success') return sonnerToast.success(message, description)
+  if (type === 'error') return sonnerToast.error(message, description)
+  return sonnerToast.default(message, description)
 }
 
 export const toast = {

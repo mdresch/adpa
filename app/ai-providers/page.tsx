@@ -54,10 +54,12 @@ export default function AIProviders() {
       apiClient.setToken(token)
     }
   }, [])
+  type SupportedAIProvider = "" | "openai" | "google" | "azure" | "mistral" | "groq" | "anthropic" | "deepseek" | "moonshot" | "xai" | "copilot" | "ollama"
+
   interface Provider {
     id: string
     name: string
-    type: string
+    type: SupportedAIProvider
     priority: number
     endpoint: string
     enabled: boolean
@@ -80,7 +82,7 @@ export default function AIProviders() {
   const [healthMetrics, setHealthMetrics] = React.useState<Array<{
     providerId: string
     providerName: string
-    providerType: string
+    providerType: SupportedAIProvider
     overallHealth: number
     availability: number
     responseTime: number
@@ -110,7 +112,7 @@ export default function AIProviders() {
     }
     providerStats?: Array<{
       provider_name: string
-      provider_type: string
+      provider_type: SupportedAIProvider
       usage_count: number
       total_tokens: number
       avg_response_time: number
@@ -121,7 +123,7 @@ export default function AIProviders() {
   const [formState, setFormState] = React.useState<{
     id: string
     name: string
-    type: "" | "openai" | "google" | "azure" | "mistral" | "groq" | "anthropic" | "deepseek" | "moonshot" | "xai" | "copilot" | "ollama"
+    type: SupportedAIProvider
     apiKey: string
     endpoint: string
     priority: number
@@ -507,10 +509,10 @@ export default function AIProviders() {
       // Use the same endpoint as dashboard for consistency
       const providers = await apiClient.getAIProviders()
       // normalize providers for display
-      const normalized = providers.map((p) => ({
+      const normalized: Provider[] = providers.map((p) => ({
         id: p.id,
         name: p.name,
-        type: p.type,
+        type: p.type as SupportedAIProvider,
         priority: p.configuration?.priority || 1, // Get priority from configuration or default to 1
         endpoint: p.configuration?.endpoint || '',
         enabled: p.is_active,
@@ -574,7 +576,7 @@ export default function AIProviders() {
         data?: Array<{
           providerId: string
           providerName: string
-          providerType: string
+          providerType: SupportedAIProvider
           overallHealth: number
           availability: number
           responseTime: number
@@ -604,7 +606,7 @@ export default function AIProviders() {
             results: Array<{
               providerId: string
               providerName: string
-              providerType: string
+              providerType: SupportedAIProvider
               overallHealth: number
               availability: number
               responseTime: number
@@ -644,7 +646,7 @@ export default function AIProviders() {
           data: {
             providerId: string
             providerName: string
-            providerType: string
+            providerType: SupportedAIProvider
             overallHealth: number
             availability: number
             responseTime: number
@@ -807,7 +809,7 @@ export default function AIProviders() {
                                   if (matchingProvider) {
                                     setFormState({
                                       ...formState,
-                                      type: val as typeof formState.type,
+                                      type: val as SupportedAIProvider,
                                       name: matchingProvider.name,
                                       priority: matchingProvider.priority,
                                       endpoint: matchingProvider.endpoint,
@@ -816,7 +818,7 @@ export default function AIProviders() {
                                     })
                                   } else {
                                     // If no existing provider of this type, just update type
-                                    setFormState((s) => ({ ...s, type: (val || "") as typeof s.type }))
+                                    setFormState((s) => ({ ...s, type: (val || "") as SupportedAIProvider }))
                                   }
                                 }}
                               >
@@ -874,7 +876,7 @@ export default function AIProviders() {
                               </Label>
                               <Select
                                 value={formState.type || undefined}
-                                onValueChange={(val: string) => setFormState((s) => ({ ...s, type: (val || "") as typeof s.type }))}
+                                onValueChange={(val: string) => setFormState((s) => ({ ...s, type: (val || "") as SupportedAIProvider }))}
                               >
                                 <SelectTrigger className="col-span-3">
                                   <SelectValue placeholder="Select provider (priorities in Failover Settings)" />
@@ -1618,15 +1620,14 @@ export default function AIProviders() {
                                 variant={provider.enabled ? "default" : "secondary"}
                                 className="h-auto p-4 flex flex-col items-start"
                                 onClick={() => {
-                                  // Open edit dialog with current provider for priority adjustment
-                                  setFormState({
-                                    id: provider.id,
-                                    name: provider.name,
-                                    type: provider.type,
-                                    apiKey: "",
-                                    endpoint: provider.endpoint,
-                                    priority: provider.priority || (index + 1),
-                                    enabled: provider.enabled,
+                                 // Open edit dialog with current provider for priority adjustment
+                                 setFormState({
+                                   id: provider.id,
+                                   name: provider.name,
+                                   type: provider.type as SupportedAIProvider,
+                                   apiKey: "",
+                                   endpoint: provider.endpoint,
+                                   priority: provider.priority || (index + 1),                                    enabled: provider.enabled,
                                     resourceName: "",
                                     deploymentName: "",
                                     apiVersion: "2024-12-01-preview",

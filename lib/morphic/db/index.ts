@@ -16,7 +16,10 @@ if (!connectionString) {
 const sslConfig =
     process.env.DATABASE_SSL_DISABLED === 'true'
         ? false
-        : process.env.NODE_ENV === 'production'
+        : (process.env.NODE_ENV === 'production' || 
+           process.env.MORPHIC_DB_SSL === 'true' || 
+           connectionString?.includes('railway.app') || 
+           connectionString?.includes('supabase.co'))
             ? { rejectUnauthorized: false }
             : false
 

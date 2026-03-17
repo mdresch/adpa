@@ -8,66 +8,102 @@ import { Activity as ActivityIcon } from "lucide-react"
 import { Job } from "@/lib/api"
 
 export function ProcessingPipeline({ jobs = [] }: { jobs?: Job[] }) {
+  const getStageStatus = (stageIndex: number) => {
+    // Map stage ranges to job types
+    // Stage 1: Ingestion
+    if (stageIndex === 0) {
+      const active = jobs.some(j => j.status === 'processing' && (j.type === 'document-convert' || j.type === 'extract-project-data'))
+      const completed = jobs.some(j => j.status === 'completed' && (j.type === 'document-convert' || j.type === 'extract-project-data'))
+      return active ? 'active' : (completed ? 'completed' : 'idle')
+    }
+    // Stages 2-6: Intelligence Pipeline
+    if (stageIndex >= 1 && stageIndex <= 5) {
+      const active = jobs.some(j => j.status === 'processing' && j.type === 'pipeline-processing')
+      return active ? 'active' : 'idle'
+    }
+    // Stage 7: AI Generation
+    if (stageIndex === 6) {
+      const active = jobs.some(j => j.status === 'processing' && (j.type === 'ai-generate' || j.type === 'document-regeneration'))
+      return active ? 'active' : 'idle'
+    }
+    // Stage 8: Quality
+    if (stageIndex === 7) {
+      const active = jobs.some(j => j.status === 'processing' && j.type === 'quality-audit')
+      return active ? 'active' : 'idle'
+    }
+    return 'idle'
+  }
+
   const pipelineStages = [
     {
       stage: "1. OCR & Ingestion",
       description: "Optical character recognition for scanned documents, PDFs, and images with format normalization",
       icon: "📄",
-      color: "from-blue-400 to-blue-500"
+      color: "from-blue-400 to-blue-500",
+      status: getStageStatus(0)
     },
     {
       stage: "2. Context Gathering",
       description: "Collects relevant project documents, stakeholder information, and historical context",
       icon: "🔍",
-      color: "from-blue-450 to-blue-550"
+      color: "from-blue-450 to-blue-550",
+      status: getStageStatus(1)
     },
     {
       stage: "3. Topic Extraction",
       description: "AI-driven topic analysis and domain-specific knowledge categorization across frameworks",
       icon: "🎯",
-      color: "from-blue-500 to-blue-600"
+      color: "from-blue-500 to-blue-600",
+      status: getStageStatus(2)
     },
     {
       stage: "4. Content Prioritization",
       description: "Ranks content by relevance, importance, and impact using multi-dimensional scoring",
       icon: "📊",
-      color: "from-blue-550 to-blue-650"
+      color: "from-blue-550 to-blue-650",
+      status: getStageStatus(3)
     },
     {
       stage: "5. Smart Compression",
       description: "Topic-centric compression with domain primers, achieving 80% token reduction",
       icon: "🗜️",
-      color: "from-blue-600 to-blue-700"
+      color: "from-blue-600 to-blue-700",
+      status: getStageStatus(4)
     },
     {
       stage: "6. Context Injection",
       description: "Injects compressed, domain-aware context into AI prompts for enhanced generation",
       icon: "💉",
-      color: "from-blue-650 to-blue-750"
+      color: "from-blue-650 to-blue-750",
+      status: getStageStatus(5)
     },
     {
       stage: "7. AI Generation",
       description: "Multi-provider AI generation with framework-specific templates and guardrails",
       icon: "🤖",
-      color: "from-blue-700 to-blue-800"
+      color: "from-blue-700 to-blue-800",
+      status: getStageStatus(6)
     },
     {
       stage: "8. Quality Scoring",
       description: "Knowledge output matrix scoring: completeness, accuracy, coherence, compliance",
       icon: "⭐",
-      color: "from-blue-750 to-blue-850"
+      color: "from-blue-750 to-blue-850",
+      status: getStageStatus(7)
     },
     {
       stage: "9. Analytics & Reporting",
       description: "Real-time metrics, cost analysis, quality dashboards, and ROI tracking",
       icon: "📈",
-      color: "from-blue-800 to-blue-900"
+      color: "from-blue-800 to-blue-900",
+      status: getStageStatus(8)
     },
     {
       stage: "10. Enterprise Integration",
       description: "Seamless export to SharePoint, Confluence, Jira, and enterprise document systems",
       icon: "🔗",
-      color: "from-blue-900 to-slate-900"
+      color: "from-blue-900 to-slate-900",
+      status: getStageStatus(9)
     }
   ]
 

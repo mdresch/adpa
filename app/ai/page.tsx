@@ -90,6 +90,9 @@ interface Project {
   document_count?: number
 }
 
+// AI Provider type for selection
+type AIProviderType = "" | "google" | "openai" | "azure" | "mistral" | "groq" | "anthropic" | "deepseek" | "moonshot" | "xai" | "copilot" | "ollama"
+
 export default function AIPage() {
   const router = useRouter()
   const { hasPermission } = useAuth()
@@ -98,7 +101,8 @@ export default function AIPage() {
 
   const [providers, setProviders] = useState<AIProvider[]>([])
   const [templates, setTemplates] = useState<Template[]>([])
-  const [selectedProvider, setSelectedProvider] = useState<string>("")
+  const [selectedProvider, setSelectedProvider] = useState<AIProviderType>("ollama")
+  const [selectedModel, setSelectedModel] = useState<string>("llama3")
   const [selectedTemplate, setSelectedTemplate] = useState<string>("")
   const [prompt, setPrompt] = useState("")
   const [temperature, setTemperature] = useState([0.7])
@@ -129,10 +133,12 @@ export default function AIPage() {
         // Extract projects array from response
         setProjects(projectsResponse.projects || [])
 
-        // Set default provider
-        const activeProvider = providersData.find(p => p.is_active)
+        // Set default provider - Prefer ollama if available
+        const ollamaProvider = providersData.find(p => p.provider_type === 'ollama' && p.is_active)
+        const activeProvider = ollamaProvider || providersData.find(p => p.is_active)
+        
         if (activeProvider) {
-          setSelectedProvider(activeProvider.name)
+          setSelectedProvider(activeProvider.name as AIProviderType)
         }
       } catch (error) {
         console.error("Failed to fetch AI data:", error)
