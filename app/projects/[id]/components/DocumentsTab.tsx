@@ -31,22 +31,14 @@ import {
   Loader2,
 } from "lucide-react"
 
-interface Document {
-  id: string
-  name: string
-  status: string
-  version: number
-  updated_at: string
-  updated_by: string
-  [key: string]: unknown
-}
+import { Document } from "@/lib/api"
 
 interface DocumentStats {
   totalDocuments: number
   counts: {
     draft: number
-    review: number
     published: number
+    review: number
     archived: number
   }
 }

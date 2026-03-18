@@ -298,7 +298,8 @@ export async function createChatStreamResponse(
                                     userMessageContent: messageContent,
                                     modelId: currentModelId,
                                     abortSignal,
-                                    parentTraceId
+                                    parentTraceId,
+                                    userId
                                 }).catch(() => DEFAULT_CHAT_TITLE)
                             }
                         }
@@ -363,7 +364,11 @@ export async function createChatStreamResponse(
                 }
             },
             onError: (error: any) => {
-                return error instanceof Error ? error.message : String(error)
+                console.error('[MORPHIC-STREAM] Error during stream execution:', error)
+                return JSON.stringify({
+                    message: error instanceof Error ? error.message : String(error),
+                    stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+                })
             },
             onFinish: async ({ responseMessage, isAborted }) => {
                 if (isAborted || !responseMessage) return

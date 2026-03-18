@@ -35,7 +35,10 @@ export async function POST(req: Request) {
         const { message, messages, chatId, trigger, messageId, ragScope } = body
         const isNewChat = !!body.isNewChat
 
-        console.log(`[MORPHIC-API] Received request: chatId=${chatId}, trigger=${trigger}, isNewChat=${isNewChat}`)
+        const isDev = process.env.NODE_ENV === 'development'
+        if (isDev) {
+            console.log(`[MORPHIC-API] Received request: chatId=${chatId}, trigger=${trigger}, isNewChat=${isNewChat}`)
+        }
 
         perfLog(
             `API Route - Start: chatId=${chatId}, trigger=${trigger}, isNewChat=${isNewChat}`
@@ -61,10 +64,14 @@ export async function POST(req: Request) {
         }
 
         const authStart = performance.now()
-        console.log('[MORPHIC-API] Checking auth...')
+        if (isDev) {
+            console.log('[MORPHIC-API] Checking auth...')
+        }
         const userId = await getCurrentUserId()
         perfTime('Auth completed', authStart)
-        console.log(`[MORPHIC-API] Auth checked: userId=${userId}`)
+        if (isDev) {
+            console.log(`[MORPHIC-API] Auth checked: userId=${userId}`)
+        }
 
         const isGuest = !userId
         if (isGuest && process.env.ENABLE_GUEST_CHAT !== 'true') {
@@ -120,12 +127,16 @@ export async function POST(req: Request) {
             : cookieStore
 
         // Select the appropriate model based on model type preference and search mode
-        console.log('[MORPHIC-API] Selecting model...')
+        if (isDev) {
+            console.log('[MORPHIC-API] Selecting model...')
+        }
         const selectedModel = selectModel({
             cookieStore: modelCookieStore,
             searchMode
         })
-        console.log(`[MORPHIC-API] Selected model: ${selectedModel.providerId}:${selectedModel.id}`)
+        if (isDev) {
+            console.log(`[MORPHIC-API] Selected model: ${selectedModel.providerId}:${selectedModel.id}`)
+        }
 
         if (!isProviderEnabled(selectedModel.providerId)) {
             console.error(`[MORPHIC-API] Provider not enabled: ${selectedModel.providerId}`)
@@ -194,7 +205,9 @@ export async function POST(req: Request) {
         })
 
         perfTime('createChatStreamResponse resolved', streamStart)
-        console.log('[MORPHIC-API] Stream response created')
+        if (isDev) {
+            console.log('[MORPHIC-API] Stream response created')
+        }
 
             // Track analytics event (non-blocking)
             ; (async () => {
@@ -230,7 +243,9 @@ export async function POST(req: Request) {
 
         const totalTime = performance.now() - startTime
         perfLog(`Total API route time: ${totalTime.toFixed(2)}ms`)
-        console.log(`[MORPHIC-API] Complete: ${totalTime.toFixed(2)}ms`)
+        if (isDev) {
+            console.log(`[MORPHIC-API] Complete: ${totalTime.toFixed(2)}ms`)
+        }
 
         return response
     } catch (error: any) {

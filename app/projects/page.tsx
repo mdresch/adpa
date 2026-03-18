@@ -6,6 +6,7 @@ import { Header } from "@/components/header"
 import { PageTransition } from "@/components/page-transition"
 import { AnimatedLayout, AnimatedGrid, AnimatedGridItem } from "@/components/animated-layout"
 import { motion } from "framer-motion"
+import { getApiBaseUrl } from "@/lib/api-url"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -757,7 +758,7 @@ export default function Projects() {
         formData.append('projectId', selectedProjectForUpload.id)
         formData.append('assessmentName', documentUploadForm.name)
 
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/onboarding/upload`, {
+        const response = await fetch(`${getApiBaseUrl()}/onboarding/upload`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`

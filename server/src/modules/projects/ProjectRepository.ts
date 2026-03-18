@@ -12,6 +12,7 @@ export interface ProjectData {
   owner_id: string;
   team_members: string; // JSON string
   company_id?: string | null;
+  correlation_id?: string;
   created_at?: Date;
   updated_at?: Date;
 }
@@ -192,10 +193,10 @@ export class ProjectRepository {
    */
   async create(data: ProjectData): Promise<QueryResult<ProjectData>> {
     return this.db.query(
-      `INSERT INTO projects (id, name, description, framework, status, priority, program_id, owner_id, team_members)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `INSERT INTO projects (id, name, description, framework, status, priority, program_id, owner_id, team_members, correlation_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
-      [data.id, data.name, data.description, data.framework, data.status, data.priority, data.program_id, data.owner_id, data.team_members]
+      [data.id, data.name, data.description, data.framework, data.status, data.priority, data.program_id, data.owner_id, data.team_members, data.correlation_id]
     );
   }
 
@@ -213,6 +214,7 @@ export class ProjectRepository {
     if (data.status !== undefined) { fields.push(`status = $${count++}`); params.push(data.status); }
     if (data.priority !== undefined) { fields.push(`priority = $${count++}`); params.push(data.priority); }
     if (data.team_members !== undefined) { fields.push(`team_members = $${count++}`); params.push(data.team_members); }
+    if (data.correlation_id !== undefined) { fields.push(`correlation_id = $${count++}`); params.push(data.correlation_id); }
     
     fields.push(`updated_at = CURRENT_TIMESTAMP`);
 

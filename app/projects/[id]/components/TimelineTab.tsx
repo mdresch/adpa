@@ -14,15 +14,7 @@ import {
   TrendingUp, 
   FileText 
 } from "lucide-react"
-import { Project } from "@/lib/api"
-
-interface Document {
-  id: string
-  title: string
-  type: string
-  status?: string
-  [key: string]: unknown
-}
+import { Project, Document } from "@/lib/api"
 
 interface TimelineTabProps {
   project: Project

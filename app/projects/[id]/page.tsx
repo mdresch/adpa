@@ -32,7 +32,8 @@ import { ComplianceSecurityTab } from "./components/ComplianceSecurityTab"
 import { IntegrationsTab } from "./components/IntegrationsTab"
 import { DigitalTwinAnalyticsTab } from "./components/DigitalTwinAnalyticsTab"
 import { TemplateConflictDialog } from "@/components/document/TemplateConflictDialog"
-import { apiClient, Project, Template, ExtendedProject } from "@/lib/api"
+import { apiClient, Project, Template, ExtendedProject, Document, Stakeholder } from "@/lib/api"
+import { getApiBaseUrl } from "@/lib/api-url"
 import { useAuth } from "@/contexts/AuthContext"
 import { useWebSocket } from "@/contexts/WebSocketContext"
 import { toast } from '@/lib/notify'
@@ -119,53 +120,10 @@ const healthConfig = {
   'Needs Improvement': { color: 'text-orange-600', bgColor: 'bg-orange-50', icon: '⚠' },
 }
 
-interface Document {
-  id: string
-  project_id: string
-  name: string
-  content?: any
-  template_id?: string
-  template_name?: string
-  status: string
-  version: number
-  created_by: string
-  updated_by: string
-  created_at: string
-  updated_at: string
-  priority_rank?: number
-  dependency_level?: number
-  character_count?: number
-  word_count?: number
-  document?: any
-}
-
-interface Stakeholder {
-  id: string
-  project_id: string
-  user_id?: string
-  name?: string
-  role: string
-  department?: string
-  email: string
-  phone?: string
-  interest_level: 'high' | 'medium' | 'low'
-  influence_level: 'high' | 'medium' | 'low'
-  engagement_approach: 'manage_closely' | 'keep_satisfied' | 'keep_informed' | 'monitor'
-  communication_frequency: 'daily' | 'weekly' | 'bi_weekly' | 'monthly' | 'as_needed'
-  stakeholder_type: 'internal' | 'external'
-  stakeholder_category: 'primary' | 'secondary'
-  expectations?: string
-  potential_impact?: string
-  is_team_member?: boolean
-  created_at: string
-  updated_at: string
-}
-
-
 // CR-2026-001: Baseline Management Component - extracted to components/BaselineManagement.tsx
 
 // AI Provider type for selection
-type AIProviderType = "" | "google" | "openai" | "azure" | "mistral" | "groq" | "anthropic" | "deepseek" | "moonshot" | "xai" | "copilot" | "ollama"
+type AIProviderType = string
 
 export default function ProjectDetail() {
   const params = useParams()
@@ -1724,7 +1682,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
         }
 
         try {
-          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/onboarding/upload`, {
+          const response = await fetch(`${getApiBaseUrl()}/onboarding/upload`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${token}`
@@ -2051,10 +2009,8 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
     try {
       setLoadingUsers(true)
       const response = await apiClient.getUsers()
-      // Handle different response formats
-      const usersArray = Array.isArray(response) ? response :
-        (response as any)?.users || (response as any)?.data || []
-      setUsers(usersArray)
+      // response is typed as { users: User[], pagination: any }
+      setUsers(response.users || [])
     } catch (error) {
       console.error("Failed to fetch users:", error)
       setUsers([])
@@ -2182,17 +2138,18 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
         if (!hasUserId) {
           // Try to find a user by email
           try {
-            const response = await apiClient.getUsers()
-            const users = Array.isArray(response) ? response : (response as any).users || []
-            const matchingUser = (users as any[]).find((u: any) =>
+            const usersResponse = await apiClient.getUsers()
+            const users = usersResponse.users || []
+            const matchingUser = users.find((u: any) =>
               u.email?.toLowerCase() === stakeholderForm.email.toLowerCase()
             )
 
-            if (matchingUser) {
+            if (matchingUser && stakeholderId) {
               // Link stakeholder to user
               await apiClient.linkStakeholderToUser(stakeholderId, matchingUser.id)
               toast.success("Stakeholder linked to user account automatically")
-            } else {
+            }
+ else {
               toast.warning(
                 `Team member must have a user account. No user found with email ${stakeholderForm.email}. ` +
                 `Please create a user account first or link an existing one.`
@@ -2313,7 +2270,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
       try {
         // Refresh documents and project data when drift is detected
         fetchDocuments()
-        fetchProjectData()
+        fetchProject()
       } catch (err) {
         console.warn('Error handling drift:detected event', err)
       }
@@ -2862,7 +2819,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                             value={selectedProvider}
                             onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                               const provider = aiProviders.find(p => p.name === e.target.value)
-                              setSelectedProvider(e.target.value)
+                              setSelectedProvider(e.target.value as AIProviderType)
                               if (provider && provider.models && provider.models.length > 0) {
                                 setSelectedModel(provider.models[0])
                               }

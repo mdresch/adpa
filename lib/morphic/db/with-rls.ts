@@ -10,12 +10,17 @@ export type TxInstance = Parameters<Parameters<typeof db.transaction>[0]>[0]
  * Custom error class for RLS violations
  */
 export class RLSViolationError extends Error {
-    constructor(message = 'Row level security policy violation') {
+    originalError?: any
+    constructor(message = 'Row level security policy violation', originalError?: any) {
         super(message)
         this.name = 'RLSViolationError'
+        this.originalError = originalError
         // Maintains proper stack trace for where our error was thrown (only available on V8)
         if (Error.captureStackTrace) {
             Error.captureStackTrace(this, RLSViolationError)
+        }
+        if (originalError?.stack) {
+            this.stack = `${this.stack}\n\nOriginal Stack:\n${originalError.stack}`
         }
     }
 }
@@ -64,10 +69,13 @@ export async function withRLS<T>(
         const errorMessage = error instanceof Error ? error.message : String(error)
         if (
             errorMessage.includes('new row violates row-level security policy') ||
-            errorMessage.includes('row-level security policy')
+            errorMessage.includes('row-level security policy') ||
+            error.code === '42501' // PostgreSQL insufficient_privilege
         ) {
+            console.error(`[DB:RLS] Policy violation detected for user ${userId}:`, errorMessage)
             throw new RLSViolationError(
-                `Access denied for user ${userId}. ${errorMessage}`
+                `Access denied for user ${userId}. ${errorMessage}`,
+                error
             )
         }
 

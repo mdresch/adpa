@@ -539,12 +539,21 @@ router.get(
         filters.status = req.query.status as string
       }
 
+      if (req.query.limit) {
+        filters.limit = Number(req.query.limit)
+      }
+      if (req.query.offset) {
+        filters.offset = Number(req.query.offset)
+      }
+
       const drifts = await entityDriftDetectionService.getProjectDrifts(projectId, filters)
 
       res.json({
         success: true,
         data: drifts,
-        count: drifts.length
+        count: drifts.length,
+        limit: filters.limit,
+        offset: filters.offset
       })
     } catch (error: any) {
       next(error)

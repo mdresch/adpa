@@ -288,6 +288,10 @@ export const aiProviders = pgTable(
         }).default('disabled'),
         lastError: text('last_error'),
         lastCheckedAt: timestamp('last_checked_at'),
+        configuration: jsonb('configuration').$type<Record<string, any>>(),
+        availableModels: jsonb('available_models').$type<any[]>(),
+        defaultModel: varchar('default_model', { length: 100 }),
+        priority: integer('priority').default(1),
         createdAt: timestamp('created_at').notNull().defaultNow(),
         updatedAt: timestamp('updated_at')
     },

@@ -1,0 +1,252 @@
+﻿node.exe : npm warn Unknown project config 
+"PUPPETEER_SKIP_DOWNLOAD". This will stop working in the next 
+major version of npm.
+At line:1 char:1
++ & "C:\Program Files\nodejs/node.exe" "C:\Program 
+Files\nodejs/node_mo ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~
+    + CategoryInfo          : NotSpecified: (npm warn Unknow...ve 
+   rsion of npm.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+
+> server@1.0.0 test
+> jest src/__tests__/services/drift-record-marked-resolved.test.ts
+
+  console.log
+    Γ£à Database already connected, reusing existing pool
+
+      at connectDatabase (src/database/connection.ts:232:17)
+
+{"level":40,"time":1773793815838,"pid":31668,"hostname":"Surface-Laptop-4-MD","msg":"[INFLUXDB] Disabled - missing INFLUXDB_TOKEN or INFLUXDB_DATABASE"}
+{"level":30,"time":1773793815925,"pid":31668,"hostname":"Surface-Laptop-4-MD","msg":"AI Service initialized - will fetch AI Gateway key from database"}
+  console.log
+    Γ£à Database already connected, reusing existing pool
+
+      at connectDatabase (src/database/connection.ts:232:17)
+
+  console.log
+    Γ£à Database already connected, reusing existing pool
+
+      at connectDatabase (src/database/connection.ts:232:17)
+
+  console.log
+    [TEST-SETUP] Connecting to test database: adpa_test_db
+
+      at Object.<anonymous> (src/__tests__/setup.ts:103:13)
+
+  console.log
+    [TEST-SETUP] Database connection verified.
+
+      at Object.<anonymous> (src/__tests__/setup.ts:112:17)
+
+FAIL src/__tests__/services/drift-record-marked-resolved.test.ts 
+(59.029 s)
+  ΓùÅ TASK-732: Drift Record Marked as Resolved ΓÇ║ Acceptance 
+Criterion: Drift record marked as resolved ΓÇ║ should update 
+drift record status to "resolved"
+
+    error: relation "users" does not exist
+
+    [0m [90m 32 |[39m     testBaselineId [33m=[39m uuidv4()
+     [90m 33 |[39m     testDriftRecordId [33m=[39m uuidv4()
+    [31m[1m>[22m[39m[90m 34 |[39m
+     [90m    |[39m [31m[1m^[22m[39m
+     [90m 35 |[39m     [90m// Create test user[39m
+     [90m 36 |[39m     [36mawait[39m pool[33m.[39mquery(
+     [90m 37 |[39m       [32m`INSERT INTO users (id, email, 
+password_hash, role)[39m[0m
+
+      at node_modules/.pnpm/pg-pool@3.10.1_pg@8.16.3/node_modules/
+pg-pool/index.js:45:11
+      at Object.<anonymous> 
+(src/__tests__/services/drift-record-marked-resolved.test.ts:34:9)
+
+  ΓùÅ TASK-732: Drift Record Marked as Resolved ΓÇ║ Acceptance 
+Criterion: Drift record marked as resolved ΓÇ║ should set 
+resolved_at timestamp to current time
+
+    error: relation "users" does not exist
+
+    [0m [90m 32 |[39m     testBaselineId [33m=[39m uuidv4()
+     [90m 33 |[39m     testDriftRecordId [33m=[39m uuidv4()
+    [31m[1m>[22m[39m[90m 34 |[39m
+     [90m    |[39m [31m[1m^[22m[39m
+     [90m 35 |[39m     [90m// Create test user[39m
+     [90m 36 |[39m     [36mawait[39m pool[33m.[39mquery(
+     [90m 37 |[39m       [32m`INSERT INTO users (id, email, 
+password_hash, role)[39m[0m
+
+      at node_modules/.pnpm/pg-pool@3.10.1_pg@8.16.3/node_modules/
+pg-pool/index.js:45:11
+      at Object.<anonymous> 
+(src/__tests__/services/drift-record-marked-resolved.test.ts:34:9)
+
+  ΓùÅ TASK-732: Drift Record Marked as Resolved ΓÇ║ Acceptance 
+Criterion: Drift record marked as resolved ΓÇ║ should persist 
+drift record in database after resolution
+
+    error: relation "users" does not exist
+
+    [0m [90m 32 |[39m     testBaselineId [33m=[39m uuidv4()
+     [90m 33 |[39m     testDriftRecordId [33m=[39m uuidv4()
+    [31m[1m>[22m[39m[90m 34 |[39m
+     [90m    |[39m [31m[1m^[22m[39m
+     [90m 35 |[39m     [90m// Create test user[39m
+     [90m 36 |[39m     [36mawait[39m pool[33m.[39mquery(
+     [90m 37 |[39m       [32m`INSERT INTO users (id, email, 
+password_hash, role)[39m[0m
+
+      at node_modules/.pnpm/pg-pool@3.10.1_pg@8.16.3/node_modules/
+pg-pool/index.js:45:11
+      at Object.<anonymous> 
+(src/__tests__/services/drift-record-marked-resolved.test.ts:34:9)
+
+  ΓùÅ TASK-732: Drift Record Marked as Resolved ΓÇ║ Acceptance 
+Criterion: Drift record marked as resolved ΓÇ║ should maintain 
+audit trail for drift resolution
+
+    error: relation "users" does not exist
+
+    [0m [90m 32 |[39m     testBaselineId [33m=[39m uuidv4()
+     [90m 33 |[39m     testDriftRecordId [33m=[39m uuidv4()
+    [31m[1m>[22m[39m[90m 34 |[39m
+     [90m    |[39m [31m[1m^[22m[39m
+     [90m 35 |[39m     [90m// Create test user[39m
+     [90m 36 |[39m     [36mawait[39m pool[33m.[39mquery(
+     [90m 37 |[39m       [32m`INSERT INTO users (id, email, 
+password_hash, role)[39m[0m
+
+      at node_modules/.pnpm/pg-pool@3.10.1_pg@8.16.3/node_modules/
+pg-pool/index.js:45:11
+      at Object.<anonymous> 
+(src/__tests__/services/drift-record-marked-resolved.test.ts:34:9)
+
+  ΓùÅ TASK-732: Drift Record Marked as Resolved ΓÇ║ Edge Cases 
+ΓÇ║ should handle resolution with major changes
+
+    error: relation "users" does not exist
+
+    [0m [90m 32 |[39m     testBaselineId [33m=[39m uuidv4()
+     [90m 33 |[39m     testDriftRecordId [33m=[39m uuidv4()
+    [31m[1m>[22m[39m[90m 34 |[39m
+     [90m    |[39m [31m[1m^[22m[39m
+     [90m 35 |[39m     [90m// Create test user[39m
+     [90m 36 |[39m     [36mawait[39m pool[33m.[39mquery(
+     [90m 37 |[39m       [32m`INSERT INTO users (id, email, 
+password_hash, role)[39m[0m
+
+      at node_modules/.pnpm/pg-pool@3.10.1_pg@8.16.3/node_modules/
+pg-pool/index.js:45:11
+      at Object.<anonymous> 
+(src/__tests__/services/drift-record-marked-resolved.test.ts:34:9)
+
+  ΓùÅ TASK-732: Drift Record Marked as Resolved ΓÇ║ Edge Cases 
+ΓÇ║ should handle resolution with empty content
+
+    error: relation "users" does not exist
+
+    [0m [90m 32 |[39m     testBaselineId [33m=[39m uuidv4()
+     [90m 33 |[39m     testDriftRecordId [33m=[39m uuidv4()
+    [31m[1m>[22m[39m[90m 34 |[39m
+     [90m    |[39m [31m[1m^[22m[39m
+     [90m 35 |[39m     [90m// Create test user[39m
+     [90m 36 |[39m     [36mawait[39m pool[33m.[39mquery(
+     [90m 37 |[39m       [32m`INSERT INTO users (id, email, 
+password_hash, role)[39m[0m
+
+      at node_modules/.pnpm/pg-pool@3.10.1_pg@8.16.3/node_modules/
+pg-pool/index.js:45:11
+      at Object.<anonymous> 
+(src/__tests__/services/drift-record-marked-resolved.test.ts:34:9)
+
+  ΓùÅ TASK-732: Drift Record Marked as Resolved ΓÇ║ Integration 
+with Document Update ΓÇ║ should update document and mark drift as 
+resolved in single transaction
+
+    error: relation "users" does not exist
+
+    [0m [90m 32 |[39m     testBaselineId [33m=[39m uuidv4()
+     [90m 33 |[39m     testDriftRecordId [33m=[39m uuidv4()
+    [31m[1m>[22m[39m[90m 34 |[39m
+     [90m    |[39m [31m[1m^[22m[39m
+     [90m 35 |[39m     [90m// Create test user[39m
+     [90m 36 |[39m     [36mawait[39m pool[33m.[39mquery(
+     [90m 37 |[39m       [32m`INSERT INTO users (id, email, 
+password_hash, role)[39m[0m
+
+      at node_modules/.pnpm/pg-pool@3.10.1_pg@8.16.3/node_modules/
+pg-pool/index.js:45:11
+      at Object.<anonymous> 
+(src/__tests__/services/drift-record-marked-resolved.test.ts:34:9)
+
+
+  ΓùÅ Test suite failed to run
+
+    error: relation "baseline_drift_detection" does not exist
+
+    [0m [90m 50 |[39m     [36mawait[39m pool[33m.[39mquery(
+     [90m 51 |[39m       [32m`INSERT INTO documents (id, 
+project_id, name, content, created_by, updated_by)[39m
+    [31m[1m>[22m[39m[90m 52 |[39m [32m       VALUES ($1, 
+$2, 'Test Document - Drift', '# Original Content', $3, 
+$3)`[39m[33m,[39m
+     [90m    |[39m         [31m[1m^[22m[39m
+     [90m 53 |[39m       [testDocumentId[33m,[39m 
+testProjectId[33m,[39m testUserId]
+     [90m 54 |[39m     )
+     [90m 55 |[39m[0m
+
+      at node_modules/.pnpm/pg-pool@3.10.1_pg@8.16.3/node_modules/
+pg-pool/index.js:45:11
+      at Object.<anonymous> 
+(src/__tests__/services/drift-record-marked-resolved.test.ts:52:9)
+
+  ΓùÅ Test suite failed to run
+
+    Database not connected. Property 'emit' accessed before 
+connectDatabase() completed.
+
+    [0m [90m 126 |[39m [90m/**[39m
+     [90m 127 |[39m [90m * For testing purposes: allows 
+overriding the internal pool with a transaction client or a 
+different pool.[39m
+    [31m[1m>[22m[39m[90m 128 |[39m [90m */[39m
+     [90m     |[39m              [31m[1m^[22m[39m
+     [90m 129 |[39m [36mexport[39m [36mfunction[39m 
+setInternalPool(p[33m:[39m [33mPool[39m [33m|[39m any) {
+     [90m 130 |[39m   internalPool [33m=[39m p
+     [90m 131 |[39m }[0m
+
+      at Object.get (src/database/connection.ts:128:19)
+      at Connection.<anonymous> (node_modules/.pnpm/pg-pool@3.10.1
+_pg@8.16.3/node_modules/pg-pool/index.js:174:15)
+      at Socket.<anonymous> (node_modules/.pnpm/pg@8.16.3/node_mod
+ules/pg/lib/connection.js:62:12)
+
+  ΓùÅ Test suite failed to run
+
+    thrown: "Exceeded timeout of 30000 ms for a hook.
+    Add a timeout value to this test to increase the timeout, if 
+this is a long-running test. See 
+https://jestjs.io/docs/api#testname-fn-timeout."
+
+    [0m [90m 142 |[39m
+     [90m 143 |[39m afterEach([36masync[39m () [33m=>[39m {
+    [31m[1m>[22m[39m[90m 144 |[39m   [36mif[39m 
+(currentClient) {
+     [90m     |[39m [31m[1m^[22m[39m
+     [90m 145 |[39m     [36mtry[39m {
+     [90m 146 |[39m       [36mawait[39m 
+currentClient[33m.[39mquery([32m"ROLLBACK"[39m)
+     [90m 147 |[39m     } [36mcatch[39m (e) {[0m
+
+      at Object.<anonymous> (src/__tests__/setup.ts:144:1)
+
+Test Suites: 1 failed, 1 total
+Tests:       7 failed, 7 total
+Snapshots:   0 total
+Time:        60.242 s, estimated 67 s
+Ran all test suites matching 
+/src\\__tests__\\services\\drift-record-marked-resolved.test.ts/i.

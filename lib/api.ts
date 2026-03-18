@@ -93,6 +93,18 @@ export interface Document {
   metadata?: any
   template_metadata?: any
   source_documents?: any[]
+  // These properties are returned by the API but were missing from the interface
+  template_name?: string
+  project_name?: string
+  word_count?: number
+  character_count?: number
+  semantic_version?: string
+  template_version?: string
+  template_author?: string
+  template_framework?: string
+  template_category?: string
+  template_complexity?: string
+  confluence_page_url?: string
 }
 
 export interface Stakeholder {
@@ -1186,8 +1198,14 @@ class ApiClient {
   // Removed duplicate deleteDocument method
 
   // Users endpoints
-  async getUsers() {
-    return this.request<{ users: User[], pagination: any }>("/users")
+  async getUsers(params?: { page?: number; limit?: number; search?: string }) {
+    const queryParams = new URLSearchParams()
+    if (params?.page) queryParams.append('page', params.page.toString())
+    if (params?.limit) queryParams.append('limit', params.limit.toString())
+    if (params?.search) queryParams.append('search', params.search)
+    const query = queryParams.toString()
+    
+    return this.request<{ users: User[], pagination: any }>(`/users${query ? `?${query}` : ''}`)
   }
 
   async getUser(id: string) {

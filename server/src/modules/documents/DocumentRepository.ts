@@ -23,6 +23,7 @@ export interface DocumentData {
   template_metadata?: any;
   generation_metadata?: any;
   confluence_page_url?: string | null;
+  correlation_id?: string;
 }
 
 export class DocumentRepository {
@@ -222,9 +223,9 @@ export class DocumentRepository {
         id, project_id, name, content, template_id, status, created_by, updated_by, 
         word_count, character_count, version, semantic_version,
         template_version, template_author, template_framework, template_category, 
-        template_complexity, template_metadata, generation_metadata
+        template_complexity, template_metadata, generation_metadata, correlation_id
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
       RETURNING *
       `,
       [
@@ -234,7 +235,8 @@ export class DocumentRepository {
         data.template_version || null, data.template_author || null, data.template_framework || null,
         data.template_category || null, data.template_complexity || null,
         data.template_metadata ? JSON.stringify(data.template_metadata) : null,
-        data.generation_metadata ? JSON.stringify(data.generation_metadata) : null
+        data.generation_metadata ? JSON.stringify(data.generation_metadata) : null,
+        data.correlation_id
       ]
     );
   }

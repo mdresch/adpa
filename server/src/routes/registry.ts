@@ -77,6 +77,14 @@ export async function registerRoutes(app: Application) {
 
   for (const route of newRoutes) {
     const fullPath = `/api/v${route.version}${route.path}`;
+    
+    // CRITICAL DEBUG: Verify router is defined before mounting
+    if (!route.router) {
+      console.error(`❌ ERROR: Module ${route.category} (path: ${fullPath}) has an UNDEFINED router!`);
+      logger.error({ category: route.category, path: fullPath }, '❌ Modular route has undefined router');
+      continue;
+    }
+
     app.use(fullPath, route.router);
     console.log(`📍 Mounted: [${route.category}] ${fullPath}`);
     logger.info(`📍 Mounted: [${route.category}] ${fullPath}`);

@@ -14,14 +14,14 @@ if (!connectionString) {
 }
 
 const sslConfig =
-    process.env.DATABASE_SSL_DISABLED === 'true'
+    process.env.DATABASE_SSL_DISABLED === 'true' || process.env.DB_SSL === 'false' || process.env.MORPHIC_DB_SSL === 'false'
         ? false
-        : (process.env.NODE_ENV === 'production' || 
-           process.env.MORPHIC_DB_SSL === 'true' || 
-           connectionString?.includes('railway.app') || 
-           connectionString?.includes('supabase.co'))
-            ? { rejectUnauthorized: false }
-            : false
+        : { rejectUnauthorized: false }
+
+// Force SSL for local development if not explicitly disabled
+const finalSslConfig = isDevelopment && process.env.DATABASE_SSL_DISABLED !== 'true' 
+    ? { rejectUnauthorized: false } 
+    : sslConfig
 
 declare global {
     var morphicPostgresClient: any
@@ -30,7 +30,7 @@ declare global {
 const client =
     globalThis.morphicPostgresClient ??
     postgres(connectionString, {
-        ssl: sslConfig,
+        ssl: finalSslConfig,
         prepare: false,
         max: isDevelopment ? 1 : 20,
         connect_timeout: 30,

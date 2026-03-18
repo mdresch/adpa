@@ -130,6 +130,73 @@ export class AnalyticsRepository {
     `, [userId, eventType, JSON.stringify(properties)]);
   }
 
+  async getAIGlobalSummary(interval: string, client?: PoolClient) {
+    const db = client || this.pool;
+    const stats = await db.query(`
+      SELECT 
+        COUNT(*) as total_requests,
+        SUM(total_tokens) as total_tokens,
+        SUM(estimated_cost) as total_cost,
+        AVG(response_time_ms) as avg_response_time,
+        (COUNT(*) FILTER (WHERE success = true)::FLOAT / NULLIF(COUNT(*), 0) * 100) as success_rate,
+        COUNT(DISTINCT model_name) as active_models
+      FROM ai_usage_logs
+      WHERE created_at >= NOW() - INTERVAL '${interval}'
+    `);
+    return stats.rows[0];
+  }
+
+  async getAIUsageTimeline(interval: string, client?: PoolClient) {
+    const db = client || this.pool;
+    // Group by day for the interval
+    const stats = await db.query(`
+      SELECT 
+        TO_CHAR(created_at, 'YYYY-MM-DD') as date,
+        COUNT(*) as requests,
+        SUM(total_tokens) as tokens
+      FROM ai_usage_logs
+      WHERE created_at >= NOW() - INTERVAL '${interval}'
+      GROUP BY TO_CHAR(created_at, 'YYYY-MM-DD')
+      ORDER BY date ASC
+    `);
+    return stats.rows;
+  }
+
+  async getAIProviderStats(interval: string, client?: PoolClient) {
+    const db = client || this.pool;
+    const stats = await db.query(`
+      SELECT 
+        provider_type as provider,
+        COUNT(*) as requests,
+        SUM(total_tokens) as tokens,
+        SUM(estimated_cost) as cost,
+        AVG(response_time_ms) as avg_latency
+      FROM ai_usage_logs
+      WHERE created_at >= NOW() - INTERVAL '${interval}'
+      GROUP BY provider_type
+      ORDER BY requests DESC
+    `);
+    return stats.rows;
+  }
+
+  async getAIModelStats(interval: string, client?: PoolClient) {
+    const db = client || this.pool;
+    const stats = await db.query(`
+      SELECT 
+        model_name as model,
+        provider_type as provider,
+        COUNT(*) as requests,
+        SUM(total_tokens) as tokens,
+        AVG(response_time_ms) as avg_latency,
+        (COUNT(*) FILTER (WHERE success = true)::FLOAT / NULLIF(COUNT(*), 0) * 100) as success_rate
+      FROM ai_usage_logs
+      WHERE created_at >= NOW() - INTERVAL '${interval}'
+      GROUP BY model_name, provider_type
+      ORDER BY requests DESC
+    `);
+    return stats.rows;
+  }
+
   async getPMBOK8Analytics(projectId: string, client?: PoolClient) {
     const db = client || this.pool;
     // ... complex queries from legacy analytics.ts ...

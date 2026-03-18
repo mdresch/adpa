@@ -545,6 +545,7 @@ extractionQueue.process("extract-project-data", QUEUE_PREFETCH, async (job) => {
           maxDocsPerBatch,
           entityIndex,
           totalEntities,
+          correlationId,
         } = job.data as any
         const jobId = (job.data as any).jobId || job.id
         try {
@@ -564,9 +565,10 @@ extractionQueue.process("extract-project-data", QUEUE_PREFETCH, async (job) => {
             childJobId: String(jobId),
             entityIndex,
             totalEntities,
+            correlationId,
           })
 
-          await projectDataExtractionService.saveSingleEntityType(projectId, userId, entityType, entities)
+          await projectDataExtractionService.saveSingleEntityType(projectId, userId, entityType, entities, correlationId)
 
           // DT assets: extracted as entities (extracted_dt_assets). Import into Digital Twin Assets Register
           // is an explicit step (POST /api/digital-twin/assets/import), same as WBS import for tasks.

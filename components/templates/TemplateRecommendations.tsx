@@ -12,6 +12,7 @@ import { Progress } from '@/components/ui/progress'
 import { Loader2, Sparkles, CheckCircle, XCircle, Clock, TrendingUp, AlertTriangle, Info, Zap, Code, FileText, ArrowRight } from 'lucide-react'
 import { toast } from '@/lib/notify'
 import { SideBySideDiff } from '@/components/drift/SideBySideDiff'
+import { getApiBaseUrl } from '@/lib/api-url'
 
 interface TemplateSuggestion {
   id: string
@@ -54,7 +55,7 @@ export function TemplateRecommendations({ templateId }: { templateId: string }) 
       setLoading(true)
       setError(null)
 
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+      const API_BASE_URL = getApiBaseUrl()
       const response = await fetch(
         `${API_BASE_URL}/quality-audits/template-improvements?templateId=${templateId}&status=all`,
         {
@@ -81,7 +82,7 @@ export function TemplateRecommendations({ templateId }: { templateId: string }) 
   const viewOptimization = async (suggestion: TemplateSuggestion) => {
     try {
       // Fetch detailed optimization data with current vs suggested content
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+      const API_BASE_URL = getApiBaseUrl()
       const response = await fetch(
         `${API_BASE_URL}/quality-audits/template-optimization/${suggestion.id}`,
         {
@@ -140,7 +141,7 @@ export function TemplateRecommendations({ templateId }: { templateId: string }) 
     try {
       setApplyingOptimization(true)
 
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+      const API_BASE_URL = getApiBaseUrl()
       // Use different endpoint for regular suggestions vs AI optimizations
       const endpoint = isRegularSuggestion
         ? `${API_BASE_URL}/quality-audits/template-improvements/${suggestionId}/implement`

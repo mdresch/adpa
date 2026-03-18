@@ -1,6 +1,4 @@
-"use client"
-
-import { useState } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -13,93 +11,8 @@ import { Switch } from "@/components/ui/switch"
 import { ModelSelector } from "@/components/ai/ModelSelector"
 import { FallbackChainVisualizer } from "@/components/ai/FallbackChainVisualizer"
 import { toast } from "@/lib/notify"
-import { Brain, Layers, Wallet, Sparkles } from "@/components/ui/icons-shim"
-
-const mockModels = [
-  {
-    id: "gpt-4o",
-    name: "gpt-4o",
-    display_name: "GPT-4o",
-    provider: { name: "OpenAI" },
-    is_active: true,
-    cost_per_1k_input_tokens: 0.005,
-    quality_score: 5,
-    context_length: 128000,
-    success_rate: 0.99
-  },
-  {
-    id: "claude-3.5-sonnet",
-    name: "claude-3.5-sonnet",
-    display_name: "Claude 3.5 Sonnet",
-    provider: { name: "Anthropic" },
-    is_active: true,
-    cost_per_1k_input_tokens: 0.003,
-    quality_score: 5,
-    context_length: 200000,
-    success_rate: 0.97
-  },
-  {
-    id: "llama3.1-70b",
-    name: "llama3.1-70b",
-    display_name: "Llama 3.1 70B",
-    provider: { name: "Ollama" },
-    is_active: true,
-    cost_per_1k_input_tokens: 0.0,
-    quality_score: 4,
-    context_length: 8192,
-    success_rate: 0.94
-  }
-]
-
-const mockChains = [
-  {
-    id: "chain-chat-balanced",
-    name: "Chat Balanced",
-    entries: [
-      {
-        id: "chain-chat-1",
-        model: { name: "gpt-4o", display_name: "GPT-4o", provider: { name: "OpenAI" } },
-        timeout_ms: 20000,
-        retry_attempts: 2,
-        success_rate: 0.98
-      },
-      {
-        id: "chain-chat-2",
-        model: { name: "claude-3.5-sonnet", display_name: "Claude 3.5 Sonnet", provider: { name: "Anthropic" } },
-        timeout_ms: 25000,
-        retry_attempts: 1,
-        success_rate: 0.96
-      },
-      {
-        id: "chain-chat-3",
-        model: { name: "llama3.1-70b", display_name: "Llama 3.1 70B", provider: { name: "Ollama" } },
-        timeout_ms: 30000,
-        retry_attempts: 1,
-        success_rate: 0.92
-      }
-    ]
-  },
-  {
-    id: "chain-extraction-reliable",
-    name: "Extraction Reliable",
-    entries: [
-      {
-        id: "chain-extract-1",
-        model: { name: "claude-3.5-sonnet", display_name: "Claude 3.5 Sonnet", provider: { name: "Anthropic" } },
-        timeout_ms: 30000,
-        retry_attempts: 2,
-        success_rate: 0.97
-      },
-      {
-        id: "chain-extract-2",
-        model: { name: "gpt-4o", display_name: "GPT-4o", provider: { name: "OpenAI" } },
-        timeout_ms: 25000,
-        retry_attempts: 1,
-        success_rate: 0.95
-      }
-    ]
-  }
-]
+import { Brain, Layers, Wallet, Sparkles, Loader2 } from "@/components/ui/icons-shim"
+import { apiClient } from "@/lib/api"
 
 const taskTypes = [
   { key: "chat", label: "Chat", description: "Interactive assistance and general chat" },
@@ -112,19 +25,101 @@ const taskTypes = [
 type TaskType = typeof taskTypes[number]["key"]
 
 export default function AIModelSettingsPage() {
+  const [providers, setProviders] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
   const [taskPreferences, setTaskPreferences] = useState<Record<TaskType, string>>({
-    chat: "chain-chat-balanced",
-    extraction: "chain-extraction-reliable",
-    completion: "gpt-4o",
-    embedding: "llama3.1-70b",
-    code: "claude-3.5-sonnet"
+    chat: "",
+    extraction: "",
+    completion: "",
+    embedding: "",
+    code: ""
   })
   const [costWeight, setCostWeight] = useState([35])
   const [qualityWeight, setQualityWeight] = useState([65])
   const [preferLocal, setPreferLocal] = useState(false)
 
+  // Fetch all providers and their models
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setLoading(true)
+        const providersData = await apiClient.request<any[]>('/ai-providers')
+        setProviders(providersData)
+        
+        // Initialize preferences from defaults if available
+        const prefs: any = {}
+        taskTypes.forEach(task => {
+          // Find first active provider with a default model
+          const activeWithDefault = providersData.find(p => (p.is_active || p.enabled) && p.default_model)
+          if (activeWithDefault) {
+            prefs[task.key] = activeWithDefault.default_model
+          }
+        })
+        setTaskPreferences(prev => ({ ...prev, ...prefs }))
+      } catch (error) {
+        console.error('Failed to load AI settings data:', error)
+        toast.error('Failed to load model settings')
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadData()
+  }, [])
+
+  // Flatten all models from all active providers
+  const allModels = useMemo(() => {
+    const models: any[] = []
+    providers.forEach(provider => {
+      if (!(provider.is_active || provider.enabled)) return
+      
+      const providerModels = provider.configuration?.models || provider.models || []
+      providerModels.forEach((m: any) => {
+        const modelId = typeof m === 'string' ? m : (m.id || m.name)
+        const modelName = typeof m === 'string' ? m : (m.name || m.id)
+        
+        // Avoid duplicates
+        if (!models.find(existing => existing.id === modelId)) {
+          models.push({
+            id: modelId,
+            name: modelId,
+            display_name: modelName,
+            provider: { name: provider.name },
+            is_active: true,
+            quality_score: m.quality_score || 4,
+            context_length: m.context_window || 128000
+          })
+        }
+      })
+    })
+    return models
+  }, [providers])
+
+  const mockChains = [
+    {
+      id: "chain-chat-balanced",
+      name: "Chat Balanced",
+      entries: [
+        {
+          id: "chain-chat-1",
+          model: { name: "gpt-4o", display_name: "GPT-4o", provider: { name: "OpenAI" } },
+          timeout_ms: 20000,
+          retry_attempts: 2,
+          success_rate: 0.98
+        }
+      ]
+    }
+  ]
+
   const handleSave = () => {
     toast.success("AI model preferences saved")
+  }
+
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    )
   }
 
   return (
@@ -184,7 +179,7 @@ export default function AIModelSettingsPage() {
                           onChange={(modelId) => {
                             setTaskPreferences((prev) => ({ ...prev, [task.key]: modelId }))
                           }}
-                          models={mockModels}
+                          models={allModels}
                           fallbackChains={mockChains}
                         />
                       </div>
@@ -194,6 +189,7 @@ export default function AIModelSettingsPage() {
               </TabsContent>
 
               <TabsContent value="chains" className="space-y-4">
+                {/* Fallback chains implementation remains largely static for now */}
                 <Card className="glass">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">

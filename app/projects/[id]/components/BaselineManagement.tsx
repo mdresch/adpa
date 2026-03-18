@@ -33,27 +33,7 @@ import {
   Users
 } from "@/components/ui/icons-shim"
 import { toast } from '@/lib/notify'
-import { apiClient } from "@/lib/api"
-
-interface Document {
-  id: string
-  project_id: string
-  name: string
-  content?: Record<string, unknown>
-  template_id?: string
-  template_name?: string
-  status: string
-  version: number
-  created_by: string
-  updated_by: string
-  created_at: string
-  updated_at: string
-  priority_rank?: number
-  dependency_level?: number
-  character_count?: number
-  word_count?: number
-  document?: Record<string, unknown>
-}
+import { apiClient, Document } from "@/lib/api"
 
 interface Baseline {
   id: string

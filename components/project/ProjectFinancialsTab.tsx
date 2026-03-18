@@ -14,6 +14,7 @@
  */
 
 import React, { useState, useEffect } from 'react'
+import { getApiBaseUrl } from '@/lib/api-url'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -86,7 +87,7 @@ export default function ProjectFinancialsTab({ projectId }: ProjectFinancialsTab
   const fetchFinancials = async () => {
     setLoading(true)
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+      const apiUrl = getApiBaseUrl()
       const token = localStorage.getItem('auth_token') || localStorage.getItem('token')
       
       // Get project basic data
@@ -156,7 +157,7 @@ export default function ProjectFinancialsTab({ projectId }: ProjectFinancialsTab
   const handleSave = async () => {
     setSaving(true)
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+      const apiUrl = getApiBaseUrl()
       const token = localStorage.getItem('auth_token') || localStorage.getItem('token')
       
       // Calculate total actual cost

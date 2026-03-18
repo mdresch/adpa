@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Sidebar } from '@/components/sidebar'
 import { Header } from '@/components/header'
+import { getApiBaseUrl } from '@/lib/api-url'
 import { PageTransition } from '@/components/page-transition'
 import { AnimatedLayout, AnimatedCard } from '@/components/animated-layout'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -80,7 +81,7 @@ export default function QualityTrendsPage() {
       try {
         setLoading(true)
 
-        const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+        const API_BASE_URL = getApiBaseUrl()
         const token = localStorage.getItem('auth_token')
 
         const response = await fetch(
@@ -147,7 +148,7 @@ export default function QualityTrendsPage() {
     try {
       setExportingCSV(true)
 
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+      const API_BASE_URL = getApiBaseUrl()
       const token = localStorage.getItem('auth_token')
 
       const response = await fetch(

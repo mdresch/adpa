@@ -121,6 +121,194 @@ router.post('/', async (req, res) => {
 })
 
 /**
+ * POST /api/ai-providers/providers/:id/toggle
+ * Toggle an AI provider's active status by ID
+ */
+router.post('/providers/:id/toggle', async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    const { id } = req.params
+
+    // Get current status
+    const providerResult = await pool.query(
+      'SELECT is_active, name FROM ai_providers WHERE id = $1',
+      [id]
+    )
+
+    if (providerResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Provider not found' })
+    }
+
+    const currentStatus = providerResult.rows[0].is_active
+    const newStatus = !currentStatus
+
+    await pool.query(
+      'UPDATE ai_providers SET is_active = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [newStatus, id]
+    )
+
+    log.info(`AI provider ${providerResult.rows[0].name} toggled to ${newStatus ? 'active' : 'inactive'}`)
+
+    res.json({
+      success: true,
+      is_active: newStatus,
+      message: `Provider ${newStatus ? 'activated' : 'deactivated'} successfully`
+    })
+  } catch (error) {
+    log.error('Toggle AI provider error:', error)
+    res.status(500).json({ error: 'Failed to toggle provider status' })
+  }
+})
+
+/**
+ * GET /api/ai-providers/providers/:id/discover-models
+ * Discover available models from a provider's API
+ */
+router.get('/providers/:id/discover-models', async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    const { id } = req.params
+
+    // Get provider details
+    const providerResult = await pool.query(
+      'SELECT id, name, provider_type, configuration, default_model FROM ai_providers WHERE id = $1',
+      [id]
+    )
+
+    if (providerResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Provider not found' })
+    }
+
+    const provider = providerResult.rows[0]
+    const type = provider.provider_type
+
+    // Mock discovered models based on type for now
+    // In a real implementation, this would call the provider's models list API
+    let discoveredModels: any[] = []
+
+    switch (type) {
+      case 'openai':
+        discoveredModels = [
+          { id: 'gpt-4o', name: 'GPT-4o', context_window: 128000, description: 'Most capable model' },
+          { id: 'gpt-4o-mini', name: 'GPT-4o Mini', context_window: 128000, description: 'Fast, affordable model' },
+          { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', context_window: 128000 },
+          { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', context_window: 16385 }
+        ]
+        break
+      case 'google':
+        discoveredModels = [
+          { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', context_window: 1000000 },
+          { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', context_window: 1000000 },
+          { id: 'gemini-1.0-pro', name: 'Gemini 1.0 Pro', context_window: 32768 }
+        ]
+        break
+      case 'anthropic':
+        discoveredModels = [
+          { id: 'claude-3-5-sonnet-20240620', name: 'Claude 3.5 Sonnet', context_window: 200000 },
+          { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus', context_window: 200000 },
+          { id: 'claude-3-sonnet-20240229', name: 'Claude 3 Sonnet', context_window: 200000 },
+          { id: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku', context_window: 200000 }
+        ]
+        break
+      case 'azure':
+        discoveredModels = [
+          { id: 'gpt-4o', name: 'GPT-4o (Azure)', context_window: 128000 },
+          { id: 'gpt-4-turbo', name: 'GPT-4 Turbo (Azure)', context_window: 128000 },
+          { id: 'gpt-35-turbo', name: 'GPT-3.5 Turbo (Azure)', context_window: 16385 }
+        ]
+        break
+      case 'cohere':
+        discoveredModels = [
+          { id: 'command-r-plus', name: 'Command R+', context_window: 128000 },
+          { id: 'command-r', name: 'Command R', context_window: 128000 }
+        ]
+        break
+      case 'deepseek':
+        discoveredModels = [
+          { id: 'deepseek-chat', name: 'DeepSeek Chat', context_window: 64000 },
+          { id: 'deepseek-coder', name: 'DeepSeek Coder', context_window: 64000 }
+        ]
+        break
+      case 'moonshot':
+        discoveredModels = [
+          { id: 'moonshot-v1-8k', name: 'Moonshot v1 8k', context_window: 8192 },
+          { id: 'moonshot-v1-32k', name: 'Moonshot v1 32k', context_window: 32768 }
+        ]
+        break
+      case 'xai':
+        discoveredModels = [
+          { id: 'grok-1', name: 'Grok-1', context_window: 131072 },
+          { id: 'grok-beta', name: 'Grok Beta', context_window: 131072 }
+        ]
+        break
+      case 'ollama':
+        discoveredModels = [
+          { id: 'llama3.1', name: 'Llama 3.1', context_window: 128000 },
+          { id: 'mistral', name: 'Mistral', context_window: 32768 },
+          { id: 'phi3', name: 'Phi-3', context_window: 128000 }
+        ]
+        break
+      default:
+        discoveredModels = [
+          { id: 'default-model', name: 'Default Model' }
+        ]
+    }
+
+    res.json({
+      success: true,
+      provider: {
+        id: provider.id,
+        name: provider.name,
+        type: provider.provider_type
+      },
+      discovered_models: discoveredModels,
+      current_default: provider.default_model || provider.configuration?.model
+    })
+  } catch (error) {
+    log.error('Discover models error:', error)
+    res.status(500).json({ error: 'Failed to discover models' })
+  }
+})
+
+/**
+ * POST /api/ai-providers/providers/:id/sync-models
+ * Sync discovered models to provider configuration
+ */
+router.post('/providers/:id/sync-models', async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    const { id } = req.params
+    const { models, default_model } = req.body
+
+    if (!models || !Array.isArray(models)) {
+      return res.status(400).json({ error: 'Models array is required' })
+    }
+
+    // Update the provider's available models and default model
+    // We update both the explicit columns and the configuration JSONB for compatibility
+    await pool.query(
+      `UPDATE ai_providers 
+       SET available_models = $1, 
+           default_model = $2,
+           configuration = configuration || jsonb_build_object('models', $1::jsonb, 'model', $2::text, 'default_model', $2::text),
+           updated_at = CURRENT_TIMESTAMP 
+       WHERE id = $3`,
+      [JSON.stringify(models), default_model, id]
+    )
+
+    log.info(`AI provider ${id} synced with ${models.length} models. Default set to ${default_model}`)
+
+    res.json({
+      success: true,
+      message: 'Models synced successfully'
+    })
+  } catch (error) {
+    log.error('Sync models error:', error)
+    res.status(500).json({ error: 'Failed to sync models' })
+  }
+})
+
+/**
  * POST /api/ai-providers/:name/configure
  * Configure/update an existing AI provider
  */
@@ -163,6 +351,16 @@ router.post('/:name/configure', async (req, res) => {
     if (typeof is_active === 'boolean') {
       updateQuery += `, is_active = $${paramIndex}`
       updateParams.push(is_active)
+      paramIndex++
+    }
+
+    if (configuration?.priority !== undefined) {
+      updateQuery += `, priority = $${paramIndex}`
+      updateParams.push(parseInt(configuration.priority.toString()) || 1)
+      paramIndex++
+    } else if (req.body.priority !== undefined) {
+      updateQuery += `, priority = $${paramIndex}`
+      updateParams.push(parseInt(req.body.priority.toString()) || 1)
       paramIndex++
     }
 

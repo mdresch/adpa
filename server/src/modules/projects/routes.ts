@@ -21,6 +21,8 @@ router.get('/:id', authenticateToken, ProjectsController.getById);
 router.post('/', authenticateToken, ProjectsController.create);
 router.put('/:id', authenticateToken, ProjectsController.update);
 router.delete('/:id', authenticateToken, ProjectsController.delete);
+router.get('/:id/integrations', authenticateToken, ProjectsController.getIntegrations);
+router.get('/:id/drift-detections', authenticateToken, ProjectsController.getDriftDetections);
 
 const routes: RouteConfig[] = [
   {

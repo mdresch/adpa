@@ -29,7 +29,7 @@ const connectionMethods = [
 ]
 
 const isTrustedPoolingProvider = (target?: string) =>
-  !!target && (target.includes("supabase.co") || target.includes("azure"))
+  !!target && (target.includes("supabase.co") || target.includes("supabase.com") || target.includes("azure"))
 
 const shouldRejectUnauthorized = () => {
   // Default to strict TLS unless explicitly disabled for custom databases

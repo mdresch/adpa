@@ -6,6 +6,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { getApiBaseUrl } from '@/lib/api-url'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -110,7 +111,7 @@ export default function TemplateImprovementsPage() {
     try {
       setLoading(true)
       
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+      const API_BASE_URL = getApiBaseUrl()
       
       const queryParams = new URLSearchParams()
       if (filters.status !== 'all') queryParams.append('status', filters.status)
@@ -138,7 +139,7 @@ export default function TemplateImprovementsPage() {
 
   const handleTriggerAnalysis = async () => {
     try {
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+      const API_BASE_URL = getApiBaseUrl()
       
       const response = await fetch(`${API_BASE_URL}/quality-audits/analyze-templates`, {
         method: 'POST',
@@ -169,7 +170,7 @@ export default function TemplateImprovementsPage() {
 
   const handleApprove = async (suggestionId: string) => {
     try {
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+      const API_BASE_URL = getApiBaseUrl()
       
       const response = await fetch(`${API_BASE_URL}/quality-audits/template-improvements/${suggestionId}/approve`, {
         method: 'POST',
@@ -216,7 +217,7 @@ export default function TemplateImprovementsPage() {
     }
 
     try {
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+      const API_BASE_URL = getApiBaseUrl()
       
       const response = await fetch(`${API_BASE_URL}/quality-audits/template-improvements/${selectedSuggestion}/reject`, {
         method: 'POST',
@@ -256,7 +257,7 @@ export default function TemplateImprovementsPage() {
     }
 
     try {
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+      const API_BASE_URL = getApiBaseUrl()
       
       const response = await fetch(`${API_BASE_URL}/quality-audits/template-improvements/${suggestionId}/implement`, {
         method: 'POST',

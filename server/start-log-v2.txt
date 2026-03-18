@@ -1,0 +1,6 @@
+﻿≡ƒôè OpenTelemetry OTLP tracing is disabled (native Langfuse SDK tracing remains available)
+[06:26:27 UTC] [32mINFO[39m (8048): [36mAI Service initialized - will fetch AI Gateway key from database[39m
+[06:26:29 UTC] [32mINFO[39m (8048): [36mPinecone service initialized[39m
+    [35mindexName[39m: "adpa-rag-index"
+    [35mhost[39m: "https://adpa-rag-index-da6r0w0.svc.aped-4627-b74a.pinecone.io"
+    [35mmodel[39m: "llama-text-embed-v2"

@@ -5,21 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Settings, Copy, Database, Lightbulb } from "lucide-react"
 import { toast } from '@/lib/notify'
-import { Project, ExtendedProject } from "@/lib/api"
-
-
-interface Document {
-  id: string
-  title: string
-  type: string
-  [key: string]: any
-}
-
-interface Stakeholder {
-  id: string
-  role: string
-  [key: string]: any
-}
+import { Project, ExtendedProject, Document, Stakeholder } from "@/lib/api"
 
 interface VariablesTabProps {
   project: ExtendedProject | null

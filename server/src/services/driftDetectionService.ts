@@ -680,6 +680,8 @@ export class DriftDetectionService {
       driftType?: DriftType
       severity?: DriftSeverity
       status?: DriftDetection['status']
+      limit?: number
+      offset?: number
     }
   ): Promise<DriftDetection[]> {
     try {
@@ -702,6 +704,16 @@ export class DriftDetectionService {
       }
 
       query += ` ORDER BY detected_at DESC`
+
+      if (filters?.limit) {
+        query += ` LIMIT $${params.length + 1}`
+        params.push(filters.limit)
+      }
+
+      if (filters?.offset) {
+        query += ` OFFSET $${params.length + 1}`
+        params.push(filters.offset)
+      }
 
       const result = await pool.query(query, params)
       return result.rows.map(row => this.mapRowToDriftDetection(row))

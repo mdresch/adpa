@@ -257,7 +257,13 @@ export async function deleteMessagesFromIndex(
 export async function getChats(userId: string): Promise<Chat[]> {
     return withRLS(userId, async tx => {
         return tx
-            .select()
+            .select({
+                id: chats.id,
+                createdAt: chats.createdAt,
+                title: chats.title,
+                userId: chats.userId,
+                visibility: chats.visibility
+            })
             .from(chats)
             .where(eq(chats.userId, userId))
             .orderBy(desc(chats.createdAt))
@@ -275,12 +281,19 @@ export async function getChatsPage(
     try {
         return withRLS(userId, async tx => {
             const results = await tx
-                .select()
+                .select({
+                    id: chats.id,
+                    createdAt: chats.createdAt,
+                    title: chats.title,
+                    userId: chats.userId,
+                    visibility: chats.visibility
+                })
                 .from(chats)
                 .where(eq(chats.userId, userId))
                 .orderBy(desc(chats.createdAt))
                 .limit(limit)
                 .offset(offset)
+            console.log(`[DB:getChatsPage] Found ${results.length} chats`)
 
             const nextOffset = results.length === limit ? offset + limit : null
 
@@ -290,7 +303,7 @@ export async function getChatsPage(
             }
         })
     } catch (error) {
-        console.error('Error fetching chat page:', error)
+        console.error('Error fetching chat page for userId:', userId, error)
         return { chats: [], nextOffset: null }
     }
 }
@@ -391,6 +404,12 @@ export async function createChatWithFirstMessageTransaction({
     perfLog(`DB - createChatWithFirstMessageTransaction start`)
     const dbStart = performance.now()
     return await withRLS(userId, async tx => {
+        console.log(`[DB:RLS] Setting session config for user: ${userId}`)
+        await tx.execute(
+            sql`SELECT set_config('app.current_user_id', ${userId}, true)`
+        )
+
+        console.log(`[DB:RLS] Executing callback for user: ${userId}`)
         await tx
             .insert(chats)
             .values({

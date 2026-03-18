@@ -109,6 +109,8 @@ import digitalTwinConnectorsRoutes from "./routes/digital-twin-connectors"
 import mediaRoutes from "./routes/mediaRoutes"
 import healthRoutes from "./routes/health"
 import aiProvidersRoutes from "./routes/ai-providers"
+import aiAnalyticsRoutes from "./routes/ai-analytics"
+import aiModelsRoutes from "./routes/ai-models"
 import documentModuleRoutes from "./modules/documents/routes"
 import analysisModuleRoutes from "./modules/analysis/routes"
 import projectModuleRoutes from "./modules/projects/routes"
@@ -218,33 +220,82 @@ app.get("/api/debug-env", (req, res) => {
 
 // API Routes
 console.log("🔧 Registering API routes...")
+console.log("DEBUG: authModuleRoutes type:", typeof authModuleRoutes, "is array:", Array.isArray(authModuleRoutes));
+console.log("DEBUG: documentModuleRoutes type:", typeof documentModuleRoutes, "is array:", Array.isArray(documentModuleRoutes));
 
 // retired legacy auth routes - now handled by modular registry (/api/v1/auth)
 // Aliased here for legacy frontend compatibility (Phase 3 compatibility layer)
-app.use("/api/auth", authModuleRoutes[0].router)
-app.use("/api/users", (req, res, next) => { req.url = '/users' + req.url; next(); }, identityModuleRoutes[0].router) 
-app.use("/api/companies", (req, res, next) => { req.url = '/companies' + req.url; next(); }, identityModuleRoutes[0].router)
-app.use("/api/projects", projectsModuleRoutes[0].router)
-app.use("/api", identityModuleRoutes[0].router) // Mounts /users and /companies
-app.use("/api", executionModuleRoutes[0].router) // Mounts /issues, /tasks, /risks, /playbooks under /api
-app.use("/api/portfolios", portfolioModuleRoutes[0].router)
-app.use("/api/portfolio", portfolioModuleRoutes[0].router)
-app.use("/api/portfolio-domains", (req, res, next) => { req.url = '/domains' + req.url; next(); }, portfolioModuleRoutes[0].router)
-app.use("/api/portfolio-assessment", (req, res, next) => { req.url = '/assessment' + req.url; next(); }, portfolioModuleRoutes[0].router)
-app.use("/api/templates", templatesModuleRoutes)
-app.use("/api/template-analytics", templatesModuleRoutes)
-app.use("/api/template-stats", (req, res, next) => { req.url = '/statistics' + req.url; next(); }, templatesModuleRoutes)
-app.use("/api/analytics", intelligenceModuleRoutes[0].router)
-app.use("/api/integrations", integrationsModuleRoutes[0].router)
-app.use("/api/documents", documentModuleRoutes[0].router)
-app.use("/api/project-data-extraction", (req, res, next) => {
-  // Map /:projectId/summary to /summary/:projectId
-  const summaryMatch = req.url.match(/^\/([^/]+)\/summary$/)
-  if (summaryMatch) {
-    req.url = `/summary/${summaryMatch[1]}`
-  }
-  next()
-}, analysisModuleRoutes[0].router)
+if (authModuleRoutes && authModuleRoutes[0]) {
+  app.use("/api/auth", authModuleRoutes[0].router)
+} else {
+  console.warn("⚠️ authModuleRoutes is missing or empty")
+}
+if (identityModuleRoutes && identityModuleRoutes[0]) {
+  app.use("/api/users", (req, res, next) => { req.url = '/users' + req.url; next(); }, identityModuleRoutes[0].router) 
+  app.use("/api/companies", (req, res, next) => { req.url = '/companies' + req.url; next(); }, identityModuleRoutes[0].router)
+  app.use("/api", identityModuleRoutes[0].router) // Mounts /users and /companies
+} else {
+  console.warn("⚠️ identityModuleRoutes is missing or empty")
+}
+
+if (projectsModuleRoutes && projectsModuleRoutes[0]) {
+  app.use("/api/projects", projectsModuleRoutes[0].router)
+} else {
+  console.warn("⚠️ projectsModuleRoutes is missing or empty")
+}
+
+if (executionModuleRoutes && executionModuleRoutes[0]) {
+  app.use("/api", executionModuleRoutes[0].router) // Mounts /issues, /tasks, /risks, /playbooks under /api
+} else {
+  console.warn("⚠️ executionModuleRoutes is missing or empty")
+}
+
+if (portfolioModuleRoutes && portfolioModuleRoutes[0]) {
+  app.use("/api/portfolios", portfolioModuleRoutes[0].router)
+  app.use("/api/portfolio", portfolioModuleRoutes[0].router)
+  app.use("/api/portfolio-domains", (req, res, next) => { req.url = '/domains' + req.url; next(); }, portfolioModuleRoutes[0].router)
+  app.use("/api/portfolio-assessment", (req, res, next) => { req.url = '/assessment' + req.url; next(); }, portfolioModuleRoutes[0].router)
+} else {
+  console.warn("⚠️ portfolioModuleRoutes is missing or empty")
+}
+
+if (templatesModuleRoutes && templatesModuleRoutes[0]) {
+  app.use("/api/templates", templatesModuleRoutes[0].router)
+  app.use("/api/template-analytics", templatesModuleRoutes[0].router)
+  app.use("/api/template-stats", (req, res, next) => { req.url = '/statistics' + req.url; next(); }, templatesModuleRoutes[0].router)
+}
+
+if (intelligenceModuleRoutes && intelligenceModuleRoutes[0]) {
+  app.use("/api/analytics", intelligenceModuleRoutes[0].router)
+} else {
+  console.warn("⚠️ intelligenceModuleRoutes is missing or empty")
+}
+
+if (integrationsModuleRoutes && integrationsModuleRoutes[0]) {
+  app.use("/api/integrations", integrationsModuleRoutes[0].router)
+} else {
+  console.warn("⚠️ integrationsModuleRoutes is missing or empty")
+}
+
+if (documentModuleRoutes && documentModuleRoutes[0]) {
+  console.log("DEBUG: mounting documentModuleRoutes");
+  app.use("/api/documents", documentModuleRoutes[0].router)
+} else {
+  console.warn("⚠️ documentModuleRoutes is missing or empty")
+}
+
+if (analysisModuleRoutes && analysisModuleRoutes[0]) {
+  app.use("/api/project-data-extraction", (req, res, next) => {
+    // Map /:projectId/summary to /summary/:projectId
+    const summaryMatch = req.url.match(/^\/([^/]+)\/summary$/)
+    if (summaryMatch) {
+      req.url = `/summary/${summaryMatch[1]}`
+    }
+    next()
+  }, analysisModuleRoutes[0].router)
+} else {
+  console.warn("⚠️ analysisModuleRoutes is missing or empty")
+}
 
 
 console.log("✅ Legacy compatibility routes registered (Bridge Layer Active)")
@@ -305,6 +356,8 @@ app.use("/api/agents", agentsRoutes)
 app.use("/api/media", mediaRoutes)
 app.use("/api/ai-providers", aiProvidersRoutes)
 app.use("/api/ai", aiProvidersRoutes)
+app.use("/api/ai-analytics", aiAnalyticsRoutes)
+app.use("/api/ai-models", aiModelsRoutes)
 console.log("✅ All API routes registered")
 app.use("/api/notifications", notificationsRoutes)
 app.use("/api/email-notifications", emailNotificationsRoutes)
@@ -480,15 +533,33 @@ async function startServer() {
 
 
 
+// Global process error handlers
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error({ promise, reason }, 'Unhandled Rejection at Promise');
+});
+
+process.on('uncaughtException', (error) => {
+  logger.error(error, 'Uncaught Exception thrown');
+  process.exit(1);
+});
+
 // Only start server if this file is the main entry point
 if (process.argv[1] && (process.argv[1].endsWith('server.ts') || process.argv[1].endsWith('server.js') || process.argv[1].includes('src/server.ts'))) {
-  startServer()
+  console.log("🚀 Starting server context...");
+  startServer().catch(err => {
+    console.error("❌ Fatal error during server startup:", err);
+    process.exit(1);
+  });
 }
 // For ts-node/tsx where process.argv[1] might be the script path
 else if (!process.argv[1] || process.argv[1].includes('server')) {
   // Conservative fallback - if we're not sure, don't auto-start if imported
   if (require.main === module) {
-    startServer()
+    console.log("🚀 Starting server context (main fallback)...");
+    startServer().catch(err => {
+      console.error("❌ Fatal error during server startup (fallback):", err);
+      process.exit(1);
+    });
   }
 }
 

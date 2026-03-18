@@ -352,7 +352,7 @@ This security architecture provides a comprehensive framework for protecting our
     if (!projectId) return
 
     try {
-      const response = await apiClient.request<DocumentVersion[]>(`/projects/${projectId}/documents/${documentId}/versions`)
+      const response = await apiClient.request<DocumentVersion[]>(`/documents/${documentId}/versions`)
 
       if (response && Array.isArray(response)) {
         setVersions(response)

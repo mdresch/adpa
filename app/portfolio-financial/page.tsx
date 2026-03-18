@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { formatCurrency, formatPercentage } from '@/lib/utils/formatUtils';
 import { TrendingUp, AlertCircle } from 'lucide-react';
+import { getApiBaseUrl } from "@/lib/api-url";
 
 interface PortfolioFinancialMetrics {
   totalBudget: number;
@@ -60,7 +61,7 @@ export default function PortfolioFinancialPage() {
         setLoading(true);
         setError(null);
 
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+        const apiUrl = getApiBaseUrl();
 
         // Fetch portfolio financial metrics
         const metricsRes = await fetch(`${apiUrl}/portfolio/financial`);

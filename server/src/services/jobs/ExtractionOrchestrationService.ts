@@ -573,12 +573,12 @@ export class ExtractionOrchestrationService {
       domains,
       batchingEnabled,
       maxBatchTokens,
-      maxDocsPerBatch
+      maxDocsPerBatch,
+      correlationId
     } = job.data as ExtendedExtractionJobData
     const selectedDomains = normalizeDomains(domains)
     const entityTypesForRun = resolveEntityTypesForDomains(selectedDomains)
     const { workerId, updateJobStatus } = options
-
     try {
       // Check if job is already marked as failed/cancelled in database before processing
       const jobCheck = await db.query(
@@ -659,7 +659,8 @@ export class ExtractionOrchestrationService {
           maxDocsPerBatch,
           entityType,
           entityIndex: index,
-          totalEntities: entityTypesForRun.length
+          totalEntities: entityTypesForRun.length,
+          correlationId
         }
 
         // addJob will insert a DB row and enqueue with the provided jobId

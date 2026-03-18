@@ -66,6 +66,33 @@ export class AnalyticsController {
     }
   };
 
+  getAIAnalytics = async (req: Request, res: Response) => {
+    try {
+      const { period = "30d" } = req.query;
+      const intervalMap = { "7d": "7 days", "30d": "30 days", "90d": "90 days", "1y": "1 year" };
+      const interval = intervalMap[period as keyof typeof intervalMap] || "30 days";
+
+      const [summary, timeline, providerStats, modelStats] = await Promise.all([
+        this.repository.getAIGlobalSummary(interval),
+        this.repository.getAIUsageTimeline(interval),
+        this.repository.getAIProviderStats(interval),
+        this.repository.getAIModelStats(interval)
+      ]);
+
+      res.json({
+        success: true,
+        summary,
+        timeline,
+        providerStats,
+        modelStats,
+        generated_at: new Date().toISOString()
+      });
+    } catch (error) {
+      this.logger.error("Get AI analytics error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  };
+
   getMetrics = async (req: Request, res: Response) => {
     // Ported from src/routes/metrics.ts
     try {

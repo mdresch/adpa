@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { ProjectRepository } from './ProjectRepository';
 import { AuthRepository } from '../auth/AuthRepository';
 import { childLogger, logger } from '../../utils/logger';
+import { asyncLocalStorage } from '../../infrastructure/logger';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -149,6 +150,7 @@ export class ProjectsController {
       }
 
       const id = uuidv4();
+      const correlationId = asyncLocalStorage.getStore();
 
       // Handle team members input (simplifying since we have a repository now)
       let finalTeamMembers: string[] = [userId];
@@ -165,7 +167,8 @@ export class ProjectsController {
         priority,
         program_id: program_id || null,
         owner_id: userId,
-        team_members: JSON.stringify(finalTeamMembers)
+        team_members: JSON.stringify(finalTeamMembers),
+        correlation_id: correlationId
       });
 
       log.info(`Project created: ${name}`, { projectId: id });
@@ -202,7 +205,8 @@ export class ProjectsController {
         return res.status(403).json({ error: "Access denied" });
       }
 
-      const updateData: any = { name, description, framework, status, priority };
+      const correlationId = asyncLocalStorage.getStore();
+      const updateData: any = { name, description, framework, status, priority, correlation_id: correlationId };
       if (team_members) {
         updateData.team_members = JSON.stringify(team_members);
       }
@@ -245,6 +249,48 @@ export class ProjectsController {
       res.json({ success: true, message: "Project deleted successfully" });
     } catch (error) {
       log.error("Delete Project error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+
+  /**
+   * GET /api/v1/projects/:id/integrations
+   * Retrieves integrations associated with a project.
+   */
+  public static async getIntegrations(req: Request, res: Response) {
+    const log = childLogger({ requestId: (req as any).requestId });
+    try {
+      const { id } = req.params;
+      if (!id || !UUID_RE.test(id)) {
+        return res.status(400).json({ error: 'Invalid project ID' });
+      }
+
+      // TODO: Implement actual integration fetching logic
+      log.info(`Fetching integrations for project: ${id} (Stub)`);
+      res.json({ success: true, integrations: [] });
+    } catch (error) {
+      log.error("GetIntegrations error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+
+  /**
+   * GET /api/v1/projects/:id/drift-detections
+   * Retrieves drift detections associated with a project.
+   */
+  public static async getDriftDetections(req: Request, res: Response) {
+    const log = childLogger({ requestId: (req as any).requestId });
+    try {
+      const { id } = req.params;
+      if (!id || !UUID_RE.test(id)) {
+        return res.status(400).json({ error: 'Invalid project ID' });
+      }
+
+      // TODO: Implement actual drift detection fetching logic
+      log.info(`Fetching drift detections for project: ${id} (Stub)`);
+      res.json({ success: true, driftDetections: [] });
+    } catch (error) {
+      log.error("GetDriftDetections error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   }

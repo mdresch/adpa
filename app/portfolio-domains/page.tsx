@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { DomainCard } from '@/components/portfolioDomains/DomainCard';
+import { getApiBaseUrl } from "@/lib/api-url";
 
 interface PortfolioDomain {
   id: string;
@@ -19,7 +20,7 @@ export default function PortfolioDomainsPage() {
     
     const fetchDomains = async () => {
       try {
-        const url = 'http://localhost:5000/api/portfolio-domains';
+        const url = `${getApiBaseUrl()}/portfolio-domains`;
         console.log('=== CLIENT-SIDE DEBUG ===');
         console.log('Fetching from:', url);
         

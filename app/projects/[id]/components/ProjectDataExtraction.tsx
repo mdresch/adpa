@@ -13,14 +13,14 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { toast } from '@/lib/notify'
 import { Database, Sparkles, CheckCircle, XCircle, Loader2, Info, AlertCircle, Users, FileText, Target, AlertTriangle, Lightbulb, Calendar, DollarSign, Archive, ListOrdered, ChevronDown, ChevronRight, Layers, Gauge, Clock, Play, CheckCircle2, Building2, Ruler, Timer, Wallet, UserCog, ShieldAlert, MessageSquare, Award } from "@/components/ui/icons-shim"
 import { Code, Users2, GitBranch, Briefcase, TrendingUp, BarChart3, Zap, Shield, Activity } from "lucide-react"
-import { apiClient } from "@/lib/api"
+import { apiClient, Project, Document } from "@/lib/api"
 import { useRouter } from "next/navigation"
 import { DOMAIN_KPI_KEYS, type DomainKpiDefinition, type PmbokDomain, PMBOK_DOMAINS } from "@/types/pmbok"
 import { ENTITY_DOMAIN_WEIGHTS, getEntityWeights, calculateWeightedCount, type EntityDomainWeight, getEntityPhaseWeights, type ProjectPhase, type EntityPhaseWeight } from "@/types/entity-domain-weights"
 
 interface ProjectDataExtractionProps {
   projectId: string
-  documents: Array<{ id: string; name: string; title?: string }>
+  documents: Document[]
 }
 
 interface EntityCounts {
@@ -123,7 +123,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
   const [lastExtractedDocumentId, setLastExtractedDocumentId] = useState<string | null>(null)
 
   // All documents (not paginated) for extraction selection
-  const [allDocuments, setAllDocuments] = useState<Array<{ id: string; name: string; title?: string }>>([])
+  const [allDocuments, setAllDocuments] = useState<Document[]>([])
   const [loadingAllDocuments, setLoadingAllDocuments] = useState(false)
   const [documentSearchTerm, setDocumentSearchTerm] = useState("")
 
@@ -747,7 +747,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
 
     const searchLower = documentSearchTerm.toLowerCase()
     return allDocuments.filter(doc =>
-      (doc.title || doc.name).toLowerCase().includes(searchLower)
+      (doc.name).toLowerCase().includes(searchLower)
     )
   }
 

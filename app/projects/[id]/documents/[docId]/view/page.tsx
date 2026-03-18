@@ -564,12 +564,12 @@ The ADPA system represents a significant advancement in document processing auto
     try {
       // Fetch document from API (including drift data and Jira linkage)
       const [documentResponse, versionsResponse, driftResponse, jiraLinkageResponse] = await Promise.all([
-        apiClient.get(`/projects/${projectId}/documents/${documentId}`),
-        apiClient.get(`/projects/${projectId}/documents/${documentId}/versions`),
-        apiClient.request<{ drifts: any[] }>(
-          `/projects/${projectId}/drift-detections?limit=100`,
+        apiClient.get(`/documents/${documentId}`),
+        apiClient.get(`/documents/${documentId}/versions`),
+        apiClient.request<{ driftRecords: any[] }>(
+          `/drift/project/${projectId}`,
           { suppressNotFoundError: true } as Record<string, unknown>
-        ).catch(() => ({ drifts: [] })),
+        ).catch(() => ({ driftRecords: [] })),
         apiClient.request<{ linked: boolean; issueKey?: string; issueUrl?: string }>(
           `/jira-linkage/document/${documentId}`,
           { suppressNotFoundError: true } as Record<string, unknown>
@@ -577,7 +577,7 @@ The ADPA system represents a significant advancement in document processing auto
       ])
 
       // Filter drifts for this specific document
-      const documentDrifts = (driftResponse.drifts || []).filter((d: any) => d.source_document_id === documentId)
+      const documentDrifts = (driftResponse.driftRecords || []).filter((d: any) => d.source_document_id === documentId)
       setDrifts(documentDrifts)
 
       // Set Jira linkage if available

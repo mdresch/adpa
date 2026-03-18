@@ -4,6 +4,7 @@ import { wrapAISDK } from 'langsmith/experimental/vercel'
 import { getModel } from '@/lib/morphic/utils/registry'
 import { isTracingEnabled } from '@/lib/morphic/utils/telemetry'
 import { getLangfuseClient } from '@/lib/morphic/utils/langfuse-client'
+import { aiService } from '@/server/src/services/aiService'
 
 const { generateText: tracedGenerateText } = wrapAISDK(ai)
 
@@ -12,6 +13,7 @@ interface GenerateChatTitleParams {
     modelId: string
     abortSignal?: AbortSignal
     parentTraceId?: string
+    userId?: string
 }
 
 /**
@@ -24,7 +26,8 @@ export async function generateChatTitle({
     userMessageContent,
     modelId,
     abortSignal,
-    parentTraceId
+    parentTraceId,
+    userId
 }: GenerateChatTitleParams): Promise<string> {
     // Fallback title uses the first 75 characters of the message or a default string.
     const fallbackTitle = userMessageContent.substring(0, 75).trim() || 'New Chat'
@@ -32,53 +35,28 @@ export async function generateChatTitle({
     try {
         const systemPrompt = `System: You are an AI assistant specialized in creating very short, concise, and informative titles for chat conversations based on the user's first message. The title should ideally be 3-5 words long, and no more than 10 words. Only output the title itself, with no prefixes, labels, or quotation marks.`
 
-        // Start Langfuse generation span
-        const langfuse = getLangfuseClient()
-        let langfuseGeneration: any = null
-        if (langfuse && parentTraceId) {
-            const trace = langfuse.trace({ id: parentTraceId })
-            langfuseGeneration = trace.generation({
-                name: 'title-generation',
-                model: modelId,
-                input: userMessageContent,
-                metadata: { promptLength: userMessageContent.length }
-            })
-        }
+        // Extract provider and model from modelId (format: "provider:model")
+        const [providerId, ...modelParts] = modelId.split(':')
+        const modelName = modelParts.join(':')
 
-        const { text: generatedTitle } = await tracedGenerateText({
-            model: getModel(modelId),
-            system: systemPrompt,
+        // Use AIService for robust generation with fallback
+        const aiResponse = await aiService.generateWithFallback({
+            userId,
+            provider: providerId || 'openai',
+            model: modelName || 'gpt-4o',
             prompt: userMessageContent,
-            abortSignal,
-            experimental_telemetry: {
-                isEnabled: isTracingEnabled(),
-                functionId: 'title-generation',
-                metadata: {
-                    modelId: modelId,
-                    agentType: 'title-generator',
-                    aiCallType: 'title_generation',
-                    requestedGeneration: 'chat_title',
-                    callPath: 'morphic-title-generator',
-                    promptLength: userMessageContent.length,
-                    ...(parentTraceId && {
-                        langfuseTraceId: parentTraceId,
-                        langfuseUpdateParent: false
-                    })
-                }
+            system_prompt: systemPrompt,
+            temperature: 0.5,
+            max_tokens: 50,
+            aiCallType: 'title_generation',
+            requestedGeneration: 'chat_title',
+            metadata: {
+                modelId,
+                parentTraceId
             }
         })
 
-        const cleanedTitle = generatedTitle.trim()
-
-        // End Langfuse generation span on success
-        if (langfuseGeneration) {
-            langfuseGeneration.end({
-                output: cleanedTitle || fallbackTitle,
-                level: 'DEFAULT',
-                statusMessage: 'SUCCESS'
-            })
-            await langfuse?.flushAsync()
-        }
+        const cleanedTitle = (aiResponse.content || '').trim()
 
         // If the model returns an empty string, use the fallback.
         if (!cleanedTitle) {
@@ -97,7 +75,7 @@ export async function generateChatTitle({
                 console.info('Title generation aborted; using fallback title.')
             }
         } else {
-            console.error('Error generating chat title with LLM:', error)
+            console.error('Error generating chat title with AIService:', error)
         }
         // If LLM generation fails or is aborted, return the fallback title.
         return fallbackTitle

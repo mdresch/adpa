@@ -6,6 +6,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { getApiBaseUrl } from '@/lib/api-url'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -76,7 +77,7 @@ export default function QualityDashboardPage() {
         setLoading(true)
         const token = localStorage.getItem('auth_token')
 
-        const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+        const API_BASE_URL = getApiBaseUrl()
 
         const [statsRes, providersRes, issuesRes] = await Promise.all([
           fetch(`${API_BASE_URL}/quality-audits/stats`, {

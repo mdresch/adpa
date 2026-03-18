@@ -20,6 +20,7 @@ import { DocumentRepository } from './DocumentRepository';
 import { AuthRepository } from '../auth/AuthRepository';
 import { ProjectRepository } from '../projects/ProjectRepository';
 import { childLogger } from '../../utils/logger';
+import { asyncLocalStorage } from '../../infrastructure/logger';
 import { cache } from '../../utils/redis';
 import { trackActivity } from '../../middleware/analyticsMiddleware';
 import AuditService from '../../services/auditService';
@@ -145,11 +146,11 @@ export class DocumentsController {
 
             const wordCount = contentString.trim().split(/\s+/).filter(Boolean).length;
             const characterCount = contentString.length;
-
-            const result = await DocumentsController.documentRepository.create({
-                project_id: projectId, name, content: contentString, template_id, status,
-                created_by: req.user?.id, word_count: wordCount, character_count: characterCount, generation_metadata
-            });
+            const correlationId = asyncLocalStorage.getStore();
+const result = await DocumentsController.documentRepository.create({
+    project_id: projectId, name, content: contentString, template_id, status,
+    created_by: req.user?.id, word_count: wordCount, character_count: characterCount, generation_metadata, correlation_id: correlationId
+});
 
             const document = result.rows[0];
             await DocumentsController.documentRepository.saveVersion({
@@ -182,7 +183,8 @@ export class DocumentsController {
             const hasAccess = await DocumentsController.checkProjectAccess(req, doc.project_id, true);
             if (!hasAccess) return res.status(403).json({ error: "Access denied" });
 
-            let updateData: any = { name, content, status };
+            const correlationId = asyncLocalStorage.getStore();
+            let updateData: any = { name, content, status, correlation_id: correlationId };
             if (metadata) updateData.metadata = { ...(doc.metadata || {}), ...metadata };
 
             if (content) {
@@ -405,11 +407,12 @@ export class DocumentsController {
 
     private static async triggerSideEffects(document: any, req: Request) {
         const log = childLogger({ requestId: (req as any).requestId });
+        const correlationId = asyncLocalStorage.getStore();
         try {
-            const jobData = { projectId: document.project_id, documentIds: [document.id], autoTriggered: true };
+            const jobData = { projectId: document.project_id, documentIds: [document.id], autoTriggered: true, correlationId };
             const jobRes = await pool.query(`INSERT INTO jobs (type, status, data, created_by, project_id) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
                 ['project-data-extraction', 'pending', JSON.stringify(jobData), req.user?.id, document.project_id]);
-            await extractionQueue.add('extract-project-data', { jobId: jobRes.rows[0].id, ...jobData, userId: req.user?.id }, { jobId: jobRes.rows[0].id });
+            await extractionQueue.add('extract-project-data', { jobId: jobRes.rows[0].id, ...jobData, userId: req.user?.id, correlationId }, { jobId: jobRes.rows[0].id });
         } catch (e) { log.error('Side effects extraction fail', e); }
 
         storageArchivalService.archiveDocument({

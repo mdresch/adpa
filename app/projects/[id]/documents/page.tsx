@@ -58,7 +58,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { useAuth } from "@/contexts/AuthContext"
 import { apiClient, Project, Template } from "@/lib/api"
-import { getApiUrl } from "@/lib/api-url"
+import { getApiUrl, getApiBaseUrl } from "@/lib/api-url"
 import { toast } from '@/lib/notify'
 import { QualityAuditBadge } from "@/components/quality"
 
@@ -267,12 +267,12 @@ export default function ProjectDocuments() {
     }
     try {
       // Fetch all drifts for the project
-      const driftResponse = await apiClient.request<{ drifts: any[], total: number }>(
-        `/projects/${projectId}/drift-detections`,
+      const driftResponse = await apiClient.request<{ driftRecords: any[], total: number }>(
+        `/drift/project/${projectId}`,
         { suppressNotFoundError: true } as Record<string, unknown>
       )
 
-      const drifts = driftResponse.drifts || []
+      const drifts = driftResponse.driftRecords || []
 
       // Count drifts per document
       const driftsByDoc = new Map<string, { count: number, hasCritical: boolean, hasHigh: boolean }>()
@@ -515,7 +515,7 @@ export default function ProjectDocuments() {
         formData.append('assessmentName', uploadForm.name)
 
         try {
-          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/onboarding/upload`, {
+          const response = await fetch(`${getApiBaseUrl()}/onboarding/upload`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${token}`
