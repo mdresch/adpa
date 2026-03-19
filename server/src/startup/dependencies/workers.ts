@@ -1,15 +1,14 @@
 import { Dependency } from "../dependencyGraph"
 import { logger } from "../../utils/logger"
 import { updateDependencyHealth } from "../../routes/health"
+import { startupManager } from "../serverBootstrap"
 
 export const workersDependency: Dependency = {
   name: "Workers",
   critical: false,
   timeout: 15000, // 15 seconds
+  dependsOn: ['Database'],
   init: async () => {
-    // HACK: Add a delay to wait for the database to be ready.
-    // This is a temporary fix for a race condition.
-    await new Promise(resolve => setTimeout(resolve, 2000));
     try {
       // 1. Start system and worker resource monitoring
       const { SystemMonitoring } = require("../../utils/systemMonitoring")

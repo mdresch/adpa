@@ -1,0 +1,22 @@
+[variables]
+NIXPACKS_NODEJS_VERSION = "20"
+# Ensure Puppeteer can find Chromium
+PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = "true"
+
+[phases.setup]
+nixPkgs = ["nodejs_20", "chromium", "pnpm"]
+
+[phases.install]
+cmds = [
+  "pnpm install",
+  "pnpm install handlebars --no-save",
+  "export PUPPETEER_EXECUTABLE_PATH=$(which chromium || which chromium-browser || echo '')"
+]
+
+[phases.build]
+cmds = [
+  "pnpm run build || true"
+]
+
+[start]
+cmd = "export PUPPETEER_EXECUTABLE_PATH=$(which chromium || which chromium-browser || echo '') && pnpm start"

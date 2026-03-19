@@ -1998,3 +1998,46 @@ Extract ALL technologies mentioned across these layers:
    - Logging: ELK Stack, Splunk, Loki, CloudWatch
    - Metrics: Prometheus, Grafana, InfluxDB
    - Error Tracking: Sentry, Rollbar, Bugsnag
+
+Extract technologies in JSON format with the following structure:
+{
+  "technologies": [
+    {
+      "name": "Technology Name",
+      "category": "frontend|backend|database|infrastructure|devops|testing|monitoring|other",
+      "description": "Short description",
+      "version": "Version if mentioned",
+      "purpose": "What it is used for",
+      "license": "License if mentioned",
+      "vendor": "Vendor if mentioned",
+      "deployment_environment": "Cloud, On-prem, etc."
+    }
+  ]
+}
+
+Requirements:
+- Extract all technologies mentioned in the architecture or technology stack
+- Use the predefined categories as much as possible
+- If a value is not provided, use null or omit optional fields
+- Return ONLY valid JSON, no markdown or explanation`
+
+      const response = await aiService.generateWithFallback({
+        prompt,
+        provider: options.aiProvider || 'openai',
+        model: options.aiModel,
+        temperature: 0.3,
+        max_tokens: 4000
+      }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
+
+      const parsed = this.parseAIResponse(response.content)
+      const technologies = parsed.technologies || []
+
+      return technologies
+    } catch (error: unknown) {
+      logger.error('[EXTRACTION-TECHNOLOGIES] Extraction failed', {
+        error: error instanceof Error ? error.message : String(error)
+      })
+      return []
+    }
+  }
+}

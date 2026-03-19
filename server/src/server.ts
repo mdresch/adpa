@@ -387,6 +387,9 @@ registerRoutes(app).catch(err => {
   logger.error(err, "❌ Failed to register modular routes")
 })
 
+import { attachAgentRoutes } from './routes/agents';
+attachAgentRoutes(io);
+
 // WebSocket connection handling
 io.on("connection", (socket) => {
   logger.debug(`[WS] Client connected: ${socket.id}`)

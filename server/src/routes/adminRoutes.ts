@@ -9,6 +9,8 @@ import { logger } from '../utils/logger'
 import { pool } from '../database/connection'
 import { Parser } from 'json2csv'
 import { semanticSearchService } from '../services/semanticSearchService'
+import fs from 'fs'
+import path from 'path'
 
 const router = express.Router()
 
@@ -686,6 +688,67 @@ router.get(
       })
     } catch (error: any) {
       logger.error('[ADMIN-ROUTES] Diagnostics failed:', error)
+      res.status(500).json({
+        success: false,
+        error: error.message
+      })
+    }
+  }
+)
+
+/**
+ * GET /api/admin/logs
+ * Read and return the last few lines of the combined log file
+ */
+router.get(
+  '/logs',
+  authenticateToken,
+  requireAdmin,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const logPath = path.resolve(process.cwd(), 'logs', 'combined.log')
+      const limit = parseInt(req.query.limit as string) || 100
+
+      if (!fs.existsSync(logPath)) {
+        return res.json({
+          success: true,
+          data: [],
+          message: 'Log file not found'
+        })
+      }
+
+      // Read the file and get the last lines
+      // For simplicity in this implementation, we read the whole file if it's small,
+      // or use a stream for larger files.
+      const stats = fs.statSync(logPath)
+      const fileSize = stats.size
+      const bufferSize = Math.min(fileSize, 500000) // Read last 500KB max
+      
+      const buffer = Buffer.alloc(bufferSize)
+      const fd = fs.openSync(logPath, 'r')
+      fs.readSync(fd, buffer, 0, bufferSize, Math.max(0, fileSize - bufferSize))
+      fs.closeSync(fd)
+
+      const content = buffer.toString('utf8')
+      const lines = content.split('\n').filter(line => line.trim() !== '')
+      
+      // Parse NDJSON lines
+      const parsedLogs = lines.map(line => {
+        try {
+          return JSON.parse(line)
+        } catch (e) {
+          return { level: 'info', message: line, timestamp: new Date().toISOString(), raw: true }
+        }
+      })
+
+      // Return the requested limit, newest first
+      res.json({
+        success: true,
+        data: parsedLogs.reverse().slice(0, limit)
+      })
+
+    } catch (error: any) {
+      logger.error('[ADMIN-ROUTES] Failed to read logs', { error: error.message })
       res.status(500).json({
         success: false,
         error: error.message

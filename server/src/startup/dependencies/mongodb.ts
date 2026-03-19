@@ -22,15 +22,14 @@ export const mongodbDependency: Dependency = {
   validate: async () => {
     const startTime = Date.now()
     try {
-      // Check if we can access the database
-      const stats = await mongoVectorStore.getStats()
+      // Use ping for lightweight connectivity check during startup
+      const isHealthy = await mongoVectorStore.ping()
       const latency = Date.now() - startTime
-      if (stats && stats.database) {
-        logger.debug(`MongoDB connected to: ${stats.database}`)
+      if (isHealthy) {
         updateDependencyHealth("MongoDB Atlas", "healthy", latency)
         return true
       }
-      updateDependencyHealth("MongoDB Atlas", "unhealthy", latency, "No database stats")
+      updateDependencyHealth("MongoDB Atlas", "unhealthy", latency, "Ping failed")
       return false
     } catch (error) {
       logger.warn("MongoDB validation failed:", error)

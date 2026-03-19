@@ -232,6 +232,18 @@ export class MongoVectorStore {
         };
     }
 
+    async ping(): Promise<boolean> {
+        try {
+            this.ensureConnected();
+            if (!this.client) return false;
+            await this.client.db(MONGODB_DB_NAME).command({ ping: 1 });
+            return true;
+        } catch (error) {
+            logger.error('MongoDB ping failed', { error: (error as Error).message });
+            return false;
+        }
+    }
+
     private generateId(): string {
         return Math.random().toString(36).substring(2) + Date.now().toString(36);
     }

@@ -6,6 +6,9 @@ import { SystemMonitoring } from "../utils/systemMonitoring"
 import { mongoVectorStore } from "../services/mongoVectorStore"
 import { initializeDependencyHealthTracking } from "../routes/health"
 
+// Export the startupManager instance so other modules can access it.
+export let startupManager: StartupManager;
+
 /**
  * Updated server startup function that uses the Startup Dependency Graph.
  * This replaces the old sequential initialization with parallel dependency initialization.
@@ -15,8 +18,6 @@ export async function initializeServerWithDependencyGraph(
   io: any,
   PORT: number
 ): Promise<void> {
-  let startupManager: StartupManager
-
   try {
     // Initialize all dependencies using the dependency graph
     startupManager = new StartupManager()
@@ -56,7 +57,8 @@ export async function initializeServerWithDependencyGraph(
 
     // Graceful shutdown handler
     const handleShutdown = async (signal: string) => {
-      console.log(`\n🛑 ${signal} received, shutting down gracefully...`)
+      console.log(`
+🛑 ${signal} received, shutting down gracefully...`)
       try {
         if (startupManager) {
           await startupManager.shutdown()
@@ -84,4 +86,3 @@ export async function initializeServerWithDependencyGraph(
     process.exit(1)
   }
 }
-

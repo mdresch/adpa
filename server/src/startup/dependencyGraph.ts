@@ -4,12 +4,13 @@ import { logger } from "../utils/logger"
  * Represents a single dependency with initialization, validation, and failure handling logic.
  */
 export interface Dependency {
-  name: string
-  critical: boolean
-  timeout: number // milliseconds
-  init: () => Promise<void>
-  validate: () => Promise<boolean>
-  shutdown?: () => Promise<void>
+  name: string;
+  critical: boolean;
+  timeout: number; // milliseconds
+  init: () => Promise<void>;
+  validate: () => Promise<boolean>;
+  shutdown?: () => Promise<void>;
+  dependsOn?: string[];
 }
 
 /**
@@ -55,27 +56,62 @@ export class DependencyGraph {
    * If fail-fast mode is enabled, stops on first critical failure.
    */
   async initialize(): Promise<Map<string, DependencyStatus>> {
-    const initPromises: Promise<void>[] = []
+    const maxWaitTime = 60000; // 60-second timeout for the entire process
+    const startTime = Date.now();
+    const initialized = new Set<string>();
+    const inProgress = new Map<string, Promise<void>>();
 
-    for (const [name, dependency] of this.dependencies.entries()) {
-      initPromises.push(this.initializeDependency(dependency))
+    const allDeps = Array.from(this.dependencies.keys());
+
+    while (initialized.size < allDeps.length) {
+      if (Date.now() - startTime > maxWaitTime) {
+        const uninitialized = allDeps.filter(d => !initialized.has(d));
+        throw new Error(`Dependency graph initialization timed out. Uninitialized dependencies: ${uninitialized.join(', ')}`);
+      }
+
+      let startedSomething = false;
+      for (const [name, dependency] of this.dependencies.entries()) {
+        if (initialized.has(name) || inProgress.has(name)) {
+          continue;
+        }
+
+        const deps = dependency.dependsOn || [];
+        const allDepsReady = deps.every(depName => initialized.has(depName));
+
+        if (allDepsReady) {
+          startedSomething = true;
+          const promise = this.initializeDependency(dependency).then(() => {
+            initialized.add(name);
+            inProgress.delete(name);
+          });
+          inProgress.set(name, promise);
+        }
+      }
+
+      if (!startedSomething && inProgress.size === 0 && initialized.size < allDeps.length) {
+         const uninitialized = allDeps.filter(d => !initialized.has(d));
+         throw new Error(`Circular dependency detected or missing dependency. Unresolved dependencies: ${uninitialized.join(', ')}`);
+      }
+
+      await Promise.race([
+        ...Array.from(inProgress.values()),
+        new Promise(resolve => setTimeout(resolve, 100)) // Wait for some progress or a short delay
+      ]);
     }
 
-    // Run all initialization in parallel but wait for all to complete
-    await Promise.all(initPromises)
+    await Promise.all(inProgress.values());
 
-    // Check for critical failures
     const criticalFailures = Array.from(this.statuses.values()).filter(
       (s) => s.critical && s.status === "failed"
-    )
+    );
 
     if (criticalFailures.length > 0 && this.failFastMode) {
       throw new Error(
         `Fail-fast mode: Critical dependency failed: ${criticalFailures.map((s) => s.name).join(", ")}`
-      )
+      );
     }
 
-    return this.statuses
+    return this.statuses;
   }
 
   /**
@@ -88,6 +124,15 @@ export class DependencyGraph {
     try {
       status.status = "initializing"
 
+      // Execute both init and validate within the timeout race
+      const initAndValidate = async () => {
+        await dependency.init()
+        const isValid = await dependency.validate()
+        if (!isValid) {
+          throw new Error("Validation failed")
+        }
+      }
+
       // Create timeout promise
       const timeoutPromise = new Promise<never>((_, reject) =>
         setTimeout(
@@ -96,14 +141,8 @@ export class DependencyGraph {
         )
       )
 
-      // Race between initialization and timeout
-      await Promise.race([dependency.init(), timeoutPromise])
-
-      // Validate the dependency
-      const isValid = await dependency.validate()
-      if (!isValid) {
-        throw new Error("Validation failed")
-      }
+      // Race between the full initialization sequence and timeout
+      await Promise.race([initAndValidate(), timeoutPromise])
 
       status.status = "ready"
       status.duration = Date.now() - startTime
