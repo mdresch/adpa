@@ -48,93 +48,19 @@ export class OrchestratorAgent extends BaseAgent {
         const batch = batches[i]
         logger.info(`Executing batch ${i + 1}/${batches.length} (${batch.length} tasks)`)
         
-        const batchPromises = batch.map(async (subGoal) => {
-          const startTime = Date.now()
-          const startTimestamp = new Date().toISOString()
-          
-          try {
-            const agent = AgentRegistry.getAgent(subGoal.domain as AgentDomain)
-            
-            // Phase 7: Apply policy-driven provider overrides
-            const preferredProviders = resolvedContext ? OrganizationPolicyEngine.getPreferredProviders(resolvedContext) : []
-            const executionContext = { 
-              ...fullContext, 
-              previousResults: results,
-              provider: preferredProviders[0] || context.provider
-            }
+        const batchPromises = batch.map(subGoal =>
+          this.executeSubGoal(subGoal, fullContext, resolvedContext, context, results)
+        )
 
-            const executionResult = await agent.run(subGoal.goal, executionContext)
-            
-            results[subGoal.id] = {
-              goalId: subGoal.id,
-              success: executionResult.success,
-              finalAnswer: executionResult.finalAnswer,
-              history: executionResult.history,
-              durationMs: Date.now() - startTime,
-              startTime: startTimestamp,
-              endTime: new Date().toISOString(),
-              domain: subGoal.domain,
-              metadata: executionResult.metadata
-            }
-          } catch (error: any) {
-            logger.error(`Subgoal ${subGoal.id} failed with error: ${error.message}`)
-            results[subGoal.id] = {
-              goalId: subGoal.id,
-              success: false,
-              finalAnswer: `Error: ${error.message}`,
-              history: [],
-              durationMs: Date.now() - startTime,
-              startTime: startTimestamp,
-              endTime: new Date().toISOString()
-            }
-          }
-        })
-
-        await Promise.all(batchPromises)
+        const batchResults = await Promise.all(batchPromises)
+        batchResults.forEach(r => { results[r.goalId] = r })
       }
     } else {
       // Serial execution
       const orderedSubGoals = SubGoalResolver.resolveSerial(subGoals)
       for (const subGoal of orderedSubGoals) {
-        const startTime = Date.now()
-        const startTimestamp = new Date().toISOString()
-        
-        try {
-          const agent = AgentRegistry.getAgent(subGoal.domain as AgentDomain)
-          
-          // Phase 7: Apply policy-driven provider overrides
-          const preferredProviders = resolvedContext ? OrganizationPolicyEngine.getPreferredProviders(resolvedContext) : []
-          const executionContext = { 
-            ...fullContext, 
-            previousResults: results,
-            provider: preferredProviders[0] || context.provider
-          }
-
-          const executionResult = await agent.run(subGoal.goal, executionContext)
-          
-          results[subGoal.id] = {
-            goalId: subGoal.id,
-            success: executionResult.success,
-            finalAnswer: executionResult.finalAnswer,
-            history: executionResult.history,
-            durationMs: Date.now() - startTime,
-            startTime: startTimestamp,
-            endTime: new Date().toISOString(),
-            domain: subGoal.domain,
-            metadata: executionResult.metadata
-          }
-        } catch (error: any) {
-          logger.error(`Subgoal ${subGoal.id} failed with error: ${error.message}`)
-          results[subGoal.id] = {
-            goalId: subGoal.id,
-            success: false,
-            finalAnswer: `Error: ${error.message}`,
-            history: [],
-            durationMs: Date.now() - startTime,
-            startTime: startTimestamp,
-            endTime: new Date().toISOString()
-          }
-        }
+        const r = await this.executeSubGoal(subGoal, fullContext, resolvedContext, context, results)
+        results[r.goalId] = r
       }
     }
     
@@ -207,6 +133,62 @@ export class OrchestratorAgent extends BaseAgent {
   }
 
   /**
+   * Shared subgoal execution logic used by both parallel and serial modes.
+   * Fetches the appropriate agent, applies policy overrides, runs the agent,
+   * and returns a fully populated SubGoalExecutionResult.
+   */
+  private async executeSubGoal(
+    subGoal: SubGoal,
+    fullContext: any,
+    resolvedContext: any,
+    originalContext: any,
+    previousResults: Record<string, SubGoalExecutionResult>
+  ): Promise<SubGoalExecutionResult> {
+    const startTime = Date.now()
+    const startTimestamp = new Date().toISOString()
+
+    try {
+      const agent = AgentRegistry.getAgent(subGoal.domain as AgentDomain)
+
+      // Phase 7: Apply policy-driven provider overrides
+      const preferredProviders = resolvedContext
+        ? OrganizationPolicyEngine.getPreferredProviders(resolvedContext)
+        : []
+      const executionContext = {
+        ...fullContext,
+        previousResults,
+        // Use the policy-preferred provider if available; otherwise let AIService decide
+        ...(preferredProviders[0] ? { provider: preferredProviders[0] } : {})
+      }
+
+      const executionResult = await agent.run(subGoal.goal, executionContext)
+
+      return {
+        goalId: subGoal.id,
+        success: executionResult.success,
+        finalAnswer: executionResult.finalAnswer,
+        history: executionResult.history,
+        durationMs: Date.now() - startTime,
+        startTime: startTimestamp,
+        endTime: new Date().toISOString(),
+        domain: subGoal.domain,
+        metadata: executionResult.metadata
+      }
+    } catch (error: any) {
+      logger.error(`Subgoal ${subGoal.id} failed with error: ${error.message}`)
+      return {
+        goalId: subGoal.id,
+        success: false,
+        finalAnswer: `Error: ${error.message}`,
+        history: [],
+        durationMs: Date.now() - startTime,
+        startTime: startTimestamp,
+        endTime: new Date().toISOString()
+      }
+    }
+  }
+
+  /**
    * Decompose goal into subgoals using LLM
    */
   async plan(goal: string, context: any): Promise<SubGoal[]> {
@@ -245,8 +227,8 @@ export class OrchestratorAgent extends BaseAgent {
     `
     
     const response = await this.aiService.generateWithFallback({
-      provider: context.provider || 'openai',
-      model: context.model || 'gpt-4o',
+      provider: context.provider,
+      model: context.model,
       prompt: prompt,
       system_prompt: 'You are an orchestration planner. Respond ONLY with valid JSON.'
     })
@@ -258,34 +240,6 @@ export class OrchestratorAgent extends BaseAgent {
       logger.error('Failed to parse orchestrator plan', e)
       return [{ id: 'fallback', goal: goal, domain: 'general' }]
     }
-  }
-
-  /**
-   * Combine execution results into a final synthesis
-   */
-  private async summarizeResults(goal: string, results: Record<string, SubGoalExecutionResult>): Promise<string> {
-    const findings = Object.values(results)
-      .map(r => `Result for ${r.goalId}: ${r.finalAnswer}`)
-      .join('\n\n')
-    
-    const prompt = `
-      You are the ADPA Orchestrator. Synthesize the findings from multiple sub-tasks into a final comprehensive answer to the user's original goal.
-      
-      Original Goal: ${goal}
-      Findings:
-      ${findings}
-      
-      Final Summary:
-    `
-    
-    const response = await this.aiService.generateWithFallback({
-      provider: Object.values(results)[0]?.metadata?.provider || 'openai',
-      model: Object.values(results)[0]?.metadata?.model || 'gpt-4o',
-      prompt: prompt,
-      system_prompt: 'You are a professional synthesizer. Provide a clear, cohesive final report.'
-    })
-    
-    return response.content
   }
 
   // Not strictly needed since we use orchestrate(), but BaseAgent requires it

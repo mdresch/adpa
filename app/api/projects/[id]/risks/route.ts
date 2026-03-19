@@ -5,15 +5,15 @@ import { logger } from '@/server/src/utils/logger';
 
 export async function GET(
     req: Request,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
+    const { id: projectId } = await params;
     const user = await getAuthenticatedUser(req);
     if (!user) return unauthorizedResponse();
 
     // Initialize database connection (safe to call multiple times)
     await connectDatabase();
 
-    const projectId = params.id;
 
     try {
         // Verify project exists

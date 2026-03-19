@@ -5,13 +5,14 @@ import { logger } from '@/server/src/utils/logger';
 
 export async function GET(
     req: Request,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
+    const { id } = await params;
     const user = await getAuthenticatedUser(req);
     if (!user) return unauthorizedResponse();
 
     try {
-        const asset = await digitalTwinAssetService.getAssetById(params.id);
+        const asset = await digitalTwinAssetService.getAssetById(id);
         if (!asset) {
             return NextResponse.json({ error: 'Asset not found' }, { status: 404 });
         }

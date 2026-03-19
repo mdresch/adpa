@@ -1,3 +1,4 @@
+"use client";
 import { useState, useEffect, useMemo } from "react"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"

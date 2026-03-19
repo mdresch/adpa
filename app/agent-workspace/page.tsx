@@ -8,10 +8,12 @@ import { PageTransition } from "@/components/page-transition"
 import { AnimatedLayout } from "@/components/animated-layout"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { BookOpen, Search, Layers, PlusCircle, Activity, Library } from "lucide-react"
+import { BookOpen, Search, Layers, PlusCircle, Activity, Library, Monitor, History } from "lucide-react"
 import { TaskDecomposition } from "./components/TaskDecomposition"
 import { AgentInteraction } from "./components/AgentInteraction"
 import { DiscoveryHub } from "./components/DiscoveryHub"
+import { AgentRunMonitor } from "./components/AgentRunMonitor"
+import { AgentRunHistory } from "./components/AgentRunHistory"
 
 export default function AgentWorkspacePage() {
   const { isAuthenticated, loading: authLoading } = useAuth()
@@ -78,6 +80,14 @@ export default function AgentWorkspacePage() {
                         <Library className="h-4 w-4" />
                         <span>Library</span>
                       </TabsTrigger>
+                      <TabsTrigger value="live-monitor" className="flex items-center space-x-2 px-4 py-2 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground transition-all">
+                        <Monitor className="h-4 w-4" />
+                        <span>Live Monitor</span>
+                      </TabsTrigger>
+                      <TabsTrigger value="run-history" className="flex items-center space-x-2 px-4 py-2 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground transition-all">
+                        <History className="h-4 w-4" />
+                        <span>Run History</span>
+                      </TabsTrigger>
                     </TabsList>
                   </div>
 
@@ -96,6 +106,14 @@ export default function AgentWorkspacePage() {
 
                     <TabsContent value="library" className="animate-in fade-in-50 duration-500 fill-mode-both">
                       <DiscoveryHub mode="library" />
+                    </TabsContent>
+                    
+                    <TabsContent value="live-monitor" className="animate-in fade-in-50 duration-500 fill-mode-both">
+                      <AgentRunMonitor />
+                    </TabsContent>
+
+                    <TabsContent value="run-history" className="animate-in fade-in-50 duration-500 fill-mode-both">
+                      <AgentRunHistory />
                     </TabsContent>
                   </div>
                 </Tabs>

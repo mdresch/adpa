@@ -3,6 +3,7 @@ import { AuthorityScoring } from './AuthorityScoring'
 import { ConflictResolver } from './ConflictResolver'
 import { SynthesisEngine } from './SynthesisEngine'
 import { SubGoalExecutionResult } from '../OrchestrationTypes'
+import { AIService } from '../../../services/aiService'
 import { logger } from '../../../utils/logger'
 
 /**

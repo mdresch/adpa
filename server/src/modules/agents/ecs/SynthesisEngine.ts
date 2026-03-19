@@ -53,8 +53,8 @@ export class SynthesisEngine {
 
     try {
       const response = await this.aiService.generateWithFallback({
-        provider: globalContext.provider || 'openai',
-        model: globalContext.model || 'gpt-4o',
+        provider: globalContext.provider,
+        model: globalContext.model,
         prompt: prompt,
         system_prompt: 'You are a professional synthesizer. Respond ONLY with valid JSON.'
       })

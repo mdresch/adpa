@@ -8,6 +8,7 @@ import FetchSection from './fetch-section'
 import { QuestionConfirmation } from './question-confirmation'
 import { SearchSection } from './search-section'
 import { ToolTodoDisplay } from './tool-todo-display'
+import { AgentRunTracker } from './agent-run-tracker'
 
 interface ToolSectionProps {
     tool: ToolPart
@@ -164,6 +165,31 @@ export function ToolSection({
                     </div>
                 </CollapsibleMessage>
             )
+        case 'tool-runProjectAgent':
+            if (tool.state === 'output-available' && (tool.output as any)?.status === 'started') {
+                return (
+                    <div className="w-full">
+                        <AgentRunTracker 
+                            runId={(tool.output as any).runId} 
+                            projectId={(tool.output as any).projectId} 
+                            goal={(tool.output as any).goal}
+                            initialStatus="active"
+                        />
+                    </div>
+                )
+            } else if (tool.state === 'output-error' || (tool.state === 'output-available' && (tool.output as any)?.error)) {
+                 return (
+                    <div className="p-4 rounded-md border text-sm text-destructive bg-destructive/10">
+                        Failed to start project agent: {tool.errorText || (tool.output as any)?.error}
+                    </div>
+                 )
+            } else {
+                 return (
+                     <div className="p-4 text-sm text-muted-foreground animate-pulse">
+                         Starting project agent...
+                     </div>
+                 )
+            }
         default:
             return null
     }

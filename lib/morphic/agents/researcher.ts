@@ -18,6 +18,7 @@ import { createDbQueryTool, createRagSearchTool } from '../tools/knowledge'
 import { createQuestionTool } from '../tools/question'
 import { createSearchTool } from '../tools/search'
 import { createTodoTools } from '../tools/todo'
+import { createRunProjectAgentTool } from '../tools/run-project-agent'
 import { getModel } from '../utils/registry'
 import { isTracingEnabled } from '@/lib/morphic/utils/telemetry'
 
@@ -124,7 +125,7 @@ export function createResearcher({
             case 'adaptive':
             default:
                 systemPrompt = ADAPTIVE_MODE_PROMPT
-                activeToolsList = ['search', 'fetch']
+                activeToolsList = ['search', 'fetch', 'runProjectAgent']
 
                 if (knowledgeEnabled) {
                     activeToolsList.push('ragSearch', 'dbQuery')
@@ -161,11 +162,14 @@ export function createResearcher({
             }
         }
 
+        const runProjectAgentTool = createRunProjectAgentTool()
+
         // Build tools object with proper typing
         const tools: ResearcherTools = {
             search: searchTool,
             fetch: fetchTool,
             askQuestion: askQuestionTool,
+            runProjectAgent: runProjectAgentTool,
             ...knowledgeTools,
             ...fileSearchTools,
             ...todoTools

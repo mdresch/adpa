@@ -198,6 +198,7 @@ export const Brain = getIcon("Brain")
 export const Wifi = getIcon("Wifi")
 export const WifiOff = getIcon("WifiOff")
 export const Cpu = getIcon("Cpu")
+export const MemoryStick = getIcon("MemoryStick")
 export const MemoryStickIcon = getIcon("MemoryStick")
 export const Building = getIcon("Building")
 export const HardDrive = getIcon("HardDrive")
@@ -223,6 +224,7 @@ export const FileArchive = getIcon("FileArchive")
 export const FileAudio = getIcon("FileAudio")
 export const FileVideo = getIcon("FileVideo")
 export const File = getIcon("File")
+export const FileCheck = getIcon("FileCheck")
 export const Info = getIcon("Info")
 export const Github = getIcon("Github")
 export const GitBranch = getIcon("GitBranch")
@@ -362,6 +364,7 @@ export default {
   Wifi,
   WifiOff,
   Cpu,
+  MemoryStick,
   MemoryStickIcon,
   Building,
   HardDrive,
@@ -387,6 +390,7 @@ export default {
   FileAudio,
   FileVideo,
   File,
+  FileCheck,
   Info,
   Github,
   GitBranch,

@@ -2495,7 +2495,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
       <div className="flex h-screen bg-background">
         <Sidebar />
         <div className="flex-1 flex flex-col overflow-hidden">
-          <Header />
+          <Header title={project?.name || "Project Dashboard"} />
           <main className="flex-1 flex items-center justify-center">
             <div className="text-center">
               <h2 className="text-xl font-semibold mb-2">Invalid Project</h2>
@@ -2515,7 +2515,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
       <div className="flex h-screen bg-background">
         <Sidebar />
         <div className="flex-1 flex flex-col overflow-hidden">
-          <Header />
+          <Header title={project?.name || "Project Dashboard"} />
           <main className="flex-1 flex items-center justify-center">
             <div className="flex items-center space-x-2">
               <Loader2 className="h-6 w-6 animate-spin" />
@@ -2533,7 +2533,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
         <div className="flex h-screen bg-background">
           <Sidebar />
           <div className="flex-1 flex flex-col overflow-hidden">
-            <Header />
+            <Header title={project?.name || "Project Dashboard"} />
             <main className="flex-1 flex items-center justify-center">
               <div className="text-center">
                 <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
@@ -2548,7 +2548,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
       <div className="flex h-screen bg-background">
         <Sidebar />
         <div className="flex-1 flex flex-col overflow-hidden">
-          <Header />
+          <Header title={project?.name || "Project Dashboard"} />
           <main className="flex-1 flex items-center justify-center">
             <div className="text-center max-w-md">
               <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-4" />

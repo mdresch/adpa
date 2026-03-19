@@ -109,9 +109,9 @@ function ROICalculator() {
             Number of Documents
           </Label>
           <div className="space-y-2">
-            <Slider
-              value={[numDocuments]}
-              onValueChange={(value: string) => setNumDocuments(value[0])}
+              <Slider
+                value={[numDocuments]}
+                onValueChange={(value: number[]) => setNumDocuments(value[0])}
               min={1}
               max={100}
               step={1}
@@ -139,7 +139,7 @@ function ROICalculator() {
           <div className="space-y-2">
             <Slider
               value={[hourlyRate]}
-              onValueChange={(value: string) => setHourlyRate(value[0])}
+              onValueChange={(value: number[]) => setHourlyRate(value[0])}
               min={25}
               max={200}
               step={5}
@@ -167,7 +167,7 @@ function ROICalculator() {
           <div className="space-y-2">
             <Slider
               value={[timeSavings]}
-              onValueChange={(value: string) => setTimeSavings(value[0])}
+              onValueChange={(value: number[]) => setTimeSavings(value[0])}
               min={30}
               max={90}
               step={5}

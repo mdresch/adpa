@@ -52,7 +52,8 @@ export function ChatMessages({
         'tool-search',
         'tool-fetch',
         'tool-askQuestion',
-        'tool-relatedQuestions'
+        'tool-relatedQuestions',
+        'tool-runProjectAgent'
     ]
 
     useEffect(() => {

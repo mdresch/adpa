@@ -10,6 +10,7 @@ import type { createDbQueryTool, createRagSearchTool } from '../tools/knowledge'
 import type { createQuestionTool } from '../tools/question'
 import type { createSearchTool } from '../tools/search'
 import type { createTodoTools } from '../tools/todo'
+import type { createRunProjectAgentTool } from '../tools/run-project-agent'
 
 // Define the tools type for researcher agent
 export type ResearcherTools = {
@@ -19,6 +20,7 @@ export type ResearcherTools = {
     ragSearch: ReturnType<typeof createRagSearchTool>
     dbQuery: ReturnType<typeof createDbQueryTool>
     fileSearch: ReturnType<typeof createFileSearchTool>
+    runProjectAgent: ReturnType<typeof createRunProjectAgentTool>
 } & ReturnType<typeof createTodoTools>
 
 // Tool invocation types for each tool

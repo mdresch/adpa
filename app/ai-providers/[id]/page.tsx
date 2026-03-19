@@ -443,7 +443,7 @@ export default function AIProviderDetails() {
     setDiscovering(true)
     setDiscoveredModels([])
     try {
-      const response = await apiClient.request(`/ai/providers/${providerId}/discover-models`) as {
+      const response = await apiClient.request(`/ai-providers/${providerId}/discover-models`) as {
         discovered_models?: any[];
         current_default?: string;
         provider?: { name?: string };
@@ -480,7 +480,7 @@ export default function AIProviderDetails() {
 
     setSyncingModels(true)
     try {
-      const response = await apiClient.request(`/ai/providers/${providerId}/sync-models`, {
+      const response = await apiClient.request(`/ai-providers/${providerId}/sync-models`, {
         method: 'POST',
         body: JSON.stringify({
           models: selectedModels,

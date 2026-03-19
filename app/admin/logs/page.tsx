@@ -55,7 +55,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { apiClient } from "@/lib/api"
+import { apiClient, ApiResponse } from "@/lib/api"
 import { format } from "date-fns"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
@@ -84,8 +84,8 @@ export default function LogsPage() {
   const fetchLogs = async () => {
     try {
       setLoading(true)
-      const response = await apiClient.request("/admin/logs?limit=500")
-      if (response && response.success) {
+      const response = await apiClient.request<ApiResponse<LogEntry[]>>("/admin/logs?limit=500")
+      if (response && response.data) {
         setLogs(response.data)
       }
     } catch (error) {

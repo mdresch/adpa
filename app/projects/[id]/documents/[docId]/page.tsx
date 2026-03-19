@@ -132,24 +132,119 @@ import { RegenerationProgress } from "@/components/documents/RegenerationProgres
 import { useDocumentRegeneration } from "@/hooks/use-document-regeneration"
 import { QualityAuditModal } from "@/components/quality/QualityAuditModal"
 
-interface Document {
+interface Feedback {
+  id: string
+  user: string
+  comment: string
+  rating: number
+  timestamp: string
+}
+
+interface AIProcessing {
+  provider?: string
+  model?: string
+  processingTime?: string
+  processingTimeMs?: number
+}
+
+interface ContentMetrics {
+  words?: number
+  characters?: string | number
+  sentences?: number
+  paragraphs?: number
+  avgWordsPerSentence?: string
+  readingTime?: number
+}
+
+interface QualityMetrics {
+  overallQuality?: number
+  completeness?: number
+  structureScore?: number
+  formattingScore?: number
+  contentDepth?: number
+  accuracy?: number
+  consistency?: number
+  contextRelevance?: number
+  professionalQuality?: number
+  standardsCompliance?: number
+}
+
+interface QualityGateCriterion {
+  criterion_id: string
+  criterion_name?: string
+  passed: boolean
+  score?: number
+}
+
+interface QualityGate {
+  gate_id: string
+  gate_name?: string
+  passed: boolean
+  score?: number
+  message?: string
+  criteria_results?: QualityGateCriterion[]
+}
+
+interface ContextStats {
+  documentDatas_used?: number
+  documentDatas_used_as_context?: number
+  total_documentDatas?: number
+  total_documentDatas_available?: number
+  project_context_used?: boolean
+  stakeholders_included?: number
+  estimated_context_tokens?: number
+}
+
+interface GenerationMetadata {
+  aiProcessing?: AIProcessing
+  contentMetrics?: ContentMetrics
+  qualityMetrics?: QualityMetrics
+  quality_gate_results?: QualityGate[]
+  quality_gates?: QualityGate[]
+  source_documentDatas?: any[]
+  sourceDocuments?: any[]
+  context_stats?: ContextStats
+  framework?: string
+  template?: {
+    framework?: string
+  }
+  generation?: {
+    durationFormatted?: string
+    duration?: number
+  }
+}
+
+interface ADPADocument {
   id: string
   name: string
   content?: any
   template_id?: string
   template_name?: string
-  template_framework?: string
   status: string
   version: number
   created_by: string
   updated_by: string
+  created_by_name?: string
+  updated_by_name?: string
   created_at: string
   updated_at: string
+  title?: string
+  framework?: string
   word_count?: number
   character_count?: number
+  sentence_count?: number
+  paragraph_count?: number
   file_size?: number
   mime_type?: string
   tags?: string[]
+  project_name?: string
+  semantic_version?: string
+  template_version?: string
+  template_author?: string
+  template_category?: string
+  template_complexity?: string
+  confluence_page_url?: string
+  generation_metadata?: GenerationMetadata
   metadata: {
     ai_model?: string
     processing_time?: string
@@ -159,13 +254,7 @@ interface Document {
     quality_score?: number
     readability_score?: number
     complexity_score?: number
-    stakeholder_feedback?: Array<{
-      id: string
-      user: string
-      comment: string
-      rating: number
-      timestamp: string
-    }>
+    stakeholder_feedback?: Feedback[]
     generation_stats?: {
       tokens_used?: number
       cost?: number
@@ -183,9 +272,51 @@ interface Document {
       file_hash?: string
       encoding?: string
       language?: string
-      structure_analysis?: any
+      structure_analysis?: {
+        sections?: number
+        subsections?: number
+        tables?: number
+        figures?: number
+      }
+    }
+    author?: string
+    reviewer?: string
+    category?: string
+    priority?: string
+    due_date?: string
+    description?: string
+    notes?: string
+    custom_fields?: Record<string, any>
+  }
+}
+
+interface QualityAudit {
+  overall_score: number
+  overall_grade: string
+  quality_level: string
+  completeness_score: number
+  consistency_score: number
+  standards_compliance_score: number
+  compliance_metrics?: {
+    overallComplianceRating: number
+    pmbokGuide?: number
+    gdpr?: number
+    hipaa?: number
+    soc2?: number
+    euAIAct?: {
+      passed: boolean
+      overallScore: number
+      criteria: {
+        transparency: { passed: boolean; score: number }
+        humanOversight: { passed: boolean; score: number }
+        accuracy: { passed: boolean; score: number }
+        dataGovernance: { passed: boolean; score: number }
+        recordKeeping: { passed: boolean; score: number }
+      }
     }
   }
+  issues?: any[]
+  audited_at: string
 }
 
 interface DocumentMetadata {
@@ -212,7 +343,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
   const docId = resolvedParams.docId
   const { isAuthenticated, user, token } = useAuth()
 
-  const [document, setDocument] = useState<Document | null>(null)
+  const [documentData, setDocumentData] = useState<ADPADocument | null>(null)
   const [project, setProject] = useState<Project | null>(null)
   const [templates, setTemplates] = useState<Template[]>([])
   const [loading, setLoading] = useState(true)
@@ -232,7 +363,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
   const [templateCategory, setTemplateCategory] = useState<string | null>(null)
   const [showQualityAuditModal, setShowQualityAuditModal] = useState(false)
   const [runningQualityAudit, setRunningQualityAudit] = useState(false)
-  const [qualityAudit, setQualityAudit] = useState<any>(null)
+  const [qualityAudit, setQualityAudit] = useState<QualityAudit | null>(null)
   const [loadingAudit, setLoadingAudit] = useState(false)
   // Ref to store timeout ID for quality audit refresh to prevent stale state updates
   const qualityAuditTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -260,21 +391,21 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
   // Fetch signature request status and recipients
   const fetchSignatureRequest = async () => {
     try {
-      const response = await apiClient.get(`/signatures/requests?documentId=${docId}`)
+      const response = await apiClient.get(`/signatures/requests?documentDataId=${docId}`)
       if (response.data && response.data.length > 0) {
         const request = response.data[0]
         setSignatureRequest(request)
-        
+
         // Fetch signed recipients (reviewers)
         if (request.recipients) {
           const signedRecipients = request.recipients.filter((r: any) => r.status === 'signed')
           setSignatureRecipients(signedRecipients)
         }
       }
-      
+
       // Also try to get signature status directly
       try {
-        const statusResponse = await apiClient.get(`/signatures/document/${docId}`, {
+        const statusResponse = await apiClient.get(`/signatures/documentData/${docId}`, {
           suppressNotFoundError: true // Suppress 404 logging - expected when no signature request exists
         })
         if (statusResponse.data && statusResponse.data.recipients) {
@@ -293,7 +424,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
       console.log('No signature request found')
     }
   }
-  
+
   // Fetch quality audit data
   const fetchQualityAudit = async () => {
     try {
@@ -301,13 +432,13 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
       const { getApiBaseUrl } = await import('@/lib/api-url')
       const API_BASE_URL = getApiBaseUrl()
       const authToken = token || localStorage.getItem('auth_token') || localStorage.getItem('token')
-      
+
       if (!authToken || !docId) {
         return
       }
 
       // First, check if quality audit exists
-      const response = await fetch(`${API_BASE_URL}/quality-audits/document/${docId}`, {
+      const response = await fetch(`${API_BASE_URL}/quality-audits/documentData/${docId}`, {
         headers: {
           'Authorization': `Bearer ${authToken}`,
           'Content-Type': 'application/json'
@@ -325,10 +456,10 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
 
       // If no audit exists (404 or no data), automatically trigger one
       if (response.status === 404 || !response.ok) {
-        console.log('[QUALITY-AUDIT] No audit found, automatically triggering quality audit for document:', docId)
-        
+        console.log('[QUALITY-AUDIT] No audit found, automatically triggering quality audit for documentData:', docId)
+
         // Automatically trigger quality audit
-        // The backend will fetch the document content itself, so we don't need to check it here
+        // The backend will fetch the documentData content itself, so we don't need to check it here
         try {
           const triggerResponse = await fetch(`${API_BASE_URL}/quality-audits/trigger`, {
             method: 'POST',
@@ -336,7 +467,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
               'Authorization': `Bearer ${authToken}`,
               'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ documentId: docId })
+            body: JSON.stringify({ documentDataId: docId })
           })
 
           if (triggerResponse.ok) {
@@ -356,7 +487,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
             const errorData = await triggerResponse.json().catch(() => ({}))
             const errorMessage = errorData.error || triggerResponse.statusText
             console.error('[QUALITY-AUDIT] Auto-trigger failed:', errorMessage)
-            // Only show toast if it's not a "no content" error (which is expected for some documents)
+            // Only show toast if it's not a "no content" error (which is expected for some documentDatas)
             if (!errorMessage.includes('no content')) {
               toast.warning("Quality audit could not be started automatically. You can trigger it manually.")
             }
@@ -380,11 +511,11 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
       setTemplateCategory(null)
       return
     }
-    
+
     try {
       const template = templates.find(t => t.id === templateId)
-      if (template && (template as any).category) {
-        setTemplateCategory((template as any).category)
+      if (template && template.category) {
+        setTemplateCategory(template.category)
       } else {
         // Try to fetch template details if not in local state
         try {
@@ -401,28 +532,28 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
     }
   }
 
-  // Fetch document data
+  // Fetch documentData data
   const fetchDocument = async () => {
     if (!docId) {
       console.error('[METADATA-PAGE] docId is missing:', { docId, projectId })
       throw new Error("Document ID is required")
     }
-    
+
     try {
-      console.log('[METADATA-PAGE] Fetching document:', { docId, projectId })
-      
+      console.log('[METADATA-PAGE] Fetching documentData:', { docId, projectId })
+
       const documentData = await apiClient.getDocument(docId)
-      
+
       if (!documentData) {
         console.error('[METADATA-PAGE] Document data is null or undefined')
         throw new Error("Document not found")
       }
-      
-      const genMetadata = (documentData as any).generation_metadata
-      // Handle both snake_case (source_documents) and camelCase (sourceDocuments) for backward compatibility
-      const sourceDocs = genMetadata?.source_documents || genMetadata?.sourceDocuments || []
+
+      const genMetadata = documentData.generation_metadata
+      // Handle both snake_case (source_documentDatas) and camelCase (sourceDocuments) for backward compatibility
+      const sourceDocs = genMetadata?.source_documentDatas || genMetadata?.sourceDocuments || []
       const hasProjectContext = Array.isArray(sourceDocs) && sourceDocs.some((doc: any) => doc.is_project_context || (doc.id && doc.id.startsWith('project_context:')))
-      
+
       console.log('[METADATA-PAGE] Document fetched successfully:', {
         id: documentData.id,
         name: documentData.name,
@@ -433,37 +564,37 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
         metadata: documentData.metadata,
         hasGenerationMetadata: !!genMetadata,
         generationMetadataKeys: genMetadata ? Object.keys(genMetadata) : [],
-        hasSourceDocuments: !!(genMetadata?.source_documents || genMetadata?.sourceDocuments),
+        hasSourceDocuments: !!(genMetadata?.source_documentDatas || genMetadata?.sourceDocuments),
         sourceDocumentsCount: Array.isArray(sourceDocs) ? sourceDocs.length : 0,
         sourceDocuments: sourceDocs,
         hasProjectContext: hasProjectContext,
         projectContextEntry: sourceDocs.find((doc: any) => doc.is_project_context || (doc.id && doc.id.startsWith('project_context:')))
       })
-      
+
       // Also log the full generation_metadata as JSON for debugging
       console.log('[METADATA-PAGE] Full generation_metadata JSON:', JSON.stringify(genMetadata, null, 2))
-      console.log('[METADATA-PAGE] Source documents array:', JSON.stringify(sourceDocs, null, 2))
-      
-      setDocument(documentData)
+      console.log('[METADATA-PAGE] Source documentDatas array:', JSON.stringify(sourceDocs, null, 2))
+
+      setDocumentData(documentData)
       await fetchSignatureRequest()
-      
+
       // Fetch template category if template_id exists
       if (documentData.template_id) {
         await fetchTemplateCategory(documentData.template_id)
       }
-      
+
       // Populate metadata form
       // Handle both 'name' and 'title' fields (database may have either)
-      const documentName = documentData.name || documentData.title || ""
+      const documentDataName = documentData.name || documentData.title || ""
       // Handle both 'framework' and 'template_framework' fields
-      const documentFramework = documentData.framework || documentData.template_framework || ""
-      
+      const documentDataFramework = documentData.framework || documentData.template_framework || ""
+
       const formData = {
-        name: documentName,
+        name: documentDataName,
         status: documentData.status || "draft",
         tags: documentData.tags || [],
         template_id: documentData.template_id || "",
-        framework: documentFramework,
+        framework: documentDataFramework,
         category: documentData.metadata?.category || "",
         priority: documentData.metadata?.priority || "medium",
         author: documentData.metadata?.author || "",
@@ -473,16 +604,16 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
         notes: documentData.metadata?.notes || "",
         custom_fields: documentData.metadata?.custom_fields || {}
       }
-      
+
       console.log('[METADATA-PAGE] Populating metadata form:', formData)
       setMetadataForm(formData)
     } catch (error) {
-      console.error("[METADATA-PAGE] Failed to fetch document:", error)
-      const errorMessage = error instanceof Error ? error.message : "Failed to load document metadata"
+      console.error("[METADATA-PAGE] Failed to fetch documentData:", error)
+      const errorMessage = error instanceof Error ? error.message : "Failed to load documentData metadata"
       toast.error(errorMessage)
-      
-      // Set document to null so UI can show error state
-      setDocument(null)
+
+      // Set documentData to null so UI can show error state
+      setDocumentData(null)
       throw error // Re-throw so Promise.all can catch it
     }
   }
@@ -511,30 +642,30 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
   const handleRunQualityAudit = async () => {
     // Validate docId first
     if (!docId) {
-      console.error('[QUALITY-AUDIT] docId is missing:', { docId, projectId, document: !!document })
+      console.error('[QUALITY-AUDIT] docId is missing:', { docId, projectId, documentData: !!documentData })
       toast.error("Document ID is missing. Please refresh the page and try again.")
       return
     }
 
-    if (!document) {
+    if (!documentData) {
       console.error('[QUALITY-AUDIT] Document not loaded:', { docId })
-      toast.error("Document not loaded. Please wait for the document to load and try again.")
+      toast.error("Document not loaded. Please wait for the documentData to load and try again.")
       return
     }
 
-    // Validate document has content
+    // Validate documentData has content
     // Handle both string content and object content
-    let documentContent: string = ""
-    if (typeof document.content === 'string') {
-      documentContent = document.content
-    } else if (document.content && typeof document.content === 'object') {
+    let documentDataContent: string = ""
+    if (typeof documentData.content === 'string') {
+      documentDataContent = documentData.content
+    } else if (documentData.content && typeof documentData.content === 'object') {
       // Try to extract content from object
-      documentContent = (document.content as any).content || (document.content as any).text || JSON.stringify(document.content)
+      documentDataContent = (documentData.content as any).content || (documentData.content as any).text || JSON.stringify(documentData.content)
     }
 
-    if (!documentContent || documentContent.trim().length === 0) {
-      console.warn('[QUALITY-AUDIT] Document has no content:', { docId, contentType: typeof document.content })
-      toast.error("Document has no content to audit. Please ensure the document has been generated.")
+    if (!documentDataContent || documentDataContent.trim().length === 0) {
+      console.warn('[QUALITY-AUDIT] Document has no content:', { docId, contentType: typeof documentData.content })
+      toast.error("Document has no content to audit. Please ensure the documentData has been generated.")
       return
     }
 
@@ -546,12 +677,12 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
 
     try {
       setRunningQualityAudit(true)
-      console.log('[QUALITY-AUDIT] Starting quality audit:', { docId, projectId, contentLength: documentContent.length })
-      
+      console.log('[QUALITY-AUDIT] Starting quality audit:', { docId, projectId, contentLength: documentDataContent.length })
+
       const { getApiBaseUrl } = await import('@/lib/api-url')
       const API_BASE_URL = getApiBaseUrl()
       const authToken = token || localStorage.getItem('auth_token') || localStorage.getItem('token')
-      
+
       if (!authToken) {
         console.error('[QUALITY-AUDIT] No auth token available')
         toast.error("Authentication required. Please log in again.")
@@ -575,7 +706,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            documentId: docId
+            documentDataId: docId
           }),
           signal: controller.signal
         })
@@ -604,17 +735,17 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
           throw new Error(data?.error || 'Quality audit response was invalid')
         }
 
-        console.log('[QUALITY-AUDIT] Audit completed successfully:', { 
-          success: data.success, 
+        console.log('[QUALITY-AUDIT] Audit completed successfully:', {
+          success: data.success,
           hasAudit: !!data.audit,
-          overallScore: data.audit?.overallScore 
+          overallScore: data.audit?.overallScore
         })
 
         toast.success(data.message || "Quality audit completed successfully!")
-        
+
         // Reset loading state immediately after successful trigger
         setRunningQualityAudit(false)
-        
+
         // Refresh audit data after a delay to show new results
         // Store timeout ID in ref for cleanup
         qualityAuditTimeoutRef.current = setTimeout(async () => {
@@ -630,7 +761,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
           message: fetchError.message,
           stack: fetchError.stack
         })
-        
+
         // Handle specific error types
         if (fetchError.name === 'AbortError') {
           throw new Error('Quality audit request timed out. The audit may still be processing. Please check back in a moment.')
@@ -645,11 +776,11 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
         error,
         docId,
         projectId,
-        hasDocument: !!document,
+        hasDocument: !!documentData,
         errorType: error instanceof Error ? error.constructor.name : typeof error,
         errorMessage: error instanceof Error ? error.message : String(error)
       })
-      
+
       // More descriptive error messages
       let errorMessage = "Failed to run quality audit"
       if (error instanceof Error) {
@@ -659,10 +790,10 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
       } else if (error && typeof error === 'object' && 'message' in error) {
         errorMessage = String((error as any).message)
       }
-      
+
       toast.error(errorMessage)
       setRunningQualityAudit(false)
-      
+
       // Clear timeout if it was set before error occurred
       if (qualityAuditTimeoutRef.current) {
         clearTimeout(qualityAuditTimeoutRef.current)
@@ -675,14 +806,14 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
   const handleSaveMetadata = async () => {
     try {
       setSaving(true)
-      
+
       const updateData = {
         name: metadataForm.name || undefined,
         status: metadataForm.status || undefined,
         tags: metadataForm.tags.length > 0 ? metadataForm.tags : undefined,
         template_id: metadataForm.template_id && metadataForm.template_id.trim() !== "" ? metadataForm.template_id : undefined,
         metadata: {
-          ...document?.metadata,
+          ...documentData?.metadata,
           category: metadataForm.category || undefined,
           priority: metadataForm.priority || undefined,
           author: metadataForm.author || undefined,
@@ -693,17 +824,17 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
           custom_fields: metadataForm.custom_fields || undefined
         }
       }
-      
+
       console.log("Saving metadata:", updateData)
-      
+
       await apiClient.updateDocument(docId, updateData)
-      
+
       toast.success("Document metadata updated successfully!")
       setIsEditing(false)
       await fetchDocument() // Refresh data
     } catch (error: any) {
       console.error("Failed to save metadata:", error)
-      
+
       // Handle validation errors specifically
       if (error.response?.status === 400 && error.response?.data?.details) {
         const validationErrors = error.response.data.details
@@ -723,10 +854,10 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
   const handleTriggerTemplateAnalysis = async () => {
     try {
       setAnalyzingTemplate(true)
-      
+
       const { getApiBaseUrl } = await import('@/lib/api-url')
       const API_BASE_URL = getApiBaseUrl()
-      
+
       const response = await fetch(`${API_BASE_URL}/quality-audits/analyze-templates`, {
         method: 'POST',
         headers: {
@@ -734,12 +865,12 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          templateId: document?.template_id
+          templateId: documentData?.template_id
         })
       })
-      
+
       const data = await response.json()
-      
+
       if (data.success) {
         toast.success('Template analysis started! Check ow /admin/quality/template-improvements in a few minutes.')
       } else {
@@ -760,12 +891,12 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
         toast.error("Please enter a comment")
         return
       }
-      
+
       if (feedbackForm.rating < 1 || feedbackForm.rating > 5) {
         toast.error("Please select a valid rating")
         return
       }
-      
+
       // Test feedback endpoint first
       console.log("Testing feedback endpoint...")
       try {
@@ -780,7 +911,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
         toast.error("Feedback system is not available. Please try again later.")
         return
       }
-      
+
       // Submit feedback to backend
       console.log("Submitting feedback:", {
         docId,
@@ -790,31 +921,31 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
           category: feedbackForm.category
         }
       })
-      
+
       const response = await apiClient.submitDocumentFeedback(docId, {
         comment: feedbackForm.comment.trim(),
         rating: feedbackForm.rating,
         category: feedbackForm.category
       })
-      
+
       console.log("Feedback response:", response)
-      
+
       if (response.success) {
-        // Update local document state with the new feedback
-        if (document) {
+        // Update local documentData state with the new feedback
+        if (documentData) {
           const updatedDocument = {
-            ...document,
+            ...documentData,
             metadata: {
-              ...document.metadata,
+              ...documentData.metadata,
               stakeholder_feedback: [
-                ...(document.metadata?.stakeholder_feedback || []),
+                ...(documentData.metadata?.stakeholder_feedback || []),
                 response.feedback
               ]
             }
           }
-          setDocument(updatedDocument)
+          setDocumentData(updatedDocument)
         }
-        
+
         toast.success("Feedback submitted successfully!")
         setFeedbackDialogOpen(false)
         setFeedbackForm({
@@ -827,12 +958,12 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
       }
     } catch (error: any) {
       console.error("Failed to submit feedback:", error)
-      
+
       // Handle specific error cases
       if (error.response?.status === 400) {
         toast.error(`Validation error: ${error.response.data?.error || "Invalid feedback data"}`)
       } else if (error.response?.status === 403) {
-        toast.error("You don't have permission to submit feedback for this document")
+        toast.error("You don't have permission to submit feedback for this documentData")
       } else if (error.response?.status === 404) {
         toast.error("Document not found")
       } else {
@@ -857,7 +988,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
     }
   }
 
-  // Handle document regeneration
+  // Handle documentData regeneration
   const handleRegenerate = async (params: {
     templateId?: string
     provider: string
@@ -867,10 +998,10 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
     max_tokens?: number
   }) => {
     if (!docId) return
-    
+
     try {
       await regenerate({
-        documentId: docId,
+        documentDataId: docId,
         ...params
       })
     } catch (error) {
@@ -878,7 +1009,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
     }
   }
 
-  // Refresh document when regeneration completes
+  // Refresh documentData when regeneration completes
   useEffect(() => {
     if (result) {
       void fetchDocument()
@@ -897,23 +1028,23 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
   // Load data on component mount
   useEffect(() => {
     let isMounted = true
-    
+
     if (!isAuthenticated) {
       console.log('[METADATA-PAGE] Not authenticated, skipping data fetch')
       setLoading(false)
       return
     }
-    
+
     if (!docId || !projectId) {
       console.warn('[METADATA-PAGE] Missing required data:', { isAuthenticated, docId, projectId })
       setLoading(false)
-      toast.error("Missing document or project ID. Please check the URL and try again.")
+      toast.error("Missing documentData or project ID. Please check the URL and try again.")
       return
     }
-    
+
     console.log('[METADATA-PAGE] useEffect triggered - fetching data:', { docId, projectId, isAuthenticated })
     setLoading(true)
-    
+
     Promise.all([fetchDocument(), fetchProject(), fetchTemplates(), fetchQualityAudit()]).then(() => {
       if (isMounted) {
         setLoading(false)
@@ -923,11 +1054,11 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
       if (isMounted) {
         console.error('[METADATA-PAGE] Error loading data:', error)
         setLoading(false)
-        const errorMessage = error instanceof Error ? error.message : "Failed to load document metadata"
-        toast.error(errorMessage || "Failed to load document metadata. Please try refreshing the page.")
+        const errorMessage = error instanceof Error ? error.message : "Failed to load documentData metadata"
+        toast.error(errorMessage || "Failed to load documentData metadata. Please try refreshing the page.")
       }
     })
-    
+
     return () => {
       isMounted = false
     }
@@ -942,27 +1073,27 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
       }
     }
   }, [])
-  
-  // Update template category when templates are loaded or document template changes
+
+  // Update template category when templates are loaded or documentData template changes
   useEffect(() => {
-    if (document?.template_id && templates.length > 0) {
-      fetchTemplateCategory(document.template_id)
+    if (documentData?.template_id && templates.length > 0) {
+      fetchTemplateCategory(documentData.template_id)
     }
-  }, [document?.template_id, templates])
+  }, [documentData?.template_id, templates])
 
   if (!isAuthenticated) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <h2 className="text-xl font-semibold mb-2">Authentication Required</h2>
-          <p className="text-muted-foreground">Please log in to access document metadata.</p>
+          <p className="text-muted-foreground">Please log in to access documentData metadata.</p>
         </div>
       </div>
     )
   }
 
-  // Show error state if document failed to load
-  if (!loading && !document && docId) {
+  // Show error state if documentData failed to load
+  if (!loading && !documentData && docId) {
     return (
       <div className="container mx-auto p-6 max-w-4xl">
         <Card>
@@ -970,7 +1101,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
             <AlertCircle className="h-12 w-12 mx-auto mb-4 text-destructive" />
             <h2 className="text-xl font-semibold mb-2">Failed to Load Document</h2>
             <p className="text-muted-foreground mb-4">
-              Unable to load document metadata. Please try refreshing the page.
+              Unable to load documentData metadata. Please try refreshing the page.
             </p>
             <Button onClick={() => window.location.reload()}>
               <RefreshCw className="h-4 w-4 mr-2" />
@@ -987,13 +1118,13 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
       <div className="h-screen bg-background flex overflow-hidden">
         <Sidebar />
         <div className="flex-1 flex flex-col overflow-hidden">
-          <Header />
+          <Header title={documentData?.name || documentData?.title || "Document Details"} />
           <main className="flex-1 overflow-y-auto p-6 custom-scrollbar">
             <div className="max-w-7xl mx-auto">
               <div className="flex items-center justify-center h-64">
                 <div className="text-center">
                   <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
-                  <p className="text-muted-foreground">Loading document metadata...</p>
+                  <p className="text-muted-foreground">Loading documentData metadata...</p>
                 </div>
               </div>
             </div>
@@ -1007,7 +1138,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
     <div className="h-screen bg-background flex overflow-hidden">
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
-        <Header />
+        <Header title={documentData?.name || documentData?.title || "Document Details"} />
         <main className="flex-1 overflow-y-auto p-6 custom-scrollbar">
           <PageTransition>
             <AnimatedLayout>
@@ -1020,10 +1151,10 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-4">
-                      <Button 
-                        variant="ghost" 
+                      <Button
+                        variant="ghost"
                         size="sm"
-                        onClick={() => router.push(`/projects/${projectId}/documents`)}
+                        onClick={() => router.push(`/projects/${projectId}/documentDatas`)}
                       >
                         <ArrowLeft className="h-4 w-4 mr-2" />
                         Back to Documents
@@ -1040,44 +1171,44 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                             </BreadcrumbItem>
                             <BreadcrumbSeparator />
                             <BreadcrumbItem>
-                              <BreadcrumbLink href={`/projects/${projectId}/documents`}>Documents</BreadcrumbLink>
+                              <BreadcrumbLink href={`/projects/${projectId}/documentDatas`}>Documents</BreadcrumbLink>
                             </BreadcrumbItem>
                             <BreadcrumbSeparator />
                             <BreadcrumbItem>
-                              <BreadcrumbPage>{document?.name || "Document"}</BreadcrumbPage>
+                              <BreadcrumbPage>{documentData?.name || "Document"}</BreadcrumbPage>
                             </BreadcrumbItem>
                           </BreadcrumbList>
                         </Breadcrumb>
                         <h1 className="text-3xl font-bold mt-2">Document Metadata</h1>
                         <p className="text-muted-foreground">
-                          Manage document metadata, compliance, and stakeholder feedback
+                          Manage documentData metadata, compliance, and stakeholder feedback
                         </p>
                       </div>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <Button 
-                        variant="outline" 
-                        onClick={() => router.push(`/projects/${projectId}/documents/${docId}/view`)}
+                      <Button
+                        variant="outline"
+                        onClick={() => router.push(`/projects/${projectId}/documentDatas/${docId}/view`)}
                       >
                         <Eye className="h-4 w-4 mr-2" />
                         View Document
                       </Button>
-                      <Button 
-                        variant="outline" 
-                        onClick={() => router.push(`/projects/${projectId}/documents/${docId}/entities`)}
+                      <Button
+                        variant="outline"
+                        onClick={() => router.push(`/projects/${projectId}/documentDatas/${docId}/entities`)}
                       >
                         <Database className="h-4 w-4 mr-2" />
                         View Entities
                       </Button>
-                      <Button 
-                        variant="outline" 
+                      <Button
+                        variant="outline"
                         onClick={() => setFeedbackDialogOpen(true)}
                       >
                         <MessageSquare className="h-4 w-4 mr-2" />
                         Start Feedback Session
                       </Button>
-                      <Button 
-                        variant="outline" 
+                      <Button
+                        variant="outline"
                         onClick={() => setIsEditing(!isEditing)}
                       >
                         <Edit className="h-4 w-4 mr-2" />
@@ -1106,37 +1237,37 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">Document Name</Label>
-                          <p className="text-lg font-semibold">{document?.name || document?.title || "Loading..."}</p>
+                          <p className="text-lg font-semibold">{documentData?.name || documentData?.title || "Loading..."}</p>
                         </div>
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">Status</Label>
-                          <div className={getStatusColor(document?.status || "draft") + " inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold"}>
-                            {document?.status}
+                          <div className={getStatusColor(documentData?.status || "draft") + " inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold"}>
+                            {documentData?.status}
                           </div>
                         </div>
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">Version</Label>
-                          <p className="text-sm">v{document?.version}</p>
+                          <p className="text-sm">v{documentData?.version}</p>
                         </div>
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">Template</Label>
-                          <p className="text-sm">{document?.template_name || "No template"}</p>
+                          <p className="text-sm">{documentData?.template_name || "No template"}</p>
                         </div>
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">Framework</Label>
                           <p className="text-sm">
-                            {document?.framework || 
-                             document?.template_framework || 
-                             (document as any)?.generation_metadata?.framework || 
-                             "Not specified"}
+                            {documentData?.framework ||
+                              documentData?.template_framework ||
+                              documentData?.generation_metadata?.framework ||
+                              "Not specified"}
                           </p>
                         </div>
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">File Size</Label>
                           <p className="text-sm">
                             {formatFileSize(
-                              document?.file_size || 
-                              (document?.content ? new Blob([document.content]).size : 0)
+                              documentData?.file_size ||
+                              (documentData?.content ? new Blob([documentData.content]).size : 0)
                             )}
                           </p>
                         </div>
@@ -1144,29 +1275,29 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                           <Label className="text-sm font-medium text-muted-foreground">Word Count</Label>
                           <p className="text-sm">
                             {(
-                              document?.word_count || 
-                              (document as any)?.generation_metadata?.contentMetrics?.words || 
+                              documentData?.word_count ||
+                              documentData?.generation_metadata?.contentMetrics?.words ||
                               0
                             ).toLocaleString()}
                           </p>
                         </div>
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">Last Updated</Label>
-                          <p className="text-sm">{new Date(document?.updated_at || "").toLocaleDateString()}</p>
+                          <p className="text-sm">{new Date(documentData?.updated_at || "").toLocaleDateString()}</p>
                         </div>
-                        
+
                         {/* Custom Metadata Fields - Always Show */}
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">Category</Label>
                           <p className="text-sm">
-                            {templateCategory || document?.metadata?.category || <span className="text-muted-foreground italic">Not set</span>}
+                            {templateCategory || documentData?.metadata?.category || <span className="text-muted-foreground italic">Not set</span>}
                           </p>
                         </div>
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">Priority</Label>
-                          {document?.metadata?.priority ? (
+                          {documentData?.metadata?.priority ? (
                             <Badge variant="outline" className="capitalize">
-                              {document.metadata.priority}
+                              {documentData.metadata.priority}
                             </Badge>
                           ) : (
                             <p className="text-sm text-muted-foreground italic">Not set</p>
@@ -1175,7 +1306,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">Author</Label>
                           <p className="text-sm">
-                            {(document as any)?.created_by_name || document?.metadata?.author || document?.created_by || <span className="text-muted-foreground italic">Not set</span>}
+                            {documentData?.created_by_name || documentData?.metadata?.author || documentData?.created_by || <span className="text-muted-foreground italic">Not set</span>}
                           </p>
                         </div>
                         <div>
@@ -1203,16 +1334,16 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">Due Date</Label>
                           <p className="text-sm">
-                            {document?.metadata?.due_date 
-                              ? new Date(document.metadata.due_date).toLocaleDateString() 
+                            {documentData?.metadata?.due_date
+                              ? new Date(documentData.metadata.due_date).toLocaleDateString()
                               : <span className="text-muted-foreground italic">Not set</span>}
                           </p>
                         </div>
                         <div className="md:col-span-2">
                           <Label className="text-sm font-medium text-muted-foreground">Tags</Label>
-                          {document?.tags && document.tags.length > 0 ? (
+                          {documentData?.tags && documentData.tags.length > 0 ? (
                             <div className="flex flex-wrap gap-2 mt-1">
-                              {document.tags.map((tag: string, idx: number) => (
+                              {documentData.tags.map((tag: string, idx: number) => (
                                 <Badge key={idx} variant="secondary">
                                   {tag}
                                 </Badge>
@@ -1225,13 +1356,13 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                         <div className="md:col-span-2">
                           <Label className="text-sm font-medium text-muted-foreground">Description</Label>
                           <p className="text-sm text-muted-foreground mt-1">
-                            {document?.metadata?.description || <span className="italic">No description</span>}
+                            {documentData?.metadata?.description || <span className="italic">No description</span>}
                           </p>
                         </div>
                         <div className="md:col-span-2">
                           <Label className="text-sm font-medium text-muted-foreground">Notes</Label>
                           <p className="text-sm text-muted-foreground mt-1">
-                            {document?.metadata?.notes || <span className="italic">No notes</span>}
+                            {documentData?.metadata?.notes || <span className="italic">No notes</span>}
                           </p>
                         </div>
                       </div>
@@ -1247,10 +1378,10 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                      <Button 
-                        variant="outline" 
+                      <Button
+                        variant="outline"
                         className="w-full justify-start"
-                        onClick={() => router.push(`/documents/${docId}/sign`)}
+                        onClick={() => router.push(`/documentDatas/${docId}/sign`)}
                       >
                         <FileSignature className="h-4 w-4 mr-2" />
                         Sign Document
@@ -1267,8 +1398,8 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                         <History className="h-4 w-4 mr-2" />
                         Version History
                       </Button>
-                      <Button 
-                        variant="outline" 
+                      <Button
+                        variant="outline"
                         className="w-full justify-start"
                         onClick={() => setShowRegenerateModal(true)}
                         disabled={isRegenerating}
@@ -1276,11 +1407,11 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                         <Sparkles className="h-4 w-4 mr-2" />
                         Create new Version
                       </Button>
-                      <Button 
-                        variant="outline" 
+                      <Button
+                        variant="outline"
                         className="w-full justify-start"
                         onClick={handleRunQualityAudit}
-                        disabled={runningQualityAudit || !document}
+                        disabled={runningQualityAudit || !documentData}
                       >
                         {runningQualityAudit ? (
                           <>
@@ -1317,7 +1448,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                           <span>Edit Document Metadata</span>
                         </CardTitle>
                         <CardDescription>
-                          Update document metadata, tags, and custom fields
+                          Update documentData metadata, tags, and custom fields
                         </CardDescription>
                       </CardHeader>
                       <CardContent>
@@ -1328,13 +1459,13 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                               <Input
                                 id="doc-name"
                                 value={metadataForm.name}
-                                onChange={(e) => setMetadataForm({...metadataForm, name: e.target.value})}
-                                placeholder="Enter document name"
+                                onChange={(e) => setMetadataForm({ ...metadataForm, name: e.target.value })}
+                                placeholder="Enter documentData name"
                               />
                             </div>
                             <div>
                               <Label htmlFor="doc-status">Status</Label>
-                              <Select value={metadataForm.status} onValueChange={(value: string) => setMetadataForm({...metadataForm, status: value})}>
+                              <Select value={metadataForm.status} onValueChange={(value: string) => setMetadataForm({ ...metadataForm, status: value })}>
                                 <SelectTrigger>
                                   <SelectValue placeholder="Select status" />
                                 </SelectTrigger>
@@ -1348,7 +1479,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                             </div>
                             <div>
                               <Label htmlFor="doc-template">Template</Label>
-                              <Select value={metadataForm.template_id} onValueChange={(value: string) => setMetadataForm({...metadataForm, template_id: value})}>
+                              <Select value={metadataForm.template_id} onValueChange={(value: string) => setMetadataForm({ ...metadataForm, template_id: value })}>
                                 <SelectTrigger>
                                   <SelectValue placeholder="Select template" />
                                 </SelectTrigger>
@@ -1363,7 +1494,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                             </div>
                             <div>
                               <Label htmlFor="doc-category">Category</Label>
-                              <Select value={metadataForm.category} onValueChange={(value: string) => setMetadataForm({...metadataForm, category: value})}>
+                              <Select value={metadataForm.category} onValueChange={(value: string) => setMetadataForm({ ...metadataForm, category: value })}>
                                 <SelectTrigger>
                                   <SelectValue placeholder="Select category" />
                                 </SelectTrigger>
@@ -1393,7 +1524,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                             </div>
                             <div>
                               <Label htmlFor="doc-priority">Priority</Label>
-                              <Select value={metadataForm.priority} onValueChange={(value: string) => setMetadataForm({...metadataForm, priority: value})}>
+                              <Select value={metadataForm.priority} onValueChange={(value: string) => setMetadataForm({ ...metadataForm, priority: value })}>
                                 <SelectTrigger>
                                   <SelectValue placeholder="Select priority" />
                                 </SelectTrigger>
@@ -1412,7 +1543,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                               <Input
                                 id="doc-author"
                                 value={metadataForm.author}
-                                onChange={(e) => setMetadataForm({...metadataForm, author: e.target.value})}
+                                onChange={(e) => setMetadataForm({ ...metadataForm, author: e.target.value })}
                                 placeholder="Enter author"
                               />
                             </div>
@@ -1421,7 +1552,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                               <Input
                                 id="doc-reviewer"
                                 value={metadataForm.reviewer}
-                                onChange={(e) => setMetadataForm({...metadataForm, reviewer: e.target.value})}
+                                onChange={(e) => setMetadataForm({ ...metadataForm, reviewer: e.target.value })}
                                 placeholder="Enter reviewer"
                               />
                             </div>
@@ -1431,7 +1562,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                                 id="doc-due-date"
                                 type="date"
                                 value={metadataForm.due_date}
-                                onChange={(e) => setMetadataForm({...metadataForm, due_date: e.target.value})}
+                                onChange={(e) => setMetadataForm({ ...metadataForm, due_date: e.target.value })}
                               />
                             </div>
                             <div>
@@ -1439,7 +1570,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                               <Input
                                 id="doc-tags"
                                 value={metadataForm.tags.join(", ")}
-                                onChange={(e) => setMetadataForm({...metadataForm, tags: e.target.value.split(", ").filter(tag => tag.trim())})}
+                                onChange={(e) => setMetadataForm({ ...metadataForm, tags: e.target.value.split(", ").filter(tag => tag.trim()) })}
                                 placeholder="Enter tags separated by commas"
                               />
                             </div>
@@ -1448,8 +1579,8 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                               <Textarea
                                 id="doc-description"
                                 value={metadataForm.description}
-                                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setMetadataForm({...metadataForm, description: e.target.value})}
-                                placeholder="Enter document description"
+                                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setMetadataForm({ ...metadataForm, description: e.target.value })}
+                                placeholder="Enter documentData description"
                                 rows={3}
                               />
                             </div>
@@ -1460,7 +1591,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                           <Textarea
                             id="doc-notes"
                             value={metadataForm.notes}
-                            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setMetadataForm({...metadataForm, notes: e.target.value})}
+                            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setMetadataForm({ ...metadataForm, notes: e.target.value })}
                             placeholder="Enter additional notes"
                             rows={4}
                           />
@@ -1495,9 +1626,9 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-muted-foreground">AI Model</span>
                           <span className="text-sm font-medium">
-                            {document?.generation_metadata?.aiProcessing?.provider && document?.generation_metadata?.aiProcessing?.model
-                              ? `${document.generation_metadata.aiProcessing.provider} - ${document.generation_metadata.aiProcessing.model}`
-                              : document?.metadata?.ai_model || "N/A"}
+                            {documentData?.generation_metadata?.aiProcessing?.provider && documentData?.generation_metadata?.aiProcessing?.model
+                              ? `${documentData.generation_metadata.aiProcessing.provider} - ${documentData.generation_metadata.aiProcessing.model}`
+                              : documentData?.metadata?.ai_model || "N/A"}
                           </span>
                         </div>
                         <div className="flex justify-between items-center">
@@ -1505,37 +1636,37 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                           <span className="text-sm font-medium">
                             {(() => {
                               // Try formatted version first
-                              const formatted = document?.generation_metadata?.aiProcessing?.processingTime || 
-                                               document?.generation_metadata?.generation?.durationFormatted
+                              const formatted = documentData?.generation_metadata?.aiProcessing?.processingTime ||
+                                documentData?.generation_metadata?.generation?.durationFormatted
                               if (formatted) return formatted
-                              
+
                               // Fall back to raw milliseconds and format
-                              const rawMs = document?.generation_metadata?.aiProcessing?.processingTimeMs || 
-                                           document?.generation_metadata?.generation?.duration ||
-                                           document?.metadata?.processing_time
-                              
+                              const rawMs = documentData?.generation_metadata?.aiProcessing?.processingTimeMs ||
+                                documentData?.generation_metadata?.generation?.duration ||
+                                documentData?.metadata?.processing_time
+
                               if (typeof rawMs === 'number' && rawMs > 0) {
                                 return (rawMs / 1000).toFixed(1) + 's'
                               }
-                              
+
                               return "N/A"
                             })()}
                           </span>
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-muted-foreground">Compression Ratio</span>
-                          <span className="text-sm font-medium">{document?.metadata?.compression_ratio || 0}%</span>
+                          <span className="text-sm font-medium">{documentData?.metadata?.compression_ratio || 0}%</span>
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-muted-foreground">Tokens Used</span>
                           <span className="text-sm font-medium">
-                            {document?.generation_metadata?.aiProcessing?.tokens?.total || document?.metadata?.generation_stats?.tokens_used?.toLocaleString() || "N/A"}
+                            {documentData?.generation_metadata?.aiProcessing?.tokens?.total || documentData?.metadata?.generation_stats?.tokens_used?.toLocaleString() || "N/A"}
                           </span>
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-muted-foreground">Generation Cost</span>
                           <span className="text-sm font-medium">
-                            {document?.generation_metadata?.aiProcessing?.tokens?.cost || `$${document?.metadata?.generation_stats?.cost || "0.00"}`}
+                            {documentData?.generation_metadata?.aiProcessing?.tokens?.cost || `$${documentData?.metadata?.generation_stats?.cost || "0.00"}`}
                           </span>
                         </div>
                       </div>
@@ -1543,7 +1674,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                   </AnimatedCard>
 
                   {/* Content Metrics */}
-                  {(document?.generation_metadata?.contentMetrics || document?.word_count) && (
+                  {(documentData?.generation_metadata?.contentMetrics || documentData?.word_count) && (
                     <AnimatedCard>
                       <CardHeader>
                         <CardTitle className="flex items-center space-x-2">
@@ -1556,18 +1687,18 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                           {(() => {
                             // Extract raw word count (handle both number and formatted string)
                             let wordCount = 0
-                            
+
                             // Priority 1: Use raw word_count from top-level column
-                            if (document?.word_count) {
-                              wordCount = document.word_count
+                            if (documentData?.word_count) {
+                              wordCount = documentData.word_count
                             }
                             // Priority 2: Use generation_metadata.wordCount if available
-                            else if (document?.generation_metadata?.wordCount) {
-                              wordCount = document.generation_metadata.wordCount
+                            else if (documentData?.generation_metadata?.wordCount) {
+                              wordCount = documentData.generation_metadata.wordCount
                             }
                             // Priority 3: Parse contentMetrics.words (formatted string)
-                            else if (document?.generation_metadata?.contentMetrics?.words) {
-                              const wordsValue = document.generation_metadata.contentMetrics.words
+                            else if (documentData?.generation_metadata?.contentMetrics?.words) {
+                              const wordsValue = documentData.generation_metadata.contentMetrics.words
                               if (typeof wordsValue === 'string') {
                                 // Remove both commas AND periods (European format) as thousands separators
                                 wordCount = parseInt(wordsValue.replace(/[,\.]/g, ''), 10) || 0
@@ -1575,9 +1706,9 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                                 wordCount = wordsValue
                               }
                             }
-                            
+
                             const readingTimeMinutes = wordCount > 0 ? Math.round((wordCount / 250) * 10) / 10 : 0
-                            
+
                             return (
                               <>
                                 <div className="flex justify-between items-center">
@@ -1592,16 +1723,16 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                                     {(() => {
                                       let charCount = 0
                                       // Priority 1: Use raw character_count from top-level column
-                                      if (document?.character_count) {
-                                        charCount = document.character_count
+                                      if (documentData?.character_count) {
+                                        charCount = documentData.character_count
                                       }
                                       // Priority 2: Use generation_metadata.characterCount if available
-                                      else if (document?.generation_metadata?.characterCount) {
-                                        charCount = document.generation_metadata.characterCount
+                                      else if (documentData?.generation_metadata?.characterCount) {
+                                        charCount = documentData.generation_metadata.characterCount
                                       }
                                       // Priority 3: Parse contentMetrics.characters (formatted string)
-                                      else if (document?.generation_metadata?.contentMetrics?.characters) {
-                                        const charsValue = document.generation_metadata.contentMetrics.characters
+                                      else if (documentData?.generation_metadata?.contentMetrics?.characters) {
+                                        const charsValue = documentData.generation_metadata.contentMetrics.characters
                                         if (typeof charsValue === 'string') {
                                           // Remove both commas AND periods as thousands separators
                                           charCount = parseInt(charsValue.replace(/[,\.]/g, ''), 10) || 0
@@ -1618,9 +1749,9 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                                   <span className="text-sm font-medium">
                                     {(() => {
                                       // Priority 1: Use raw sentence_count from top-level column
-                                      const sentenceCount = document?.sentence_count || 
-                                                           document?.generation_metadata?.contentMetrics?.sentences || 
-                                                           0
+                                      const sentenceCount = documentData?.sentence_count ||
+                                        documentData?.generation_metadata?.contentMetrics?.sentences ||
+                                        0
                                       return sentenceCount > 0 ? sentenceCount.toLocaleString('en-US') : "N/A"
                                     })()}
                                   </span>
@@ -1630,9 +1761,9 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                                   <span className="text-sm font-medium">
                                     {(() => {
                                       // Priority 1: Use raw paragraph_count from top-level column
-                                      const paragraphCount = document?.paragraph_count || 
-                                                            document?.generation_metadata?.contentMetrics?.paragraphs || 
-                                                            0
+                                      const paragraphCount = documentData?.paragraph_count ||
+                                        documentData?.generation_metadata?.contentMetrics?.paragraphs ||
+                                        0
                                       return paragraphCount > 0 ? paragraphCount.toLocaleString('en-US') : "N/A"
                                     })()}
                                   </span>
@@ -1642,22 +1773,22 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                                   <span className="text-sm font-medium">
                                     {(() => {
                                       // Try generation_metadata first (most accurate)
-                                      const avgFromMeta = document?.generation_metadata?.contentMetrics?.avgWordsPerSentence
+                                      const avgFromMeta = documentData?.generation_metadata?.contentMetrics?.avgWordsPerSentence
                                       if (avgFromMeta) return avgFromMeta
-                                      
+
                                       // Calculate from actual values as fallback
-                                      const wc = document?.word_count || 
-                                                document?.generation_metadata?.contentMetrics?.words || 
-                                                0
-                                      const sc = document?.sentence_count || 
-                                                document?.generation_metadata?.contentMetrics?.sentences || 
-                                                0
+                                      const wc = documentData?.word_count ||
+                                        documentData?.generation_metadata?.contentMetrics?.words ||
+                                        0
+                                      const sc = documentData?.sentence_count ||
+                                        documentData?.generation_metadata?.contentMetrics?.sentences ||
+                                        0
                                       const avg = (wc > 0 && sc > 0) ? Math.round(wc / sc) : null
                                       return avg ? avg : "N/A"
                                     })()}
                                   </span>
                                 </div>
-                                
+
                                 {/* Reading Time */}
                                 {wordCount > 0 && (
                                   <div className="flex justify-between items-center pt-2 border-t">
@@ -1677,13 +1808,13 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
 
                   {/* Quality Gates Section */}
                   {(() => {
-                    const qualityGates = (document as any)?.generation_metadata?.quality_gate_results || 
-                                        (document as any)?.generation_metadata?.quality_gates || []
-                    const euAIActGate = qualityGates.find((gate: any) => 
-                      gate.gate_id === 'EU_AI_ACT_COMPLIANCE_GATE' || 
+                    const qualityGates = documentData?.generation_metadata?.quality_gate_results ||
+                      documentData?.generation_metadata?.quality_gates || []
+                    const euAIActGate = qualityGates.find((gate: any) =>
+                      gate.gate_id === 'EU_AI_ACT_COMPLIANCE_GATE' ||
                       gate.gate_name?.includes('EU AI Act')
                     )
-                    
+
                     if (qualityGates.length > 0 || euAIActGate) {
                       return (
                         <AnimatedCard>
@@ -1693,7 +1824,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                               <span>Quality Gates</span>
                             </CardTitle>
                             <CardDescription>
-                              Quality gate validation results from document generation
+                              Quality gate validation results from documentData generation
                             </CardDescription>
                           </CardHeader>
                           <CardContent>
@@ -1712,41 +1843,39 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                                       <Badge className="bg-red-500 text-white text-xs">✗ Failed</Badge>
                                     )}
                                   </div>
-                                  
+
                                   <div className="space-y-2">
                                     <div className="flex justify-between items-center">
                                       <span className="text-sm text-muted-foreground">Overall Score</span>
                                       <div className="flex items-center space-x-2">
                                         <div className="w-24 bg-gray-200 rounded-full h-2">
-                                          <div 
-                                            className={`h-2 rounded-full ${
-                                              (euAIActGate.score || 0) >= 75 ? 'bg-green-500' :
-                                              (euAIActGate.score || 0) >= 60 ? 'bg-yellow-500' :
-                                              'bg-red-500'
-                                            }`}
+                                          <div
+                                            className={`h-2 rounded-full ${(euAIActGate.score || 0) >= 75 ? 'bg-green-500' :
+                                                (euAIActGate.score || 0) >= 60 ? 'bg-yellow-500' :
+                                                  'bg-red-500'
+                                              }`}
                                             style={{ width: `${euAIActGate.score || 0}%` }}
                                           />
                                         </div>
                                         <span className="text-sm font-medium w-12 text-right">{euAIActGate.score || 0}%</span>
                                       </div>
                                     </div>
-                                    
+
                                     {euAIActGate.criteria_results && euAIActGate.criteria_results.length > 0 && (
                                       <div className="grid grid-cols-2 gap-2 mt-3 text-xs">
                                         {euAIActGate.criteria_results.map((criterion: any, idx: number) => {
                                           const criterionName = criterion.criterion_id?.includes('TRANSPARENCY') ? 'Transparency' :
-                                                               criterion.criterion_id?.includes('HUMAN_OVERSIGHT') ? 'Human Oversight' :
-                                                               criterion.criterion_id?.includes('ACCURACY') ? 'Accuracy' :
-                                                               criterion.criterion_id?.includes('DATA_GOVERNANCE') ? 'Data Governance' :
-                                                               criterion.criterion_id?.includes('RECORD_KEEPING') ? 'Record Keeping' :
-                                                               criterion.criterion_name || 'Unknown'
-                                          
+                                            criterion.criterion_id?.includes('HUMAN_OVERSIGHT') ? 'Human Oversight' :
+                                              criterion.criterion_id?.includes('ACCURACY') ? 'Accuracy' :
+                                                criterion.criterion_id?.includes('DATA_GOVERNANCE') ? 'Data Governance' :
+                                                  criterion.criterion_id?.includes('RECORD_KEEPING') ? 'Record Keeping' :
+                                                    criterion.criterion_name || 'Unknown'
+
                                           return (
                                             <div key={idx} className="flex justify-between">
                                               <span className="text-muted-foreground">{criterionName}:</span>
-                                              <span className={`font-medium ${
-                                                criterion.passed !== false ? 'text-green-600' : 'text-red-600'
-                                              }`}>
+                                              <span className={`font-medium ${criterion.passed !== false ? 'text-green-600' : 'text-red-600'
+                                                }`}>
                                                 {criterion.score || 0}%
                                               </span>
                                             </div>
@@ -1754,7 +1883,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                                         })}
                                       </div>
                                     )}
-                                    
+
                                     {euAIActGate.message && (
                                       <p className="text-xs text-muted-foreground mt-2 italic">
                                         {euAIActGate.message}
@@ -1763,10 +1892,10 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                                   </div>
                                 </div>
                               )}
-                              
+
                               {/* Other Quality Gates */}
-                              {qualityGates.filter((gate: any) => 
-                                gate.gate_id !== 'EU_AI_ACT_COMPLIANCE_GATE' && 
+                              {qualityGates.filter((gate: any) =>
+                                gate.gate_id !== 'EU_AI_ACT_COMPLIANCE_GATE' &&
                                 !gate.gate_name?.includes('EU AI Act')
                               ).map((gate: any, idx: number) => (
                                 <div key={idx} className="p-3 bg-gray-50 rounded-lg border">
@@ -1781,12 +1910,11 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                                   {gate.score !== undefined && (
                                     <div className="mt-2 flex items-center space-x-2">
                                       <div className="w-20 bg-gray-200 rounded-full h-1.5">
-                                        <div 
-                                          className={`h-1.5 rounded-full ${
-                                            gate.score >= 80 ? 'bg-green-500' :
-                                            gate.score >= 60 ? 'bg-yellow-500' :
-                                            'bg-red-500'
-                                          }`}
+                                        <div
+                                          className={`h-1.5 rounded-full ${gate.score >= 80 ? 'bg-green-500' :
+                                              gate.score >= 60 ? 'bg-yellow-500' :
+                                                'bg-red-500'
+                                            }`}
                                           style={{ width: `${gate.score}%` }}
                                         />
                                       </div>
@@ -1798,10 +1926,10 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                                   )}
                                 </div>
                               ))}
-                              
+
                               {qualityGates.length === 0 && !euAIActGate && (
                                 <p className="text-sm text-muted-foreground text-center py-4">
-                                  No quality gates available for this document
+                                  No quality gates available for this documentData
                                 </p>
                               )}
                             </div>
@@ -1835,23 +1963,21 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                         <div className="space-y-4">
                           {/* Overall Score */}
                           <div className="text-center p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
-                            <div className={`text-4xl font-bold ${
-                              qualityAudit.overall_score >= 90 ? 'text-green-600' :
-                              qualityAudit.overall_score >= 80 ? 'text-blue-600' :
-                              qualityAudit.overall_score >= 70 ? 'text-yellow-600' :
-                              qualityAudit.overall_score >= 60 ? 'text-orange-600' :
-                              'text-red-600'
-                            }`}>
+                            <div className={`text-4xl font-bold ${qualityAudit.overall_score >= 90 ? 'text-green-600' :
+                                qualityAudit.overall_score >= 80 ? 'text-blue-600' :
+                                  qualityAudit.overall_score >= 70 ? 'text-yellow-600' :
+                                    qualityAudit.overall_score >= 60 ? 'text-orange-600' :
+                                      'text-red-600'
+                              }`}>
                               {qualityAudit.overall_score}%
                             </div>
                             <div className="flex items-center justify-center gap-2 mt-2">
-                              <Badge className={`${
-                                qualityAudit.overall_grade === 'A' ? 'bg-green-500' :
-                                qualityAudit.overall_grade === 'B' ? 'bg-blue-500' :
-                                qualityAudit.overall_grade === 'C' ? 'bg-yellow-500' :
-                                qualityAudit.overall_grade === 'D' ? 'bg-orange-500' :
-                                'bg-red-500'
-                              } text-white`}>
+                              <Badge className={`${qualityAudit.overall_grade === 'A' ? 'bg-green-500' :
+                                  qualityAudit.overall_grade === 'B' ? 'bg-blue-500' :
+                                    qualityAudit.overall_grade === 'C' ? 'bg-yellow-500' :
+                                      qualityAudit.overall_grade === 'D' ? 'bg-orange-500' :
+                                        'bg-red-500'
+                                } text-white`}>
                                 Grade {qualityAudit.overall_grade}
                               </Badge>
                               <span className="text-sm text-gray-600">{qualityAudit.quality_level}</span>
@@ -1864,13 +1990,12 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                               <span className="text-sm text-muted-foreground">Completeness</span>
                               <div className="flex items-center space-x-2">
                                 <div className="w-20 bg-gray-200 rounded-full h-2">
-                                  <div 
-                                    className={`h-2 rounded-full ${
-                                      qualityAudit.completeness_score >= 90 ? 'bg-green-500' :
-                                      qualityAudit.completeness_score >= 80 ? 'bg-blue-500' :
-                                      qualityAudit.completeness_score >= 70 ? 'bg-yellow-500' :
-                                      'bg-orange-500'
-                                    }`}
+                                  <div
+                                    className={`h-2 rounded-full ${qualityAudit.completeness_score >= 90 ? 'bg-green-500' :
+                                        qualityAudit.completeness_score >= 80 ? 'bg-blue-500' :
+                                          qualityAudit.completeness_score >= 70 ? 'bg-yellow-500' :
+                                            'bg-orange-500'
+                                      }`}
                                     style={{ width: `${qualityAudit.completeness_score}%` }}
                                   />
                                 </div>
@@ -1881,13 +2006,12 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                               <span className="text-sm text-muted-foreground">Consistency</span>
                               <div className="flex items-center space-x-2">
                                 <div className="w-20 bg-gray-200 rounded-full h-2">
-                                  <div 
-                                    className={`h-2 rounded-full ${
-                                      qualityAudit.consistency_score >= 90 ? 'bg-green-500' :
-                                      qualityAudit.consistency_score >= 80 ? 'bg-blue-500' :
-                                      qualityAudit.consistency_score >= 70 ? 'bg-yellow-500' :
-                                      'bg-orange-500'
-                                    }`}
+                                  <div
+                                    className={`h-2 rounded-full ${qualityAudit.consistency_score >= 90 ? 'bg-green-500' :
+                                        qualityAudit.consistency_score >= 80 ? 'bg-blue-500' :
+                                          qualityAudit.consistency_score >= 70 ? 'bg-yellow-500' :
+                                            'bg-orange-500'
+                                      }`}
                                     style={{ width: `${qualityAudit.consistency_score}%` }}
                                   />
                                 </div>
@@ -1898,13 +2022,12 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                               <span className="text-sm text-muted-foreground">Standards Compliance</span>
                               <div className="flex items-center space-x-2">
                                 <div className="w-20 bg-gray-200 rounded-full h-2">
-                                  <div 
-                                    className={`h-2 rounded-full ${
-                                      qualityAudit.standards_compliance_score >= 90 ? 'bg-green-500' :
-                                      qualityAudit.standards_compliance_score >= 80 ? 'bg-blue-500' :
-                                      qualityAudit.standards_compliance_score >= 70 ? 'bg-yellow-500' :
-                                      'bg-orange-500'
-                                    }`}
+                                  <div
+                                    className={`h-2 rounded-full ${qualityAudit.standards_compliance_score >= 90 ? 'bg-green-500' :
+                                        qualityAudit.standards_compliance_score >= 80 ? 'bg-blue-500' :
+                                          qualityAudit.standards_compliance_score >= 70 ? 'bg-yellow-500' :
+                                            'bg-orange-500'
+                                      }`}
                                     style={{ width: `${qualityAudit.standards_compliance_score}%` }}
                                   />
                                 </div>
@@ -1923,13 +2046,12 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                                   <span className="text-sm text-muted-foreground">Overall Compliance</span>
                                   <div className="flex items-center space-x-2">
                                     <div className="w-20 bg-gray-200 rounded-full h-2">
-                                      <div 
-                                        className={`h-2 rounded-full ${
-                                          qualityAudit.compliance_metrics.overallComplianceRating >= 90 ? 'bg-green-500' :
-                                          qualityAudit.compliance_metrics.overallComplianceRating >= 80 ? 'bg-blue-500' :
-                                          qualityAudit.compliance_metrics.overallComplianceRating >= 70 ? 'bg-yellow-500' :
-                                          'bg-orange-500'
-                                        }`}
+                                      <div
+                                        className={`h-2 rounded-full ${qualityAudit.compliance_metrics.overallComplianceRating >= 90 ? 'bg-green-500' :
+                                            qualityAudit.compliance_metrics.overallComplianceRating >= 80 ? 'bg-blue-500' :
+                                              qualityAudit.compliance_metrics.overallComplianceRating >= 70 ? 'bg-yellow-500' :
+                                                'bg-orange-500'
+                                          }`}
                                         style={{ width: `${qualityAudit.compliance_metrics.overallComplianceRating}%` }}
                                       />
                                     </div>
@@ -1973,12 +2095,11 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                                         <span className="text-sm text-muted-foreground">Overall Score</span>
                                         <div className="flex items-center space-x-2">
                                           <div className="w-20 bg-gray-200 rounded-full h-2">
-                                            <div 
-                                              className={`h-2 rounded-full ${
-                                                qualityAudit.compliance_metrics.euAIAct.overallScore >= 75 ? 'bg-green-500' :
-                                                qualityAudit.compliance_metrics.euAIAct.overallScore >= 60 ? 'bg-yellow-500' :
-                                                'bg-red-500'
-                                              }`}
+                                            <div
+                                              className={`h-2 rounded-full ${qualityAudit.compliance_metrics.euAIAct.overallScore >= 75 ? 'bg-green-500' :
+                                                  qualityAudit.compliance_metrics.euAIAct.overallScore >= 60 ? 'bg-yellow-500' :
+                                                    'bg-red-500'
+                                                }`}
                                               style={{ width: `${qualityAudit.compliance_metrics.euAIAct.overallScore}%` }}
                                             />
                                           </div>
@@ -2060,13 +2181,13 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                         {/* Overall Quality Score */}
                         {(() => {
                           // Debug: Log quality metrics to console
-                          if (document?.generation_metadata?.qualityMetrics) {
-                            console.log('📊 Quality Metrics from metadata:', document.generation_metadata.qualityMetrics)
+                          if (documentData?.generation_metadata?.qualityMetrics) {
+                            console.log('📊 Quality Metrics from metadata:', documentData.generation_metadata.qualityMetrics)
                           }
-                          
-                          const overallQuality = document?.generation_metadata?.qualityMetrics?.overallQuality || 
-                                                document?.metadata?.quality_score || 
-                                                0
+
+                          const overallQuality = documentData?.generation_metadata?.qualityMetrics?.overallQuality ||
+                            documentData?.metadata?.quality_score ||
+                            0
                           return (
                             <div className="flex justify-between items-center p-3 bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border">
                               <span className="text-sm font-semibold">Overall Quality Score</span>
@@ -2086,172 +2207,172 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                             </div>
                           )
                         })()}
-                        
+
                         <Separator />
-                        
+
                         {/* All 9 Quality Dimensions */}
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-muted-foreground">Completeness</span>
                           <div className="flex items-center space-x-2">
                             <div className="w-16 bg-gray-200 rounded-full h-2">
-                              <div 
-                                className="bg-blue-600 h-2 rounded-full" 
-                                style={{ width: `${document?.generation_metadata?.qualityMetrics?.completeness || 0}%` }}
+                              <div
+                                className="bg-blue-600 h-2 rounded-full"
+                                style={{ width: `${documentData?.generation_metadata?.qualityMetrics?.completeness || 0}%` }}
                               ></div>
                             </div>
-                            <span className="text-sm font-medium">{document?.generation_metadata?.qualityMetrics?.completeness || 0}%</span>
+                            <span className="text-sm font-medium">{documentData?.generation_metadata?.qualityMetrics?.completeness || 0}%</span>
                           </div>
                         </div>
-                        
+
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-muted-foreground">Structure</span>
                           <div className="flex items-center space-x-2">
                             <div className="w-16 bg-gray-200 rounded-full h-2">
-                              <div 
-                                className="bg-green-600 h-2 rounded-full" 
-                                style={{ width: `${document?.generation_metadata?.qualityMetrics?.structureScore || 0}%` }}
+                              <div
+                                className="bg-green-600 h-2 rounded-full"
+                                style={{ width: `${documentData?.generation_metadata?.qualityMetrics?.structureScore || 0}%` }}
                               ></div>
                             </div>
-                            <span className="text-sm font-medium">{document?.generation_metadata?.qualityMetrics?.structureScore || 0}%</span>
+                            <span className="text-sm font-medium">{documentData?.generation_metadata?.qualityMetrics?.structureScore || 0}%</span>
                           </div>
                         </div>
-                        
+
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-muted-foreground">Formatting & Style</span>
                           <div className="flex items-center space-x-2">
                             <div className="w-16 bg-gray-200 rounded-full h-2">
-                              <div 
-                                className="bg-orange-600 h-2 rounded-full" 
-                                style={{ width: `${document?.generation_metadata?.qualityMetrics?.formattingScore || 0}%` }}
+                              <div
+                                className="bg-orange-600 h-2 rounded-full"
+                                style={{ width: `${documentData?.generation_metadata?.qualityMetrics?.formattingScore || 0}%` }}
                               ></div>
                             </div>
-                            <span className="text-sm font-medium">{document?.generation_metadata?.qualityMetrics?.formattingScore || 0}%</span>
+                            <span className="text-sm font-medium">{documentData?.generation_metadata?.qualityMetrics?.formattingScore || 0}%</span>
                           </div>
                         </div>
-                        
+
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-muted-foreground">Content Depth</span>
                           <div className="flex items-center space-x-2">
                             <div className="w-16 bg-gray-200 rounded-full h-2">
-                              <div 
-                                className="bg-purple-600 h-2 rounded-full" 
-                                style={{ width: `${document?.generation_metadata?.qualityMetrics?.contentDepth || 0}%` }}
+                              <div
+                                className="bg-purple-600 h-2 rounded-full"
+                                style={{ width: `${documentData?.generation_metadata?.qualityMetrics?.contentDepth || 0}%` }}
                               ></div>
                             </div>
-                            <span className="text-sm font-medium">{document?.generation_metadata?.qualityMetrics?.contentDepth || 0}%</span>
+                            <span className="text-sm font-medium">{documentData?.generation_metadata?.qualityMetrics?.contentDepth || 0}%</span>
                           </div>
                         </div>
-                        
+
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-muted-foreground">Accuracy</span>
                           <div className="flex items-center space-x-2">
                             <div className="w-16 bg-gray-200 rounded-full h-2">
-                              <div 
-                                className="bg-indigo-600 h-2 rounded-full" 
-                                style={{ width: `${document?.generation_metadata?.qualityMetrics?.accuracy || 0}%` }}
+                              <div
+                                className="bg-indigo-600 h-2 rounded-full"
+                                style={{ width: `${documentData?.generation_metadata?.qualityMetrics?.accuracy || 0}%` }}
                               ></div>
                             </div>
-                            <span className="text-sm font-medium">{document?.generation_metadata?.qualityMetrics?.accuracy || 0}%</span>
+                            <span className="text-sm font-medium">{documentData?.generation_metadata?.qualityMetrics?.accuracy || 0}%</span>
                           </div>
                         </div>
-                        
+
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-muted-foreground">Consistency</span>
                           <div className="flex items-center space-x-2">
                             <div className="w-16 bg-gray-200 rounded-full h-2">
-                              <div 
-                                className="bg-teal-600 h-2 rounded-full" 
-                                style={{ width: `${document?.generation_metadata?.qualityMetrics?.consistency || 0}%` }}
+                              <div
+                                className="bg-teal-600 h-2 rounded-full"
+                                style={{ width: `${documentData?.generation_metadata?.qualityMetrics?.consistency || 0}%` }}
                               ></div>
                             </div>
-                            <span className="text-sm font-medium">{document?.generation_metadata?.qualityMetrics?.consistency || 0}%</span>
+                            <span className="text-sm font-medium">{documentData?.generation_metadata?.qualityMetrics?.consistency || 0}%</span>
                           </div>
                         </div>
-                        
+
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-muted-foreground">Context Relevance</span>
                           <div className="flex items-center space-x-2">
                             <div className="w-16 bg-gray-200 rounded-full h-2">
-                              <div 
-                                className="bg-cyan-600 h-2 rounded-full" 
-                                style={{ width: `${document?.generation_metadata?.qualityMetrics?.contextRelevance || 0}%` }}
+                              <div
+                                className="bg-cyan-600 h-2 rounded-full"
+                                style={{ width: `${documentData?.generation_metadata?.qualityMetrics?.contextRelevance || 0}%` }}
                               ></div>
                             </div>
-                            <span className="text-sm font-medium">{document?.generation_metadata?.qualityMetrics?.contextRelevance || 0}%</span>
+                            <span className="text-sm font-medium">{documentData?.generation_metadata?.qualityMetrics?.contextRelevance || 0}%</span>
                           </div>
                         </div>
-                        
+
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-muted-foreground">Professional Quality</span>
                           <div className="flex items-center space-x-2">
                             <div className="w-16 bg-gray-200 rounded-full h-2">
-                              <div 
-                                className="bg-pink-600 h-2 rounded-full" 
-                                style={{ width: `${document?.generation_metadata?.qualityMetrics?.professionalQuality || 0}%` }}
+                              <div
+                                className="bg-pink-600 h-2 rounded-full"
+                                style={{ width: `${documentData?.generation_metadata?.qualityMetrics?.professionalQuality || 0}%` }}
                               ></div>
                             </div>
-                            <span className="text-sm font-medium">{document?.generation_metadata?.qualityMetrics?.professionalQuality || 0}%</span>
+                            <span className="text-sm font-medium">{documentData?.generation_metadata?.qualityMetrics?.professionalQuality || 0}%</span>
                           </div>
                         </div>
-                        
+
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-muted-foreground">Standards Compliance</span>
                           <div className="flex items-center space-x-2">
                             <div className="w-16 bg-gray-200 rounded-full h-2">
-                              <div 
-                                className="bg-emerald-600 h-2 rounded-full" 
-                                style={{ width: `${document?.generation_metadata?.qualityMetrics?.standardsCompliance || 0}%` }}
+                              <div
+                                className="bg-emerald-600 h-2 rounded-full"
+                                style={{ width: `${documentData?.generation_metadata?.qualityMetrics?.standardsCompliance || 0}%` }}
                               ></div>
                             </div>
-                            <span className="text-sm font-medium">{document?.generation_metadata?.qualityMetrics?.standardsCompliance || 0}%</span>
+                            <span className="text-sm font-medium">{documentData?.generation_metadata?.qualityMetrics?.standardsCompliance || 0}%</span>
                           </div>
                         </div>
-                        
+
                         <Separator />
-                        
+
                         <div className="space-y-2">
                           {(() => {
                             // Calculate complexity score for display (same logic as below)
-                            // Handle both snake_case (source_documents) and camelCase (sourceDocuments) for backward compatibility
-                            const sourceDocuments = (document as any)?.generation_metadata?.source_documents || (document as any)?.generation_metadata?.sourceDocuments || []
-                            const wordCount = (document as any)?.generation_metadata?.contentMetrics?.words || 0
-                            const paragraphs = (document as any)?.generation_metadata?.contentMetrics?.paragraphs || 0
-                            const framework = (document as any)?.generation_metadata?.framework || document?.template_framework
-                            const overallQuality = (document as any)?.generation_metadata?.qualityMetrics?.overallQuality || 0
-                            
+                            // Handle both snake_case (source_documentDatas) and camelCase (sourceDocuments) for backward compatibility
+                            const sourceDocuments = documentData?.generation_metadata?.source_documentDatas || documentData?.generation_metadata?.sourceDocuments || []
+                            const wordCount = documentData?.generation_metadata?.contentMetrics?.words || 0
+                            const paragraphs = documentData?.generation_metadata?.contentMetrics?.paragraphs || 0
+                            const framework = documentData?.generation_metadata?.framework || documentData?.template_framework
+                            const overallQuality = documentData?.generation_metadata?.qualityMetrics?.overallQuality || 0
+
                             let complexity = 0
                             if (wordCount > 5000) complexity += 30
                             else if (wordCount > 3000) complexity += 25
                             else if (wordCount > 1500) complexity += 20
                             else if (wordCount > 800) complexity += 15
                             else complexity += 10
-                            
+
                             const avgWordsPerParagraph = paragraphs > 0 ? wordCount / paragraphs : 0
                             if (avgWordsPerParagraph > 100) complexity += 25
                             else if (avgWordsPerParagraph > 70) complexity += 20
                             else if (avgWordsPerParagraph > 50) complexity += 15
                             else complexity += 10
-                            
+
                             if (sourceDocuments.length > 10) complexity += 20
                             else if (sourceDocuments.length > 5) complexity += 15
                             else if (sourceDocuments.length > 3) complexity += 10
                             else if (sourceDocuments.length > 0) complexity += 5
-                            
+
                             if (framework && framework !== 'Not specified') complexity += 15
-                            
+
                             if (overallQuality > 85) complexity += 10
                             else if (overallQuality > 70) complexity += 7
                             else if (overallQuality > 50) complexity += 5
-                            
+
                             complexity = Math.min(100, Math.max(0, complexity))
-                            
+
                             return (
                               <div className="flex justify-between items-center p-2 bg-gradient-to-r from-red-50 to-orange-50 rounded-lg border border-red-200">
                                 <span className="text-sm font-semibold text-red-700">Complexity Score</span>
                                 <div className="flex items-center space-x-2">
                                   <div className="w-16 bg-gray-200 rounded-full h-2">
-                                    <div 
-                                      className="bg-red-600 h-2 rounded-full" 
+                                    <div
+                                      className="bg-red-600 h-2 rounded-full"
                                       style={{ width: `${complexity}%` }}
                                     ></div>
                                   </div>
@@ -2260,66 +2381,66 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                               </div>
                             )
                           })()}
-                          
+
                           {/* Complexity Time Estimate with Research Breakdown */}
                           {(() => {
-                            // Get source documents from generation_metadata
-                            // Handle both snake_case (source_documents) and camelCase (sourceDocuments) for backward compatibility
-                            const sourceDocuments = (document as any)?.generation_metadata?.source_documents || (document as any)?.generation_metadata?.sourceDocuments || []
+                            // Get source documentDatas from generation_metadata
+                            // Handle both snake_case (source_documentDatas) and camelCase (sourceDocuments) for backward compatibility
+                            const sourceDocuments = documentData?.generation_metadata?.source_documentDatas || documentData?.generation_metadata?.sourceDocuments || []
                             const sourceDocCount = sourceDocuments.length
-                            
-                            // Calculate total words in source documents
+
+                            // Calculate total words in source documentDatas
                             const totalSourceWords = sourceDocuments.reduce((sum: number, doc: any) => {
                               // Estimate words from tokens (1 token ≈ 0.75 words)
                               const estimatedWords = Math.round((doc.originalTokens || 0) * 0.75)
                               return sum + estimatedWords
                             }, 0)
-                            
+
                             // Calculate reading time (250 words/min average)
                             const readingTimeMinutes = Math.round(totalSourceWords / 250)
                             const readingTimeHours = Math.round(readingTimeMinutes / 60 * 10) / 10
-                            
-                            // Get generated document metrics
-                            const wordCount = (document as any)?.generation_metadata?.contentMetrics?.words || 0
-                            const sentences = (document as any)?.generation_metadata?.contentMetrics?.sentences || 0
-                            const paragraphs = (document as any)?.generation_metadata?.contentMetrics?.paragraphs || 0
-                            
-                            // Calculate complexity score based on document characteristics
+
+                            // Get generated documentData metrics
+                            const wordCount = documentData?.generation_metadata?.contentMetrics?.words || 0
+                            const sentences = documentData?.generation_metadata?.contentMetrics?.sentences || 0
+                            const paragraphs = documentData?.generation_metadata?.contentMetrics?.paragraphs || 0
+
+                            // Calculate complexity score based on documentData characteristics
                             let complexity = 0
-                            
+
                             // Base complexity from word count (0-30 points)
                             if (wordCount > 5000) complexity += 30
                             else if (wordCount > 3000) complexity += 25
                             else if (wordCount > 1500) complexity += 20
                             else if (wordCount > 800) complexity += 15
                             else complexity += 10
-                            
+
                             // Structure complexity (0-25 points)
                             const avgWordsPerParagraph = paragraphs > 0 ? wordCount / paragraphs : 0
                             if (avgWordsPerParagraph > 100) complexity += 25 // Very long paragraphs = complex
                             else if (avgWordsPerParagraph > 70) complexity += 20
                             else if (avgWordsPerParagraph > 50) complexity += 15
                             else complexity += 10
-                            
-                            // Source document complexity (0-20 points)
+
+                            // Source documentData complexity (0-20 points)
                             if (sourceDocCount > 10) complexity += 20
                             else if (sourceDocCount > 5) complexity += 15
                             else if (sourceDocCount > 3) complexity += 10
                             else if (sourceDocCount > 0) complexity += 5
-                            
+
                             // Framework compliance adds complexity (0-15 points)
-                            const framework = (document as any)?.generation_metadata?.framework || document?.template_framework
+                            const framework = documentData?.generation_metadata?.framework || documentData?.template_framework
                             if (framework && framework !== 'Not specified') complexity += 15
-                            
+
                             // Quality metrics contribution (0-10 points)
-                            const overallQuality = (document as any)?.generation_metadata?.qualityMetrics?.overallQuality || 0
+                            const overallQuality = documentData?.generation_metadata?.qualityMetrics?.overallQuality || 0
                             if (overallQuality > 85) complexity += 10
                             else if (overallQuality > 70) complexity += 7
                             else if (overallQuality > 50) complexity += 5
-                            
+
                             // Ensure complexity is 0-100
                             complexity = Math.min(100, Math.max(0, complexity))
-                            
+
                             // Determine complexity level and writing time estimate
                             let level = 'Simple'
                             let writingTimeMin = 2
@@ -2327,7 +2448,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                             let color = 'text-green-600'
                             let bgColor = 'bg-green-50'
                             let borderColor = 'border-green-200'
-                            
+
                             if (complexity >= 76) {
                               level = 'Very Complex'
                               writingTimeMin = 16
@@ -2350,29 +2471,29 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                               bgColor = 'bg-yellow-50'
                               borderColor = 'border-yellow-200'
                             }
-                            
-                            const writingTime = writingTimeMax >= 16 
+
+                            const writingTime = writingTimeMax >= 16
                               ? `${writingTimeMin / 8}-${writingTimeMax / 8} days (${writingTimeMin}-${writingTimeMax} hours)`
                               : `${writingTimeMin}-${writingTimeMax} hours`
-                            
+
                             // Format reading time display
-                            const readingTimeDisplay = readingTimeHours >= 8 
-                              ? `${Math.round(readingTimeHours / 8 * 10) / 10} day${readingTimeHours >= 16 ? 's' : ''}` 
+                            const readingTimeDisplay = readingTimeHours >= 8
+                              ? `${Math.round(readingTimeHours / 8 * 10) / 10} day${readingTimeHours >= 16 ? 's' : ''}`
                               : `${readingTimeHours} hour${readingTimeHours !== 1 ? 's' : ''}`
-                            
+
                             // Calculate total manual effort
                             const totalManualHours = readingTimeHours + (writingTimeMin + writingTimeMax) / 2
                             const totalManualDisplay = totalManualHours >= 8
                               ? `${Math.round(totalManualHours / 8 * 10) / 10} days`
                               : `${Math.round(totalManualHours * 10) / 10} hours`
-                            
+
                             return (
                               <div className={`p-3 ${bgColor} rounded-lg border ${borderColor}`}>
                                 <div className="flex justify-between items-center mb-2">
                                   <span className="text-xs text-muted-foreground">Complexity Level:</span>
                                   <span className={`text-sm font-semibold ${color}`}>{level}</span>
                                 </div>
-                                
+
                                 {sourceDocCount > 0 && (
                                   <>
                                     <Separator className="my-2" />
@@ -2390,31 +2511,31 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                                     </div>
                                   </>
                                 )}
-                                
+
                                 <Separator className="my-2" />
                                 <div className="flex justify-between items-center">
                                   <span className="text-xs font-medium text-muted-foreground">Total Manual Effort:</span>
                                   <span className={`text-sm font-bold ${color}`}>{totalManualDisplay}</span>
                                 </div>
-                                
+
                                 {(() => {
                                   // Get AI generation time (formatted)
-                                  const aiTime = (document as any)?.generation_metadata?.aiProcessing?.processingTime || 
-                                                (document as any)?.generation_metadata?.generation?.durationFormatted
-                                  
+                                  const aiTime = documentData?.generation_metadata?.aiProcessing?.processingTime ||
+                                    documentData?.generation_metadata?.generation?.durationFormatted
+
                                   // Get raw milliseconds for speedup calculation
-                                  const aiTimeMs = (document as any)?.generation_metadata?.aiProcessing?.processingTimeMs || 
-                                                  (document as any)?.generation_metadata?.generation?.duration || 0
-                                  
+                                  const aiTimeMs = documentData?.generation_metadata?.aiProcessing?.processingTimeMs ||
+                                    documentData?.generation_metadata?.generation?.duration || 0
+
                                   if (aiTime || aiTimeMs) {
                                     const displayTime = aiTime || (aiTimeMs > 0 ? `${(aiTimeMs / 1000).toFixed(1)}s` : 'N/A')
-                                    
+
                                     // Calculate speedup
                                     const aiHours = aiTimeMs / 1000 / 60 / 60
-                                    const speedup = totalManualHours > 0 && aiHours > 0 
-                                      ? Math.round(totalManualHours / aiHours) 
+                                    const speedup = totalManualHours > 0 && aiHours > 0
+                                      ? Math.round(totalManualHours / aiHours)
                                       : 0
-                                    
+
                                     return (
                                       <div className="mt-2 pt-2 border-t space-y-1">
                                         <div className="flex justify-between items-center text-xs">
@@ -2434,14 +2555,14 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                                             </div>
                                             {(() => {
                                               // Get reading time from content metrics
-                                              const readingTimeMin = (document as any)?.generation_metadata?.contentMetrics?.readingTime || 
-                                                                    Math.ceil(wordCount / 250)
-                                              const readingTimeDisplay = readingTimeMin >= 60 
-                                                ? `${Math.round(readingTimeMin / 60 * 10) / 10} hours` 
+                                              const readingTimeMin = documentData?.generation_metadata?.contentMetrics?.readingTime ||
+                                                Math.ceil(wordCount / 250)
+                                              const readingTimeDisplay = readingTimeMin >= 60
+                                                ? `${Math.round(readingTimeMin / 60 * 10) / 10} hours`
                                                 : `${readingTimeMin} minutes`
-                                              
+
                                               const roi = Math.round((totalManualHours * 60) / readingTimeMin)
-                                              
+
                                               return (
                                                 <div className="text-xs font-medium text-purple-600 mt-1">
                                                   📖 Result reading time: ~{readingTimeDisplay}
@@ -2482,26 +2603,26 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                     <CardContent>
                       {(() => {
                         // Get compliance data from quality metrics
-                        const standardsScore = document?.generation_metadata?.qualityMetrics?.standardsCompliance || 0
-                        const overallQuality = document?.generation_metadata?.qualityMetrics?.overallQuality || 0
-                        const framework = document?.template_framework || document?.generation_metadata?.template?.framework || 'PMBOK'
-                        const documentType = document?.template_name || document?.name || ''
-                        
+                        const standardsScore = documentData?.generation_metadata?.qualityMetrics?.standardsCompliance || 0
+                        const overallQuality = documentData?.generation_metadata?.qualityMetrics?.overallQuality || 0
+                        const framework = documentData?.template_framework || documentData?.generation_metadata?.template?.framework || 'PMBOK'
+                        const documentDataType = documentData?.template_name || documentData?.name || ''
+
                         // Determine framework compliance
                         const isPMBOK = framework.toUpperCase().includes('PMBOK')
                         const isBABOK = framework.toUpperCase().includes('BABOK')
                         const isDMBOK = framework.toUpperCase().includes('DMBOK')
-                        
-                        // Determine regulatory applicability based on document type and content
-                        const hasPersonalData = documentType.toLowerCase().includes('stakeholder') || 
-                                               documentType.toLowerCase().includes('hr') ||
-                                               documentType.toLowerCase().includes('resource')
-                        const hasHealthData = documentType.toLowerCase().includes('health') ||
-                                             documentType.toLowerCase().includes('medical')
-                        const hasSecurityControls = documentType.toLowerCase().includes('security') ||
-                                                   documentType.toLowerCase().includes('risk') ||
-                                                   documentType.toLowerCase().includes('compliance')
-                        
+
+                        // Determine regulatory applicability based on documentData type and content
+                        const hasPersonalData = documentDataType.toLowerCase().includes('stakeholder') ||
+                          documentDataType.toLowerCase().includes('hr') ||
+                          documentDataType.toLowerCase().includes('resource')
+                        const hasHealthData = documentDataType.toLowerCase().includes('health') ||
+                          documentDataType.toLowerCase().includes('medical')
+                        const hasSecurityControls = documentDataType.toLowerCase().includes('security') ||
+                          documentDataType.toLowerCase().includes('risk') ||
+                          documentDataType.toLowerCase().includes('compliance')
+
                         return (
                           <div className="space-y-6">
                             {/* Framework Compliance */}
@@ -2524,7 +2645,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                                     </div>
                                   </div>
                                 )}
-                                
+
                                 {isBABOK && (
                                   <div className="flex justify-between items-center p-3 bg-green-50 rounded-lg border border-green-200">
                                     <div>
@@ -2539,7 +2660,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                                     </div>
                                   </div>
                                 )}
-                                
+
                                 {isDMBOK && (
                                   <div className="flex justify-between items-center p-3 bg-purple-50 rounded-lg border border-purple-200">
                                     <div>
@@ -2554,7 +2675,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                                     </div>
                                   </div>
                                 )}
-                                
+
                                 {!isPMBOK && !isBABOK && !isDMBOK && (
                                   <div className="text-center p-4 bg-gray-50 rounded-lg border">
                                     <p className="text-xs text-muted-foreground">No specific framework detected</p>
@@ -2562,9 +2683,9 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                                 )}
                               </div>
                             </div>
-                            
+
                             <Separator />
-                            
+
                             {/* Regulatory Compliance */}
                             <div>
                               <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
@@ -2580,7 +2701,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                                     <p className="text-xs text-green-600 mt-1">Data privacy considered</p>
                                   )}
                                 </div>
-                                
+
                                 <div className={`text-center p-3 rounded border ${hasHealthData ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
                                   <p className="text-xs text-muted-foreground mb-1">HIPAA</p>
                                   <p className="text-sm font-semibold">
@@ -2590,21 +2711,21 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                                     <p className="text-xs text-green-600 mt-1">Health data protected</p>
                                   )}
                                 </div>
-                                
+
                                 <div className={`text-center p-3 rounded border ${hasSecurityControls ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
                                   <p className="text-xs text-muted-foreground mb-1">SOC 2</p>
                                   <p className="text-sm font-semibold">
                                     {hasSecurityControls ? '✅ Applicable' : '➖ N/A'}
                                   </p>
                                   {hasSecurityControls && (
-                                    <p className="text-xs text-green-600 mt-1">Controls documented</p>
+                                    <p className="text-xs text-green-600 mt-1">Controls documentDataed</p>
                                   )}
                                 </div>
                               </div>
                             </div>
-                            
+
                             <Separator />
-                            
+
                             {/* Standards & Best Practices */}
                             <div>
                               <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
@@ -2615,19 +2736,19 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                                   <span className="text-sm text-muted-foreground">Industry Standards</span>
                                   <span className="text-sm font-bold text-blue-600">{standardsScore}%</span>
                                 </div>
-                                
+
                                 <div className="flex justify-between items-center p-2 bg-gradient-to-r from-purple-50 to-pink-50 rounded">
                                   <span className="text-sm text-muted-foreground">Best Practices</span>
                                   <span className="text-sm font-bold text-purple-600">{overallQuality}%</span>
                                 </div>
-                                
+
                                 <div className="flex justify-between items-center p-2 bg-gradient-to-r from-green-50 to-emerald-50 rounded">
                                   <span className="text-sm text-muted-foreground">Template Adherence</span>
-                                  <span className="text-sm font-bold text-green-600">{document?.generation_metadata?.qualityMetrics?.structureScore || standardsScore}%</span>
+                                  <span className="text-sm font-bold text-green-600">{documentData?.generation_metadata?.qualityMetrics?.structureScore || standardsScore}%</span>
                                 </div>
                               </div>
                             </div>
-                            
+
                             {/* Compliance Summary */}
                             <div className="mt-4 p-4 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg">
                               <div className="flex justify-between items-center">
@@ -2671,17 +2792,17 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                     </CardHeader>
                     <CardContent>
                       {(() => {
-                        // Handle both snake_case (source_documents) and camelCase (sourceDocuments) for backward compatibility
-                        const sourceDocs = (document as any)?.generation_metadata?.source_documents || (document as any)?.generation_metadata?.sourceDocuments || []
-                        
+                        // Handle both snake_case (source_documentDatas) and camelCase (sourceDocuments) for backward compatibility
+                        const sourceDocs = documentData?.generation_metadata?.source_documentDatas || documentData?.generation_metadata?.sourceDocuments || []
+
                         if (sourceDocs.length === 0) {
                           return (
                             <p className="text-sm text-muted-foreground text-center py-4">
-                              No source documents - this was the first document generated or no context was available.
+                              No source documentDatas - this was the first documentData generated or no context was available.
                             </p>
                           )
                         }
-                        
+
                         return (
                           <>
                             {/* Individual Document Details */}
@@ -2689,114 +2810,111 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                               {sourceDocs.map((source: any, idx: number) => {
                                 // Handle project context entries specially
                                 const isProjectContext = source.is_project_context || (source.id && source.id.startsWith('project_context:'))
-                                const linkUrl = isProjectContext 
+                                const linkUrl = isProjectContext
                                   ? `/projects/${projectId}` // Link to project page for project context
-                                  : `/projects/${projectId}/documents/${source.id}/view` // Link to document for regular documents
-                                
+                                  : `/projects/${projectId}/documentDatas/${source.id}/view` // Link to documentData for regular documentDatas
+
                                 return (
-                                <Link
-                                  key={source.id || idx}
-                                  href={linkUrl}
-                                  className="block p-4 border rounded-lg hover:bg-muted/50 transition-colors"
-                                >
-                                  <div className="flex items-start space-x-3">
-                                    <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-                                      isProjectContext 
-                                        ? 'bg-purple-100 dark:bg-purple-900' 
-                                        : 'bg-blue-100 dark:bg-blue-900'
-                                    }`}>
-                                      <span className={`text-sm font-bold ${
-                                        isProjectContext 
-                                          ? 'text-purple-600 dark:text-purple-300' 
-                                          : 'text-blue-600 dark:text-blue-300'
-                                      }`}>
-                                        {isProjectContext ? '🏗️' : (source.priority_rank || idx + 1)}
-                                      </span>
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                      <div className="flex items-center space-x-2 mb-1">
-                                        <h4 className="text-sm font-semibold truncate">
-                                          {source.title || source.name}
-                                        </h4>
-                                        {isProjectContext && (
-                                          <Badge variant="outline" className="bg-purple-50 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800 flex-shrink-0">
-                                            Project Context
-                                          </Badge>
-                                        )}
-                                        {!isProjectContext && source.status && (
-                                          <Badge variant="outline" className="capitalize flex-shrink-0">
-                                            {source.status}
-                                          </Badge>
-                                        )}
-                                        {source.dependency_level && (
-                                          <Badge 
-                                            variant="secondary" 
-                                            className={`flex-shrink-0 ${
-                                              source.dependency_level >= 4 ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' :
-                                              source.dependency_level === 3 ? 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300' :
-                                              source.dependency_level === 2 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' :
-                                              'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
-                                            }`}
-                                          >
-                                            {source.dependency_level >= 4 ? '🔴 Critical' :
-                                             source.dependency_level === 3 ? '🟠 High' :
-                                             source.dependency_level === 2 ? '🟡 Medium' : '🟢 Low'}
-                                          </Badge>
-                                        )}
+                                  <Link
+                                    key={source.id || idx}
+                                    href={linkUrl}
+                                    className="block p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                                  >
+                                    <div className="flex items-start space-x-3">
+                                      <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${isProjectContext
+                                          ? 'bg-purple-100 dark:bg-purple-900'
+                                          : 'bg-blue-100 dark:bg-blue-900'
+                                        }`}>
+                                        <span className={`text-sm font-bold ${isProjectContext
+                                            ? 'text-purple-600 dark:text-purple-300'
+                                            : 'text-blue-600 dark:text-blue-300'
+                                          }`}>
+                                          {isProjectContext ? '🏗️' : (source.priority_rank || idx + 1)}
+                                        </span>
                                       </div>
-                                      <div className="flex items-center space-x-2 text-xs text-muted-foreground">
-                                        {source.phase_name && (
-                                          <span className="flex items-center space-x-1">
-                                            <span className="font-medium">{source.phase_name}</span>
-                                          </span>
-                                        )}
-                                        {source.type && (
-                                          <>
-                                            <span>•</span>
-                                            <span>{source.type}</span>
-                                          </>
-                                        )}
-                                        {source.priority_rank && typeof source.priority_rank === 'number' && (
-                                          <>
-                                            <span>•</span>
-                                            <span className="font-medium">Score: {Math.round(source.priority_rank)}</span>
-                                          </>
-                                        )}
-                                      </div>
-                                      {/* Reading Metrics */}
-                                      {source.character_count && (
-                                        <div className="flex items-center space-x-2 text-xs text-muted-foreground/80 mt-1">
-                                          <span>📄 {source.character_count.toLocaleString()} chars</span>
-                                          <span>•</span>
-                                          <span>📖 {source.word_count?.toLocaleString() || 'N/A'} words</span>
-                                          <span>•</span>
-                                          <span className="font-medium">⏱️ ~{source.reading_time_minutes || Math.round((source.word_count || 0) / 250)} min read</span>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center space-x-2 mb-1">
+                                          <h4 className="text-sm font-semibold truncate">
+                                            {source.title || source.name}
+                                          </h4>
+                                          {isProjectContext && (
+                                            <Badge variant="outline" className="bg-purple-50 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800 flex-shrink-0">
+                                              Project Context
+                                            </Badge>
+                                          )}
+                                          {!isProjectContext && source.status && (
+                                            <Badge variant="outline" className="capitalize flex-shrink-0">
+                                              {source.status}
+                                            </Badge>
+                                          )}
+                                          {source.dependency_level && (
+                                            <Badge
+                                              variant="secondary"
+                                              className={`flex-shrink-0 ${source.dependency_level >= 4 ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' :
+                                                  source.dependency_level === 3 ? 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300' :
+                                                    source.dependency_level === 2 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' :
+                                                      'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                                                }`}
+                                            >
+                                              {source.dependency_level >= 4 ? '🔴 Critical' :
+                                                source.dependency_level === 3 ? '🟠 High' :
+                                                  source.dependency_level === 2 ? '🟡 Medium' : '🟢 Low'}
+                                            </Badge>
+                                          )}
                                         </div>
-                                      )}
+                                        <div className="flex items-center space-x-2 text-xs text-muted-foreground">
+                                          {source.phase_name && (
+                                            <span className="flex items-center space-x-1">
+                                              <span className="font-medium">{source.phase_name}</span>
+                                            </span>
+                                          )}
+                                          {source.type && (
+                                            <>
+                                              <span>•</span>
+                                              <span>{source.type}</span>
+                                            </>
+                                          )}
+                                          {source.priority_rank && typeof source.priority_rank === 'number' && (
+                                            <>
+                                              <span>•</span>
+                                              <span className="font-medium">Score: {Math.round(source.priority_rank)}</span>
+                                            </>
+                                          )}
+                                        </div>
+                                        {/* Reading Metrics */}
+                                        {source.character_count && (
+                                          <div className="flex items-center space-x-2 text-xs text-muted-foreground/80 mt-1">
+                                            <span>📄 {source.character_count.toLocaleString()} chars</span>
+                                            <span>•</span>
+                                            <span>📖 {source.word_count?.toLocaleString() || 'N/A'} words</span>
+                                            <span>•</span>
+                                            <span className="font-medium">⏱️ ~{source.reading_time_minutes || Math.round((source.word_count || 0) / 250)} min read</span>
+                                          </div>
+                                        )}
+                                      </div>
+                                      <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                                     </div>
-                                    <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                                  </div>
-                                </Link>
+                                  </Link>
                                 )
                               })}
                             </div>
-                            
+
                             {/* Context Stats Summary */}
-                            {(document as any)?.generation_metadata?.context_stats && (
+                            {documentData?.generation_metadata?.context_stats && (
                               <div className="mt-4 p-3 bg-muted/50 rounded-lg">
                                 {(() => {
-                                  const contextStats = (document as any).generation_metadata.context_stats
+                                  const contextStats = documentData.generation_metadata!.context_stats!
                                   const totalChars = sourceDocs.reduce((sum: number, doc: any) => sum + (doc.character_count || 0), 0)
                                   const totalWords = sourceDocs.reduce((sum: number, doc: any) => sum + (doc.word_count || 0), 0)
                                   const totalReadingTime = sourceDocs.reduce((sum: number, doc: any) => sum + (doc.reading_time_minutes || 0), 0)
-                                  
+
                                   return (
                                     <div className="space-y-3">
                                       <div className="grid grid-cols-2 gap-3 text-xs">
                                         <div>
                                           <span className="text-muted-foreground">Documents Used:</span>
                                           <span className="ml-2 font-medium">
-                                            {contextStats.documents_used || contextStats.documents_used_as_context || sourceDocs.length} / {contextStats.total_documents || contextStats.total_documents_available || 0}
+                                            {contextStats.documentDatas_used || contextStats.documentDatas_used_as_context || sourceDocs.length} / {contextStats.total_documentDatas || contextStats.total_documentDatas_available || 0}
                                           </span>
                                         </div>
                                         {contextStats.project_context_used && (
@@ -2824,7 +2942,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                                           </div>
                                         )}
                                       </div>
-                                      
+
                                       {/* Total Reading Metrics */}
                                       {totalChars > 0 && (
                                         <div className="pt-2 border-t">
@@ -2845,8 +2963,8 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                                             <div className="col-span-2">
                                               <span className="text-muted-foreground">Total Reading Time:</span>
                                               <span className="ml-2 font-medium">
-                                                {totalReadingTime >= 60 
-                                                  ? `${Math.round(totalReadingTime / 60 * 10) / 10} hours` 
+                                                {totalReadingTime >= 60
+                                                  ? `${Math.round(totalReadingTime / 60 * 10) / 10} hours`
                                                   : `${Math.round(totalReadingTime)} minutes`}
                                               </span>
                                             </div>
@@ -2884,9 +3002,9 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
-                      {document?.metadata?.stakeholder_feedback && document.metadata.stakeholder_feedback.length > 0 ? (
+                      {documentData?.metadata?.stakeholder_feedback && documentData.metadata.stakeholder_feedback.length > 0 ? (
                         <div className="space-y-4">
-                          {document.metadata.stakeholder_feedback.map((feedback) => (
+                          {documentData.metadata.stakeholder_feedback.map((feedback) => (
                             <div key={feedback.id} className="border rounded-lg p-4">
                               <div className="flex items-start justify-between mb-2">
                                 <div className="flex items-center space-x-2">
@@ -2894,9 +3012,9 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                                   <span className="font-medium">{feedback.user}</span>
                                   <div className="flex items-center space-x-1">
                                     {[...Array(5)].map((_, i) => (
-                                      <Star 
-                                        key={i} 
-                                        className={`h-4 w-4 ${i < feedback.rating ? 'text-yellow-400 fill-current' : 'text-gray-300'}`} 
+                                      <Star
+                                        key={i}
+                                        className={`h-4 w-4 ${i < feedback.rating ? 'text-yellow-400 fill-current' : 'text-gray-300'}`}
                                       />
                                     ))}
                                   </div>
@@ -2913,8 +3031,8 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                         <div className="text-center py-8">
                           <MessageSquare className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                           <p className="text-muted-foreground">No feedback yet</p>
-                          <Button 
-                            variant="outline" 
+                          <Button
+                            variant="outline"
                             className="mt-2"
                             onClick={() => setFeedbackDialogOpen(true)}
                           >
@@ -2945,29 +3063,29 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">File Hash</Label>
                           <p className="text-sm font-mono">
-                            {document?.metadata?.technical_metadata?.file_hash || 
-                             (document?.id ? `${document.id.substring(0, 16)}...` : "N/A")}
+                            {documentData?.metadata?.technical_metadata?.file_hash ||
+                              (documentData?.id ? `${documentData.id.substring(0, 16)}...` : "N/A")}
                           </p>
                           <p className="text-xs text-muted-foreground italic mt-1">SHA-256 (truncated)</p>
                         </div>
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">Encoding</Label>
                           <p className="text-sm">
-                            {document?.metadata?.technical_metadata?.encoding || "UTF-8"}
+                            {documentData?.metadata?.technical_metadata?.encoding || "UTF-8"}
                           </p>
                           <p className="text-xs text-muted-foreground italic mt-1">Standard text encoding</p>
                         </div>
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">Language</Label>
                           <p className="text-sm">
-                            {document?.metadata?.technical_metadata?.language || "en (English)"}
+                            {documentData?.metadata?.technical_metadata?.language || "en (English)"}
                           </p>
                           <p className="text-xs text-muted-foreground italic mt-1">Detected language</p>
                         </div>
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">MIME Type</Label>
                           <p className="text-sm">
-                            {document?.mime_type || document?.metadata?.mime_type || "text/markdown"}
+                            {documentData?.mime_type || documentData?.metadata?.mime_type || "text/markdown"}
                           </p>
                           <p className="text-xs text-muted-foreground italic mt-1">Content type</p>
                         </div>
@@ -2979,32 +3097,32 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">Generation Method</Label>
                           <Badge variant="secondary">
-                            {document?.generation_metadata?.aiProcessing?.provider ? "AI Generated" : "Uploaded"}
+                            {documentData?.generation_metadata?.aiProcessing?.provider ? "AI Generated" : "Uploaded"}
                           </Badge>
                           <p className="text-xs text-muted-foreground italic mt-1">
-                            {document?.generation_metadata?.aiProcessing?.provider 
-                              ? `via ${document.generation_metadata.aiProcessing.provider}` 
+                            {documentData?.generation_metadata?.aiProcessing?.provider
+                              ? `via ${documentData.generation_metadata.aiProcessing.provider}`
                               : "User uploaded"}
                           </p>
                         </div>
-                        {document?.metadata?.technical_metadata?.structure_analysis && (
+                        {documentData?.metadata?.technical_metadata?.structure_analysis && (
                           <div className="md:col-span-2">
                             <Label className="text-sm font-medium text-muted-foreground">Structure Analysis</Label>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-2">
                               <div className="text-center p-2 bg-muted rounded">
-                                <div className="text-lg font-bold">{document.metadata.technical_metadata.structure_analysis.sections}</div>
+                                <div className="text-lg font-bold">{documentData.metadata.technical_metadata.structure_analysis.sections}</div>
                                 <div className="text-xs text-muted-foreground">Sections</div>
                               </div>
                               <div className="text-center p-2 bg-muted rounded">
-                                <div className="text-lg font-bold">{document.metadata.technical_metadata.structure_analysis.subsections}</div>
+                                <div className="text-lg font-bold">{documentData.metadata.technical_metadata.structure_analysis.subsections}</div>
                                 <div className="text-xs text-muted-foreground">Subsections</div>
                               </div>
                               <div className="text-center p-2 bg-muted rounded">
-                                <div className="text-lg font-bold">{document.metadata.technical_metadata.structure_analysis.tables}</div>
+                                <div className="text-lg font-bold">{documentData.metadata.technical_metadata.structure_analysis.tables}</div>
                                 <div className="text-xs text-muted-foreground">Tables</div>
                               </div>
                               <div className="text-center p-2 bg-muted rounded">
-                                <div className="text-lg font-bold">{document.metadata.technical_metadata.structure_analysis.figures}</div>
+                                <div className="text-lg font-bold">{documentData.metadata.technical_metadata.structure_analysis.figures}</div>
                                 <div className="text-xs text-muted-foreground">Figures</div>
                               </div>
                             </div>
@@ -3021,13 +3139,13 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                     <DialogHeader>
                       <DialogTitle>Submit Feedback</DialogTitle>
                       <DialogDescription>
-                        Provide feedback for this document to help improve its quality and compliance.
+                        Provide feedback for this documentData to help improve its quality and compliance.
                       </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4">
                       <div>
                         <Label htmlFor="feedback-category">Category</Label>
-                        <Select value={feedbackForm.category} onValueChange={(value: string) => setFeedbackForm({...feedbackForm, category: value})}>
+                        <Select value={feedbackForm.category} onValueChange={(value: string) => setFeedbackForm({ ...feedbackForm, category: value })}>
                           <SelectTrigger>
                             <SelectValue placeholder="Select category" />
                           </SelectTrigger>
@@ -3047,7 +3165,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                             <button
                               key={rating}
                               type="button"
-                              onClick={() => setFeedbackForm({...feedbackForm, rating})}
+                              onClick={() => setFeedbackForm({ ...feedbackForm, rating })}
                               className={`p-1 ${feedbackForm.rating >= rating ? 'text-yellow-400' : 'text-gray-300'}`}
                             >
                               <Star className="h-6 w-6" />
@@ -3063,7 +3181,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                         <Textarea
                           id="feedback-comment"
                           value={feedbackForm.comment}
-                          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setFeedbackForm({...feedbackForm, comment: e.target.value})}
+                          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setFeedbackForm({ ...feedbackForm, comment: e.target.value })}
                           placeholder="Enter your feedback..."
                           rows={4}
                         />
@@ -3090,10 +3208,10 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
       <RegenerateVersionModal
         open={showRegenerateModal}
         onOpenChange={setShowRegenerateModal}
-        documentId={docId}
-        currentTemplate={document?.template_id}
-        currentTemplateName={document?.template_name}
-        currentVersion={document?.version?.toString() || '1.0'}
+        documentDataId={docId}
+        currentTemplate={documentData?.template_id}
+        currentTemplateName={documentData?.template_name}
+        currentVersion={documentData?.version?.toString() || '1.0'}
         projectId={projectId}
         onRegenerate={handleRegenerate}
       />
@@ -3106,7 +3224,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
         error={regenerationError}
         result={result}
         onClose={resetRegeneration}
-        documentId={docId}
+        documentDataId={docId}
       />
 
       {/* Signature Request Dialog */}
@@ -3116,7 +3234,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
         onSubmit={async (data) => {
           try {
             const response = await apiClient.post('/signatures/initiate', {
-              documentId: docId,
+              documentDataId: docId,
               ...data,
             })
             toast.success('Signature request sent successfully!')
@@ -3126,7 +3244,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
             throw error
           }
         }}
-        documentTitle={document?.name}
+        documentDataTitle={documentData?.name}
       />
 
       {/* Quality Audit Modal */}

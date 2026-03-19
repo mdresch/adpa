@@ -8,14 +8,19 @@ import { logger } from '../../../utils/logger'
 export class ConflictResolver {
   /**
    * Identifies conflicts by comparing node content.
-   * Note: In a production setting, this would often involve LLM-based analysis.
+   *
+   * TODO (Phase 11 - Conflict Detection):
+   * This stub always returns an empty array, making the entire conflict resolution
+   * pipeline a no-op. A production implementation should:
+   *   1. Use an LLM pass to compare node content for semantic contradictions.
+   *   2. Use rule-based heuristics for numeric/boolean fields (e.g. risk scores
+   *      that differ by > 20%).
+   *   3. Populate ConflictRecord.involvedNodeIds and resolutionStrategy so that
+   *      ConflictResolver.resolve() can act on them.
    */
   static identifyConflicts(nodes: EvidenceNode[]): ConflictRecord[] {
     const conflicts: ConflictRecord[] = []
-    
-    // Simplified heuristic: If sources disagree on the same property
-    // (Actual logic would be task-specific or LLM-driven)
-    
+    // Placeholder – no conflicts detected until Phase 11 implementation
     return conflicts
   }
 

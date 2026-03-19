@@ -70,8 +70,8 @@ export class MultiAgentReviewEngine {
 
     try {
       const response = await this.aiService.generateWithFallback({
-        provider: context.provider || 'openai',
-        model: context.model || 'gpt-4o',
+        provider: context.provider,
+        model: context.model,
         prompt: prompt,
         system_prompt: 'You are a critical peer reviewer. Respond ONLY with valid JSON.'
       })

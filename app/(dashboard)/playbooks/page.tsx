@@ -507,11 +507,6 @@ export default function PlaybooksPage() {
                                         defaultValue={[75]}
                                         max={100}
                                         step={5}
-                                        marks={[
-                                            { value: 50, label: "50%" },
-                                            { value: 75, label: "75%" },
-                                            { value: 90, label: "90%" }
-                                        ]}
                                         className="w-full"
                                     />
                                 </div>

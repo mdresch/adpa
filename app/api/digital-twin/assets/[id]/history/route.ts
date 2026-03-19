@@ -5,8 +5,9 @@ import { logger } from '@/server/src/utils/logger';
 
 export async function GET(
     req: Request,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
+    const { id } = await params;
     const user = await getAuthenticatedUser(req);
     if (!user) return unauthorizedResponse();
 
@@ -14,7 +15,7 @@ export async function GET(
         const { searchParams } = new URL(req.url);
         const limit = parseInt(searchParams.get('limit') || '20', 10);
 
-        const history = await digitalTwinAssetService.getStateHistory(params.id, limit);
+        const history = await digitalTwinAssetService.getStateHistory(id, limit);
         return NextResponse.json(history);
     } catch (error) {
         logger.error('GET /api/digital-twin/assets/:id/history error', { error });

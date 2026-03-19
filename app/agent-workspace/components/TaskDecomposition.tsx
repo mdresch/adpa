@@ -49,8 +49,8 @@ export function TaskDecomposition() {
     try {
       // 1. Create the goal
       const goalResponse: any = await apiClient.post("/goals", {
-        title: goalTitle,
-        description: goalDescription,
+        goalName: goalTitle,
+        ...(goalDescription.trim() ? { description: goalDescription } : {}),
         projectId: selectedProjectId
       })
 

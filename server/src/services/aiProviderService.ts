@@ -388,6 +388,54 @@ class AIProviderService {
   }
 
   /**
+   * Discover models for a specific provider
+   */
+  async discoverModels(providerId: string): Promise<{ provider: any; discoveredModels: any[] }> {
+    if (!this.initialized) {
+      await this.initialize()
+    }
+
+    const providerResult = await pool.query(
+      'SELECT id, name, provider_type, api_key_encrypted, configuration, default_model FROM ai_providers WHERE id = $1',
+      [providerId]
+    )
+
+    if (providerResult.rows.length === 0) {
+      throw new Error('Provider not found')
+    }
+
+    const providerData = providerResult.rows[0]
+
+    // Create a temporary config to instantiate the provider class
+    const tempConfig: AIProviderConfig = {
+      id: providerData.id,
+      name: providerData.name,
+      type: providerData.provider_type,
+      apiKey: this.decryptApiKey(providerData.api_key_encrypted),
+      endpoint: providerData.configuration?.endpoint,
+      model: providerData.configuration?.model,
+      priority: providerData.priority || 1,
+      isActive: providerData.is_active,
+      configuration: providerData.configuration || {},
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }
+    
+    const providerInstance = this.createProvider(tempConfig)
+    const discoveredModels = await providerInstance.getModels()
+
+    return {
+      provider: {
+        id: providerData.id,
+        name: providerData.name,
+        type: providerData.provider_type,
+        default_model: providerData.default_model,
+      },
+      discoveredModels: discoveredModels.map(m => (typeof m === 'string' ? { id: m, name: m } : m))
+    }
+  }
+
+  /**
    * TEST UTILITY: Set a provider instance directly (bypass DB)
    */
   setProvider(name: string, provider: AIProvider): void {

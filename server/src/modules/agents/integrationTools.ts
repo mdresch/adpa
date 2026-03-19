@@ -27,6 +27,10 @@ async function getIntegration(type: string) {
   
   if (row.credentials_encrypted) {
     try {
+      // SECURITY WARNING: Despite the column name "credentials_encrypted", credentials are
+      // currently only BASE64-ENCODED, not encrypted. Base64 provides zero confidentiality.
+      // TODO: Replace with proper at-rest encryption (e.g. AES-256-GCM via Node crypto,
+      // or a KMS-backed secret manager such as AWS Secrets Manager / Azure Key Vault).
       credentials = JSON.parse(Buffer.from(row.credentials_encrypted, 'base64').toString())
     } catch (e) {
       logger.error(`Failed to parse credentials for integration ${row.id}`, e)

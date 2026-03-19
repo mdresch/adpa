@@ -5,7 +5,7 @@
  * imports share the same bus in the browser.
  */
 
-export type NotificationType = 'success' | 'error' | 'info' | 'warning' | 'room-joined'
+export type NotificationType = 'success' | 'error' | 'info' | 'warning' | 'room-joined' | 'loading'
 
 export interface BaseNotification {
   title: string
@@ -37,6 +37,10 @@ export interface RoomJoinedNotification extends BaseNotification {
   type: 'room-joined'
 }
 
+export interface LoadingNotification extends BaseNotification {
+  type: 'loading'
+}
+
 /**
  * Payload for the application-wide notification bus.
  * Uses a discriminated union to allow for type-specific properties in the future.
@@ -47,6 +51,7 @@ export type NotificationPayload =
   | InfoNotification
   | WarningNotification
   | RoomJoinedNotification
+  | LoadingNotification
 
 const EVENT_NAME = 'adpa:notification'
 

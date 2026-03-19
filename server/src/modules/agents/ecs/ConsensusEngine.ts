@@ -77,8 +77,8 @@ export class ConsensusEngine {
 
     try {
       const response = await this.aiService.generateWithFallback({
-        provider: context.provider || 'openai',
-        model: context.model || 'gpt-4o',
+        provider: context.provider,
+        model: context.model,
         prompt: prompt,
         system_prompt: 'You are a consensus synthesizer. Respond ONLY with valid JSON.'
       })

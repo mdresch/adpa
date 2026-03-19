@@ -7,7 +7,7 @@ export default function DocumentEditorLoading() {
     <div className="flex h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
-        <Header />
+        <Header title="Loading Document..." />
         <main className="flex-1 flex flex-col overflow-hidden">
           {/* Document Header Skeleton */}
           <div className="border-b bg-background p-4">

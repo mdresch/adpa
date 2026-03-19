@@ -42,9 +42,11 @@ export class UnifiedEvaluationEngine implements EvaluationProvider {
     )
 
     // 4. Final Synthesis Selection
-    // Heuristic: Prefer consensus-backed result if agreement is high
-    const finalAnswer = consensusScore > 0.7 
-      ? ecsResult.finalConclusion // In a more complex engine, we might re-synthesize here
+    // When consensus is high (>70%), the inter-agent agreement gives strong confidence.
+    // When low, we rely purely on the ECS authoritative conclusion.
+    // TODO: In a future phase, low-consensus cases could trigger a re-synthesis pass.
+    const finalAnswer = consensusScore > 0.7
+      ? `[High Consensus: ${(consensusScore * 100).toFixed(0)}%] ${ecsResult.finalConclusion}`
       : ecsResult.finalConclusion
 
     return {

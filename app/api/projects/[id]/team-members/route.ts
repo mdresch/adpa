@@ -24,15 +24,15 @@ const normalizeTeamMembers = (rawTeamMembers: unknown): string[] => {
 
 export async function GET(
     req: Request,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
+    const { id: projectId } = await params;
     const requester = await getAuthenticatedUser(req);
     if (!requester) return unauthorizedResponse();
 
     // Initialize database connection (safe to call multiple times)
     await connectDatabase();
 
-    const projectId = params.id;
 
     try {
         const projectResult = await pool.query(

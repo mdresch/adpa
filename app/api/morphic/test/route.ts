@@ -1,13 +1,13 @@
-import { connectDatabase } from '@/server/src/database/connection'
+import { connectDatabase, pool } from '@/server/src/database/connection'
 
 export async function GET() {
     try {
-        const db = await connectDatabase()
-        const result = await db.execute('SELECT 1 as connected')
+        await connectDatabase()
+        const result = await pool.query('SELECT 1 as connected')
         return Response.json({ 
             status: 'morphic-test-ok', 
             database: 'connected',
-            result,
+            result: result.rows[0],
             timestamp: new Date().toISOString() 
         })
     } catch (error: any) {

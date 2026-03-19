@@ -133,7 +133,7 @@ export default function ProjectDocumentViewer() {
   const projectId = params.id as string
   const documentId = params.docId as string
 
-  const [document, setDocument] = useState<DocumentData | null>(null)
+  const [adpaDocument, setAdpaDocument] = useState<DocumentData | null>(null)
   const [versions, setVersions] = useState<VersionData[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [editedContent, setEditedContent] = useState("")
@@ -1021,8 +1021,8 @@ The ADPA system represents a significant advancement in document processing auto
       const loadingToast = toast.loading("Creating Jira issue...")
       const resp = await apiClient.post(`/jira-linkage/create-issue`, {
         documentId,
-        issueTitle: document?.name || document?.title || 'Document',
-        issueDescription: `Document: ${document?.name || document?.title}\n\nProject: ${projectId}\nDocument ID: ${documentId}`,
+        issueTitle: adpaDocument?.name || adpaDocument?.title || 'Document',
+        issueDescription: `Document: ${adpaDocument?.name || adpaDocument?.title}\n\nProject: ${projectId}\nDocument ID: ${documentId}`,
         confluenceUrl: (document as any)?.confluence_page_url || undefined
       })
 
@@ -1576,7 +1576,7 @@ The ADPA system represents a significant advancement in document processing auto
       <div className="min-h-screen bg-background flex">
         <Sidebar />
         <div className="flex-1 flex flex-col overflow-hidden">
-          <Header />
+          <Header title={adpaDocument?.name || adpaDocument?.title || "Document View"} />
           <main className="flex-1 overflow-y-auto p-6">
             <div className="max-w-7xl mx-auto">
               <div className="flex items-center justify-center h-64">
@@ -1598,7 +1598,7 @@ The ADPA system represents a significant advancement in document processing auto
         <div className="min-h-screen bg-background flex">
           <Sidebar />
           <div className="flex-1 flex flex-col overflow-hidden">
-            <Header />
+            <Header title={adpaDocument?.name || adpaDocument?.title || "Document View"} />
             <main className="flex-1 overflow-y-auto p-6">
               <div className="max-w-7xl mx-auto">
                 <div className="flex items-center justify-center h-64">
@@ -1617,7 +1617,7 @@ The ADPA system represents a significant advancement in document processing auto
       <div className="min-h-screen bg-background flex">
         <Sidebar />
         <div className="flex-1 flex flex-col overflow-hidden">
-          <Header />
+          <Header title={adpaDocument?.name || adpaDocument?.title || "Document View"} />
           <main className="flex-1 overflow-y-auto p-6">
             <div className="max-w-7xl mx-auto">
               <div className="flex items-center justify-center h-64">
@@ -1656,7 +1656,7 @@ The ADPA system represents a significant advancement in document processing auto
       </div>
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="flex-shrink-0">
-          <Header />
+          <Header title={adpaDocument?.name || adpaDocument?.title || "Document View"} />
         </div>
         <main className="flex-1 overflow-y-auto p-6">
           <PageTransition>
@@ -2873,7 +2873,7 @@ The ADPA system represents a significant advancement in document processing auto
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <BarChart3 className="h-5 w-5" />
-              Document Summaries - {document?.title}
+              Document Summaries - {adpaDocument?.title}
             </DialogTitle>
             <DialogDescription>
               View cached AI-generated summaries at different compression levels. These are reused in process-flow jobs to save time and API costs.
@@ -3064,9 +3064,9 @@ The ADPA system represents a significant advancement in document processing auto
         open={showRegenerateModal}
         onOpenChange={setShowRegenerateModal}
         documentId={documentId}
-        currentTemplate={document?.template_id}
-        currentTemplateName={document?.template_name || (document as any)?.metadata?.templateName}
-        currentVersion={document?.version?.toString() || '1.0'}
+        currentTemplate={adpaDocument?.template_id}
+        currentTemplateName={adpaDocument?.template_name || (document as any)?.metadata?.templateName}
+        currentVersion={adpaDocument?.version?.toString() || '1.0'}
         projectId={projectId}
         onRegenerate={handleRegenerate}
       />
@@ -3087,7 +3087,7 @@ The ADPA system represents a significant advancement in document processing auto
         open={showVersionsDialog}
         onOpenChange={setShowVersionsDialog}
         versions={versions}
-        documentName={document?.name}
+        documentName={adpaDocument?.name}
         loadedVersionId={(document as any)?.loaded_version_id}
         onLoadVersion={(version) => {
           // Load selected version into the main view with all metadata
@@ -3118,7 +3118,7 @@ The ADPA system represents a significant advancement in document processing auto
         open={showVersionDialog}
         onOpenChange={setShowVersionDialog}
         version={selectedVersion}
-        documentName={document?.name}
+        documentName={adpaDocument?.name}
       />
     </div>
   )

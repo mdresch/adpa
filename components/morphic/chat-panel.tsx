@@ -18,6 +18,9 @@ import { SearchModeSelector } from './search-mode-selector'
 import { Button } from './ui/button'
 import { IconBlinkingLogo } from './ui/icons'
 import { UploadedFileList } from './uploaded-file-list'
+import { Switch } from './ui/switch'
+import { Label } from '@/components/ui/label'
+import { generateId } from '@/lib/morphic/db/schema'
 
 
 const INPUT_UPDATE_DELAY_MS = 10
@@ -65,6 +68,8 @@ export function ChatPanel({
     const [isComposing, setIsComposing] = useState(false)
     const [enterDisabled, setEnterDisabled] = useState(false)
     const [isInputFocused, setIsInputFocused] = useState(false)
+    const [isAgentMode, setIsAgentMode] = useState(false)
+    const [agentResponse, setAgentResponse] = useState<string | null>(null)
     const { close: closeArtifact } = useArtifact()
     const isLoading = status === 'submitted' || status === 'streaming'
 
@@ -86,6 +91,50 @@ export function ChatPanel({
         onNewChat?.()
         router.push('/')
     }
+
+    const handleAgentSubmit = async (goal: string) => {
+        if (!goal.trim()) return;
+
+        append({
+            id: generateId(),
+            role: 'user',
+            content: goal,
+        });
+
+        setAgentResponse('Agent is thinking...');
+
+        try {
+            const response = await fetch('/api/agents/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ goal })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Agent request failed');
+            }
+
+            const result = await response.json();
+            
+            append({
+                id: generateId(),
+                role: 'assistant',
+                content: result.response,
+                // trace: result.trace // Can be used later to show agent thoughts
+            });
+            setAgentResponse(null);
+
+        } catch (error: any) {
+            toast.error(error.message);
+            setAgentResponse(null);
+            append({
+                id: generateId(),
+                role: 'assistant',
+                content: `Error: ${error.message}`,
+            });
+        }
+    };
 
     const isToolInvocationInProgress = () => {
         if (!messages.length) return false
@@ -152,9 +201,15 @@ export function ChatPanel({
             )}
             <form
                 onSubmit={e => {
-                    handleSubmit(e)
-                    setIsInputFocused(false)
-                    inputRef.current?.blur()
+                    if (isAgentMode) {
+                        e.preventDefault();
+                        handleAgentSubmit(input);
+                        handleInputChange({ target: { value: '' } } as any);
+                    } else {
+                        handleSubmit(e);
+                    }
+                    setIsInputFocused(false);
+                    inputRef.current?.blur();
                 }}
                 className={cn('max-w-full md:max-w-3xl w-full mx-auto relative')}
             >
@@ -280,6 +335,10 @@ export function ChatPanel({
                             )}
                             <SearchModeSelector />
                             <RAGScopeSelector />
+                            <div className="flex items-center space-x-2">
+                                <Switch id="agent-mode" checked={isAgentMode} onCheckedChange={setIsAgentMode} />
+                                <Label htmlFor="agent-mode">Agent Mode</Label>
+                            </div>
                         </div>
                         <div className="flex items-center gap-2">
                             {messages.length > 0 && (

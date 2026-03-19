@@ -8,6 +8,20 @@ import * as goalService from '../../services/goalService'
 import { discoveryService } from '../../services/discoveryService'
 import './integrationTools'
 
+// Sentinel UUID used when no authenticated user ID is available in a tool call.
+// Tool implementations should prefer extracting the caller's ID from context args
+// (e.g. args.requestedBy or args.userId) before falling back to this value.
+const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000000'
+
+/**
+ * Extract the best available user/caller ID from tool arguments.
+ * Agents should pass `requestedBy` or `userId` in their args when possible
+ * so that created resources are attributed to the correct user.
+ */
+function resolveUserId(args: any): string {
+  return args.requestedBy || args.userId || SYSTEM_USER_ID
+}
+
 /**
  * Register Task Creation Tool
  */
@@ -21,13 +35,14 @@ class CreateTaskTool extends BaseTool {
       taskName: { type: 'string' },
       description: { type: 'string' },
       estimatedHours: { type: 'number' },
-      goalId: { type: 'string' }
+      goalId: { type: 'string' },
+      requestedBy: { type: 'string', description: 'ID of the user requesting this action' }
     },
     required: ['projectId', 'taskName']
   }
 
   async execute(args: any) {
-    return taskService.createTask(args, '00000000-0000-0000-0000-000000000000')
+    return taskService.createTask(args, resolveUserId(args))
   }
 }
 
@@ -40,13 +55,14 @@ class DecomposeTaskTool extends BaseTool {
   parameters = {
     type: 'object',
     properties: {
-      taskId: { type: 'string' }
+      taskId: { type: 'string' },
+      requestedBy: { type: 'string', description: 'ID of the user requesting this action' }
     },
     required: ['taskId']
   }
 
   async execute(args: any) {
-    return taskService.decomposeTask(args.taskId, '00000000-0000-0000-0000-000000000000')
+    return taskService.decomposeTask(args.taskId, resolveUserId(args))
   }
 }
 
@@ -59,13 +75,14 @@ class DecomposeGoalTool extends BaseTool {
   parameters = {
     type: 'object',
     properties: {
-      goalId: { type: 'string' }
+      goalId: { type: 'string' },
+      requestedBy: { type: 'string', description: 'ID of the user requesting this action' }
     },
     required: ['goalId']
   }
 
   async execute(args: any) {
-    return goalService.decomposeGoal(args.goalId, '00000000-0000-0000-0000-000000000000')
+    return goalService.decomposeGoal(args.goalId, resolveUserId(args))
   }
 }
 

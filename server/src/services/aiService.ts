@@ -88,7 +88,7 @@ let isTracingEnabled = () => false
 let tracedGenerateText = async (params: any) => {
   const { model, messages, prompt, temperature, maxOutputTokens } = params
   if (messages) {
-    return await model.generateText({ messages, temperature, maxTokenTokens: maxOutputTokens })
+    return await model.generateText({ messages, temperature, maxTokens: maxOutputTokens })
   }
   return await model.generateText({ prompt, temperature, maxOutputTokens })
 }
@@ -370,10 +370,10 @@ class AIService {
       }
 
       // FIX: Use correct column names from ai_providers table schema
-      const result = await safeQuery<{ 
+      const result = await safeQuery<{
         provider_type: string
         is_active: boolean
-        configuration: any 
+        configuration: any
       }>(
         'SELECT provider_type, is_active, configuration FROM ai_providers WHERE is_active = true'
       )
@@ -492,7 +492,7 @@ class AIService {
         logger.warn('AI Service: Database pool not available, using local fallback provider')
         return [LOCAL_FALLBACK_PROVIDER]
       }
-      
+
       const result = await dbPool.query(
         `SELECT provider_type, api_key_encrypted, configuration
          FROM ai_providers 
@@ -801,7 +801,7 @@ class AIService {
         logger.error('❌ [AI-SERVICE] Database pool not available for provider lookup')
         throw new Error('Database pool not available')
       }
-      
+
       // Get provider type from database to build the model ID
       logger.debug('[AI-SERVICE] Looking up provider type')
       // Try to find provider by provider_type first (e.g., "mistral", "openai"), then by name
@@ -833,7 +833,8 @@ class AIService {
           model: request.model || "unknown",
           modelParameters: {
             temperature: request.temperature,
-            maxTokens: request.max_tokens
+            max_tokens: request.max_tokens,
+
           },
           input: messages
         });
@@ -972,7 +973,8 @@ class AIService {
             model: modelName,
             messages: messages as any,
             temperature: request.temperature || 0.7,
-            max_tokens: request.max_tokens
+            max_tokens: request.max_tokens,
+
           })
 
           const totalTokens = completion.usage?.total_tokens || 0
@@ -1296,23 +1298,23 @@ class AIService {
           // Throw a special error to trigger fallback logic
           throw new Error('AI_GATEWAY_NOT_CONFIGURED')
         }
-          logger.info('📨 [AI-SERVICE-6/8] Using unified messages array')
-          result = await ai.generateText({
-            model: gatewayModelId,
-            messages: messages as any,
-            temperature: request.temperature || 0.7,
-            maxOutputTokens: request.max_tokens || 2000,
-            experimental_telemetry: {
-              isEnabled: isTracingEnabled(),
-              functionId: 'ai-gateway-messages',
-              metadata: this.buildTelemetryMetadata(request, {
-                provider: 'gateway',
-                model: gatewayModelId,
-                callPath: 'gateway-messages',
-                templateName: resolvedTemplateName,
-              })
-            }
-          } as any)
+        logger.info('📨 [AI-SERVICE-6/8] Using unified messages array')
+        result = await ai.generateText({
+          model: gatewayModelId,
+          messages: messages as any,
+          temperature: request.temperature || 0.7,
+          maxOutputTokens: request.max_tokens || 2000,
+          experimental_telemetry: {
+            isEnabled: isTracingEnabled(),
+            functionId: 'ai-gateway-messages',
+            metadata: this.buildTelemetryMetadata(request, {
+              provider: 'gateway',
+              model: gatewayModelId,
+              callPath: 'gateway-messages',
+              templateName: resolvedTemplateName,
+            })
+          }
+        } as any)
 
         // Validate that result has content before marking as successful
         if (!result || !result.text || result.text.trim().length === 0) {
@@ -1758,125 +1760,125 @@ class AIService {
             const modelName = ollamaModelCandidates[modelIndex]
 
             try {
-            // Use unified messages for Ollama chat API
-            // ... already built at start of generate()
+              // Use unified messages for Ollama chat API
+              // ... already built at start of generate()
 
-            // Call Ollama's native /api/chat endpoint
-            const ollamaResponse = await fetch(`${ollamaEndpoint}/api/chat`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                model: modelName,
-                messages,
-                stream: false,
-                options: {
-                  temperature: request.temperature || 0.7,
-                  num_predict: request.max_tokens || 4096
-                }
+              // Call Ollama's native /api/chat endpoint
+              const ollamaResponse = await fetch(`${ollamaEndpoint}/api/chat`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  model: modelName,
+                  messages,
+                  stream: false,
+                  options: {
+                    temperature: request.temperature || 0.7,
+                    num_predict: request.max_tokens || 4096
+                  }
+                })
               })
-            })
 
-            if (!ollamaResponse.ok) {
-              const errorText = await ollamaResponse.text()
-              const errorTextLower = errorText.toLowerCase()
-              const modelNotFound = ollamaResponse.status === 404 && errorTextLower.includes('model') && errorTextLower.includes('not found')
+              if (!ollamaResponse.ok) {
+                const errorText = await ollamaResponse.text()
+                const errorTextLower = errorText.toLowerCase()
+                const modelNotFound = ollamaResponse.status === 404 && errorTextLower.includes('model') && errorTextLower.includes('not found')
 
-              if (modelNotFound && modelIndex < ollamaModelCandidates.length - 1) {
-                logger.warn(`[AI-SERVICE] Ollama model "${modelName}" not found, trying next candidate`)
-                continue
+                if (modelNotFound && modelIndex < ollamaModelCandidates.length - 1) {
+                  logger.warn(`[AI-SERVICE] Ollama model "${modelName}" not found, trying next candidate`)
+                  continue
+                }
+
+                throw new Error(`Ollama API error (${ollamaResponse.status}): ${errorText}`)
               }
 
-              throw new Error(`Ollama API error (${ollamaResponse.status}): ${errorText}`)
-            }
+              const ollamaData = await ollamaResponse.json() as any
+              const generatedText = ollamaData.message?.content || ollamaData.response || ''
 
-            const ollamaData = await ollamaResponse.json() as any
-            const generatedText = ollamaData.message?.content || ollamaData.response || ''
+              logger.debug('[AI-SERVICE] Ollama successful:', {
+                contentLength: generatedText.length,
+                totalDuration: ollamaData.total_duration,
+                loadDuration: ollamaData.load_duration,
+                promptEvalCount: ollamaData.prompt_eval_count,
+                evalCount: ollamaData.eval_count
+              })
 
-            logger.debug('[AI-SERVICE] Ollama successful:', {
-              contentLength: generatedText.length,
-              totalDuration: ollamaData.total_duration,
-              loadDuration: ollamaData.load_duration,
-              promptEvalCount: ollamaData.prompt_eval_count,
-              evalCount: ollamaData.eval_count
-            })
+              // Calculate tokens (Ollama returns token counts in response)
+              const promptTokens = ollamaData.prompt_eval_count || 0
+              const completionTokens = ollamaData.eval_count || 0
+              const totalTokens = promptTokens + completionTokens
 
-            // Calculate tokens (Ollama returns token counts in response)
-            const promptTokens = ollamaData.prompt_eval_count || 0
-            const completionTokens = ollamaData.eval_count || 0
-            const totalTokens = promptTokens + completionTokens
+              // Update usage stats
+              await this.updateUsageStats(request.provider, { total_tokens: totalTokens })
 
-            // Update usage stats
-            await this.updateUsageStats(request.provider, { total_tokens: totalTokens })
+              // Track detailed AI usage for analytics (background, non-blocking)
+              const responseTimeMs = Date.now() - startTime
+              setImmediate(() => {
+                this.trackAIUsageAsync(
+                  request.provider,
+                  modelName,
+                  {
+                    prompt_tokens: promptTokens,
+                    completion_tokens: completionTokens,
+                    total_tokens: totalTokens,
+                  },
+                  responseTimeMs,
+                  true,
+                  request.userId,
+                  request.projectId,
+                  request.documentId
+                )
+              })
 
-            // Track detailed AI usage for analytics (background, non-blocking)
-            const responseTimeMs = Date.now() - startTime
-            setImmediate(() => {
-              this.trackAIUsageAsync(
-                request.provider,
-                modelName,
-                {
+              logger.info(`[AI] ✓ Ollama/${modelName} - ${totalTokens} tokens - ${responseTimeMs}ms`)
+
+              if (langfuseGeneration) {
+                langfuseGeneration.end({
+                  output: generatedText,
+                  usage: {
+                    promptTokens: promptTokens,
+                    completionTokens: completionTokens,
+                    totalTokens: totalTokens
+                  }
+                });
+                await langfuse.flushAsync();
+              }
+
+              return {
+                content: generatedText,
+                provider: request.provider,
+                model: modelName,
+                usage: {
                   prompt_tokens: promptTokens,
                   completion_tokens: completionTokens,
                   total_tokens: totalTokens,
                 },
-                responseTimeMs,
-                true,
-                request.userId,
-                request.projectId,
-                request.documentId
-              )
-            })
-
-            logger.info(`[AI] ✓ Ollama/${modelName} - ${totalTokens} tokens - ${responseTimeMs}ms`)
-
-            if (langfuseGeneration) {
-              langfuseGeneration.end({
-                output: generatedText,
-                usage: {
-                  promptTokens: promptTokens,
-                  completionTokens: completionTokens,
-                  totalTokens: totalTokens
-                }
-              });
-              await langfuse.flushAsync();
-            }
-
-            return {
-              content: generatedText,
-              provider: request.provider,
-              model: modelName,
-              usage: {
-                prompt_tokens: promptTokens,
-                completion_tokens: completionTokens,
-                total_tokens: totalTokens,
-              },
-            }
+              }
             } catch (ollamaError: any) {
-            if (ollamaError?.cause?.code === 'ECONNREFUSED') {
-              logger.warn('⚠️ [AI-SERVICE] Ollama connection refused - ensure Ollama is running locally')
-              throw new Error('Ollama service unavailable (ECONNREFUSED)')
-            }
+              if (ollamaError?.cause?.code === 'ECONNREFUSED') {
+                logger.warn('⚠️ [AI-SERVICE] Ollama connection refused - ensure Ollama is running locally')
+                throw new Error('Ollama service unavailable (ECONNREFUSED)')
+              }
 
-            const errorMessage = ollamaError?.message || 'Unknown Ollama error'
-            const errorMessageLower = errorMessage.toLowerCase()
-            const isModelNotFound = errorMessageLower.includes('model') && errorMessageLower.includes('not found')
-            const isOllamaCloudAuthError =
-              errorMessageLower.includes('unauthorized') &&
-              (errorMessageLower.includes('signin_url') || modelName.toLowerCase().includes(':cloud'))
+              const errorMessage = ollamaError?.message || 'Unknown Ollama error'
+              const errorMessageLower = errorMessage.toLowerCase()
+              const isModelNotFound = errorMessageLower.includes('model') && errorMessageLower.includes('not found')
+              const isOllamaCloudAuthError =
+                errorMessageLower.includes('unauthorized') &&
+                (errorMessageLower.includes('signin_url') || modelName.toLowerCase().includes(':cloud'))
 
-            if (isModelNotFound && modelIndex < ollamaModelCandidates.length - 1) {
-              logger.warn(`[AI-SERVICE] Ollama model "${modelName}" unavailable, trying next candidate`)
-              continue
-            }
+              if (isModelNotFound && modelIndex < ollamaModelCandidates.length - 1) {
+                logger.warn(`[AI-SERVICE] Ollama model "${modelName}" unavailable, trying next candidate`)
+                continue
+              }
 
-            if (isOllamaCloudAuthError && modelIndex < ollamaModelCandidates.length - 1) {
-              logger.warn(`[AI-SERVICE] Ollama cloud model "${modelName}" requires authentication, trying next local candidate`)
-              continue
-            }
+              if (isOllamaCloudAuthError && modelIndex < ollamaModelCandidates.length - 1) {
+                logger.warn(`[AI-SERVICE] Ollama cloud model "${modelName}" requires authentication, trying next local candidate`)
+                continue
+              }
 
-            lastOllamaError = ollamaError instanceof Error ? ollamaError : new Error(errorMessage)
-            logger.error('[AI-SERVICE] Ollama native API failed:', ollamaError)
-            break
+              lastOllamaError = ollamaError instanceof Error ? ollamaError : new Error(errorMessage)
+              logger.error('[AI-SERVICE] Ollama native API failed:', ollamaError)
+              break
             }
           }
 
@@ -2569,15 +2571,15 @@ class AIService {
    */
   async generateStream(request: AIGenerateRequest): Promise<any> {
     const providerType = request.provider.toLowerCase()
-    
+
     // Get direct API key for fallback
     const dbPool = getPool()
     const providerResult = await dbPool?.query(
       "SELECT provider_type, api_key_encrypted, configuration FROM ai_providers WHERE (provider_type = $1 OR LOWER(name) = LOWER($1)) AND is_active = true LIMIT 1",
       [request.provider]
     )
-    
-    const directApiKey = providerResult?.rows[0] 
+
+    const directApiKey = providerResult?.rows[0]
       ? (providerResult.rows[0].configuration?.apiKey || this.decryptApiKey(providerResult.rows[0].api_key_encrypted))
       : undefined
 
@@ -2586,7 +2588,7 @@ class AIService {
     if (!messages) {
       const systemPrompt = request.system_prompt || (request.template_id ? await this.getTemplateSystemPrompt(request.template_id) : undefined)
       const userContent = request.template_id ? this.buildUserMessage(request.prompt, request.variables) : request.prompt
-      
+
       messages = []
       if (systemPrompt) {
         messages.push({ role: 'system', content: systemPrompt })
@@ -2598,7 +2600,7 @@ class AIService {
     if (providerType === 'ollama') {
       const ollamaEndpoint = process.env.OLLAMA_BASE_URL || 'http://localhost:11434'
       const modelName = request.model || process.env.OLLAMA_MODEL || 'llama3.1'
-      
+
       const response = await fetch(`${ollamaEndpoint}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2614,7 +2616,7 @@ class AIService {
       })
 
       if (!response.ok) throw new Error(`Ollama stream error: ${response.statusText}`)
-      return response.body 
+      return response.body
     }
 
     // Handle DeepSeek direct
@@ -2625,6 +2627,7 @@ class AIService {
         messages: messages as any,
         temperature: request.temperature,
         maxTokens: request.max_tokens,
+
       })
       return result.toTextStreamResponse()
     }
@@ -2636,6 +2639,8 @@ class AIService {
       messages: messages as any,
       temperature: request.temperature,
       maxTokens: request.max_tokens,
+
+
     })
     return result.toTextStreamResponse()
   }
@@ -2649,7 +2654,7 @@ class AIService {
   ): Promise<{ stream: any; providerUsed: string }> {
     const activeProviders = await this.getActiveProviders()
     let providers = fallbackProviders ? fallbackProviders.filter(p => activeProviders.includes(p)) : activeProviders
-    
+
     if (!providers.includes(LOCAL_FALLBACK_PROVIDER)) {
       providers.push(LOCAL_FALLBACK_PROVIDER)
     }

@@ -3,7 +3,7 @@
 import type React from "react"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
-import { Brain, FileText, Zap, TrendingUp, Users, Sparkles, Activity as ActivityIcon } from "lucide-react"
+import { Brain, FileText, Zap, TrendingUp, Users, Sparkles, Activity as ActivityIcon, Rocket, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 
@@ -195,7 +195,71 @@ export function LandingPage() {
               </motion.div>
             ))}
           </div>
+          {/* Onboarding CTA Section */}
+      <section className="py-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-blue-900 via-indigo-900 to-slate-900 relative overflow-hidden">
+        {/* Background elements */}
+        <div className="absolute top-0 right-0 -mr-20 -mt-20 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl" />
+
+        <div className="max-w-5xl mx-auto relative z-10">
+          <Card className="border-0 shadow-2xl bg-white/5 dark:bg-slate-900/40 backdrop-blur-xl hover:bg-white/10 dark:hover:bg-slate-900/60 transition-all duration-500 rounded-3xl overflow-hidden">
+            <CardContent className="p-8 md:p-12 lg:p-16 flex flex-col md:flex-row items-center gap-12">
+              <div className="flex-1 text-center md:text-left">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  whileInView={{ opacity: 1, scale: 1 }}
+                  viewport={{ once: true }}
+                >
+                  <div className="inline-flex items-center px-4 py-2 rounded-full bg-blue-500/20 text-blue-300 text-sm font-semibold mb-6 border border-blue-500/30">
+                    <Rocket className="mr-2 h-4 w-4" />
+                    New: Maturity Assessment Portal
+                  </div>
+                  <h2 className="text-4xl md:text-5xl font-bold text-white mb-6 leading-tight">
+                    Accelerate Your <span className="bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">Maturity Journey</span>
+                  </h2>
+                  <p className="text-xl text-blue-100/80 mb-8 leading-relaxed">
+                    Experience our AI-powered onboarding and project management maturity assessment. Get actionable insights aligned with PMBOK 8 standards in minutes.
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-4 justify-center md:justify-start">
+                    <Button 
+                      onClick={() => router.push("/onboarding")}
+                      size="lg"
+                      className="bg-white text-blue-900 hover:bg-blue-50 font-bold px-8 py-6 rounded-2xl shadow-lg hover:shadow-xl transition-all h-auto text-lg group"
+                    >
+                      Start Free Assessment
+                      <ChevronRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                    </Button>
+                    <Button 
+                      variant="outline"
+                      size="lg"
+                      onClick={() => router.push("/onboarding")}
+                      className="border-white/20 text-blue-900 hover:bg-white/10 font-medium px-8 py-6 rounded-2xl h-auto text-lg"
+                    >
+                      Learn More
+                    </Button>
+                  </div>
+                </motion.div>
+              </div>
+
+              <div className="w-full md:w-1/3 flex justify-center">
+                <motion.div
+                  initial={{ opacity: 0, rotate: -10, y: 20 }}
+                  whileInView={{ opacity: 1, rotate: 0, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ type: "spring", stiffness: 100 }}
+                  className="relative"
+                >
+                  <div className="p-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-3xl shadow-2xl relative z-10">
+                    <Brain className="h-20 w-20 text-white opacity-90" />
+                  </div>
+                  <div className="absolute -inset-4 bg-blue-500/20 rounded-[2.5rem] blur-xl animate-pulse" />
+                </motion.div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
+      </section>
+    </div>
       </section>
     </div>
   )

@@ -23,6 +23,8 @@ const finalSslConfig = isDevelopment && process.env.DATABASE_SSL_DISABLED !== 't
     ? { rejectUnauthorized: false } 
     : sslConfig
 
+console.log(`[DB:INIT] NODE_ENV=${process.env.NODE_ENV}, DATABASE_SSL_DISABLED=${process.env.DATABASE_SSL_DISABLED}, sslConfig=${JSON.stringify(sslConfig)}, finalSslConfig=${JSON.stringify(finalSslConfig)}`)
+
 declare global {
     var morphicPostgresClient: any
 }

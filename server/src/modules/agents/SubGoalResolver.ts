@@ -30,9 +30,15 @@ export class SubGoalResolver {
       }
 
       if (currentBatch.length === 0) {
-        logger.error(`Cycle detected in subgoal dependencies: ${remaining.map(sg => sg.id).join(', ')}`)
-        // Break the cycle by taking one remaining subgoal anyway, or throw
-        // For robustness, we'll take the first remaining one
+        // A cycle prevents any remaining subgoal from becoming runnable.
+        // We break it by forcing the first unresolvable subgoal through anyway,
+        // which will likely produce incomplete results for that task but prevents
+        // an infinite loop. Callers can detect this via the logged warning.
+        const unresolvableIds = nextRemaining.map(sg => sg.id).join(', ')
+        logger.warn(
+          `Dependency cycle detected — cannot satisfy dependencies for: [${unresolvableIds}]. ` +
+          `Forcing '${nextRemaining[0]?.id}' to break the cycle. Results may be incomplete.`
+        )
         const fallback = nextRemaining.shift()
         if (fallback) {
           currentBatch.push(fallback)

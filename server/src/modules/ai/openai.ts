@@ -486,11 +486,9 @@ export class OpenAIConnector {
    * Get available models from providers
    * Uses the native OpenAI client for this management task as AI SDK doesn't support listing models yet
    */
-  async getAvailableModels(preferredProvider?: string): Promise<string[]> {
+  async getAvailableModels(preferredProvider?: string): Promise<any[]> {
     const providers = this.getAvailableProvidersList(preferredProvider)
-
-    // Default models if we can't fetch any
-    const defaultModels = ["gpt-4", "gpt-3.5-turbo", "gpt-3.5-turbo-16k", "gpt-4-turbo"]
+    const defaultModels = ["gpt-4", "gpt-3.5-turbo", "gpt-3.5-turbo-16k", "gpt-4-turbo"].map(id => ({ id, name: id }))
 
     for (const providerName of providers) {
       try {
@@ -500,7 +498,12 @@ export class OpenAIConnector {
         const response = await client.models.list()
         const models = response.data
           .filter(model => model.id.startsWith('gpt')) // Filter for GPT models
-          .map(model => model.id)
+          .map(model => ({
+            id: model.id,
+            name: model.id, // Or a more display-friendly name if available
+            context_window: (model as any).context_window || 0, // Assuming context_window is available
+            description: `Owner: ${model.owned_by}`
+          }))
 
         if (models.length > 0) {
           return models

@@ -6,11 +6,16 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { useTheme } from "next-themes"
 import { NotificationCenter } from "./notification-center"
+import { ClientOnly } from "./client-only"
 import { useEffect, useState } from "react"
 import { apiClient } from "@/lib/api"
 import Link from "next/link"
 
-export function Header() {
+interface HeaderProps {
+  title?: string
+}
+
+export function Header({ title }: HeaderProps) {
   const { theme, setTheme } = useTheme()
   const [metrics, setMetrics] = useState<any>({})
   const [mounted, setMounted] = useState(false)
@@ -51,6 +56,11 @@ export function Header() {
   return (
     <header className="flex items-center justify-between px-6 py-4 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-700 shadow-sm">
       <div className="flex items-center space-x-4 flex-1">
+        {title && (
+          <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200 mr-4">
+            {title}
+          </h2>
+        )}
         <div className="relative max-w-md group">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 h-4 w-4 transition-colors group-focus-within:text-blue-500" />
           <Input
@@ -99,7 +109,9 @@ export function Header() {
         </Button>
 
         {/* Notifications */}
-        <NotificationCenter />
+        <ClientOnly>
+          <NotificationCenter />
+        </ClientOnly>
 
         {/* Settings */}
         <Button

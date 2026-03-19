@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { Client } from 'pg'
 
-export async function GET(request: Request, { params }: { params: { id: string } }) {
-  const id = params.id
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
   const DATABASE_URL = process.env.DATABASE_URL
 
   if (!DATABASE_URL) {

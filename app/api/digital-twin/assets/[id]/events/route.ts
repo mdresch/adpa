@@ -5,8 +5,9 @@ import { logger } from '@/server/src/utils/logger';
 
 export async function GET(
     req: Request,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
+    const { id } = await params;
     const user = await getAuthenticatedUser(req);
     if (!user) return unauthorizedResponse();
 
@@ -14,7 +15,7 @@ export async function GET(
         const { searchParams } = new URL(req.url);
         const limit = parseInt(searchParams.get('limit') || '50', 10);
 
-        const events = await digitalTwinEventService.getEventsByAsset(params.id, limit);
+        const events = await digitalTwinEventService.getEventsByAsset(id, limit);
         return NextResponse.json(events);
     } catch (error) {
         logger.error('GET /api/digital-twin/assets/:id/events error', { error });

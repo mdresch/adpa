@@ -67,8 +67,8 @@ export abstract class BaseAgent {
         // 1. Plan/Thought
         const prompt = this.constructPrompt(goal, context, this.history)
         const response = await this.aiService.generateWithFallback({
-          provider: context.provider || 'openai',
-          model: context.model || 'gpt-4o',
+          provider: context.provider,
+          model: context.model,
           prompt: prompt,
           system_prompt: this.systemPrompt
         })

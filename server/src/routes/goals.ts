@@ -60,12 +60,12 @@ router.post('/',
   validate(Joi.object({
     projectId: Joi.string().uuid().required(),
     goalName: Joi.string().max(255).required(),
-    description: Joi.string().optional(),
+    description: Joi.string().allow('', null).optional(),
     targetDate: Joi.date().optional(),
     priority: Joi.string().valid('low', 'medium', 'high', 'critical').optional(),
     milestones: Joi.array().items(Joi.object({
       milestoneName: Joi.string().required(),
-      description: Joi.string().optional(),
+      description: Joi.string().allow('', null).optional(),
       targetDate: Joi.date().optional()
     })).optional()
   })),
@@ -73,11 +73,22 @@ router.post('/',
     const log = childLogger({ requestId: (req as any).requestId })
     try {
       const userId = (req as any).user?.id
-      const goal = await goalService.createGoal(req.body, userId)
+      
+      // Map goalName to title for the service layer
+      const goalInput = {
+        ...req.body,
+        title: req.body.goalName
+      }
+      
+      const goal = await goalService.createGoal(goalInput, userId)
       res.status(201).json({ success: true, data: goal })
-    } catch (error) {
-      log.error('Failed to create goal', error)
-      res.status(500).json({ error: 'Failed to create goal' })
+    } catch (error: any) {
+      log.error('Error creating goal:', error)
+      res.status(500).json({ 
+        message: 'Failed to create goal', 
+        error: error.message,
+        details: error.details || error
+      })
     }
   }
 )

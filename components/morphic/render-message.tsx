@@ -20,6 +20,7 @@ import { ResearchProcessSection } from './research-process-section'
 import { SearchSection } from './search-section'
 import { UserFileSection } from './user-file-section'
 import { UserTextSection } from './user-text-section'
+import { AgentRunTracker } from './agent-run-tracker'
 
 type MessagePart =
     | ReasoningPart

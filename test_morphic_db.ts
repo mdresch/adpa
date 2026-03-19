@@ -2,12 +2,14 @@ import dotenv from 'dotenv'
 import path from 'path'
 import postgres from 'postgres'
 
-// Load root .env.development
-dotenv.config({ path: path.resolve(process.cwd(), '.env.development') })
+// Try to load .env first, then fall back to .env.development
+const envPath = path.resolve(process.cwd(), '.env')
+dotenv.config({ path: envPath })
+console.log('Loading environment from:', envPath)
 
 async function testConnection() {
     const connectionString = process.env.MORPHIC_DATABASE_URL
-    console.log('Testing Morphic DB connection to:', connectionString ? connectionString.substring(0, 50) + '...' : 'UNDEFINED')
+    console.log('Testing Morphic DB connection to:', connectionString ? connectionString.substring(0, 80) + '...' : 'UNDEFINED')
     
     if (!connectionString) {
         console.error('MORPHIC_DATABASE_URL is not set')
@@ -15,10 +17,11 @@ async function testConnection() {
     }
 
     try {
-        console.log('Attempting to connect...')
+        console.log('\n--- Attempting WITHOUT SSL ---')
         const sql = postgres(connectionString, {
-            ssl: false, // Try without SSL first
-            connect_timeout: 10
+            ssl: false,
+            connect_timeout: 10,
+            onnotice: (notice) => console.log('Notice:', notice)
         })
         
         const result = await sql`SELECT NOW()`
@@ -26,19 +29,20 @@ async function testConnection() {
         await sql.end()
     } catch (err: any) {
         console.warn('❌ Connection failed (No SSL):', err.message)
-        
-        try {
-            console.log('Retrying with SSL (rejectUnauthorized: false)...')
-            const sqlSsl = postgres(connectionString, {
-                ssl: { rejectUnauthorized: false },
-                connect_timeout: 10
-            })
-            const result = await sqlSsl`SELECT NOW()`
-            console.log('✅ Connection successful (With SSL):', result)
-            await sqlSsl.end()
-        } catch (errSsl: any) {
-            console.error('❌ Connection failed (With SSL):', errSsl.message)
-        }
+    }
+
+    try {
+        console.log('\n--- Attempting WITH SSL (rejectUnauthorized: false) ---')
+        const sqlSsl = postgres(connectionString, {
+            ssl: { rejectUnauthorized: false },
+            connect_timeout: 10,
+            onnotice: (notice) => console.log('Notice:', notice)
+        })
+        const result = await sqlSsl`SELECT NOW()`
+        console.log('✅ Connection successful (With SSL):', result)
+        await sqlSsl.end()
+    } catch (errSsl: any) {
+        console.error('❌ Connection failed (With SSL):', errSsl.message)
     }
 }
 
