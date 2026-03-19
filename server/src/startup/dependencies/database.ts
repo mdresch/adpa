@@ -6,7 +6,7 @@ import { updateDependencyHealth } from "../../routes/health"
 export const databaseDependency: Dependency = {
   name: "Database",
   critical: true,
-  timeout: 30000, // 30 seconds
+  timeout: 65000, // 65 seconds to allow for 60s PG timeout + buffer
   init: async () => {
     const startTime = Date.now()
     try {

@@ -14,7 +14,7 @@ const dnsLookup = promisify(dns.lookup)
 const getDatabaseUrl = () => process.env.DATABASE_URL || process.env.POSTGRES_URL
 
 // timeouts and retry defaults can be configured via environment variables
-const DEFAULT_DB_CONN_TIMEOUT_MS = parseInt(process.env.DB_CONN_TIMEOUT_MS || '30000', 10)
+const DEFAULT_DB_CONN_TIMEOUT_MS = parseInt(process.env.DB_CONN_TIMEOUT_MS || '60000', 10)
 const DEFAULT_DB_QUERY_TIMEOUT_MS = parseInt(process.env.DB_QUERY_TIMEOUT_MS || '15000', 10)
 const DEFAULT_DB_MAX_RETRIES_PER_METHOD = parseInt(process.env.DB_MAX_RETRIES_PER_METHOD || '1', 10)
 // Later code may bump these values when making manual connection attempts

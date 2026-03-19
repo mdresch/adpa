@@ -1,43 +1,14 @@
-import { google } from "@ai-sdk/google";
-import { Ratelimit } from "@upstash/ratelimit";
-import { kv } from "@vercel/kv";
-import { streamText } from "ai";
 import { match } from "ts-pattern";
 
-// IMPORTANT! Set the runtime to edge: https://vercel.com/docs/functions/edge-functions/edge-runtime
-export const runtime = "edge";
-
+/**
+ * Proxy route for AI generation.
+ * This route matches the Novel editor's request format, builds the appropriate messages,
+ * and proxies the request to the backend Express server for centralized AI management.
+ */
 export async function POST(req: Request): Promise<Response> {
-  // Check if the GOOGLE_GENERATIVE_AI_API_KEY is set
-  if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY === "") {
-    return new Response("Missing GOOGLE_GENERATIVE_AI_API_KEY - make sure to add it to your .env file.", {
-      status: 400,
-    });
-  }
-  
-  // Rate limiting (optional, keeping logic from Novel but checking if env vars exist)
-  if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-    const ip = req.headers.get("x-forwarded-for") ?? "127.0.0.1";
-    const ratelimit = new Ratelimit({
-      redis: kv,
-      limiter: Ratelimit.slidingWindow(50, "1 d"),
-    });
-
-    const { success, limit, reset, remaining } = await ratelimit.limit(`novel_ratelimit_${ip}`);
-
-    if (!success) {
-      return new Response("You have reached your request limit for the day.", {
-        status: 429,
-        headers: {
-          "X-RateLimit-Limit": limit.toString(),
-          "X-RateLimit-Remaining": remaining.toString(),
-          "X-RateLimit-Reset": reset.toString(),
-        },
-      });
-    }
-  }
-
   const { prompt, option, command } = await req.json();
+
+  // Map Novel editor options to system messages
   const messages = match(option)
     .with("continue", () => [
       {
@@ -115,18 +86,38 @@ export async function POST(req: Request): Promise<Response> {
         content: `For this text: ${prompt}. You have to respect the command: ${command}`,
       },
     ])
-    .run();
+    .otherwise(() => [
+        { role: 'user', content: prompt }
+    ]);
 
-  const result = await streamText({
-    prompt: messages[messages.length - 1].content,
-    system: messages.length > 1 ? messages[0].content : undefined, 
-    maxTokens: 4096,
-    temperature: 0.7,
-    topP: 1,
-    frequencyPenalty: 0,
-    presencePenalty: 0,
-    model: google("gemini-1.5-flash"), 
+  // Proxy to backend
+  const backendUrl = process.env.BACKEND_URL || 'http://localhost:5000';
+  const response = await fetch(`${backendUrl}/api/ai-providers/generate-stream`, {
+    method: 'POST',
+    headers: {
+        'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+        messages,
+        temperature: 0.7,
+        max_tokens: 4096
+    })
   });
 
-  return result.toDataStreamResponse();
+  if (!response.ok) {
+    const errorData = await response.json();
+    return new Response(JSON.stringify(errorData), {
+        status: response.status,
+        headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
+  // Return the streaming response directly
+  return new Response(response.body, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    },
+  });
 }

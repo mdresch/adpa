@@ -10,20 +10,6 @@ export const workersDependency: Dependency = {
   dependsOn: ['Database'],
   init: async () => {
     try {
-      // 1. Start system and worker resource monitoring
-      const { SystemMonitoring } = require("../../utils/systemMonitoring")
-      const { WorkerMonitoring } = require("../../utils/workerMonitoring")
-      
-      SystemMonitoring.start()
-      const WORKER_ID = `worker-${process.pid}-${Date.now()}`
-      WorkerMonitoring.start(WORKER_ID, "Backend Worker")
-      logger.info("System and worker resource monitoring started")
-
-      // 2. Initialize document conversion queue worker
-      logger.info("Initializing document conversion worker...")
-      require("../../jobs/documentConversionJob")
-      logger.info("Document conversion worker initialized")
-
       // 3. Simple queue availability check
       const { addJob } = require("../../services/queueService")
       if (!addJob) {
@@ -38,6 +24,24 @@ export const workersDependency: Dependency = {
   },
   validate: async () => {
     try {
+      // 1. Start system and worker resource monitoring
+      // We do this in validate to ensure Database (dependency) is actually ready
+      const { SystemMonitoring } = require("../../utils/systemMonitoring")
+      const { WorkerMonitoring } = require("../../utils/workerMonitoring")
+      
+      SystemMonitoring.start()
+      const WORKER_ID = `worker-${process.pid}-${Date.now()}`
+      // Small additional delay to ensure DB pool is fully stable
+      setTimeout(() => {
+        WorkerMonitoring.start(WORKER_ID, "Backend Worker")
+        logger.info("System and worker resource monitoring started")
+      }, 2000)
+
+      // 2. Initialize document conversion queue worker
+      logger.info("Initializing document conversion worker...")
+      require("../../jobs/documentConversionJob")
+      logger.info("Document conversion worker initialized")
+
       const { addJob } = require("../../services/queueService")
       const healthy = typeof addJob === "function"
       updateDependencyHealth("Workers", healthy ? "healthy" : "unhealthy")

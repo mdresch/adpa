@@ -43,6 +43,7 @@ export interface AIGenerateRequest {
   riskName?: string
   traceName?: string
   metadata?: Record<string, any>
+  messages?: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>
 }
 
 export interface AIGenerateResponse {
@@ -773,6 +774,16 @@ class AIService {
       logger.debug('[AI-SERVICE] Using provided system_prompt')
     }
 
+    // Unified message handling for all providers
+    let messages = request.messages
+    if (!messages) {
+      messages = []
+      if (systemMessage) {
+        messages.push({ role: 'system', content: systemMessage })
+      }
+      messages.push({ role: 'user', content: userMessage })
+    }
+
     const resolvedTemplateName = await this.getTemplateName(request.template_id, request.template_name)
     const rootTraceMetadata = this.buildTelemetryMetadata(request, {
       provider: request.provider,
@@ -824,7 +835,7 @@ class AIService {
             temperature: request.temperature,
             maxTokens: request.max_tokens
           },
-          input: systemMessage ? [{ role: "system", content: systemMessage }, { role: "user", content: userMessage }] : userMessage
+          input: messages
         });
       }
 
@@ -871,10 +882,7 @@ class AIService {
 
           const deepseekResult = await tracedGenerateText({
             model: deepseek(modelName),
-            messages: [
-              ...(systemMessage ? [{ role: 'system' as const, content: systemMessage }] : []),
-              { role: 'user' as const, content: userMessage }
-            ],
+            messages: messages as any,
             temperature: request.temperature,
             maxOutputTokens: request.max_tokens,
             experimental_telemetry: {
@@ -962,10 +970,7 @@ class AIService {
           // Use native OpenAI SDK - exactly as Moonshot documentation shows
           const completion = await moonshotClient.chat.completions.create({
             model: modelName,
-            messages: [
-              ...(systemMessage ? [{ role: 'system' as const, content: systemMessage }] : []),
-              { role: 'user' as const, content: userMessage }
-            ],
+            messages: messages as any,
             temperature: request.temperature || 0.7,
             max_tokens: request.max_tokens
           })
@@ -1039,10 +1044,7 @@ class AIService {
 
           const xaiResult = await tracedGenerateText({
             model: xai(modelName),
-            messages: [
-              ...(systemMessage ? [{ role: 'system' as const, content: systemMessage }] : []),
-              { role: 'user' as const, content: userMessage }
-            ],
+            messages: messages as any,
             temperature: request.temperature,
             maxOutputTokens: request.max_tokens,
             experimental_telemetry: {
@@ -1167,9 +1169,8 @@ class AIService {
           logger.info(`[AI-SERVICE] Calling native Anthropic messages.create()`)
 
           // Build messages for Anthropic (separate system from messages)
-          const anthropicMessages: Array<{ role: 'user' | 'assistant', content: string }> = []
-
-          // Add user message
+          const anthropicMessages = messages.filter(m => m.role !== 'system') as Array<{ role: 'user' | 'assistant', content: string }>
+          const anthropicSystem = messages.find(m => m.role === 'system')?.content || systemMessage
           anthropicMessages.push({
             role: 'user',
             content: userMessage
@@ -1181,7 +1182,7 @@ class AIService {
             completion = await anthropicClient.messages.create({
               model: modelName,
               max_tokens: request.max_tokens || 4096,
-              system: systemMessage || undefined,  // System is separate in Anthropic
+              system: anthropicSystem || undefined,  // System is separate in Anthropic
               messages: anthropicMessages,
               temperature: request.temperature || 0.7
             })
@@ -1295,15 +1296,10 @@ class AIService {
           // Throw a special error to trigger fallback logic
           throw new Error('AI_GATEWAY_NOT_CONFIGURED')
         }
-        // KISS: Use messages array if we have system message, otherwise use prompt
-        if (systemMessage) {
-          logger.info('📨 [AI-SERVICE-6/8] Using KISS architecture with system + user messages')
+          logger.info('📨 [AI-SERVICE-6/8] Using unified messages array')
           result = await ai.generateText({
             model: gatewayModelId,
-            messages: [
-              { role: 'system', content: systemMessage },
-              { role: 'user', content: userMessage }
-            ],
+            messages: messages as any,
             temperature: request.temperature || 0.7,
             maxOutputTokens: request.max_tokens || 2000,
             experimental_telemetry: {
@@ -1317,25 +1313,6 @@ class AIService {
               })
             }
           } as any)
-        } else {
-          logger.info('📨 [AI-SERVICE-6/8] Using simple prompt (no template)')
-          result = await ai.generateText({
-            model: gatewayModelId,
-            prompt: userMessage,
-            temperature: request.temperature || 0.7,
-            maxOutputTokens: request.max_tokens || 2000,
-            experimental_telemetry: {
-              isEnabled: isTracingEnabled(),
-              functionId: 'ai-gateway-prompt',
-              metadata: this.buildTelemetryMetadata(request, {
-                provider: 'gateway',
-                model: gatewayModelId,
-                callPath: 'gateway-prompt',
-                templateName: resolvedTemplateName,
-              })
-            }
-          } as any)
-        }
 
         // Validate that result has content before marking as successful
         if (!result || !result.text || result.text.trim().length === 0) {
@@ -1421,10 +1398,8 @@ class AIService {
           }
 
           const model = genAI.getGenerativeModel({ model: finalModel })
-          // KISS: Combine system and user message for Google AI (it doesn't have separate system role)
-          const combinedPrompt = systemMessage
-            ? `${systemMessage}\n\n---\n\n${userMessage}`
-            : userMessage
+          // KISS: Combine messages for Google AI (best practice for fallback without full history support)
+          const combinedPrompt = messages.map(m => `[${m.role.toUpperCase()}]: ${m.content}`).join('\n\n---\n\n')
           const googleResult = await model.generateContent(combinedPrompt)
           const response = await googleResult.response
 
@@ -1528,10 +1503,7 @@ class AIService {
 
           const mistralResult = await tracedGenerateText({
             model: mistral(modelName),
-            messages: [
-              ...(systemMessage ? [{ role: 'system' as const, content: systemMessage }] : []),
-              { role: 'user' as const, content: userMessage }
-            ],
+            messages: messages as any,
             temperature: request.temperature,
             maxOutputTokens: request.max_tokens,
             experimental_telemetry: {
@@ -1616,10 +1588,7 @@ class AIService {
 
           const deepseekResult = await tracedGenerateText({
             model: deepseek(modelName),
-            messages: [
-              ...(systemMessage ? [{ role: 'system' as const, content: systemMessage }] : []),
-              { role: 'user' as const, content: userMessage }
-            ],
+            messages: messages as any,
             temperature: request.temperature,
             maxOutputTokens: request.max_tokens,
             experimental_telemetry: {
@@ -1704,10 +1673,7 @@ class AIService {
 
           const moonshotResult = await tracedGenerateText({
             model: moonshot(modelName),
-            messages: [
-              ...(systemMessage ? [{ role: 'system' as const, content: systemMessage }] : []),
-              { role: 'user' as const, content: userMessage }
-            ],
+            messages: messages as any,
             temperature: request.temperature,
             maxOutputTokens: request.max_tokens,
             experimental_telemetry: {
@@ -1792,11 +1758,8 @@ class AIService {
             const modelName = ollamaModelCandidates[modelIndex]
 
             try {
-            // Build messages for Ollama chat API
-            const messages = [
-              ...(systemMessage ? [{ role: 'system', content: systemMessage }] : []),
-              { role: 'user', content: userMessage }
-            ]
+            // Use unified messages for Ollama chat API
+            // ... already built at start of generate()
 
             // Call Ollama's native /api/chat endpoint
             const ollamaResponse = await fetch(`${ollamaEndpoint}/api/chat`, {
@@ -1940,10 +1903,7 @@ class AIService {
 
           const openaiResult = await tracedGenerateText({
             model: openai(modelName),
-            messages: [
-              ...(systemMessage ? [{ role: 'system' as const, content: systemMessage }] : []),
-              { role: 'user' as const, content: userMessage }
-            ],
+            messages: messages as any,
             temperature: request.temperature || 0.7,
             maxOutputTokens: request.max_tokens || 2000,
             experimental_telemetry: {
@@ -2039,10 +1999,7 @@ class AIService {
 
           const groqResult = await tracedGenerateText({
             model: groq(modelName),
-            messages: [
-              ...(systemMessage ? [{ role: 'system' as const, content: systemMessage }] : []),
-              { role: 'user' as const, content: userMessage }
-            ],
+            messages: messages as any,
             temperature: request.temperature,
             maxOutputTokens: request.max_tokens,
             experimental_telemetry: {
@@ -2605,6 +2562,116 @@ class AIService {
   async testGoogleAIConnection(name?: string): Promise<boolean> {
     logger.info('[AI] testGoogleAIConnection (stub)', { name })
     return true
+  }
+
+  /**
+   * generateStream - Stream AI response for a single provider
+   */
+  async generateStream(request: AIGenerateRequest): Promise<any> {
+    const providerType = request.provider.toLowerCase()
+    
+    // Get direct API key for fallback
+    const dbPool = getPool()
+    const providerResult = await dbPool?.query(
+      "SELECT provider_type, api_key_encrypted, configuration FROM ai_providers WHERE (provider_type = $1 OR LOWER(name) = LOWER($1)) AND is_active = true LIMIT 1",
+      [request.provider]
+    )
+    
+    const directApiKey = providerResult?.rows[0] 
+      ? (providerResult.rows[0].configuration?.apiKey || this.decryptApiKey(providerResult.rows[0].api_key_encrypted))
+      : undefined
+
+    // Prepare messages
+    let messages = request.messages
+    if (!messages) {
+      const systemPrompt = request.system_prompt || (request.template_id ? await this.getTemplateSystemPrompt(request.template_id) : undefined)
+      const userContent = request.template_id ? this.buildUserMessage(request.prompt, request.variables) : request.prompt
+      
+      messages = []
+      if (systemPrompt) {
+        messages.push({ role: 'system', content: systemPrompt })
+      }
+      messages.push({ role: 'user', content: userContent })
+    }
+
+    // Handle Ollama (Direct API for streaming)
+    if (providerType === 'ollama') {
+      const ollamaEndpoint = process.env.OLLAMA_BASE_URL || 'http://localhost:11434'
+      const modelName = request.model || process.env.OLLAMA_MODEL || 'llama3.1'
+      
+      const response = await fetch(`${ollamaEndpoint}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: modelName,
+          messages,
+          stream: true,
+          options: {
+            temperature: request.temperature || 0.7,
+            num_predict: request.max_tokens || 4096
+          }
+        })
+      })
+
+      if (!response.ok) throw new Error(`Ollama stream error: ${response.statusText}`)
+      return response.body 
+    }
+
+    // Handle DeepSeek direct
+    if (providerType === 'deepseek' && directApiKey) {
+      const deepseek = createDeepSeek({ apiKey: directApiKey })
+      const result = await ai.streamText({
+        model: deepseek(request.model || 'deepseek-chat'),
+        messages: messages as any,
+        temperature: request.temperature,
+        maxTokens: request.max_tokens,
+      })
+      return result.toTextStreamResponse()
+    }
+
+    // Default to OpenAI / Gateway
+    const openai = createOpenAI({ apiKey: directApiKey || process.env.OPENAI_API_KEY })
+    const result = await ai.streamText({
+      model: openai(request.model || 'gpt-4o'),
+      messages: messages as any,
+      temperature: request.temperature,
+      maxTokens: request.max_tokens,
+    })
+    return result.toTextStreamResponse()
+  }
+
+  /**
+   * generateStreamWithFallback - Stream AI response with automatic fallback
+   */
+  async generateStreamWithFallback(
+    request: AIGenerateRequest,
+    fallbackProviders?: string[]
+  ): Promise<{ stream: any; providerUsed: string }> {
+    const activeProviders = await this.getActiveProviders()
+    let providers = fallbackProviders ? fallbackProviders.filter(p => activeProviders.includes(p)) : activeProviders
+    
+    if (!providers.includes(LOCAL_FALLBACK_PROVIDER)) {
+      providers.push(LOCAL_FALLBACK_PROVIDER)
+    }
+
+    if (activeProviders.includes(request.provider)) {
+      providers = [request.provider, ...providers.filter(p => p !== request.provider)]
+    }
+
+    let lastError: Error | null = null
+    for (const provider of providers) {
+      try {
+        logger.info(`🔄 [AI-STREAM-FALLBACK] Trying: ${provider}`)
+        const stream = await this.generateStream({ ...request, provider })
+        return { stream, providerUsed: provider }
+      } catch (error: any) {
+        logger.warn(`⚠️ [AI-STREAM-FALLBACK] ${provider} failed: ${error.message}`)
+        lastError = error
+        // Continue to next provider
+      }
+    }
+
+    throw lastError || new Error('All streaming providers failed')
   }
 }
 
