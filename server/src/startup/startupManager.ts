@@ -10,6 +10,7 @@ import {
   pineconeDependency,
   langfuseDependency,
   securityValidationDependency,
+  upstashDependency,
 } from "./dependencies"
 import { logger } from "../utils/logger"
 
@@ -38,6 +39,7 @@ export class StartupManager {
     this.graph.register(mongodbDependency)
     this.graph.register(pineconeDependency)
     this.graph.register(langfuseDependency)
+    this.graph.register(upstashDependency)
   }
 
   async initialize(): Promise<void> {

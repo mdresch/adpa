@@ -36,8 +36,7 @@ export async function markdownToPdf(
     // Configure marked with GFM (GitHub Flavored Markdown) for table support
     marked.setOptions({
       gfm: true,
-      breaks: false,
-      mangle: false
+      breaks: false
     })
 
     // Parse Markdown to HTML

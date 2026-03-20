@@ -273,7 +273,7 @@ export class EntityExtractionService {
         provider: selectedProvider,
         model: selectedModel,
         temperature: 0.3, // Lower temperature for more consistent extraction
-        maxTokens: 4000
+        max_tokens: 4000
       })
 
       // Use the provider that was actually used (may differ from selected if fallback occurred)
@@ -291,6 +291,7 @@ export class EntityExtractionService {
         entities,
         providerUsed,
         modelUsed,
+        undefined, // correlationId
         3600 * 24 // Cache for 24 hours
       )
 

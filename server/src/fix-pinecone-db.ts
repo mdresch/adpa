@@ -51,3 +51,5 @@ async function fixPineconeIntegration() {
 }
 
 fixPineconeIntegration();
+
+export {};

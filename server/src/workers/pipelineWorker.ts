@@ -46,8 +46,7 @@ export async function processPipelineJob(job: any) {
       processing_config: processingConfig || {} as any,
       context_config: contextBundle || {},
       quality_config: qualityConfig || {},
-      output_config: outputConfig || {},
-      createdAt: new Date()
+      output_config: outputConfig || {}
     }
 
     // Execute the pipeline

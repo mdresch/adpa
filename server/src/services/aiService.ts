@@ -5,7 +5,7 @@
  * Version: 3.1 - AI Gateway + Direct Fallback
  */
 
-import * as ai from "ai"
+import { generateText, streamText } from "ai"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { createMistral } from "@ai-sdk/mistral"
 import { createOpenAI } from "@ai-sdk/openai"
@@ -88,9 +88,19 @@ let isTracingEnabled = () => false
 let tracedGenerateText = async (params: any) => {
   const { model, messages, prompt, temperature, maxOutputTokens } = params
   if (messages) {
-    return await model.generateText({ messages, temperature, maxTokens: maxOutputTokens })
+    return await generateText({
+      model,
+      messages,
+      temperature,
+      maxOutputTokens
+    })
   }
-  return await model.generateText({ prompt, temperature, maxOutputTokens })
+  return await generateText({
+    model,
+    prompt,
+    temperature,
+    maxOutputTokens
+  })
 }
 
 try {
@@ -885,7 +895,7 @@ class AIService {
             model: deepseek(modelName),
             messages: messages as any,
             temperature: request.temperature,
-            maxOutputTokens: request.max_tokens,
+            maxTokens: request.max_tokens,
             experimental_telemetry: {
               isEnabled: isTracingEnabled(),
               functionId: 'ai-generate-deepseek',
@@ -1048,7 +1058,7 @@ class AIService {
             model: xai(modelName),
             messages: messages as any,
             temperature: request.temperature,
-            maxOutputTokens: request.max_tokens,
+            maxTokens: request.max_tokens,
             experimental_telemetry: {
               isEnabled: isTracingEnabled(),
               functionId: 'ai-generate-xai',
@@ -1507,7 +1517,7 @@ class AIService {
             model: mistral(modelName),
             messages: messages as any,
             temperature: request.temperature,
-            maxOutputTokens: request.max_tokens,
+            maxTokens: request.max_tokens,
             experimental_telemetry: {
               isEnabled: isTracingEnabled(),
               functionId: 'ai-mistral-direct',
@@ -1592,7 +1602,7 @@ class AIService {
             model: deepseek(modelName),
             messages: messages as any,
             temperature: request.temperature,
-            maxOutputTokens: request.max_tokens,
+            maxTokens: request.max_tokens,
             experimental_telemetry: {
               isEnabled: isTracingEnabled(),
               functionId: 'ai-deepseek-fallback',
@@ -1677,7 +1687,7 @@ class AIService {
             model: moonshot(modelName),
             messages: messages as any,
             temperature: request.temperature,
-            maxOutputTokens: request.max_tokens,
+            maxTokens: request.max_tokens,
             experimental_telemetry: {
               isEnabled: isTracingEnabled(),
               functionId: 'ai-moonshot-fallback',
@@ -1907,7 +1917,7 @@ class AIService {
             model: openai(modelName),
             messages: messages as any,
             temperature: request.temperature || 0.7,
-            maxOutputTokens: request.max_tokens || 2000,
+            maxTokens: request.max_tokens || 2000,
             experimental_telemetry: {
               isEnabled: isTracingEnabled(),
               functionId: 'ai-openai-fallback',
@@ -2003,7 +2013,7 @@ class AIService {
             model: groq(modelName),
             messages: messages as any,
             temperature: request.temperature,
-            maxOutputTokens: request.max_tokens,
+            maxTokens: request.max_tokens,
             experimental_telemetry: {
               isEnabled: isTracingEnabled(),
               functionId: 'ai-groq-fallback',
@@ -2622,11 +2632,11 @@ class AIService {
     // Handle DeepSeek direct
     if (providerType === 'deepseek' && directApiKey) {
       const deepseek = createDeepSeek({ apiKey: directApiKey })
-      const result = await ai.streamText({
+      const result = await streamText({
         model: deepseek(request.model || 'deepseek-chat'),
         messages: messages as any,
         temperature: request.temperature,
-        maxTokens: request.max_tokens,
+        maxOutputTokens: request.max_tokens,
 
       })
       return result.toTextStreamResponse()
@@ -2634,11 +2644,11 @@ class AIService {
 
     // Default to OpenAI / Gateway
     const openai = createOpenAI({ apiKey: directApiKey || process.env.OPENAI_API_KEY })
-    const result = await ai.streamText({
+    const result = await streamText({
       model: openai(request.model || 'gpt-4o'),
       messages: messages as any,
       temperature: request.temperature,
-      maxTokens: request.max_tokens,
+      maxOutputTokens: request.max_tokens,
 
 
     })

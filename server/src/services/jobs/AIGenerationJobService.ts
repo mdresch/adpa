@@ -301,9 +301,8 @@ export class AIGenerationJobService {
             // Project not found, but still add placeholder
             log.warn('[AI-JOB] Project not found, adding project context placeholder', { projectId: projectIdForDoc })
             const projectContextEntry = {
-              id: `project_context:${projectIdForDoc}`,
-              title: `Project Context: Project ${projectIdForDoc.substring(0, 8)}...`,
-              name: `Project Context: Project ${projectIdForDoc.substring(0, 8)}...`,
+              title: `Project Context: Project ${(projectIdForDoc as string).substring(0, 8)}...`,
+              name: `Project Context: Project ${(projectIdForDoc as string).substring(0, 8)}...`,
               type: 'Project Context',
               template_id: null,
               status: 'active',
@@ -324,8 +323,8 @@ export class AIGenerationJobService {
           })
           const projectContextEntry = {
             id: `project_context:${projectIdForDoc}`,
-            title: `Project Context: Project ${projectIdForDoc.substring(0, 8)}...`,
-            name: `Project Context: Project ${projectIdForDoc.substring(0, 8)}...`,
+            title: `Project Context: Project ${(projectIdForDoc as string).substring(0, 8)}...`,
+            name: `Project Context: Project ${(projectIdForDoc as string).substring(0, 8)}...`,
             type: 'Project Context',
             template_id: null,
             status: 'active',
@@ -420,9 +419,8 @@ export class AIGenerationJobService {
       if (projectIdForDoc && sourceDocuments.length === 0) {
         log.error('[AI-JOB] ⚠️ CRITICAL: sourceDocuments is empty! Adding project context as fallback', { projectId: projectIdForDoc })
         const emergencyProjectContext = {
-          id: `project_context:${projectIdForDoc}`,
-          title: `Project Context: Project ${projectIdForDoc.substring(0, 8)}...`,
-          name: `Project Context: Project ${projectIdForDoc.substring(0, 8)}...`,
+          title: `Project Context: Project ${(projectIdForDoc as string).substring(0, 8)}...`,
+          name: `Project Context: Project ${(projectIdForDoc as string).substring(0, 8)}...`,
           type: 'Project Context',
           template_id: null,
           status: 'active',

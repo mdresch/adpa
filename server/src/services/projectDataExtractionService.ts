@@ -17,6 +17,8 @@ import { domainSpecificExtractionService } from './domainSpecificExtractionServi
 import { ExtractionContext } from './extraction/base/ExtractionContext'
 import type { ExtractionDocument, ExtractionResult as ModuleExtractionResult } from './extraction/base/ExtractionResult'
 import type { PersistenceResult } from './extraction/base/Persistence'
+import { resolveSourceDocumentIdStrict as resolveSourceIdStrict } from './extraction/base/SourceDocumentResolver'
+import { deduplicateEntities } from './extraction/base/Deduper'
 import type { PoolClient } from 'pg'
 import { normalizeBatchingConfig, planDocumentBatches } from './extraction/batchPlanner'
 import type { ExtractionBatchingConfig, ExtractionBatchProgressMeta } from './jobs/types'
@@ -581,6 +583,76 @@ export class ProjectDataExtractionService {
   }
 
   /**
+   * Build a map of document titles to IDs for easier resolution
+   */
+  private buildDocumentMap(documents: ExtractionSourceDocument[]): Map<string, string> {
+    const map = new Map<string, string>()
+    documents.forEach(doc => {
+      if (doc.title && doc.id) {
+        const title = doc.title.toLowerCase().trim()
+        map.set(title, doc.id)
+        // Also add sanitized version
+        const sanitized = title.replace(/[^\w\s]/g, '')
+        if (sanitized !== title) map.set(sanitized, doc.id)
+      }
+    })
+    return map
+  }
+
+  /**
+   * Build a bulleted list of document titles for the AI prompt
+   */
+  private buildDocumentList(documents: ExtractionSourceDocument[]): string {
+    return documents.map((doc, idx) => `- Document ${idx + 1}: "${doc.title || 'Untitled'}"`).join('\n')
+  }
+
+  /**
+   * Combine document contents into a contextual string for the prompt
+   */
+  private buildDocumentContext(documents: ExtractionSourceDocument[]): string {
+    return documents.map((doc, idx) => {
+      return `--- Document ${idx + 1}: ${doc.title || 'Untitled'} ---\n${doc.content || ''}\n`
+    }).join('\n\n')
+  }
+
+  /**
+   * Parse JSON from AI response, handling markdown blocks
+   */
+  private parseAIResponse(content: string): any {
+    try {
+      const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/) || content.match(/```\s*([\s\S]*?)\s*```/)
+      const jsonString = jsonMatch ? jsonMatch[1] : content
+      return JSON.parse(jsonString.trim())
+    } catch (error) {
+      logger.error('[EXTRACTION] Failed to parse AI response as JSON', { error })
+      return null
+    }
+  }
+
+  /**
+   * Strictly resolve source_document_id and validate it on the entity
+   */
+  private resolveSourceDocumentIdStrict(
+    entity: any,
+    documentMap: Map<string, string>,
+    documents: any[],
+    entityType: string,
+    entityLabel: string
+  ): boolean {
+    // Create a temporary context for the resolver
+    const context = new ExtractionContext('', '', documents, {})
+    const result = resolveSourceIdStrict(entity, context, entityType, entityLabel)
+    return result.resolved
+  }
+
+  /**
+   * Remove duplicate stakeholders from a batch
+   */
+  private deduplicateStakeholdersBatch(stakeholders: Stakeholder[]): Stakeholder[] {
+    return deduplicateEntities(stakeholders, (s) => `${s.name?.toLowerCase().trim()}|${s.role?.toLowerCase().trim()}`, 'stakeholders')
+  }
+
+  /**
    * Main entry point: Extract all entities from project documents
    */
   async extractProjectEntities(
@@ -952,6 +1024,84 @@ export class ProjectDataExtractionService {
     } finally {
       client.release()
     }
+  }
+
+  /**
+   * Universal bridge to the modular extraction registry for saving
+   */
+  private async bridgeSave(entityType: string, client: PoolClient, projectId: string, userId: string, entities: any[], correlationId?: string): Promise<PersistenceResult> {
+    const { extractionRegistry } = await import('./extraction/ExtractionRegistry')
+    const saver = extractionRegistry.getSaver(entityType)
+    if (!saver) {
+       logger.warn(`[EXTRACTION-BRIDGE] No saver found for ${entityType}`)
+       return { saved: 0, skipped: 0, failed: entities.length, error: 'No saver found' }
+    }
+    return saver(client, projectId, userId, entities)
+  }
+
+  /**
+   * Universal bridge to the modular extraction registry for extraction
+   */
+  private async bridgeExtract(entityType: string, documents: any[], projectId: string, options: any): Promise<any[]> {
+    const { extractionRegistry } = await import('./extraction/ExtractionRegistry')
+    const extractor = extractionRegistry.getExtractor(entityType)
+    if (!extractor) {
+        logger.warn(`[EXTRACTION-BRIDGE] No extractor found for ${entityType}`)
+        return []
+    }
+    const context = new ExtractionContext(projectId, 'system', documents as any, options)
+    const result = await extractor(context, options)
+    return result.entities
+  }
+
+  // Bridged Save Methods
+  public async saveStakeholders(client: PoolClient, projectId: string, userId: string, entities: any[], correlationId?: string) { return this.bridgeSave('stakeholders', client, projectId, userId, entities, correlationId) }
+  public async saveRequirements(client: PoolClient, projectId: string, userId: string, entities: any[], correlationId?: string) { return this.bridgeSave('requirements', client, projectId, userId, entities, correlationId) }
+  public async saveRisks(client: PoolClient, projectId: string, userId: string, entities: any[], correlationId?: string) { return this.bridgeSave('risks', client, projectId, userId, entities, correlationId) }
+  public async saveMilestones(client: PoolClient, projectId: string, userId: string, entities: any[], correlationId?: string) { return this.bridgeSave('milestones', client, projectId, userId, entities, correlationId) }
+  public async saveConstraints(client: PoolClient, projectId: string, userId: string, entities: any[], correlationId?: string) { return this.bridgeSave('constraints', client, projectId, userId, entities, correlationId) }
+  public async saveSuccessCriteria(client: PoolClient, projectId: string, userId: string, entities: any[], correlationId?: string) { return this.bridgeSave('success_criteria', client, projectId, userId, entities, correlationId) }
+  public async saveBestPractices(client: PoolClient, projectId: string, userId: string, entities: any[], correlationId?: string) { return this.bridgeSave('best_practices', client, projectId, userId, entities, correlationId) }
+  public async savePhases(client: PoolClient, projectId: string, userId: string, entities: any[], correlationId?: string) { return this.bridgeSave('phases', client, projectId, userId, entities, correlationId) }
+  public async saveResources(client: PoolClient, projectId: string, userId: string, entities: any[], correlationId?: string) { return this.bridgeSave('resources', client, projectId, userId, entities, correlationId) }
+  public async saveTechnologies(client: PoolClient, projectId: string, userId: string, entities: any[], correlationId?: string) { return this.bridgeSave('technologies', client, projectId, userId, entities, correlationId) }
+  public async saveQualityStandards(client: PoolClient, projectId: string, userId: string, entities: any[], correlationId?: string) { return this.bridgeSave('quality_standards', client, projectId, userId, entities, correlationId) }
+  public async saveDeliverables(client: PoolClient, projectId: string, userId: string, entities: any[], correlationId?: string) { return this.bridgeSave('deliverables', client, projectId, userId, entities, correlationId) }
+  public async saveScopeItems(client: PoolClient, projectId: string, userId: string, entities: any[], correlationId?: string) { return this.bridgeSave('scope_items', client, projectId, userId, entities, correlationId) }
+  public async saveActivities(client: PoolClient, projectId: string, userId: string, entities: any[], correlationId?: string) { return this.bridgeSave('activities', client, projectId, userId, entities, correlationId) }
+  public async saveTeamAgreements(client: PoolClient, projectId: string, userId: string, entities: any[], correlationId?: string) { return this.bridgeSave('team_agreements', client, projectId, userId, entities, correlationId) }
+  public async saveDevelopmentApproaches(client: PoolClient, projectId: string, userId: string, entities: any[], correlationId?: string) { return this.bridgeSave('development_approaches', client, projectId, userId, entities, correlationId) }
+  public async saveProjectIterations(client: PoolClient, projectId: string, userId: string, entities: any[], correlationId?: string) { return this.bridgeSave('project_iterations', client, projectId, userId, entities, correlationId) }
+  public async saveWorkItems(client: PoolClient, projectId: string, userId: string, entities: any[], correlationId?: string) { return this.bridgeSave('work_items', client, projectId, userId, entities, correlationId) }
+  public async saveCapacityPlans(client: PoolClient, projectId: string, userId: string, entities: any[], correlationId?: string) { return this.bridgeSave('capacity_plans', client, projectId, userId, entities, correlationId) }
+  public async savePerformanceMeasurements(client: PoolClient, projectId: string, userId: string, entities: any[], correlationId?: string) { return this.bridgeSave('performance_measurements', client, projectId, userId, entities, correlationId) }
+  public async saveEarnedValueMetrics(client: PoolClient, projectId: string, userId: string, entities: any[], correlationId?: string) { return this.bridgeSave('earned_value_metrics', client, projectId, userId, entities, correlationId) }
+  public async saveOpportunities(client: PoolClient, projectId: string, userId: string, entities: any[], correlationId?: string) { return this.bridgeSave('opportunities', client, projectId, userId, entities, correlationId) }
+  public async saveRiskResponses(client: PoolClient, projectId: string, userId: string, entities: any[], correlationId?: string) { return this.bridgeSave('risk_responses', client, projectId, userId, entities, correlationId) }
+  public async savePerformanceActuals(client: PoolClient, projectId: string, userId: string, entities: any[], correlationId?: string) { return this.bridgeSave('performance_actuals', client, projectId, userId, entities, correlationId) }
+
+  public async saveDomainEntities(client: PoolClient, projectId: string, userId: string, domain: string, entities: any[], correlationId?: string): Promise<PersistenceResult> {
+    const entityType = domain === 'infrastructure' ? 'dt_assets' : 'supply_chain_data'
+    return this.bridgeSave(entityType, client, projectId, userId, entities, correlationId)
+  }
+
+  // Bridged Extract Methods
+  public async extractQualityStandards(documents: any[], projectId: string, options: any, documentMap: Map<string, string>, documentList: string) { return this.bridgeExtract('quality_standards', documents, projectId, options) }
+  public async extractDeliverables(documents: any[], projectId: string, options: any, documentMap: Map<string, string>, documentList: string) { return this.bridgeExtract('deliverables', documents, projectId, options) }
+  public async extractScopeItems(documents: any[], projectId: string, options: any, documentMap: Map<string, string>, documentList: string) { return this.bridgeExtract('scope_items', documents, projectId, options) }
+  public async extractActivities(documents: any[], projectId: string, options: any, documentMap: Map<string, string>, documentList: string) { return this.bridgeExtract('activities', documents, projectId, options) }
+  public async extractTeamAgreements(documents: any[], projectId: string, options: any, documentMap: Map<string, string>, documentList: string) { return this.bridgeExtract('team_agreements', documents, projectId, options) }
+  public async extractDevelopmentApproaches(documents: any[], projectId: string, options: any, documentMap: Map<string, string>, documentList: string) { return this.bridgeExtract('development_approaches', documents, projectId, options) }
+  public async extractProjectIterations(documents: any[], projectId: string, options: any, documentMap: Map<string, string>, documentList: string) { return this.bridgeExtract('project_iterations', documents, projectId, options) }
+  public async extractWorkItems(documents: any[], projectId: string, options: any, documentMap: Map<string, string>, documentList: string) { return this.bridgeExtract('work_items', documents, projectId, options) }
+  public async extractCapacityPlans(documents: any[], projectId: string, options: any, documentMap: Map<string, string>, documentList: string) { return this.bridgeExtract('capacity_plans', documents, projectId, options) }
+  public async extractPerformanceMeasurements(documents: any[], projectId: string, options: any, documentMap: Map<string, string>, documentList: string) { return this.bridgeExtract('performance_measurements', documents, projectId, options) }
+  public async extractEarnedValueMetrics(documents: any[], projectId: string, options: any, documentMap: Map<string, string>, documentList: string) { return this.bridgeExtract('earned_value_metrics', documents, projectId, options) }
+  public async extractOpportunities(documents: any[], projectId: string, options: any, documentMap: Map<string, string>, documentList: string) { return this.bridgeExtract('opportunities', documents, projectId, options) }
+  public async extractRiskResponses(documents: any[], projectId: string, options: any, documentMap: Map<string, string>, documentList: string) { return this.bridgeExtract('risk_responses', documents, projectId, options) }
+  public async extractPerformanceActuals(documents: any[], projectId: string, options: any, documentMap: Map<string, string>, documentList: string) { return this.bridgeExtract('performance_actuals', documents, projectId, options) }
+  public async extractDomainData(documents: any[], projectId: string, options: any, documentMap: Map<string, string>, documentList: string) {
+    return domainSpecificExtractionService.extractDomainDataWithLocations(documents, projectId, options)
   }
 
   /**

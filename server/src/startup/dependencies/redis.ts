@@ -4,7 +4,7 @@ import { logger } from "../../utils/logger"
 import { updateDependencyHealth } from "../../routes/health"
 
 export const redisDependency: Dependency = {
-  name: "Redis",
+  name: "Primary Redis",
   critical: false,
   timeout: 10000, // 10 seconds
   init: async () => {

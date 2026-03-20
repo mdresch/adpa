@@ -35,3 +35,5 @@ async function checkPineconeIntegration() {
 }
 
 checkPineconeIntegration();
+
+export {};

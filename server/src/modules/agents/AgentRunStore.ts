@@ -4,7 +4,7 @@ import { logger } from '../../utils/logger';
 
 export type AgentRunStatus = 'pending' | 'running' | 'completed' | 'failed' | 'guided';
 export type AgentPhaseStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
-export type AgentEventType = 'thought' | 'action' | 'observation' | 'error' | 'review' | 'consensus' | 'phase_start' | 'phase_end' | 'run_start' | 'run_end';
+export type AgentEventType = 'thought' | 'action' | 'observation' | 'error' | 'review' | 'consensus' | 'phase_start' | 'phase_end' | 'run_start' | 'run_end' | 'guidance';
 
 export interface AgentRun {
     id: string;

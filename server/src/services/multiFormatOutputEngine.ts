@@ -1201,6 +1201,14 @@ interface BrandingOptions {
   branding_consistency: boolean
 }
 
+interface BrandingRequirements {
+  branding_standard: string
+  logo_requirements: string[]
+  color_specifications: string[]
+  typography_requirements: string[]
+  branding_guidelines: string[]
+}
+
 interface ComplianceRequirements {
   compliance_frameworks: string[]
   compliance_threshold: number

@@ -9,58 +9,74 @@ const redisConnectionMethods = [
     host: process.env.REDIS_HOST || "localhost",
     description: "Railway External/Proxy Redis"
   },
-  // Method 2: Internal Railway Redis (for when running inside Railway)
+  // Method 2: Upstash fallback (if configured)
+  {
+    url: process.env.UPSTASH_REDIS_URL,
+    description: "Upstash Serverless Redis (Fallback)"
+  },
+  // Method 3: Internal Railway Redis (for when running inside Railway)
   {
     host: "redis.railway.internal",
     description: "Railway Internal Redis"
   },
-  // Method 3: Default Localhost
+  // Method 4: Default Localhost
   {
     host: "localhost",
     description: "Localhost Redis"
   }
 ]
 
-const createRedisConfig = (host: string) => {
-  // If REDIS_URL is provided (e.g., from Railway), use it directly
-  if (process.env.REDIS_URL) {
+const createRedisConfig = (connectionString: string | undefined) => {
+  if (!connectionString) return null;
+
+  const isUrl = connectionString.includes('://');
+
+  // Base socket configuration for resilience
+  const socketConfig: any = {
+    connectTimeout: 10000, // 10 seconds
+    // keepAlive: 5000,       // TCP Keep-alive every 5 seconds (temporary disable to test)
+    // noDelay: true,         // Disable Nagle's algorithm (temporary disable to test)
+    reconnectStrategy: (retries: number) => {
+      // Exponential backoff with a cap at 30 seconds
+      const delay = Math.min(retries * 1000, 30000);
+      logger.info(`Redis reconnecting in ${delay}ms (attempt ${retries})`);
+      return delay;
+    }
+  }
+
+  // If it's a full URL (e.g., from Upstash or Railway REDIS_URL)
+  if (isUrl) {
     const config: any = {
-      url: process.env.REDIS_URL,
-      socket: {
-        connectTimeout: 10000, // 10 seconds
-        lazyConnect: true,
-      }
+      url: connectionString,
+      socket: socketConfig
     }
 
     // Enable TLS ONLY if URL protocol is rediss:// (secure Redis)
-    // Railway internal Redis uses redis:// (no TLS needed)
-    // External services like Upstash use rediss:// (TLS required)
-    if (process.env.REDIS_URL.startsWith('rediss://')) {
+    if (connectionString.startsWith('rediss://')) {
       config.socket.tls = true
       config.socket.rejectUnauthorized = false // For self-signed certificates
     }
 
-    logger.info("Redis config (from REDIS_URL):", {
+    logger.info("Redis config from URL:", {
       url: config.url.replace(/:[^:@]+@/, ':***@'), // Hide password in logs
       tls: !!config.socket.tls,
-      protocol: process.env.REDIS_URL.split(':')[0]
+      protocol: connectionString.split(':')[0]
     })
     return config
   }
 
-  // Fallback: build config from parts (Host, Port, Password)
+  // Fallback: build config from host (Host, Port, Password)
   const config: any = {
     socket: {
-      host: host,
+      ...socketConfig,
+      host: connectionString,
       port: Number.parseInt(process.env.REDIS_PORT || "6379"),
-      connectTimeout: 10000,
-      lazyConnect: true,
     },
     password: process.env.REDIS_PASSWORD,
     database: Number.parseInt(process.env.REDIS_DB || "0"),
   }
 
-  logger.info("Redis config built from parts:", {
+  logger.info("Redis config from host:", {
     host: config.socket.host,
     port: config.socket.port,
     hasPassword: !!config.password
@@ -70,8 +86,27 @@ const createRedisConfig = (host: string) => {
 
 let redisClient: any = null
 let isConnecting = false
+let heartbeatInterval: NodeJS.Timeout | null = null
+
 // Circuit breaker for Redis to avoid hammering a failing service
 const redisBreaker = new CircuitBreaker(3, 30000) // open after 3 failures, reset after 30s
+
+/**
+ * Start a periodic heartbeat to keep the connection alive
+ */
+function startHeartbeat(client: any) {
+  if (heartbeatInterval) clearInterval(heartbeatInterval)
+  
+  heartbeatInterval = setInterval(async () => {
+    try {
+      if (client.isOpen) {
+        await client.ping()
+      }
+    } catch (err) {
+      logger.error(err, "Redis heartbeat PING failed:")
+    }
+  }, 30000) // PING every 30 seconds
+}
 
 /**
  * Enhanced Redis client accessor that checks connection state
@@ -91,13 +126,10 @@ const getRedisClient = () => {
         logger.error(err, "Background Redis reconnection failed:")
       })
     }
-    return null // Return null so callers can degrade gracefully while we reconnect
+    return null 
   }
 
   if (!redisClient) {
-    // If we've never had a client, we shouldn't create it synchronously here 
-    // because connect() is async and createClient alone doesn't establish the socket.
-    // The server should have called connectRedis() at startup.
     if (!isConnecting) {
       connectRedis().catch(err => {
         logger.error(err, "Initial background Redis connection failed:")
@@ -113,44 +145,65 @@ export async function connectRedis() {
   if (isConnecting) return
   isConnecting = true
 
-  const maxRetriesPerMethod = 4
-  const baseRetryDelay = 1000 // 1 second
+  const maxRetriesPerMethod = 3 // Reduced since internal strategy will also retry
+  const baseRetryDelay = 1000
 
   try {
     // Try each connection method
     for (const method of redisConnectionMethods) {
-      logger.info(`Trying Redis connection via ${method.description}: ${method.host}`)
+      const connStr = method.url || (method.host === process.env.REDIS_HOST ? process.env.REDIS_URL : method.host) || method.host;
+      
+      if (!connStr) continue;
+
+      logger.info(`Trying Redis connection via ${method.description}: ${connStr.includes('://') ? connStr.split('@')[1] || connStr : connStr}`);
 
       for (let attempt = 1; attempt <= maxRetriesPerMethod; attempt++) {
         let testClient: any = null
         try {
-          logger.info(`Attempting to connect to Redis (attempt ${attempt}/${maxRetriesPerMethod}) via ${method.description}...`)
+          const config = createRedisConfig(connStr)
+          if (!config) continue;
 
-          // Create a new client for this connection method
-          testClient = createClient(createRedisConfig(method.host))
+          testClient = createClient(config)
 
           // Attach event listeners
           testClient.on("error", (err: any) => {
-            logger.error(err, "Redis Client Error:")
+            // Detailed logging for ALL errors during debugging
+            const errorDetails = {
+              message: err.message,
+              code: err.code,
+              name: err.name,
+              stack: err.stack ? (err.stack.split('\n')[1] || '') : ''
+            };
+            
+            logger.error(errorDetails, `[REDIS] ❌ Detailed Error: ${err.message}`);
+
+            if (err.message && (err.message.includes('ECONNRESET') || err.message.includes('Socket closed'))) {
+              logger.debug(err, "[REDIS] 🔄 Connection Reset (expected during proxy idle/restart):")
+            }
           })
-          testClient.on("connect", () => {
-            logger.info("Redis client connected")
-          })
+          
+          testClient.on("connect", () => logger.info("Redis client connecting..."))
           testClient.on("ready", () => {
-            logger.info("Redis client ready")
+            logger.info("Redis client ready and functional")
+            startHeartbeat(testClient)
+          })
+          testClient.on("reconnecting", () => logger.info("Redis client attempting to reconnect..."))
+          testClient.on("end", () => {
+            logger.warn("Redis connection ended")
+            if (heartbeatInterval) clearInterval(heartbeatInterval)
           })
 
-          // Add timeout to prevent hanging
-          const connectionTimeout = 5000 + (attempt - 1) * 2000
+          // Add timeout to prevent hanging on initial connect
+          const connectionTimeout = 10000 
           await Promise.race([
             testClient.connect(),
             new Promise((_, reject) =>
-              setTimeout(() => reject(new Error(`Connection timeout after ${connectionTimeout}ms`)), connectionTimeout)
+              setTimeout(() => reject(new Error(`Initial connection timeout after ${connectionTimeout}ms`)), connectionTimeout)
             )
           ])
 
-          // If successful, update the global client and return
-          if (redisClient) {
+          // If successful, update the global client
+          if (redisClient && redisClient !== testClient) {
             await redisClient.disconnect().catch(() => { })
           }
           redisClient = testClient
@@ -159,16 +212,9 @@ export async function connectRedis() {
           return
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error)
-          const errorStack = error instanceof Error ? error.stack : undefined
-          console.error(`❌ Redis connection attempt ${attempt} failed via ${method.description}`)
-          console.error(`   Error: ${errorMessage}`)
-          if (errorStack) {
-            console.error(`   Stack: ${errorStack.split('\n').slice(0, 3).join('\n')}`)
-          }
           logger.warn(`Redis connection attempt ${attempt} failed via ${method.description}:`, errorMessage)
           redisBreaker.recordFailure()
 
-          // Clean up failed client
           if (testClient) {
             try {
               await testClient.disconnect().catch(() => { })
@@ -177,7 +223,6 @@ export async function connectRedis() {
 
           if (attempt < maxRetriesPerMethod) {
             const delay = baseRetryDelay * Math.pow(2, attempt - 1)
-            console.log(`🔄 Retrying Redis connection in ${delay}ms...`)
             await new Promise(resolve => setTimeout(resolve, delay))
           }
         }
@@ -187,6 +232,7 @@ export async function connectRedis() {
     isConnecting = false
   }
 }
+
 
 export async function disconnectRedis() {
   try {

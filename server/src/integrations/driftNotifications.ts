@@ -6,8 +6,10 @@
  * Automatically sends notifications when drift is detected
  */
 
-const db = require('../lib/db');
-import { getNotificationService, NotificationPayload } from '../services/notificationService';
+import { Pool } from 'pg'
+import { pool as defaultPool } from '../database/connection'
+import { logger } from '../utils/logger'
+import { getNotificationService, NotificationPayload } from '../services/notificationService'
 
 // ============================================================================
 // Types
@@ -73,7 +75,7 @@ async function getProjectNotificationRecipients(
           )
     `;
 
-    const result = await db.query(query, [projectId, notificationType, severity]);
+    const result = await (pool || defaultPool).query(query, [projectId, notificationType, severity]);
     return result.rows;
 }
 
@@ -102,7 +104,7 @@ async function getProjectStakeholders(
             END
     `;
 
-    const result = await db.query(query, [projectId]);
+    const result = await (pool || defaultPool).query(query, [projectId]);
     return result.rows;
 }
 
@@ -110,7 +112,7 @@ async function getProjectStakeholders(
  * Get project name
  */
 async function getProjectName(pool: Pool, projectId: string): Promise<string> {
-    const result = await db.query(
+    const result = await (pool || defaultPool).query(
         'SELECT name FROM projects WHERE id = $1',
         [projectId]
     );
@@ -188,14 +190,14 @@ export async function sendBudgetOverrunAlert(
         console.log(`Budget overrun alert sent for drift ${driftData.id}:`, results);
 
         // Update drift detection record
-        await db.query(
+        await (pool || defaultPool).query(
             `UPDATE baseline_drift_detection 
              SET alert_sent = true, alert_sent_at = NOW() 
              WHERE id = $1`,
             [driftData.id]
         );
     } catch (error) {
-        console.error('Error sending budget overrun alert:', error);
+        logger.error('Error sending budget overrun alert:', error);
         throw error;
     }
 }
@@ -279,14 +281,14 @@ export async function sendPositiveDriftNotification(
         console.log(`Positive drift notification sent for drift ${driftData.id}:`, results);
 
         // Update drift detection record
-        await db.query(
+        await (pool || defaultPool).query(
             `UPDATE baseline_drift_detection 
              SET alert_sent = true, alert_sent_at = NOW() 
              WHERE id = $1`,
             [driftData.id]
         );
     } catch (error) {
-        console.error('Error sending positive drift notification:', error);
+        logger.error('Error sending positive drift notification:', error);
         throw error;
     }
 }

@@ -98,6 +98,7 @@ import developmentApproachRoutes from "./routes/developmentApproachRoutes"
 import lessonsLearnedRoutes from "./routes/lessonsLearnedRoutes"
 import developmentApproachModuleRoutes from "./modules/developmentApproach/routes"
 import contextOrchestratorRoutes from "./routes/contextOrchestrator"
+import morphicModuleRoutes from "./modules/morphic/routes"
 import uxDocumentationRoutes from "./routes/uxDocumentationRoutes"
 import digitalTwinAssetsRoutes from "./routes/digital-twin-assets"
 import digitalTwinEventsRoutes from "./routes/digital-twin-events"
@@ -242,6 +243,14 @@ if (projectsModuleRoutes && projectsModuleRoutes[0]) {
   app.use("/api/projects", projectsModuleRoutes[0].router)
 } else {
   console.warn("⚠️ projectsModuleRoutes is missing or empty")
+}
+
+if (morphicModuleRoutes && morphicModuleRoutes[0]) {
+  app.use("/api/v1/morphic", morphicModuleRoutes[0].router)
+  // Legacy compatibility mounting if needed
+  app.use("/api/morphic", morphicModuleRoutes[0].router)
+} else {
+  console.warn("⚠️ morphicModuleRoutes is missing or empty")
 }
 
 if (executionModuleRoutes && executionModuleRoutes[0]) {
