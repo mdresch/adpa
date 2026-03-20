@@ -42,7 +42,7 @@ function wrapSearchToolForQuickMode<
 
             // Force optimized type for quick mode
             const modifiedParams = {
-                ...params,
+                ...(params as any),
                 type: 'optimized' as const
             }
 
@@ -183,7 +183,7 @@ export function createResearcher({
         const agent = new ToolLoopAgent({
             model: getModel(model),
             instructions: `${systemPrompt}\nCurrent date and time: ${currentDate}${assistedContextInstructions}`,
-            tools,
+            tools: tools as any,
             activeTools: activeToolsList,
             stopWhen: stepCountIs(maxSteps),
             ...(modelConfig?.providerOptions && {
@@ -219,9 +219,9 @@ export function createResearcher({
 
 // Helper function to access agent tools
 export function getResearcherTools(
-    agent: ToolLoopAgent<never, ResearcherTools, never>
+    agent: ToolLoopAgent<any, any, any>
 ): ResearcherTools {
-    return agent.tools
+    return agent.tools as any
 }
 
 export const researcher = createResearcher

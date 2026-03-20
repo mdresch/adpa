@@ -25,5 +25,11 @@ export interface BaseStreamConfig {
     knowledgeEnabled?: boolean
     ragScope?: RAGScope
     assistedContext?: string
+    dbActions?: {
+        createChat: (id: string, userId: string, title: string) => Promise<any>
+        upsertMessage: (message: any, userId: string) => Promise<any>
+        loadChatWithMessages: (chatId: string, userId: string) => Promise<any>
+        updateChatTitle: (chatId: string, title: string, userId: string) => Promise<any>
+    }
 }
 

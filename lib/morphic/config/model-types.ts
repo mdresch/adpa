@@ -55,7 +55,8 @@ export async function getModelsForSlot(
                         id: provider.defaultModel,
                         name: `${provider.name} (Default: ${provider.defaultModel})`,
                         provider: provider.name,
-                        providerId: provider.id
+                        providerId: provider.id,
+                        modelId: provider.defaultModel
                     })
                     addedModelIds.add(modelId)
                 }
@@ -69,7 +70,8 @@ export async function getModelsForSlot(
                     candidates.push({
                         ...staticModel,
                         providerId: provider.id,
-                        provider: provider.name
+                        provider: provider.name,
+                        modelId: staticModel.id // mapping id to modelId for consistency
                     })
                     addedModelIds.add(modelId)
                 }
@@ -87,7 +89,8 @@ export async function getModelsForSlot(
                             id: mId,
                             name: `${provider.name}: ${mName}`,
                             provider: provider.name,
-                            providerId: provider.id
+                            providerId: provider.id,
+                            modelId: mId
                         })
                         addedModelIds.add(fullId)
                     }
@@ -103,7 +106,7 @@ export async function getModelsForSlot(
     if (staticModel) {
         const staticFullId = `${staticModel.providerId}:${staticModel.id}`
         if (!addedModelIds.has(staticFullId)) {
-            candidates.push(staticModel)
+            candidates.push(staticModel as Model)
             addedModelIds.add(staticFullId)
         }
     }
@@ -117,8 +120,9 @@ export async function getModelsForSlot(
             id: ollamaModelId,
             name: 'Ollama (Local Fallback)',
             provider: 'Ollama',
-            providerId: 'ollama'
-        })
+            providerId: 'ollama',
+            modelId: ollamaModelId
+        } as Model)
         addedModelIds.add(ollamaFullId)
     }
 

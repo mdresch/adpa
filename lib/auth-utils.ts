@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
-import { pool } from '@/server/src/database/connection';
-import { logger } from '@/server/src/utils/logger';
+import { pool } from '@/database/connection';
+import { logger } from '@/utils/logger';
 
 export interface AuthenticatedUser {
     id: string;

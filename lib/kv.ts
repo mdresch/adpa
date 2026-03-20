@@ -77,6 +77,21 @@ export class CacheService {
   }
 
   /**
+   * Delete keys matching a pattern
+   */
+  static async delByPattern(pattern: string): Promise<void> {
+    if (!redis) return;
+    try {
+      const keys = await redis.keys(pattern);
+      if (keys.length > 0) {
+        await redis.del(...keys);
+      }
+    } catch (error) {
+      console.error('[KV-REDIS] delByPattern error:', error);
+    }
+  }
+
+  /**
    * Session management: set session with expiry
    */
   static async setSession(sessionId: string, data: any, ttl = 86400): Promise<void> {

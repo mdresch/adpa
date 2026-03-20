@@ -15,14 +15,18 @@ export async function persistStreamResults(
     parentTraceId?: string,
     searchMode?: SearchMode,
     modelId?: string,
-    initialSavePromise?: Promise<
-        Awaited<ReturnType<typeof createChatWithFirstMessage>>
-    >,
-    initialUserMessage?: UIMessage
+    initialSavePromise?: Promise<any>,
+    initialUserMessage?: UIMessage,
+    dbActions?: {
+        createChat: (chatId: string, userId: string, title: string) => Promise<any>
+        upsertMessage: (message: UIMessage & { chatId: string }, userId: string) => Promise<any>
+        updateChatTitle: (chatId: string, title: string, userId: string) => Promise<any>
+    }
 ) {
-    // Attach metadata to the response message
-    responseMessage.metadata = {
-        ...(responseMessage.metadata || {}),
+    // Attach metadata to the response message using type assertion to handle missing property in UIMessage
+    const currentMetadata = (responseMessage as any).metadata || {}
+    ;(responseMessage as any).metadata = {
+        ...currentMetadata,
         ...(parentTraceId && { traceId: parentTraceId }),
         ...(searchMode && { searchMode }),
         ...(modelId && { modelId })
@@ -42,12 +46,18 @@ export async function persistStreamResults(
             if (initialUserMessage) {
                 const fallbackStart = performance.now()
                 try {
-                    await createChatWithFirstMessage(
-                        chatId,
-                        initialUserMessage,
-                        userId,
-                        DEFAULT_CHAT_TITLE
-                    )
+                    if (dbActions?.createChat) {
+                        await dbActions.createChat(chatId, userId, DEFAULT_CHAT_TITLE)
+                    } else if (initialUserMessage) {
+                        await createChatWithFirstMessage(
+                            chatId,
+                            initialUserMessage,
+                            userId,
+                            DEFAULT_CHAT_TITLE
+                        )
+                    } else {
+                        throw new Error('No user message available for fallback chat creation')
+                    }
                     perfTime('initial chat persistence fallback completed', fallbackStart)
                 } catch (fallbackError) {
                     // Check if the error is due to duplicate key (chat already exists)
@@ -80,13 +90,15 @@ export async function persistStreamResults(
     // Save message with retry logic
     const saveStart = performance.now()
     try {
-        await upsertMessage({ ...responseMessage, chatId }, userId)
+        const upsertAction = dbActions?.upsertMessage || upsertMessage
+        await upsertAction({ ...responseMessage, chatId }, userId)
         perfTime('upsertMessage (AI response) completed', saveStart)
     } catch (error) {
         console.error('Error saving message:', error)
         try {
+            const upsertAction = dbActions?.upsertMessage || upsertMessage
             await retryDatabaseOperation(
-                () => upsertMessage({ ...responseMessage, chatId }, userId),
+                () => upsertAction({ ...responseMessage, chatId }, userId),
                 'save message'
             )
             perfTime('upsertMessage (AI response) completed after retry', saveStart)
@@ -99,7 +111,8 @@ export async function persistStreamResults(
     // Update title after message is saved
     if (chatTitle && chatTitle !== DEFAULT_CHAT_TITLE) {
         try {
-            await updateChatTitle(chatId, chatTitle, userId)
+            const updateTitleAction = dbActions?.updateChatTitle || updateChatTitle
+            await updateTitleAction(chatId, chatTitle, userId)
         } catch (error) {
             console.error('Error updating title:', error)
             // Don't throw here as title update is not critical

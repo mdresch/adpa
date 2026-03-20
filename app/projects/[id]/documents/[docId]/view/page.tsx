@@ -78,52 +78,12 @@ import { useDocumentRegeneration } from "@/hooks/use-document-regeneration"
 import { Sparkles } from "@/components/ui/icons-shim"
 import { DocumentEntityEditor } from "@/components/documents/DocumentEntityEditor"
 
-interface DocumentData {
-  id: string
-  title: string
-  content: string
-  author: string
-  created_at: string
-  updated_at: string
-  status: string
-  project_id: string
-  project_name: string
-  template_id?: string
-  template_name?: string
-  version?: number
-  word_count: number
-  character_count: number
-  compression_ratio: number
-  original_size: string
-  compressed_size: string
-  processing_time: string
-  ai_model: string
-  input_tokens: number
-  output_tokens: number
-  tags: string[]
-  source_documents: Array<{
-    id: string
-    title: string
-    type: string
-    url?: string
-  }>
-  comments: Array<{
-    id: string
-    author: string
-    content: string
-    created_at: string
-  }>
-}
-
-interface VersionData {
-  id: string
-  version: string
-  created_at: string
-  author: string
-  changes: string
-  word_count: number
-  content?: string
-}
+import { 
+  ADPADocument, 
+  DocumentVersion, 
+  GenerationMetadata, 
+  DocumentMetadata 
+} from "@/types/adpa"
 
 export default function ProjectDocumentViewer() {
   const params = useParams()
@@ -133,8 +93,8 @@ export default function ProjectDocumentViewer() {
   const projectId = params.id as string
   const documentId = params.docId as string
 
-  const [adpaDocument, setAdpaDocument] = useState<DocumentData | null>(null)
-  const [versions, setVersions] = useState<VersionData[]>([])
+  const [adpaDocument, setAdpaDocument] = useState<ADPADocument | null>(null)
+  const [versions, setVersions] = useState<DocumentVersion[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [editedContent, setEditedContent] = useState("")
   const [isSaving, setIsSaving] = useState(false)
@@ -150,7 +110,7 @@ export default function ProjectDocumentViewer() {
   const [activeSection, setActiveSection] = useState<string>("")
   const [templateName, setTemplateName] = useState<string>("")
   const [showRegenerateModal, setShowRegenerateModal] = useState(false)
-  const [selectedVersion, setSelectedVersion] = useState<VersionData | null>(null)
+  const [selectedVersion, setSelectedVersion] = useState<DocumentVersion | null>(null)
   const [showVersionDialog, setShowVersionDialog] = useState(false)
   const [drifts, setDrifts] = useState<any[]>([])
   const [showDriftHighlights, setShowDriftHighlights] = useState(true)
@@ -671,7 +631,7 @@ The ADPA system represents a significant advancement in document processing auto
         dataToDisplay.generation_metadata?.source_documents ||
         []
 
-      setDocument({
+      setAdpaDocument({
         ...documentData, // Keep base document metadata (project_id, template_id, etc.)
         ...dataToDisplay, // Override with latest version's data
         content: contentString,
@@ -692,7 +652,7 @@ The ADPA system represents a significant advancement in document processing auto
       console.error("Failed to load document:", error)
       toast.error("Failed to load document from API")
       // Don't set mock data - let the UI show error state
-      setDocument(null)
+      setAdpaDocument(null)
       setVersions([])
       setEditedContent("")
       setBaseContentSnapshot("")

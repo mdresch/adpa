@@ -158,3 +158,9 @@ export const createDbQueryTool = (userId: string) => tool({
         }
     }
 })
+
+/**
+ * Static instances for type inference and default usage
+ */
+export const ragSearchTool = createRagSearchTool('system')
+export const dbQueryTool = createDbQueryTool('system')

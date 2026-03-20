@@ -14,7 +14,12 @@ import { researcher } from '@/lib/morphic/agents/researcher'
 import { isTracingEnabled } from '@/lib/morphic/utils/telemetry'
 import { getLangfuseClient, isLangfuseEnabled } from '@/lib/morphic/utils/langfuse-client'
 
-import { loadChatWithMessages as loadChat, upsertMessage, createChat } from '../db/actions'
+import { 
+    loadChatWithMessages as defaultLoadChat, 
+    upsertMessage as defaultUpsertMessage, 
+    createChatWithFirstMessage as defaultCreateChat,
+    updateChatTitle as defaultUpdateChatTitle 
+} from '../db/actions'
 import { generateChatTitle } from '../agents/title-generator'
 import { signInternalFileUrls } from '../utils/file-signer'
 import { getTextFromParts } from '../utils/message-utils'
@@ -29,7 +34,8 @@ import { createHash } from 'crypto'
 import type { StreamContext } from './helpers/types'
 import { BaseStreamConfig } from './types'
 
-// Constants
+// ... existing code ...
+
 const DEFAULT_CHAT_TITLE = 'Untitled'
 
 export async function createChatStreamResponse(
@@ -49,8 +55,19 @@ export async function createChatStreamResponse(
         isNewChat,
         knowledgeEnabled,
         ragScope,
-        assistedContext
+        assistedContext,
+        dbActions
     } = config
+
+    // Use injected actions or default to lib/morphic/db/actions
+    const db = {
+        loadChatWithMessages: dbActions?.loadChatWithMessages || defaultLoadChat,
+        upsertMessage: dbActions?.upsertMessage || defaultUpsertMessage,
+        updateChatTitle: dbActions?.updateChatTitle || defaultUpdateChatTitle
+    }
+    
+    // We handle createChat separately below to avoid type conflicts between 
+    // the simplified backend version and the complex default version
 
     // Verify that chatId is provided
     if (!chatId) {
@@ -62,15 +79,20 @@ export async function createChatStreamResponse(
 
     // Persist user message and create chat if needed
     if (message) {
-        // Ensure chat exists if new
         if (isNewChat && userId) {
-            const title = getTextFromParts(message.parts)?.slice(0, 100) || DEFAULT_CHAT_TITLE
-            await createChat({ id: chatId, title, userId })
+            const title = getTextFromParts(message.parts)?.slice(0, 100) || 'New Chat'
+            if (dbActions?.createChat) {
+                // Simplified interface from backend
+                await dbActions.createChat(chatId, userId, title)
+            } else {
+                // Default interface from lib/morphic/db/actions
+                await defaultCreateChat(chatId, message, userId, title)
+            }
         }
 
         // Save the user message
         if (userId) {
-            await upsertMessage({
+            await db.upsertMessage({
                 ...message,
                 chatId
             }, userId)
@@ -81,7 +103,7 @@ export async function createChatStreamResponse(
     let initialChat = null
     if (!isNewChat) {
         const loadChatStart = performance.now()
-        initialChat = await loadChat(chatId, userId)
+        initialChat = await db.loadChatWithMessages(chatId, userId)
         perfTime('loadChat completed', loadChatStart)
 
         if (initialChat && initialChat.userId !== userId) {
@@ -381,7 +403,14 @@ export async function createChatStreamResponse(
                     titlePromise,
                     parentTraceId,
                     searchMode,
-                    context.modelId
+                    context.modelId,
+                    undefined, // initialSavePromise - already awaited above
+                    undefined, // initialUserMessage
+                    {
+                        ...db,
+                        createChat: dbActions?.createChat || ((id: string, userId: string, title: string) => 
+                            defaultCreateChat(id, message!, userId, title))
+                    }
                 )
 
                 // Update Langfuse generation with actual streamed output

@@ -92,6 +92,42 @@ services:
     ports:
       - "27017:27017" # Standard MongoDB port
 
+  backend:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    container_name: adpa-backend
+    restart: always
+    environment:
+      - NODE_ENV=development
+      - PORT=5000
+      - DATABASE_URL=postgres://myuser:mypassword@postgres:5432/adpa
+      - MORPHIC_DATABASE_URL=${MORPHIC_DATABASE_URL}
+      - CHAT_REDIS_URL=redis://redis:6379
+      - JWT_SECRET=${JWT_SECRET}
+      - ENABLE_AUTH=true
+      - ENABLE_GUEST_CHAT=true
+    ports:
+      - "5000:5000"
+    depends_on:
+      - postgres
+      - redis
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: adpa-frontend
+    restart: always
+    environment:
+      - NODE_ENV=development
+      - BACKEND_URL=http://backend:5000
+      - NEXT_PUBLIC_BACKEND_URL=http://localhost:5000
+    ports:
+      - "3005:3005"
+    depends_on:
+      - backend
+
 volumes:
   postgres_data:
   redis_data:

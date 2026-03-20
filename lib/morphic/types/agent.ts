@@ -1,6 +1,6 @@
 import type {
-    CoreMessage,
-    ToolInvocation,
+    ModelMessage as CoreMessage,
+    UIToolInvocation,
     UIMessage
 } from 'ai'
 
@@ -24,13 +24,16 @@ export type ResearcherTools = {
 } & ReturnType<typeof createTodoTools>
 
 // Tool invocation types for each tool
-export type SearchToolInvocation = ToolInvocation
-export type FetchToolInvocation = ToolInvocation
-export type QuestionToolInvocation = ToolInvocation
-export type TodoWriteToolInvocation = ToolInvocation
+export type SearchToolInvocation = UIToolInvocation<any> & { toolName: 'search' }
+export type FetchToolInvocation = UIToolInvocation<any> & { toolName: 'fetch' }
+export type QuestionToolInvocation = UIToolInvocation<any> & { toolName: 'askQuestion' }
+export type TodoWriteToolInvocation = UIToolInvocation<any> & { toolName: string }
 
 // Union type for all tool invocations
-export type ResearcherToolInvocation = ToolInvocation
+export type ResearcherToolInvocation = UIToolInvocation<any> & {
+    toolName: string
+    result?: any
+}
 
 // Helper type to extract tool names
 export type ResearcherToolName = keyof ResearcherTools
@@ -39,13 +42,13 @@ export type ResearcherToolName = keyof ResearcherTools
 export function isSearchToolInvocation(
     invocation: ResearcherToolInvocation
 ): invocation is SearchToolInvocation {
-    return invocation.toolName === 'search'
+    return (invocation as any).toolName === 'search'
 }
 
 export function isFetchToolInvocation(
     invocation: ResearcherToolInvocation
 ): invocation is FetchToolInvocation {
-    return invocation.toolName === 'fetch'
+    return (invocation as any).toolName === 'fetch'
 }
 
 // Response type for agent.respond()
