@@ -322,7 +322,7 @@ type Gap = AssessmentData['gaps'][number];
 export default function AssessmentResultsPage() {
   const router = useRouter();
   const { isAuthenticated, loading: authLoading } = useAuth();
-  const params = useParams<{ batchId: string }>();
+  const params = React.use(useParams() as any);
   
   // Get batchId from route params
   const batchId = params?.batchId || '';

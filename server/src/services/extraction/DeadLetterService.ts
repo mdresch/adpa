@@ -27,6 +27,7 @@ export interface ExtractionFailure {
   retryAt?: Date
   resolvedAt?: Date
   resolutionNotes?: string
+  createdAt?: Date
 }
 
 /**
@@ -126,7 +127,8 @@ export class DeadLetterService {
           status,
           retry_at as "retryAt",
           resolved_at as "resolvedAt",
-          resolution_notes as "resolutionNotes"
+          resolution_notes as "resolutionNotes",
+          created_at as "createdAt"
         FROM extraction_failures
         WHERE project_id = $1 AND status = 'pending'
         ORDER BY created_at DESC
@@ -168,7 +170,8 @@ export class DeadLetterService {
           status,
           retry_at as "retryAt",
           resolved_at as "resolvedAt",
-          resolution_notes as "resolutionNotes"
+          resolution_notes as "resolutionNotes",
+          created_at as "createdAt"
         FROM extraction_failures
         WHERE correlation_id = $1
         ORDER BY created_at DESC

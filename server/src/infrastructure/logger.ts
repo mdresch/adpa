@@ -1,4 +1,4 @@
-import pino from 'pino';
+import { pino } from 'pino';
 import { AsyncLocalStorage } from 'async_hooks';
 
 // 1. Create the storage for the Correlation ID

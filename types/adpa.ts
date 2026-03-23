@@ -153,6 +153,7 @@ export interface ADPADocument {
   comments?: any[]
   loaded_version?: string | null
   loaded_version_id?: string | null
+  generation_metadata?: GenerationMetadata
   metadata: {
     ai_model?: string
     processing_time?: string
@@ -196,6 +197,33 @@ export interface ADPADocument {
     notes?: string
     custom_fields?: Record<string, any>
   }
+}
+
+export interface GenerationMetadata {
+  provider?: string
+  model?: string
+  temperature?: number
+  prompt?: string
+  qualityMetrics?: any
+  source_documents?: any[]
+  context_stats?: ContextStats
+}
+
+export interface ContextStats {
+  total_documents_available: number | string
+  documents_used_as_context: number | string
+  project_context_used?: boolean
+  stakeholders_available?: number | string
+  custom_settings_count?: number | string
+  custom_metadata_count?: number | string
+  estimated_context_tokens?: number | string
+  // Legacy aliases
+  total_documents?: number | string
+  documents_used?: number | string
+  project_context_included?: boolean
+  stakeholders_included?: number | string
+  custom_settings_included?: number | string
+  custom_metadata_included?: number | string
 }
 
 export interface QualityAudit {

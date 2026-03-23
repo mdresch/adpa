@@ -8,7 +8,7 @@
 import express from 'express'
 import Joi from 'joi'
 import { authenticateToken, requirePermission } from '../middleware/auth'
-import { validate } from '../middleware/validation'
+import { validate, validateQuery } from '../middleware/validation'
 import { escalationService } from '../services/escalationService'
 import { logger } from '../utils/logger'
 import { pool } from '../database/connection'
@@ -23,12 +23,11 @@ router.get(
   '/alerts',
   authenticateToken,
   requirePermission('projects.view'),
-  validate(
+  validateQuery(
     Joi.object({
       projectId: Joi.string().uuid().required(),
       status: Joi.string().valid('pending', 'notified', 'acknowledged', 'in_progress', 'resolved', 'expired').optional()
-    }),
-    'query'
+    })
   ),
   async (req, res) => {
     try {

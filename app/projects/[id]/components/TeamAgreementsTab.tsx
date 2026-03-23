@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import type { ProjectTeamMember, AgreementParticipant } from "./team-agreements.types"
 
-interface TeamAgreement {
+export interface TeamAgreement {
   id: string
   project_id: string
   title: string
@@ -42,10 +42,10 @@ interface TeamAgreement {
     | 'other'
   agreed_by?: string[]
   agreed_by_details?: AgreementParticipant[]
-  facilitated_by?: string
+  facilitated_by?: string | null
   facilitated_by_name?: string | null
   effective_date?: string
-  review_frequency?: string
+  review_frequency?: 'weekly' | 'bi_weekly' | 'monthly' | 'quarterly' | 'annually' | 'as_needed' | ''
   next_review_date?: string
   status?: 'draft' | 'active' | 'under_review' | 'revised' | 'deprecated'
   adherence_score?: number

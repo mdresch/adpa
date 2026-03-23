@@ -162,7 +162,7 @@ const healthConfig = {
 }
 
 export default function TemplateDetailPage() {
-  const params = useParams()
+  const params = React.use(useParams() as any)
   const router = useRouter()
   const { user, hasPermission } = useAuth()
   const templateId = params.id as string

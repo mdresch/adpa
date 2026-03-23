@@ -19,18 +19,20 @@ export class TemplatesController {
       const userResult = await pool.query("SELECT company_id FROM users WHERE id = $1", [(req as any).user?.id]);
       const companyId = userResult.rows[0]?.company_id || null;
 
-      const templates = await this.repository.findAll({
-        limit: Number(limit),
-        offset,
-        framework: framework as string,
-        category: category as string,
-        search: search as string,
-        is_public: is_public === 'true',
-        template_scope: template_scope as string,
+      const templates = await this.repository.findAll(
+        {
+          limit: Number(limit),
+          offset,
+          framework: framework as string,
+          category: category as string,
+          search: search as string,
+          is_public: is_public === 'true',
+          template_scope: template_scope as string,
+        },
+        isSuperAdmin,
         companyId,
-        userId: (req as any).user?.id,
-        isSuperAdmin
-      });
+        (req as any).user?.id
+      );
 
       res.json({ success: true, data: templates });
     } catch (error) {
@@ -42,7 +44,15 @@ export class TemplatesController {
   getById = async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
-      const template = await this.repository.findById(id);
+      
+      const userRole = (req as any).user?.role?.toLowerCase();
+      const isSuperAdmin = userRole === 'super_admin' || userRole === 'admin';
+      
+      const userResult = await pool.query("SELECT company_id FROM users WHERE id = $1", [(req as any).user?.id]);
+      const companyId = userResult.rows[0]?.company_id || null;
+      const userId = (req as any).user?.id;
+
+      const template = await this.repository.findById(id, isSuperAdmin, companyId, userId);
       if (!template) return res.status(404).json({ error: "Template not found" });
 
       res.json({ success: true, data: template });

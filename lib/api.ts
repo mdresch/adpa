@@ -156,6 +156,17 @@ export interface Template {
   last_validated_at?: string
   // AI Enhancement Fields
   system_prompt?: string
+  quality_threshold?: number
+  prompt_version?: number
+  gkg_context_strategy?: {
+    profile?: 'governance_full' | 'charter_light' | 'requirements_only' | 'risks_only' | 'stakeholders_only' | 'custom'
+    entityTypes?: string[]
+    scope?: 'same_project' | 'same_project_top_docs' | 'dependent_projects' | 'all_accessible'
+    maxDocuments?: number
+    maxUnits?: number
+    traceableOnly?: boolean
+    documentStatusFilter?: 'approved_published_only' | 'include_draft_review'
+  } | null
   context_injection_config?: {
     enabled: boolean
     sources: Array<{
@@ -1148,7 +1159,7 @@ class ApiClient {
   // Integrations API
   async getIntegrations(): Promise<any[]> {
     const response = await this.request<{ integrations: any[] }>("/integrations")
-    return response.integrations || response
+    return response.integrations || []
   }
 
   async createIntegration(integrationData: any): Promise<any> {

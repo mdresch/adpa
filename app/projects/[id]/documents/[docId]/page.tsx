@@ -2723,7 +2723,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                                         <div>
                                           <span className="text-muted-foreground">Documents Used:</span>
                                           <span className="ml-2 font-medium">
-                                            {contextStats.documentDatas_used || contextStats.documentDatas_used_as_context || sourceDocs.length} / {contextStats.total_documentDatas || contextStats.total_documentDatas_available || 0}
+                                            {Number(contextStats.documents_used || contextStats.documents_used_as_context || sourceDocs.length)} / {Number(contextStats.total_documents || contextStats.total_documents_available || 0)}
                                           </span>
                                         </div>
                                         {contextStats.project_context_used && (
@@ -2734,7 +2734,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                                             </span>
                                           </div>
                                         )}
-                                        {contextStats.stakeholders_included > 0 && (
+                                        {Number(contextStats.stakeholders_included || 0) > 0 && (
                                           <div>
                                             <span className="text-muted-foreground">Stakeholders:</span>
                                             <span className="ml-2 font-medium">
@@ -2746,7 +2746,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                                           <div>
                                             <span className="text-muted-foreground">Est. Context Tokens:</span>
                                             <span className="ml-2 font-medium">
-                                              {contextStats.estimated_context_tokens.toLocaleString()}
+                                              {Number(contextStats.estimated_context_tokens).toLocaleString()}
                                             </span>
                                           </div>
                                         )}
@@ -3017,7 +3017,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
       <RegenerateVersionModal
         open={showRegenerateModal}
         onOpenChange={setShowRegenerateModal}
-        documentDataId={docId}
+        documentId={docId}
         currentTemplate={documentData?.template_id}
         currentTemplateName={documentData?.template_name}
         currentVersion={documentData?.version?.toString() || '1.0'}
@@ -3033,7 +3033,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
         error={regenerationError}
         result={result}
         onClose={resetRegeneration}
-        documentDataId={docId}
+        documentId={docId}
       />
 
       {/* Signature Request Dialog */}
@@ -3043,7 +3043,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
         onSubmit={async (data) => {
           try {
             const response = await apiClient.post('/signatures/initiate', {
-              documentDataId: docId,
+              documentId: docId,
               ...data,
             })
             toast.success('Signature request sent successfully!')
@@ -3053,7 +3053,8 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
             throw error
           }
         }}
-        documentDataTitle={documentData?.name}
+        documentTitle={documentData?.name}
+        disabled={saving}
       />
 
       {/* Quality Audit Modal */}

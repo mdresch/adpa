@@ -15,6 +15,7 @@ export class JiraIntegration implements IntegrationProvider {
   private service: JiraService
   private config: JiraIntegrationConfig
   private integrationId: string
+  name: string = 'jira'
 
   constructor(config: JiraIntegrationConfig, integrationId: string) {
     this.config = config

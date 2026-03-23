@@ -227,8 +227,7 @@ router.post(
       const baseline = await baselineService.createBaseline(
         project_id,
         userId,
-        baselineData,
-        [] // No document IDs since we're using entities
+        baselineData
       )
 
       const duration = Date.now() - startTime

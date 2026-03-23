@@ -270,8 +270,12 @@ export function OverviewTab({
         if (assessedCount > 0) {
           const avgCompliance = totalCompliance / assessedCount
           // Calculate average grade
-          const gradeCounts: Record<string, number> = { A: 0, B: 0, C: 0, D: 0, F: 0 }
-          grades.forEach(g => gradeCounts[g]++)
+          const gradeCounts: { A: number; B: number; C: number; D: number; F: number } = { A: 0, B: 0, C: 0, D: 0, F: 0 }
+          grades.forEach(g => {
+            if (g in gradeCounts) {
+              gradeCounts[g as keyof typeof gradeCounts]++
+            }
+          })
           const avgGradeIndex = Math.round(avgCompliance / 20) // 0-4 scale
           const gradeOrder = ['F', 'D', 'C', 'B', 'A']
           const avgGrade = gradeOrder[Math.min(avgGradeIndex, 4)]

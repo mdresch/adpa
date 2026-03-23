@@ -144,8 +144,8 @@ export class AdobePDFService {
                 mimeType: PDFServicesSDK.MimeType.HTML
               }),
               params: {
-                documentLanguage: options?.documentLanguage || 'en-US'
-                // includeTaggedPDF: options?.includeTaggedPDF || false // Not available in this version
+                documentLanguage: options?.documentLanguage || 'en-US',
+                createTaggedPDF: options?.includeTaggedPDF || false
               }
             })
 
@@ -244,8 +244,8 @@ export class AdobePDFService {
           mimeType: PDFServicesSDK.MimeType.DOCX
         }),
         params: {
-          documentLanguage: options?.documentLanguage || 'en-US'
-          // includeTaggedPDF: options?.includeTaggedPDF || false // Not available in this version
+          documentLanguage: options?.documentLanguage || 'en-US',
+          createTaggedPDF: options?.includeTaggedPDF || false
         }
       })
 
@@ -412,7 +412,7 @@ export class AdobePDFService {
         permissions: pdfPermissions,
         encryptionAlgorithm: PDFServicesSDK.EncryptionAlgorithm.AES_256,
         contentEncryption: PDFServicesSDK.ContentEncryption.ALL_CONTENT_EXCEPT_METADATA
-      }
+      } as any
     })
 
     const pollingURL = await this.pdfServices.submit({ job })

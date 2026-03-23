@@ -10,7 +10,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ExternalLink } from "lucide-react";
-import { iTwinViewerIframe } from "@/components/digital-twin/iTwinViewer";
+import { ITwinViewer } from "@/components/digital-twin/iTwinViewer";
 import { apiClient } from "@/lib/api";
 import { useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -105,7 +105,7 @@ export default function iTwinViewerPage() {
             </div>
           </div>
         ) : (
-          <iTwinViewerIframe
+          <ITwinViewer
             itwinId={finalItwinId}
             imodelId={finalImodelId}
             assetId={assetId || undefined}

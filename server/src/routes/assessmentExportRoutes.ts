@@ -99,6 +99,7 @@ router.get('/list', authenticate, async (req: Request, res: Response, next: Next
 // ============================================================================
 
 router.get('/batch/:batchId', authenticate, async (req: Request, res: Response, next: NextFunction) => {
+  const userId = (req as any).user.id;
   try {
     const { batchId } = req.params;
     const userId = (req as any).user.id;
@@ -822,7 +823,7 @@ router.post('/batch/:batchId/complete', authenticate, async (req: Request, res: 
 
     // Prepare assessment data with all calculated metrics
     // Ensure gap_analysis includes all_gaps and all_recommendations
-    const gapAnalysis = assessmentResult.gap_analysis || {};
+    const gapAnalysis: any = assessmentResult.gap_analysis || {};
     if (!gapAnalysis.all_gaps) {
       gapAnalysis.all_gaps = [
         ...(gapAnalysis.critical_gaps || []),
@@ -1112,7 +1113,6 @@ router.post('/batch/:batchId/regenerate', authenticate, async (req: Request, res
 
     // Generate fresh assessment with all documents
     const assessment = await portfolioAssessmentService.generateAssessment(
-      batchId,
       batch.project_id,
       userId
     );

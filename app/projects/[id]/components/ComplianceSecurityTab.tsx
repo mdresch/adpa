@@ -144,7 +144,7 @@ export function ComplianceSecurityTab({ projectId }: ComplianceSecurityTabProps)
   const loadComplianceSecurity = async () => {
     try {
       setLoading(true)
-      const response = await apiClient.get(`/projects/${projectId}/compliance-security`)
+      const response = await apiClient.get<{ data: ComplianceSecurity[] }>(`/projects/${projectId}/compliance-security`)
       setData(response.data || [])
     } catch (error) {
       console.error('Error loading compliance security:', error)

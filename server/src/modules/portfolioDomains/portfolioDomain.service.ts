@@ -18,27 +18,37 @@ export async function getAllDomains(): Promise<PortfolioDomain[]> {
           {
             id: '1',
             name: 'Project Management',
-            description: { markdown: '<p>Core project management methodologies and practices including waterfall, agile, and hybrid approaches.</p>' }
+            description: { markdown: '<p>Core project management methodologies and practices including waterfall, agile, and hybrid approaches.</p>' },
+            created_at: new Date(),
+            updated_at: new Date()
           },
           {
             id: '2', 
             name: 'Risk Management',
-            description: { markdown: '<p>Comprehensive risk identification, assessment, mitigation, and monitoring processes.</p>' }
+            description: { markdown: '<p>Comprehensive risk identification, assessment, mitigation, and monitoring processes.</p>' },
+            created_at: new Date(),
+            updated_at: new Date()
           },
           {
             id: '3',
             name: 'Financial Management',
-            description: { markdown: '<p>Budget planning, cost control, financial reporting, and ROI analysis for projects.</p>' }
+            description: { markdown: '<p>Budget planning, cost control, financial reporting, and ROI analysis for projects.</p>' },
+            created_at: new Date(),
+            updated_at: new Date()
           },
           {
             id: '4',
             name: 'Stakeholder Management',
-            description: { markdown: '<p>Stakeholder identification, engagement planning, communication, and relationship management.</p>' }
+            description: { markdown: '<p>Stakeholder identification, engagement planning, communication, and relationship management.</p>' },
+            created_at: new Date(),
+            updated_at: new Date()
           },
           {
             id: '5',
             name: 'Quality Management',
-            description: { markdown: '<p>Quality planning, assurance, control processes and continuous improvement methodologies.</p>' }
+            description: { markdown: '<p>Quality planning, assurance, control processes and continuous improvement methodologies.</p>' },
+            created_at: new Date(),
+            updated_at: new Date()
           }
         ];
       }

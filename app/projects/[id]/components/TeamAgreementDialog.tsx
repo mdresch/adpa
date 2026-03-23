@@ -15,33 +15,7 @@ import { toast } from '@/lib/notify'
 import { Loader2 } from "lucide-react"
 import type { ProjectTeamMember } from "./team-agreements.types"
 
-interface TeamAgreement {
-  id: string
-  project_id: string
-  title: string
-  description: string
-  category: 
-    | 'working_hours'
-    | 'communication'
-    | 'decision_making'
-    | 'conflict_resolution'
-    | 'quality_standards'
-    | 'meeting_norms'
-    | 'code_of_conduct'
-    | 'collaboration_tools'
-    | 'response_times'
-    | 'knowledge_sharing'
-    | 'other'
-  agreed_by?: string[]
-  facilitated_by?: string
-  effective_date: string
-  review_frequency?: 'weekly' | 'bi_weekly' | 'monthly' | 'quarterly' | 'annually' | 'as_needed'
-  next_review_date?: string
-  status: 'draft' | 'active' | 'under_review' | 'revised' | 'deprecated'
-  adherence_score?: number
-  violations_count?: number
-  notes?: string
-}
+import { TeamAgreement } from "./TeamAgreementsTab"
 
 interface TeamAgreementDialogProps {
   open: boolean
@@ -52,6 +26,7 @@ interface TeamAgreementDialogProps {
   teamMembersLoading?: boolean
   onSuccess: () => void
 }
+
 
 export function TeamAgreementDialog({
   open,

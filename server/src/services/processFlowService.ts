@@ -1040,63 +1040,63 @@ class ProcessFlowService {
           id: 1,
           name: 'Template Analysis',
           description: 'Analyzing selected template structure and requirements',
-          status: 'pending',
+          status: 'pending' as const,
           tokens: 0
         },
         {
           id: 2,
           name: 'Project Information Extraction',
           description: 'Extracting project metadata and context',
-          status: 'pending',
+          status: 'pending' as const,
           tokens: 0
         },
         ...(config.includeStakeholders ? [{
           id: 2.5,
           name: 'Stakeholder Information Extraction',
           description: 'Extracting project stakeholder information',
-          status: 'pending',
+          status: 'pending' as const,
           tokens: 0
         }] : []),
         {
           id: 3,
           name: 'Document Prioritization',
           description: 'Prioritizing documents by relevance and importance',
-          status: 'pending',
+          status: 'pending' as const,
           tokens: 0
         },
         {
           id: 4,
           name: 'AI Document Compression',
           description: `Compressing documents using ${config.compressionMethod} method at ${(config.compressionLevel * 100).toFixed(0)}%`,
-          status: 'pending',
+          status: 'pending' as const,
           tokens: 0
         },
         {
           id: 5,
           name: 'Context Window Optimization',
           description: 'Optimizing content for 2M+ token context window',
-          status: 'pending',
+          status: 'pending' as const,
           tokens: 0
         },
         {
           id: 6,
           name: 'Content Injection',
           description: 'Injecting prioritized content into template',
-          status: 'pending',
+          status: 'pending' as const,
           tokens: 0
         },
         {
           id: 7,
           name: 'AI Document Generation',
           description: 'Generating final document using AI provider',
-          status: 'pending',
+          status: 'pending' as const,
           tokens: 0
         },
         {
           id: 8,
           name: 'Quality Validation',
           description: 'Validating output quality and completeness',
-          status: 'pending',
+          status: 'pending' as const,
           tokens: 0
         }
       ]
@@ -1485,7 +1485,7 @@ class ProcessFlowService {
       // Mark current step as failed
       const currentStep = steps.find(step => step.status === 'processing')
       if (currentStep) {
-        currentStep.status = 'failed'
+        currentStep.status = 'error' as const
         currentStep.description = `Failed: ${error.message}`
       }
       throw error
@@ -1495,7 +1495,7 @@ class ProcessFlowService {
   /**
    * Generate document using AI provider with the built context
    */
-  private async generateDocumentWithAI(contextContent: string, template: any, config: WorkflowConfiguration): Promise<string> {
+  private async generateDocumentWithAI(contextContent: string, template: any, config: WorkflowConfiguration): Promise<any> {
     try {
       // Import aiService dynamically to avoid circular dependencies
       const { aiService } = await import('./aiService')
@@ -1564,7 +1564,7 @@ class ProcessFlowService {
         provider: response.provider || providerType,
         model: response.model || modelName,
         usage: response.usage,
-        metadata: response.metadata
+        metadata: (response as any).metadata
       }
       
     } catch (error) {
@@ -1778,8 +1778,10 @@ class ProcessFlowService {
       }
       
       // Calculate quality and compliance metrics
+      let docQuality: any = null;
       try {
-        const { analyzeDocumentQuality } = await import('../utils/documentMetadata')
+        const metadataUtils = await import('../utils/documentMetadata')
+        const analyzeDocFunc = (metadataUtils as any).analyzeDocumentQuality
         const tempMetadata = {
           wordCount,
           characterCount,
@@ -1788,25 +1790,28 @@ class ProcessFlowService {
           templateId: config.templateId || undefined,
           framework: project.framework || 'ADPA'
         } as any
-        const qualityMetrics = analyzeDocumentQuality(finalContent, tempMetadata, compressedDocuments.length)
         
-        // Add quality and compliance metrics to generation_metadata
-        (generationMetadata as any).qualityMetrics = {
-          overallQuality: qualityMetrics.overallQuality,
-          completeness: qualityMetrics.completeness,
-          structureScore: qualityMetrics.structureScore,
-          formattingScore: qualityMetrics.formattingScore,
-          contentDepth: qualityMetrics.contentDepth,
-          accuracy: qualityMetrics.accuracy,
-          consistency: qualityMetrics.consistency,
-          contextRelevance: qualityMetrics.contextRelevance,
-          professionalQuality: qualityMetrics.professionalQuality,
-          standardsCompliance: qualityMetrics.standardsCompliance,
-          complexityScore: qualityMetrics.complexityScore,
-          recommendations: qualityMetrics.recommendations
-        };
+        docQuality = analyzeDocFunc(finalContent, tempMetadata, compressedDocuments.length)
         
-        (generationMetadata as any).complianceMetrics = qualityMetrics.complianceMetrics;
+        if (docQuality) {
+          // Add quality and compliance metrics to generation_metadata
+          (generationMetadata as any).qualityMetrics = {
+            overallQuality: docQuality.overallQuality,
+            completeness: docQuality.completeness,
+            structureScore: docQuality.structureScore,
+            formattingScore: docQuality.formattingScore,
+            contentDepth: docQuality.contentDepth,
+            accuracy: docQuality.accuracy,
+            consistency: docQuality.consistency,
+            contextRelevance: docQuality.contextRelevance,
+            professionalQuality: docQuality.professionalQuality,
+            standardsCompliance: docQuality.standardsCompliance,
+            complexityScore: docQuality.complexityScore,
+            recommendations: docQuality.recommendations
+          };
+          
+          (generationMetadata as any).complianceMetrics = docQuality.complianceMetrics;
+        }
       } catch (metricsError) {
         logger.warn('Failed to calculate compliance metrics:', metricsError)
         // Continue without metrics rather than failing the document save

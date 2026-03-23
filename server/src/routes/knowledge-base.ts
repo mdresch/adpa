@@ -7,12 +7,12 @@ import express, { Request, Response } from 'express'
 import { knowledgeBaseService } from '../services/knowledgeBaseService'
 import { pool } from '../database/connection'
 import { logger } from '../utils/logger'
-import { authenticate } from '../middleware/auth'
+import { authenticateToken } from '../middleware/auth'
 
 const router = express.Router()
 
 // Apply authentication to all routes
-router.use(authenticate)
+router.use(authenticateToken)
 
 /**
  * GET /api/knowledge-base/entries

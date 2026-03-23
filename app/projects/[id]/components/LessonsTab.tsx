@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from 'react'
-import LessonDialog from './LessonDialog'
+import LessonDialog, { LessonItem } from './LessonDialog'
 import { apiClient } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -10,20 +10,6 @@ import { Badge } from '@/components/ui/badge'
 
 interface LessonsTabProps {
   projectId: string
-}
-
-// Updated interface to match the lessons_learned table schema
-interface LessonItem {
-  id: string
-  title: string
-  description: string
-  category: string
-  impact: 'low' | 'medium' | 'high' | 'critical'
-  positive_or_negative: boolean
-  status: 'identified' | 'documented' | 'shared' | 'applied' | 'archived'
-  severity: 'low' | 'medium' | 'high' | 'critical'
-  phase?: string
-  created_at: string
 }
 
 export default function LessonsTab({ projectId }: LessonsTabProps) {

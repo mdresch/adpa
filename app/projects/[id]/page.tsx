@@ -125,16 +125,22 @@ const healthConfig = {
 // AI Provider type for selection
 type AIProviderType = string
 
-export default function ProjectDetail() {
-  const params = useParams()
-  const searchParams = useSearchParams()
-  const projectId = Array.isArray(params?.id) ? params.id[0] : params?.id as string
+export default function ProjectDetail({ 
+  params, 
+  searchParams 
+}: { 
+  params: Promise<{ id: string }>, 
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }> 
+}) {
+  const resolvedParams = React.use(params)
+  const resolvedSearchParams = React.use(searchParams)
+  const projectId = resolvedParams.id
   const router = useRouter()
   const { isAuthenticated } = useAuth()
   const { joinRoom, leaveRoom } = useWebSocket()
 
   // Get initial tab from query parameter, default to "overview"
-  const initialTab = searchParams?.get('tab') || 'overview'
+  const initialTab = (resolvedSearchParams.tab as string) || 'overview'
   const [activeTab, setActiveTab] = React.useState<string>(initialTab)
 
   const [project, setProject] = React.useState<ExtendedProject | null>(null)
@@ -147,11 +153,11 @@ export default function ProjectDetail() {
 
   // Update active tab when query parameter changes
   React.useEffect(() => {
-    const tabFromQuery = searchParams?.get('tab')
+    const tabFromQuery = resolvedSearchParams.tab as string
     if (tabFromQuery) {
       setActiveTab(tabFromQuery)
     }
-  }, [searchParams])
+  }, [resolvedSearchParams])
 
   // Smart Document Versioning state
   const [conflictDialogOpen, setConflictDialogOpen] = React.useState(false)

@@ -125,17 +125,15 @@ router.get('/library', authMiddleware, async (req, res) => {
  * POST /api/prompt-assistant/save
  * Save a prompt template
  */
-router.post('/save', authMiddleware, validate({
-  body: {
-    name: 'string|required',
-    description: 'string',
-    category: 'string|required',
-    methodology: 'string|required',
-    system_prompt: 'string|required',
-    context_requirements: 'array|required',
-    is_public: 'boolean|required'
-  }
-}), async (req, res) => {
+router.post('/save', authMiddleware, validate(Joi.object({
+    name: Joi.string().required(),
+    description: Joi.string().allow('', null).optional(),
+    category: Joi.string().required(),
+    methodology: Joi.string().required(),
+    system_prompt: Joi.string().required(),
+    context_requirements: Joi.array().required(),
+    is_public: Joi.boolean().required()
+  })), async (req, res) => {
   try {
     const template = {
       ...req.body,
@@ -157,18 +155,16 @@ router.post('/save', authMiddleware, validate({
  * POST /api/prompt-assistant/track-performance
  * Track template generation performance
  */
-router.post('/track-performance', authMiddleware, validate({
-  body: {
-    template_id: 'string|required',
-    prompt_template_id: 'string',
-    generation_id: 'string|required',
-    model_used: 'string|required',
-    quality_score: 'number|required',
-    generation_time: 'number|required',
-    cost: 'number|required',
-    user_feedback: 'number'
-  }
-}), async (req, res) => {
+router.post('/track-performance', authMiddleware, validate(Joi.object({
+    template_id: Joi.string().required(),
+    prompt_template_id: Joi.string().allow('', null).optional(),
+    generation_id: Joi.string().required(),
+    model_used: Joi.string().required(),
+    quality_score: Joi.number().required(),
+    generation_time: Joi.number().required(),
+    cost: Joi.number().required(),
+    user_feedback: Joi.number().optional()
+  })), async (req, res) => {
   try {
     await promptAssistant.trackPerformance(req.body)
     res.json({ success: true })

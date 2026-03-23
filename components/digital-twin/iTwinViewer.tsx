@@ -35,7 +35,7 @@ interface iTwinViewerProps {
  * - IMJS_ITWIN_ID (optional, can be passed as prop)
  * - IMJS_IMODEL_ID (optional, can be passed as prop)
  */
-export function iTwinViewer({ itwinId, imodelId, assetId, assetName }: iTwinViewerProps) {
+export function ITwinViewer({ itwinId, imodelId, assetId, assetName }: iTwinViewerProps) {
   const viewerRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

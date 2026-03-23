@@ -112,7 +112,7 @@ async function listFailures(projectId: string) {
     console.log(`    Correlation: ${f.correlationId || 'N/A'}`)
     console.log(`    Retries: ${f.retryCount}`)
     console.log(`    Status: ${f.status}`)
-    console.log(`    Created: ${f.resolved_at}`)
+    console.log(`    Created: ${f.resolvedAt || f.createdAt}`)
     console.log()
   })
 }

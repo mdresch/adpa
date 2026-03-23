@@ -18,7 +18,7 @@ import { apiClient } from '@/lib/api'
 import { toast } from '@/lib/notify'
 
 // This should match the interface in LessonsTab.tsx, but is redefined here for modularity
-interface LessonItem {
+export interface LessonItem {
   id?: string
   title: string
   description: string

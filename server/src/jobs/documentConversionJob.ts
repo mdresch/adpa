@@ -74,7 +74,7 @@ documentUploadQueue.process('file-process', WORKER_CONCURRENCY, async (job: IQue
       jobId: job.id,
       batchId: job.data.batchId,
       filename: job.data.filename,
-      attempt: job.attemptsMade + 1,
+      attempt: (job as any).attemptsMade + 1,
       error: error.message,
       stack: error.stack
     });

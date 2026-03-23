@@ -544,8 +544,8 @@ router.get(
           durationMs,
           errorMessage: row.error_message || null,
           staleCounts: result?.staleCounts || null,
-          deletedNodes: result?.cleanup?.deletedNodes || null,
-          deletedEdges: result?.cleanup?.deletedEdges || null,
+          deletedNodes: (result?.cleanup as any)?.deletedNodes || null,
+          deletedEdges: (result?.cleanup as any)?.deletedEdges || null,
         }
       })
 
@@ -559,8 +559,8 @@ router.get(
             acc.durationSamples += 1
             acc.totalDurationMs += item.durationMs
           }
-          if (item.staleCounts?.semanticUnits) {
-            acc.totalStaleUnits += Number(item.staleCounts.semanticUnits) || 0
+          if ((item.staleCounts as any)?.semanticUnits) {
+            acc.totalStaleUnits += Number((item.staleCounts as any).semanticUnits) || 0
           }
           return acc
         },

@@ -31,6 +31,10 @@ interface ProjectIntegrations {
     projectwise_folder_path?: string
     [key: string]: any
   }
+  confluence_space_key?: string
+  confluence_parent_page_id?: string
+  jira_project_key?: string
+  jira_issue_type_default?: string
 }
 
 export default function ProjectSettingsPage() {

@@ -759,6 +759,9 @@ importers:
       '@adobe/pdfservices-node-sdk':
         specifier: ^4.1.0
         version: 4.1.0
+      '@ai-sdk/azure':
+        specifier: ^3.0.48
+        version: 3.0.48(zod@3.25.76)
       '@ai-sdk/deepseek':
         specifier: ^1.0.32
         version: 1.0.35(zod@3.25.76)
@@ -1110,6 +1113,12 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
+  '@ai-sdk/azure@3.0.48':
+    resolution: {integrity: sha512-rkaXEZZYRNnuGUJ5OZY3SHhVsD7wMSE9NqkASCHP5IOZmPYySKrgTk3LgL+U/8ib1TNfO2nuGrhUrwR/d9lmYg==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
   '@ai-sdk/deepseek@1.0.35':
     resolution: {integrity: sha512-Qvh2yxL5zJS9RO/Bf12pyYBIDmn+9GR1hT6e28IYWQWnt2Xq0h9XGps6XagLAv3VYYFg8c/ozkWVd4kXLZ25HA==}
     engines: {node: '>=18'}
@@ -1176,6 +1185,12 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
+  '@ai-sdk/openai@3.0.47':
+    resolution: {integrity: sha512-bRsb2sDN5u+pKO3Kdr0flpxtL+cPwQ2uCo/pVyzIbj2I4AkKAokJHhw5JWLVOeEwdlYzWfmv+hzaiGarzUcTFQ==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
   '@ai-sdk/provider-utils@3.0.22':
     resolution: {integrity: sha512-fFT1KfUUKktfAFm5mClJhS1oux9tP2qgzmEZVl5UdwltQ1LO/s8hd7znVrgKzivwv1s1FIPza0s9OpJaNB/vHw==}
     engines: {node: '>=18'}
@@ -1184,6 +1199,12 @@ packages:
 
   '@ai-sdk/provider-utils@4.0.15':
     resolution: {integrity: sha512-8XiKWbemmCbvNN0CLR9u3PQiet4gtEVIrX4zzLxnCj06AwsEDJwJVBbKrEI4t6qE8XRSIvU2irka0dcpziKW6w==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
+  '@ai-sdk/provider-utils@4.0.21':
+    resolution: {integrity: sha512-MtFUYI1/8mgDvRmaBDjbLJPFFrMG777AvSgyIFQtZHIMzm88R/12vYBBpnk7pfiWLFE1DSZzY4WDYzGbKAcmiw==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -11975,6 +11996,13 @@ snapshots:
       '@ai-sdk/provider-utils': 4.0.15(zod@3.24.1(patch_hash=99447639c57a97aecf6e33f715d29c14e2e6503bd04dd97ce56ab473d578dc52))
       zod: 3.24.1(patch_hash=99447639c57a97aecf6e33f715d29c14e2e6503bd04dd97ce56ab473d578dc52)
 
+  '@ai-sdk/azure@3.0.48(zod@3.25.76)':
+    dependencies:
+      '@ai-sdk/openai': 3.0.47(zod@3.25.76)
+      '@ai-sdk/provider': 3.0.8
+      '@ai-sdk/provider-utils': 4.0.21(zod@3.25.76)
+      zod: 3.25.76
+
   '@ai-sdk/deepseek@1.0.35(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 2.0.1
@@ -12043,6 +12071,12 @@ snapshots:
       '@ai-sdk/provider-utils': 4.0.15(zod@3.24.1(patch_hash=99447639c57a97aecf6e33f715d29c14e2e6503bd04dd97ce56ab473d578dc52))
       zod: 3.24.1(patch_hash=99447639c57a97aecf6e33f715d29c14e2e6503bd04dd97ce56ab473d578dc52)
 
+  '@ai-sdk/openai@3.0.47(zod@3.25.76)':
+    dependencies:
+      '@ai-sdk/provider': 3.0.8
+      '@ai-sdk/provider-utils': 4.0.21(zod@3.25.76)
+      zod: 3.25.76
+
   '@ai-sdk/provider-utils@3.0.22(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 2.0.1
@@ -12056,6 +12090,13 @@ snapshots:
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.0.6
       zod: 3.24.1(patch_hash=99447639c57a97aecf6e33f715d29c14e2e6503bd04dd97ce56ab473d578dc52)
+
+  '@ai-sdk/provider-utils@4.0.21(zod@3.25.76)':
+    dependencies:
+      '@ai-sdk/provider': 3.0.8
+      '@standard-schema/spec': 1.1.0
+      eventsource-parser: 3.0.6
+      zod: 3.25.76
 
   '@ai-sdk/provider@2.0.1':
     dependencies:

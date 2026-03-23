@@ -24,11 +24,13 @@ export class ProjectPhaseOrchestrator {
     await agentRunStore.updateRun(runId, { status: 'running' });
 
     try {
-      const contextResolver = new ProjectContextResolver(projectId);
-      const fullContext = await contextResolver.getFullContext();
+      const contextResolver = new ProjectContextResolver();
+      const resolvedContext = await contextResolver.resolve(projectId);
+      const fullContext = JSON.stringify(resolvedContext, null, 2);
 
       for (const phaseInfo of PHASES) {
-        const phaseId = await agentRunStore.createPhase(runId, phaseInfo);
+        const phaseData = { ...phaseInfo, phase_number: phaseInfo.number, phase_name: phaseInfo.name };
+        const phaseId = await agentRunStore.createPhase(runId, phaseData as any);
         streamingBus.emitToRun(runId, 'phase_start', { runId, phaseId, ...phaseInfo });
 
         const startTime = Date.now();
@@ -50,12 +52,13 @@ ${fullContext}`;
           // The agent's execution will emit events. We need to listen to them.
           // This requires the agent to be an EventEmitter or have a similar mechanism.
           // For now, we simulate this by having the agent directly call the bus and store.
-          const finalAnswer = await agent.runPhase(prompt, {
+          const agentResult = await agent.run(prompt, {
             runId,
             phaseId,
             streamingBus,
             agentRunStore
           });
+          const finalAnswer = agentResult.finalAnswer;
 
           const durationMs = Date.now() - startTime;
           await agentRunStore.updatePhase(phaseId, {

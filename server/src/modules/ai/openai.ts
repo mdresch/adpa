@@ -74,7 +74,7 @@ export interface OpenAIResponse {
   provider?: string
 }
 
-interface OpenAIError {
+export interface OpenAIError {
   message: string
   type: string
   code?: string

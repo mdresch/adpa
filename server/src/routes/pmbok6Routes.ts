@@ -21,7 +21,7 @@
 import express from 'express'
 import Joi from 'joi'
 import { authenticateToken } from '../middleware/auth'
-import { validate, validateParams } from '../middleware/validation'
+import { validate, validateParams, validateQuery } from '../middleware/validation'
 import { childLogger } from '../utils/logger'
 import { pool } from '../database/connection'
 import { schemas } from '../middleware/validation'
@@ -241,7 +241,7 @@ router.get(
 router.get(
   '/processes',
   authenticateToken,
-  validate(listProcessesSchema, 'query'),
+  validateQuery(listProcessesSchema),
   async (req, res) => {
     const log = childLogger({ requestId: (req as any).requestId })
     

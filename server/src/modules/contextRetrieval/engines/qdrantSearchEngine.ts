@@ -71,7 +71,7 @@ export class QdrantSearchEngine {
         await this.client.createCollection(this.collectionName, {
           vectors: {
             size: this.config.vectorSize,
-            distance: this.config.distance
+            distance: this.config.distance === 'Euclidean' ? 'Euclid' as any : this.config.distance as any
           }
         })
         logger.info('Qdrant collection created', { collectionName: this.collectionName })
@@ -100,18 +100,18 @@ export class QdrantSearchEngine {
       logger.debug('Performing Qdrant search', { query: query.substring(0, 50), contextTypes, limit })
 
       // Generate embeddings for the query
-      const queryEmbeddings = await this.embeddingsService.generateEmbeddings(query)
+      const queryEmbeddings = await this.embeddingsService.generateEmbeddings({ input: query })
 
       // Build filter conditions
       const qdrantFilter = this.buildQdrantFilter(contextTypes, filters)
 
       // Search in Qdrant
       const searchResult = await this.client.search(this.collectionName, {
-        vector: queryEmbeddings,
+        vector: queryEmbeddings.data[0].embedding,
         limit,
         filter: qdrantFilter ? { must: qdrantFilter } : undefined,
         with_payload: true,
-        with_vectors: false
+        with_vector: false
       })
 
       // Convert Qdrant results to ContextRetrievalResult format
@@ -121,7 +121,7 @@ export class QdrantSearchEngine {
           id: point.id?.toString() || `qdrant-${index}`,
           type: (payload.type as ContextType) || 'document_history',
           content: payload.content as string || '',
-          title: (payload.title as string) || payload.content?.substring(0, 100) || '',
+          title: (payload.title as string) || (payload.content as string)?.substring(0, 100) || '',
           relevanceScore: 1 - (point.score || 0), // Convert distance to similarity score
           source: (payload.source as string) || 'qdrant',
           sourceId: (payload.sourceId as string) || point.id?.toString() || '',

@@ -164,7 +164,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
 
       console.log('[EXTRACTION] Fetched documents:', documentsData)
 
-      const docs = documentsData.documents || documentsData.data || []
+      const docs = (documentsData as any).documents || (documentsData as any).data || []
       setAllDocuments(docs)
 
       console.log('[EXTRACTION] Set allDocuments:', docs.length)
@@ -1367,7 +1367,8 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
             const sourceEntityCounts = sourceEntities.map(e => ({
               key: e,
               label: entityTypeConfig[e]?.label || e,
-              count: entityCounts?.[e as keyof EntityCounts] || 0
+              count: entityCounts?.[e as keyof EntityCounts] || 0,
+              color: entityTypeConfig[e]?.color || 'text-slate-500'
             })).filter(e => e.count > 0)
 
             const totalSourceCount = sourceEntityCounts.reduce((sum, e) => sum + e.count, 0)

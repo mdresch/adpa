@@ -1,4 +1,4 @@
-import dotenv from "dotenv"
+import * as dotenv from "dotenv"
 // Only load .env if not in production (Railway injects env vars directly)
 
 import { Pool } from "pg"

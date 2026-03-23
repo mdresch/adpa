@@ -1,5 +1,5 @@
 import { logger as baseLogger, childLogger as baseChildLogger } from '../infrastructure/logger';
-import pino from 'pino';
+import * as pino from 'pino';
 
 /**
  * FlexibleLogMethod enables both:

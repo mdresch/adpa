@@ -1,5 +1,5 @@
-// import { generateText } from 'ai'; // Temporarily disabled
-// import { createAzure } from '@ai-sdk/azure'; // Temporarily disabled
+import { generateText } from 'ai';
+import { createAzure } from '@ai-sdk/azure';
 import { isTracingEnabled, isNativeLangfuseEnabled } from '../../tracing'
 import { Langfuse } from 'langfuse'
 
@@ -193,13 +193,13 @@ export class AzureConnector {
             deployment: deployment
           }
         }
-      });
+      } as any);
 
       const response: AzureResponse = {
         text: result.text,
         usage: result.usage ? {
-          promptTokens: result.usage.promptTokens,
-          completionTokens: result.usage.completionTokens,
+          promptTokens: (result.usage as any).promptTokens || 0,
+          completionTokens: (result.usage as any).completionTokens || 0,
           totalTokens: result.usage.totalTokens,
         } : undefined,
         finishReason: result.finishReason,
@@ -209,11 +209,7 @@ export class AzureConnector {
       if (langfuseGeneration) {
         langfuseGeneration.end({
           output: result.text,
-          usage: result.usage ? {
-            promptTokens: result.usage.promptTokens,
-            completionTokens: result.usage.completionTokens,
-            totalTokens: result.usage.totalTokens,
-          } : undefined
+          usage: response.usage
         });
         await langfuse.flushAsync();
       }
@@ -253,7 +249,7 @@ export class AzureConnector {
         temperature: 0.1,
       };
 
-      await this.generateContent(providerName, testRequest);
+      await this.generateContent(providerName, testRequest as any);
 
       console.log(`[AZURE AI] Connection test successful for ${providerName}`);
       return true;
@@ -290,8 +286,8 @@ export class AzureConnector {
       await generateText({
         model: azure(model),
         prompt: 'API key validation test',
-        maxTokens: 5,
-      });
+        maxTokens: 500
+      } as any);
 
       console.log(`[AZURE AI] API key validation successful for model: ${model}`);
     } catch (error) {

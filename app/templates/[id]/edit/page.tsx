@@ -58,13 +58,13 @@ interface GkgContextStrategy {
 interface Template {
   id: string
   name: string
-  description: string
+  description?: string
   framework: string
-  category: string
-  development_status: string
+  category?: string
+  development_status?: string
   content: any
   variables: any[]
-  system_prompt: string | null
+  system_prompt?: string | null
   quality_threshold?: number
   prompt_version?: number
   is_public: boolean
@@ -886,7 +886,7 @@ CHARTER STRUCTURE:
                                 <p className="text-xs text-muted-foreground">
                                   Which types of entities to include in the context. The graph stores requirements, risks, stakeholders, milestones, constraints, deliverables, etc.; the profile selects which of these are sent to the LLM.
                                 </p>
-                                <Select value={gkgProfile} onValueChange={(v: GkgContextStrategy['profile']) => setGkgProfile(v)}>
+                                <Select value={gkgProfile} onValueChange={(v: string) => setGkgProfile(v as GkgContextStrategy['profile'])}>
                                   <SelectTrigger>
                                     <SelectValue />
                                   </SelectTrigger>
@@ -905,7 +905,7 @@ CHARTER STRUCTURE:
                                 <p className="text-xs text-muted-foreground">
                                   Where to pull context from in the graph: one project, its best documents, dependent projects, or all projects you can access.
                                 </p>
-                                <Select value={gkgScope} onValueChange={(v: GkgContextStrategy['scope']) => setGkgScope(v)}>
+                                <Select value={gkgScope} onValueChange={(v: string) => setGkgScope(v as GkgContextStrategy['scope'])}>
                                   <SelectTrigger>
                                     <SelectValue />
                                   </SelectTrigger>
@@ -954,7 +954,7 @@ CHARTER STRUCTURE:
                               <p className="text-xs text-muted-foreground">
                                 Restrict context to documents with status Approved or Published only, or include Draft and In Review documents as well.
                               </p>
-                              <Select value={gkgDocumentStatusFilter} onValueChange={(v: GkgContextStrategy['documentStatusFilter']) => setGkgDocumentStatusFilter(v)}>
+                              <Select value={gkgDocumentStatusFilter} onValueChange={(v: string) => setGkgDocumentStatusFilter(v as GkgContextStrategy['documentStatusFilter'])}>
                                 <SelectTrigger>
                                   <SelectValue />
                                 </SelectTrigger>

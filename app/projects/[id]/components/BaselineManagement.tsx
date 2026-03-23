@@ -47,6 +47,8 @@ interface Baseline {
   }
   technical_baseline?: string | {       // JSONB - can be string or parsed object
     technology_stack?: any[];
+    quality_standards?: any[];
+    best_practices?: any[];
   }
   timeline_baseline?: string | {        // JSONB - can be string or parsed object
     project_duration?: string;
@@ -57,17 +59,23 @@ interface Baseline {
   cost_baseline?: string | {            // JSONB - can be string or parsed object
     total_budget?: number | string;
     cost_categories?: any[];
+    budget_resources?: any[];
+    cost_breakdown?: any[];
   }
   success_criteria?: string | {         // JSONB - can be string or parsed object
     kpis?: any[];
+    quality_metrics?: any[];
+    acceptance_criteria?: any[];
   }
   resource_baseline?: string | {        // JSONB - resource allocation data
     stakeholders?: any[];
     team_members?: any[];
+    equipment?: any[];
   }
   extracted_from_documents?: string[]
-  status: 'pending' | 'approved' | 'declined' | 'active'
+  status: 'pending' | 'approved' | 'declined' | 'active' | 'draft'
   created_by: string
+  created_by_name?: string
   approved_by?: string
   approved_at?: string
   created_at: string
@@ -106,6 +114,11 @@ interface MissingDocument {
   name: string
   type: string
   reason: string
+  documentType?: string
+  purpose?: string
+  priority?: 'low' | 'medium' | 'high' | 'critical'
+  whatItProvides?: string
+  template?: string
 }
 
 interface BaselineManagementProps {
@@ -136,9 +149,13 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
     try {
       const response = await apiClient.request<{ baseline: Baseline }>(
         `/baselines/project/${projectId}/active`,
-        { suppressNotFoundError: true } as Record<string, unknown> // 404 is expected when no baseline exists yet
+        { suppressNotFoundError: true } as Record<string, unknown>
       )
-      setBaseline(response.baseline)
+      if (response && response.baseline) {
+        setBaseline(response.baseline)
+      } else {
+        setBaseline(null)
+      }
     } catch (error: unknown) {
       // 404 is expected when no baseline has been created yet - gracefully handle it
       const err = error as { status?: number; message?: string }
@@ -1262,15 +1279,15 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
                       <div className="flex items-center justify-between mb-2">
                         <Users className="h-5 w-5 text-green-600" />
                         <span className="text-2xl font-bold text-green-900">
-                          {(typeof viewingBaseline.resource_baseline === 'object' ? viewingBaseline.resource_baseline?.stakeholders?.length || 0 : 0) + 
-                           (typeof viewingBaseline.resource_baseline === 'object' ? viewingBaseline.resource_baseline?.team_members?.length || 0 : 0)}
+                          {(typeof viewingBaseline.resource_baseline === 'object' ? (viewingBaseline.resource_baseline as any)?.stakeholders?.length || 0 : 0) + 
+                           (typeof viewingBaseline.resource_baseline === 'object' ? (viewingBaseline.resource_baseline as any)?.team_members?.length || 0 : 0)}
                         </span>
                       </div>
                       <p className="text-xs font-medium text-green-900 mb-1">Resources</p>
                       <div className="text-xs text-green-700 space-y-0.5">
-                        <p>{viewingBaseline.resource_baseline?.stakeholders?.length || 0} Stakeholders</p>
-                        <p>{viewingBaseline.resource_baseline?.team_members?.length || 0} Team Members</p>
-                        <p>{viewingBaseline.resource_baseline?.equipment?.length || 0} Equipment</p>
+                        <p>{typeof viewingBaseline.resource_baseline === 'object' ? (viewingBaseline.resource_baseline as any)?.stakeholders?.length || 0 : 0} Stakeholders</p>
+                        <p>{typeof viewingBaseline.resource_baseline === 'object' ? (viewingBaseline.resource_baseline as any)?.team_members?.length || 0 : 0} Team Members</p>
+                        <p>{typeof viewingBaseline.resource_baseline === 'object' ? (viewingBaseline.resource_baseline as any)?.equipment?.length || 0 : 0} Equipment</p>
                       </div>
                     </CardContent>
                   </Card>
@@ -1281,13 +1298,13 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
                       <div className="flex items-center justify-between mb-2">
                         <DollarSign className="h-5 w-5 text-emerald-600" />
                         <span className="text-lg font-bold text-emerald-900">
-                          {viewingBaseline.cost_baseline?.total_budget || 'N/A'}
+                          {typeof viewingBaseline.cost_baseline === 'object' ? (viewingBaseline.cost_baseline as any)?.total_budget || 'N/A' : 'N/A'}
                         </span>
                       </div>
                       <p className="text-xs font-medium text-emerald-900 mb-1">Total Budget</p>
                       <div className="text-xs text-emerald-700 space-y-0.5">
-                        <p>{viewingBaseline.cost_baseline?.budget_resources?.length || 0} Budget Items</p>
-                        <p>{Object.keys(viewingBaseline.cost_baseline?.cost_breakdown || {}).length} Categories</p>
+                        <p>{typeof viewingBaseline.cost_baseline === 'object' ? (viewingBaseline.cost_baseline as any)?.budget_resources?.length || 0 : 0} Budget Items</p>
+                        <p>{typeof viewingBaseline.cost_baseline === 'object' ? Object.keys((viewingBaseline.cost_baseline as any)?.cost_breakdown || {}).length : 0} Categories</p>
                       </div>
                     </CardContent>
                   </Card>
@@ -1298,14 +1315,14 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
                       <div className="flex items-center justify-between mb-2">
                         <CheckCircle className="h-5 w-5 text-orange-600" />
                         <span className="text-2xl font-bold text-orange-900">
-                          {(viewingBaseline.success_criteria?.kpis?.length || 0)}
+                          {typeof viewingBaseline.success_criteria === 'object' ? (viewingBaseline.success_criteria as any)?.kpis?.length || 0 : 0}
                         </span>
                       </div>
                       <p className="text-xs font-medium text-orange-900 mb-1">Success KPIs</p>
                       <div className="text-xs text-orange-700 space-y-0.5">
-                        <p>{viewingBaseline.success_criteria?.kpis?.length || 0} KPIs</p>
-                        <p>{viewingBaseline.success_criteria?.quality_metrics?.length || 0} Quality Metrics</p>
-                        <p>{viewingBaseline.success_criteria?.acceptance_criteria?.length || 0} Acceptance Criteria</p>
+                        <p>{typeof viewingBaseline.success_criteria === 'object' ? (viewingBaseline.success_criteria as any)?.kpis?.length || 0 : 0} KPIs</p>
+                        <p>{typeof viewingBaseline.success_criteria === 'object' ? (viewingBaseline.success_criteria as any)?.quality_metrics?.length || 0 : 0} Quality Metrics</p>
+                        <p>{typeof viewingBaseline.success_criteria === 'object' ? (viewingBaseline.success_criteria as any)?.acceptance_criteria?.length || 0 : 0} Acceptance Criteria</p>
                       </div>
                     </CardContent>
                   </Card>

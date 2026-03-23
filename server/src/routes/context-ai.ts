@@ -134,7 +134,7 @@ router.post("/generate", async (req, res) => {
       context_warnings: response.context_warnings,
       context_token_usage: response.context_token_usage,
       duration,
-      metadata: response.metadata
+      metadata: (response as any).metadata
     })
 
   } catch (error) {
@@ -293,7 +293,7 @@ router.post("/batch", async (req, res) => {
       responses,
       batch_duration: duration,
       total_requests: requests.length,
-      successful_requests: responses.filter(r => !r.metadata?.error).length
+      successful_requests: responses.filter(r => !(r as any).metadata?.error).length
     })
 
   } catch (error) {
