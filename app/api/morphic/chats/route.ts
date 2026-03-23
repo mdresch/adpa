@@ -9,7 +9,10 @@ export async function GET(request: NextRequest) {
         const cookieStore = await cookies()
         const token = cookieStore.get('auth_token')?.value
 
-        const response = await fetch(`${BACKEND_URL}/api/v1/morphic/history?${searchParams.toString()}`, {
+        const fetchUrl = `${BACKEND_URL}/api/v1/morphic/history?${searchParams.toString()}`
+        console.log(`[FRONTEND-PROXY] Fetching: ${fetchUrl}`)
+        
+        const response = await fetch(fetchUrl, {
             headers: {
                 'Authorization': `Bearer ${token}`
             }

@@ -530,7 +530,7 @@ export class PersonalizationEngine {
 
       const result: PersonalizationResult = {
         personalization_id: personalizationId,
-        success: qualityAssessment.overall_quality_score >= request.quality_constraints.minimum_quality_score,
+        success: qualityAssessment.overall_quality_score >= (request.quality_constraints[0]?.minimum_quality_score ?? 0),
         personalized_content: personalizedContent,
         personalization_metrics: metrics,
         stakeholder_analysis: stakeholderAnalysis,
@@ -1338,7 +1338,7 @@ interface StakeholderRelationship {
   relationship_strength: number
 }
 
-interface CommunicationPreference {
+interface StakeholderCommunicationPreference {
   stakeholder_id: string
   preferred_tone: string
   preferred_format: string

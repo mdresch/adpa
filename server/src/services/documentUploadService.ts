@@ -467,7 +467,7 @@ export async function processUploadedFile(
 
       // Extract string from object if it's an object
       if (markdownContent && typeof markdownContent === 'object') {
-        markdownContent = markdownContent.text || markdownContent.content || markdownContent.markdown || JSON.stringify(markdownContent);
+        markdownContent = (markdownContent as any).text || (markdownContent as any).content || (markdownContent as any).markdown || JSON.stringify(markdownContent);
       } else {
         markdownContent = String(markdownContent || '');
       }
@@ -858,7 +858,7 @@ async function createDocumentRecord(
 
     // Extract string from object if it's an object
     if (markdownContent && typeof markdownContent === 'object') {
-      markdownContent = markdownContent.text || markdownContent.content || markdownContent.markdown || JSON.stringify(markdownContent);
+      markdownContent = (markdownContent as any).text || (markdownContent as any).content || (markdownContent as any).markdown || JSON.stringify(markdownContent);
       logger.warn('Extracted string from markdown object', {
         filename: data.filename,
         extractedLength: markdownContent.length

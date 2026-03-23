@@ -28,8 +28,8 @@ export class TemplateController {
       const filters = { framework, category, search, is_public, template_scope, limit, offset };
       
       const [templates, total] = await Promise.all([
-        this.repository.findTemplates(filters, isSuperAdmin, userCompanyId, user.id),
-        this.repository.countTemplates(filters, isSuperAdmin, userCompanyId, user.id)
+        this.repository.findTemplates(filters, isSuperAdmin, userCompanyId, user?.id),
+        this.repository.countTemplates(filters, isSuperAdmin, userCompanyId, user?.id)
       ]);
 
       res.json({

@@ -494,7 +494,7 @@ export class HistoricalAnalysisService implements IHistoricalAnalysisService {
     try {
       logger.info('Updating pattern database')
 
-      await this.patternRecognitionService.updatePatternDatabase()
+      await this.patternRecognitionService.updateAllPatternDatabases()
 
       logger.info('Pattern database update completed')
 

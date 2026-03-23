@@ -1,9 +1,11 @@
 import { Request, Response } from 'express';
+import * as fs from 'fs';
+import * as path from 'path';
 import { MorphicRepository } from './MorphicRepository';
 import { createChatStreamResponse } from '../../../../lib/morphic/streaming/create-chat-stream-response';
 import { pipeWebResponseToExpress } from '../../utils/stream';
 import { selectModel } from '../../../../lib/morphic/utils/model-selection';
-import { childLogger } from "../../utils/logger";
+import { childLogger, asyncLocalStorage } from "../../utils/logger";
 import { buildUIMessageFromDB } from '../../../../lib/morphic/utils/message-mapping';
 import { CacheService } from '../../../../lib/kv';
 import aiSearchRAGService from '../../services/aiSearchRAGService';
@@ -112,6 +114,7 @@ export class MorphicController {
                 modelType: modelType as any,
                 knowledgeEnabled,
                 ragScope,
+                correlationId: asyncLocalStorage.getStore(),
                 dbActions: {
                     loadChatWithMessages: (id, uid) => this.repository.loadChat(id, uid || userId),
                     upsertMessage: (msg, uid) => this.repository.upsertMessage(msg, uid || userId),
@@ -158,7 +161,14 @@ export class MorphicController {
                 nextOffset
             });
         } catch (error: any) {
+            console.error('[MORPHIC-BACKEND] Error fetching Morphic history:', error);
             this.log.error('Error fetching Morphic history:', error);
+            try {
+                const logPath = path.join(process.cwd(), 'morphic_debug.log');
+                fs.appendFileSync(logPath, `${new Date().toISOString()} - Error: ${error.message}\nStack: ${error.stack}\n`);
+            } catch (e) {
+                // ignore
+            }
             res.status(500).json({ error: 'Internal Server Error' });
         }
     }

@@ -448,11 +448,15 @@ export class JobManager {
       const stageJob = result.rows[0]
 
       const status: ProcessingStatus = {
+        job_id: jobId,
         status: stageJob.status,
         progress: stageJob.progress,
         started_at: stageJob.started_at,
         completed_at: stageJob.completed_at,
-        error: stageJob.error ? JSON.parse(stageJob.error) : undefined
+        error: stageJob.error ? JSON.parse(stageJob.error) : undefined,
+        stages_completed: stageJob.stages_completed || [],
+        stages_remaining: stageJob.stages_remaining || [],
+        metadata: stageJob.metadata || {}
       }
 
       logger.info('Stage job status retrieved successfully', {

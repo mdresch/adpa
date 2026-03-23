@@ -3,6 +3,14 @@
  * Defines TypeScript interfaces and types for pattern recognition and best practices
  */
 
+export interface PatternRecognitionConfig {
+  minPatternFrequency: number
+  minConfidence: number
+  maxPatternsPerDocument: number
+  enableLearning: boolean
+  learningThreshold: number
+}
+
 export interface DocumentPattern {
   id: string
   pattern_type: DocumentPatternType
@@ -203,6 +211,14 @@ export interface ProjectAnalysis {
   best_practices_applied: BestPractice[]
   improvement_opportunities: string[]
   analyzed_at: Date
+}
+
+export interface PatternRecognitionService {
+  analyzeDocumentPatterns(documentId: string): Promise<PatternRecognitionResult>
+  detectPatterns(content: string, framework: string): Promise<DocumentPattern[]>
+  identifyBestPractices(documentId: string): Promise<BestPractice[]>
+  learnFromDocument(documentId: string): Promise<void>
+  updateAllPatternDatabases(): Promise<void>
 }
 
 export interface HistoricalAnalysisService {

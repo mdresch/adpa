@@ -24,12 +24,13 @@ export const generateId = () => createId()
 
 // Chats table
 export const chats = pgTable(
-    'chats',
+    'morphic_chats',
     {
         id: varchar('id', { length: ID_LENGTH })
             .primaryKey()
             .$defaultFn(() => generateId()),
         createdAt: timestamp('created_at').notNull().defaultNow(),
+        updatedAt: timestamp('updated_at'),
         title: text('title').notNull(),
         userId: varchar('user_id', { length: USER_ID_LENGTH }).notNull(),
         visibility: varchar('visibility', {
@@ -71,7 +72,7 @@ export type Chat = InferSelectModel<typeof chats>
 
 // Messages table
 export const messages = pgTable(
-    'messages',
+    'morphic_messages',
     {
         id: varchar('id', { length: ID_LENGTH })
             .primaryKey()
@@ -121,7 +122,7 @@ export type Message = InferSelectModel<typeof messages>
 
 // Parts table
 export const parts = pgTable(
-    'parts',
+    'morphic_parts',
     {
         id: varchar('id', { length: ID_LENGTH })
             .primaryKey()
@@ -241,7 +242,7 @@ export type NewPart = typeof parts.$inferInsert
 
 // Feedback table
 export const feedback = pgTable(
-    'feedback',
+    'morphic_feedback',
     {
         id: varchar('id', { length: ID_LENGTH })
             .primaryKey()

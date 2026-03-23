@@ -18,8 +18,7 @@ const turndownService = new TurndownService({
   bulletListMarker: '-',
   codeBlockStyle: 'fenced',
   emDelimiter: '*',
-  strongDelimiter: '**',
-  codeBlockStyle: 'fenced'
+  strongDelimiter: '**'
 })
 
 // Configure Turndown to preserve more structure

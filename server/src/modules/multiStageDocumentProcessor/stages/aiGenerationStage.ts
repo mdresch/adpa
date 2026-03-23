@@ -845,7 +845,7 @@ Return ONLY the section content in markdown format. Do not include section heade
 
     if (context.project_context) {
       const proj = context.project_context as any
-      parts.push(`Project: ${JSON.stringify(proj.project_data ?? { project_id: proj.project_id, project_name: proj.project_name } ?? proj ?? {}, null, 2)}`)
+      parts.push(`Project: ${JSON.stringify(proj.project_data || { project_id: proj.project_id, project_name: proj.project_name } || proj || {}, null, 2)}`)
     }
 
     const userCtx = (context as any).user_context ?? (context as any).user_profile_context

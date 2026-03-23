@@ -6,20 +6,20 @@
 import { logger } from '../../../utils/logger'
 import type { 
   IFreshnessPolicyEngine, 
-  ContextFreshnessPolicy, 
+  FreshnessPolicy, 
   PolicyEvaluationResult,
   FreshnessMetrics,
   FreshnessHealthStatus
 } from '../types'
 
 export class FreshnessPolicyEngine implements IFreshnessPolicyEngine {
-  private policies: Map<string, ContextFreshnessPolicy> = new Map()
+  private policies: Map<string, FreshnessPolicy> = new Map()
 
   constructor() {
     this.initializeDefaultPolicies()
   }
 
-  async createPolicy(policy: ContextFreshnessPolicy): Promise<ContextFreshnessPolicy> {
+  async createPolicy(policy: FreshnessPolicy): Promise<FreshnessPolicy> {
     try {
       logger.debug('Creating freshness policy', { policyId: policy.policy_id })
 
@@ -37,7 +37,7 @@ export class FreshnessPolicyEngine implements IFreshnessPolicyEngine {
     }
   }
 
-  async updatePolicy(policyId: string, updates: Partial<ContextFreshnessPolicy>): Promise<ContextFreshnessPolicy> {
+  async updatePolicy(policyId: string, updates: Partial<FreshnessPolicy>): Promise<FreshnessPolicy> {
     try {
       logger.debug('Updating freshness policy', { policyId })
 
@@ -84,7 +84,7 @@ export class FreshnessPolicyEngine implements IFreshnessPolicyEngine {
     }
   }
 
-  async getPolicy(policyId: string): Promise<ContextFreshnessPolicy | null> {
+  async getPolicy(policyId: string): Promise<FreshnessPolicy | null> {
     try {
       logger.debug('Getting freshness policy', { policyId })
 
@@ -107,7 +107,7 @@ export class FreshnessPolicyEngine implements IFreshnessPolicyEngine {
     }
   }
 
-  async listPolicies(): Promise<ContextFreshnessPolicy[]> {
+  async listPolicies(): Promise<FreshnessPolicy[]> {
     try {
       logger.debug('Listing freshness policies')
 
@@ -185,7 +185,7 @@ export class FreshnessPolicyEngine implements IFreshnessPolicyEngine {
     }
   }
 
-  async optimizePolicy(policyId: string, metrics: FreshnessMetrics): Promise<ContextFreshnessPolicy> {
+  async optimizePolicy(policyId: string, metrics: FreshnessMetrics): Promise<FreshnessPolicy> {
     try {
       logger.debug('Optimizing freshness policy', { policyId })
 
@@ -256,7 +256,7 @@ export class FreshnessPolicyEngine implements IFreshnessPolicyEngine {
     }
   }
 
-  private async performPolicyEvaluation(policy: ContextFreshnessPolicy, contextData: any): Promise<PolicyEvaluationResult> {
+  private async performPolicyEvaluation(policy: FreshnessPolicy, contextData: any): Promise<PolicyEvaluationResult> {
     try {
       let evaluationScore = 0.0
       const evaluationFactors: string[] = []
@@ -317,8 +317,9 @@ export class FreshnessPolicyEngine implements IFreshnessPolicyEngine {
         overall_score: evaluationScore,
         context_scores: evaluationFactors.map((factor, idx) => ({
           context_id: `ctx_${idx}`,
-          score: evaluationScore,
-          factors: [factor]
+          freshness_score: evaluationScore,
+          compliance_score: evaluationScore,
+          recommendation: factor
         })),
         metadata: {
           contexts_evaluated: evaluationFactors.length,
@@ -338,7 +339,7 @@ export class FreshnessPolicyEngine implements IFreshnessPolicyEngine {
     }
   }
 
-  private async performPolicyOptimization(policy: ContextFreshnessPolicy, metrics: FreshnessMetrics): Promise<ContextFreshnessPolicy> {
+  private async performPolicyOptimization(policy: FreshnessPolicy, metrics: FreshnessMetrics): Promise<FreshnessPolicy> {
     try {
       const optimizedPolicy = { ...policy }
 
@@ -380,7 +381,7 @@ export class FreshnessPolicyEngine implements IFreshnessPolicyEngine {
     }
   }
 
-  private async calculatePolicyMetrics(policy: ContextFreshnessPolicy): Promise<FreshnessMetrics> {
+  private async calculatePolicyMetrics(policy: FreshnessPolicy): Promise<FreshnessMetrics> {
     try {
       return {
         timeframe: '24h',
@@ -429,7 +430,7 @@ export class FreshnessPolicyEngine implements IFreshnessPolicyEngine {
     }
   }
 
-  private async calculatePolicyHealthStatus(policy: ContextFreshnessPolicy): Promise<FreshnessHealthStatus> {
+  private async calculatePolicyHealthStatus(policy: FreshnessPolicy): Promise<FreshnessHealthStatus> {
     try {
       const metrics = await this.calculatePolicyMetrics(policy)
       
@@ -484,7 +485,7 @@ export class FreshnessPolicyEngine implements IFreshnessPolicyEngine {
   private initializeDefaultPolicies(): void {
     try {
       // Default policy for project context
-      const projectPolicy: ContextFreshnessPolicy = {
+      const projectPolicy: FreshnessPolicy = {
         policy_id: 'default_project_policy',
         policy_name: 'Default Project Context Policy',
         policy_description: 'Default freshness policy for project context data',
@@ -525,7 +526,7 @@ export class FreshnessPolicyEngine implements IFreshnessPolicyEngine {
       this.policies.set(projectPolicy.policy_id, projectPolicy)
 
       // Default policy for user profile context
-      const userPolicy: ContextFreshnessPolicy = {
+      const userPolicy: FreshnessPolicy = {
         policy_id: 'default_user_policy',
         policy_name: 'Default User Profile Policy',
         policy_description: 'Default freshness policy for user profile context data',
@@ -625,7 +626,7 @@ export class FreshnessPolicyEngine implements IFreshnessPolicyEngine {
   }
 
   // Methods called by ContextFreshnessManager
-  async applyPolicy(contextId: string, policy: ContextFreshnessPolicy): Promise<any> {
+  async applyPolicy(contextId: string, policy: FreshnessPolicy): Promise<any> {
     try {
       logger.debug('Applying policy to context', { contextId, policyId: policy.policy_id })
       
@@ -642,7 +643,7 @@ export class FreshnessPolicyEngine implements IFreshnessPolicyEngine {
     }
   }
 
-  async evaluatePolicy(policy: any, contexts: any[]): Promise<any> {
+  async evaluateBatchPolicy(policy: any, contexts: any[]): Promise<any> {
     try {
       logger.debug('Evaluating policy', { policyId: policy.policy_id, contextsCount: contexts.length })
       

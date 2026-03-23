@@ -10,12 +10,12 @@ import { parseAIResponse } from '../../base/Parser'
 import { buildExtractionPrompt } from '../../base/PromptBuilder'
 import { resolveSourceDocumentIdStrict } from '../../base/SourceDocumentResolver'
 import { extractionCacheService } from '../../cache'
-import type { ProjectOrgChart } from './types'
+import type { ProjectOrgChartNode } from './types'
 
 export async function extractProjectOrgChart(
     context: ExtractionContext,
     options: { temperature?: number; maxTokens?: number } = {}
-): Promise<ExtractionResult<ProjectOrgChart>> {
+): Promise<ExtractionResult<ProjectOrgChartNode>> {
     const startTime = Date.now()
     let cacheHit = false
     let rejectedCount = 0
@@ -96,7 +96,7 @@ export async function extractProjectOrgChart(
         const rawEntities = parsed.project_org_chart || []
 
         // Post-processing and source resolution
-        const validEntities: ProjectOrgChart[] = []
+        const validEntities: ProjectOrgChartNode[] = []
 
         rawEntities.forEach((entity: any) => {
             const resolution = resolveSourceDocumentIdStrict(

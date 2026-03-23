@@ -15,13 +15,9 @@
 
 import dotenv from 'dotenv'
 import { readFileSync } from 'fs'
-import { join, dirname } from 'path'
-import { fileURLToPath } from 'url'
+import { join } from 'path'
 import { pool } from '../database/connection'
 import { logger } from '../utils/logger'
-
-// CommonJS __dirname is available
-const __dirname = __dirname
 
 // Load environment variables
 dotenv.config()
@@ -69,4 +65,3 @@ async function runMigration() {
 
 // Run the migration
 runMigration()
-

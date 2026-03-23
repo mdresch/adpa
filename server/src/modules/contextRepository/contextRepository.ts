@@ -188,22 +188,23 @@ export class ContextRepository implements IContextRepository {
 
       const { documentId, framework, category } = params
 
-      // Fetch document and related context
-      const [
-        documentHistory,
-        similarDocuments,
-        qualityTrends,
-        bestPractices
-      ] = await Promise.all([
-        this.documentHistory.getDocumentHistory(documentId),
-        this.documentHistory.getSimilarDocuments(documentHistory?.template_id || '', undefined, 5),
-        this.documentHistory.getQualityTrends('monthly'),
-        this.documentHistory.getBestPractices(framework, category)
-      ])
+      // Fetch document history first as others depend on it
+      const documentHistory = await this.documentHistory.getDocumentHistory(documentId)
 
       if (!documentHistory) {
         throw new Error(`Document history not found for document ID: ${documentId}`)
       }
+
+      // Fetch related context
+      const [
+        similarDocuments,
+        qualityTrends,
+        bestPractices
+      ] = await Promise.all([
+        this.documentHistory.getSimilarDocuments(documentHistory?.template_id || '', undefined, 5),
+        this.documentHistory.getQualityTrends('monthly'),
+        this.documentHistory.getBestPractices(framework, category)
+      ])
 
       const context = {
         documentHistory,

@@ -452,7 +452,41 @@ export class ContextFreshnessManager implements IContextFreshnessManager {
     try {
       logger.info('Evaluating freshness policy', { policyId: policy.policy_id, contextsCount: contexts.length })
 
-      const evaluation = await this.freshnessPolicyEngine.evaluatePolicy(policy, contexts)
+      const evaluationResult = await this.freshnessPolicyEngine.evaluatePolicy(policy.policy_id, contexts)
+
+      const evaluation: PolicyEvaluation = {
+        policy_id: policy.policy_id,
+        evaluated_at: new Date(),
+        contexts_evaluated: contexts.length,
+        actions_recommended: [],
+        actions_executed: [],
+        success_rate: evaluationResult.success_rate || 0,
+        performance_impact: {
+          processing_time_change: 0,
+          memory_usage_change: 0,
+          cpu_usage_change: 0,
+          network_usage_change: 0,
+          storage_usage_change: 0
+        },
+        quality_impact: {
+          freshness_improvement: 0,
+          accuracy_improvement: 0,
+          completeness_improvement: 0,
+          consistency_improvement: 0,
+          reliability_improvement: 0
+        },
+        cost_benefit_analysis: {
+          implementation_cost: 0,
+          operational_cost: 0,
+          quality_benefit: 0,
+          performance_benefit: 0,
+          user_satisfaction_benefit: 0,
+          roi: 0,
+          payback_period: 0
+        },
+        recommendations: [],
+        evaluation_score: evaluationResult.evaluation_score
+      }
 
       // Store policy evaluation
       await this.storePolicyEvaluation(evaluation)

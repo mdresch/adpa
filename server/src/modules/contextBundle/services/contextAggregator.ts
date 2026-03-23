@@ -556,10 +556,10 @@ export class ContextAggregator {
   private async processTemporalPatterns(data: TemporalContextData): Promise<void> {
     // This would implement temporal pattern processing logic
     // For now, just calculate basic temporal relevance
-    data.temporal_relevance = this.calculateTemporalRelevance(data)
+    data.temporal_relevance = this.calculateDataTemporalRelevance(data)
   }
 
-  private calculateTemporalRelevance(data: TemporalContextData): number {
+  private calculateDataTemporalRelevance(data: TemporalContextData): number {
     // Simple temporal relevance calculation
     const now = new Date()
     const recentEvents = data.creation_timeline.filter(event => {

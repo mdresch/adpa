@@ -626,6 +626,7 @@ export interface StageOutput {
 }
 
 export interface ProcessingStatus {
+  job_id?: string
   status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
   progress: number
   started_at?: Date
@@ -635,6 +636,7 @@ export interface ProcessingStatus {
   stages_remaining: string[]
   estimated_completion?: Date
   error?: ProcessingError
+  metadata?: Record<string, any>
 }
 
 export interface StageStatus {

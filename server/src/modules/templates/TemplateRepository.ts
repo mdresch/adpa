@@ -6,7 +6,7 @@ export class TemplateRepository {
 
   constructor(private pool: Pool) {}
 
-  async findAll(filters: any, isSuperAdmin: boolean, userCompanyId: string | null, userId: string, client?: PoolClient) {
+  async findTemplates(filters: any, isSuperAdmin: boolean, userCompanyId: string | null, userId: string, client?: PoolClient): Promise<any[]> {
     const db = client || this.pool;
     
     let query = `

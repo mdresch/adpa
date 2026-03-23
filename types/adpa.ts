@@ -58,23 +58,31 @@ export interface QualityGate {
 }
 
 export interface ContextStats {
-  documents_used?: number
-  documents_used_as_context?: number
-  total_documents?: number
-  total_documents_available?: number
+  documents_used?: number | string
+  documents_used_as_context?: number | string
+  total_documents?: number | string
+  total_documents_available?: number | string
   project_context_used?: boolean
-  stakeholders_included?: number
-  estimated_context_tokens?: number
+  stakeholders_included?: number | string
+  estimated_context_tokens?: number | string
+  stakeholders_available?: number | string
+  custom_settings_count?: number | string
+  custom_metadata_count?: number | string
+  // Legacy aliases
+  project_context_included?: boolean
+  custom_settings_included?: number | string
+  custom_metadata_included?: number | string
 }
 
 export interface GenerationMetadata {
   aiProcessing?: AIProcessing
   contentMetrics?: ContentMetrics
-  qualityMetrics?: QualityMetrics
+  qualityMetrics?: QualityMetrics | any
   quality_gate_results?: QualityGate[]
   quality_gates?: QualityGate[]
   source_documentDatas?: any[]
   sourceDocuments?: any[]
+  source_documents?: any[]
   context_stats?: ContextStats
   framework?: string
   wordCount?: number
@@ -86,6 +94,10 @@ export interface GenerationMetadata {
     durationFormatted?: string
     duration?: number
   }
+  provider?: string
+  model?: string
+  temperature?: number
+  prompt?: string
 }
 
 export interface DocumentVersion {
@@ -153,7 +165,6 @@ export interface ADPADocument {
   comments?: any[]
   loaded_version?: string | null
   loaded_version_id?: string | null
-  generation_metadata?: GenerationMetadata
   metadata: {
     ai_model?: string
     processing_time?: string
@@ -199,33 +210,6 @@ export interface ADPADocument {
   }
 }
 
-export interface GenerationMetadata {
-  provider?: string
-  model?: string
-  temperature?: number
-  prompt?: string
-  qualityMetrics?: any
-  source_documents?: any[]
-  context_stats?: ContextStats
-}
-
-export interface ContextStats {
-  total_documents_available: number | string
-  documents_used_as_context: number | string
-  project_context_used?: boolean
-  stakeholders_available?: number | string
-  custom_settings_count?: number | string
-  custom_metadata_count?: number | string
-  estimated_context_tokens?: number | string
-  // Legacy aliases
-  total_documents?: number | string
-  documents_used?: number | string
-  project_context_included?: boolean
-  stakeholders_included?: number | string
-  custom_settings_included?: number | string
-  custom_metadata_included?: number | string
-}
-
 export interface QualityAudit {
   overall_score: number
   overall_grade: string
@@ -269,4 +253,65 @@ export interface DocumentMetadata {
   description?: string
   notes?: string
   custom_fields?: Record<string, any>
+}
+
+export interface AuthenticatedUser {
+  id: string
+  email: string
+  role: string
+  name?: string
+  permissions?: Record<string, boolean> | string[]
+}
+
+export interface ProjectContext {
+  id: string
+  name: string
+  description: string
+  framework: string
+  metadata: Record<string, any>
+  stakeholders: Array<{
+    id: string
+    name: string
+    role: string
+    email: string
+    department?: string
+    stakeholder_type: 'external' | 'internal'
+    stakeholder_category: 'primary' | 'secondary'
+    influence_level?: string | number
+    interest_level?: string | number
+  }>
+  documents: Array<{
+    id: string
+    name: string
+    type: string
+    content: string
+    metadata: Record<string, any>
+  }>
+  created_at?: Date | string
+  updated_at?: Date | string
+  // Extended properties for specific service needs
+  project_id?: string
+  project_name?: string
+  project_type?: string
+  project_phase?: string
+  project_goals?: string[]
+  project_constraints?: string[]
+  project_timeline?: string
+  project_budget?: number | string
+  budget?: number | string
+  status?: string
+  project_team?: any[]
+  project_stakeholders?: any[]
+}
+
+export interface ProcessingStatus {
+  job_id: string
+  status: 'pending' | 'processing' | 'completed' | 'failed'
+  progress: number
+  started_at: Date | string
+  completed_at?: Date | string
+  error?: string
+  stages_completed?: string[]
+  stages_remaining?: string[]
+  metadata: Record<string, any>
 }

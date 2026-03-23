@@ -12,6 +12,7 @@ import { v4 as uuidv4 } from 'uuid'
 
 interface TemplateVersion {
   id: string
+  name: string
   content: string
   system_prompt?: string
   prompt_version: number
@@ -180,7 +181,7 @@ Always respond with valid JSON only.`
       max_tokens: 8000
     }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
-    const usage = result.usage || {}
+    const usage = result.usage
 
     // Extract token usage for analytics (support camelCase and snake_case)
     const totalTokens =

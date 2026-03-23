@@ -67,6 +67,7 @@ class GovernanceDecisionsExtractor implements Extractor {
           const record = {
             id,
             project_id: defaultProject, // may be null; DB table requires NOT NULL — caller should set env
+            source_document_id: null as string | null,
             name: title || `Decision ${id}`,
             description: line,
             source: file,

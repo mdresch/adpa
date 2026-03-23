@@ -9,6 +9,7 @@ import { isProviderEnabled } from '@/lib/morphic/utils/registry'
 const DEFAULT_MODEL: Model = {
     id: 'gemini-2.5-flash',
     name: 'Gemini 2.5 Flash',
+    provider: 'google',
     providerId: 'google',
     modelId: 'gemini-2.5-flash',
     isEnabled: true

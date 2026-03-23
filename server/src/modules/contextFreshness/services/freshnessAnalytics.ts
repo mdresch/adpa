@@ -718,15 +718,42 @@ export class FreshnessAnalyticsService {
     }
   }
 
-  async getFreshnessTrends(policyId: string, timeRange: { start: Date; end: Date }): Promise<any> {
-    return this.analyzeFreshnessTrends(policyId, timeRange)
+  private timeframeToRange(timeframe: string): { start: Date; end: Date } {
+    const end = new Date()
+    const start = new Date()
+    
+    switch (timeframe) {
+      case '1h':
+        start.setHours(end.getHours() - 1)
+        break
+      case '24h':
+        start.setHours(end.getHours() - 24)
+        break
+      case '7d':
+        start.setDate(end.getDate() - 7)
+        break
+      case '30d':
+        start.setDate(end.getDate() - 30)
+        break
+      default:
+        // Default to 24h if unknown
+        start.setHours(end.getHours() - 24)
+    }
+    
+    return { start, end }
   }
 
-  async generateStalenessReport(policyId: string, timeRange: { start: Date; end: Date }): Promise<any> {
-    return this.generateFreshnessReport(policyId, timeRange)
+  async getFreshnessTrends(policyId: string = 'global', timeRange: { start: Date; end: Date } | string = '24h'): Promise<any> {
+    const range = typeof timeRange === 'string' ? this.timeframeToRange(timeRange) : timeRange
+    return this.analyzeFreshnessTrends(policyId, range)
   }
 
-  async monitorHealth(policyId: string): Promise<FreshnessHealthStatus> {
+  async generateStalenessReport(policyId: string = 'global', timeRange?: { start: Date; end: Date } | string): Promise<any> {
+    const range = typeof timeRange === 'string' ? this.timeframeToRange(timeRange) : (timeRange || this.timeframeToRange('24h'))
+    return this.generateFreshnessReport(policyId, range)
+  }
+
+  async monitorHealth(policyId: string = 'global'): Promise<FreshnessHealthStatus> {
     const history = this.healthHistory.get(policyId) || []
     if (history.length === 0) {
       return {

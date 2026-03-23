@@ -1,4 +1,4 @@
-export interface ProjectOrgChart {
+export interface ProjectOrgChartNode {
     person_name: string;
     title?: string;
     reports_to?: string;
@@ -6,3 +6,5 @@ export interface ProjectOrgChart {
     source_document?: string;
     source_document_id?: string;
 }
+
+export type ProjectOrgChart = ProjectOrgChartNode;

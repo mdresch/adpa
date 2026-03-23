@@ -156,9 +156,13 @@ export interface IQueue {
   /**
    * Event emitter methods (for compatibility with Bull)
    */
-  on(event: string, handler: (...args: any[]) => void): void
-  off(event: string, handler: (...args: any[]) => void): void
-  once(event: string, handler: (...args: any[]) => void): void
+  on(event: string, handler: (...args: any[]) => void): any
+  off(event: string, handler: (...args: any[]) => void): any
+  once(event: string, handler: (...args: any[]) => void): any
   emit(event: string, ...args: any[]): boolean
+  /**
+   * Get queue information (alias for getStats for some implementations)
+   */
+  getInfo(): Promise<any>
 }
 

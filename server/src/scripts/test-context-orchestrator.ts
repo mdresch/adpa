@@ -33,13 +33,26 @@ async function testContextOrchestrator() {
           {
             source_id: 'test_source',
             source_name: 'Test Source',
-            source_type: 'database',
-            enabled: true
+            source_type: 'project_database',
+            enabled: true,
+            source_config: {},
+            priority: 1,
+            reliability_score: 1.0,
+            last_updated: new Date()
           }
         ],
         enable_external_source_integration: false,
-        enable_rag_integration: false, // Disable to avoid dependencies
-        enable_baseline_integration: false
+        enable_project_analysis: false,
+        enable_user_profile_analysis: false,
+        enable_document_history_analysis: false,
+        enable_template_context_analysis: false,
+        max_context_age: 24,
+        context_quality_threshold: 0.5,
+        include_historical_patterns: false,
+        include_collaboration_data: false,
+        include_performance_metrics: false,
+        analysis_depth: 'shallow',
+        priority_filters: []
       },
       enable_access_control: false, // Disable to avoid dependencies
       enable_freshness_validation: false // Disable to avoid dependencies

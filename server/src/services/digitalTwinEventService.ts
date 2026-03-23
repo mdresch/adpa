@@ -2,13 +2,15 @@ import { pool } from '../database/connection'
 import { logger } from '../utils/logger'
 import { v4 as uuidv4 } from 'uuid'
 
+export type PlatformType = 'iTwin' | 'AzureDT' | 'Generic' | 'Visio'
+
 export interface DigitalTwinEventInput {
   asset_id: string
   event_type: 'state_change' | 'attribute_change' | 'relationship_change' | 'creation' | 'deletion' | 'alert' | 'sync_error'
   event_payload: any
   event_summary?: string
   platform_event_id?: string
-  platform_type: 'iTwin' | 'AzureDT' | 'Generic' | 'Visio'
+  platform_type: PlatformType
   event_timestamp: Date
   processing_status?: 'pending' | 'processing' | 'completed' | 'failed' | 'skipped'
 }

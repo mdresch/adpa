@@ -8,7 +8,7 @@
 import { logger } from '../../utils/logger';
 import { ingestEvent, type IngestEventInput, type PlatformType } from '../digitalTwinEventService';
 import type { DigitalTwinIngestionSource } from '../digitalTwinIngestionService';
-import type { PlatformEvent } from './genericRestConnector';
+import { type PlatformEvent, type DigitalTwinConnector } from './connectorManager';
 
 export interface iTwinConfig {
   clientId: string;
@@ -19,7 +19,7 @@ export interface iTwinConfig {
   baseUrl?: string; // iTwin Platform API base URL (default: https://api.bentley.com)
 }
 
-export class iTwinConnector {
+export class iTwinConnector implements DigitalTwinConnector {
   private config: iTwinConfig;
   private source: DigitalTwinIngestionSource;
   private accessToken: string | null = null;
@@ -32,7 +32,7 @@ export class iTwinConnector {
 
   constructor(source: DigitalTwinIngestionSource) {
     this.source = source;
-    const connConfig = source.connection_config as iTwinConfig;
+    const connConfig = source.connection_config as unknown as iTwinConfig;
     
     if (!connConfig?.clientId || !connConfig?.clientSecret) {
       throw new Error('Invalid iTwin connection config: clientId and clientSecret are required');

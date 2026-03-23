@@ -30,7 +30,9 @@ export class DatabaseQueryRetriever extends BaseContextRetriever {
       // Replace parameters in query
       const processedQuery = this.processQuery(query, parameters)
       
+      const startTime = performance.now()
       const result = await pool.query(processedQuery.query, processedQuery.params)
+      const duration = performance.now() - startTime
 
       return {
         query: processedQuery.query,
@@ -39,7 +41,7 @@ export class DatabaseQueryRetriever extends BaseContextRetriever {
         metadata: {
           row_count: result.rows.length,
           fields: result.fields?.map(f => f.name) || [],
-          query_execution_time_ms: result.duration || 0
+          query_execution_time_ms: duration
         }
       }
 

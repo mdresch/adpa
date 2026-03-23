@@ -137,7 +137,8 @@ export async function createChatStreamResponse(
                 modelId: model ? `${model.providerId}:${model.id}` : 'unknown',
                 knowledgeEnabled,
                 hasAssistedContext: !!assistedContext,
-                trigger
+                trigger,
+                correlationId: config.correlationId
             },
             tags: ['morphic', searchMode || 'adaptive', model?.providerId || 'unknown']
         })
@@ -173,7 +174,8 @@ export async function createChatStreamResponse(
         initialChat,
         abortSignal,
         parentTraceId,
-        isNewChat
+        isNewChat,
+        correlationId: config.correlationId
     }
 
     let titlePromise: Promise<string> | undefined
@@ -420,6 +422,14 @@ export async function createChatStreamResponse(
                             .filter((p: any) => p.type === 'text')
                             .map((p: any) => p.text)
                             .join('')
+                        
+                        // Fallback: If no text was produced, send a helpful error message to avoid "unanswered query"
+                        if (textParts.length === 0 && !isAborted) {
+                           console.warn(`[MORPHIC-STREAM] No text produced for chatId=${chatId}. Providing fallback.`);
+                           const fallbackText = "I'm sorry, I couldn't find a clear answer to your query. Please try rephrasing or checking your search settings.";
+                           responseMessage.parts.push({ type: 'text', text: fallbackText });
+                        }
+
                         const toolParts = responseMessage.parts
                             .filter((p: any) => p.type === 'tool-invocation')
                             .map((p: any) => ({ tool: p.toolInvocation?.toolName, args: p.toolInvocation?.args }))

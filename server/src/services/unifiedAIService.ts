@@ -12,6 +12,7 @@ import { logger } from '../utils/logger'
 import { pool } from '../database/connection'
 import { isTracingEnabled, isNativeLangfuseEnabled } from '../tracing'
 import { Langfuse } from 'langfuse'
+import { asyncLocalStorage } from '../infrastructure/logger'
 
 const langfuse = new Langfuse({
   publicKey: process.env.LANGFUSE_PUBLIC_KEY,
@@ -217,6 +218,7 @@ class UnifiedAIService {
           projectId: request.projectId,
           documentId: request.documentId,
           templateId: request.template_id,
+          correlationId: asyncLocalStorage.getStore(),
         },
         tags: [provider.type, model]
       }) : null
@@ -247,7 +249,8 @@ class UnifiedAIService {
           functionId: `unified-ai-generate-${provider.type}`,
           metadata: {
             provider: provider.name,
-            model: model
+            model: model,
+            correlationId: asyncLocalStorage.getStore()
           }
         }
       })
@@ -345,6 +348,7 @@ class UnifiedAIService {
           projectId: request.projectId,
           documentId: request.documentId,
           templateId: request.template_id,
+          correlationId: asyncLocalStorage.getStore(),
         },
         tags: [provider.type, model]
       }) : null
@@ -374,7 +378,8 @@ class UnifiedAIService {
           functionId: `unified-ai-generate-object-${provider.type}`,
           metadata: {
             provider: provider.name,
-            model: model
+            model: model,
+            correlationId: asyncLocalStorage.getStore(),
           }
         }
       })
@@ -577,6 +582,7 @@ class UnifiedAIService {
           projectId: request.projectId,
           documentId: request.documentId,
           templateId: request.template_id,
+          correlationId: asyncLocalStorage.getStore(),
         },
         tags: [provider.type, model]
       }) : null
@@ -607,7 +613,8 @@ class UnifiedAIService {
           functionId: `unified-ai-stream-${provider.type}`,
           metadata: {
             provider: provider.name,
-            model: model
+            model: model,
+            correlationId: asyncLocalStorage.getStore(),
           }
         }
       })

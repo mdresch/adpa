@@ -247,7 +247,7 @@ export interface SemanticSearchEngine {
   search(query: string, contextTypes: ContextType[], filters?: ContextFilters): Promise<ContextRetrievalResult[]>
   generateEmbeddings(content: string): Promise<number[]>
   calculateSimilarity(embeddings1: number[], embeddings2: number[]): Promise<number>
-  findSimilarContent(query: string, limit: number): Promise<ContextRetrievalResult[]>
+  findSimilarContent(queryEmbeddings: number[], contextTypes: ContextType[], filters?: ContextFilters): Promise<ContextRetrievalResult[]>
 }
 
 export interface KeywordSearchEngine {

@@ -1,6 +1,6 @@
 import { Search } from 'lucide-react'
-import { SearchMode } from '@/lib/morphic/types/search'
-import { IconLogoOutline } from '@/components/morphic/ui/icons'
+import { SearchMode } from '../types/search'
+import { IconLogoOutline } from '../../../components/morphic/ui/icons'
 
 export interface SearchModeConfig {
     value: SearchMode

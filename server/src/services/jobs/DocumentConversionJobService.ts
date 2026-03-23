@@ -70,7 +70,7 @@ export class DocumentConversionJobService {
     const db = deps?.database || { query: pool.query.bind(pool) } as any
     const ws = deps?.websocket || io
     const log = deps?.logger || logger
-    const { jobId, userId, documentId, format } = job.data as DocumentConversionJobData
+    const { jobId, userId, documentId, toFormat } = job.data as DocumentConversionJobData
     const { workerId, updateJobStatus } = options
 
     try {
@@ -83,8 +83,8 @@ export class DocumentConversionJobService {
       // Update progress
       await updateJobStatus(jobId, "processing", 50, workerId, "document-processing")
 
-      // Convert document to target format
-      const convertedContent = await this.convertDocument(document, format)
+      // Convert document to target toFormat
+      const convertedContent = await this.convertDocument(document, toFormat)
 
       // Update progress
       await updateJobStatus(jobId, "processing", 90, workerId, "document-processing")
@@ -92,7 +92,7 @@ export class DocumentConversionJobService {
       // Prepare result
       const result = {
         originalId: documentId,
-        format,
+        toFormat,
         content: convertedContent,
         convertedAt: new Date().toISOString(),
       }
@@ -167,15 +167,15 @@ export class DocumentConversionJobService {
   }
 
   /**
-   * Convert document to target format
+   * Convert document to target toFormat
    * TODO: Integrate with DocumentFormatService for proper conversion
    */
-  private static async convertDocument(document: any, format: string): Promise<any> {
+  private static async convertDocument(document: any, toFormat: string): Promise<any> {
     // This would integrate with actual document conversion services
     // For now, return a placeholder
     // TODO: Replace with DocumentFormatService integration
     return {
-      format,
+      toFormat,
       content: `Converted document: ${document.name}`,
       size: 1024,
     }

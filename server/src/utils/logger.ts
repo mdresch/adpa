@@ -1,4 +1,4 @@
-import { logger as baseLogger, childLogger as baseChildLogger } from '../infrastructure/logger';
+import { logger as baseLogger, childLogger as baseChildLogger, asyncLocalStorage } from '../infrastructure/logger';
 import * as pino from 'pino';
 
 /**
@@ -56,5 +56,5 @@ const wrap = (log: any): FlexibleLogger => {
 const logger = wrap(baseLogger);
 const childLogger = (meta: Record<string, any>) => wrap(baseChildLogger(meta));
 
-export { logger, childLogger };
+export { logger, childLogger, asyncLocalStorage };
 export default logger;

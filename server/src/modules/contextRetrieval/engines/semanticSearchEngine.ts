@@ -70,7 +70,8 @@ export class SemanticSearchEngine implements ISemanticSearchEngine {
 
   async generateEmbeddings(content: string): Promise<number[]> {
     try {
-      return await this.embeddingsService.generateEmbeddings(content)
+      const response = await this.embeddingsService.generateEmbeddings({ input: content })
+      return response.data[0].embedding
 
     } catch (error) {
       logger.error('Failed to generate embeddings', {
@@ -93,7 +94,7 @@ export class SemanticSearchEngine implements ISemanticSearchEngine {
     }
   }
 
-  async findSimilarContent(query: string, limit: number = 10): Promise<ContextRetrievalResult[]> {
+  async findSimilarContentByText(query: string, limit: number = 10): Promise<ContextRetrievalResult[]> {
     try {
       const queryEmbeddings = await this.generateEmbeddings(query)
       const similarResults = await this.embeddingsService.findSimilarEmbeddings(queryEmbeddings, limit, 0.7)
@@ -126,7 +127,7 @@ export class SemanticSearchEngine implements ISemanticSearchEngine {
     }
   }
 
-  private async findSimilarContent(queryEmbeddings: number[], contextTypes: ContextType[], filters?: ContextFilters): Promise<ContextRetrievalResult[]> {
+  public async findSimilarContent(queryEmbeddings: number[], contextTypes: ContextType[], filters?: ContextFilters): Promise<ContextRetrievalResult[]> {
     try {
       // Use the new JSONB vector similarity function
       const result = await pool.query(

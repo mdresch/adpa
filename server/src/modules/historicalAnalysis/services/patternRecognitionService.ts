@@ -263,7 +263,7 @@ export class PatternRecognitionService {
     }
   }
 
-  async updatePatternDatabase(): Promise<void> {
+  async updateAllPatternDatabases(): Promise<void> {
     try {
       logger.info('Updating pattern database')
 

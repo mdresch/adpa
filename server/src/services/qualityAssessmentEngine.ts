@@ -1505,13 +1505,7 @@ interface StrategyPerformance {
   last_updated: Date
 }
 
-// Additional supporting interfaces
-interface ProjectContext {
-  project_id: string
-  project_name: string
-  project_type: string
-  project_phase: string
-}
+import { ProjectContext } from '@root-types/adpa'
 
 interface BusinessContext {
   company_id: string

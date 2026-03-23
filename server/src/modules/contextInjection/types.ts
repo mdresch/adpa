@@ -33,6 +33,9 @@ export interface ContextResult {
     freshness_score: number
     confidence_score: number
     size_bytes: number
+    processing_time_ms?: number
+    transformed_format?: string
+    transformed_at?: Date
   }
   errors?: string[]
   warnings?: string[]

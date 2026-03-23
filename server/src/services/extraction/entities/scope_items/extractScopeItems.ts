@@ -55,7 +55,7 @@ export async function extractScopeItems(
           item,
           context,
           'SCOPE-ITEMS',
-          item.title || item.item_name || 'Unnamed Scope Item'
+          item.title || 'Unnamed Scope Item'
         )
         
         if (resolution.resolved) {
@@ -149,7 +149,7 @@ export async function extractScopeItems(
         item,
         context,
         'SCOPE-ITEMS',
-        item.title || item.item_name || 'Unnamed Scope Item'
+        item.title || 'Unnamed Scope Item'
       )
       
       if (resolution.resolved) {

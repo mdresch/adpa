@@ -186,10 +186,8 @@ async function convertPDFToMarkdown(
     // Convert extracted text to structured Markdown
     const markdown = formatPDFTextToMarkdown(data.text, data.info);
 
-    // CRITICAL: Ensure markdown is always a string, never an object
-    const markdownString = typeof markdown === 'string' 
-      ? markdown 
-      : (markdown?.text || markdown?.content || markdown?.markdown || String(markdown || ''));
+    // CRITICAL: Ensure markdown is always a string
+    const markdownString = markdown;
 
     if (!markdownString || markdownString.trim() === '') {
       throw new Error('PDF conversion resulted in empty Markdown content');
@@ -260,10 +258,8 @@ async function convertPDFWithAdobe(
     const resultData = await extractAdobeResult(resultPath);
     const markdown = convertAdobeResultToMarkdown(resultData);
 
-    // CRITICAL: Ensure markdown is always a string, never an object
-    const markdownString = typeof markdown === 'string' 
-      ? markdown 
-      : (markdown?.text || markdown?.content || markdown?.markdown || String(markdown || ''));
+    // CRITICAL: Ensure markdown is always a string
+    const markdownString = markdown;
 
     if (!markdownString || markdownString.trim() === '') {
       throw new Error('Adobe PDF conversion resulted in empty Markdown content');

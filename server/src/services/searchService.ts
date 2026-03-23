@@ -430,7 +430,7 @@ export async function searchTodos(
     ])
 
     const taskTodos = tasks
-      .filter(task => isTodoStatus(task.status))
+      .filter((task: SearchResult) => isTodoStatus(task.status))
       .map(task => ({
         ...task,
         id: `todo-task-${task.id}`,
@@ -716,7 +716,7 @@ export async function searchDocuments(
             const docsMap = new Map(docsResult.rows.map((r: any) => [r.id, r]))
             
             // Convert chunks to search results
-            const docResults = chunks.map(chunk => {
+            const docResults = chunks.map((chunk): SearchResult | null => {
               const doc = docsMap.get(chunk.document_id)
               if (!doc) return null
               

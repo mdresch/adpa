@@ -327,6 +327,7 @@ interface ExtendedExtractionJobData extends ProjectDataExtractionJobData {
   autoTriggered?: boolean
   sourceDocumentId?: string
   domainRunIds?: DomainRunIdMap
+  correlationId?: string
 }
 
 interface ProcessJobOptions {

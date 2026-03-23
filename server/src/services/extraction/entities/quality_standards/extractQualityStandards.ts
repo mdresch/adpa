@@ -54,7 +54,7 @@ export async function extractQualityStandards(
           standard,
           context,
           'QUALITY-STANDARDS',
-          standard.title || standard.standard_name || 'Unnamed Quality Standard'
+          standard.title || 'Unnamed Quality Standard'
         )
         
         if (resolution.resolved) {
@@ -150,7 +150,7 @@ export async function extractQualityStandards(
         standard,
         context,
         'QUALITY-STANDARDS',
-        standard.title || standard.standard_name || 'Unnamed Quality Standard'
+        standard.title || 'Unnamed Quality Standard'
       )
       
       if (resolution.resolved) {

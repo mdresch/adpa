@@ -22,7 +22,8 @@ export class ExtractionContext {
   public readonly provider: string
   public readonly model?: string
   public readonly documentContext: string
-  public readonly correlationId: string
+   public readonly correlationId: string
+  public readonly options: ExtractionOptions
 
   constructor(
     projectId: string,
@@ -35,7 +36,8 @@ export class ExtractionContext {
     this.documents = documents
     this.provider = options.aiProvider || 'openai'
     this.model = options.aiModel
-    this.correlationId = options.correlationId ?? randomUUID()
+     this.correlationId = options.correlationId ?? randomUUID()
+    this.options = options
 
     // Build document map for source document resolution
     this.documentMap = this.buildDocumentMap(documents)

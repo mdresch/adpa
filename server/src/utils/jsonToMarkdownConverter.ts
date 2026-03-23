@@ -148,8 +148,8 @@ export class JsonToMarkdownConverter {
     const errors: string[] = []
 
     // Check for balanced headers
-    const headerLevels = markdown.match(/^#{1,6}\s/gm) || []
-    headerLevels.forEach(header => {
+    const headerLevels = (markdown.match(/^#{1,6}\s/gm) || []) as string[]
+    headerLevels.forEach((header) => {
       const level = header.trim().length
       if (level > 6) {
         errors.push(`Invalid header level: ${level}. Maximum is 6.`)
@@ -157,7 +157,7 @@ export class JsonToMarkdownConverter {
     })
 
     // Check for table syntax
-    const tableRows = markdown.match(/\|.*\|/g) || []
+    const tableRows = (markdown.match(/\|.*\|/g) || []) as string[]
     tableRows.forEach((row, index) => {
       const cells = row.split('|').filter(cell => cell !== '')
       if (index > 0 && index < tableRows.length - 1) {

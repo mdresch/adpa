@@ -404,8 +404,7 @@ export class ConfluenceService {
       // GFM is enabled by default in marked v11, but we explicitly set it
       marked.setOptions({
         gfm: true,
-        breaks: false, // Don't convert line breaks to <br>
-        mangle: false
+        breaks: false // Don't convert line breaks to <br>
       })
 
       // Convert Markdown to HTML using marked (synchronous parse)

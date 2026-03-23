@@ -9,13 +9,20 @@ import { GenericRestConnector } from './genericRestConnector';
 import { iTwinConnector } from './iTwinConnector';
 import { AzureDigitalTwinsConnector } from './azureDigitalTwinsConnector';
 import type { DigitalTwinIngestionSource } from '../digitalTwinIngestionService';
-import type { PlatformEvent } from './genericRestConnector';
+export type PlatformEvent = {
+  assetId: string;
+  eventType: 'state_change' | 'attribute_change' | 'relationship_change' | 'creation' | 'deletion' | 'alert' | 'sync_error';
+  eventPayload: any;
+  eventSummary?: string;
+  platformEventId?: string;
+  eventTimestamp?: Date;
+};
 
 export interface DigitalTwinConnector {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
   startPolling?(): Promise<void>;
-  stopPolling?(): Promise<void>;
+  stopPolling?(): void;
   fetchAssetState?(assetId: string): Promise<Record<string, unknown>>;
   handleWebhook?(payload: Record<string, unknown>): Promise<void>;
   getStatus(): { connected: boolean; [key: string]: unknown };

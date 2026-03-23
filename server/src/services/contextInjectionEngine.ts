@@ -109,18 +109,7 @@ export interface ContextData {
   user_context: UserContext
 }
 
-export interface ProjectContext {
-  project_id: string
-  project_name: string
-  project_type: string
-  project_phase: string
-  project_goals: string[]
-  project_constraints: string[]
-  project_timeline: string
-  project_budget: number
-  project_team: TeamMember[]
-  project_stakeholders: Stakeholder[]
-}
+import { ProjectContext } from '@root-types/adpa'
 
 export interface BusinessContext {
   company_id: string

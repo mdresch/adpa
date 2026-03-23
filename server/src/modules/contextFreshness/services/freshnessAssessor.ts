@@ -251,11 +251,23 @@ export class FreshnessAssessor {
     
     if (freshnessHistory.length < 2) {
       return {
+        context_id: context.id,
         direction: 'stable',
         rate: 0,
         confidence: 0,
         timeframe: '24h',
-        data_points: freshnessHistory.length
+        data_points: freshnessHistory.length,
+        trend_data: [],
+        trend_direction: 'stable',
+        trend_strength: 0,
+        seasonality: false,
+        forecast: {
+          next_freshness_score: 0.8,
+          confidence_interval: [0.7, 0.9],
+          forecast_horizon: 24,
+          accuracy: 0.9,
+          factors: []
+        }
       }
     }
     
@@ -266,11 +278,29 @@ export class FreshnessAssessor {
     const confidence = this.calculateTrendConfidence(recentScores)
     
     return {
+      context_id: context.id,
       direction: trendDirection,
       rate: trendRate,
       confidence,
       timeframe: '24h',
-      data_points: recentScores.length
+      data_points: recentScores.length,
+      trend_data: freshnessHistory.slice(-10).map(h => ({
+        timestamp: h.timestamp,
+        freshness_score: h.freshness_score,
+        access_count: h.access_count,
+        update_count: 1,
+        quality_score: h.quality_score
+      })),
+      trend_direction: trendDirection,
+      trend_strength: Math.abs(trendRate) * 10,
+      seasonality: false,
+      forecast: {
+        next_freshness_score: recentScores[recentScores.length - 1],
+        confidence_interval: [0.5, 1.0],
+        forecast_horizon: 24,
+        accuracy: confidence,
+        factors: []
+      }
     }
   }
 

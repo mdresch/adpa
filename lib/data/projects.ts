@@ -163,7 +163,7 @@ export class ProjectService {
       )
       VALUES (
         ${name}, ${description || null}, ${framework}, ${status}, ${priority},
-        ${start_date || null}, ${end_date || null}, ${budget || null}, ${userId}, ${userId},
+        ${start_date ? (start_date instanceof Date ? start_date.toISOString() : start_date) : null}, ${end_date ? (end_date instanceof Date ? end_date.toISOString() : end_date) : null}, ${budget || null}, ${userId}, ${userId},
         ${JSON.stringify(settings)}, ${JSON.stringify(metadata)}
       )
       RETURNING *

@@ -1,5 +1,5 @@
 import { pool } from '../../../database/connection'
-import { logger } from '../../../../utils/logger'
+import { logger } from '../../../utils/logger'
 import type { ExtractionContext } from '../base/ExtractionContext'
 
 export interface ExtractionFailure {

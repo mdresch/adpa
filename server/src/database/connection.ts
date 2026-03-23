@@ -62,10 +62,6 @@ const createPool = (host: string) => {
     console.log('Using DATABASE_URL connection string')
     return new Pool({
       connectionString: currentDbUrl,
-      // SSL configuration for Supabase/Azure:
-      // - Supabase uses PgBouncer (connection pooler) which causes cert chain issues
-      // - Disable cert validation for Supabase (trusted provider)
-      // - For custom databases, enable validation unless explicitly disabled
       ssl: buildSslConfig(currentDbUrl),
       max: 50,
       idleTimeoutMillis: 30000,
@@ -73,18 +69,26 @@ const createPool = (host: string) => {
     })
   }
 
+  // Use local Docker credentials if host is localhost AND process.env.DB_HOST was different
+  const isLocalFallback = host === 'localhost' && process.env.DB_HOST && process.env.DB_HOST !== 'localhost'
+  const user = isLocalFallback ? 'myuser' : (process.env.DB_USER || "postgres")
+  const password = isLocalFallback ? 'mypassword' : (process.env.DB_PASSWORD || "password")
+  const database = isLocalFallback ? 'adpa' : (process.env.DB_NAME || "adpa_db")
+
+  if (isLocalFallback) {
+    console.log(`🔧 Using Local Docker credentials for ${host} (${user})`)
+  }
+
   // Otherwise use individual connection parameters
   return new Pool({
     host: host,
     port: Number(process.env.DB_PORT) || 5432,
-    database: process.env.DB_NAME || "adpa_db",
-    user: process.env.DB_USER || "postgres",
-    password: process.env.DB_PASSWORD || "password",
+    database: database,
+    user: user,
+    password: password,
     max: 50,
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 10000, // Reduced to 10 seconds per attempt for Railway
-    // SSL configuration for Supabase and other cloud providers
-    // Supabase/Azure: disable validation (PgBouncer connection pooling causes cert issues)
+    connectionTimeoutMillis: 10000,
     ssl: buildSslConfig(host),
   })
 }

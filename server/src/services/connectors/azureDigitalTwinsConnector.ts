@@ -8,7 +8,7 @@
 import { logger } from '../../utils/logger';
 import { ingestEvent, type IngestEventInput, type PlatformType } from '../digitalTwinEventService';
 import type { DigitalTwinIngestionSource } from '../digitalTwinIngestionService';
-import type { PlatformEvent } from './genericRestConnector';
+import { type PlatformEvent, type DigitalTwinConnector } from './connectorManager';
 
 export interface AzureDTConfig {
   instanceUrl: string; // e.g., https://your-instance.api.wus2.digitaltwins.azure.net
@@ -19,7 +19,7 @@ export interface AzureDTConfig {
   eventGridKey?: string; // Event Grid access key
 }
 
-export class AzureDigitalTwinsConnector {
+export class AzureDigitalTwinsConnector implements DigitalTwinConnector {
   private config: AzureDTConfig;
   private source: DigitalTwinIngestionSource;
   private accessToken: string | null = null;
@@ -31,7 +31,7 @@ export class AzureDigitalTwinsConnector {
 
   constructor(source: DigitalTwinIngestionSource) {
     this.source = source;
-    const connConfig = source.connection_config as AzureDTConfig;
+    const connConfig = source.connection_config as unknown as AzureDTConfig;
     
     if (!connConfig?.instanceUrl || !connConfig?.tenantId || !connConfig?.clientId || !connConfig?.clientSecret) {
       throw new Error('Invalid Azure DT connection config: instanceUrl, tenantId, clientId, and clientSecret are required');

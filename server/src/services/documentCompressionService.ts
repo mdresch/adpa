@@ -247,11 +247,11 @@ class DocumentCompressionService {
       if (providerResult.rows.length === 0) {
         logger.warn('No active AI providers available for quality metrics, skipping')
         return {
-          qualityScore: 0.8,
-          readabilityScore: 0.8,
-          coherenceScore: 0.8,
-          completenessScore: 0.8,
-          compressionEfficiency: compressionRatio
+          coherence: 0.8,
+          completeness: 0.8,
+          relevance: 0.8,
+          readability: 0.8,
+          overall: 0.8
         }
       }
       

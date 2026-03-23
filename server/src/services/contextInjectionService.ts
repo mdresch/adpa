@@ -38,29 +38,7 @@ export interface ContextInjectionResult {
   qualityScore: number
 }
 
-export interface ProjectContext {
-  id: string
-  name: string
-  description: string
-  framework: string
-  metadata: Record<string, any>
-  stakeholders: Array<{
-    id: string
-    name: string
-    role: string
-    email: string
-    department?: string
-    stakeholder_type: 'internal' | 'external'
-    stakeholder_category: 'primary' | 'secondary'
-  }>
-  documents: Array<{
-    id: string
-    name: string
-    type: string
-    content: string
-    metadata: Record<string, any>
-  }>
-}
+import { ProjectContext } from '@/types/adpa'
 
 class ContextInjectionService {
   /**

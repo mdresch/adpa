@@ -23,14 +23,14 @@ export interface AIGenerateRequest {
   userId?: string
   projectId?: string
   documentId?: string
-  documentVersion?: number
+  documentVersion?: string | number
   provider: string
   model?: string
   prompt: string
   system_prompt?: string
   template_id?: string
   template_name?: string
-  template_version?: number
+  template_version?: string | number
   variables?: Record<string, any>
   temperature?: number
   max_tokens?: number
@@ -54,7 +54,14 @@ export interface AIGenerateResponse {
     prompt_tokens: number
     completion_tokens: number
     total_tokens: number
+    totalTokens?: number
+    promptTokens?: number
+    completionTokens?: number
   }
+  metadata?: Record<string, any>
+  confidence?: number
+  duration?: number
+  processing_time_ms?: number
 }
 
 // Provider configuration types

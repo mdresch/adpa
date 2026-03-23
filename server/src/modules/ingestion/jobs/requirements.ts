@@ -6,8 +6,8 @@ const INPUT_DIR = process.env.REQ_INPUT_DIR || path.join(process.cwd(), 'data', 
 const OUTPUT_DIR = process.env.REQ_OUTPUT_DIR || path.join(process.cwd(), 'data', 'ingested');
 const OUTPUT_FILE = path.join(OUTPUT_DIR, 'requirements.jsonl');
 
-function ensureDirSync(dir: string): Promise<void> {
-  return fs.mkdir(dir, { recursive: true }) as Promise<void>;
+async function ensureDirSync(dir: string): Promise<void> {
+  await fs.mkdir(dir, { recursive: true });
 }
 
 function isTextFile(filename: string) {

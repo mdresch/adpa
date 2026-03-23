@@ -572,6 +572,22 @@ export interface DocumentQualityMetrics {
   overall_score: number
 }
 
+export interface ContextAggregator {
+  aggregate(sources: ContextSource[]): Promise<AggregatedContext>
+}
+
+export interface ContextOrganizer {
+  organize(context: AggregatedContext): Promise<AggregatedContext>
+}
+
+export interface ContextValidator {
+  validate(context: AggregatedContext): Promise<boolean>
+}
+
+export interface ContextOptimizer {
+  optimize(context: AggregatedContext): Promise<AggregatedContext>
+}
+
 export interface UsagePatterns {
   access_frequency: number
   modification_frequency: number
@@ -858,7 +874,7 @@ export interface UsageAnalytics {
   unique_users: number
   average_session_duration: number
   peak_usage_times: Date[]
-  usage_patterns: UsagePattern[]
+  usage_patterns: UsagePatterns[]
   user_satisfaction: number
 }
 

@@ -7,6 +7,7 @@
 import { logger } from '../../utils/logger';
 import { ingestEvent, type IngestEventInput, type PlatformType } from '../digitalTwinEventService';
 import type { DigitalTwinIngestionSource } from '../digitalTwinIngestionService';
+import { type DigitalTwinConnector, type PlatformEvent } from './connectorManager';
 
 export interface ConnectorConfig {
   baseUrl: string;
@@ -33,16 +34,9 @@ export interface ConnectorConfig {
   pollInterval?: number; // Polling interval in seconds (default: 60)
 }
 
-export interface PlatformEvent {
-  assetId: string;
-  eventType: 'state_change' | 'attribute_change' | 'relationship_change' | 'creation' | 'deletion' | 'alert' | 'sync_error';
-  eventPayload: Record<string, unknown>;
-  eventSummary?: string;
-  platformEventId?: string;
-  eventTimestamp?: Date;
-}
+// Using PlatformEvent from connectorManager
 
-export class GenericRestConnector {
+export class GenericRestConnector implements DigitalTwinConnector {
   private config: ConnectorConfig;
   private source: DigitalTwinIngestionSource;
   private accessToken: string | null = null;
@@ -53,7 +47,7 @@ export class GenericRestConnector {
 
   constructor(source: DigitalTwinIngestionSource) {
     this.source = source;
-    const connConfig = source.connection_config as ConnectorConfig;
+    const connConfig = source.connection_config as unknown as ConnectorConfig;
     if (!connConfig?.baseUrl) {
       throw new Error('Invalid connection config: baseUrl is required');
     }

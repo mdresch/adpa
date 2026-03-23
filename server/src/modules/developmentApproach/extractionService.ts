@@ -86,14 +86,16 @@ Extract as a SINGLE JSON object (not array - one per project):
     // Call AI service with caching
     const cacheKey = `dev_approach_${projectId}_${documents.map(d => d.id).join('_')}`;
     
-    const response = await aiService.generateText({
+    const response = await aiService.generate({
       prompt,
       provider: options.aiProvider || 'openai',
       model: options.aiModel || 'gpt-4-turbo-preview',
       temperature: options.temperature || 0.3,
-      maxTokens: 2000,
-      cacheKey,
-      cacheTTL: 86400 // Cache for 24 hours
+      max_tokens: 2000,
+      metadata: {
+        cacheKey,
+        cacheTTL: 86400 // Cache for 24 hours
+      }
     });
     
     // Parse AI response

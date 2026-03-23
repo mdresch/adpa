@@ -393,6 +393,10 @@ export class RabbitQueueAdapter extends EventEmitter implements IQueue {
     await this.channel.close()
   }
 
+  async getInfo(): Promise<any> {
+    return this.getStats()
+  }
+
   async getStats(): Promise<{ waiting: number; active: number; completed: number; failed: number; delayed: number }> {
     try {
       // Use a one-off setup to check queue status

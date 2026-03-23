@@ -192,6 +192,7 @@ router.get("/workers", authenticateToken, async (req, res) => {
         cpu: 0, // Will be merged below
         memory: 0, // Will be merged below
         health: successRate >= 90 ? 'healthy' : successRate >= 70 ? 'degraded' : 'unhealthy',
+        lastHeartbeat: null as Date | null,
         currentTasks: row.job_ids ? row.job_ids.split(',').slice(0, 5).map((id: string) => ({
           jobId: id,
           progress: parseInt(row.max_progress) || 0,

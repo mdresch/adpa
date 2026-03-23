@@ -15,11 +15,27 @@ import { Resource } from '@opentelemetry/resources'
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node'
 import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions'
 import { diag, DiagConsoleLogger, DiagLogLevel } from '@opentelemetry/api'
-import { BatchSpanProcessor, SimpleSpanProcessor, ConsoleSpanExporter } from '@opentelemetry/sdk-trace-base'
+import { BatchSpanProcessor, SimpleSpanProcessor, ConsoleSpanExporter, SpanProcessor, Span } from '@opentelemetry/sdk-trace-base'
+import { asyncLocalStorage } from './infrastructure/logger'
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
 
 // Only log OpenTelemetry errors (suppress info/warn/debug noise)
 diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.ERROR)
+
+/**
+ * Custom SpanProcessor to inject correlationId from AsyncLocalStorage into all spans.
+ */
+class CorrelationIdProcessor implements SpanProcessor {
+  onStart(span: Span): void {
+    const correlationId = asyncLocalStorage.getStore()
+    if (correlationId) {
+      span.setAttribute('correlationId', correlationId)
+    }
+  }
+  onEnd(): void {}
+  forceFlush(): Promise<void> { return Promise.resolve() }
+  shutdown(): Promise<void> { return Promise.resolve() }
+}
 
 // Configuration
 const ENABLE_LANGFUSE_OTLP = process.env.ENABLE_LANGFUSE_TRACING === 'true'
@@ -68,7 +84,7 @@ export function initTracing(): void {
 
   try {
     // Create span processors
-    const spanProcessors = []
+    const spanProcessors: SpanProcessor[] = [new CorrelationIdProcessor()]
     if (ENABLE_LANGFUSE_OTLP) {
       if (!LANGFUSE_PUBLIC_KEY || !LANGFUSE_SECRET_KEY) {
         console.warn('⚠️ Langfuse credentials missing, skipping tracing')
@@ -146,7 +162,8 @@ export function initTracing(): void {
     console.log(`   Service: ${SERVICE_NAME} v${SERVICE_VERSION}`)
     console.log(`   Endpoint: ${OTLP_ENDPOINT} ${ENABLE_LANGFUSE_OTLP ? '(Langfuse)' : '(Local/Native)'}`)
     if (ENABLE_LANGFUSE_OTLP) {
-      console.log(`   Status: 🚀 Exporting to Langfuse Cloud`)
+      const target = OTLP_ENDPOINT.includes('localhost') ? 'Local' : 'Cloud'
+      console.log(`   Status: 🚀 Exporting to Langfuse ${target}`)
     }
 
     // Graceful shutdown

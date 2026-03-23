@@ -260,6 +260,7 @@ export async function getChats(userId: string): Promise<Chat[]> {
             .select({
                 id: chats.id,
                 createdAt: chats.createdAt,
+                updatedAt: chats.updatedAt,
                 title: chats.title,
                 userId: chats.userId,
                 visibility: chats.visibility
@@ -284,6 +285,7 @@ export async function getChatsPage(
                 .select({
                     id: chats.id,
                     createdAt: chats.createdAt,
+                    updatedAt: chats.updatedAt,
                     title: chats.title,
                     userId: chats.userId,
                     visibility: chats.visibility

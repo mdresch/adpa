@@ -512,7 +512,7 @@ extractionQueue.process("extract-project-data", QUEUE_PREFETCH, async (job) => {
   // Child entity extractors - Register immediately using async IIFE
   if (process.env.NODE_ENV !== 'test') {
   ; (async () => {
-    const { projectDataExtractionService } = await import("./projectDataExtractionService")
+    const { extractSingleEntityType, saveSingleEntityType } = await import("./extraction/ExtractionOrchestrator")
 
     const ENTITY_TYPES = [
       'stakeholders', 'requirements', 'risks', 'milestones', 'constraints',
@@ -554,7 +554,7 @@ extractionQueue.process("extract-project-data", QUEUE_PREFETCH, async (job) => {
           // Update status to processing
           await updateJobStatus(jobId, "processing", 10, WORKER_ID, "project-data-extraction")
 
-          const entities = await projectDataExtractionService.extractSingleEntityType(projectId, userId, entityType, {
+          const entities = await extractSingleEntityType(projectId, userId, entityType, {
             aiProvider,
             aiModel,
             documentIds,
@@ -568,7 +568,7 @@ extractionQueue.process("extract-project-data", QUEUE_PREFETCH, async (job) => {
             correlationId,
           })
 
-          await projectDataExtractionService.saveSingleEntityType(projectId, userId, entityType, entities, correlationId)
+          await saveSingleEntityType(projectId, userId, entityType, entities, correlationId)
 
           // DT assets: extracted as entities (extracted_dt_assets). Import into Digital Twin Assets Register
           // is an explicit step (POST /api/digital-twin/assets/import), same as WBS import for tasks.

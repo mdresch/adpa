@@ -67,8 +67,22 @@ export interface ExtractionOptions {
   temperature?: number
   /** Maximum tokens for AI response */
   maxTokens?: number
-  /** Correlation ID for tracing the extraction run */
+   /** Correlation ID for tracing the extraction run */
   correlationId?: string
+  /** Whether batching is enabled */
+  batchingEnabled?: boolean
+  /** Maximum tokens per batch */
+  maxBatchTokens?: number
+  /** Maximum documents per batch */
+  maxDocsPerBatch?: number
+  /** Parent job ID for orchestrated extractions */
+  parentJobId?: string
+  /** Child job ID (this job) */
+  childJobId?: string
+  /** Index of the current entity type being extracted */
+  entityIndex?: number
+  /** Total number of entity types in the run */
+  totalEntities?: number
 }
 
 /**

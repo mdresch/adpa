@@ -3,6 +3,37 @@
  * Defines TypeScript interfaces and types for role-based access control
  */
 
+export interface RoleManager {
+  createRole(role: Role): Promise<Role>
+  updateRole(roleId: string, updates: Partial<Role>): Promise<Role>
+  deleteRole(roleId: string): Promise<void>
+  getRole(roleId: string): Promise<Role | null>
+  listRoles(filters?: any): Promise<Role[]>
+  assignRole(userId: string, roleId: string, contextId?: string): Promise<void>
+  removeRole(userId: string, roleId: string, contextId?: string): Promise<void>
+}
+
+export interface PermissionManager {
+  createPermission(permission: CreatePermissionRequest): Promise<Permission>
+  updatePermission(permissionId: string, updates: Partial<Permission>): Promise<Permission>
+  deletePermission(permissionId: string): Promise<void>
+  getPermission(permissionId: string): Promise<Permission | null>
+  listPermissions(filters?: PermissionFilters): Promise<Permission[]>
+}
+
+export interface SecurityManager {
+  validateContextAccess(userId: string, contextId: string): Promise<ValidationResult>
+  setContextSecurityLevel(contextId: string, level: SecurityLevel): Promise<void>
+  getContextSecurityLevel(contextId: string): Promise<SecurityLevel>
+  monitorSecurityIncidents(): Promise<SecurityIncident[]>
+}
+
+export interface AuditManager {
+  logAccessAttempt(attempt: AccessAttempt): Promise<void>
+  getAccessLogs(filters?: AccessLogFilters): Promise<AccessLog[]>
+  generateAccessReport(timeframe: string): Promise<AccessReport>
+}
+
 export interface ContextAccessControlManager {
   // Access control
   checkAccess(userId: string, contextId: string, action: AccessAction): Promise<AccessDecision>
@@ -288,6 +319,25 @@ export interface UserRoleMetadata {
   next_review_date?: Date
   compliance_notes: string[]
   risk_assessment: string
+}
+
+export interface AccessControlEngine {
+  evaluateAccess(userId: string, contextId: string, action: AccessAction): Promise<AccessDecision>
+  evaluateBatchAccess(userId: string, contextIds: string[], action: AccessAction): Promise<AccessDecision[]>
+  evaluateRolePermissions(roleId: string, action: AccessAction): Promise<Permission[]>
+  evaluateUserPermissions(userId: string, action: AccessAction): Promise<Permission[]>
+  validateConstraints(permissions: Permission[], contextId: string): Promise<boolean>
+  assessRisk(userId: string, contextId: string, action: AccessAction): Promise<RiskAssessment>
+}
+
+export interface ComplianceRequirement {
+  id: string
+  name: string
+  description: string
+  framework: string
+  priority: 'low' | 'medium' | 'high' | 'critical'
+  status: 'active' | 'inactive' | 'deprecated'
+  metadata: Record<string, any>
 }
 
 export type SecurityLevel = 

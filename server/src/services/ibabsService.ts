@@ -315,7 +315,7 @@ export class IBabsService {
   ): Promise<{ documentId: string; url: string }> {
     try {
       const formData = new FormData()
-      const blob = new Blob([document.content], { type: document.contentType })
+      const blob = new Blob([document.content as any], { type: document.contentType })
       
       formData.append("file", blob, `${document.title}.pdf`)
       formData.append("title", document.title)

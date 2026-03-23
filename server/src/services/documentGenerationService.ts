@@ -16,27 +16,7 @@ export interface DocumentGenerationRequest {
   userId: string
 }
 
-export interface ProjectContext {
-  id: string
-  name: string
-  framework: string
-  description?: string
-  budget?: number
-  start_date?: string
-  end_date?: string
-  status: string
-  stakeholders?: Array<{
-    name: string
-    role: string
-    interest_level: string
-    influence_level: string
-  }>
-  documents?: Array<{
-    name: string
-    status: string
-  }>
-  team_members?: any
-}
+import { ProjectContext } from '@root-types/adpa'
 
 export interface TemplateContext {
   id: string

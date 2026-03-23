@@ -149,6 +149,8 @@ export interface PageMargins {
   left: string
 }
 
+export type { AuthenticatedUser } from '@root-types/adpa'
+
 export interface DocumentGeneratorConfig {
   output_directory: string
   temp_directory: string
@@ -191,12 +193,6 @@ export interface MarkdownGenerationOptions {
   toc_depth: number
 }
 
-export interface AuthenticatedUser {
-  id: string
-  email: string
-  role: string
-  permissions: Record<string, boolean>
-}
 
 export interface GenerationError extends Error {
   code: string

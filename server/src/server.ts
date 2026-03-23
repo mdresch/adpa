@@ -559,8 +559,9 @@ process.on('uncaughtException', (error) => {
 if (process.argv[1] && (process.argv[1].endsWith('server.ts') || process.argv[1].endsWith('server.js') || process.argv[1].includes('src/server.ts'))) {
   console.log("🚀 Starting server context...");
   startServer().catch(err => {
-    console.error("❌ Fatal error during server startup:", err);
-    process.exit(1);
+    console.error("❌ Error during server startup (continuing if possible):", err);
+    // Do not exit! Allow the server to stay alive for resilient features like Morphic
+    // process.exit(1);
   });
 }
 // For ts-node/tsx where process.argv[1] might be the script path

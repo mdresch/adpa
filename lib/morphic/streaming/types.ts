@@ -25,6 +25,7 @@ export interface BaseStreamConfig {
     knowledgeEnabled?: boolean
     ragScope?: RAGScope
     assistedContext?: string
+    correlationId?: string
     dbActions?: {
         createChat: (id: string, userId: string, title: string) => Promise<any>
         upsertMessage: (message: any, userId: string) => Promise<any>

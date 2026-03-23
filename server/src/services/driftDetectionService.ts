@@ -81,7 +81,7 @@ export interface DriftDetectionOptions {
 }
 
 export class DriftDetectionService {
-  async checkForDrift(projectId: string, documentId?: string): Promise<{ hasDrift: boolean; driftPoints: DriftPoint[]; severity: DriftSeverity }> {
+  async checkForDrift(projectId: string, documentId?: string): Promise<{ hasDrift: boolean; driftPoints: DriftPoint[]; severity: DriftSeverity; summary?: string }> {
     const drifts = await this.detectDrift(projectId)
     const driftPoints: DriftPoint[] = drifts.map(d => ({
       drift_type: d.drift_type,
@@ -103,7 +103,12 @@ export class DriftDetectionService {
     const severity: DriftSeverity = driftPoints.some(dp => dp.drift_severity === 'critical')
       ? 'critical'
       : driftPoints.some(dp => dp.drift_severity === 'warning') ? 'warning' : 'info'
-    return { hasDrift, driftPoints, severity }
+    return { 
+      hasDrift, 
+      driftPoints, 
+      severity,
+      summary: hasDrift ? `Detected ${driftPoints.length} drift points with maximum severity ${severity}` : 'No drift detected'
+    }
   }
 
   async createDriftRecord(params: {

@@ -8,11 +8,13 @@ export { FreshnessAssessor } from './services/freshnessAssessor'
 export { TimeBasedPrioritizer } from './services/timeBasedPrioritizer'
 export { RefreshScheduler } from './services/refreshScheduler'
 export { StalenessManager } from './services/stalenessManager'
+export { FreshnessPolicyEngine } from './services/freshnessPolicyEngine'
+export { FreshnessAnalyticsService } from './services/freshnessAnalytics'
 
 export type {
   // Core service types
   ContextFreshnessManager as IContextFreshnessManager,
-  FreshnessAssessor as IFreshnessAssessor,
+  IFreshnessPolicyEngine,
   TimeBasedPrioritizer as ITimeBasedPrioritizer,
   RefreshScheduler as IRefreshScheduler,
   StalenessManager as IStalenessManager,
@@ -56,70 +58,18 @@ export type {
 
   // Policy types
   FreshnessPolicy,
-  FreshnessRule,
-  FreshnessCondition,
-  FreshnessAction,
-  ActionType,
-  NotificationConfig,
-  NotificationChannel,
-  NotificationCondition,
-  StalenessThreshold,
-  RefreshStrategy,
-  RefreshMethod,
-  SchedulingConfig,
-  TimeWindow,
-  SchedulingConstraint,
-  PerformanceOptimization,
-  CacheStrategy,
-  ResourceLimits,
-  ErrorHandlingConfig,
-  RetryPolicy,
-  FallbackStrategy,
-  FallbackCondition,
-  ErrorNotification,
-  LoggingConfig,
-  CleanupRule,
-  CleanupCondition,
-  CleanupSchedule,
-  SafetyCheck,
-  PriorityRule,
-  PriorityFactor,
-  PriorityWeights,
-
-  // Policy result types
+  FreshnessThreshold,
+  RefreshRequirement,
+  QualityRequirement,
   PolicyResult,
-  PolicyAction,
   PerformanceImpact,
   QualityImpact,
   PolicyEvaluation,
-  CostBenefitAnalysis,
-  PolicyRecommendation,
+  PolicyEvaluationResult,
+  ContextScore,
 
   // Analytics types
   FreshnessMetrics,
-  FreshnessDistribution,
-  StalenessTrend,
-  RefreshStatistics,
-  FreshnessPerformanceMetrics,
-  FreshnessTrend as FreshnessTrendData,
-  TrendDataPoint,
-  FreshnessForecast,
-  ForecastFactor,
-  StalenessReport,
-  StalenessDistribution,
-  ImpactAnalysis,
-  ImpactMetrics,
-  RiskAssessment,
-  RiskFactor,
-  MitigationStrategy,
-  MonitoringRequirement,
-  AlertCondition,
-  StalenessRecommendation,
-  ActionItem,
   FreshnessHealthStatus,
-  ComponentHealth,
-  HealthIssue,
-  HealthMetrics,
-  HealthAlert,
-  HealthRecommendation
+  StalenessReport
 } from './types'

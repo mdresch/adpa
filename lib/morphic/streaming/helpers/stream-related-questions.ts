@@ -62,9 +62,9 @@ export async function streamRelatedQuestions(
             const parsedQuestions = relatedSchema.safeParse(completedQuestions)
 
             if (parsedQuestions.success) {
-                finalQuestions = parsedQuestions.data
+                finalQuestions = parsedQuestions.data as Array<{ question: string }>
             } else if (Array.isArray(completedQuestions)) {
-                finalQuestions = completedQuestions
+                finalQuestions = completedQuestions as Array<{ question: string }>
                 console.warn(
                     'Related questions validation failed:',
                     parsedQuestions.error
