@@ -45,6 +45,20 @@ interface TemplateImprovementNotification {
   suggestionId: string
 }
 
+export interface NotificationPayload {
+  notification_type: string
+  reference_type: string
+  reference_id: string
+  project_id?: string
+  recipients: Array<{
+    user_id?: string
+    destination: string
+    channel: string
+  }>
+  variables: Record<string, any>
+  severity?: string
+}
+
 class NotificationService {
   private transporter: nodemailer.Transporter | null = null
   private enabled: boolean = false
@@ -266,6 +280,50 @@ class NotificationService {
     } catch (error) {
       logger.error('[NOTIFICATION] Failed to send SLA breach alert', { error })
     }
+  }
+
+  /**
+   * Send a generic notification (multi-channel support)
+   * TASK-741: Bridges the gap for drift detection notifications
+   */
+  async sendNotification(payload: NotificationPayload): Promise<Array<{ channel: string; success: boolean; error?: string }>> {
+    const results: Array<{ channel: string; success: boolean; error?: string }> = []
+
+    for (const recipient of payload.recipients) {
+      try {
+        if (recipient.channel === 'email') {
+          if (!this.enabled) {
+            results.push({ channel: 'email', success: false, error: 'Email service disabled' })
+            continue
+          }
+
+          // In a real implementation, we would use templates here.
+          // For now, we'll log it and let the driftNotifications.ts logic proceed.
+          logger.info(`[NOTIFICATION] Sending ${payload.notification_type} email to ${recipient.destination}`)
+          
+          await this.sendEmail({
+            to: recipient.destination,
+            subject: `ADPA Alert: ${payload.notification_type.replace(/_/g, ' ').toUpperCase()}`,
+            html: `<p>Notification Type: ${payload.notification_type}</p><pre>${JSON.stringify(payload.variables, null, 2)}</pre>`
+          })
+          
+          results.push({ channel: 'email', success: true })
+        } else {
+          // Other channels (slack, teams, sms) could be added here
+          logger.warn(`[NOTIFICATION] Channel ${recipient.channel} not yet implemented for generic notifications`)
+          results.push({ channel: recipient.channel, success: false, error: 'Channel not implemented' })
+        }
+      } catch (error) {
+        logger.error(`[NOTIFICATION] Failed to send to ${recipient.destination} via ${recipient.channel}`, { error })
+        results.push({ 
+          channel: recipient.channel, 
+          success: false, 
+          error: error instanceof Error ? error.message : String(error) 
+        })
+      }
+    }
+
+    return results
   }
 
   /**

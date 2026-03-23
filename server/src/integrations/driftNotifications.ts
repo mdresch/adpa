@@ -9,7 +9,7 @@
 import { Pool } from 'pg'
 import { pool as defaultPool } from '../database/connection'
 import { logger } from '../utils/logger'
-import { getNotificationService, NotificationPayload } from '../services/notificationService'
+import { notificationService, NotificationPayload } from '../services/notificationService'
 
 // ============================================================================
 // Types
@@ -131,7 +131,7 @@ export async function sendBudgetOverrunAlert(
     driftData: BudgetOverrunData
 ): Promise<void> {
     try {
-        const notificationService = getNotificationService();
+        // Use the imported notificationService
         
         // Get recipients
         let recipients = await getProjectNotificationRecipients(
@@ -210,7 +210,7 @@ export async function sendPositiveDriftNotification(
     driftData: PositiveDriftData
 ): Promise<void> {
     try {
-        const notificationService = getNotificationService();
+        // Use the imported notificationService
         
         // Get recipients
         let recipients = await getProjectNotificationRecipients(

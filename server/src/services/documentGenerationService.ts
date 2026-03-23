@@ -167,7 +167,7 @@ class DocumentGenerationService {
         metadata: {
           provider: request.provider,
           model: request.model || 'default',
-          tokensUsed: totalTokensUsed, // Aggregate of all parallel calls
+          tokens_used: totalTokensUsed, // Aggregate of all parallel calls
           context: {
             projectName: project.name,
             framework: project.framework,

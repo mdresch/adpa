@@ -50,7 +50,7 @@ function formatTimeAgo(date: string | Date): string {
   return new Date(date).toLocaleDateString()
 }
 
-interface DocumentVersion {
+export interface DocumentVersion {
   id: string
   version: string
   content: string

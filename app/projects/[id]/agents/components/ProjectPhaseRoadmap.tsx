@@ -14,7 +14,7 @@ const PHASES = [
     { number: 10, name: "Synthesis & Reporting" },
 ];
 
-export function ProjectPhaseRoadmap() {
+export function ProjectPhaseRoadmap({ projectId, activeRunId }: { projectId: string; activeRunId: string | null }) {
     return (
         <div>
             <h3 className="text-lg font-semibold mb-4">Phase Roadmap</h3>

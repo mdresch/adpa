@@ -292,7 +292,7 @@ export default function ProjectDetail() {
   const fetchProject = async () => {
     try {
       setLoading(true)
-      const projectData = await apiClient.getProject(projectId)
+      const projectData: any = await apiClient.getProject(projectId)
       setProject(projectData)
 
       // Also fetch documents and stakeholders for this project
@@ -317,7 +317,7 @@ export default function ProjectDetail() {
         limit: documentsPagination.limit,
         search: searchTerm || undefined,
       }
-      const documentsData = await apiClient.getProjectDocuments(projectId, params)
+      const documentsData: any = await apiClient.getProjectDocuments(projectId, params)
       setDocuments(documentsData.documents || [])
       setDocumentsPagination(documentsData.pagination || {
         page: 1,
@@ -363,9 +363,9 @@ export default function ProjectDetail() {
   // Fetch document statistics (total counts by status)
   const fetchDocumentStats = async () => {
     try {
-      const response = await apiClient.request<DocumentStatsResponse>(`/documents/project/${projectId}/stats`)
+      const response: any = await apiClient.request(`/documents/project/${projectId}/stats`)
       const statsData = response.stats;
-      
+
       setDocumentStats({
         totalDocuments: Number(statsData.total_documents) || 0,
         counts: {
@@ -393,7 +393,7 @@ export default function ProjectDetail() {
         page: 1,
         limit: 1000, // High limit to get all documents
       }
-      const documentsData = await apiClient.getProjectDocuments(projectId, params)
+      const documentsData: any = await apiClient.getProjectDocuments(projectId, params)
 
       // Extract unique template IDs
       const usedTemplates = new Set<string>()
@@ -416,7 +416,7 @@ export default function ProjectDetail() {
   const fetchStakeholders = async () => {
     try {
       setStakeholdersLoading(true)
-      const stakeholdersData = await apiClient.getProjectStakeholders(projectId)
+      const stakeholdersData: any = await apiClient.getProjectStakeholders(projectId)
       setStakeholders(Array.isArray(stakeholdersData.stakeholders) ? stakeholdersData.stakeholders : [])
     } catch (error) {
       console.error("Failed to fetch stakeholders:", error)
@@ -1262,7 +1262,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
 
       try {
         // Use new endpoint that includes conflict detection
-        const createResult = await apiClient.generateDocument({
+        const createResult: any = await apiClient.generateDocument({
           projectId,
           name: documentName,
           description: documentDescription,
@@ -1377,7 +1377,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
           }
 
           // Generate as new version of existing document
-          const result = await apiClient.generateDocumentNewVersion({
+          const result: any = await apiClient.generateDocumentNewVersion({
             existingDocumentId: conflictData.existingDocument.id,
             projectId: conflictData.generationData.projectId,
             templateId: conflictData.generationData.templateId,
@@ -1429,7 +1429,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
 
           // Create new document with modified name
           const newName = `${documentName} (Alternative)`
-          const separateResult = await apiClient.generateDocument({
+          const separateResult: any = await apiClient.generateDocument({
             projectId: conflictData.generationData.projectId,
             name: newName,
             description: documentDescription,
@@ -1494,7 +1494,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
     try {
       setLoadingTemplates(true)
       console.log('🔵 Calling apiClient.getTemplates with limit=100')
-      const response = await apiClient.getTemplates({
+      const response: any = await apiClient.getTemplates({
         limit: 100  // Increased limit to get more templates
       })
       console.log('📊 Templates API response:', response)
@@ -1568,7 +1568,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
     }
 
     try {
-      const providers = await apiClient.getAIProviders()
+      const providers: any = await apiClient.getAIProviders()
       const normalizedProviders = (providers || []).map((provider: any) => ({
         ...provider,
         models: normalizeModels(provider),
@@ -1671,7 +1671,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
 
         // Use the upload endpoint that converts PDFs/DOCX to Markdown
         const formData = new FormData()
-        formData.append('files', uploadForm.file)
+        formData.append('files', uploadForm.file as Blob)
         formData.append('projectId', projectId)
         formData.append('assessmentName', uploadForm.name)
 
@@ -1828,7 +1828,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
   // Download document
   const handleDownloadDocument = async (documentId: string) => {
     try {
-      const docData = await apiClient.getDocument(documentId)
+      const docData: any = await apiClient.getDocument(documentId)
 
       // Create a blob with the document content
       const content = typeof docData.content === 'string'
@@ -1872,13 +1872,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
     try {
       setUpgrading(true)
 
-      const response = await apiClient.post<{
-        success: boolean
-        data: {
-          program: { id: string; name: string }
-          project: any
-        }
-      }>(`/projects/${projectId}/upgrade-to-program`, {})
+      const response: any = await apiClient.post(`/projects/${projectId}/upgrade-to-program`, {})
 
       if (response.success && response.data) {
         const { program } = response.data
@@ -2008,7 +2002,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
   const fetchUsers = async () => {
     try {
       setLoadingUsers(true)
-      const response = await apiClient.getUsers()
+      const response: any = await apiClient.getUsers()
       // response is typed as { users: User[], pagination: any }
       setUsers(response.users || [])
     } catch (error) {
@@ -2116,12 +2110,12 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
 
       if (editingStakeholder) {
         // Update existing stakeholder
-        const response = await apiClient.updateStakeholder(editingStakeholder.id, stakeholderForm)
+        const response: any = await apiClient.updateStakeholder(editingStakeholder.id, stakeholderForm)
         savedStakeholder = response.stakeholder
         toast.success("Stakeholder updated successfully!")
       } else {
         // Create new stakeholder
-        const response = await apiClient.createStakeholder({
+        const response: any = await apiClient.createStakeholder({
           project_id: projectId,
           ...stakeholderForm
         })
@@ -2138,7 +2132,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
         if (!hasUserId) {
           // Try to find a user by email
           try {
-            const usersResponse = await apiClient.getUsers()
+            const usersResponse: any = await apiClient.getUsers()
             const users = usersResponse.users || []
             const matchingUser = users.find((u: any) =>
               u.email?.toLowerCase() === stakeholderForm.email.toLowerCase()
@@ -2149,7 +2143,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
               await apiClient.linkStakeholderToUser(stakeholderId, matchingUser.id)
               toast.success("Stakeholder linked to user account automatically")
             }
- else {
+            else {
               toast.warning(
                 `Team member must have a user account. No user found with email ${stakeholderForm.email}. ` +
                 `Please create a user account first or link an existing one.`

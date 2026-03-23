@@ -412,7 +412,7 @@ export class VersioningService {
 
             const newVersionResult = await client.query(
                 `INSERT INTO document_versions (
-          id, document_id, version_number, semantic_version, change_description, 
+          id, document_id, version, semantic_version, change_description, 
           content, content_hash, created_by, change_type, parent_version_id, metadata
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         RETURNING *`,

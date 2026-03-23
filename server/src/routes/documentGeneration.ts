@@ -453,7 +453,9 @@ router.post("/generate",
           provider: result.metadata.provider,
           model: result.metadata.model,
           tokens: {
-            total: result.metadata.tokensUsed || 0
+            prompt: 0,
+            completion: 0,
+            total: result.metadata.tokens_used || 0
           }
         },
         contentMetrics: {

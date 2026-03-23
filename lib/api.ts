@@ -96,6 +96,8 @@ export interface Document {
   // These properties are returned by the API but were missing from the interface
   template_name?: string
   project_name?: string
+  title?: string
+  framework?: string
   word_count?: number
   character_count?: number
   semantic_version?: string
@@ -105,6 +107,9 @@ export interface Document {
   template_category?: string
   template_complexity?: string
   confluence_page_url?: string
+  tags?: string[]
+  quality_score?: number
+  quality_status?: string
 }
 
 export interface Stakeholder {

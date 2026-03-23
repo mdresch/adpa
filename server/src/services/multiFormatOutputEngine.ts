@@ -102,6 +102,7 @@ export interface ConversionResult {
 
 export interface FormatConversionResult {
   format_id: string
+  format_name: string
   format_type: FormatType
   content: string | Buffer
   file_size: number
@@ -481,6 +482,7 @@ export class MultiFormatOutputEngine {
 
     return {
       format_id: `${targetFormat}_${Date.now()}`,
+      format_name: targetFormat,
       format_type: targetFormat,
       content: convertedContent,
       file_size: fileSize,
@@ -748,7 +750,7 @@ export class MultiFormatOutputEngine {
       issues.push({
         issue_id: `issue_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         issue_type: 'quality_issue',
-        severity: issue.severity,
+        severity: issue.severity as Severity,
         description: issue.description,
         affected_formats: formatResults.map(f => f.format_type),
         location: issue.location,
@@ -762,7 +764,7 @@ export class MultiFormatOutputEngine {
       issues.push({
         issue_id: `perf_issue_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         issue_type: 'performance_issue',
-        severity: issue.severity,
+        severity: issue.severity as Severity,
         description: issue.description,
         affected_formats: formatResults.map(f => f.format_type),
         location: issue.location,
@@ -806,7 +808,7 @@ export class MultiFormatOutputEngine {
         description: opportunity.description,
         implementation_guidance: `Focus on ${opportunity.opportunity_type} improvements`,
         expected_impact: opportunity.potential_impact,
-        effort_required: opportunity.implementation_effort,
+        effort_required: opportunity.implementation_effort as EffortLevel,
         affected_formats: formatResults.map(f => f.format_type),
         stakeholder_benefits: ['enhanced_quality', 'better_user_experience']
       })
@@ -1326,7 +1328,7 @@ interface QualityCompliance {
 interface ComplianceIssue {
   issue_id: string
   issue_type: string
-  severity: string
+  severity: Severity
   description: string
   location: string
   remediation_guidance: string
@@ -1335,7 +1337,7 @@ interface ComplianceIssue {
 interface ComplianceRecommendation {
   recommendation_id: string
   recommendation_type: string
-  priority: string
+  priority: Priority
   description: string
   implementation_guidance: string
 }
@@ -1423,6 +1425,12 @@ interface BrandingQualityScore {
   branding_quality: number
 }
 
+interface AccessibilityRequirements {
+  wcag_level: string
+  accessibility_features: string[]
+  inclusive_design: boolean
+}
+
 interface InteractiveQualityScore {
   format_id: string
   format_name: string
@@ -1434,7 +1442,7 @@ interface InteractiveQualityScore {
 interface QualityIssue {
   issue_id: string
   issue_type: string
-  severity: string
+  severity: Severity
   description: string
   location: string
   remediation_guidance: string
@@ -1453,7 +1461,7 @@ interface ImprovementOpportunity {
   opportunity_type: string
   description: string
   potential_impact: number
-  implementation_effort: string
+  implementation_effort: EffortLevel
 }
 
 interface ConversionSpeedMetric {
@@ -1488,7 +1496,7 @@ interface EfficiencyMetric {
 interface PerformanceIssue {
   issue_id: string
   issue_type: string
-  severity: string
+  severity: Severity
   description: string
   location: string
   remediation_guidance: string
@@ -1504,7 +1512,7 @@ interface PerformanceOptimization {
 interface PerformanceRecommendation {
   recommendation_id: string
   recommendation_type: string
-  priority: string
+  priority: Priority
   description: string
   implementation_guidance: string
 }
@@ -1544,7 +1552,7 @@ interface InclusiveDesignAssessment {
 interface AccessibilityIssue {
   issue_id: string
   issue_type: string
-  severity: string
+  severity: Severity
   description: string
   location: string
   remediation_guidance: string
@@ -1553,7 +1561,7 @@ interface AccessibilityIssue {
 interface AccessibilityRecommendation {
   recommendation_id: string
   recommendation_type: string
-  priority: string
+  priority: Priority
   description: string
   implementation_guidance: string
 }
@@ -1590,7 +1598,7 @@ interface BrandingGuideline {
 interface BrandingIssue {
   issue_id: string
   issue_type: string
-  severity: string
+  severity: Severity
   description: string
   location: string
   remediation_guidance: string
@@ -1599,7 +1607,7 @@ interface BrandingIssue {
 interface BrandingRecommendation {
   recommendation_id: string
   recommendation_type: string
-  priority: string
+  priority: Priority
   description: string
   implementation_guidance: string
 }
@@ -1639,7 +1647,7 @@ interface InteractiveFeature {
 interface InteractiveIssue {
   issue_id: string
   issue_type: string
-  severity: string
+  severity: Severity
   description: string
   location: string
   remediation_guidance: string
@@ -1648,7 +1656,7 @@ interface InteractiveIssue {
 interface InteractiveRecommendation {
   recommendation_id: string
   recommendation_type: string
-  priority: string
+  priority: Priority
   description: string
   implementation_guidance: string
 }

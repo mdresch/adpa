@@ -21,6 +21,7 @@ export interface DocumentData {
   template_category?: string | null;
   template_complexity?: string | null;
   template_metadata?: any;
+  title?: string;
   generation_metadata?: any;
   confluence_page_url?: string | null;
   correlation_id?: string;

@@ -243,7 +243,7 @@ Please generate a comprehensive, updated version that incorporates all recent pr
       );
 
       const nextVersion = newVersion.semantic_version;
-      const nextIntegerVersion = newVersion.version_number;
+      const nextIntegerVersion = Number(newVersion.version);
 
       log.info(`Version calculation: ${actualVersionType} → ${nextVersion}`, {
         requestedType: params.versionType,
@@ -333,6 +333,15 @@ Please generate a comprehensive, updated version that incorporates all recent pr
             temperature: params.temperature || 0.7,
             context_summary: aiResponse.context_summary,
             context_token_usage: aiResponse.context_token_usage,
+            aiProcessing: {
+              provider: params.provider,
+              model: params.model || 'default',
+              tokens: {
+                prompt: aiResponse.usage?.prompt_tokens || 0,
+                completion: aiResponse.usage?.completion_tokens || 0,
+                total: aiResponse.usage?.total_tokens || 0
+              }
+            },
             template_id: templateId,
             template_version: currentTemplateVersion,
             generated_at: new Date().toISOString(),

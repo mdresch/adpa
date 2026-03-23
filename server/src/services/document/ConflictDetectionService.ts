@@ -446,7 +446,7 @@ export class ConflictDetectionService {
         const currentVersionResult = await client.query(
             `SELECT content FROM document_versions
        WHERE document_id = $1
-       ORDER BY version_number DESC
+       ORDER BY version DESC
        LIMIT 1`,
             [conflict.document_id]
         );

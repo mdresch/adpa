@@ -57,32 +57,27 @@ import {
   AlertCircle,
   Loader2,
   Layers,
+  Sparkles,
+  Award,
 } from "@/components/ui/icons-shim"
-import { Award } from "@/components/ui/icons-shim"
 import { useAuth } from "@/contexts/AuthContext"
 import { apiClient } from "@/lib/api"
 import { useWebSocket } from "@/contexts/WebSocketContext"
 import { toast } from '@/lib/notify'
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
-import { vscDarkPlus } from "react-syntax-highlighter/dist/cjs/styles/prism"
 import { saveAs } from "file-saver"
 import { RegenerateVersionModal } from "@/components/documents/RegenerateVersionModal"
 import { RegenerationProgress } from "@/components/documents/RegenerationProgress"
 import { VersionViewerDialog } from "@/components/documents/VersionViewerDialog"
-import { VersionListDialog } from "@/components/documents/VersionListDialog"
-import { DriftHighlighter } from "@/components/documents/DriftHighlighter"
-import { EntityHighlighter } from "@/components/documents/EntityHighlighter"
-import { useDocumentRegeneration } from "@/hooks/use-document-regeneration"
-import { Sparkles } from "@/components/ui/icons-shim"
-import { DocumentEntityEditor } from "@/components/documents/DocumentEntityEditor"
+import { VersionListDialog, DocumentVersion as DocVersion } from "@/components/documents/VersionListDialog"
 
-import { 
-  ADPADocument, 
-  DocumentVersion, 
-  GenerationMetadata, 
-  DocumentMetadata 
+import { useDocumentRegeneration } from "@/hooks/use-document-regeneration"
+
+import {
+  ADPADocument as ADPADoc,
+  GenerationMetadata,
+  DocumentMetadata
 } from "@/types/adpa"
 
 export default function ProjectDocumentViewer() {
@@ -93,8 +88,8 @@ export default function ProjectDocumentViewer() {
   const projectId = params.id as string
   const documentId = params.docId as string
 
-  const [adpaDocument, setAdpaDocument] = useState<ADPADocument | null>(null)
-  const [versions, setVersions] = useState<DocumentVersion[]>([])
+  const [documentData, setDocumentData] = useState<ADPADoc | null>(null)
+  const [versions, setVersions] = useState<DocVersion[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [editedContent, setEditedContent] = useState("")
   const [isSaving, setIsSaving] = useState(false)
@@ -110,7 +105,7 @@ export default function ProjectDocumentViewer() {
   const [activeSection, setActiveSection] = useState<string>("")
   const [templateName, setTemplateName] = useState<string>("")
   const [showRegenerateModal, setShowRegenerateModal] = useState(false)
-  const [selectedVersion, setSelectedVersion] = useState<DocumentVersion | null>(null)
+  const [selectedVersion, setSelectedVersion] = useState<DocVersion | null>(null)
   const [showVersionDialog, setShowVersionDialog] = useState(false)
   const [drifts, setDrifts] = useState<any[]>([])
   const [showDriftHighlights, setShowDriftHighlights] = useState(true)
@@ -136,612 +131,11 @@ export default function ProjectDocumentViewer() {
     category: "general"
   })
 
-  // Submit feedback
-  const handleSubmitFeedback = async () => {
-    try {
-      // Validate feedback form
-      if (!feedbackForm.comment.trim()) {
-        toast.error("Please enter a comment");
-        return;
-      }
-
-      if (feedbackForm.rating < 1 || feedbackForm.rating > 5) {
-        toast.error("Please select a valid rating");
-        return;
-      }
-
-      // Test feedback endpoint first
-      console.log("Testing feedback endpoint...");
-      try {
-        await apiClient.testFeedbackEndpoint({
-          comment: feedbackForm.comment.trim(),
-          rating: feedbackForm.rating,
-          category: feedbackForm.category,
-        });
-        console.log("Test endpoint working, proceeding with real submission...");
-      } catch (testError) {
-        console.error("Test endpoint failed:", testError);
-        toast.error("Feedback system is not available. Please try again later.");
-        return;
-      }
-
-      // Submit feedback to backend
-      console.log("Submitting feedback:", {
-        documentId,
-        feedback: {
-          comment: feedbackForm.comment.trim(),
-          rating: feedbackForm.rating,
-          category: feedbackForm.category,
-        },
-      });
-
-      const response = await apiClient.submitDocumentFeedback(documentId, {
-        comment: feedbackForm.comment.trim(),
-        rating: feedbackForm.rating,
-        category: feedbackForm.category,
-      });
-
-      console.log("Feedback response:", response);
-
-      if (response.success) {
-        toast.success("Feedback submitted successfully!");
-        setFeedbackDialogOpen(false);
-        setFeedbackForm({
-          comment: "",
-          rating: 5,
-          category: "general",
-        });
-        // Refresh document to show new feedback in metadata if applicable
-        fetchDocument();
-      } else {
-        toast.error("Failed to submit feedback");
-      }
-    } catch (error: any) {
-      console.error("Failed to submit feedback:", error);
-
-      // Handle specific error cases
-      if (error.response?.status === 400) {
-        toast.error(`Validation error: ${error.response.data?.error || "Invalid feedback data"}`);
-      } else if (error.response?.status === 403) {
-        toast.error("You don't have permission to submit feedback for this document");
-      } else if (error.response?.status === 404) {
-        toast.error("Document not found");
-      } else {
-        toast.error("Failed to submit feedback. Please try again.");
-      }
-    }
-  };
-
-  // Entity highlighting state
-  const [entityHighlight, setEntityHighlight] = useState<{
-    entityName: string
-    entityType: string
-    highlightStart?: number
-    highlightEnd?: number
-    highlightLineStart?: number
-    highlightLineEnd?: number
-    highlightSnippet?: string
-    highlightTag?: string
-  } | null>(null)
-
   // Document regeneration hook
   const { regenerate, progress, isRegenerating, error: regenerationError, result, reset: resetRegeneration } = useDocumentRegeneration()
 
   // WebSocket event handlers for conflict and regeneration events
   const { on, off, joinRoom, leaveRoom } = useWebSocket()
-  useEffect(() => {
-    // Join the document and project rooms to receive events
-    const documentRoom = `document:${documentId}`
-    const projectRoom = `project:${projectId}`
-    joinRoom(documentRoom)
-    joinRoom(projectRoom)
-
-    // Track recent notifications to prevent duplicate toasts
-    const recentNotifications = new Set<string>()
-
-    const handleConflictDetected = (data: {
-      jobId: string;
-      conflictId: string;
-      conflictDetails: any;
-      resolutionOptions: string[];
-    }) => {
-      try {
-        // Deduplicate: only show toast if we haven't shown it recently for this conflict
-        const notificationKey = `conflict-detected-${data.conflictId}`
-        if (!recentNotifications.has(notificationKey)) {
-          recentNotifications.add(notificationKey)
-          toast.warning(`Template conflict detected during regeneration: ${data.conflictDetails.template?.name || 'Unknown Template'}`)
-          // Remove from set after 5 seconds to allow re-notification if needed
-          setTimeout(() => recentNotifications.delete(notificationKey), 5000)
-        }
-        // The conflict dialog will be shown by the project page
-      } catch (err) {
-        console.warn('Error handling document:regeneration:conflict_detected event', err)
-      }
-    }
-
-    const handleConflictResolved = (data: {
-      conflictId: string;
-      resolutionMethod: string;
-      documentId: string;
-      newVersionId?: string;
-    }) => {
-      try {
-        if (data.documentId === documentId) {
-          // Deduplicate: only show toast if we haven't shown it recently for this conflict
-          const notificationKey = `conflict-resolved-${data.conflictId}`
-          if (!recentNotifications.has(notificationKey)) {
-            recentNotifications.add(notificationKey)
-            toast.success(`Conflict resolved using ${data.resolutionMethod}`)
-            // Remove from set after 5 seconds to allow re-notification if needed
-            setTimeout(() => recentNotifications.delete(notificationKey), 5000)
-          }
-          fetchDocument() // Refresh document to show updates
-        }
-      } catch (err) {
-        console.warn('Error handling document:conflict_resolved event', err)
-      }
-    }
-
-    const handleRegenerationCompleted = (data: {
-      jobId: string;
-      versionId: string;
-      versionNumber: string;
-      documentName?: string;
-    }) => {
-      try {
-        // Deduplicate: only show toast if we haven't shown it recently for this version
-        const notificationKey = `regeneration-completed-${data.versionId}`
-        if (!recentNotifications.has(notificationKey)) {
-          recentNotifications.add(notificationKey)
-          toast.success(`Document regeneration completed (v${data.versionNumber})`)
-          // Remove from set after 5 seconds to allow re-notification if needed
-          setTimeout(() => recentNotifications.delete(notificationKey), 5000)
-        }
-        fetchDocument() // Refresh document to show the new version
-      } catch (err) {
-        console.warn('Error handling document:regeneration:completed event', err)
-      }
-    }
-
-    on("document:regeneration:conflict_detected", handleConflictDetected)
-    on("document:conflict_resolved", handleConflictResolved)
-    on("document:regeneration:completed", handleRegenerationCompleted)
-
-    return () => {
-      off("document:regeneration:conflict_detected", handleConflictDetected)
-      off("document:conflict_resolved", handleConflictResolved)
-      off("document:regeneration:completed", handleRegenerationCompleted)
-      leaveRoom(documentRoom)
-      leaveRoom(projectRoom)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [documentId, projectId]) // joinRoom, leaveRoom, on, off are stable callbacks
-
-  // Mock data for demonstration
-  const mockDocument: DocumentData = {
-    id: documentId,
-    title: "Project Requirements Document",
-    content: `# Project Requirements Document
-
-## Project Overview
-This document outlines the comprehensive requirements for the **Advanced Document Processing & Automation (ADPA)** project.
-
-## Executive Summary
-The ADPA system is designed to revolutionize document processing workflows through AI-powered automation, intelligent content analysis, and seamless integration capabilities.
-
-## Functional Requirements
-
-### 1. Document Processing Engine
-- **AI-Powered Analysis**: Advanced natural language processing for document understanding
-- **Multi-Format Support**: PDF, DOCX, TXT, MD, and other common formats
-- **Batch Processing**: Handle multiple documents simultaneously
-- **Real-time Processing**: Sub-second response times for simple operations
-
-### 2. Template Management System
-- **Dynamic Templates**: Create and manage document templates
-- **Variable Injection**: Inject project-specific data into templates
-- **Version Control**: Track template changes and rollback capabilities
-- **Collaboration**: Multi-user template editing and approval workflows
-
-### 3. AI Provider Integration
-- **Multi-Provider Support**: OpenAI, Azure AI, Google AI, Mistral, and more
-- **Failover Mechanisms**: Automatic provider switching for reliability
-- **Cost Optimization**: Intelligent provider selection based on cost and performance
-- **API Management**: Centralized API key and configuration management
-
-### 4. Workflow Automation
-- **Process Flow Builder**: Visual workflow design interface
-- **Conditional Logic**: Smart routing based on document content and metadata
-- **Scheduling**: Automated processing schedules and triggers
-- **Monitoring**: Real-time workflow execution monitoring
-
-## Technical Requirements
-
-### Architecture
-\`\`\`typescript
-interface DocumentProcessor {
-  processDocument(document: File): Promise<ProcessedDocument>
-  extractMetadata(document: File): Promise<DocumentMetadata>
-  generateSummary(content: string): Promise<string>
-  compressContent(content: string): Promise<CompressedContent>
-}
-
-class ADPADocumentProcessor implements DocumentProcessor {
-  private aiProviders: AIProvider[]
-  private templateEngine: TemplateEngine
-  private workflowEngine: WorkflowEngine
-
-  async processDocument(document: File): Promise<ProcessedDocument> {
-    const metadata = await this.extractMetadata(document)
-    const content = await this.extractContent(document)
-    const summary = await this.generateSummary(content)
-    
-    return {
-      id: generateId(),
-      content,
-      metadata,
-      summary,
-      processedAt: new Date(),
-      status: 'completed'
-    }
-  }
-}
-\`\`\`
-
-### Database Schema
-\`\`\`sql
-CREATE TABLE documents (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  project_id UUID REFERENCES projects(id),
-  title VARCHAR(255) NOT NULL,
-  content TEXT,
-  metadata JSONB,
-  status VARCHAR(50) DEFAULT 'draft',
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW(),
-  author_id UUID REFERENCES users(id)
-);
-
-CREATE TABLE document_versions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  document_id UUID REFERENCES documents(id),
-  version_number INTEGER,
-  content TEXT,
-  changes TEXT,
-  created_at TIMESTAMP DEFAULT NOW(),
-  author_id UUID REFERENCES users(id)
-);
-\`\`\`
-
-## Performance Requirements
-- **Response Time**: < 2 seconds for document processing
-- **Throughput**: 1000+ documents per hour
-- **Availability**: 99.9% uptime SLA
-- **Scalability**: Horizontal scaling support
-
-## Security Requirements
-- **Authentication**: Multi-factor authentication support
-- **Authorization**: Role-based access control (RBAC)
-- **Encryption**: End-to-end encryption for sensitive documents
-- **Audit Trail**: Comprehensive logging and audit capabilities
-- **Compliance**: GDPR, HIPAA, and SOC2 compliance
-
-## Integration Requirements
-- **API Gateway**: RESTful and GraphQL APIs
-- **Webhook Support**: Real-time notifications and integrations
-- **Third-party Services**: SharePoint, Confluence, Google Drive integration
-- **Export Formats**: PDF, DOCX, HTML, JSON, XML
-
-## Quality Assurance
-- **Testing Strategy**: Unit, integration, and end-to-end testing
-- **Code Coverage**: Minimum 80% test coverage
-- **Performance Testing**: Load testing and stress testing
-- **Security Testing**: Penetration testing and vulnerability assessment
-
-## Deployment and Operations
-- **Containerization**: Docker and Kubernetes deployment
-- **CI/CD Pipeline**: Automated testing and deployment
-- **Monitoring**: Application performance monitoring (APM)
-- **Backup and Recovery**: Automated backup and disaster recovery
-
-## Success Metrics
-- **User Adoption**: 90% of target users actively using the system
-- **Processing Efficiency**: 50% reduction in document processing time
-- **Cost Savings**: 30% reduction in manual document processing costs
-- **User Satisfaction**: 4.5+ star rating from user feedback
-
-## Conclusion
-The ADPA system represents a significant advancement in document processing automation, combining cutting-edge AI technology with robust engineering practices to deliver a scalable, secure, and user-friendly solution.`,
-    author: "Project Manager",
-    created_at: "2024-01-15T10:30:00Z",
-    updated_at: "2024-01-15T14:45:00Z",
-    status: "published",
-    project_id: projectId,
-    project_name: "ADPA Development Project",
-    word_count: 847,
-    character_count: 5234,
-    compression_ratio: 78,
-    original_size: "3.2MB",
-    compressed_size: "704KB",
-    processing_time: "4.2s",
-    ai_model: "GPT-4 Turbo",
-    input_tokens: 2847,
-    output_tokens: 1956,
-    tags: ["requirements", "technical", "architecture", "ai", "automation"],
-    source_documents: [
-      { id: "src-1", title: "Business Requirements", type: "PDF" },
-      { id: "src-2", title: "Technical Architecture", type: "DOCX" },
-      { id: "src-3", title: "User Stories", type: "MD" },
-      { id: "src-4", title: "API Specifications", type: "JSON" }
-    ],
-    comments: [
-      {
-        id: "comment-1",
-        author: "Technical Lead",
-        content: "The architecture section looks solid. Consider adding more details about the microservices communication patterns.",
-        created_at: "2024-01-15T11:15:00Z"
-      },
-      {
-        id: "comment-2",
-        author: "Product Manager",
-        content: "Great work on the requirements! The performance metrics are well-defined and achievable.",
-        created_at: "2024-01-15T12:30:00Z"
-      }
-    ]
-  }
-
-  const mockVersions: VersionData[] = [
-    {
-      id: "v1",
-      version: "1.0",
-      created_at: "2024-01-15T10:30:00Z",
-      author: "Project Manager",
-      changes: "Initial document creation with basic requirements",
-      word_count: 456
-    },
-    {
-      id: "v2",
-      version: "1.1",
-      created_at: "2024-01-15T12:15:00Z",
-      author: "Technical Lead",
-      changes: "Added technical architecture and database schema",
-      word_count: 723
-    },
-    {
-      id: "v3",
-      version: "1.2",
-      created_at: "2024-01-15T14:45:00Z",
-      author: "Project Manager",
-      changes: "Enhanced with performance requirements and success metrics",
-      word_count: 847
-    }
-  ]
-
-  // Extract fetchDocument so it can be reused by saveEdit
-  const fetchDocument = async () => {
-    setIsLoading(true)
-    try {
-      // Fetch document from API (including drift data and Jira linkage)
-      const [documentResponse, versionsResponse, driftResponse, jiraLinkageResponse] = await Promise.all([
-        apiClient.get(`/documents/${documentId}`),
-        apiClient.get(`/documents/${documentId}/versions`),
-        apiClient.request<{ driftRecords: any[] }>(
-          `/drift/project/${projectId}`,
-          { suppressNotFoundError: true } as Record<string, unknown>
-        ).catch(() => ({ driftRecords: [] })),
-        apiClient.request<{ linked: boolean; issueKey?: string; issueUrl?: string }>(
-          `/jira-linkage/document/${documentId}`,
-          { suppressNotFoundError: true } as Record<string, unknown>
-        ).catch(() => ({ linked: false }))
-      ])
-
-      // Filter drifts for this specific document
-      const documentDrifts = (driftResponse.driftRecords || []).filter((d: any) => d.source_document_id === documentId)
-      setDrifts(documentDrifts)
-
-      // Set Jira linkage if available
-      if (jiraLinkageResponse.linked && jiraLinkageResponse.issueKey && jiraLinkageResponse.issueUrl) {
-        setJiraLinkage({
-          issueKey: jiraLinkageResponse.issueKey,
-          issueUrl: jiraLinkageResponse.issueUrl,
-          created: true // We don't track this in the response, but assume it exists
-        })
-      } else {
-        setJiraLinkage(null)
-      }
-
-      const documentData = documentResponse
-      const versionsData = versionsResponse || []
-
-      console.log('[DocumentView] Loaded document:', documentData)
-      console.log('[DocumentView] Loaded versions count:', versionsData.length)
-      console.log('[DocumentView] All versions with timestamps:', versionsData.map((v: any) => ({
-        version: v.version,
-        created_at: v.created_at,
-        timestamp: new Date(v.created_at).getTime()
-      })))
-
-      // 🆕 Find the latest version (highest semantic version)
-      let latestVersion = null
-      if (versionsData.length > 0) {
-        // Helper function to parse semantic version
-        const parseVersion = (versionStr: string): [number, number, number] => {
-          const parts = versionStr.split('.').map(p => parseInt(p, 10) || 0)
-          return [parts[0] || 0, parts[1] || 0, parts[2] || 0]
-        }
-
-        // Sort by semantic version DESC (highest version first)
-        const sortedVersions = [...versionsData].sort((a: any, b: any) => {
-          const [aMajor, aMinor, aPatch] = parseVersion(a.version)
-          const [bMajor, bMinor, bPatch] = parseVersion(b.version)
-
-          // Compare major, then minor, then patch
-          if (bMajor !== aMajor) return bMajor - aMajor
-          if (bMinor !== aMinor) return bMinor - aMinor
-          return bPatch - aPatch
-        })
-        latestVersion = sortedVersions[0]
-        console.log('[DocumentView] Sorted versions (highest first):', sortedVersions.map((v: any) => v.version))
-        console.log('[DocumentView] Latest version selected:', latestVersion.version, 'created:', latestVersion.created_at)
-      }
-
-      // Use latest version's content if available, otherwise fall back to current document
-      const dataToDisplay = latestVersion || documentData
-
-      console.log('[DocumentView] Displaying version:', latestVersion ? latestVersion.version : 'current')
-      console.log('[DocumentView] Version contents available:', versionsData.map((v: any) => ({
-        version: v.version,
-        hasContent: !!v.content,
-        contentLength: v.content?.length || 0
-      })))
-
-      // Convert content to string if it's an object
-      let contentString = ''
-      if (typeof dataToDisplay.content === 'string') {
-        contentString = dataToDisplay.content
-      } else if (dataToDisplay.content && typeof dataToDisplay.content === 'object') {
-        // Handle different content object formats
-        if (dataToDisplay.content.text) {
-          contentString = dataToDisplay.content.text
-        } else if (dataToDisplay.content.markdown) {
-          contentString = dataToDisplay.content.markdown
-        } else {
-          // Fallback: stringify the object
-          contentString = JSON.stringify(dataToDisplay.content, null, 2)
-        }
-      }
-
-      // Use template_name from document response (backend already provides it)
-      if (documentData.template_name) {
-        setTemplateName(documentData.template_name)
-      } else if (documentData.template_id) {
-        // Fallback: fetch template name if not included in response
-        try {
-          const templateResponse = await apiClient.get(`/templates/${documentData.template_id}`)
-          setTemplateName(templateResponse.name || 'Unknown Template')
-        } catch (error) {
-          console.error('Failed to fetch template name:', error)
-          setTemplateName('Unknown Template')
-        }
-      }
-
-      // 🆕 Extract source_documents from metadata if available
-      const sourceDocuments = dataToDisplay.metadata?.source_documents ||
-        dataToDisplay.generation_metadata?.source_documents ||
-        []
-
-      setAdpaDocument({
-        ...documentData, // Keep base document metadata (project_id, template_id, etc.)
-        ...dataToDisplay, // Override with latest version's data
-        content: contentString,
-        source_documents: sourceDocuments, // Expose at top level for UI
-        loaded_version: latestVersion ? latestVersion.version : null,
-        loaded_version_id: latestVersion ? latestVersion.id : null
-      })
-      setVersions(versionsData)
-      setEditedContent(contentString)
-      setBaseContentSnapshot(contentString)
-      setLatestContentSnapshot(contentString)
-
-      // Extract TOC from real document content
-      if (contentString) {
-        extractTableOfContents(contentString)
-      }
-    } catch (error) {
-      console.error("Failed to load document:", error)
-      toast.error("Failed to load document from API")
-      // Don't set mock data - let the UI show error state
-      setAdpaDocument(null)
-      setVersions([])
-      setEditedContent("")
-      setBaseContentSnapshot("")
-      setLatestContentSnapshot("")
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    // Ensure we're in a browser environment
-    if (typeof window === 'undefined' || typeof document === 'undefined') return
-
-    fetchDocument()
-
-    // Track page engagement for document viewer
-    const startTime = Date.now()
-    let interactionCount = 0
-
-    const handleInteraction = () => {
-      interactionCount++
-    }
-
-    // Add null check for document
-    if (document) {
-      document.addEventListener('click', handleInteraction)
-      document.addEventListener('scroll', handleInteraction)
-    }
-
-    return () => {
-      // Calculate engagement when page unloads
-      const timeSpent = Math.floor((Date.now() - startTime) / 1000)
-      trackPageEngagement(`/projects/${projectId}/documents/${documentId}/view`, timeSpent, interactionCount)
-
-      // Remove event listeners if document exists
-      if (document) {
-        document.removeEventListener('click', handleInteraction)
-        document.removeEventListener('scroll', handleInteraction)
-      }
-    }
-  }, [projectId, documentId])
-
-  // Parse URL parameters for entity highlighting
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const urlParams = new URLSearchParams(window.location.search)
-
-      const entityName = urlParams.get('entityName')
-      const entityType = urlParams.get('entityType')
-      const highlightStart = urlParams.get('highlightStart')
-      const highlightEnd = urlParams.get('highlightEnd')
-      const highlightLineStart = urlParams.get('highlightLineStart')
-      const highlightLineEnd = urlParams.get('highlightLineEnd')
-      const highlightSnippet = urlParams.get('highlightSnippet')
-      const highlightTag = urlParams.get('highlightTag')
-
-      if (entityName && entityType) {
-        const decodedEntityName = decodeURIComponent(entityName)
-        const decodedEntityType = decodeURIComponent(entityType)
-
-        setEntityHighlight({
-          entityName: decodedEntityName,
-          entityType: decodedEntityType,
-          highlightStart: highlightStart ? parseInt(highlightStart, 10) : undefined,
-          highlightEnd: highlightEnd ? parseInt(highlightEnd, 10) : undefined,
-          highlightLineStart: highlightLineStart ? parseInt(highlightLineStart, 10) : undefined,
-          highlightLineEnd: highlightLineEnd ? parseInt(highlightLineEnd, 10) : undefined,
-          highlightSnippet: highlightSnippet ? decodeURIComponent(highlightSnippet) : undefined,
-          highlightTag: highlightTag ? decodeURIComponent(highlightTag) : undefined
-        })
-
-        // Track entity highlighting when parameters are detected
-        trackEntityHighlighting('scrolled')
-
-        // Track feature usage with metadata
-        trackFeatureUsage('entity_highlighting', 'active', {
-          entity_type: decodedEntityType,
-          entity_name: decodedEntityName,
-          has_location_data: (highlightStart || highlightLineStart) ? 'true' : 'false',
-          highlighting_method: highlightStart ? 'character' : highlightLineStart ? 'line' : highlightSnippet ? 'snippet' : 'tag'
-        })
-
-        // Show notification about entity highlighting
-        setTimeout(() => {
-          toast.info(`Highlighting "${decodedEntityName}" from ${decodedEntityType}`)
-        }, 1000)
-      }
-    }
-  }, [projectId, documentId])
 
   // Extract table of contents from markdown
   const extractTableOfContents = useCallback((content: string) => {
@@ -801,483 +195,261 @@ The ADPA system represents a significant advancement in document processing auto
     setTableOfContents(headings)
   }, [])
 
-  // Stable callback for drift marker ToC regeneration
-  const handleEnhancedContentReady = useCallback((enhancedContent: string) => {
-    if (!enhancedContent) return
+  // Extract fetchDocument so it can be reused
+  const fetchDocument = async () => {
+    setIsLoading(true)
+    try {
+      // Fetch document from API (including drift data and Jira linkage)
+      const [documentResponse, versionsResponse, driftResponse, jiraLinkageResponse] = await Promise.all([
+        apiClient.get<ADPADoc>(`/documents/${documentId}`),
+        apiClient.get<DocVersion[]>(`/documents/${documentId}/versions`),
+        apiClient.request<{ driftRecords: any[] }>(
+          `/drift/project/${projectId}`,
+          { suppressNotFoundError: true } as Record<string, unknown>
+        ).catch(() => ({ driftRecords: [] })),
+        apiClient.request<{ linked: boolean; issueKey?: string; issueUrl?: string }>(
+          `/jira-linkage/document/${documentId}`,
+          { suppressNotFoundError: true } as Record<string, unknown>
+        ).catch(() => ({ linked: false }))
+      ])
 
-    if (showDriftHighlights && drifts.length > 0) {
-      setLatestContentSnapshot(enhancedContent)
-      extractTableOfContents(enhancedContent)
-    }
-  }, [showDriftHighlights, drifts, extractTableOfContents])
+      // Filter drifts for this specific document
+      const documentDrifts = (driftResponse.driftRecords || []).filter((d: any) => d.source_document_id === documentId)
+      setDrifts(documentDrifts)
 
-  // Recompute table of contents when toggling highlights off
-  useEffect(() => {
-    if (!showDriftHighlights) {
-      if (baseContentSnapshot) {
-        extractTableOfContents(baseContentSnapshot)
+      // Set Jira linkage if available
+      if ('issueKey' in jiraLinkageResponse && jiraLinkageResponse.issueKey && jiraLinkageResponse.issueUrl) {
+        setJiraLinkage({
+          issueKey: jiraLinkageResponse.issueKey,
+          issueUrl: jiraLinkageResponse.issueUrl,
+          created: true
+        })
+      } else {
+        setJiraLinkage(null)
       }
-    }
-  }, [showDriftHighlights, baseContentSnapshot, extractTableOfContents])
 
-  // Smooth scroll to section
-  const scrollToSection = (sectionId: string) => {
-    console.log('[TOC] Attempting to scroll to:', sectionId)
-    console.log('[TOC] Current TOC items:', tableOfContents.map(h => ({ id: h.id, text: h.text })))
+      const fetchedDoc = (documentResponse as any).document || (documentResponse as any).data || documentResponse
+      const rawVersions = (versionsResponse as any).versions || (versionsResponse as any).data || versionsResponse
+      const versionsData = Array.isArray(rawVersions) ? rawVersions : []
 
-    // Use window.document to avoid conflicts
-    const element = window.document.getElementById(sectionId)
+      console.log('[DocumentView] Loaded document:', fetchedDoc)
+      console.log('[DocumentView] Loaded versions count:', versionsData.length)
 
-    if (element) {
-      console.log('[TOC] ✅ Element found! Scrolling...')
-      console.log('[TOC] Element position:', {
-        top: element.getBoundingClientRect().top,
-        scrollY: window.scrollY,
-        offsetHeight: element.offsetHeight
-      })
-
-      // Use modern scrollIntoView with offset
-      const elementPosition = element.getBoundingClientRect().top
-      const offsetPosition = elementPosition + window.scrollY - 120 // 120px offset for header
-
-      window.scrollTo({
-        top: offsetPosition,
-        behavior: 'smooth'
-      })
-
-      setActiveSection(sectionId)
-      console.log('[TOC] Scroll command sent')
-    } else {
-      console.warn('[TOC] ❌ Element not found with ID:', sectionId)
-      console.log('[TOC] All element IDs on page:',
-        Array.from(window.document.querySelectorAll('[id]')).map(el => el.id).filter(id => id.startsWith('heading-') || id.startsWith('drift-'))
-      )
-
-      // Fallback: Try to find by text content
-      const allHeadings = Array.from(window.document.querySelectorAll('h1, h2, h3, h4, h5, h6'))
-      const sectionText = tableOfContents.find(h => h.id === sectionId)?.text
-
-      console.log('[TOC] Searching for heading with text:', sectionText)
-      console.log('[TOC] All heading texts on page:', allHeadings.map(h => h.textContent?.trim()))
-
-      if (sectionText) {
-        // Try exact match first
-        let matchingHeading = allHeadings.find(h =>
-          h.textContent?.trim() === sectionText.trim()
-        ) as HTMLElement | undefined
-
-        // Try case-insensitive partial match if exact fails
-        if (!matchingHeading) {
-          matchingHeading = allHeadings.find(h =>
-            h.textContent?.toLowerCase().includes(sectionText.toLowerCase())
-          ) as HTMLElement | undefined
+      // Find the latest version (highest semantic version)
+      let latestVersion = null
+      if (versionsData.length > 0) {
+        const parseVersion = (versionStr: string): [number, number, number] => {
+          const parts = versionStr.split('.').map(p => parseInt(p, 10) || 0)
+          return [parts[0] || 0, parts[1] || 0, parts[2] || 0]
         }
 
-        if (matchingHeading) {
-          console.log('[TOC] ✅ Found heading by text content, scrolling...')
-          matchingHeading.scrollIntoView({ behavior: 'smooth', block: 'start' })
-          window.scrollBy({ top: -120, behavior: 'smooth' }) // Offset for sticky header
-          setActiveSection(sectionId)
-        } else {
-          console.error('[TOC] ❌ Could not find heading by ID or text')
+        const sortedVersions = [...versionsData].sort((a: any, b: any) => {
+          const [aMajor, aMinor, aPatch] = parseVersion(a.version)
+          const [bMajor, bMinor, bPatch] = parseVersion(b.version)
+          if (bMajor !== aMajor) return bMajor - aMajor
+          if (bMinor !== aMinor) return bMinor - aMinor
+          return bPatch - aPatch
+        })
+        latestVersion = sortedVersions[0]
+      }
+
+      const dataToDisplay = latestVersion || fetchedDoc
+
+      // Convert content to string if it's an object (robust extraction)
+      let contentString = ''
+      const rawContent = dataToDisplay.content
+      if (typeof rawContent === 'string') {
+        contentString = rawContent
+      } else if (rawContent && typeof rawContent === 'object') {
+        contentString = (rawContent as any).text || 
+                        (rawContent as any).markdown || 
+                        (rawContent as any).content || 
+                        JSON.stringify(rawContent, null, 2)
+      }
+
+      // Template name handling
+      if (fetchedDoc.template_name) {
+        setTemplateName(fetchedDoc.template_name)
+      } else if (fetchedDoc.template_id) {
+        try {
+          const templateResponse = await apiClient.get(`/templates/${fetchedDoc.template_id}`)
+          setTemplateName((templateResponse as any).template?.name || (templateResponse as any).name || 'Unknown Template')
+        } catch (error) {
+          console.error('Failed to fetch template name:', error)
+          setTemplateName('Unknown Template')
         }
       }
+
+      // Source documents handling
+      const sourceDocuments = (dataToDisplay as any).metadata?.source_documents ||
+        (dataToDisplay as any).metadata?.source_documentDatas ||
+        (dataToDisplay as any).generation_metadata?.source_documents ||
+        (dataToDisplay as any).generation_metadata?.source_documentDatas ||
+        (dataToDisplay as any).source_documents ||
+        []
+
+      setDocumentData({
+        ...fetchedDoc,
+        ...dataToDisplay,
+        content: contentString,
+        source_documents: sourceDocuments,
+        loaded_version: latestVersion ? latestVersion.version : null,
+        loaded_version_id: latestVersion ? latestVersion.id : null
+      })
+      setVersions(versionsData)
+      setEditedContent(contentString)
+      setBaseContentSnapshot(contentString)
+      setLatestContentSnapshot(contentString)
+
+      if (contentString) {
+        extractTableOfContents(contentString)
+      }
+    } catch (error) {
+      console.error("Failed to load document:", error)
+      toast.error("Failed to load document from API")
+      setDocumentData(null)
+      setVersions([])
+      setEditedContent("")
+    } finally {
+      setIsLoading(false)
     }
   }
 
-  // Scroll spy for active section tracking
+  // Initial load and engagement tracking
   useEffect(() => {
-    // Ensure we're in a browser environment
-    if (typeof window === 'undefined' || typeof document === 'undefined') return
-    if (tableOfContents.length === 0) return
+    if (typeof window === 'undefined') return
+    fetchDocument()
 
-    const handleScroll = () => {
-      if (!window || !window.document) return
+    const startTime = Date.now()
+    let interactionCount = 0
+    const handleInteraction = () => { interactionCount++ }
 
-      const scrollPosition = window.scrollY + 150
-
-      for (let i = tableOfContents.length - 1; i >= 0; i--) {
-        const heading = tableOfContents[i]
-        const element = window.document.getElementById(heading.id)
-
-        if (element && element.offsetTop <= scrollPosition) {
-          setActiveSection(heading.id)
-          break
-        }
-      }
-    }
-
-    // Add null check for window
-    if (window) {
-      window.addEventListener('scroll', handleScroll, { passive: true })
-      handleScroll()
-    }
+    window.document.addEventListener('click', handleInteraction)
+    window.document.addEventListener('scroll', handleInteraction)
 
     return () => {
-      if (window) {
-        window.removeEventListener('scroll', handleScroll)
+      const timeSpent = Math.floor((Date.now() - startTime) / 1000)
+      trackPageEngagement(`/projects/${projectId}/documents/${documentId}/view`, timeSpent, interactionCount)
+      window.document.removeEventListener('click', handleInteraction)
+      window.document.removeEventListener('scroll', handleInteraction)
+    }
+  }, [projectId, documentId])
+
+  // WebSocket effect
+  useEffect(() => {
+    const documentRoom = `document:${documentId}`
+    const projectRoom = `project:${projectId}`
+    joinRoom(documentRoom)
+    joinRoom(projectRoom)
+
+    const recentNotifications = new Set<string>()
+
+    const handleConflictDetected = (data: any) => {
+      const key = `conflict-detected-${data.conflictId}`
+      if (!recentNotifications.has(key)) {
+        recentNotifications.add(key)
+        toast.warning(`Template conflict detected: ${data.conflictDetails.template?.name || 'Unknown'}`)
+        setTimeout(() => recentNotifications.delete(key), 5000)
       }
     }
-  }, [tableOfContents])
 
-  const handlePublishToConfluence = async () => {
-    try {
-      const resp = await apiClient.post(`/integrations/confluence/latest/export`, { documentId })
-      const url = (resp as any)?.confluenceUrl || (resp as any)?.data?.confluenceUrl
-      if (url) {
-        toast.success('Published to Confluence')
-      } else if ((resp as any)?.data?.error) {
-        const r = (resp as any).data
-        const hint = r.reason === 'space_not_configured' ? 'No project mapping or integration target space is set.'
-          : r.reason === 'space_not_found' ? 'Space not found. Check Project Settings → Confluence Space Key or Integration Target Space Key.'
-            : r.reason === 'not_authorized' ? 'Confluence rejected the request. Check API token permissions.'
-              : r.reason === 'title_conflict' ? 'A page with this title already exists. Updated the existing page if found.'
-                : 'See server logs.'
-
-        // Extract error message safely
-        let errorMsg = 'Unknown error'
-        if (typeof r.error === 'string') {
-          errorMsg = r.error
-        } else if (r.error?.message) {
-          errorMsg = r.error.message
-        } else if (r.error?.details) {
-          errorMsg = r.error.details
-        } else if (typeof r.error === 'object') {
-          errorMsg = JSON.stringify(r.error)
-        }
-
-        toast.error(`Failed to publish to Confluence: ${errorMsg}. ${hint}`)
-        return
+    const handleConflictResolved = (data: any) => {
+      if (data.documentId === documentId) {
+        toast.success(`Conflict resolved using ${data.resolutionMethod}`)
+        fetchDocument()
       }
-      if (url) {
-        setDocument(prev => prev ? ({ ...(prev as any), confluence_page_url: url }) as any : prev)
-      } else {
-        toast.info('Export completed, but URL not returned. Check Confluence.')
-      }
-    } catch (e: any) {
-      // Extract error message safely
-      let errorMsg = 'Export failed'
-      if (e?.response?.data?.error) {
-        const errorData = e.response.data.error
-        if (typeof errorData === 'string') {
-          errorMsg = errorData
-        } else if (errorData?.message) {
-          errorMsg = errorData.message
-        } else if (errorData?.details) {
-          errorMsg = errorData.details
-        } else if (typeof errorData === 'object') {
-          errorMsg = JSON.stringify(errorData)
-        }
-      } else if (e?.message) {
-        errorMsg = e.message
-      }
-
-      toast.error(`Failed to publish to Confluence: ${errorMsg}`)
-    }
-  }
-
-  const handlePublishToJira = async () => {
-    try {
-      const loadingToast = toast.loading("Creating Jira issue...")
-      const resp = await apiClient.post(`/jira-linkage/create-issue`, {
-        documentId,
-        issueTitle: adpaDocument?.name || adpaDocument?.title || 'Document',
-        issueDescription: `Document: ${adpaDocument?.name || adpaDocument?.title}\n\nProject: ${projectId}\nDocument ID: ${documentId}`,
-        confluenceUrl: (document as any)?.confluence_page_url || undefined
-      })
-
-      toast.dismiss(loadingToast)
-
-      if (resp.issueKey && resp.issueUrl) {
-        toast.success(resp.created ? 'Jira issue created successfully' : 'Document linked to existing Jira issue')
-        setJiraLinkage({
-          issueKey: resp.issueKey,
-          issueUrl: resp.issueUrl,
-          created: resp.created || false
-        })
-        // Refresh document to get updated linkage
-        await fetchDocument()
-      } else {
-        toast.error('Failed to create Jira issue: No issue key returned')
-      }
-    } catch (e: any) {
-      // Extract error message safely
-      let errorMsg = 'Failed to create Jira issue'
-      if (e?.response?.data?.error) {
-        const errorData = e.response.data.error
-        if (typeof errorData === 'string') {
-          errorMsg = errorData
-        } else if (errorData?.message) {
-          errorMsg = errorData.message
-        } else if (errorData?.details) {
-          errorMsg = errorData.details
-        } else if (typeof errorData === 'object') {
-          errorMsg = JSON.stringify(errorData)
-        }
-      } else if (e?.response?.data?.details) {
-        errorMsg = typeof e.response.data.details === 'string'
-          ? e.response.data.details
-          : JSON.stringify(e.response.data.details)
-      } else if (e?.message) {
-        errorMsg = e.message
-      }
-
-      toast.error(`Failed to publish to Jira: ${errorMsg}`)
-    }
-  }
-
-  const exportToPDF = async () => {
-    if (!document) return
-
-    try {
-      // Track export start
-      trackDocumentExport('pdf', false)
-      setIsExportingPdf(true)
-      const startTime = Date.now()
-
-      const loadingToast = toast.loading("Generating PDF...")
-      const blob = await apiClient.exportDocumentPdf(documentId)
-
-      // Create download link
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `${document.title || document.name || 'document'}.pdf`
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      window.URL.revokeObjectURL(url)
-
-      const duration = Date.now() - startTime
-
-      toast.dismiss(loadingToast)
-      toast.success("Document exported to PDF")
-
-      // Track successful export
-      trackDocumentExport('pdf', true)
-      trackPerformance('pdf_export_time', duration, 'ms')
-      trackFeatureUsage('document_export', 'pdf', {
-        document_id: documentId,
-        export_duration_ms: duration.toString()
-      })
-
-    } catch (error: any) {
-      console.error("PDF export error:", error)
-
-      // Track failed export
-      trackDocumentExport('pdf', false)
-      trackFeatureUsage('document_export', 'pdf_failed', {
-        document_id: documentId,
-        error_type: error?.response?.status?.toString() || 'unknown'
-      })
-
-      // Extract error message safely
-      let errorMessage = "Failed to export PDF"
-      if (error?.response?.data?.error) {
-        const errorData = error.response.data.error
-        if (typeof errorData === 'string') {
-          errorMessage = errorData
-        } else if (errorData?.message) {
-          errorMessage = errorData.message
-        } else if (errorData?.details) {
-          errorMessage = errorData.details
-        } else if (typeof errorData === 'object') {
-          errorMessage = JSON.stringify(errorData)
-        }
-      } else if (error?.message) {
-        errorMessage = error.message
-      }
-
-      toast.error(`Failed to export PDF: ${errorMessage}`)
-    } finally {
-      setIsExportingPdf(false)
-    }
-  }
-
-  const exportToWord = async () => {
-    if (!document) return
-
-    try {
-      setIsExportingWord(true)
-      const loadingToast = toast.loading("Generating Word document...")
-      const blob = await apiClient.exportDocumentDocx(documentId)
-
-      // Create download link
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `${document.title || document.name || 'document'}.docx`
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      window.URL.revokeObjectURL(url)
-
-      toast.dismiss(loadingToast)
-      toast.success("Document exported to Word")
-    } catch (error: any) {
-      console.error("Word export error:", error)
-
-      // Extract error message safely
-      let errorMessage = "Failed to export Word document"
-      if (error?.response?.data?.error) {
-        const errorData = error.response.data.error
-        if (typeof errorData === 'string') {
-          errorMessage = errorData
-        } else if (errorData?.message) {
-          errorMessage = errorData.message
-        } else if (errorData?.details) {
-          errorMessage = errorData.details
-        } else if (typeof errorData === 'object') {
-          errorMessage = JSON.stringify(errorData)
-        }
-      } else if (error?.message) {
-        errorMessage = error.message
-      }
-
-      toast.error(`Failed to export Word document: ${errorMessage}`)
-    } finally {
-      setIsExportingWord(false)
-    }
-  }
-
-  const exportToMarkdown = () => {
-    if (!document) return
-
-    // Extract markdown content from document
-    let markdownContent = ""
-    if (typeof document.content === 'string') {
-      markdownContent = document.content
-    } else if (document.content && typeof document.content === 'object') {
-      markdownContent = document.content.markdown || document.content.content || document.content.text || JSON.stringify(document.content)
     }
 
-    const blob = new Blob([markdownContent], { type: "text/markdown" })
-    saveAs(blob, `${document.title || document.name || 'document'}.md`)
-    toast.success("Document exported to Markdown")
-  }
+    const handleRegenerationCompleted = (data: any) => {
+      const key = `regeneration-completed-${data.versionId}`
+      if (!recentNotifications.has(key)) {
+        recentNotifications.add(key)
+        toast.success(`Document regeneration completed (v${data.versionNumber})`)
+        setTimeout(() => recentNotifications.delete(key), 5000)
+      }
+      fetchDocument()
+    }
 
-  const printDocument = () => {
-    if (!document) return
+    on("document:regeneration:conflict_detected", handleConflictDetected)
+    on("document:conflict_resolved", handleConflictResolved)
+    on("document:regeneration:completed", handleRegenerationCompleted)
 
-    // Open print dialog with document content
-    const printWindow = window.open('', '_blank')
-    if (!printWindow) {
-      toast.error("Please allow popups to print")
+    return () => {
+      off("document:regeneration:conflict_detected", handleConflictDetected)
+      off("document:conflict_resolved", handleConflictResolved)
+      off("document:regeneration:completed", handleRegenerationCompleted)
+      leaveRoom(documentRoom)
+      leaveRoom(projectRoom)
+    }
+  }, [documentId, projectId, on, off, joinRoom, leaveRoom])
+
+  // Submit feedback
+  const handleSubmitFeedback = async () => {
+    if (!feedbackForm.comment.trim()) {
+      toast.error("Please enter a comment")
       return
     }
 
-    // Extract markdown content
-    let markdownContent = ""
-    if (typeof document.content === 'string') {
-      markdownContent = document.content
-    } else if (document.content && typeof document.content === 'object') {
-      markdownContent = document.content.markdown || document.content.content || document.content.text || JSON.stringify(document.content)
-    }
-
-    // Convert markdown to HTML for printing
-    // Use a simple markdown-to-HTML conversion for printing
-    const htmlContent = markdownContent
-      .replace(/^# (.*$)/gim, '<h1>$1</h1>')
-      .replace(/^## (.*$)/gim, '<h2>$1</h2>')
-      .replace(/^### (.*$)/gim, '<h3>$1</h3>')
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.*?)\*/g, '<em>$1</em>')
-      .replace(/`(.*?)`/g, '<code>$1</code>')
-      .replace(/\n/g, '<br>')
-
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>${document.title || document.name || 'Document'}</title>
-        <style>
-          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 20px; line-height: 1.6; }
-          h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
-          h2 { color: #34495e; border-bottom: 1px solid #bdc3c7; padding-bottom: 8px; margin-top: 25px; }
-          h3 { color: #34495e; margin-top: 20px; }
-          table { border-collapse: collapse; width: 100%; margin: 20px 0; }
-          th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
-          th { background-color: #3498db; color: white; font-weight: bold; }
-          code { background-color: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-family: monospace; }
-          @media print { body { margin: 0; } }
-        </style>
-      </head>
-      <body>
-        <h1>${document.title || document.name || 'Document'}</h1>
-        ${htmlContent}
-      </body>
-      </html>
-    `)
-    printWindow.document.close()
-    printWindow.focus()
-
-    // Wait for content to load, then print
-    setTimeout(() => {
-      printWindow.print()
-      // Close window after printing (optional)
-      // printWindow.close()
-    }, 250)
-  }
-
-  const copyToClipboard = () => {
-    if (!document) return
-
-    navigator.clipboard.writeText(document.content)
-    toast.success("Document content copied to clipboard")
-  }
-
-  const shareDocument = () => {
-    if (!document) return
-
-    // Track document sharing analytics
-    trackDocumentShare(document.id, 'native_share', 1)
-    trackCollaboration('share', document.id, 1)
-
-    if (navigator.share) {
-      navigator.share({
-        title: document.title,
-        text: document.content.substring(0, 200) + "...",
-        url: window.location.href,
+    try {
+      const response = await apiClient.submitDocumentFeedback(documentId, {
+        comment: feedbackForm.comment.trim(),
+        rating: feedbackForm.rating,
+        category: feedbackForm.category,
       })
-    } else {
-      // Fallback to clipboard copy - track as alternative sharing method
-      trackDocumentShare(document.id, 'clipboard_copy', 1)
-      copyToClipboard()
+
+      if (response.success) {
+        toast.success("Feedback submitted successfully!")
+        setFeedbackDialogOpen(false)
+        setFeedbackForm({ comment: "", rating: 5, category: "general" })
+        fetchDocument()
+      }
+    } catch (error) {
+      console.error("Failed to submit feedback:", error)
+      toast.error("Failed to submit feedback")
+    }
+  }
+
+  const addComment = async () => {
+    if (!newComment.trim() || !documentData) return
+
+    try {
+      const response = await apiClient.post(`/projects/${projectId}/documents/${documentId}/comments`, {
+        content: newComment,
+        author_id: user?.id
+      })
+
+      const newCommentObj = (response as any).data || (response as any).comment
+
+      setDocumentData({
+        ...documentData,
+        comments: [...(documentData.comments || []), newCommentObj]
+      })
+      setNewComment("")
+      toast.success("Comment added successfully")
+    } catch (error) {
+      console.error("Failed to add comment:", error)
+      toast.error("Failed to add comment")
     }
   }
 
   const saveDocument = async (isAutosave = false) => {
-    if (!document) return
-
-    // Don't autosave if content hasn't changed from valid document content
-    // (This is a simplified check, rely on debounce mostly)
-
+    if (!documentData) return
     if (isAutosave) setIsSaving(true)
 
-    // Track document editing collaboration
-    trackCollaboration('edit', document.id, 1)
+    trackCollaboration('edit', documentData.id, 1)
 
     try {
-      // Save to the API
-      const response = await apiClient.put(`/projects/${projectId}/documents/${documentId}`, {
+      await apiClient.put(`/projects/${projectId}/documents/${documentId}`, {
         content: editedContent,
-        title: document.title,
-        tags: document.tags || []
+        title: documentData.title || documentData.name,
+        tags: documentData.tags || []
       })
 
       if (!isAutosave) {
         toast.success("Document saved successfully!")
-
-        // 🔄 Reload document data to get new version number and updated metadata
-        // Only do full reload on manual save to avoid jitter
         await fetchDocument()
       } else {
         setLastSaved(new Date())
-      }
-
-      // Re-extract TOC from new content
-      if (editedContent) {
-        extractTableOfContents(editedContent)
       }
     } catch (error) {
       console.error("Failed to save document:", error)
@@ -1291,243 +463,111 @@ The ADPA system represents a significant advancement in document processing auto
     saveDocument(true)
   }, 2000)
 
+  const copyToClipboard = () => {
+    if (!documentData) return
+    navigator.clipboard.writeText(documentData.content)
+    toast.success("Copied to clipboard")
+  }
 
-
-  // Handle drift actions
-  const handleAcceptDrift = async (driftId: string) => {
-    try {
-      // Update drift status to 'accepted'
-      await apiClient.request(`/projects/${projectId}/drift-detections/${driftId}/accept`, {
-        method: 'PUT',
-        body: JSON.stringify({
-          resolution_notes: 'Drift accepted by user'
-        })
+  const shareDocument = () => {
+    if (!documentData) return
+    trackDocumentShare(documentData.id, 'native_share', 1)
+    if (navigator.share) {
+      navigator.share({
+        title: documentData.title || documentData.name,
+        text: (documentData.content || "").substring(0, 200) + "...",
+        url: window.location.href,
       })
-
-      toast.success('Drift accepted successfully')
-
-      // Refresh drifts list
-      const driftResponse = await apiClient.request<{ drifts: any[] }>(
-        `/projects/${projectId}/drift-detections?limit=100`,
-        { suppressNotFoundError: true } as Record<string, unknown>
-      ).catch(() => ({ drifts: [] }))
-
-      const documentDrifts = (driftResponse.drifts || []).filter((d: any) => d.source_document_id === documentId && d.status !== 'resolved' && d.status !== 'false_positive')
-      setDrifts(documentDrifts)
-    } catch (error: any) {
-      console.error('Failed to accept drift:', error)
-
-      // Extract error message safely
-      let errorMessage = 'Unknown error'
-      if (error?.error) {
-        const errorData = error.error
-        if (typeof errorData === 'string') {
-          errorMessage = errorData
-        } else if (errorData?.message) {
-          errorMessage = errorData.message
-        } else if (errorData?.details) {
-          errorMessage = errorData.details
-        } else if (typeof errorData === 'object') {
-          errorMessage = JSON.stringify(errorData)
-        }
-      } else if (error?.response?.data?.error) {
-        const errorData = error.response.data.error
-        if (typeof errorData === 'string') {
-          errorMessage = errorData
-        } else if (errorData?.message) {
-          errorMessage = errorData.message
-        } else if (errorData?.details) {
-          errorMessage = errorData.details
-        } else if (typeof errorData === 'object') {
-          errorMessage = JSON.stringify(errorData)
-        }
-      } else if (error?.message) {
-        errorMessage = error.message
-      }
-
-      toast.error(`Failed to accept drift: ${errorMessage}`)
+    } else {
+      copyToClipboard()
     }
   }
 
-
-
-  const handleRemoveDrift = async (driftId: string) => {
+  const exportToPDF = async () => {
+    if (!documentData) return
     try {
-      // Update drift status to 'dismissed'
-      await apiClient.request(`/projects/${projectId}/drift-detections/${driftId}/remove`, {
-        method: 'PUT',
-        body: JSON.stringify({
-          resolution_notes: 'Drift removed by user'
-        })
-      })
-
-      toast.success('Drift removed successfully')
-
-      // Refresh drifts list
-      const driftResponse = await apiClient.request<{ drifts: any[] }>(
-        `/projects/${projectId}/drift-detections?limit=100`,
-        { suppressNotFoundError: true } as Record<string, unknown>
-      ).catch(() => ({ drifts: [] }))
-
-      const documentDrifts = (driftResponse.drifts || []).filter((d: any) => d.source_document_id === documentId && d.status !== 'resolved' && d.status !== 'false_positive')
-      setDrifts(documentDrifts)
-    } catch (error: any) {
-      console.error('Failed to remove drift:', error)
-
-      // Extract error message safely
-      let errorMessage = 'Unknown error'
-      if (error?.error) {
-        const errorData = error.error
-        if (typeof errorData === 'string') {
-          errorMessage = errorData
-        } else if (errorData?.message) {
-          errorMessage = errorData.message
-        } else if (errorData?.details) {
-          errorMessage = errorData.details
-        } else if (typeof errorData === 'object') {
-          errorMessage = JSON.stringify(errorData)
-        }
-      } else if (error?.response?.data?.error) {
-        const errorData = error.response.data.error
-        if (typeof errorData === 'string') {
-          errorMessage = errorData
-        } else if (errorData?.message) {
-          errorMessage = errorData.message
-        } else if (errorData?.details) {
-          errorMessage = errorData.details
-        } else if (typeof errorData === 'object') {
-          errorMessage = JSON.stringify(errorData)
-        }
-      } else if (error?.message) {
-        errorMessage = error.message
-      }
-
-      toast.error(`Failed to remove drift: ${errorMessage}`)
-    }
-  }
-
-  // Handle document regeneration
-  const handleRegenerate = async (params: {
-    templateId?: string
-    provider: string
-    model?: string
-    versionType: 'patch' | 'minor' | 'major'
-    temperature: number
-    max_tokens?: number
-  }) => {
-    if (!documentId) return
-
-    try {
-      await regenerate({
-        documentId,
-        ...params
-      })
+      setIsExportingPdf(true)
+      const blob = await apiClient.exportDocumentPdf(documentId)
+      const url = window.URL.createObjectURL(blob)
+      const link = window.document.createElement('a')
+      link.href = url
+      link.download = `${documentData.title || documentData.name || 'document'}.pdf`
+      window.document.body.appendChild(link)
+      link.click()
+      window.document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+      toast.success("Exported to PDF")
     } catch (error) {
-      console.error('Regeneration failed:', error)
-    }
-  }
-
-  // Refresh document when regeneration completes
-  useEffect(() => {
-    const reloadAfterRegeneration = async () => {
-      if (result && documentId && projectId) {
-        try {
-          // Reload document and versions
-          const [documentResponse, versionsResponse] = await Promise.all([
-            apiClient.get(`/projects/${projectId}/documents/${documentId}`),
-            apiClient.get(`/projects/${projectId}/documents/${documentId}/versions`)
-          ])
-
-          const documentData = documentResponse
-          const versionsData = versionsResponse || []
-
-          // Convert content to string
-          let contentString = ''
-          if (typeof documentData.content === 'string') {
-            contentString = documentData.content
-          } else if (documentData.content && typeof documentData.content === 'object') {
-            if (documentData.content.text) {
-              contentString = documentData.content.text
-            } else if (documentData.content.markdown) {
-              contentString = documentData.content.markdown
-            } else {
-              contentString = JSON.stringify(documentData.content, null, 2)
-            }
-          }
-
-          const sourceDocuments = documentData.metadata?.source_documents ||
-            documentData.generation_metadata?.source_documents ||
-            []
-
-          setDocument({
-            ...documentData,
-            content: contentString,
-            source_documents: sourceDocuments
-          })
-          setVersions(versionsData)
-          setEditedContent(contentString)
-
-          if (contentString) {
-            extractTableOfContents(contentString)
-          }
-
-          toast.success('Document reloaded with new version!')
-        } catch (error) {
-          console.error('Failed to reload after regeneration:', error)
-        }
-      }
-    }
-
-    reloadAfterRegeneration()
-  }, [result, documentId, projectId])
-
-  const addComment = async () => {
-    if (!newComment.trim() || !document) return
-
-    try {
-      // Save comment to the API
-      const response = await apiClient.post(`/projects/${projectId}/documents/${documentId}/comments`, {
-        content: newComment,
-        author_id: user?.id
-      })
-
-      const newCommentObj = response.data
-
-      setDocument({
-        ...document,
-        comments: [...(document.comments || []), newCommentObj]
-      })
-      setNewComment("")
-      toast.success("Comment added successfully")
-    } catch (error) {
-      console.error("Failed to add comment:", error)
-      toast.error("Failed to add comment")
-    }
-  }
-
-  const fetchSummaries = async () => {
-    setLoadingSummaries(true)
-    setShowSummaries(true)
-
-    try {
-      const response = await apiClient.request(
-        `/documents/${documentId}/summaries`
-      )
-
-      if (response.summaries) {
-        setSummaries(response.summaries)
-        if (response.summaries.length === 0) {
-          toast.info("No cached summaries yet. They will be created when you run process-flow jobs.")
-        } else {
-          toast.success(`Found ${response.summaries.length} cached summaries!`)
-        }
-      }
-    } catch (error) {
-      console.error("Failed to fetch summaries:", error)
-      toast.error("Failed to load summaries")
-      setSummaries([])
+      toast.error("Failed to export PDF")
     } finally {
-      setLoadingSummaries(false)
+      setIsExportingPdf(false)
+    }
+  }
+
+  const exportToWord = async () => {
+    if (!documentData) return
+    try {
+      setIsExportingWord(true)
+      const blob = await apiClient.exportDocumentDocx(documentId)
+      const url = window.URL.createObjectURL(blob)
+      const link = window.document.createElement('a')
+      link.href = url
+      link.download = `${documentData.title || documentData.name || 'document'}.docx`
+      window.document.body.appendChild(link)
+      link.click()
+      window.document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+      toast.success("Exported to Word")
+    } catch (error) {
+      toast.error("Failed to export Word")
+    } finally {
+      setIsExportingWord(false)
+    }
+  }
+
+  const exportToMarkdown = () => {
+    if (!documentData) return
+    const blob = new Blob([documentData.content], { type: "text/markdown" })
+    saveAs(blob, `${documentData.title || documentData.name || 'document'}.md`)
+    toast.success("Exported to Markdown")
+  }
+
+  const printDocument = () => {
+    if (!documentData) return
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) return
+    printWindow.document.write(`<html><head><title>${documentData.title || documentData.name}</title></head><body>${documentData.content}</body></html>`)
+    printWindow.document.close()
+    printWindow.print()
+  }
+
+  const handlePublishToConfluence = async () => {
+    try {
+      const resp: any = await apiClient.post(`/integrations/confluence/latest/export`, { documentId })
+      const url = resp?.confluenceUrl || resp?.data?.confluenceUrl
+      if (url) {
+        setDocumentData(prev => prev ? ({ ...prev, confluence_page_url: url }) : null)
+        toast.success('Published to Confluence')
+      }
+    } catch (e) {
+      toast.error('Failed to publish to Confluence')
+    }
+  }
+
+  const handlePublishToJira = async () => {
+    try {
+      const resp: any = await apiClient.post(`/jira-linkage/create-issue`, {
+        documentId,
+        issueTitle: documentData?.title || documentData?.name || 'Document',
+        issueDescription: `Document: ${documentData?.title || documentData?.name}`,
+        confluenceUrl: documentData?.confluence_page_url
+      })
+      if (resp.issueKey) {
+        setJiraLinkage({ issueKey: resp.issueKey, issueUrl: resp.issueUrl, created: resp.created })
+        toast.success('Published to Jira')
+      }
+    } catch (e) {
+      toast.error('Failed to publish to Jira')
     }
   }
 
@@ -1535,74 +575,28 @@ The ADPA system represents a significant advancement in document processing auto
     return (
       <div className="min-h-screen bg-background flex">
         <Sidebar />
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <Header title={adpaDocument?.name || adpaDocument?.title || "Document View"} />
-          <main className="flex-1 overflow-y-auto p-6">
-            <div className="max-w-7xl mx-auto">
-              <div className="flex items-center justify-center h-64">
-                <div className="text-center">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-                  <p className="text-muted-foreground">Loading document...</p>
-                </div>
-              </div>
-            </div>
+        <div className="flex-1 flex flex-col">
+          <Header title="Loading..." />
+          <main className="flex-1 flex items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </main>
         </div>
       </div>
     )
   }
 
-  if (!document) {
-    if (isLoading) {
-      return (
-        <div className="min-h-screen bg-background flex">
-          <Sidebar />
-          <div className="flex-1 flex flex-col overflow-hidden">
-            <Header title={adpaDocument?.name || adpaDocument?.title || "Document View"} />
-            <main className="flex-1 overflow-y-auto p-6">
-              <div className="max-w-7xl mx-auto">
-                <div className="flex items-center justify-center h-64">
-                  <div className="text-center">
-                    <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
-                    <p className="text-muted-foreground">Loading document...</p>
-                  </div>
-                </div>
-              </div>
-            </main>
-          </div>
-        </div>
-      )
-    }
+  if (!documentData) {
     return (
       <div className="min-h-screen bg-background flex">
         <Sidebar />
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <Header title={adpaDocument?.name || adpaDocument?.title || "Document View"} />
-          <main className="flex-1 overflow-y-auto p-6">
-            <div className="max-w-7xl mx-auto">
-              <div className="flex items-center justify-center h-64">
-                <div className="text-center max-w-md">
-                  <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
-                  <h2 className="text-xl font-semibold mb-2">Failed to Load Document</h2>
-                  <p className="text-muted-foreground mb-4">
-                    Unable to load document data. Please check your connection and try again.
-                  </p>
-                  <div className="flex gap-2 justify-center">
-                    <Button onClick={() => fetchDocument()} variant="default">
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                      Retry
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => router.back()}
-                    >
-                      <ArrowLeft className="h-4 w-4 mr-2" />
-                      Go Back
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </div>
+        <div className="flex-1 flex flex-col">
+          <Header title="Document Not Found" />
+          <main className="flex-1 flex flex-col items-center justify-center">
+            <AlertCircle className="h-12 w-12 text-destructive mb-4" />
+            <h2 className="text-2xl font-bold">Document Not Found</h2>
+            <Button className="mt-4" onClick={() => router.push(`/projects/${projectId}/documents`)}>
+              Back to Documents
+            </Button>
           </main>
         </div>
       </div>
@@ -1610,1216 +604,202 @@ The ADPA system represents a significant advancement in document processing auto
   }
 
   return (
-    <div className="h-screen bg-background flex overflow-hidden" style={{ scrollBehavior: 'smooth' }}>
-      <div className="flex-shrink-0">
-        <Sidebar />
-      </div>
+    <div className="h-screen bg-background flex overflow-hidden">
+      <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="flex-shrink-0">
-          <Header title={adpaDocument?.name || adpaDocument?.title || "Document View"} />
-        </div>
+        <Header title={documentData.title || documentData.name || "Document View"} />
         <main className="flex-1 overflow-y-auto p-6">
           <PageTransition>
             <AnimatedLayout>
               <div className="max-w-7xl mx-auto">
-                {/* Header */}
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="mb-6"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-4">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => router.push(`/projects/${projectId}/documents`)}
-                      >
-                        <ArrowLeft className="h-4 w-4 mr-2" />
-                        Back to Documents
-                      </Button>
-                      <div>
-                        <div className="flex items-center space-x-2 mb-1">
-                          <Folder className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-sm text-muted-foreground">{document.project_name}</span>
-                        </div>
-                        <h1 className="text-3xl font-bold">{document.title}</h1>
-                        <p className="text-muted-foreground">
-                          Project Document Viewer
-                        </p>
-                      </div>
+                {/* Header Section */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+                  <div>
+                    <div className="flex items-center space-x-2 text-sm text-muted-foreground mb-1">
+                      <Folder className="h-4 w-4" />
+                      <span>{documentData.project_name || 'Project'}</span>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <Badge variant="secondary">{document.status}</Badge>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setShowVersionsDialog(true)}
-                      >
-                        <History className="h-4 w-4 mr-2" />
-                        {(document as any).loaded_version
-                          ? `v${(document as any).loaded_version} (${versions.length} versions)`
-                          : `Versions (${versions.length})`
-                        }
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setShowComments(!showComments)}
-                      >
-                        <MessageSquare className="h-4 w-4 mr-2" />
-                        Comments ({document.comments?.length || 0})
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={fetchSummaries}
-                      >
-                        <BarChart3 className="h-4 w-4 mr-2" />
-                        View Summaries
-                      </Button>
-                    </div>
+                    <h1 className="text-3xl font-bold">{documentData.title || documentData.name}</h1>
                   </div>
-                </motion.div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="secondary">{documentData.status}</Badge>
+                    <Button variant="outline" size="sm" onClick={() => setShowVersionsDialog(true)}>
+                      <History className="h-4 w-4 mr-2" />
+                      v{documentData.loaded_version || documentData.version}
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setShowComments(!showComments)}>
+                      <MessageSquare className="h-4 w-4 mr-2" />
+                      {documentData.comments?.length || 0}
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setShowRegenerateModal(true)}>
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      Regenerate
+                    </Button>
+                    <Button variant="outline" size="sm" asChild>
+                      <Link href={`/projects/${projectId}/documents/${documentId}`}>
+                        <Settings className="h-4 w-4 mr-2" />
+                        Metadata
+                      </Link>
+                    </Button>
+                  </div>
+                </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-                  {/* Main Content */}
-                  <div className="lg:col-span-3 space-y-4">
-                    {/* Drift Alerts Banner */}
-                    {drifts.length > 0 && showDriftHighlights && (
-                      <Card className="border-2 border-orange-300 bg-gradient-to-br from-orange-50 to-amber-50">
-                        <CardContent className="pt-6">
-                          <div className="flex items-start gap-4">
-                            <AlertTriangle className="h-6 w-6 text-orange-600 mt-0.5 flex-shrink-0" />
-                            <div className="flex-1">
-                              <div className="flex items-center justify-between mb-2">
-                                <h3 className="text-lg font-bold text-orange-900">
-                                  ⚠️ {drifts.length} Drift{drifts.length > 1 ? 's' : ''} Detected in This Document
-                                </h3>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => setShowDriftHighlights(false)}
-                                  className="text-orange-700 hover:text-orange-900"
-                                >
-                                  Hide
-                                </Button>
-                              </div>
-                              <p className="text-sm text-orange-800 mb-3">
-                                This document contains content that deviates from the approved baseline.
-                              </p>
-                              <div className="space-y-2">
-                                {drifts.slice(0, 3).map((drift: any) => (
-                                  <div key={drift.id} className="p-3 bg-white border border-orange-200 rounded-lg">
-                                    <div className="flex items-center gap-2 mb-1">
-                                      <Badge variant="outline" className="text-xs">
-                                        {drift.detection_type.replace(/_/g, ' ').toUpperCase()}
-                                      </Badge>
-                                      <Badge variant={drift.drift_severity === 'high' ? 'destructive' : 'secondary'}>
-                                        {drift.drift_severity}
-                                      </Badge>
-                                    </div>
-                                    <p className="text-sm font-medium text-orange-900">{drift.drift_description}</p>
-                                  </div>
-                                ))}
-                                {drifts.length > 3 && (
-                                  <p className="text-xs text-orange-700 text-center py-1">
-                                    + {drifts.length - 3} more drifts
-                                  </p>
-                                )}
-                              </div>
-                              <Button
-                                size="sm"
-                                onClick={() => router.push(`/projects/${projectId}/drift`)}
-                                className="mt-3 bg-orange-600 hover:bg-orange-700 text-white"
-                              >
-                                <ExternalLink className="h-4 w-4 mr-2" />
-                                View All in Drift Management Center
-                              </Button>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
-
-                    {drifts.length > 0 && !showDriftHighlights && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setShowDriftHighlights(true)}
-                        className="border-orange-300 text-orange-700"
-                      >
-                        <AlertTriangle className="h-4 w-4 mr-2" />
-                        Show {drifts.length} Drift Alert{drifts.length > 1 ? 's' : ''}
-                      </Button>
-                    )}
-
+                  {/* Editor Column */}
+                  <div className="lg:col-span-3">
                     <AnimatedCard>
-                      <CardHeader>
-                        <div className="flex items-center justify-between">
-                          <CardTitle className="flex items-center space-x-2">
-                            <FileText className="h-5 w-5" />
-                            <span>Document Content</span>
-                            {drifts.length > 0 && (
-                              <Badge variant="secondary" className="ml-2">
-                                <AlertTriangle className="h-3 w-3 mr-1" />
-                                {drifts.length} Drift{drifts.length > 1 ? 's' : ''}
-                              </Badge>
-                            )}
-                          </CardTitle>
-                          <div className="flex items-center space-x-2">
-                            {isSaving && <span className="text-xs text-muted-foreground animate-pulse">Saving...</span>}
-                            {!isSaving && lastSaved && <span className="text-xs text-muted-foreground mr-2">Saved {lastSaved.toLocaleTimeString()}</span>}
-
-                            <Button variant="outline" size="sm" onClick={copyToClipboard}>
-                              <Copy className="h-4 w-4 mr-2" />
-                              Copy
-                            </Button>
-                            <Button variant="outline" size="sm" onClick={shareDocument}>
-                              <Share className="h-4 w-4 mr-2" />
-                              Share
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setShowRegenerateModal(true)}
-                              disabled={isRegenerating}
-                            >
-                              <Sparkles className="h-4 w-4 mr-2" />
-                              Create new Version
-                            </Button>
-                            <Link href={`/projects/${projectId}/documents/${documentId}`}>
-                              <Button variant="default" size="sm">
-                                <ExternalLink className="h-4 w-4 mr-2" />
-                                View Metadata
-                              </Button>
-                            </Link>
-                            <Button size="sm" onClick={() => saveDocument(false)}>
-                              Save Now
-                            </Button>
-                          </div>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-lg font-medium">Content</CardTitle>
+                        <div className="flex items-center gap-2">
+                          {isSaving && <span className="text-xs text-muted-foreground animate-pulse">Saving...</span>}
+                          <Button variant="ghost" size="sm" onClick={copyToClipboard}><Copy className="h-4 w-4" /></Button>
+                          <Button variant="ghost" size="sm" onClick={shareDocument}><Share className="h-4 w-4" /></Button>
                         </div>
                       </CardHeader>
-                      <CardContent className="p-8">
+                      <CardContent>
                         <NovelEditor
-                          initialValue={document.content}
+                          initialValue={documentData.content}
                           onChange={(json, html, markdown) => {
                             setEditedContent(markdown)
                             debouncedAutosave()
                           }}
                           storageKey={`novel-doc-${documentId}`}
-                          onFeedback={() => setFeedbackDialogOpen(true)}
                         />
                       </CardContent>
                     </AnimatedCard>
                   </div>
 
-                  {/* Sidebar - Sticky */}
-                  <div className="space-y-6 sticky top-6 self-start">
-                    {/* Table of Contents */}
-                    {!isSaving && tableOfContents.length > 0 && (
-                      <AnimatedCard>
-                        <CardHeader>
-                          <CardTitle className="flex items-center space-x-2">
-                            <FileText className="h-5 w-5" />
-                            <span>Table of Contents</span>
-                          </CardTitle>
-                          <CardDescription>
-                            Click to jump to section
-                          </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                          <nav className="space-y-1">
-                            {tableOfContents.map((heading) => (
-                              <button
-                                key={heading.id}
-                                onClick={() => scrollToSection(heading.id)}
-                                className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-all ${activeSection === heading.id
-                                  ? 'bg-primary text-primary-foreground font-medium'
-                                  : heading.isDrift
-                                    ? (heading.level === 4
-                                      ? 'hover:bg-red-50 dark:hover:bg-red-900/20 text-red-700 dark:text-red-300 hover:text-red-900 dark:hover:text-red-100 border-l-4 border-red-500'
-                                      : 'hover:bg-yellow-50 dark:hover:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300 hover:text-yellow-900 dark:hover:text-yellow-100 border-l-4 border-yellow-400')
-                                    : 'hover:bg-muted text-muted-foreground hover:text-foreground'
-                                  } ${heading.isDrift
-                                    ? 'font-semibold ml-6'
-                                    : heading.level === 1 ? 'font-semibold' :
-                                      heading.level === 2 ? 'ml-3' :
-                                        heading.level === 3 ? 'ml-6 text-xs' :
-                                          heading.level === 4 ? 'ml-9 text-xs' :
-                                            'ml-12 text-xs'
-                                  }`}
-                              >
-                                {heading.isDrift && (
-                                  <AlertTriangle className="inline-block h-3 w-3 mr-1 -mt-0.5" />
-                                )}
-                                {heading.text}
-                              </button>
-                            ))}
-                          </nav>
-                        </CardContent>
-                      </AnimatedCard>
-                    )}
-
-                    {/* Document Information */}
+                  {/* Sidebar Column */}
+                  <div className="space-y-6">
+                    {/* Metadata Card */}
                     <AnimatedCard>
-                      <CardHeader>
-                        <CardTitle className="flex items-center space-x-2">
-                          <FileText className="h-5 w-5" />
-                          <span>Document Information</span>
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        <div className="flex items-center space-x-2">
-                          <User className="h-4 w-4 text-muted-foreground" />
-                          <div className="flex-1">
-                            <p className="text-sm font-medium">Author</p>
-                            <p className="text-sm text-muted-foreground">{document.author || 'Unknown'}</p>
-                          </div>
+                      <CardHeader><CardTitle className="text-sm font-medium">Info</CardTitle></CardHeader>
+                      <CardContent className="space-y-4 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Author:</span>
+                          <span className="font-medium">{documentData.author || 'AI Agent'}</span>
                         </div>
-                        <div className="flex items-center space-x-2">
-                          <Calendar className="h-4 w-4 text-muted-foreground" />
-                          <div className="flex-1">
-                            <p className="text-sm font-medium">Created</p>
-                            <p className="text-sm text-muted-foreground">
-                              {new Date(document.created_at).toLocaleDateString()} at {new Date(document.created_at).toLocaleTimeString()}
-                            </p>
-                          </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Created:</span>
+                          <span>{new Date(documentData.created_at).toLocaleDateString()}</span>
                         </div>
-                        <div className="flex items-center space-x-2">
-                          <Clock className="h-4 w-4 text-muted-foreground" />
-                          <div className="flex-1">
-                            <p className="text-sm font-medium">Last Updated</p>
-                            <p className="text-sm text-muted-foreground">
-                              {new Date(document.updated_at).toLocaleDateString()} at {new Date(document.updated_at).toLocaleTimeString()}
-                            </p>
-                          </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Words:</span>
+                          <span>{documentData.word_count?.toLocaleString()}</span>
                         </div>
                         <Separator />
-                        <div className="space-y-2">
-                          <p className="text-sm font-medium">File Information</p>
-                          <div className="space-y-2 text-sm">
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Version:</span>
-                              <span className="font-medium font-mono">
-                                v{(document as any).loaded_version || (versions.length > 0 ? versions[versions.length - 1].version : ((document as any).version || '1.0'))}
-                              </span>
-                            </div>
-                            {((document as any).template_id || templateName) && (
-                              <div className="flex justify-between">
-                                <span className="text-muted-foreground">Template:</span>
-                                <span className="font-medium">{templateName || 'Loading...'}</span>
-                              </div>
-                            )}
-                            {(document as any).framework && (
-                              <div className="flex justify-between">
-                                <span className="text-muted-foreground">Framework:</span>
-                                <span className="font-medium">{(document as any).framework}</span>
-                              </div>
-                            )}
-                            {(document as any).status && (
-                              <div className="flex justify-between">
-                                <span className="text-muted-foreground">Status:</span>
-                                <Badge variant="outline" className="text-xs">
-                                  {(document as any).status}
-                                </Badge>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        <Separator />
-                        <div className="space-y-2">
-                          <p className="text-sm font-medium">Content Statistics</p>
-                          <div className="grid grid-cols-2 gap-2 text-sm">
-                            <div>
-                              <span className="text-muted-foreground">Words:</span>
-                              <span className="ml-2 font-medium">
-                                {(document.word_count ||
-                                  (document as any).generation_metadata?.contentMetrics?.words ||
-                                  0).toLocaleString()}
-                              </span>
-                            </div>
-                            <div>
-                              <span className="text-muted-foreground">Characters:</span>
-                              <span className="ml-2 font-medium">
-                                {(document.character_count ||
-                                  (document as any).generation_metadata?.contentMetrics?.characters ||
-                                  0).toLocaleString()}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                        {document.tags && document.tags.length > 0 && (
-                          <>
-                            <Separator />
-                            <div className="space-y-2">
-                              <p className="text-sm font-medium">Tags</p>
-                              <div className="flex flex-wrap gap-1">
-                                {document.tags.map((tag) => (
-                                  <Badge key={tag} variant="outline" className="text-xs">
-                                    <Tag className="h-3 w-3 mr-1" />
-                                    {tag}
-                                  </Badge>
-                                ))}
-                              </div>
-                            </div>
-                          </>
-                        )}
-                      </CardContent>
-                    </AnimatedCard>
-
-                    {/* AI Processing Metrics */}
-                    <AnimatedCard>
-                      <CardHeader>
-                        <CardTitle className="flex items-center space-x-2">
-                          <BarChart3 className="h-5 w-5" />
-                          <span>AI Processing Metrics</span>
-                        </CardTitle>
-                        <CardDescription>
-                          How this document was generated
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        <div className="space-y-2">
-                          <p className="text-sm font-medium">Provider & Model</p>
-                          <div className="text-sm space-y-1">
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Provider:</span>
-                              <span className="font-medium">
-                                {(document as any).generation_metadata?.aiProcessing?.provider ||
-                                  (document as any).metadata?.ai_usage?.provider_used ||
-                                  'N/A'}
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Model:</span>
-                              <span className="font-medium">
-                                {(document as any).generation_metadata?.aiProcessing?.model ||
-                                  (document as any).metadata?.ai_usage?.model_used ||
-                                  document.ai_model || 'N/A'}
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Temperature:</span>
-                              <span className="font-medium">
-                                {(document as any).generation_metadata?.aiProcessing?.temperature || 'N/A'}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                        <Separator />
-                        <div className="space-y-2">
-                          <p className="text-sm font-medium">Token Usage</p>
-                          <div className="text-sm space-y-1">
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Input Tokens:</span>
-                              <span className="font-medium">
-                                {(document as any).generation_metadata?.aiProcessing?.tokens?.input ||
-                                  document.input_tokens || 'N/A'}
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Output Tokens:</span>
-                              <span className="font-medium">
-                                {(document as any).generation_metadata?.aiProcessing?.tokens?.output ||
-                                  document.output_tokens || 'N/A'}
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Total Tokens:</span>
-                              <span className="font-medium text-primary">
-                                {(document as any).generation_metadata?.aiProcessing?.tokens?.total ||
-                                  ((document.input_tokens || 0) + (document.output_tokens || 0)) || 'N/A'}
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Est. Cost:</span>
-                              <span className="font-medium text-green-600">
-                                {(document as any).generation_metadata?.aiProcessing?.tokens?.cost || 'N/A'}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                        <Separator />
-                        <div className="space-y-2">
-                          <p className="text-sm font-medium">Performance</p>
-                          <div className="text-sm space-y-1">
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Processing Time:</span>
-                              <span className="font-medium">
-                                {(document as any).generation_metadata?.aiProcessing?.processingTime ||
-                                  (document as any).generation_metadata?.generation?.durationFormatted ||
-                                  ((document as any).generation_metadata?.generation?.duration ?
-                                    `${((document as any).generation_metadata.generation.duration / 1000).toFixed(2)}s` :
-                                    'N/A')}
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Status:</span>
-                              <Badge variant="secondary" className="text-xs">
-                                {(document as any).generation_metadata?.generation?.status || 'unknown'}
-                              </Badge>
-                            </div>
-                          </div>
+                        <div className="flex flex-wrap gap-1">
+                          {(documentData.tags || []).map(t => <Badge key={t} variant="outline" className="text-[10px]">{t}</Badge>)}
                         </div>
                       </CardContent>
                     </AnimatedCard>
 
-                    {/* Quality Metrics */}
-                    {(document as any).generation_metadata?.qualityMetrics && (
+                    {/* AI Stats Card */}
+                    {documentData.generation_metadata && (
                       <AnimatedCard>
-                        <CardHeader>
-                          <CardTitle className="flex items-center space-x-2">
-                            <Award className="h-5 w-5" />
-                            <span>Quality Metrics</span>
-                          </CardTitle>
-                          <CardDescription>
-                            AI-analyzed document quality indicators
-                          </CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                          <div className="space-y-2">
-                            <p className="text-sm font-medium">Overall Quality</p>
-                            <div className="flex items-center justify-between">
-                              <span className="text-3xl font-bold text-primary">
-                                {(document as any).generation_metadata.qualityMetrics.overallQuality ||
-                                  (document as any).generation_metadata.qualityMetrics.overall || 0}%
-                              </span>
-                              <Badge
-                                variant="secondary"
-                                className="text-sm px-3 py-1"
-                              >
-                                {(() => {
-                                  const score = (document as any).generation_metadata.qualityMetrics.overallQuality ||
-                                    (document as any).generation_metadata.qualityMetrics.overall || 0
-                                  if (score >= 90) return 'A (Excellent)'
-                                  if (score >= 80) return 'B (Good)'
-                                  if (score >= 70) return 'C (Fair)'
-                                  if (score >= 60) return 'D (Poor)'
-                                  return 'F (Needs Improvement)'
-                                })()}
-                              </Badge>
-                            </div>
+                        <CardHeader><CardTitle className="text-sm font-medium">AI Insights</CardTitle></CardHeader>
+                        <CardContent className="space-y-2 text-xs">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Model:</span>
+                            <span>{documentData.ai_model || 'N/A'}</span>
                           </div>
-                          <Separator />
-                          <div className="space-y-2">
-                            <p className="text-sm font-medium">Detailed Scores</p>
-                            <div className="space-y-2">
-                              <div className="flex justify-between items-center">
-                                <span className="text-sm text-muted-foreground">Completeness</span>
-                                <div className="flex items-center space-x-2">
-                                  <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                                    <div
-                                      className="h-full bg-blue-500 transition-all"
-                                      style={{ width: `${(document as any).generation_metadata.qualityMetrics.completeness || 0}%` }}
-                                    />
-                                  </div>
-                                  <span className="text-sm font-medium w-12 text-right">
-                                    {(document as any).generation_metadata.qualityMetrics.completeness || 0}%
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="flex justify-between items-center">
-                                <span className="text-sm text-muted-foreground">Structure</span>
-                                <div className="flex items-center space-x-2">
-                                  <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                                    <div
-                                      className="h-full bg-green-500 transition-all"
-                                      style={{ width: `${(document as any).generation_metadata.qualityMetrics.structureScore || (document as any).generation_metadata.qualityMetrics.structure || 0}%` }}
-                                    />
-                                  </div>
-                                  <span className="text-sm font-medium w-12 text-right">
-                                    {(document as any).generation_metadata.qualityMetrics.structureScore || (document as any).generation_metadata.qualityMetrics.structure || 0}%
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="flex justify-between items-center">
-                                <span className="text-sm text-muted-foreground">Formatting & Style</span>
-                                <div className="flex items-center space-x-2">
-                                  <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                                    <div
-                                      className="h-full bg-purple-500 transition-all"
-                                      style={{ width: `${(document as any).generation_metadata.qualityMetrics.formattingScore || (document as any).generation_metadata.qualityMetrics.formatting || 0}%` }}
-                                    />
-                                  </div>
-                                  <span className="text-sm font-medium w-12 text-right">
-                                    {(document as any).generation_metadata.qualityMetrics.formattingScore || (document as any).generation_metadata.qualityMetrics.formatting || 0}%
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="flex justify-between items-center">
-                                <span className="text-sm text-muted-foreground">Content Depth</span>
-                                <div className="flex items-center space-x-2">
-                                  <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                                    <div
-                                      className="h-full bg-orange-500 transition-all"
-                                      style={{ width: `${(document as any).generation_metadata.qualityMetrics.contentDepth || (document as any).generation_metadata.qualityMetrics.depth || 0}%` }}
-                                    />
-                                  </div>
-                                  <span className="text-sm font-medium w-12 text-right">
-                                    {(document as any).generation_metadata.qualityMetrics.contentDepth || (document as any).generation_metadata.qualityMetrics.depth || 0}%
-                                  </span>
-                                </div>
-                              </div>
-
-                              {/* New Dimensions 5-9 */}
-                              {(document as any).generation_metadata.qualityMetrics.accuracy !== undefined && (
-                                <>
-                                  <div className="flex justify-between items-center">
-                                    <span className="text-sm text-muted-foreground">Accuracy</span>
-                                    <div className="flex items-center space-x-2">
-                                      <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                                        <div
-                                          className="h-full bg-indigo-500 transition-all"
-                                          style={{ width: `${(document as any).generation_metadata.qualityMetrics.accuracy}%` }}
-                                        />
-                                      </div>
-                                      <span className="text-sm font-medium w-12 text-right">
-                                        {(document as any).generation_metadata.qualityMetrics.accuracy}%
-                                      </span>
-                                    </div>
-                                  </div>
-
-                                  <div className="flex justify-between items-center">
-                                    <span className="text-sm text-muted-foreground">Consistency</span>
-                                    <div className="flex items-center space-x-2">
-                                      <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                                        <div
-                                          className="h-full bg-teal-500 transition-all"
-                                          style={{ width: `${(document as any).generation_metadata.qualityMetrics.consistency}%` }}
-                                        />
-                                      </div>
-                                      <span className="text-sm font-medium w-12 text-right">
-                                        {(document as any).generation_metadata.qualityMetrics.consistency}%
-                                      </span>
-                                    </div>
-                                  </div>
-
-                                  <div className="flex justify-between items-center">
-                                    <span className="text-sm text-muted-foreground">Context Relevance</span>
-                                    <div className="flex items-center space-x-2">
-                                      <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                                        <div
-                                          className="h-full bg-cyan-500 transition-all"
-                                          style={{ width: `${(document as any).generation_metadata.qualityMetrics.contextRelevance}%` }}
-                                        />
-                                      </div>
-                                      <span className="text-sm font-medium w-12 text-right">
-                                        {(document as any).generation_metadata.qualityMetrics.contextRelevance}%
-                                      </span>
-                                    </div>
-                                  </div>
-
-                                  <div className="flex justify-between items-center">
-                                    <span className="text-sm text-muted-foreground">Professional Quality</span>
-                                    <div className="flex items-center space-x-2">
-                                      <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                                        <div
-                                          className="h-full bg-pink-500 transition-all"
-                                          style={{ width: `${(document as any).generation_metadata.qualityMetrics.professionalQuality}%` }}
-                                        />
-                                      </div>
-                                      <span className="text-sm font-medium w-12 text-right">
-                                        {(document as any).generation_metadata.qualityMetrics.professionalQuality}%
-                                      </span>
-                                    </div>
-                                  </div>
-
-                                  <div className="flex justify-between items-center">
-                                    <span className="text-sm text-muted-foreground">Standards Compliance</span>
-                                    <div className="flex items-center space-x-2">
-                                      <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                                        <div
-                                          className="h-full bg-emerald-500 transition-all"
-                                          style={{ width: `${(document as any).generation_metadata.qualityMetrics.standardsCompliance}%` }}
-                                        />
-                                      </div>
-                                      <span className="text-sm font-medium w-12 text-right">
-                                        {(document as any).generation_metadata.qualityMetrics.standardsCompliance}%
-                                      </span>
-                                    </div>
-                                  </div>
-                                </>
-                              )}
-                            </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Tokens:</span>
+                            <span>{(documentData.input_tokens || 0) + (documentData.output_tokens || 0)}</span>
                           </div>
-
-                          {/* Complexity Score with Time Estimate */}
-                          {(document as any).generation_metadata.qualityMetrics.complexityScore !== undefined && (
-                            <>
-                              <Separator />
-                              <div className="space-y-2">
-                                <p className="text-sm font-medium">Manual Creation Estimate</p>
-                                <div className="flex justify-between items-center">
-                                  <span className="text-sm text-muted-foreground">Complexity Score</span>
-                                  <div className="flex items-center space-x-2">
-                                    <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                                      <div
-                                        className="h-full bg-red-500 transition-all"
-                                        style={{ width: `${(document as any).generation_metadata.qualityMetrics.complexityScore}%` }}
-                                      />
-                                    </div>
-                                    <span className="text-sm font-medium w-12 text-right">
-                                      {(document as any).generation_metadata.qualityMetrics.complexityScore}%
-                                    </span>
-                                  </div>
-                                </div>
-
-                                {/* Time Estimate Card with Research Breakdown */}
-                                {(() => {
-                                  const complexity = (document as any).generation_metadata.qualityMetrics.complexityScore || 0
-                                  const research = (document as any).generation_metadata?.researchComplexity
-
-                                  let level = 'Simple'
-                                  let writingTime = '2-4 hours'
-                                  let color = 'text-green-600'
-                                  let bgColor = 'bg-green-50'
-                                  let borderColor = 'border-green-200'
-
-                                  if (complexity >= 76) {
-                                    level = 'Very Complex'
-                                    writingTime = '2-4 days (16-32 hours)'
-                                    color = 'text-red-600'
-                                    bgColor = 'bg-red-50'
-                                    borderColor = 'border-red-200'
-                                  } else if (complexity >= 51) {
-                                    level = 'Complex'
-                                    writingTime = '1-2 days (8-16 hours)'
-                                    color = 'text-orange-600'
-                                    bgColor = 'bg-orange-50'
-                                    borderColor = 'border-orange-200'
-                                  } else if (complexity >= 26) {
-                                    level = 'Moderate'
-                                    writingTime = '4-8 hours'
-                                    color = 'text-yellow-600'
-                                    bgColor = 'bg-yellow-50'
-                                    borderColor = 'border-yellow-200'
-                                  }
-
-                                  // Calculate research time based on source documents
-                                  const sourceDocCount = research?.sourceDocuments || 0
-                                  const readingTimeHours = research?.estimatedReadingTimeHours || 0
-                                  const readingTimeDisplay = readingTimeHours >= 8
-                                    ? `${Math.round(readingTimeHours / 8)} day${readingTimeHours >= 16 ? 's' : ''}`
-                                    : `${Math.round(readingTimeHours)} hour${readingTimeHours !== 1 ? 's' : ''}`
-
-                                  return (
-                                    <div className={`p-3 ${bgColor} rounded-lg border ${borderColor} mt-2`}>
-                                      <div className="flex justify-between items-center mb-2">
-                                        <span className="text-xs text-muted-foreground">Complexity Level:</span>
-                                        <span className={`text-sm font-semibold ${color}`}>{level}</span>
-                                      </div>
-
-                                      {sourceDocCount > 0 && (
-                                        <div className="space-y-1 mb-2 pb-2 border-b">
-                                          <div className="flex justify-between items-center text-xs">
-                                            <span className="text-muted-foreground">📚 Context Research:</span>
-                                            <span className={`font-medium ${color}`}>
-                                              {sourceDocCount} doc{sourceDocCount !== 1 ? 's' : ''} (~{readingTimeDisplay})
-                                            </span>
-                                          </div>
-                                          <div className="flex justify-between items-center text-xs">
-                                            <span className="text-muted-foreground">✍️ Writing Time:</span>
-                                            <span className={`font-medium ${color}`}>{writingTime}</span>
-                                          </div>
-                                        </div>
-                                      )}
-
-                                      <div className="flex justify-between items-center mb-2">
-                                        <span className="text-xs font-medium text-muted-foreground">Total Manual Effort:</span>
-                                        <span className={`text-sm font-bold ${color}`}>
-                                          {sourceDocCount > 0 ? `${readingTimeDisplay} + ${writingTime}` : writingTime}
-                                        </span>
-                                      </div>
-
-                                      <div className="text-xs text-muted-foreground italic pt-2 border-t">
-                                        ⚡ Time savings: AI generated in {(document as any).generation_metadata?.generation?.duration || 'N/A'}
-                                      </div>
-                                    </div>
-                                  )
-                                })()}
+                          {documentData.generation_metadata.qualityMetrics && (
+                            <div className="mt-2">
+                              <p className="mb-1">Quality Score: {documentData.generation_metadata.qualityMetrics.overallQuality}%</p>
+                              <div className="w-full bg-muted h-1 rounded-full overflow-hidden">
+                                <div className="bg-primary h-full" style={{ width: `${documentData.generation_metadata.qualityMetrics.overallQuality}%` }} />
                               </div>
-                            </>
-                          )}
-                          {(document as any).generation_metadata.qualityMetrics.recommendations?.length > 0 && (
-                            <>
-                              <Separator />
-                              <div className="space-y-2">
-                                <p className="text-sm font-medium">Recommendations</p>
-                                <ul className="text-sm text-muted-foreground space-y-1">
-                                  {(document as any).generation_metadata.qualityMetrics.recommendations.map((rec: string, idx: number) => (
-                                    <li key={idx} className="flex items-start space-x-2">
-                                      <span className="text-blue-500 mt-0.5">•</span>
-                                      <span>{rec}</span>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            </>
+                            </div>
                           )}
                         </CardContent>
                       </AnimatedCard>
                     )}
 
-                    {/* Content Metrics */}
-                    {((document as any).word_count || (document as any).generation_metadata?.contentMetrics) && (
-                      <AnimatedCard>
-                        <CardHeader>
-                          <CardTitle className="flex items-center space-x-2">
-                            <FileText className="h-5 w-5" />
-                            <span>Content Metrics</span>
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="space-y-2 text-sm">
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Word Count:</span>
-                              <span className="font-medium">
-                                {((document as any).word_count || (document as any).generation_metadata?.contentMetrics?.words || 0).toLocaleString('en-US')}
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Characters:</span>
-                              <span className="font-medium">
-                                {((document as any).character_count || (document as any).generation_metadata?.contentMetrics?.characters || 0).toLocaleString('en-US')}
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Sentences:</span>
-                              <span className="font-medium">
-                                {(() => {
-                                  const sc = (document as any).sentence_count || (document as any).generation_metadata?.contentMetrics?.sentences || 0
-                                  return sc > 0 ? sc.toLocaleString('en-US') : 'N/A'
-                                })()}
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Paragraphs:</span>
-                              <span className="font-medium">
-                                {(() => {
-                                  const pc = (document as any).paragraph_count || (document as any).generation_metadata?.contentMetrics?.paragraphs || 0
-                                  return pc > 0 ? pc.toLocaleString('en-US') : 'N/A'
-                                })()}
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Avg Words/Sentence:</span>
-                              <span className="font-medium">
-                                {(() => {
-                                  // Try pre-calculated value first
-                                  const preCalc = (document as any).generation_metadata?.contentMetrics?.avgWordsPerSentence
-                                  if (preCalc && preCalc !== 'N/A') return preCalc
-
-                                  // Otherwise calculate it
-                                  const wc = (document as any).word_count || (document as any).generation_metadata?.contentMetrics?.wordCount || 0
-                                  const sc = (document as any).sentence_count || (document as any).generation_metadata?.contentMetrics?.sentenceCount || 0
-                                  return (wc > 0 && sc > 0) ? (wc / sc).toFixed(1) : 'N/A'
-                                })()}
-                              </span>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </AnimatedCard>
-                    )}
-
-                    {/* Export Options */}
+                    {/* Export Card */}
                     <AnimatedCard>
-                      <CardHeader>
-                        <CardTitle className="flex items-center space-x-2">
-                          <Download className="h-5 w-5" />
-                          <span>Export Options</span>
-                        </CardTitle>
-                        <CardDescription className="flex items-center">
-                          Export or publish this document
-                          <Button
-                            variant="link"
-                            className="h-auto p-0 ml-2 text-xs"
-                            onClick={() => router.push(`/projects/${projectId}?tab=integrations`)}
-                          >
-                            <Settings className="h-3 w-3 mr-1" />
-                            Configure Project Settings
-                          </Button>
-                        </CardDescription>
-                      </CardHeader>
+                      <CardHeader><CardTitle className="text-sm font-medium">Actions</CardTitle></CardHeader>
                       <CardContent className="space-y-2">
-                        {(document as any)?.confluence_page_url ? (
-                          <Button asChild variant="default" className="w-full justify-start">
-                            <a href={(document as any).confluence_page_url} target="_blank" rel="noopener noreferrer">
-                              <ExternalLink className="h-4 w-4 mr-2" />
-                              View in Confluence
-                            </a>
+                        <Button variant="outline" className="w-full justify-start text-xs h-8" onClick={exportToPDF} disabled={isExportingPdf}>
+                          <Download className="h-3 w-3 mr-2" /> PDF
+                        </Button>
+                        <Button variant="outline" className="w-full justify-start text-xs h-8" onClick={exportToWord} disabled={isExportingWord}>
+                          <Download className="h-3 w-3 mr-2" /> Word
+                        </Button>
+                        <Button variant="outline" className="w-full justify-start text-xs h-8" onClick={exportToMarkdown}>
+                          <Download className="h-3 w-3 mr-2" /> Markdown
+                        </Button>
+                        {documentData.confluence_page_url ? (
+                          <Button variant="default" className="w-full justify-start text-xs h-8" asChild>
+                            <a href={documentData.confluence_page_url} target="_blank" rel="noreferrer"><ExternalLink className="h-3 w-3 mr-2" /> Confluence</a>
                           </Button>
                         ) : (
-                          <Button variant="default" className="w-full justify-start" onClick={handlePublishToConfluence}>
-                            <ExternalLink className="h-4 w-4 mr-2" />
-                            Publish to Confluence
+                          <Button variant="outline" className="w-full justify-start text-xs h-8" onClick={handlePublishToConfluence}>
+                            <ExternalLink className="h-3 w-3 mr-2" /> Publish to Confluence
                           </Button>
                         )}
-
-                        {jiraLinkage?.issueUrl ? (
-                          <Button asChild variant="default" className="w-full justify-start">
-                            <a href={jiraLinkage.issueUrl} target="_blank" rel="noopener noreferrer">
-                              <ExternalLink className="h-4 w-4 mr-2" />
-                              View in Jira ({jiraLinkage.issueKey})
-                            </a>
-                          </Button>
-                        ) : (
-                          <Button variant="default" className="w-full justify-start" onClick={handlePublishToJira}>
-                            <ExternalLink className="h-4 w-4 mr-2" />
-                            Publish to Jira
-                          </Button>
-                        )}
-
-                        <Button
-                          variant="outline"
-                          className="w-full justify-start"
-                          onClick={exportToPDF}
-                          disabled={isExportingPdf}
-                        >
-                          {isExportingPdf ? (
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          ) : (
-                            <Download className="h-4 w-4 mr-2" />
-                          )}
-                          {isExportingPdf ? "Exporting PDF..." : "Export as PDF"}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          className="w-full justify-start"
-                          onClick={exportToWord}
-                          disabled={isExportingWord}
-                        >
-                          {isExportingWord ? (
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          ) : (
-                            <Download className="h-4 w-4 mr-2" />
-                          )}
-                          {isExportingWord ? "Exporting Word..." : "Export as Word"}
-                        </Button>
-                        <Button variant="outline" className="w-full justify-start" onClick={exportToMarkdown}>
-                          <Download className="h-4 w-4 mr-2" />
-                          Export as Markdown
-                        </Button>
-                        <Button variant="outline" className="w-full justify-start" onClick={printDocument}>
-                          <Settings className="h-4 w-4 mr-2" />
-                          Print Document
-                        </Button>
                       </CardContent>
                     </AnimatedCard>
-
-                    {/* Context Statistics: from metadata.context_stats or derived from gkg_context_snapshot (e.g. project context doc) */}
-                    {(() => {
-                      const docAny = document as any
-                      const metaStats = docAny.metadata?.context_stats
-                      const gkg = docAny.generation_metadata?.gkg_context_snapshot
-                      const hasMetaStats = metaStats && (metaStats.total_documents_available != null || metaStats.documents_used_as_context != null || metaStats.estimated_context_tokens != null)
-                      const contextStats = hasMetaStats
-                        ? metaStats
-                        : gkg
-                          ? {
-                            total_documents_available: gkg.documentsCount ?? 0,
-                            documents_used_as_context: gkg.documentsCount ?? 0,
-                            stakeholders_available: 0,
-                            custom_settings_count: 0,
-                            custom_metadata_count: 0,
-                            estimated_context_tokens: typeof gkg.markdown === 'string' ? Math.ceil(gkg.markdown.length / 4) : undefined,
-                          }
-                          : null
-                      return contextStats ? (
-                        <AnimatedCard>
-                          <CardHeader>
-                            <CardTitle className="flex items-center space-x-2">
-                              <BarChart3 className="h-5 w-5" />
-                              <span>Context Statistics</span>
-                            </CardTitle>
-                            <CardDescription>
-                              What context was used to generate this document
-                            </CardDescription>
-                          </CardHeader>
-                          <CardContent>
-                            <div className="space-y-2 text-sm">
-                              <div className="flex justify-between">
-                                <span className="text-muted-foreground">Documents in Project:</span>
-                                <span className="font-medium">
-                                  {contextStats.total_documents_available ?? '—'}
-                                </span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-muted-foreground">Used as Context:</span>
-                                <span className="font-medium text-primary">
-                                  {contextStats.documents_used_as_context ?? '—'}
-                                </span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-muted-foreground">Stakeholders Available:</span>
-                                <span className="font-medium">
-                                  {contextStats.stakeholders_available ?? '—'}
-                                </span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-muted-foreground">Custom Settings:</span>
-                                <span className="font-medium">
-                                  {contextStats.custom_settings_count ?? '—'}
-                                </span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-muted-foreground">Custom Metadata:</span>
-                                <span className="font-medium">
-                                  {contextStats.custom_metadata_count ?? '—'}
-                                </span>
-                              </div>
-                              <Separator className="my-2" />
-                              <div className="flex justify-between">
-                                <span className="text-muted-foreground">Context Tokens:</span>
-                                <span className="font-medium text-blue-600">
-                                  ~{contextStats.estimated_context_tokens != null ? contextStats.estimated_context_tokens.toLocaleString() : 'N/A'}
-                                </span>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </AnimatedCard>
-                      ) : null
-                    })()}
-
-                    {/* Source Documents */}
-                    <AnimatedCard>
-                      <CardHeader>
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <CardTitle className="flex items-center space-x-2">
-                              <ExternalLink className="h-5 w-5" />
-                              <span>Source Documents</span>
-                            </CardTitle>
-                            <CardDescription>
-                              Documents used as context during generation
-                            </CardDescription>
-                          </div>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              const docAny = document as any
-                              const gkgFromPipeline = docAny.metadata?.context_gathering?.context_bundle?.context_data?.gkg_context
-                              const gkgFromGenMeta = docAny.generation_metadata?.gkg_context_snapshot
-                              const gkg = gkgFromPipeline || gkgFromGenMeta
-                              if (gkg?.markdown != null || (gkg?.unitsCount != null && gkg.unitsCount > 0)) {
-                                setInjectedContextData({
-                                  markdown: gkg.markdown || '',
-                                  unitsCount: gkg.unitsCount ?? 0,
-                                  documentsCount: gkg.documentsCount ?? 0,
-                                  entityTypes: Array.isArray(gkg.entityTypes) ? gkg.entityTypes : [],
-                                  strategy: gkg.strategy
-                                })
-                              } else {
-                                setInjectedContextData(null)
-                              }
-                              setShowInjectedContextDialog(true)
-                            }}
-                          >
-                            <Layers className="h-4 w-4 mr-2" />
-                            Show injected context
-                          </Button>
-                        </div>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-2">
-                          {(document.source_documents || []).length === 0 ? (
-                            <p className="text-sm text-muted-foreground italic">
-                              No source documents - this was the first document generated or no context was available.
-                            </p>
-                          ) : (
-                            (document.source_documents || []).map((doc: any, idx: number) => (
-                              <div key={doc.id || doc.title || idx} className="flex items-center justify-between p-3 rounded border hover:bg-accent transition-colors">
-                                <div className="flex items-center space-x-3 flex-1">
-                                  <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold">
-                                    {doc.priority_rank || idx + 1}
-                                  </div>
-                                  <div className="flex-1">
-                                    <div className="flex items-center space-x-2 mb-1">
-                                      <p className="text-sm font-medium">{doc.title}</p>
-                                      {doc.status && (
-                                        <Badge variant="secondary" className="text-xs">
-                                          {doc.status}
-                                        </Badge>
-                                      )}
-                                      {doc.phase_name && doc.phase_name !== 'Other' && (
-                                        <Badge variant="outline" className="text-xs">
-                                          Phase {doc.lifecycle_phase}: {doc.phase_name}
-                                        </Badge>
-                                      )}
-                                    </div>
-                                    <p className="text-xs text-muted-foreground">{doc.type}</p>
-                                  </div>
-                                </div>
-                                <Link href={doc.url || `/projects/${projectId}/documents/${doc.id}/view`}>
-                                  <Button variant="ghost" size="sm">
-                                    <Eye className="h-4 w-4" />
-                                  </Button>
-                                </Link>
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      </CardContent>
-                    </AnimatedCard>
-
-                    {/* Injected context (GKG) dialog - scrollable body and context text */}
-                    <Dialog open={showInjectedContextDialog} onOpenChange={setShowInjectedContextDialog}>
-                      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
-                        <DialogHeader className="shrink-0">
-                          <DialogTitle className="flex items-center space-x-2">
-                            <Layers className="h-5 w-5" />
-                            <span>Injected context (GKG)</span>
-                          </DialogTitle>
-                          <DialogDescription>
-                            Context from the semantic model (Governance Knowledge Graph) and GKG settings that was injected for the LLM when this document was generated.
-                          </DialogDescription>
-                        </DialogHeader>
-                        <div className="flex-1 min-h-0 flex flex-col gap-4 overflow-y-auto overflow-x-hidden">
-                          {injectedContextData ? (
-                            <>
-                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm shrink-0">
-                                <div className="rounded border p-2 bg-muted/50">
-                                  <span className="text-muted-foreground block">Semantic units</span>
-                                  <span className="font-medium">{injectedContextData.unitsCount}</span>
-                                </div>
-                                <div className="rounded border p-2 bg-muted/50">
-                                  <span className="text-muted-foreground block">Source documents</span>
-                                  <span className="font-medium">{injectedContextData.documentsCount}</span>
-                                </div>
-                                <div className="rounded border p-2 bg-muted/50 col-span-2">
-                                  <span className="text-muted-foreground block">Entity types</span>
-                                  <span className="font-medium">
-                                    {injectedContextData.entityTypes.length > 0
-                                      ? injectedContextData.entityTypes.join(', ')
-                                      : '—'}
-                                  </span>
-                                </div>
-                              </div>
-                              {injectedContextData.markdown ? (
-                                <div className="flex flex-col min-h-0 shrink-0">
-                                  <p className="text-sm text-muted-foreground mb-1">Context text sent to the LLM:</p>
-                                  <ScrollArea className="h-[50vh] min-h-[240px] max-h-[60vh] rounded border bg-muted/30 p-3 text-sm font-mono whitespace-pre-wrap">
-                                    {injectedContextData.markdown}
-                                  </ScrollArea>
-                                </div>
-                              ) : (
-                                <p className="text-sm text-muted-foreground italic">No context markdown was stored for this generation.</p>
-                              )}
-                            </>
-                          ) : (
-                            <p className="text-sm text-muted-foreground">
-                              Injected context was not recorded for this document. It may have been generated before this feature, without GKG context, or via a path that does not store the injected context.
-                            </p>
-                          )}
-                        </div>
-                      </DialogContent>
-                    </Dialog>
                   </div>
                 </div>
 
-                {/* Version History */}
-                {showVersions && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="mt-6"
-                  >
-                    <AnimatedCard>
-                      <CardHeader>
-                        <CardTitle className="flex items-center space-x-2">
-                          <History className="h-5 w-5" />
-                          <span>Version History</span>
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-4">
-                          {(versions || []).map((version) => (
-                            <div key={version.id} className="flex items-center justify-between p-4 border rounded-lg">
-                              <div className="flex items-center space-x-4">
-                                <Badge variant="outline">v{version.version}</Badge>
-                                <div>
-                                  <p className="font-medium">{version.changes}</p>
-                                  <p className="text-sm text-muted-foreground">
-                                    {version.author} • {new Date(version.created_at).toLocaleString()}
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="flex items-center space-x-2">
-                                <span className="text-sm text-muted-foreground">
-                                  {version.word_count} words
-                                </span>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => {
-                                    setSelectedVersion(version)
-                                    setShowVersionDialog(true)
-                                  }}
-                                >
-                                  <Eye className="h-4 w-4" />
-                                </Button>
-                              </div>
+                {/* Source Documents Section */}
+                <div className="mt-8">
+                  <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <Layers className="h-5 w-5" /> Source Context
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {(documentData.source_documents || []).map((doc: any, i: number) => (
+                      <Card key={i} className="hover:bg-muted/50 transition-colors">
+                        <CardHeader className="p-4">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <p className="text-sm font-medium">{doc.title}</p>
+                              <p className="text-[10px] text-muted-foreground">{doc.type}</p>
                             </div>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </AnimatedCard>
-                  </motion.div>
-                )}
+                            <Button variant="ghost" size="sm" asChild>
+                              <Link href={`/projects/${projectId}/documents/${doc.id}/view`}><Eye className="h-3 w-3" /></Link>
+                            </Button>
+                          </div>
+                        </CardHeader>
+                      </Card>
+                    ))}
+                    {(documentData.source_documents || []).length === 0 && (
+                      <p className="text-sm text-muted-foreground italic">No source context recorded.</p>
+                    )}
+                  </div>
+                </div>
 
                 {/* Comments Section */}
                 {showComments && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="mt-6"
-                  >
-                    <AnimatedCard>
-                      <CardHeader>
-                        <CardTitle className="flex items-center space-x-2">
-                          <MessageSquare className="h-5 w-5" />
-                          <span>Comments ({(document.comments || []).length})</span>
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-4">
-                          {(document.comments || []).map((comment) => (
-                            <div key={comment.id} className="p-4 border rounded-lg">
-                              <div className="flex items-center justify-between mb-2">
-                                <div className="flex items-center space-x-2">
-                                  <User className="h-4 w-4 text-muted-foreground" />
-                                  <span className="font-medium">{comment.author}</span>
-                                </div>
-                                <span className="text-sm text-muted-foreground">
-                                  {new Date(comment.created_at).toLocaleString()}
-                                </span>
-                              </div>
-                              <p className="text-sm">{comment.content}</p>
+                  <div className="mt-8 space-y-4">
+                    <h3 className="text-lg font-semibold">Comments</h3>
+                    <div className="space-y-4">
+                      {(documentData.comments || []).map((c: any) => (
+                        <Card key={c.id}>
+                          <CardContent className="p-4">
+                            <div className="flex justify-between text-xs text-muted-foreground mb-2">
+                              <span>{c.author}</span>
+                              <span>{new Date(c.created_at).toLocaleString()}</span>
                             </div>
-                          ))}
-
-                          {/* Add Comment Form */}
-                          <div className="p-4 border rounded-lg">
-                            <div className="space-y-2">
-                              <textarea
-                                value={newComment}
-                                onChange={(e) => setNewComment(e.target.value)}
-                                placeholder="Add a comment..."
-                                className="w-full p-2 border rounded-lg text-sm"
-                                rows={3}
-                              />
-                              <div className="flex justify-end">
-                                <Button size="sm" onClick={addComment} disabled={!newComment.trim()}>
-                                  Add Comment
-                                </Button>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </AnimatedCard>
-                  </motion.div>
+                            <p className="text-sm">{c.content}</p>
+                          </CardContent>
+                        </Card>
+                      ))}
+                      <div className="flex gap-2">
+                        <Textarea 
+                          placeholder="Add a comment..." 
+                          value={newComment} 
+                          onChange={e => setNewComment(e.target.value)} 
+                          className="min-h-[80px]"
+                        />
+                        <Button className="self-end" onClick={addComment} disabled={!newComment.trim()}>Post</Button>
+                      </div>
+                    </div>
+                  </div>
                 )}
               </div>
             </AnimatedLayout>
@@ -2827,211 +807,39 @@ The ADPA system represents a significant advancement in document processing auto
         </main>
       </div>
 
-      {/* Summaries Dialog */}
-      <Dialog open={showSummaries} onOpenChange={setShowSummaries}>
-        <DialogContent className="max-w-5xl max-h-[80vh]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <BarChart3 className="h-5 w-5" />
-              Document Summaries - {adpaDocument?.title}
-            </DialogTitle>
-            <DialogDescription>
-              View cached AI-generated summaries at different compression levels. These are reused in process-flow jobs to save time and API costs.
-            </DialogDescription>
-          </DialogHeader>
+      {/* Dialogs & Modals */}
+      <VersionListDialog
+        open={showVersionsDialog}
+        onOpenChange={setShowVersionsDialog}
+        versions={versions}
+        documentName={documentData.name}
+        loadedVersionId={(documentData as any).loaded_version_id}
+        // @ts-ignore - DocumentVersion type mismatch from aliased import
+        onLoadVersion={(version) => {
+          setDocumentData({
+            ...documentData,
+            content: version.content,
+            version: parseFloat(version.version),
+            loaded_version: version.version,
+            loaded_version_id: version.id
+          } as any)
+          setEditedContent(version.content)
+          toast.success(`Loaded version ${version.version}`)
+        }}
+      />
 
-          <ScrollArea className="h-[60vh] pr-4">
-            {loadingSummaries ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="text-center">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-                  <p className="text-muted-foreground">Loading summaries...</p>
-                </div>
-              </div>
-            ) : summaries.length === 0 ? (
-              <div className="text-center py-12">
-                <BarChart3 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-semibold mb-2">No Summaries Yet</h3>
-                <p className="text-muted-foreground mb-4">
-                  Summaries will be automatically created when you run process-flow jobs with AI compression.
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  Once created, they'll be cached and reused to save time (~60s AI call becomes instant!)
-                </p>
-              </div>
-            ) : (
-              <Tabs defaultValue={summaries[0]?.compression_level?.toString() || "0.2"} className="w-full">
-                <TabsList className="grid grid-cols-auto gap-2 mb-4" aria-label="Document summary compression levels">
-                  {Array.from(new Set(summaries.map(s => s.compression_level)))
-                    .sort((a, b) => a - b)
-                    .map((level) => (
-                      <TabsTrigger key={level} value={level.toString()}>
-                        {(level * 100).toFixed(0)}% Compression
-                      </TabsTrigger>
-                    ))}
-                </TabsList>
-
-                {Array.from(new Set(summaries.map(s => s.compression_level))).map((level) => {
-                  const summary = summaries.find(s => s.compression_level === level)
-                  if (!summary) return null
-
-                  return (
-                    <TabsContent key={level} value={level.toString()} className="space-y-4">
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="text-lg">Summary Statistics</CardTitle>
-                        </CardHeader>
-                        <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                          <div>
-                            <p className="text-sm text-muted-foreground">Compression Level</p>
-                            <p className="text-2xl font-bold">{(summary.compression_level * 100).toFixed(0)}%</p>
-                          </div>
-                          <div>
-                            <p className="text-sm text-muted-foreground">Original Tokens</p>
-                            <p className="text-2xl font-bold">{summary.original_tokens.toLocaleString()}</p>
-                          </div>
-                          <div>
-                            <p className="text-sm text-muted-foreground">Compressed Tokens</p>
-                            <p className="text-2xl font-bold">{summary.compressed_tokens.toLocaleString()}</p>
-                          </div>
-                          <div>
-                            <p className="text-sm text-muted-foreground">Times Reused</p>
-                            <p className="text-2xl font-bold text-green-600">{summary.times_reused || 0}</p>
-                          </div>
-                        </CardContent>
-                      </Card>
-
-                      <Card>
-                        <CardHeader>
-                          <div className="flex items-center justify-between">
-                            <CardTitle className="text-lg">Compressed Content</CardTitle>
-                            <div className="flex items-center gap-2">
-                              {summary.ai_provider && (
-                                <Badge variant="outline">
-                                  {summary.ai_provider}
-                                </Badge>
-                              )}
-                              {summary.is_valid ? (
-                                <Badge variant="default" className="bg-green-600">Valid</Badge>
-                              ) : (
-                                <Badge variant="destructive">Invalid</Badge>
-                              )}
-                            </div>
-                          </div>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="bg-muted p-4 rounded-lg max-h-96 overflow-y-auto">
-                            <div className="prose prose-sm dark:prose-invert max-w-none">
-                              <ReactMarkdown
-                                remarkPlugins={[remarkGfm]}
-                              >
-                                {summary.compressed_content}
-                              </ReactMarkdown>
-                            </div>
-                          </div>
-
-                          <div className="mt-4 grid grid-cols-2 gap-4 text-sm text-muted-foreground">
-                            <div>
-                              <span className="font-medium">Created:</span>{' '}
-                              {new Date(summary.created_at).toLocaleString()}
-                            </div>
-                            {summary.last_reused_at && (
-                              <div>
-                                <span className="font-medium">Last Reused:</span>{' '}
-                                {new Date(summary.last_reused_at).toLocaleString()}
-                              </div>
-                            )}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </TabsContent>
-                  )
-                })}
-              </Tabs>
-            )}
-          </ScrollArea>
-        </DialogContent>
-      </Dialog>
-
-      {/* Feedback Dialog */}
-      <Dialog open={feedbackDialogOpen} onOpenChange={setFeedbackDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Submit Feedback</DialogTitle>
-            <DialogDescription>
-              Provide feedback for this document to help improve its quality and compliance.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Category</Label>
-              <Select
-                value={feedbackForm.category}
-                onValueChange={(value) => setFeedbackForm({ ...feedbackForm, category: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="general">General</SelectItem>
-                  <SelectItem value="clarity">Clarity & Readability</SelectItem>
-                  <SelectItem value="accuracy">Technical Accuracy</SelectItem>
-                  <SelectItem value="completeness">Completeness</SelectItem>
-                  <SelectItem value="compliance">Compliance</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Rating</Label>
-              <div className="flex items-center space-x-1">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <Button
-                    key={star}
-                    variant="ghost"
-                    size="sm"
-                    className={`p-0 h-8 w-8 ${feedbackForm.rating >= star ? "text-yellow-400" : "text-muted-foreground"}`}
-                    onClick={() => setFeedbackForm({ ...feedbackForm, rating: star })}
-                  >
-                    <Star className="h-6 w-6 fill-current" />
-                  </Button>
-                ))}
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Comment</Label>
-              <Textarea
-                placeholder="Share your thoughts..."
-                value={feedbackForm.comment}
-                onChange={(e) => setFeedbackForm({ ...feedbackForm, comment: e.target.value })}
-                rows={4}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setFeedbackDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSubmitFeedback}>
-              <MessageSquare className="h-4 w-4 mr-2" />
-              Submit Feedback
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Regeneration Modal */}
       <RegenerateVersionModal
         open={showRegenerateModal}
         onOpenChange={setShowRegenerateModal}
         documentId={documentId}
-        currentTemplate={adpaDocument?.template_id}
-        currentTemplateName={adpaDocument?.template_name || (document as any)?.metadata?.templateName}
-        currentVersion={adpaDocument?.version?.toString() || '1.0'}
+        currentTemplate={documentData.template_id}
+        currentVersion={documentData.version?.toString() || '1.0'}
         projectId={projectId}
-        onRegenerate={handleRegenerate}
+        onRegenerate={async (params) => {
+          await regenerate({ documentId, ...params })
+        }}
       />
 
-      {/* Regeneration Progress */}
       <RegenerationProgress
         jobId={progress?.jobId || null}
         progress={progress}
@@ -3040,45 +848,6 @@ The ADPA system represents a significant advancement in document processing auto
         result={result}
         onClose={resetRegeneration}
         documentId={documentId}
-      />
-
-      {/* Version List Dialog */}
-      <VersionListDialog
-        open={showVersionsDialog}
-        onOpenChange={setShowVersionsDialog}
-        versions={versions}
-        documentName={adpaDocument?.name}
-        loadedVersionId={(document as any)?.loaded_version_id}
-        onLoadVersion={(version) => {
-          // Load selected version into the main view with all metadata
-          setDocument({
-            ...document!,
-            content: version.content,
-            version: parseFloat(version.version),
-            word_count: version.word_count || 0,
-            // Preserve version metadata
-            generation_metadata: version.metadata || {},
-            // Add version tracking
-            loaded_version: version.version,
-            loaded_version_id: version.id
-          } as any)
-          setEditedContent(version.content)
-          extractTableOfContents(version.content)
-
-          // Show success with metadata info
-          const metaInfo = version.metadata?.provider
-            ? ` (Generated with ${version.metadata.provider}${version.metadata.model ? ` - ${version.metadata.model}` : ''})`
-            : ''
-          toast.success(`Loaded version ${version.version}${metaInfo}`)
-        }}
-      />
-
-      {/* Version Viewer Dialog (standalone - for inline history) */}
-      <VersionViewerDialog
-        open={showVersionDialog}
-        onOpenChange={setShowVersionDialog}
-        version={selectedVersion}
-        documentName={adpaDocument?.name}
       />
     </div>
   )

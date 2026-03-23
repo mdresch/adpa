@@ -616,16 +616,16 @@ export class DocumentHistoryAnalyzer {
   private async gatherDocumentDriftImpacts(templateId: string, projectId: string): Promise<any[]> {
     try {
       const res = await pool.query(`
-        SELECT d.id, d.title, d.updated_at, dv.version_number, dv.status
+        SELECT d.id, d.title, d.updated_at, dv.version, d.status
         FROM documents d
-        LEFT JOIN document_versions dv ON dv.document_id = d.id AND dv.status = 'published'
+        LEFT JOIN document_versions dv ON dv.document_id = d.id
         WHERE d.project_id = $1 AND d.title ILIKE '%' || $2 || '%'
         ORDER BY d.updated_at DESC
       `, [projectId, templateId])
       return res.rows.map(r => ({
         document_id: r.id,
         title: r.title,
-        version: r.version_number || null,
+        version: r.version || null,
         status: r.status || 'unknown',
         last_updated: r.updated_at,
         impact_summary: 'Potential drift impact — requires validation',

@@ -319,7 +319,15 @@ export default function ProjectDocuments() {
       if (gradeFilter !== "all") params.grade = gradeFilter
       if (frameworkFilter !== "all") params.framework = frameworkFilter
 
-      const response = await apiClient.get(`/documents/project/${projectId}?${new URLSearchParams(params).toString()}`)
+      const response = await apiClient.get<{
+        documents: Document[]
+        pagination?: {
+          page: number
+          limit: number
+          total: number
+          pages: number
+        }
+      }>(`/documents/project/${projectId}?${new URLSearchParams(params).toString()}`)
       const docs = response.documents || []
 
       // Fetch drift counts for each document
@@ -334,7 +342,7 @@ export default function ProjectDocuments() {
         {
           id: "doc-1",
           name: "Project Requirements Document",
-          template_id: null, // Mock data - no template ID
+          template_id: undefined, // Mock data - no template ID
           template_name: "AI-Enhanced Project Charter Template",
           template_framework: "PMBOK 7",
           status: "published",
@@ -509,6 +517,10 @@ export default function ProjectDocuments() {
           throw new Error('Authentication required. Please log in again.')
         }
 
+        if (!projectId || !isValidGuid(projectId)) {
+          throw new Error("Invalid project ID")
+        }
+
         const formData = new FormData()
         formData.append('files', uploadForm.file)
         formData.append('projectId', projectId)
@@ -638,6 +650,10 @@ export default function ProjectDocuments() {
       name: `${project?.name} - Generated Document`,
       template_id: "",
       prompt: `Generate a comprehensive document for the ${project?.name} project using the ${project?.framework} framework.`,
+      provider: "Groq AI",
+      model: "llama-3.1-8b-instant",
+      temperature: 0.7,
+      max_tokens: 8000,
     })
     setGenerateDialogOpen(true)
     fetchTemplates()
@@ -690,6 +706,7 @@ export default function ProjectDocuments() {
                 provider: "Groq AI",
                 model: "llama-3.1-8b-instant",
                 temperature: 0.7,
+                max_tokens: 8000,
               })
               await fetchDocuments()
               return
@@ -733,6 +750,7 @@ export default function ProjectDocuments() {
         provider: "Groq AI",
         model: "llama-3.1-8b-instant",
         temperature: 0.7,
+        max_tokens: 8000,
       })
       await fetchDocuments()
     } catch (error) {
@@ -811,7 +829,7 @@ export default function ProjectDocuments() {
       if (gradeFilter !== "all") params.grade = gradeFilter
       if (frameworkFilter !== "all") params.framework = frameworkFilter
 
-      const response = await apiClient.get(`/documents/project/${projectId}?${new URLSearchParams(params).toString()}`)
+      const response = await apiClient.get(`/documents/project/${projectId}?${new URLSearchParams(params).toString()}`) as any
       const allDocs = response.documents || []
       const allIds = allDocs.map((doc: any) => doc.id)
 
@@ -1039,8 +1057,8 @@ export default function ProjectDocuments() {
                   <AlertCircle className="h-8 w-8 text-destructive mx-auto mb-4" />
                   <h2 className="text-xl font-semibold mb-2">Project ID Missing</h2>
                   <p className="text-muted-foreground">Unable to load document library. Please navigate from a project page.</p>
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     className="mt-4"
                     onClick={() => router.push('/projects')}
                   >
@@ -1153,9 +1171,9 @@ export default function ProjectDocuments() {
                         </CardDescription>
                       </CardHeader>
                       <CardContent>
-                        {stats.byFramework.length > 0 ? (
+                        {(stats.byFramework?.length ?? 0) > 0 ? (
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                            {stats.byFramework.map((framework, index) => {
+                            {stats.byFramework?.map((framework, index) => {
                               const percentage = ((framework.count / stats.totalDocuments) * 100).toFixed(1)
                               const colors = [
                                 'bg-purple-500',
@@ -1317,7 +1335,7 @@ export default function ProjectDocuments() {
                       onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFrameworkFilter(e.target.value)}
                     >
                       <option value="all">All Frameworks</option>
-                      {stats?.byFramework.map((fw, index) => (
+                      {stats?.byFramework?.map((fw, index) => (
                         <option key={index} value={fw.framework}>
                           {fw.framework} ({fw.count})
                         </option>
@@ -1331,7 +1349,7 @@ export default function ProjectDocuments() {
                       onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setTemplateFilter(e.target.value)}
                     >
                       <option value="all">All Templates</option>
-                      {stats?.byTemplate.map((template, index) => (
+                      {stats?.byTemplate?.map((template, index) => (
                         <option key={index} value={template.template_name}>
                           {template.template_name}
                         </option>
@@ -1794,14 +1812,12 @@ export default function ProjectDocuments() {
                                     <div className="flex items-center gap-2">
                                       <span className="text-sm font-medium">Template Status:</span>
                                       {selectedTemplate.development_status && statusConfig[selectedTemplate.development_status as keyof typeof statusConfig] && (
-                                        // @ts-expect-error - Badge accepts children via HTMLAttributes
                                         <Badge variant={statusConfig[selectedTemplate.development_status as keyof typeof statusConfig].variant}>
                                           {statusConfig[selectedTemplate.development_status as keyof typeof statusConfig].emoji} {statusConfig[selectedTemplate.development_status as keyof typeof statusConfig].label}
                                         </Badge>
                                       )}
                                     </div>
                                     {selectedTemplate.health_rating && healthConfig[selectedTemplate.health_rating as keyof typeof healthConfig] && (
-                                      // @ts-expect-error - Badge accepts children via HTMLAttributes
                                       <Badge variant="outline" className={`text-xs ${healthConfig[selectedTemplate.health_rating as keyof typeof healthConfig].color}`}>
                                         {healthConfig[selectedTemplate.health_rating as keyof typeof healthConfig].icon} {selectedTemplate.health_rating}
                                       </Badge>
@@ -1957,14 +1973,12 @@ export default function ProjectDocuments() {
                                     <div className="flex items-center gap-2">
                                       <span className="text-sm font-medium">Template Status:</span>
                                       {selectedTemplate.development_status && statusConfig[selectedTemplate.development_status as keyof typeof statusConfig] && (
-                                        // @ts-expect-error - Badge accepts children via HTMLAttributes
                                         <Badge variant={statusConfig[selectedTemplate.development_status as keyof typeof statusConfig].variant}>
                                           {statusConfig[selectedTemplate.development_status as keyof typeof statusConfig].emoji} {statusConfig[selectedTemplate.development_status as keyof typeof statusConfig].label}
                                         </Badge>
                                       )}
                                     </div>
                                     {selectedTemplate.health_rating && healthConfig[selectedTemplate.health_rating as keyof typeof healthConfig] && (
-                                      // @ts-expect-error - Badge accepts children via HTMLAttributes
                                       <Badge variant="outline" className={`text-xs ${healthConfig[selectedTemplate.health_rating as keyof typeof healthConfig].color}`}>
                                         {healthConfig[selectedTemplate.health_rating as keyof typeof healthConfig].icon} {selectedTemplate.health_rating}
                                       </Badge>

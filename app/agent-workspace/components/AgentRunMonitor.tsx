@@ -1,7 +1,7 @@
 "use client";
 import React from 'react';
 
-export function AgentRunMonitor() {
+export function AgentRunMonitor({ runId }: { runId: string | null }) {
     return (
         <div>
             <h2 className="text-xl font-semibold">Live Agent Run Monitor</h2>

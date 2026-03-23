@@ -203,7 +203,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
   // Fetch signature request status and recipients
   const fetchSignatureRequest = async () => {
     try {
-      const response = await apiClient.get(`/signatures/requests?documentDataId=${docId}`)
+      const response = await apiClient.get<{ data: any[] }>(`/signatures/requests?documentDataId=${docId}`)
       if (response.data && response.data.length > 0) {
         const request = response.data[0]
         setSignatureRequest(request)
@@ -217,7 +217,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
 
       // Also try to get signature status directly
       try {
-        const statusResponse = await apiClient.get(`/signatures/documentData/${docId}`, {
+        const statusResponse = await apiClient.get<{ data: any }>(`/signatures/documentData/${docId}`, {
           suppressNotFoundError: true // Suppress 404 logging - expected when no signature request exists
         })
         if (statusResponse.data && statusResponse.data.recipients) {
@@ -331,12 +331,12 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
       } else {
         // Try to fetch template details if not in local state
         try {
-          const templateResponse = await apiClient.get(`/templates/${templateId}`)
-          if (templateResponse.category) {
-            setTemplateCategory(templateResponse.category)
+          const template = await apiClient.getTemplate(templateId)
+          if (template.category) {
+            setTemplateCategory(template.category)
           }
         } catch (error) {
-          console.log('Could not fetch template category')
+          console.error('Failed to fetch template category:', error)
         }
       }
     } catch (error) {
@@ -354,26 +354,26 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
     try {
       console.log('[METADATA-PAGE] Fetching documentData:', { docId, projectId })
 
-      const documentData = await apiClient.getDocument(docId)
+      const fetchedDocument = await apiClient.getDocument(docId)
 
-      if (!documentData) {
+      if (!fetchedDocument) {
         console.error('[METADATA-PAGE] Document data is null or undefined')
         throw new Error("Document not found")
       }
 
-      const genMetadata = documentData.generation_metadata
+      const genMetadata = fetchedDocument.generation_metadata
       // Handle both snake_case (source_documentDatas) and camelCase (sourceDocuments) for backward compatibility
       const sourceDocs = genMetadata?.source_documentDatas || genMetadata?.sourceDocuments || []
       const hasProjectContext = Array.isArray(sourceDocs) && sourceDocs.some((doc: any) => doc.is_project_context || (doc.id && doc.id.startsWith('project_context:')))
 
       console.log('[METADATA-PAGE] Document fetched successfully:', {
-        id: documentData.id,
-        name: documentData.name,
-        title: documentData.title,
-        status: documentData.status,
-        hasMetadata: !!documentData.metadata,
-        metadataKeys: documentData.metadata ? Object.keys(documentData.metadata) : [],
-        metadata: documentData.metadata,
+        id: fetchedDocument.id,
+        name: fetchedDocument.name,
+        title: fetchedDocument.title,
+        status: fetchedDocument.status,
+        hasMetadata: !!fetchedDocument.metadata,
+        metadataKeys: fetchedDocument.metadata ? Object.keys(fetchedDocument.metadata) : [],
+        metadata: fetchedDocument.metadata,
         hasGenerationMetadata: !!genMetadata,
         generationMetadataKeys: genMetadata ? Object.keys(genMetadata) : [],
         hasSourceDocuments: !!(genMetadata?.source_documentDatas || genMetadata?.sourceDocuments),
@@ -387,34 +387,34 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
       console.log('[METADATA-PAGE] Full generation_metadata JSON:', JSON.stringify(genMetadata, null, 2))
       console.log('[METADATA-PAGE] Source documentDatas array:', JSON.stringify(sourceDocs, null, 2))
 
-      setDocumentData(documentData)
+      setDocumentData(fetchedDocument as any)
       await fetchSignatureRequest()
 
       // Fetch template category if template_id exists
-      if (documentData.template_id) {
-        await fetchTemplateCategory(documentData.template_id)
+      if (fetchedDocument.template_id) {
+        await fetchTemplateCategory(fetchedDocument.template_id)
       }
 
       // Populate metadata form
       // Handle both 'name' and 'title' fields (database may have either)
-      const documentDataName = documentData.name || documentData.title || ""
+      const documentDataName = fetchedDocument.name || fetchedDocument.title || ""
       // Handle both 'framework' and 'template_framework' fields
-      const documentDataFramework = documentData.framework || documentData.template_framework || ""
+      const documentDataFramework = fetchedDocument.framework || fetchedDocument.template_framework || ""
 
       const formData = {
         name: documentDataName,
-        status: documentData.status || "draft",
-        tags: documentData.tags || [],
-        template_id: documentData.template_id || "",
+        status: fetchedDocument.status || "draft",
+        tags: fetchedDocument.tags || [],
+        template_id: fetchedDocument.template_id || "",
         framework: documentDataFramework,
-        category: documentData.metadata?.category || "",
-        priority: documentData.metadata?.priority || "medium",
-        author: documentData.metadata?.author || "",
-        reviewer: documentData.metadata?.reviewer || "",
-        due_date: documentData.metadata?.due_date || "",
-        description: documentData.metadata?.description || "",
-        notes: documentData.metadata?.notes || "",
-        custom_fields: documentData.metadata?.custom_fields || {}
+        category: fetchedDocument.metadata?.category || "",
+        priority: fetchedDocument.metadata?.priority || "medium",
+        author: fetchedDocument.metadata?.author || "",
+        reviewer: fetchedDocument.metadata?.reviewer || "",
+        due_date: fetchedDocument.metadata?.due_date || "",
+        description: fetchedDocument.metadata?.description || "",
+        notes: fetchedDocument.metadata?.notes || "",
+        custom_fields: fetchedDocument.metadata?.custom_fields || {}
       }
 
       console.log('[METADATA-PAGE] Populating metadata form:', formData)
@@ -813,7 +813,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
 
     try {
       await regenerate({
-        documentDataId: docId,
+        documentId: docId,
         ...params
       })
     } catch (error) {
@@ -1509,14 +1509,11 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                               wordCount = documentData.generation_metadata.wordCount
                             }
                             // Priority 3: Parse contentMetrics.words (formatted string)
-                            else if (documentData?.generation_metadata?.contentMetrics?.words) {
-                              const wordsValue = documentData.generation_metadata.contentMetrics.words
-                              if (typeof wordsValue === 'string') {
-                                // Remove both commas AND periods (European format) as thousands separators
-                                wordCount = parseInt(wordsValue.replace(/[,\.]/g, ''), 10) || 0
-                              } else {
-                                wordCount = wordsValue
-                              }
+                            else if (documentData?.generation_metadata?.contentMetrics) {
+                              const wordsValue = documentData.generation_metadata.contentMetrics.words;
+                              wordCount = typeof wordsValue === 'string'
+                                ? (parseInt(wordsValue.replace(/[,\\.]/g, ''), 10) || 0)
+                                : (typeof wordsValue === 'number' ? wordsValue : 0);
                             }
 
                             const readingTimeMinutes = wordCount > 0 ? Math.round((wordCount / 250) * 10) / 10 : 0

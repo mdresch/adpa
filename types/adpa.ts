@@ -11,14 +11,20 @@ export interface AIProcessing {
   model?: string
   processingTime?: string
   processingTimeMs?: number
+  tokens?: {
+    prompt: number
+    completion: number
+    total: number
+    cost?: string | number
+  }
 }
 
 export interface ContentMetrics {
-  words?: number
+  words?: string | number
   characters?: string | number
-  sentences?: number
-  paragraphs?: number
-  avgWordsPerSentence?: string
+  sentences?: string | number
+  paragraphs?: string | number
+  avgWordsPerSentence?: string | number
   readingTime?: number
 }
 
@@ -52,10 +58,10 @@ export interface QualityGate {
 }
 
 export interface ContextStats {
-  documentDatas_used?: number
-  documentDatas_used_as_context?: number
-  total_documentDatas?: number
-  total_documentDatas_available?: number
+  documents_used?: number
+  documents_used_as_context?: number
+  total_documents?: number
+  total_documents_available?: number
   project_context_used?: boolean
   stakeholders_included?: number
   estimated_context_tokens?: number
@@ -71,6 +77,8 @@ export interface GenerationMetadata {
   sourceDocuments?: any[]
   context_stats?: ContextStats
   framework?: string
+  wordCount?: number
+  characterCount?: number
   template?: {
     framework?: string
   }
@@ -80,14 +88,33 @@ export interface GenerationMetadata {
   }
 }
 
+export interface DocumentVersion {
+  id: string
+  document_id: string
+  version_number: number
+  version: string // semantic version as string for display
+  content: any
+  author?: string
+  changes?: string
+  created_by: string
+  created_at: string
+  semantic_version?: string
+  is_current?: boolean
+  change_description?: string
+  metadata?: any
+  word_count?: number
+}
+
 export interface ADPADocument {
   id: string
   name: string
   content?: any
   template_id?: string
   template_name?: string
+  project_id?: string
   status: string
   version: number
+  author?: string
   created_by: string
   updated_by: string
   created_by_name?: string
@@ -107,10 +134,25 @@ export interface ADPADocument {
   semantic_version?: string
   template_version?: string
   template_author?: string
+  template_framework?: string
   template_category?: string
   template_complexity?: string
+  quality_score?: number
+  quality_status?: 'passed' | 'warning' | 'failed' | 'pending' | 'not_audited'
+  quality_audit_id?: string
   confluence_page_url?: string
   generation_metadata?: GenerationMetadata
+  compression_ratio?: number
+  original_size?: string
+  compressed_size?: string
+  processing_time?: string
+  ai_model?: string
+  input_tokens?: number
+  output_tokens?: number
+  source_documents?: any[]
+  comments?: any[]
+  loaded_version?: string | null
+  loaded_version_id?: string | null
   metadata: {
     ai_model?: string
     processing_time?: string
