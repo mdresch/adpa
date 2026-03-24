@@ -14,7 +14,7 @@ export const morphicDbDependency: Dependency = {
     const startTime = Date.now()
     try {
       // Force a simple query to initialize the connection pool
-      await (morphicRepo as any).query`SELECT 1 as initialized`
+      await (morphicRepo as any).query('SELECT 1 as initialized')
       const latency = Date.now() - startTime
       updateDependencyHealth("Morphic DB", "healthy", latency)
       logger.info("[STARTUP] Morphic DB connection initialized successfully.")
@@ -22,13 +22,11 @@ export const morphicDbDependency: Dependency = {
       const latency = Date.now() - startTime
       updateDependencyHealth("Morphic DB", "unhealthy", latency, String(err))
       logger.warn("[STARTUP] Morphic DB connection failed or is using fallback.", err)
-      // Since it's not critical, we don't throw to crash the startup unless we want fail-fast for it.
-      // The instructions say it's separate from main ADPA, so let's log and proceed.
     }
   },
   validate: async () => {
     try {
-      const result = await (morphicRepo as any).query`SELECT 1 as ok`
+      const result = await (morphicRepo as any).query('SELECT 1 as ok')
       if (result && result.length > 0 && result[0].ok === 1) {
         return true
       }
@@ -40,12 +38,11 @@ export const morphicDbDependency: Dependency = {
     }
   },
   shutdown: async () => {
-    // The MorphicRepository uses a static client internally.
-    // We can gracefully end it if it's available.
+    // The MorphicRepository uses a static pool internally.
     try {
-      const client = (MorphicRepository as any)._client
-      if (client) {
-        await client.end()
+      const pool = (MorphicRepository as any)._pool
+      if (pool) {
+        await pool.end()
         logger.info("[SHUTDOWN] Morphic DB connection closed.")
       }
     } catch (error) {

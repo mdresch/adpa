@@ -106,7 +106,7 @@ export function createResearcher({
         const todoTools = writer ? createTodoTools() : {}
 
         let systemPrompt: string
-        let activeToolsList: (keyof ResearcherTools)[] = []
+        let activeToolsList: string[] = []
         let maxSteps: number
         let searchTool = originalSearchTool
 
@@ -125,7 +125,7 @@ export function createResearcher({
             case 'adaptive':
             default:
                 systemPrompt = ADAPTIVE_MODE_PROMPT
-                activeToolsList = ['search', 'fetch', 'runProjectAgent']
+                activeToolsList = ['search', 'fetch', 'runProjectAgent', 'askQuestion']
 
                 if (knowledgeEnabled) {
                     activeToolsList.push('ragSearch', 'dbQuery')
@@ -165,15 +165,40 @@ export function createResearcher({
         const runProjectAgentTool = createRunProjectAgentTool()
 
         // Build tools object with proper typing
-        const tools: ResearcherTools = {
+        const tools = {
             search: searchTool,
             fetch: fetchTool,
             askQuestion: askQuestionTool,
+            ask_question: askQuestionTool,
             runProjectAgent: runProjectAgentTool,
+            run_project_agent: runProjectAgentTool,
             ...knowledgeTools,
             ...fileSearchTools,
             ...todoTools
-        } as ResearcherTools
+        } as any
+
+        // Add snake_case aliases for other multi-word tools
+        if (tools.fileSearch) tools.file_search = tools.fileSearch
+        if (tools.todoWrite) tools.todo_write = tools.todoWrite
+        if (tools.ragSearch) tools.rag_search = tools.ragSearch
+        if (tools.dbQuery) tools.db_query = tools.dbQuery
+
+        // Update activeToolsList with aliases
+        const aliases: Record<string, string> = {
+            askQuestion: 'ask_question',
+            runProjectAgent: 'run_project_agent',
+            fileSearch: 'file_search',
+            todoWrite: 'todo_write',
+            ragSearch: 'rag_search',
+            dbQuery: 'db_query'
+        }
+
+        activeToolsList.forEach(toolName => {
+            const alias = aliases[toolName as string]
+            if (alias && !activeToolsList.includes(alias as any)) {
+                activeToolsList.push(alias as any)
+            }
+        })
 
         // Create ToolLoopAgent with all configuration
         const assistedContextInstructions = assistedContext

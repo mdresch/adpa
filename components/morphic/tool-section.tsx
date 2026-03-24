@@ -33,7 +33,7 @@ export function ToolSection({
     isFirst = false,
     isLast = false
 }: ToolSectionProps) {
-    if (tool.type === 'tool-askQuestion') {
+    if (tool.type === 'tool-askQuestion' || tool.type === 'tool-ask_question') {
         if (
             (tool.state === 'input-streaming' || tool.state === 'input-available') &&
             addToolResult
@@ -110,6 +110,7 @@ export function ToolSection({
                 />
             )
         case 'tool-ragSearch':
+        case 'tool-rag_search':
             return (
                 <CollapsibleMessage
                     role="assistant"
@@ -137,6 +138,7 @@ export function ToolSection({
                 </CollapsibleMessage>
             )
         case 'tool-dbQuery':
+        case 'tool-db_query':
             return (
                 <CollapsibleMessage
                     role="assistant"
@@ -166,6 +168,7 @@ export function ToolSection({
                 </CollapsibleMessage>
             )
         case 'tool-runProjectAgent':
+        case 'tool-run_project_agent':
             if (tool.state === 'output-available' && (tool.output as any)?.status === 'started') {
                 return (
                     <div className="w-full">

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
-import { pool } from '@/database/connection';
+import { pool, connectDatabase } from '@/database/connection';
 import { logger } from '@/utils/logger';
 
 export interface AuthenticatedUser {
@@ -27,6 +27,8 @@ export async function getAuthenticatedUser(req: Request): Promise<AuthenticatedU
     if (!token) return null;
 
     try {
+        // Ensure database pool is initialized in Next.js environment
+        await connectDatabase();
         const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
 
         const result = await pool.query(

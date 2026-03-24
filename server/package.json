@@ -25,7 +25,8 @@
     "init-qdrant": "ts-node -r tsconfig-paths/register scripts/init-qdrant-collection.ts",
     "init-gkg-schema": "ts-node -r tsconfig-paths/register scripts/init-gkg-schema.ts",
     "generate-embeddings": "ts-node -r tsconfig-paths/register scripts/generate-embeddings.ts",
-    "verify:jina": "ts-node -r tsconfig-paths/register scripts/verify-jina.ts"
+    "verify:jina": "ts-node -r tsconfig-paths/register scripts/verify-jina.ts",
+    "sync:ai": "ts-node -r tsconfig-paths/register scripts/sync-ai-providers.ts"
   },
   "keywords": [],
   "author": "Menno Drescher",

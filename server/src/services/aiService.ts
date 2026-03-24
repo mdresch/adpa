@@ -1316,7 +1316,7 @@ class AIService {
           throw new Error('AI_GATEWAY_NOT_CONFIGURED')
         }
         logger.info('📨 [AI-SERVICE-6/8] Using unified messages array')
-        result = await ai.generateText({
+        result = await generateText({
           model: gatewayModelId,
           messages: messages as any,
           temperature: request.temperature || 0.7,
@@ -2222,9 +2222,9 @@ class AIService {
         'gemini-1.0-pro-vision': 'gemini-1.5-flash-latest',
         'gemini-1.5-flash': 'gemini-1.5-flash-latest',
         'gemini-1.5-pro': 'gemini-1.5-pro-latest',
-        'gemini-2.0-flash-exp': 'gemini-1.5-flash-latest',
-        'gemini-2.5-flash': 'gemini-1.5-flash-latest',
-        'gemini-3-flash-preview': 'gemini-1.5-flash-latest',
+        'gemini-2.0-flash-exp': 'gemini-2.0-flash-exp',
+        'gemini-2.5-flash': 'gemini-2.5-flash',
+        'gemini-3-flash-preview': 'gemini-3-flash-preview',
       }
     }
 
@@ -2244,7 +2244,7 @@ class AIService {
 
     // Validate model against valid models list for Google (v1 API compatibility)
     if (providerType === 'google') {
-      const validModels = ['gemini-1.5-flash-latest', 'gemini-1.5-pro-latest', 'gemini-2.0-flash-exp']
+      const validModels = ['gemini-1.5-flash-latest', 'gemini-1.5-pro-latest', 'gemini-2.0-flash-exp', 'gemini-2.5-flash', 'gemini-3-flash-preview']
       if (!validModels.includes(modelId)) {
         logger.warn(`[AI-SERVICE] Invalid Google model ${modelId}, using default: gemini-1.5-flash-latest`)
         modelId = 'gemini-1.5-flash-latest'

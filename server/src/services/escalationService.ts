@@ -7,7 +7,7 @@
  */
 
 import { pool } from '../database/connection'
-import { logger } from '../utils/logger'
+import { logger, asyncLocalStorage } from '../utils/logger'
 import { emailNotificationService, BudgetOverrunEmailData, ScopeCreepEmailData } from './emailNotificationService'
 import { teamsService } from './teamsService'
 import { emergencyMeetingService } from './emergencyMeetingService'
@@ -526,12 +526,15 @@ export class EscalationService {
           logger.info('[ESCALATION] Email notification type not implemented yet:', rule.drift_type)
       }
 
+      const correlationId = asyncLocalStorage.getStore()
+
       // Log the notification
       await pool.query(
         `INSERT INTO email_notification_logs (
           notification_type, severity, priority, recipient_roles, subject,
-          project_id, drift_detection_id, escalation_alert_id, metadata, status
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+          project_id, drift_detection_id, escalation_alert_id, metadata, status,
+          correlation_id
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
         [
           rule.drift_type,
           rule.severity_level,
@@ -542,7 +545,8 @@ export class EscalationService {
           alert.drift_detection_id,
           alert.id,
           JSON.stringify({ rule_name: rule.rule_name }),
-          'sent'
+          'sent',
+          correlationId
         ]
       )
     } catch (error) {

@@ -360,7 +360,7 @@ export function ChatPanel({
                                 type={isLoading ? 'button' : 'submit'}
                                 size={'icon'}
                                 className={cn(isLoading && 'animate-pulse', 'rounded-full')}
-                                disabled={input.length === 0 && !isLoading}
+                                disabled={(input.trim().length === 0 && !isLoading) || isToolInvocationInProgress()}
                                 onClick={isLoading ? stop : undefined}
                             >
                                 {isLoading ? <Square size={20} /> : <ArrowUp size={20} />}
