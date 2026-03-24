@@ -1,5 +1,7 @@
 # Digital Twin Integration Roadmap
 
+> **🎯 JIRA EPIC CREATED**: [WA-149](https://cba-hr.atlassian.net/browse/WA-149) - March 23, 2026
+
 **Status**: 🔵 High Priority  
 **Business Driver**: Bentley iTwin & Microsoft Azure Digital Twins Partnership Opportunities  
 **Contact**: Caroline Keane (Bentley), Elisha Lass (Microsoft Azure)  

@@ -208,27 +208,36 @@ router.post('/:id/sync-models', async (req, res) => {
       return res.status(400).json({ error: 'Models array is required' })
     }
 
-    // Update the provider's available models and default model
+    // Update provider record with discovered models and default model
     // We update both the explicit columns and the configuration JSONB for compatibility
-    await pool.query(
-      `UPDATE ai_providers 
-       SET available_models = $1, 
-           default_model = $2,
-           configuration = configuration || jsonb_build_object('models', $1::jsonb, 'model', $2::text, 'default_model', $2::text),
-           updated_at = CURRENT_TIMESTAMP 
-       WHERE id = $3`,
-      [JSON.stringify(models), default_model, id]
-    )
+    try {
+      await pool.query(`
+      UPDATE ai_providers 
+      SET available_models = $1::jsonb,
+          default_model = $2::text,
+          configuration = COALESCE(configuration, '{}'::jsonb) || 
+            jsonb_build_object(
+              'models', $1::jsonb,
+              'default_model', $2::text,
+              'model', $2::text
+            ),
+          updated_at = NOW()
+      WHERE id = $3
+    `, [JSON.stringify(models), default_model, id]);
 
-    log.info(`AI provider ${id} synced with ${models.length} models. Default set to ${default_model}`)
+      log.info(`AI provider ${id} synced with ${models.length} models. Default set to ${default_model}`)
 
-    res.json({
-      success: true,
-      message: 'Models synced successfully'
-    })
-  } catch (error) {
+      res.json({
+        success: true,
+        message: 'Models synced successfully'
+      })
+    } catch (dbError: any) {
+      log.error('Database error during sync-models:', dbError)
+      res.status(500).json({ error: `Database sync failed: ${dbError.message}` })
+    }
+  } catch (error: any) {
     log.error('Sync models error:', error)
-    res.status(500).json({ error: 'Failed to sync models' })
+    res.status(500).json({ error: error.message || 'Failed to sync models' })
   }
 })
 
@@ -279,12 +288,14 @@ router.post('/:name/configure', async (req, res) => {
     }
 
     if (configuration?.priority !== undefined) {
+      const priorityVal = parseInt(configuration.priority.toString()) || 1
       updateQuery += `, priority = $${paramIndex}`
-      updateParams.push(parseInt(configuration.priority.toString()) || 1)
+      updateParams.push(priorityVal)
       paramIndex++
     } else if (req.body.priority !== undefined) {
+      const priorityVal = parseInt(req.body.priority.toString()) || 1
       updateQuery += `, priority = $${paramIndex}`
-      updateParams.push(parseInt(req.body.priority.toString()) || 1)
+      updateParams.push(priorityVal)
       paramIndex++
     }
 
@@ -502,33 +513,22 @@ router.get('/models', async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId })
   try {
     const result = await pool.query(`
-      SELECT name, provider_type FROM ai_providers WHERE is_active = true
+      SELECT id, name, provider_type FROM ai_providers WHERE is_active = true
     `)
 
     const models: Record<string, string[]> = {}
 
     for (const row of result.rows) {
       const providerName = row.name
-      const providerType = row.provider_type
+      const providerId = row.id
 
-      switch (providerType) {
-        case 'openai':
-          models[providerName] = ['gpt-3.5-turbo', 'gpt-4', 'gpt-4-turbo']
-          break
-        case 'google':
-          models[providerName] = ['gemini-pro', 'gemini-pro-vision']
-          break
-        case 'azure':
-          models[providerName] = ['gpt-35-turbo', 'gpt-4']
-          break
-        case 'anthropic':
-          models[providerName] = ['claude-3-sonnet', 'claude-3-haiku', 'claude-3-opus']
-          break
-        case 'ollama':
-          models[providerName] = ['llama3', 'llama3.1', 'mistral', 'phi3']
-          break
-        default:
-          models[providerName] = ['llama3']
+      try {
+        const discovery = await aiProviderService.discoverModels(providerId)
+        models[providerName] = discovery.discoveredModels.map(m => m.id)
+      } catch (err) {
+        log.warn(`Failed to discover models for ${providerName} during global fetch:`, err)
+        // Fallback to basic defaults only if discovery fails completely
+        models[providerName] = [getDefaultModel(row.provider_type)]
       }
     }
 

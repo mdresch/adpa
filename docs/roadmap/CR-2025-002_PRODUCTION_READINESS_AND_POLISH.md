@@ -1,5 +1,8 @@
 # Change Request CR-2025-002: Production Readiness & Feature Polish
 
+> **🎯 JIRA EPIC CREATED**: [WA-144](https://cba-hr.atlassian.net/browse/WA-144) - March 23, 2026  
+> **Child Stories**: WA-147 (Security), WA-148 (Documentation), WA-146 (Features), WA-145 (Deployment)
+
 **Status:** APPROVED  
 **Priority:** HIGH  
 **Type:** Enhancement / Production Readiness  

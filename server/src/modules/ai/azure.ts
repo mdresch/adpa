@@ -259,6 +259,44 @@ export class AzureConnector {
     }
   }
 
+  async getAvailableModels(providerName: string): Promise<any[]> {
+    const defaultModels = [{ id: 'gpt-4', name: 'GPT-4' }, { id: 'gpt-35-turbo', name: 'GPT-3.5 Turbo' }];
+    
+    try {
+      const provider = this.providers.get(providerName);
+      if (!provider) {
+        return defaultModels;
+      }
+
+      const { resourceName, apiKey, apiVersion = '2024-02-01' } = provider.config;
+      const url = `https://${resourceName}.openai.azure.com/openai/deployments?api-version=${apiVersion}`;
+
+      const response = await fetch(url, {
+        headers: {
+          'api-key': apiKey,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Azure API responded with ${response.status}`);
+      }
+
+      const data = await response.json() as any;
+      if (data.data && Array.isArray(data.data)) {
+        return data.data.map((deployment: any) => ({
+          id: deployment.id,
+          name: deployment.model || deployment.id
+        }));
+      }
+
+      return defaultModels;
+    } catch (error) {
+      console.error(`[AZURE AI] Failed to fetch models for ${providerName}:`, error);
+      return defaultModels;
+    }
+  }
+
   private decryptApiKey(encryptedApiKey: string): string {
     try {
       return Buffer.from(encryptedApiKey, 'base64').toString('utf-8');

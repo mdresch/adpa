@@ -94,6 +94,7 @@ export class MorphicRepository {
 
             return {
                 ...chatResult[0],
+                userId: chatResult[0].user_id, // Map for compatibility
                 messages: messagesResult
             };
         } catch (error) {

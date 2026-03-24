@@ -1387,27 +1387,25 @@ class AIService {
           const genAI = new GoogleGenerativeAI(directApiKey)
 
           // Map deprecated/unavailable models to current working ones
-          // Note: gemini-2.0-flash is stable and confirmed working with v1 API
+          // Note: gemini-1.5-flash-latest is stable and confirmed working with v1 API
+          // Map deprecated/unavailable models to current working ones
           const modelMap: Record<string, string> = {
-            'gemini-pro': 'gemini-2.0-flash',
-            'gemini-pro-vision': 'gemini-2.0-flash',
-            'gemini-1.0-pro': 'gemini-2.0-flash',
-            'gemini-1.0-pro-vision': 'gemini-2.0-flash',
-            'gemini-1.5-flash': 'gemini-2.0-flash',
-            'gemini-1.5-pro': 'gemini-2.0-flash',
-            'gemini-2.0-flash-exp': 'gemini-2.0-flash',
-            'gemini-2.5-flash': 'gemini-2.0-flash',
-            'gemini-2.5-pro': 'gemini-2.0-flash',
-            'gemini-3-flash-preview': 'gemini-2.0-flash',
+            'gemini-pro': 'gemini-2.5-flash',
+            'gemini-pro-vision': 'gemini-2.5-flash',
+            'gemini-1.0-pro': 'gemini-2.5-flash',
+            'gemini-1.5-flash': 'gemini-2.5-flash',
+            'gemini-1.5-pro': 'gemini-2.5-pro',
+            'gemini-flash-latest': 'gemini-2.5-flash',
+            'gemini-pro-latest': 'gemini-2.5-pro'
           }
 
-          // Use mapped model or fallback to current default (gemini-2.0-flash)
-          const requestedModel = request.model || 'gemini-2.0-flash'
+          // Use mapped model or fallback to current default (gemini-2.5-flash)
+          const requestedModel = request.model || 'gemini-2.5-flash'
           const modelName = modelMap[requestedModel] || requestedModel
 
           // Validate model name (ensure it's a current model that works in v1 API)
-          const validModels = ['gemini-2.0-flash', 'gemini-2.0-flash-exp']
-          const finalModel = validModels.includes(modelName) ? modelName : 'gemini-2.0-flash'
+          const validModels = ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-1.5-flash-latest', 'gemini-flash-latest']
+          const finalModel = validModels.includes(modelName) ? modelName : 'gemini-2.5-flash'
 
           // Log model mapping for debugging
           if (requestedModel !== finalModel) {
@@ -2190,7 +2188,7 @@ class AIService {
   private async buildGatewayModelId(providerType: string, model?: string): Promise<string> {
     const defaultModels: Record<string, string> = {
       'openai': 'gpt-4o',
-      'google': 'gemini-2.5-flash', // Use stable flash model
+      'google': 'gemini-1.5-flash-latest', // Use stable flash model
       'groq': 'llama-3.3-70b-versatile',
       'mistral': 'mistral-large-latest',
       'anthropic': 'claude-3-5-sonnet-latest',
@@ -2218,15 +2216,15 @@ class AIService {
     // Model mapping for deprecated/unavailable models (centralized validation)
     const modelMaps: Record<string, Record<string, string>> = {
       'google': {
-        'gemini-pro': 'gemini-1.5-flash',
-        'gemini-pro-vision': 'gemini-1.5-flash',
-        'gemini-1.0-pro': 'gemini-1.5-flash',
-        'gemini-1.0-pro-vision': 'gemini-1.5-flash',
-        'gemini-1.5-flash': 'gemini-1.5-flash',
-        'gemini-1.5-pro': 'gemini-1.5-pro',
-        'gemini-2.0-flash-exp': 'gemini-1.5-flash',
-        'gemini-2.5-flash': 'gemini-1.5-flash',
-        'gemini-3-flash-preview': 'gemini-1.5-flash',
+        'gemini-pro': 'gemini-1.5-flash-latest',
+        'gemini-pro-vision': 'gemini-1.5-flash-latest',
+        'gemini-1.0-pro': 'gemini-1.5-flash-latest',
+        'gemini-1.0-pro-vision': 'gemini-1.5-flash-latest',
+        'gemini-1.5-flash': 'gemini-1.5-flash-latest',
+        'gemini-1.5-pro': 'gemini-1.5-pro-latest',
+        'gemini-2.0-flash-exp': 'gemini-1.5-flash-latest',
+        'gemini-2.5-flash': 'gemini-1.5-flash-latest',
+        'gemini-3-flash-preview': 'gemini-1.5-flash-latest',
       }
     }
 
@@ -2246,10 +2244,10 @@ class AIService {
 
     // Validate model against valid models list for Google (v1 API compatibility)
     if (providerType === 'google') {
-      const validModels = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-exp']
+      const validModels = ['gemini-1.5-flash-latest', 'gemini-1.5-pro-latest', 'gemini-2.0-flash-exp']
       if (!validModels.includes(modelId)) {
-        logger.warn(`[AI-SERVICE] Invalid Google model ${modelId}, using default: gemini-1.5-flash`)
-        modelId = 'gemini-1.5-flash'
+        logger.warn(`[AI-SERVICE] Invalid Google model ${modelId}, using default: gemini-1.5-flash-latest`)
+        modelId = 'gemini-1.5-flash-latest'
       }
     }
 

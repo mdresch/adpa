@@ -297,8 +297,8 @@ export default function AIProviders() {
 
         const isEditing = !!formState.id
         const endpoint = isEditing
-          ? `/context-ai/providers/${formState.id}/configure`
-          : '/context-ai/providers'
+          ? `/ai-providers/${encodeURIComponent(formState.name)}/configure`
+          : '/ai-providers'
 
         const method = "POST" // Always use POST for both create and update
 
@@ -308,17 +308,20 @@ export default function AIProviders() {
           endpoint,
           formState: {
             id: formState.id,
+            name: formState.name,
             type: formState.type,
             priority: formState.priority,
             enabled: formState.enabled
           },
           requestBody: {
             ...(isEditing ? {
+              api_key: formState.apiKey || undefined, // Only send if changed
               configuration: {
                 endpoint: formState.endpoint,
                 priority: parseInt(formState.priority?.toString() || '1')
               },
               is_active: formState.enabled,
+              priority: parseInt(formState.priority?.toString() || '1')
             } : {
               name: formState.name,
               provider_type: providerType,
@@ -328,6 +331,7 @@ export default function AIProviders() {
                 priority: formState.priority
               },
               is_active: formState.enabled,
+              priority: formState.priority
             })
           }
         })
@@ -336,10 +340,11 @@ export default function AIProviders() {
           method,
           body: JSON.stringify({
             ...(isEditing ? {
-              // Edit mode - only send configuration and active status
+              // Edit mode
+              api_key: formState.apiKey || undefined,
               configuration: {
                 endpoint: formState.endpoint,
-                priority: parseInt(formState.priority?.toString() || '1'), // Ensure number
+                priority: parseInt(formState.priority?.toString() || '1'),
                 // Azure AI Foundry specific configuration
                 ...(providerType === "azure" && {
                   resourceName: formState.resourceName,
@@ -354,8 +359,9 @@ export default function AIProviders() {
                 })
               },
               is_active: formState.enabled,
+              priority: parseInt(formState.priority?.toString() || '1')
             } : {
-              // Add mode - send all fields
+              // Add mode
               name: formState.name,
               provider_type: providerType,
               api_key: formState.apiKey,
@@ -376,6 +382,7 @@ export default function AIProviders() {
                 })
               },
               is_active: formState.enabled,
+              priority: formState.priority
             }),
           }),
         })
@@ -439,7 +446,7 @@ export default function AIProviders() {
         const response = await apiClient.request<{
           is_active: boolean
           message?: string
-        }>(`/ai/providers/${encodeURIComponent(id)}/toggle`, {
+        }>(`/ai-providers/${encodeURIComponent(id)}/toggle`, {
           method: "POST",
         })
 

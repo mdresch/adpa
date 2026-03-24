@@ -1,5 +1,7 @@
 # ADPA Market Readiness 2026 - PMBOK 8 + EU Regulations + Competitive Response
 
+> **🎯 JIRA EPIC CREATED**: [WA-150](https://cba-hr.atlassian.net/browse/WA-150) - March 23, 2026
+
 **Date**: October 31, 2025  
 **Status**: 📋 **STRATEGIC MARKET RESPONSE**  
 **Scope**: PMBOK 8 readiness + EU compliance + competitive positioning  

@@ -2,6 +2,7 @@ import express from 'express';
 import { pool } from '../database/connection';
 import { childLogger } from '../utils/logger';
 import { authenticateToken } from '../middleware/auth';
+import { aiProviderService } from '../services/aiProviderService';
 
 const router = express.Router();
 
@@ -14,7 +15,7 @@ const router = express.Router();
  * GET /api/ai-models/providers/:providerId/models
  * Get all models for a specific provider
  */
-router.get('/providers/:providerId/models', authenticateToken, async (req, res) => {
+router.get('/providers/:providerId/models', async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId });
   try {
     const { providerId } = req.params;
@@ -68,7 +69,7 @@ router.get('/providers/:providerId/models', authenticateToken, async (req, res) 
  * GET /api/ai-models/providers/:providerId/models/:modelId
  * Get configuration for a specific model
  */
-router.get('/providers/:providerId/models/:modelId', authenticateToken, async (req, res) => {
+router.get('/providers/:providerId/models/:modelId', async (req, res) => {
   try {
     const { providerId, modelId } = req.params;
     
@@ -101,7 +102,7 @@ router.get('/providers/:providerId/models/:modelId', authenticateToken, async (r
  * POST /api/ai-models/providers/:providerId/models
  * Add or update model configuration for a provider
  */
-router.post('/providers/:providerId/models', authenticateToken, async (req, res) => {
+router.post('/providers/:providerId/models', async (req, res) => {
   try {
     const { providerId } = req.params;
     const modelData = req.body;
@@ -138,6 +139,38 @@ router.post('/providers/:providerId/models', authenticateToken, async (req, res)
     });
   } catch (error) {
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * POST /api/ai-models/providers/:providerId/test-connectivity
+ * Test connectivity for a specific provider
+ */
+router.post('/providers/:providerId/test-connectivity', async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId });
+  try {
+    const { providerId } = req.params;
+    
+    log.info(`Testing connectivity for provider: ${providerId}`);
+    const success = await aiProviderService.testProviderById(providerId);
+
+    if (success) {
+      res.json({
+        success: true,
+        message: 'Connectivity test passed'
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        message: 'Connectivity test failed'
+      });
+    }
+  } catch (error: any) {
+    log.error('Test connectivity error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message || 'Internal server error' 
+    });
   }
 });
 

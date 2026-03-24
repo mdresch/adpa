@@ -5,11 +5,23 @@ import { AsyncLocalStorage } from 'async_hooks';
 export const asyncLocalStorage = new AsyncLocalStorage<string>();
 
 // 2. Configure Pino
+const isDev = process.env.NODE_ENV === 'development' && !process.env.NEXT_RUNTIME;
+
 export const logger = pino({
   level: process.env.LOG_LEVEL || 'info',
-  transport: (process.env.NODE_ENV === 'development' && !process.env.NEXT_RUNTIME) ? {
-    target: 'pino-pretty',
-    options: { colorize: true, translateTime: 'HH:MM:ss Z' }
+  transport: isDev ? {
+    targets: [
+      {
+        target: 'pino-pretty',
+        options: { colorize: true, translateTime: 'HH:MM:ss Z' },
+        level: process.env.LOG_LEVEL || 'info'
+      },
+      {
+        target: 'pino/file',
+        options: { destination: 'd:/Source/adpa/server/logs/server.log', mkdir: true },
+        level: process.env.LOG_LEVEL || 'info'
+      }
+    ]
   } : undefined,
   // 3. Automatically inject the correlation ID into EVERY log
   mixin() {

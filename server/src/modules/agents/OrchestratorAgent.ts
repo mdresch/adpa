@@ -203,6 +203,8 @@ export class OrchestratorAgent extends BaseAgent {
       - 'pmbok': Best for project management, risk analysis, resource planning, and governance tasks.
       - 'discovery': Best for research, information gathering, and exploring external/internal data sources.
       - 'integration': Best for connecting systems, API operations, and data synchronization.
+      - 'rovo': Best for high-level architecture planning, Jira issue management, and Confluence documentation syncing.
+      - 'gemini': Best for code implementation, running tests, local repository automation, and Git operations.
       - 'general': Best for general reasoning, common knowledge, or tasks that don't fit the above.
 
       DEPENDENCIES:

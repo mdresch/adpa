@@ -11,7 +11,7 @@ export type ExecutionMode = 'serial' | 'parallel'
 export interface SubGoal {
   id: string
   goal: string
-  domain: 'pmbok' | 'discovery' | 'integration' | 'general'
+  domain: 'pmbok' | 'discovery' | 'integration' | 'general' | 'rovo' | 'gemini'
   dependsOn?: string[]
   metadata?: Record<string, any>
 }

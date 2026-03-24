@@ -11,6 +11,7 @@ import {
   langfuseDependency,
   securityValidationDependency,
   upstashDependency,
+  morphicDbDependency,
 } from "./dependencies"
 import { logger } from "../utils/logger"
 
@@ -40,7 +41,9 @@ export class StartupManager {
     this.graph.register(pineconeDependency)
     this.graph.register(langfuseDependency)
     this.graph.register(upstashDependency)
+    this.graph.register(morphicDbDependency)
   }
+
 
   async initialize(): Promise<void> {
     logger.info("🚀 Starting server initialization with dependency graph...")

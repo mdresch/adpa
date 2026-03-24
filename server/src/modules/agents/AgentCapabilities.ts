@@ -32,5 +32,16 @@ export const AGENT_CAPABILITY_PROFILES: Record<string, AgentCapabilityProfile> =
     supportedCapabilities: ['general_utility'],
     preferredDomains: ['general'],
     authorityMultiplier: 0.8
+  },
+  'rovo': {
+    supportedCapabilities: ['manage_jira', 'manage_confluence', 'rovo_search', 'decompose_tasks'],
+    preferredDomains: ['integration', 'pmbok'],
+    authorityMultiplier: 1.5
+  },
+  'gemini': {
+    supportedCapabilities: ['code_implementation', 'repository_automation', 'general_utility'],
+    preferredDomains: ['discovery', 'general'],
+    authorityMultiplier: 1.3
   }
 }
+

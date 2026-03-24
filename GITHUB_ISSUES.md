@@ -1,5 +1,21 @@
 # GitHub Issues - ADPA Technical Improvements (Optimized Plan)
 
+> **🎯 JIRA MIGRATION COMPLETE** (March 23, 2026)
+> 
+> These GitHub issues have been migrated and consolidated into Jira:
+> - **Epic WA-124**: ADPA Production Readiness & Stability (4 stories, 42 SP)
+> - **Epic WA-125**: ADPA Quality & Testing Infrastructure (3 stories, 34 SP)
+> - **Epic WA-126**: ADPA Design System & UX Foundation (5 stories, 39 SP)
+> 
+> View in Jira: https://cba-hr.atlassian.net/browse/WA-124
+
+> **📌 Jira Migration Status**: Issues #609-623 have been migrated to Jira  
+> 
+> **Active Project (WA - WebApp ADPA on cba-hr.atlassian.net)**:  
+> - [Epic WA-107 (Test Harness)](https://cba-hr.atlassian.net/browse/WA-107) | [Epic WA-108 (Modular Architecture)](https://cba-hr.atlassian.net/browse/WA-108)  
+> - **Summary**: [jira_wa_replication_summary.md](./jira_wa_replication_summary.md)  
+> - **Parent Epic**: [WA-106 (Working on ADPA by Rovo)](https://cba-hr.atlassian.net/browse/WA-106)
+
 This file contains all issues structured by phase and epic. Copy these into your GitHub project board.
 
 ---
@@ -105,6 +121,7 @@ This file contains all issues structured by phase and epic. Copy these into your
 - **Priority**: Critical
 - **Story Points**: 5
 - **Assignee**: QA Lead
+- **Jira**: [WA-110](https://cba-hr.atlassian.net/browse/WA-110)
 - **Description**:
   Establish testing infrastructure with transaction-based database isolation.
   
@@ -132,6 +149,7 @@ This file contains all issues structured by phase and epic. Copy these into your
 - **Priority**: High
 - **Story Points**: 3
 - **Assignee**: QA Lead
+- **Jira**: [WA-109](https://cba-hr.atlassian.net/browse/WA-109)
 - **Description**:
   Build test data factories for consistent test setup.
   
@@ -155,6 +173,7 @@ This file contains all issues structured by phase and epic. Copy these into your
 - **Priority**: High
 - **Story Points**: 3
 - **Assignee**: QA Lead
+- **Jira**: [WA-111](https://cba-hr.atlassian.net/browse/WA-111)
 - **Description**:
   Create mock AI providers for testing failover and generation.
   
@@ -177,6 +196,7 @@ This file contains all issues structured by phase and epic. Copy these into your
 - **Priority**: High
 - **Story Points**: 3
 - **Assignee**: QA Lead
+- **Jira**: [WA-112](https://cba-hr.atlassian.net/browse/WA-112)
 - **Description**:
   Create mock job queue for testing job lifecycle.
   
@@ -199,6 +219,7 @@ This file contains all issues structured by phase and epic. Copy these into your
 - **Priority**: High
 - **Story Points**: 4
 - **Assignee**: QA Lead
+- **Jira**: [WA-114](https://cba-hr.atlassian.net/browse/WA-114)
 - **Description**:
   Test login, token verification, and authentication failures.
   
@@ -224,6 +245,7 @@ This file contains all issues structured by phase and epic. Copy these into your
 - **Priority**: High
 - **Story Points**: 4
 - **Assignee**: QA Lead
+- **Jira**: [WA-115](https://cba-hr.atlassian.net/browse/WA-115)
 - **Description**:
   Test project creation, retrieval, update, deletion.
   
@@ -249,6 +271,7 @@ This file contains all issues structured by phase and epic. Copy these into your
 - **Priority**: High
 - **Story Points**: 4
 - **Assignee**: QA Lead
+- **Jira**: [WA-113](https://cba-hr.atlassian.net/browse/WA-113)
 - **Description**:
   Test document generation from templates with AI enrichment.
   
@@ -272,6 +295,7 @@ This file contains all issues structured by phase and epic. Copy these into your
 - **Priority**: Critical
 - **Story Points**: 4
 - **Assignee**: QA Lead
+- **Jira**: [WA-116](https://cba-hr.atlassian.net/browse/WA-116)
 - **Description**:
   Test AI provider failover and error handling.
   
@@ -295,6 +319,7 @@ This file contains all issues structured by phase and epic. Copy these into your
 - **Priority**: High
 - **Story Points**: 2
 - **Assignee**: QA Lead
+- **Jira**: [WA-117](https://cba-hr.atlassian.net/browse/WA-117)
 - **Description**:
   Test health endpoints with Supertest.
   
@@ -315,6 +340,7 @@ This file contains all issues structured by phase and epic. Copy these into your
 - **Priority**: High
 - **Story Points**: 3
 - **Assignee**: QA Lead
+- **Jira**: [WA-118](https://cba-hr.atlassian.net/browse/WA-118)
 - **Description**:
   Test job enqueue, processing, and error handling.
   
@@ -338,6 +364,7 @@ This file contains all issues structured by phase and epic. Copy these into your
 - **Priority**: High
 - **Story Points**: 5
 - **Assignee**: Backend Lead
+- **Jira**: [WA-119](https://cba-hr.atlassian.net/browse/WA-119)
 - **Description**:
   Create route registry with auto-discovery from modules.
   
@@ -358,11 +385,13 @@ This file contains all issues structured by phase and epic. Copy these into your
 
 ---
 
-### Issue 3.2: Create Module Structure
+### Issue 3.2 (#620): Create Module Structure
 - **Phase**: 3
 - **Priority**: Critical
 - **Story Points**: 8
 - **Assignee**: Backend Lead + Senior Eng
+- **Jira (Primary)**: [WA-122](https://cba-hr.atlassian.net/browse/WA-122)
+- **Jira (Reference)**: [COG-86](https://cba-adpa.atlassian.net/browse/COG-86)
 - **Description**:
   Refactor services into module structure.
   
@@ -393,11 +422,13 @@ This file contains all issues structured by phase and epic. Copy these into your
 
 ---
 
-### Issue 3.3: Extract Projects Repository
+### Issue 3.3 (#621): Extract Projects Repository
 - **Phase**: 3
 - **Priority**: High
 - **Story Points**: 4
 - **Assignee**: Backend Lead
+- **Jira (Primary)**: [WA-120](https://cba-hr.atlassian.net/browse/WA-120)
+- **Jira (Reference)**: [COG-84](https://cba-adpa.atlassian.net/browse/COG-84)
 - **Description**:
   Move project queries to repository with caching + query context.
   
@@ -419,11 +450,13 @@ This file contains all issues structured by phase and epic. Copy these into your
 
 ---
 
-### Issue 3.4: Extract Documents Repository
+### Issue 3.4 (#622): Extract Documents Repository
 - **Phase**: 3
 - **Priority**: High
 - **Story Points**: 4
 - **Assignee**: Backend Lead + Senior Eng
+- **Jira (Primary)**: [WA-121](https://cba-hr.atlassian.net/browse/WA-121)
+- **Jira (Reference)**: [COG-88](https://cba-adpa.atlassian.net/browse/COG-88)
 - **Description**:
   Move document queries to repository with optimization.
   
@@ -444,11 +477,13 @@ This file contains all issues structured by phase and epic. Copy these into your
 
 ---
 
-### Issue 3.5: Refactor AI Service to Module
+### Issue 3.5 (#623): Refactor AI Service to Module
 - **Phase**: 3
 - **Priority**: High
 - **Story Points**: 6
 - **Assignee**: Backend Lead + Senior Eng
+- **Jira (Primary)**: [WA-123](https://cba-hr.atlassian.net/browse/WA-123)
+- **Jira (Reference)**: [COG-87](https://cba-adpa.atlassian.net/browse/COG-87)
 - **Description**:
   Isolate AI providers and failover logic into module.
   

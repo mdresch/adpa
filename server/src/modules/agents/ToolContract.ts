@@ -12,6 +12,11 @@ export type ToolCapability =
   | 'sync_external_system'
   | 'generate_report'
   | 'general_utility'
+  | 'manage_jira'
+  | 'manage_confluence'
+  | 'rovo_search'
+  | 'code_implementation'
+  | 'repository_automation'
 
 export interface ToolContract<I = any, O = any> {
   capability: ToolCapability

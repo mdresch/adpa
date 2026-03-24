@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI, GenerativeModel } from "@google/generative-ai"
 import { logger } from "../../utils/logger"
-import { pool } from "../../database/connection"
+import { pool, getDatabasePoolSafe } from "../../database/connection"
 
 export interface GoogleConfig {
   apiKey: string
@@ -87,6 +87,26 @@ class GoogleConnector {
    * Initialize Google AI providers from database
    */
   async initializeProviders(): Promise<void> {
+    const startTime = Date.now()
+    const maxWaitTime = 15000 // 15 seconds
+    const checkInterval = 100 // 100ms
+    let elapsedTime = 0
+
+    // Wait for the pool to be initialized via getDatabasePoolSafe
+    // The Proxy 'pool' will throw if we access it before connectDatabase() is done
+    while (elapsedTime < maxWaitTime) {
+      if (getDatabasePoolSafe()) {
+        break
+      }
+      elapsedTime += checkInterval
+      await new Promise(resolve => setTimeout(resolve, checkInterval))
+    }
+
+    if (!getDatabasePoolSafe() && elapsedTime >= maxWaitTime) {
+      logger.warn('Database pool not ready after 15s in GoogleAIProvider, skipping DB-based init')
+      return
+    }
+
     try {
       const result = await pool.query(`
         SELECT 
@@ -238,66 +258,82 @@ class GoogleConnector {
    * Get available models for Google AI by calling the real API
    */
   async getAvailableModels(providerName?: string): Promise<any[]> {
-    const defaultModels = [
-      { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', description: 'Fast and efficient', context_window: 1000000, capabilities: ['text', 'vision'] },
-      { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', description: 'Most capable', context_window: 2000000, capabilities: ['text', 'vision'] },
-    ]
-
     if (!providerName) {
-      return defaultModels
+      throw new Error("Provider name is required for model discovery");
     }
 
     try {
-      const client = this.clients.get(providerName)
-      if (!client) {
-        logger.warn(`No client found for provider: ${providerName}`)
-        return defaultModels
+      let provider = this.providers.get(providerName);
+      
+      // If not in memory, try to load it now
+      if (!provider) {
+        logger.info(`Provider ${providerName} not in memory, attempting to load for discovery...`);
+        const result = await pool.query(
+          "SELECT id, name, api_key_encrypted, configuration, is_active, priority FROM ai_providers WHERE name = $1 AND provider_type = 'google'",
+          [providerName]
+        );
+        
+        if (result.rows.length > 0) {
+          const row = result.rows[0];
+          provider = {
+            id: row.id,
+            name: row.name,
+            config: {
+              apiKey: this.decryptApiKey(row.api_key_encrypted),
+              ...row.configuration
+            },
+            isActive: row.is_active,
+            priority: row.priority || 1,
+            rateLimits: row.configuration?.rateLimits || { requestsPerMinute: 60, tokensPerMinute: 32000, requestsPerDay: 1500 },
+            currentUsage: { requestsThisMinute: 0, tokensThisMinute: 0, requestsToday: 0, lastReset: new Date() }
+          };
+          // Register it so it's available for next time
+          this.providers.set(provider.name, provider);
+          this.clients.set(provider.name, new GoogleGenerativeAI(provider.config.apiKey));
+        }
+      }
+      
+      if (!provider) {
+        throw new Error(`Provider '${providerName}' not found in database or memory.`);
       }
 
-      logger.info(`Calling Google API to list available models for ${providerName}...`)
+      const modelsEndpoint = 'https://generativelanguage.googleapis.com/v1/models?key=' + provider.config.apiKey;
+      logger.info(`Discovering models for ${providerName} using v1 API...`);
       
-      // Call Google's REST API directly to list models
-      // The SDK doesn't have a listModels method, so we use fetch
-      const provider = this.providers.get(providerName)
-      if (!provider) {
-        return defaultModels
-      }
-      
-      const response = await fetch(
-        'https://generativelanguage.googleapis.com/v1/models?key=' + provider.config.apiKey
-      )
+      const response = await fetch(modelsEndpoint);
       
       if (!response.ok) {
-        throw new Error(`API responded with ${response.status}: ${response.statusText}`)
+        const errorText = await response.text();
+        throw new Error(`Google API responded with ${response.status}: ${errorText || response.statusText}`);
       }
       
-      const data = await response.json()
+      const data = await response.json();
       
       if (data.models && Array.isArray(data.models)) {
         const models = data.models
           .filter((m: any) => 
-            m.supportedGenerationMethods?.includes('generateContent') &&
-            m.name.includes('gemini')
+            m.supportedGenerationMethods?.includes('generateContent') || 
+            m.supportedGenerationMethods?.includes('predict')
           )
           .map((m: any) => {
-            const modelId = m.name.replace('models/', '')
+            const modelId = m.name.replace('models/', '');
             return {
               id: modelId,
               name: m.displayName || modelId,
               description: m.description || '',
               context_window: m.inputTokenLimit || 32000,
               capabilities: m.supportedGenerationMethods || ['generateContent']
-            }
-          })
+            };
+          });
         
-        logger.info(`✅ Discovered ${models.length} Google Gemini models via API`)
-        return models.length > 0 ? models : defaultModels
+        logger.info(`✅ Discovered ${models.length} Google models via API for ${providerName}`);
+        return models;
       }
       
-      return defaultModels
-    } catch (error) {
-      logger.error(`Failed to fetch models from Google API for ${providerName}:`, error)
-      return defaultModels
+      return [];
+    } catch (error: any) {
+      logger.error(`Failed to fetch models from Google API for ${providerName}:`, error);
+      throw error; // Propagate error so user knows why it failed
     }
   }
 
@@ -356,9 +392,20 @@ class GoogleConnector {
   }
 
   private decryptApiKey(encryptedKey: string): string {
-    // TODO: Implement proper encryption/decryption
+    if (!encryptedKey) return ''
+    
+    // If it already looks like a Google API key, don't try to decode it
+    if (encryptedKey.startsWith('AIza')) {
+      return encryptedKey
+    }
+
     try {
-      return Buffer.from(encryptedKey, "base64").toString("utf-8")
+      const decoded = Buffer.from(encryptedKey, "base64").toString("utf-8")
+      // Only return decoded if it looks valid (e.g., contains the Google prefix)
+      if (decoded.startsWith('AIza')) {
+        return decoded
+      }
+      return encryptedKey // Fallback to original
     } catch {
       return encryptedKey // Fallback to plain text
     }

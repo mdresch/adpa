@@ -1,5 +1,7 @@
 # Smart Document Versioning & Template Re-generation
 
+> **🎯 JIRA EPIC CREATED**: [WA-151](https://cba-hr.atlassian.net/browse/WA-151) - March 23, 2026
+
 **Date**: October 31, 2025  
 **Status**: 📋 **PLANNED**  
 **Priority**: 🔴 **HIGH** (Core UX improvement)  

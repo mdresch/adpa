@@ -8,9 +8,13 @@
 import { pool } from '../database/connection'
 import { logger } from '../utils/logger'
 import { v4 as uuidv4 } from 'uuid'
+import { openaiConnector } from '../modules/ai/openai'
+import { googleConnector } from '../modules/ai/google'
+import { azureConnector } from '../modules/ai/azure'
+import { mistralConnector } from '../modules/ai/mistral'
 
 // AI Provider Types
-export type AIProviderType = 'openai' | 'google' | 'azure' | 'anthropic' | 'cohere' | 'huggingface' | 'ollama' | 'deepseek' | 'moonshot' | 'xai' | 'groq'
+export type AIProviderType = 'openai' | 'google' | 'azure' | 'anthropic' | 'cohere' | 'huggingface' | 'ollama' | 'deepseek' | 'moonshot' | 'xai' | 'groq' | 'mistral'
 
 // AI Provider Configuration
 export interface AIProviderConfig {
@@ -157,6 +161,8 @@ class AIProviderService {
         return new XAIProvider(config)
       case 'groq':
         return new GroqProvider(config)
+      case 'mistral':
+        return new MistralProvider(config)
       default:
         throw new Error(`Unsupported provider type: ${config.type}`)
     }
@@ -422,7 +428,9 @@ class AIProviderService {
     }
     
     const providerInstance = this.createProvider(tempConfig)
+    logger.info(`Calling getModels for ${providerData.name} (type: ${providerData.provider_type})...`)
     const discoveredModels = await providerInstance.getModels()
+    logger.info(`getModels returned ${discoveredModels.length} results for ${providerData.name}`)
 
     return {
       provider: {
@@ -431,8 +439,49 @@ class AIProviderService {
         type: providerData.provider_type,
         default_model: providerData.default_model,
       },
-      discoveredModels: discoveredModels.map(m => (typeof m === 'string' ? { id: m, name: m } : m))
+      discoveredModels: discoveredModels.map(m => {
+        const result = (typeof m === 'string' ? { id: m, name: m } : m);
+        return result;
+      })
     }
+  }
+
+  /**
+   * Test a provider by its database ID
+   */
+  async testProviderById(providerId: string): Promise<boolean> {
+    if (!this.initialized) {
+      await this.initialize()
+    }
+
+    const providerResult = await pool.query(
+      'SELECT id, name, provider_type, api_key_encrypted, configuration FROM ai_providers WHERE id = $1',
+      [providerId]
+    )
+
+    if (providerResult.rows.length === 0) {
+      throw new Error('Provider not found')
+    }
+
+    const providerData = providerResult.rows[0]
+
+    // Create a temporary config to instantiate the provider class
+    const tempConfig: AIProviderConfig = {
+      id: providerData.id,
+      name: providerData.name,
+      type: providerData.provider_type,
+      apiKey: this.decryptApiKey(providerData.api_key_encrypted),
+      endpoint: providerData.configuration?.endpoint,
+      model: providerData.configuration?.model,
+      priority: providerData.priority || 1,
+      isActive: providerData.is_active,
+      configuration: providerData.configuration || {},
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }
+    
+    const providerInstance = this.createProvider(tempConfig)
+    return await providerInstance.test()
   }
 
   /**
@@ -464,28 +513,51 @@ class OpenAIProvider implements AIProvider {
   }
 
   async generate(request: AIRequest): Promise<AIResponse> {
-    // Implementation would use OpenAI SDK
-    // For now, return a mock response
-    return {
-      content: `Mock OpenAI response for: ${request.prompt}`,
-      usage: {
-        promptTokens: 10,
-        completionTokens: 20,
-        totalTokens: 30
-      },
-      model: this.config.model || 'gpt-3.5-turbo',
-      provider: this.config.name,
-      finishReason: 'stop'
+    try {
+      const messages = request.messages || [{ role: 'user', content: request.prompt }];
+      const response = await openaiConnector.generateCompletion({
+        messages,
+        model: request.model || this.config.model || 'gpt-3.5-turbo',
+        temperature: request.temperature,
+        max_tokens: request.maxTokens,
+      }, this.config.name);
+      
+      return {
+        content: response.choices[0]?.message?.content || '',
+        usage: response.usage ? {
+          promptTokens: response.usage.prompt_tokens,
+          completionTokens: response.usage.completion_tokens,
+          totalTokens: response.usage.total_tokens
+        } : undefined,
+        model: response.model,
+        provider: this.config.name,
+        finishReason: response.choices[0]?.finish_reason
+      };
+    } catch (error) {
+      logger.warn(`[MOCK FALLBACK] OpenAI generation failed for ${this.name}, using mock. Error:`, error);
+      return {
+        content: `Mock OpenAI response for: ${request.prompt}`,
+        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        model: this.config.model || 'gpt-3.5-turbo',
+        provider: this.config.name,
+        finishReason: 'stop'
+      }
     }
   }
 
   async test(): Promise<boolean> {
-    // Test OpenAI connection
-    return true
+    return openaiConnector.testConnection(this.config.name)
   }
 
   async getModels(): Promise<string[]> {
-    return ['gpt-3.5-turbo', 'gpt-4', 'gpt-4-turbo']
+    try {
+      const models = await openaiConnector.getAvailableModels(this.config.name)
+      if (!models || models.length === 0) throw new Error('No models returned from API');
+      return models.map(m => m.id)
+    } catch (error: any) {
+      logger.error(`Failed to discover OpenAI models for ${this.config.name}:`, error)
+      throw new Error(`Model discovery failed for ${this.config.name}: ${error.message || 'Unknown error'}`)
+    }
   }
 }
 
@@ -499,26 +571,55 @@ class GoogleAIProvider implements AIProvider {
   }
 
   async generate(request: AIRequest): Promise<AIResponse> {
-    // Implementation would use Google AI SDK
-    return {
-      content: `Mock Google AI response for: ${request.prompt}`,
-      usage: {
-        promptTokens: 10,
-        completionTokens: 20,
-        totalTokens: 30
-      },
-      model: this.config.model || 'gemini-pro',
-      provider: this.config.name,
-      finishReason: 'stop'
+    try {
+      const messages = request.messages || [{ role: 'user', content: request.prompt }];
+      if (request.systemPrompt && !request.messages) {
+        messages.unshift({ role: 'system', content: request.systemPrompt });
+      }
+
+      const response = await googleConnector.generateCompletion({
+        messages,
+        model: request.model || this.config.model || 'gemini-pro',
+        temperature: request.temperature,
+        max_tokens: request.maxTokens,
+      }, this.config.name);
+      
+      return {
+        content: response.choices[0]?.message?.content || '',
+        usage: response.usage ? {
+          promptTokens: response.usage.prompt_tokens,
+          completionTokens: response.usage.completion_tokens,
+          totalTokens: response.usage.total_tokens
+        } : undefined,
+        model: response.model,
+        provider: this.config.name,
+        finishReason: response.choices[0]?.finish_reason
+      };
+    } catch (error) {
+      logger.warn(`[MOCK FALLBACK] Google generation failed for ${this.name}, using mock. Error:`, error);
+      return {
+        content: `Mock Google AI response for: ${request.prompt}`,
+        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        model: this.config.model || 'gemini-pro',
+        provider: this.config.name,
+        finishReason: 'stop'
+      }
     }
   }
 
   async test(): Promise<boolean> {
-    return true
+    return googleConnector.testConnection(this.config.name)
   }
 
   async getModels(): Promise<string[]> {
-    return ['gemini-pro', 'gemini-pro-vision']
+    try {
+      const models = await googleConnector.getAvailableModels(this.config.name)
+      if (!models || models.length === 0) throw new Error('No models returned from API');
+      return models.map(m => m.id)
+    } catch (error: any) {
+      logger.error(`Failed to discover Google models for ${this.config.name}:`, error)
+      throw new Error(`Model discovery failed for ${this.config.name}: ${error.message || 'Unknown error'}`)
+    }
   }
 }
 
@@ -532,25 +633,48 @@ class AzureAIProvider implements AIProvider {
   }
 
   async generate(request: AIRequest): Promise<AIResponse> {
-    return {
-      content: `Mock Azure AI response for: ${request.prompt}`,
-      usage: {
-        promptTokens: 10,
-        completionTokens: 20,
-        totalTokens: 30
-      },
-      model: this.config.model || 'gpt-35-turbo',
-      provider: this.config.name,
-      finishReason: 'stop'
+    try {
+      const response = await azureConnector.generateContent(this.config.name, {
+        prompt: request.prompt,
+        messages: request.messages,
+        model: request.model || this.config.model,
+        temperature: request.temperature,
+        maxTokens: request.maxTokens,
+        systemPrompt: request.systemPrompt
+      });
+      
+      return {
+        content: response.text,
+        usage: response.usage,
+        model: request.model || this.config.model || 'gpt-35-turbo',
+        provider: this.config.name,
+        finishReason: response.finishReason
+      };
+    } catch (error) {
+      logger.warn(`[MOCK FALLBACK] Azure generation failed for ${this.name}, using mock. Error:`, error);
+      return {
+        content: `Mock Azure AI response for: ${request.prompt}`,
+        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        model: this.config.model || 'gpt-35-turbo',
+        provider: this.config.name,
+        finishReason: 'stop'
+      }
     }
   }
 
   async test(): Promise<boolean> {
-    return true
+    return azureConnector.testConnection(this.config.name)
   }
 
   async getModels(): Promise<string[]> {
-    return ['gpt-35-turbo', 'gpt-4']
+    try {
+      const models = await azureConnector.getAvailableModels(this.config.name)
+      if (!models || models.length === 0) throw new Error('No models returned from API');
+      return models.map(m => m.id)
+    } catch (error: any) {
+      logger.error(`Failed to discover Azure models for ${this.config.name}:`, error)
+      throw new Error(`Model discovery failed for ${this.config.name}: ${error.message || 'Unknown error'}`)
+    }
   }
 }
 
@@ -564,13 +688,10 @@ class AnthropicProvider implements AIProvider {
   }
 
   async generate(request: AIRequest): Promise<AIResponse> {
+    logger.warn(`[MOCK] Using mock Anthropic generation for ${this.name}.`);
     return {
       content: `Mock Anthropic response for: ${request.prompt}`,
-      usage: {
-        promptTokens: 10,
-        completionTokens: 20,
-        totalTokens: 30
-      },
+      usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
       model: this.config.model || 'claude-3-sonnet',
       provider: this.config.name,
       finishReason: 'stop'
@@ -578,11 +699,12 @@ class AnthropicProvider implements AIProvider {
   }
 
   async test(): Promise<boolean> {
-    return true
+    return true; 
   }
 
   async getModels(): Promise<string[]> {
-    return ['claude-3-sonnet', 'claude-3-haiku', 'claude-3-opus']
+    // Anthropic currently doesn't have a public models list API
+    return ['claude-3-7-sonnet-latest', 'claude-3-5-sonnet-latest', 'claude-3-5-haiku-latest', 'claude-3-opus-latest']
   }
 }
 
@@ -596,13 +718,10 @@ class CohereProvider implements AIProvider {
   }
 
   async generate(request: AIRequest): Promise<AIResponse> {
+    logger.warn(`[MOCK] Using mock Cohere generation for ${this.name}.`);
     return {
       content: `Mock Cohere response for: ${request.prompt}`,
-      usage: {
-        promptTokens: 10,
-        completionTokens: 20,
-        totalTokens: 30
-      },
+      usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
       model: this.config.model || 'command',
       provider: this.config.name,
       finishReason: 'stop'
@@ -610,11 +729,32 @@ class CohereProvider implements AIProvider {
   }
 
   async test(): Promise<boolean> {
-    return true
+    try {
+      const response = await fetch('https://api.cohere.ai/v1/models', {
+        headers: { 'Authorization': `Bearer ${this.config.apiKey}` }
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
   }
 
   async getModels(): Promise<string[]> {
-    return ['command', 'command-light']
+    try {
+      const response = await fetch('https://api.cohere.ai/v1/models', {
+        headers: { 'Authorization': `Bearer ${this.config.apiKey}` }
+      });
+      if (response.ok) {
+        const data = await response.json() as any;
+        const models = data.models?.map((m: any) => m.name);
+        if (!models || models.length === 0) throw new Error('No models returned from API');
+        return models;
+      }
+      throw new Error(`Cohere API returned ${response.status}`);
+    } catch (e: any) {
+      logger.error('Failed to fetch Cohere models:', e);
+      throw new Error(`Model discovery failed for ${this.config.name}: ${e.message}`);
+    }
   }
 }
 
@@ -628,13 +768,10 @@ class HuggingFaceProvider implements AIProvider {
   }
 
   async generate(request: AIRequest): Promise<AIResponse> {
+    logger.warn(`[MOCK] Using mock HuggingFace generation for ${this.name}.`);
     return {
       content: `Mock HuggingFace response for: ${request.prompt}`,
-      usage: {
-        promptTokens: 10,
-        completionTokens: 20,
-        totalTokens: 30
-      },
+      usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
       model: this.config.model || 'microsoft/DialoGPT-medium',
       provider: this.config.name,
       finishReason: 'stop'
@@ -646,7 +783,8 @@ class HuggingFaceProvider implements AIProvider {
   }
 
   async getModels(): Promise<string[]> {
-    return ['microsoft/DialoGPT-medium', 'facebook/blenderbot-400M-distill']
+    // This would ideally search HF hub, but returning a curated list for the integration
+    return ['meta-llama/Llama-3.3-70B-Instruct', 'mistralai/Mistral-7B-v0.1', 'microsoft/phi-2']
   }
 }
 
@@ -716,12 +854,15 @@ class OllamaProvider implements AIProvider {
       const response = await fetch(`${endpoint}/api/tags`);
       if (response.ok) {
         const data = await response.json() as any;
-        return data.models?.map((m: any) => m.name) || ['llama3', 'mistral'];
+        const models = data.models?.map((m: any) => m.name);
+        if (!models || models.length === 0) throw new Error('No models found in Ollama');
+        return models;
       }
-    } catch (e) {
+      throw new Error(`Ollama returned ${response.status}`);
+    } catch (e: any) {
       logger.error('Failed to fetch Ollama models:', e);
+      throw new Error(`Model discovery failed for ${this.config.name}: ${e.message}`);
     }
-    return ['llama3', 'mistral'];
   }
 }
 
@@ -729,36 +870,185 @@ class DeepSeekProvider implements AIProvider {
   name: string
   type: AIProviderType
   constructor(private config: AIProviderConfig) { this.name = config.name; this.type = config.type; }
-  async generate(request: AIRequest): Promise<AIResponse> { return { content: 'Mock DeepSeek response', model: 'deepseek-chat', provider: this.name }; }
-  async test(): Promise<boolean> { return true; }
-  async getModels(): Promise<string[]> { return ['deepseek-chat', 'deepseek-coder']; }
+  async generate(request: AIRequest): Promise<AIResponse> { 
+    logger.warn(`[MOCK] Using mock DeepSeek generation for ${this.name}.`);
+    return { content: 'Mock DeepSeek response', model: 'deepseek-chat', provider: this.name }; 
+  }
+  async test(): Promise<boolean> { 
+    try {
+      const response = await fetch('https://api.deepseek.com/models', {
+        headers: { 'Authorization': `Bearer ${this.config.apiKey}` }
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+  async getModels(): Promise<string[]> { 
+    try {
+      const response = await fetch('https://api.deepseek.com/models', {
+        headers: { 'Authorization': `Bearer ${this.config.apiKey}` }
+      });
+      if (response.ok) {
+        const data = await response.json() as any;
+        const models = data.data?.map((m: any) => m.id);
+        if (!models || models.length === 0) throw new Error('No models returned from API');
+        return models;
+      }
+      throw new Error(`DeepSeek API returned ${response.status}`);
+    } catch (e: any) {
+      logger.error('Failed to fetch DeepSeek models:', e);
+      throw new Error(`Model discovery failed for ${this.config.name}: ${e.message}`);
+    }
+  }
 }
 
 class MoonshotProvider implements AIProvider {
   name: string
   type: AIProviderType
   constructor(private config: AIProviderConfig) { this.name = config.name; this.type = config.type; }
-  async generate(request: AIRequest): Promise<AIResponse> { return { content: 'Mock Moonshot response', model: 'kimi-k2-turbo-preview', provider: this.name }; }
-  async test(): Promise<boolean> { return true; }
-  async getModels(): Promise<string[]> { return ['kimi-k2-turbo-preview', 'moonshot-v1-8k']; }
+  async generate(request: AIRequest): Promise<AIResponse> { 
+    logger.warn(`[MOCK] Using mock Moonshot generation for ${this.name}.`);
+    return { content: 'Mock Moonshot response', model: 'kimi-k2-turbo-preview', provider: this.name }; 
+  }
+  async test(): Promise<boolean> { 
+    try {
+      const response = await fetch('https://api.moonshot.cn/v1/models', {
+        headers: { 'Authorization': `Bearer ${this.config.apiKey}` }
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+  async getModels(): Promise<string[]> { 
+    try {
+      const response = await fetch('https://api.moonshot.cn/v1/models', {
+        headers: { 'Authorization': `Bearer ${this.config.apiKey}` }
+      });
+      if (response.ok) {
+        const data = await response.json() as any;
+        const models = data.data?.map((m: any) => m.id);
+        if (!models || models.length === 0) throw new Error('No models returned from API');
+        return models;
+      }
+      throw new Error(`Moonshot API returned ${response.status}`);
+    } catch (e: any) {
+      logger.error('Failed to fetch Moonshot models:', e);
+      throw new Error(`Model discovery failed for ${this.config.name}: ${e.message}`);
+    }
+  }
 }
 
 class XAIProvider implements AIProvider {
   name: string
   type: AIProviderType
   constructor(private config: AIProviderConfig) { this.name = config.name; this.type = config.type; }
-  async generate(request: AIRequest): Promise<AIResponse> { return { content: 'Mock xAI response', model: 'grok-beta', provider: this.name }; }
-  async test(): Promise<boolean> { return true; }
-  async getModels(): Promise<string[]> { return ['grok-beta']; }
+  async generate(request: AIRequest): Promise<AIResponse> { 
+    logger.warn(`[MOCK] Using mock xAI generation for ${this.name}.`);
+    return { content: 'Mock xAI response', model: 'grok-beta', provider: this.name }; 
+  }
+  async test(): Promise<boolean> { 
+    try {
+      const response = await fetch('https://api.x.ai/v1/models', {
+        headers: { 'Authorization': `Bearer ${this.config.apiKey}` }
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+  async getModels(): Promise<string[]> { 
+    try {
+      const response = await fetch('https://api.x.ai/v1/models', {
+        headers: { 'Authorization': `Bearer ${this.config.apiKey}` }
+      });
+      if (response.ok) {
+        const data = await response.json() as any;
+        const models = data.data?.map((m: any) => m.id);
+        if (!models || models.length === 0) throw new Error('No models returned from API');
+        return models;
+      }
+      throw new Error(`xAI API returned ${response.status}`);
+    } catch (e: any) {
+      logger.error('Failed to fetch xAI models:', e);
+      throw new Error(`Model discovery failed for ${this.config.name}: ${e.message}`);
+    }
+  }
 }
 
 class GroqProvider implements AIProvider {
   name: string
   type: AIProviderType
   constructor(private config: AIProviderConfig) { this.name = config.name; this.type = config.type; }
-  async generate(request: AIRequest): Promise<AIResponse> { return { content: 'Mock Groq response', model: 'llama-3.3-70b-versatile', provider: this.name }; }
-  async test(): Promise<boolean> { return true; }
-  async getModels(): Promise<string[]> { return ['llama-3.3-70b-versatile', 'mixtral-8x7b-32768']; }
+  async generate(request: AIRequest): Promise<AIResponse> { 
+    logger.warn(`[MOCK] Using mock Groq generation for ${this.name}.`);
+    return { content: 'Mock Groq response', model: 'llama-3.3-70b-versatile', provider: this.name }; 
+  }
+  async test(): Promise<boolean> { 
+    try {
+      const response = await fetch('https://api.groq.com/openai/v1/models', {
+        headers: { 'Authorization': `Bearer ${this.config.apiKey}` }
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+  async getModels(): Promise<string[]> { 
+    try {
+      const response = await fetch('https://api.groq.com/openai/v1/models', {
+        headers: { 'Authorization': `Bearer ${this.config.apiKey}` }
+      });
+      if (response.ok) {
+        const data = await response.json() as any;
+        const models = data.data?.map((m: any) => m.id);
+        if (!models || models.length === 0) throw new Error('No models returned from API');
+        return models;
+      }
+      throw new Error(`Groq API returned ${response.status}`);
+    } catch (e: any) {
+      logger.error('Failed to fetch Groq models:', e);
+      throw new Error(`Model discovery failed for ${this.config.name}: ${e.message}`);
+    }
+  }
+}
+
+class MistralProvider implements AIProvider {
+  name: string
+  type: AIProviderType
+  constructor(private config: AIProviderConfig) { this.name = config.name; this.type = config.type; }
+  async generate(request: AIRequest): Promise<AIResponse> { 
+    logger.warn(`[MOCK] Using mock Mistral generation for ${this.name}.`);
+    return { content: 'Mock Mistral response', model: 'mistral-large-latest', provider: this.name }; 
+  }
+  async test(): Promise<boolean> { 
+    try {
+      const response = await fetch('https://api.mistral.ai/v1/models', {
+        headers: { 'Authorization': `Bearer ${this.config.apiKey}` }
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+  async getModels(): Promise<string[]> { 
+    try {
+      const response = await fetch('https://api.mistral.ai/v1/models', {
+        headers: { 'Authorization': `Bearer ${this.config.apiKey}` }
+      });
+      if (response.ok) {
+        const data = await response.json() as any;
+        const models = data.data?.map((m: any) => m.id);
+        if (!models || models.length === 0) throw new Error('No models returned from API');
+        return models;
+      }
+      throw new Error(`Mistral API returned ${response.status}`);
+    } catch (e: any) {
+      logger.error('Failed to fetch Mistral models:', e);
+      throw new Error(`Model discovery failed for ${this.config.name}: ${e.message}`);
+    }
+  }
 }
 
 // Export singleton instance

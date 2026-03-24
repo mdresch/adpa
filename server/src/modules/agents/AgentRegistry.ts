@@ -11,11 +11,13 @@
 import { BaseAgent } from './BaseAgent'
 import { GeneralPurposeAgent } from './GeneralPurposeAgent'
 import { DiscoveryAgent } from './DiscoveryAgent'
+import { RovoAgent } from './RovoAgent'
+import { GeminiAgent } from './GeminiAgent'
 import { PMBOKProcessAgent } from '../pmbok6/PMBOKProcessAgent'
 import { PMBOK6_PROCESSES } from '../../../../types/pmbok6-data'
 import { AGENT_CAPABILITY_PROFILES } from './AgentCapabilities'
 
-export type AgentDomain = 'pmbok' | 'discovery' | 'integration' | 'general'
+export type AgentDomain = 'pmbok' | 'discovery' | 'integration' | 'general' | 'rovo' | 'gemini'
 
 /**
  * Registry to handle agent instantiation by domain.
@@ -66,6 +68,12 @@ export class AgentRegistry {
 
       case 'discovery':
         return new DiscoveryAgent()
+
+      case 'rovo':
+        return new RovoAgent()
+
+      case 'gemini':
+        return new GeminiAgent()
 
       case 'integration': {
         const agent = new GeneralPurposeAgent()
