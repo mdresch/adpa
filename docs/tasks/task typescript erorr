@@ -1,0 +1,6 @@
+# Tasks
+
+- [x] Fix TypeScript error in [app/templates/page.tsx](file:///d:/Source/adpa/app/templates/page.tsx) <!-- id: 0 -->
+    - [x] Add guards for `new Date(template.deleted_at)` <!-- id: 1 -->
+    - [x] Check for other similar unsafe Date initializations <!-- id: 2 -->
+- [x] Verify fix <!-- id: 3 -->

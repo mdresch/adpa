@@ -124,7 +124,9 @@ router.post(
         relationshipDepth: Joi.number().min(1).max(3).default(2),
         relationshipTypes: Joi.array().items(Joi.string()).optional(),
         includeKnowledgeBase: Joi.boolean().default(true),
-        maxContextItems: Joi.number().min(1).max(15).default(8)
+        maxContextItems: Joi.number().min(1).max(15).default(8),
+        includeStale: Joi.boolean().default(true),
+        maxPromptTokens: Joi.number().min(100).max(6000).default(1800)
     })),
     async (req, res) => {
         try {
@@ -147,6 +149,8 @@ router.post(
                 relationshipTypes: req.body.relationshipTypes,
                 includeKnowledgeBase: req.body.includeKnowledgeBase,
                 maxContextItems: req.body.maxContextItems,
+                includeStale: req.body.includeStale,
+                maxPromptTokens: req.body.maxPromptTokens,
                 includeAnswer: false
             }
 
@@ -189,6 +193,8 @@ router.post(
         relationshipTypes: Joi.array().items(Joi.string()).optional(),
         includeKnowledgeBase: Joi.boolean().default(true),
         maxContextItems: Joi.number().min(1).max(15).default(8),
+        includeStale: Joi.boolean().default(true),
+        maxPromptTokens: Joi.number().min(100).max(6000).default(1800),
         includeAnswer: Joi.boolean().default(true),
         stream: Joi.boolean().default(false),
         provider: Joi.string().optional(),
@@ -216,6 +222,8 @@ router.post(
                 relationshipTypes: req.body.relationshipTypes,
                 includeKnowledgeBase: req.body.includeKnowledgeBase,
                 maxContextItems: req.body.maxContextItems,
+                includeStale: req.body.includeStale,
+                maxPromptTokens: req.body.maxPromptTokens,
                 includeAnswer: req.body.includeAnswer,
                 provider: req.body.provider,
                 model: req.body.model,

@@ -1,0 +1,30 @@
+# Walkthrough - AI Provider Integration & Bootstrapping
+
+I have successfully integrated the new Azure AI cloud endpoints and the **Foundry Local** on-device inference platform, followed by implementing automated bootstrapping and pushing all changes to the repository.
+
+## Changes Made
+
+### 1. Azure AI Cloud Integration
+- **Refactored [AzureConnector](file:///d:/Source/adpa/server/src/modules/ai/azure.ts#50-353)**: Updated [azure.ts](file:///d:/Source/adpa/server/src/modules/ai/azure.ts) to robustly parse resource names from both standard Azure OpenAI and Azure AI Project/Foundry endpoints.
+- **Unified Provider Sync**: Single script to register all cloud and local providers in the database.
+
+### 2. Foundry Local Integration (On-Device)
+- **New Connector**: Created [foundry-local.ts](file:///d:/Source/adpa/server/src/modules/ai/foundry-local.ts) for the [Foundry Local REST API](https://foundrylocal.ai).
+- **Service Registration**: Updated [aiProviderService.ts](file:///d:/Source/adpa/server/src/services/aiProviderService.ts) for automatic model discovery.
+
+### 3. Local AI Bootstrapping (NEW)
+- **[LocalAIService](file:///d:/Source/adpa/server/src/services/localAIService.ts#16-121)**: Implemented [localAIService.ts](file:///d:/Source/adpa/server/src/services/localAIService.ts) to manage local AI processes.
+- **Automated Startup**: Integrated into [aiProviders.ts](file:///d:/Source/adpa/server/src/startup/dependencies/aiProviders.ts), ensuring Ollama and Foundry Local services are initialized on server startup.
+- **Environment**: Added `LOCAL_AI_AUTO_START` and model parameters to [.env](file:///d:/Source/adpa/.env).
+
+### 4. Stability & Type-Safety Fixes
+- **Researcher Agent Fix**: Implemented localized type-safety in [researcher.ts](file:///d:/Source/adpa/lib/morphic/agents/researcher.ts) for Gemini tool compatibility.
+- **Knowledge Tool Fix**: Resolved type error in [knowledge.ts](file:///d:/Source/adpa/lib/morphic/tools/knowledge.ts).
+
+## Repository & Submission
+- **Branch**: `WA-107-adpa-test-harness-implementation`
+- **Action**: Cleaned up scratch files, staged all modifications, and pushed to `origin`.
+
+> [!IMPORTANT]
+> - Ensure **Foundry Local** and **Ollama** CLIs are installed for the automated bootstrap to function.
+> - Please update your cloud API keys in the [.env](file:///d:/Source/adpa/.env) file!

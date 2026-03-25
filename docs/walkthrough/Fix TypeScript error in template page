@@ -1,0 +1,23 @@
+# Walkthrough - Fix TypeScript error in Templates page
+
+I have resolved the "No overload matches this call" TypeScript error in [app/templates/page.tsx](file:///d:/Source/adpa/app/templates/page.tsx).
+
+## Changes Made
+
+### Frontend
+
+#### [page.tsx](file:///d:/Source/adpa/app/templates/page.tsx)
+
+- Added a conditional guard for `template.deleted_at` before passing it to the `Date` constructor at line 1137.
+- This ensures that if the field is `undefined`, the application displays a fallback ('—') instead of causing a type mismatch.
+
+```diff
+- Framework: {template.framework} • Category: {template.category} • Archived: {new Date(template.deleted_at).toLocaleDateString()}
++ Framework: {template.framework} • Category: {template.category} • Archived: {template.deleted_at ? new Date(template.deleted_at).toLocaleDateString() : '—'}
+```
+
+## Verification Results
+
+### Automated Tests
+- I've reviewed the file for other `new Date()` calls and confirmed they already have appropriate guards or are using guaranteed non-null fields.
+- Verified that the logic now matches the pattern used elsewhere in the file (e.g., lines 908 and 1014).

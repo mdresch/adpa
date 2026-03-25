@@ -63,6 +63,36 @@ export default function LessonsTab({ projectId }: LessonsTabProps) {
     fetchLessons()
   }
 
+  const handleApprove = async (lesson: LessonItem) => {
+    try {
+      if (!lesson.id) return
+      const resp = await apiClient.put<{ success: boolean }>(`lessons/lessons/${lesson.id}`, {
+        status: 'documented'
+      })
+      if (resp && resp.success) {
+        toast.success('Lesson approved')
+        void fetchLessons()
+      }
+    } catch (err) {
+      console.error('Failed to approve lesson:', err)
+      toast.error('Failed to approve lesson')
+    }
+  }
+
+  const handleDismiss = async (lesson: LessonItem) => {
+    try {
+      if (!lesson.id) return
+      const resp = await apiClient.delete<{ success: boolean }>(`lessons/lessons/${lesson.id}`)
+      if (resp && resp.success) {
+        toast.success('Lesson dismissed')
+        void fetchLessons()
+      }
+    } catch (err) {
+      console.error('Failed to dismiss lesson:', err)
+      toast.error('Failed to dismiss lesson')
+    }
+  }
+
   if (loading) {
     return <div className="py-8 text-center">Loading lessons…</div>
   }
@@ -73,8 +103,11 @@ export default function LessonsTab({ projectId }: LessonsTabProps) {
     )
   }
 
+  const suggestions = items.filter(i => i.status === 'identified')
+  const finalized = items.filter(i => i.status !== 'identified')
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold">Lessons Learned</h2>
@@ -88,11 +121,51 @@ export default function LessonsTab({ projectId }: LessonsTabProps) {
         </div>
       </div>
 
-      {items.length === 0 ? (
-        <div className="py-8 text-center text-muted-foreground">No lessons have been documented for this project yet.</div>
+      {suggestions.length > 0 && (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <span className="flex h-2 w-2 rounded-full bg-primary animate-pulse" />
+              AI Suggestions for Completion
+            </CardTitle>
+            <CardDescription>
+              We've identified these lessons and accomplishments from your completed project.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {suggestions.map((lesson: LessonItem) => (
+              <div key={lesson.id} className="flex flex-col gap-3 p-4 rounded-lg bg-background border shadow-sm">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-semibold">{lesson.title}</h4>
+                      <Badge variant={lesson.category === 'accomplishment' ? 'default' : 'outline'}>
+                        {lesson.category}
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">{lesson.description}</p>
+                  </div>
+                  <div className="flex gap-2 shrink-0">
+                    <Button variant="default" size="sm" onClick={() => handleApprove(lesson)}>Approve</Button>
+                    <Button variant="outline" size="sm" onClick={() => handleEdit(lesson)}>Edit</Button>
+                    <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => handleDismiss(lesson)}>Dismiss</Button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {finalized.length === 0 ? (
+        <div className="py-8 text-center text-muted-foreground border rounded-lg border-dashed">
+          {suggestions.length > 0 
+            ? "Finalize suggestions or create a new lesson to see it here." 
+            : "No lessons have been documented for this project yet."}
+        </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          {items.map((lesson: LessonItem) => (
+          {finalized.map((lesson: LessonItem) => (
             <Card key={lesson.id} className="border">
               <CardHeader>
                 <div className="flex items-start justify-between">
@@ -107,7 +180,7 @@ export default function LessonsTab({ projectId }: LessonsTabProps) {
                     {lesson.positive_or_negative ? 'Positive' : 'Negative'}
                   </Badge>
                 </div>
-                <CardDescription>{new Date(lesson.created_at).toLocaleDateString()}</CardDescription>
+                <CardDescription>{new Date(lesson.created_at || '').toLocaleDateString()}</CardDescription>
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-muted-foreground mb-4 line-clamp-3">{lesson.description}</p>

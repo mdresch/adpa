@@ -1,0 +1,18 @@
+# Fix TypeScript error in Templates page
+
+The goal is to resolve a "No overload matches this call" error in [app/templates/page.tsx](file:///d:/Source/adpa/app/templates/page.tsx) where an optional `deleted_at` field is passed directly to the `Date` constructor.
+
+## Proposed Changes
+
+### [Frontend] (app/templates/page.tsx)
+
+#### [MODIFY] [page.tsx](file:///d:/Source/adpa/app/templates/page.tsx)
+
+- Update line 1137 to guard against `undefined` for `template.deleted_at`.
+- Review other usages of `new Date()` in the file for similar safety issues.
+
+## Verification Plan
+
+### Manual Verification
+- I will run `pnpm build` or use a local TS check command to verify the error is gone.
+- I will also manually verify that the "Archived" date correctly shows '—' or is omitted if `deleted_at` is missing (though it shouldn't be missing in the Archive tab).

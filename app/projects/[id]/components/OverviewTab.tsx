@@ -4,13 +4,13 @@ import { Suspense, useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { 
-  Activity, 
-  DollarSign, 
-  Users, 
-  FileText, 
-  PieChart as PieChartIcon, 
-  BarChart3, 
+import {
+  Activity,
+  DollarSign,
+  Users,
+  FileText,
+  PieChart as PieChartIcon,
+  BarChart3,
   Target,
   CheckCircle,
   AlertTriangle,
@@ -28,6 +28,7 @@ import {
   Lock
 } from "lucide-react"
 import dynamic from 'next/dynamic'
+import { AnimatedGrid, AnimatedGridItem, AnimatedCard } from "@/components/animated-layout"
 
 function ChartPlaceholder() {
   return <div className="h-80 min-h-[200px] w-full animate-pulse rounded bg-muted" aria-hidden="true" />
@@ -118,11 +119,11 @@ interface OverviewTabProps {
   projectId: string
 }
 
-export function OverviewTab({ 
-  project, 
-  progress, 
-  managerName, 
-  documentStats, 
+export function OverviewTab({
+  project,
+  progress,
+  managerName,
+  documentStats,
   stakeholders,
   projectId
 }: OverviewTabProps) {
@@ -165,7 +166,7 @@ export function OverviewTab({
   })
 
   // Calculate team members count from stakeholders
-  const teamMembers = stakeholders.filter(s => 
+  const teamMembers = stakeholders.filter(s =>
     s.stakeholder_type === 'internal' && s.is_team_member === true
   )
 
@@ -174,7 +175,7 @@ export function OverviewTab({
     const fetchMetrics = async () => {
       try {
         setLoadingMetrics(true)
-        
+
         // Fetch PMBOK 8 domain metrics from extraction API
         const token = localStorage.getItem('auth_token')
         const extractionResponse = await fetch(getApiUrl(`/project-data-extraction/${projectId}/summary`), {
@@ -198,7 +199,7 @@ export function OverviewTab({
               delivery: (extractionData.entityCounts?.deliverables || 0) + (extractionData.entityCounts?.successCriteria || 0)
             })
           }
-          
+
           // Set metrics from extraction data
           if (extractionData.success) {
             const entityCounts = extractionData.entityCounts || {}
@@ -217,11 +218,11 @@ export function OverviewTab({
         // Fetch document quality metrics
         const documentsResponse = await apiClient.getProjectDocuments(projectId, { limit: 1000 })
         const documents = documentsResponse.documents || []
-        
+
         let totalCompliance = 0
         let assessedCount = 0
         const grades: string[] = []
-        
+
         // Aggregate all quality dimensions
         const dimensionSums = {
           completeness: 0,
@@ -244,14 +245,14 @@ export function OverviewTab({
             if (overallQuality > 0) {
               totalCompliance += overallQuality
               assessedCount++
-              
+
               // Determine grade
               if (overallQuality >= 90) grades.push('A')
               else if (overallQuality >= 80) grades.push('B')
               else if (overallQuality >= 70) grades.push('C')
               else if (overallQuality >= 60) grades.push('D')
               else grades.push('F')
-              
+
               // Sum all dimensions
               dimensionSums.completeness += qualityMetrics.completeness || 0
               dimensionSums.structureScore += qualityMetrics.structureScore || 0
@@ -472,7 +473,7 @@ export function OverviewTab({
         if (projectRes.status === 'fulfilled' && projectRes.value.ok) {
           const projectData = await projectRes.value.json()
           const proj = projectData.project || projectData.data || projectData
-          
+
           // Financials KPI (budget utilization)
           if (proj.budget && proj.actual_cost !== undefined) {
             const utilization = proj.budget > 0 ? ((proj.actual_cost / proj.budget) * 100).toFixed(1) : '0'
@@ -530,10 +531,10 @@ export function OverviewTab({
             const driftData = await driftRes.value.json()
             const drifts = driftData.drifts || driftData.data || []
             // Filter out resolved/false_positive drifts for active count
-            const activeDrifts = drifts.filter((d: any) => 
+            const activeDrifts = drifts.filter((d: any) =>
               d.status !== 'resolved' && d.status !== 'false_positive' && d.status !== 'dismissed'
             )
-            const criticalDrifts = activeDrifts.filter((d: any) => 
+            const criticalDrifts = activeDrifts.filter((d: any) =>
               d.drift_severity === 'critical' || d.drift_severity === 'high'
             )
             setAdditionalMetrics(prev => ({
@@ -578,348 +579,384 @@ export function OverviewTab({
   return (
     <div className="space-y-4">
       {/* Key Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-        <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg">
-          <div className="absolute inset-0 bg-gradient-to-br from-blue-50/50 to-transparent dark:from-blue-950/20" />
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-            <CardTitle className="text-sm font-medium">Progress</CardTitle>
-            <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
-              <Activity className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-            </div>
-          </CardHeader>
-          <CardContent className="relative z-10">
-            <div className="text-2xl font-bold">{progress}%</div>
-            <Progress value={progress} className="mt-2" />
-          </CardContent>
-        </Card>
-
-        <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg">
-          <div className="absolute inset-0 bg-gradient-to-br from-green-50/50 to-transparent dark:from-green-950/20" />
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-            <CardTitle className="text-sm font-medium">Budget</CardTitle>
-            <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
-              <DollarSign className="h-4 w-4 text-green-600 dark:text-green-400" />
-            </div>
-          </CardHeader>
-          <CardContent className="relative z-10">
-            <div className="text-2xl font-bold">
-              {project.budget ? `$${project.budget.toLocaleString()}` : 'Not set'}
-            </div>
-            <p className="text-xs text-muted-foreground">Total allocated</p>
-          </CardContent>
-        </Card>
-
-        <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg">
-          <div className="absolute inset-0 bg-gradient-to-br from-indigo-50/50 to-transparent dark:from-indigo-950/20" />
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-            <CardTitle className="text-sm font-medium">Manager</CardTitle>
-            <div className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-900/30">
-              <Users className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-            </div>
-          </CardHeader>
-          <CardContent className="relative z-10">
-            <div className="text-lg font-bold">{managerName || 'Not assigned'}</div>
-            <p className="text-xs text-muted-foreground">Project manager</p>
-          </CardContent>
-        </Card>
-
-        <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg">
-          <div className="absolute inset-0 bg-gradient-to-br from-cyan-50/50 to-transparent dark:from-cyan-950/20" />
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-            <CardTitle className="text-sm font-medium">Team Members</CardTitle>
-            <div className="p-2 rounded-lg bg-cyan-100 dark:bg-cyan-900/30">
-              <Users className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
-            </div>
-          </CardHeader>
-          <CardContent className="relative z-10">
-            <div className="text-2xl font-bold">{teamMembers.length}</div>
-            <p className="text-xs text-muted-foreground">
-              {stakeholders.length > 0 ? `${stakeholders.length} total stakeholders` : 'No stakeholders'}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg">
-          <div className="absolute inset-0 bg-gradient-to-br from-purple-50/50 to-transparent dark:from-purple-950/20" />
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-            <CardTitle className="text-sm font-medium">Documents</CardTitle>
-            <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
-              <FileText className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-            </div>
-          </CardHeader>
-          <CardContent className="relative z-10">
-            <div className="text-2xl font-bold">{documentStats.totalDocuments}</div>
-            <p className="text-xs text-muted-foreground">Generated docs</p>
-          </CardContent>
-        </Card>
-
-        {issueStats && (
-          <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg">
-            <div className="absolute inset-0 bg-gradient-to-br from-red-50/50 to-transparent dark:from-red-950/20" />
+      <AnimatedGrid className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+        <AnimatedGridItem>
+          <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg h-full">
+            <div className="absolute inset-0 bg-gradient-to-br from-blue-50/50 to-transparent dark:from-blue-950/20" />
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-              <CardTitle className="text-sm font-medium">Issues</CardTitle>
-              <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/30">
-                <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
+              <CardTitle className="text-sm font-medium">Progress</CardTitle>
+              <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
+                <Activity className="h-4 w-4 text-blue-600 dark:text-blue-400" />
               </div>
             </CardHeader>
             <CardContent className="relative z-10">
-              <div className="text-2xl font-bold">{issueStats.total_issues}</div>
+              <div className="text-2xl font-bold">{progress}%</div>
+              <Progress value={progress} className="mt-2" />
+            </CardContent>
+          </Card>
+        </AnimatedGridItem>
+
+        <AnimatedGridItem>
+          <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg h-full">
+            <div className="absolute inset-0 bg-gradient-to-br from-green-50/50 to-transparent dark:from-green-950/20" />
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+              <CardTitle className="text-sm font-medium">Budget</CardTitle>
+              <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
+                <DollarSign className="h-4 w-4 text-green-600 dark:text-green-400" />
+              </div>
+            </CardHeader>
+            <CardContent className="relative z-10">
+              <div className="text-2xl font-bold">
+                {project.budget ? `$${project.budget.toLocaleString()}` : 'Not set'}
+              </div>
+              <p className="text-xs text-muted-foreground">Total allocated</p>
+            </CardContent>
+          </Card>
+        </AnimatedGridItem>
+
+        <AnimatedGridItem>
+          <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg">
+            <div className="absolute inset-0 bg-gradient-to-br from-indigo-50/50 to-transparent dark:from-indigo-950/20" />
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+              <CardTitle className="text-sm font-medium">Manager</CardTitle>
+              <div className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-900/30">
+                <Users className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+              </div>
+            </CardHeader>
+            <CardContent className="relative z-10">
+              <div className="text-lg font-bold">{managerName || 'Not assigned'}</div>
+              <p className="text-xs text-muted-foreground">Project manager</p>
+            </CardContent>
+          </Card>
+        </AnimatedGridItem>
+
+        <AnimatedGridItem>
+          <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg">
+            <div className="absolute inset-0 bg-gradient-to-br from-cyan-50/50 to-transparent dark:from-cyan-950/20" />
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+              <CardTitle className="text-sm font-medium">Team Members</CardTitle>
+              <div className="p-2 rounded-lg bg-cyan-100 dark:bg-cyan-900/30">
+                <Users className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+              </div>
+            </CardHeader>
+            <CardContent className="relative z-10">
+              <div className="text-2xl font-bold">{teamMembers.length}</div>
               <p className="text-xs text-muted-foreground">
-                {issueStats.open_issues} open, {issueStats.critical_issues} critical
-                {issueStats.overdue_issues > 0 && `, ${issueStats.overdue_issues} overdue`}
+                {stakeholders.length > 0 ? `${stakeholders.length} total stakeholders` : 'No stakeholders'}
               </p>
             </CardContent>
           </Card>
+        </AnimatedGridItem>
+
+        <AnimatedGridItem>
+          <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg">
+            <div className="absolute inset-0 bg-gradient-to-br from-purple-50/50 to-transparent dark:from-purple-950/20" />
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+              <CardTitle className="text-sm font-medium">Documents</CardTitle>
+              <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
+                <FileText className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+              </div>
+            </CardHeader>
+            <CardContent className="relative z-10">
+              <div className="text-2xl font-bold">{documentStats.totalDocuments}</div>
+              <p className="text-xs text-muted-foreground">Generated docs</p>
+            </CardContent>
+          </Card>
+        </AnimatedGridItem>
+
+        {issueStats && (
+          <AnimatedGridItem>
+            <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg">
+              <div className="absolute inset-0 bg-gradient-to-br from-red-50/50 to-transparent dark:from-red-950/20" />
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+                <CardTitle className="text-sm font-medium">Issues</CardTitle>
+                <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/30">
+                  <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                </div>
+              </CardHeader>
+              <CardContent className="relative z-10">
+                <div className="text-2xl font-bold">{issueStats.total_issues}</div>
+                <p className="text-xs text-muted-foreground">
+                  {issueStats.open_issues} open, {issueStats.critical_issues} critical
+                  {issueStats.overdue_issues > 0 && `, ${issueStats.overdue_issues} overdue`}
+                </p>
+              </CardContent>
+            </Card>
+          </AnimatedGridItem>
         )}
 
         {/* AI Extractions */}
-        <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg">
-          <div className="absolute inset-0 bg-gradient-to-br from-violet-50/50 to-transparent dark:from-violet-950/20" />
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-            <CardTitle className="text-sm font-medium">AI Extractions</CardTitle>
-            <div className="p-2 rounded-lg bg-violet-100 dark:bg-violet-900/30">
-              <Database className="h-4 w-4 text-violet-600 dark:text-violet-400" />
-            </div>
-          </CardHeader>
-          <CardContent className="relative z-10">
-            <div className="text-2xl font-bold">{additionalMetrics.aiExtractions}</div>
-            <p className="text-xs text-muted-foreground">Total entities extracted</p>
-          </CardContent>
-        </Card>
+        <AnimatedGridItem>
+          <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg">
+            <div className="absolute inset-0 bg-gradient-to-br from-violet-50/50 to-transparent dark:from-violet-950/20" />
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+              <CardTitle className="text-sm font-medium">AI Extractions</CardTitle>
+              <div className="p-2 rounded-lg bg-violet-100 dark:bg-violet-900/30">
+                <Database className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+              </div>
+            </CardHeader>
+            <CardContent className="relative z-10">
+              <div className="text-2xl font-bold">{additionalMetrics.aiExtractions}</div>
+              <p className="text-xs text-muted-foreground">Total entities extracted</p>
+            </CardContent>
+          </Card>
+        </AnimatedGridItem>
 
         {/* Lessons */}
-        <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg">
-          <div className="absolute inset-0 bg-gradient-to-br from-yellow-50/50 to-transparent dark:from-yellow-950/20" />
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-            <CardTitle className="text-sm font-medium">Lessons</CardTitle>
-            <div className="p-2 rounded-lg bg-yellow-100 dark:bg-yellow-900/30">
-              <Lightbulb className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
-            </div>
-          </CardHeader>
-          <CardContent className="relative z-10">
-            <div className="text-2xl font-bold">{additionalMetrics.lessonsCount}</div>
-            <p className="text-xs text-muted-foreground">Lessons learned</p>
-          </CardContent>
-        </Card>
+        <AnimatedGridItem>
+          <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg">
+            <div className="absolute inset-0 bg-gradient-to-br from-yellow-50/50 to-transparent dark:from-yellow-950/20" />
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+              <CardTitle className="text-sm font-medium">Lessons</CardTitle>
+              <div className="p-2 rounded-lg bg-yellow-100 dark:bg-yellow-900/30">
+                <Lightbulb className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
+              </div>
+            </CardHeader>
+            <CardContent className="relative z-10">
+              <div className="text-2xl font-bold">{additionalMetrics.lessonsCount}</div>
+              <p className="text-xs text-muted-foreground">Lessons learned</p>
+            </CardContent>
+          </Card>
+        </AnimatedGridItem>
 
         {/* Performance */}
-        <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg">
-          <div className="absolute inset-0 bg-gradient-to-br from-emerald-50/50 to-transparent dark:from-emerald-950/20" />
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-            <CardTitle className="text-sm font-medium">Performance</CardTitle>
-            <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/30">
-              <TrendingUp className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-            </div>
-          </CardHeader>
-          <CardContent className="relative z-10">
-            <div className="text-lg font-bold">{additionalMetrics.performanceKpi || 'N/A'}</div>
-            <p className="text-xs text-muted-foreground">SPI / CPI</p>
-          </CardContent>
-        </Card>
+        <AnimatedGridItem>
+          <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg">
+            <div className="absolute inset-0 bg-gradient-to-br from-emerald-50/50 to-transparent dark:from-emerald-950/20" />
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+              <CardTitle className="text-sm font-medium">Performance</CardTitle>
+              <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/30">
+                <TrendingUp className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+              </div>
+            </CardHeader>
+            <CardContent className="relative z-10">
+              <div className="text-lg font-bold">{additionalMetrics.performanceKpi || 'N/A'}</div>
+              <p className="text-xs text-muted-foreground">SPI / CPI</p>
+            </CardContent>
+          </Card>
+        </AnimatedGridItem>
 
         {/* Number of Stakeholders */}
-        <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg">
-          <div className="absolute inset-0 bg-gradient-to-br from-teal-50/50 to-transparent dark:from-teal-950/20" />
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-            <CardTitle className="text-sm font-medium">Stakeholders</CardTitle>
-            <div className="p-2 rounded-lg bg-teal-100 dark:bg-teal-900/30">
-              <Users className="h-4 w-4 text-teal-600 dark:text-teal-400" />
-            </div>
-          </CardHeader>
-          <CardContent className="relative z-10">
-            <div className="text-2xl font-bold">{additionalMetrics.stakeholdersCount || stakeholders.length}</div>
-            <p className="text-xs text-muted-foreground">Total identified</p>
-          </CardContent>
-        </Card>
+        <AnimatedGridItem>
+          <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg">
+            <div className="absolute inset-0 bg-gradient-to-br from-teal-50/50 to-transparent dark:from-teal-950/20" />
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+              <CardTitle className="text-sm font-medium">Stakeholders</CardTitle>
+              <div className="p-2 rounded-lg bg-teal-100 dark:bg-teal-900/30">
+                <Users className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+              </div>
+            </CardHeader>
+            <CardContent className="relative z-10">
+              <div className="text-2xl font-bold">{additionalMetrics.stakeholdersCount || stakeholders.length}</div>
+              <p className="text-xs text-muted-foreground">Total identified</p>
+            </CardContent>
+          </Card>
+        </AnimatedGridItem>
 
         {/* Team Agreements */}
-        <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg">
-          <div className="absolute inset-0 bg-gradient-to-br from-sky-50/50 to-transparent dark:from-sky-950/20" />
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-            <CardTitle className="text-sm font-medium">Team Agreements</CardTitle>
-            <div className="p-2 rounded-lg bg-sky-100 dark:bg-sky-900/30">
-              <Users className="h-4 w-4 text-sky-600 dark:text-sky-400" />
-            </div>
-          </CardHeader>
-          <CardContent className="relative z-10">
-            <div className="text-2xl font-bold">{additionalMetrics.teamAgreementsCount}</div>
-            <p className="text-xs text-muted-foreground">Team agreements</p>
-          </CardContent>
-        </Card>
+        <AnimatedGridItem>
+          <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg">
+            <div className="absolute inset-0 bg-gradient-to-br from-sky-50/50 to-transparent dark:from-sky-950/20" />
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+              <CardTitle className="text-sm font-medium">Team Agreements</CardTitle>
+              <div className="p-2 rounded-lg bg-sky-100 dark:bg-sky-900/30">
+                <Users className="h-4 w-4 text-sky-600 dark:text-sky-400" />
+              </div>
+            </CardHeader>
+            <CardContent className="relative z-10">
+              <div className="text-2xl font-bold">{additionalMetrics.teamAgreementsCount}</div>
+              <p className="text-xs text-muted-foreground">Team agreements</p>
+            </CardContent>
+          </Card>
+        </AnimatedGridItem>
 
         {/* Development Approach */}
-        <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg">
-          <div className="absolute inset-0 bg-gradient-to-br from-fuchsia-50/50 to-transparent dark:from-fuchsia-950/20" />
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-            <CardTitle className="text-sm font-medium">Development Approach</CardTitle>
-            <div className="p-2 rounded-lg bg-fuchsia-100 dark:bg-fuchsia-900/30">
-              <Code className="h-4 w-4 text-fuchsia-600 dark:text-fuchsia-400" />
-            </div>
-          </CardHeader>
-          <CardContent className="relative z-10">
-            <div className="text-2xl font-bold">{additionalMetrics.developmentApproachCount}</div>
-            <p className="text-xs text-muted-foreground">Approaches defined</p>
-          </CardContent>
-        </Card>
+        <AnimatedGridItem>
+          <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg">
+            <div className="absolute inset-0 bg-gradient-to-br from-fuchsia-50/50 to-transparent dark:from-fuchsia-950/20" />
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+              <CardTitle className="text-sm font-medium">Development Approach</CardTitle>
+              <div className="p-2 rounded-lg bg-fuchsia-100 dark:bg-fuchsia-900/30">
+                <Code className="h-4 w-4 text-fuchsia-600 dark:text-fuchsia-400" />
+              </div>
+            </CardHeader>
+            <CardContent className="relative z-10">
+              <div className="text-2xl font-bold">{additionalMetrics.developmentApproachCount}</div>
+              <p className="text-xs text-muted-foreground">Approaches defined</p>
+            </CardContent>
+          </Card>
+        </AnimatedGridItem>
 
         {/* Baseline Date */}
-        <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg">
-          <div className="absolute inset-0 bg-gradient-to-br from-amber-50/50 to-transparent dark:from-amber-950/20" />
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-            <CardTitle className="text-sm font-medium">Baseline Date</CardTitle>
-            <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/30">
-              <Target className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-            </div>
-          </CardHeader>
-          <CardContent className="relative z-10">
-            <div className="text-lg font-bold">{additionalMetrics.baselineDate || 'Not set'}</div>
-            <p className="text-xs text-muted-foreground">Active baseline</p>
-          </CardContent>
-        </Card>
+        <AnimatedGridItem>
+          <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg">
+            <div className="absolute inset-0 bg-gradient-to-br from-amber-50/50 to-transparent dark:from-amber-950/20" />
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+              <CardTitle className="text-sm font-medium">Baseline Date</CardTitle>
+              <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/30">
+                <Target className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              </div>
+            </CardHeader>
+            <CardContent className="relative z-10">
+              <div className="text-lg font-bold">{additionalMetrics.baselineDate || 'Not set'}</div>
+              <p className="text-xs text-muted-foreground">Active baseline</p>
+            </CardContent>
+          </Card>
+        </AnimatedGridItem>
 
         {/* Financials KPI */}
-        <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg">
-          <div className="absolute inset-0 bg-gradient-to-br from-lime-50/50 to-transparent dark:from-lime-950/20" />
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-            <CardTitle className="text-sm font-medium">Financials KPI</CardTitle>
-            <div className="p-2 rounded-lg bg-lime-100 dark:bg-lime-900/30">
-              <DollarSign className="h-4 w-4 text-lime-600 dark:text-lime-400" />
-            </div>
-          </CardHeader>
-          <CardContent className="relative z-10">
-            <div className="text-lg font-bold">{additionalMetrics.financialsKpi || 'N/A'}</div>
-            <p className="text-xs text-muted-foreground">Budget utilization</p>
-          </CardContent>
-        </Card>
+        <AnimatedGridItem>
+          <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg">
+            <div className="absolute inset-0 bg-gradient-to-br from-lime-50/50 to-transparent dark:from-lime-950/20" />
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+              <CardTitle className="text-sm font-medium">Financials KPI</CardTitle>
+              <div className="p-2 rounded-lg bg-lime-100 dark:bg-lime-900/30">
+                <DollarSign className="h-4 w-4 text-lime-600 dark:text-lime-400" />
+              </div>
+            </CardHeader>
+            <CardContent className="relative z-10">
+              <div className="text-lg font-bold">{additionalMetrics.financialsKpi || 'N/A'}</div>
+              <p className="text-xs text-muted-foreground">Budget utilization</p>
+            </CardContent>
+          </Card>
+        </AnimatedGridItem>
 
         {/* Timeline Start Date */}
-        <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg">
-          <div className="absolute inset-0 bg-gradient-to-br from-pink-50/50 to-transparent dark:from-pink-950/20" />
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-            <CardTitle className="text-sm font-medium">Timeline Start</CardTitle>
-            <div className="p-2 rounded-lg bg-pink-100 dark:bg-pink-900/30">
-              <Calendar className="h-4 w-4 text-pink-600 dark:text-pink-400" />
-            </div>
-          </CardHeader>
-          <CardContent className="relative z-10">
-            <div className="text-lg font-bold">{additionalMetrics.timelineStartDate || project.start_date ? new Date(project.start_date).toLocaleDateString() : 'Not set'}</div>
-            <p className="text-xs text-muted-foreground">Project start date</p>
-          </CardContent>
-        </Card>
+        <AnimatedGridItem>
+          <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg">
+            <div className="absolute inset-0 bg-gradient-to-br from-pink-50/50 to-transparent dark:from-pink-950/20" />
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+              <CardTitle className="text-sm font-medium">Timeline Start</CardTitle>
+              <div className="p-2 rounded-lg bg-pink-100 dark:bg-pink-900/30">
+                <Calendar className="h-4 w-4 text-pink-600 dark:text-pink-400" />
+              </div>
+            </CardHeader>
+            <CardContent className="relative z-10">
+              <div className="text-lg font-bold">{additionalMetrics.timelineStartDate || (project.start_date ? new Date(project.start_date).toLocaleDateString() : 'Not set')}</div>
+              <p className="text-xs text-muted-foreground">Project start date</p>
+            </CardContent>
+          </Card>
+        </AnimatedGridItem>
 
         {/* Number of Risks */}
-        <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg">
-          <div className="absolute inset-0 bg-gradient-to-br from-orange-50/50 to-transparent dark:from-orange-950/20" />
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-            <CardTitle className="text-sm font-medium">Risks</CardTitle>
-            <div className="p-2 rounded-lg bg-orange-100 dark:bg-orange-900/30">
-              <AlertTriangle className="h-4 w-4 text-orange-600 dark:text-orange-400" />
-            </div>
-          </CardHeader>
-          <CardContent className="relative z-10">
-            <div className="text-2xl font-bold">{additionalMetrics.risksCount}</div>
-            <p className="text-xs text-muted-foreground">Identified risks</p>
-          </CardContent>
-        </Card>
+        <AnimatedGridItem>
+          <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg">
+            <div className="absolute inset-0 bg-gradient-to-br from-orange-50/50 to-transparent dark:from-orange-950/20" />
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+              <CardTitle className="text-sm font-medium">Risks</CardTitle>
+              <div className="p-2 rounded-lg bg-orange-100 dark:bg-orange-900/30">
+                <AlertTriangle className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+              </div>
+            </CardHeader>
+            <CardContent className="relative z-10">
+              <div className="text-2xl font-bold">{additionalMetrics.risksCount}</div>
+              <p className="text-xs text-muted-foreground">Identified risks</p>
+            </CardContent>
+          </Card>
+        </AnimatedGridItem>
 
         {/* Compliance & Security */}
-        <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg">
-          <div className="absolute inset-0 bg-gradient-to-br from-slate-50/50 to-transparent dark:from-slate-950/20" />
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-            <CardTitle className="text-sm font-medium">Compliance & Security</CardTitle>
-            <div className="p-2 rounded-lg bg-slate-100 dark:bg-slate-900/30">
-              <Lock className="h-4 w-4 text-slate-600 dark:text-slate-400" />
-            </div>
-          </CardHeader>
-          <CardContent className="relative z-10">
-            <div className="text-2xl font-bold">{additionalMetrics.complianceSecurityCount}</div>
-            <p className="text-xs text-muted-foreground">Security items</p>
-          </CardContent>
-        </Card>
+        <AnimatedGridItem>
+          <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg">
+            <div className="absolute inset-0 bg-gradient-to-br from-slate-50/50 to-transparent dark:from-slate-950/20" />
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+              <CardTitle className="text-sm font-medium">Compliance & Security</CardTitle>
+              <div className="p-2 rounded-lg bg-slate-100 dark:bg-slate-900/30">
+                <Lock className="h-4 w-4 text-slate-600 dark:text-slate-400" />
+              </div>
+            </CardHeader>
+            <CardContent className="relative z-10">
+              <div className="text-2xl font-bold">{additionalMetrics.complianceSecurityCount}</div>
+              <p className="text-xs text-muted-foreground">Security items</p>
+            </CardContent>
+          </Card>
+        </AnimatedGridItem>
 
         {/* Number of Integrations */}
-        <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg">
-          <div className="absolute inset-0 bg-gradient-to-br from-blue-50/50 to-transparent dark:from-blue-950/20" />
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-            <CardTitle className="text-sm font-medium">Integrations</CardTitle>
-            <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
-              <Settings className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-            </div>
-          </CardHeader>
-          <CardContent className="relative z-10">
-            <div className="text-2xl font-bold">{additionalMetrics.integrationsCount}</div>
-            <p className="text-xs text-muted-foreground">Connected systems</p>
-          </CardContent>
-        </Card>
+        <AnimatedGridItem>
+          <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg">
+            <div className="absolute inset-0 bg-gradient-to-br from-blue-50/50 to-transparent dark:from-blue-950/20" />
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+              <CardTitle className="text-sm font-medium">Integrations</CardTitle>
+              <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
+                <Settings className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              </div>
+            </CardHeader>
+            <CardContent className="relative z-10">
+              <div className="text-2xl font-bold">{additionalMetrics.integrationsCount}</div>
+              <p className="text-xs text-muted-foreground">Connected systems</p>
+            </CardContent>
+          </Card>
+        </AnimatedGridItem>
 
         {/* Number of Digital Twins */}
-        <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg">
-          <div className="absolute inset-0 bg-gradient-to-br from-indigo-50/50 to-transparent dark:from-indigo-950/20" />
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-            <CardTitle className="text-sm font-medium">Digital Twins</CardTitle>
-            <div className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-900/30">
-              <Layers className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-            </div>
-          </CardHeader>
-          <CardContent className="relative z-10">
-            <div className="text-2xl font-bold">{additionalMetrics.digitalTwinsCount}</div>
-            <p className="text-xs text-muted-foreground">Digital twin assets</p>
-          </CardContent>
-        </Card>
+        <AnimatedGridItem>
+          <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg">
+            <div className="absolute inset-0 bg-gradient-to-br from-indigo-50/50 to-transparent dark:from-indigo-950/20" />
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+              <CardTitle className="text-sm font-medium">Digital Twins</CardTitle>
+              <div className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-900/30">
+                <Layers className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+              </div>
+            </CardHeader>
+            <CardContent className="relative z-10">
+              <div className="text-2xl font-bold">{additionalMetrics.digitalTwinsCount}</div>
+              <p className="text-xs text-muted-foreground">Digital twin assets</p>
+            </CardContent>
+          </Card>
+        </AnimatedGridItem>
 
         {/* Drift Detected */}
-        <Card className={`relative overflow-hidden border-2 transition-all duration-300 hover:shadow-lg ${
-          additionalMetrics.driftCount > 0 
-            ? 'border-orange-500/50 hover:border-orange-500 dark:border-orange-400/50' 
-            : 'hover:border-primary/50'
-        }`}>
-          <div className={`absolute inset-0 bg-gradient-to-br ${
-            additionalMetrics.driftCount > 0
-              ? 'from-orange-50/70 to-red-50/50 dark:from-orange-950/30 dark:to-red-950/20'
-              : 'from-amber-50/50 to-transparent dark:from-amber-950/20'
-          }`} />
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-            <CardTitle className="text-sm font-medium">Drift Detected</CardTitle>
-            <div className={`p-2 rounded-lg ${
-              additionalMetrics.driftCount > 0
-                ? 'bg-orange-100 dark:bg-orange-900/30 animate-pulse'
-                : 'bg-amber-100 dark:bg-amber-900/30'
+        <AnimatedGridItem>
+          <Card className={`relative overflow-hidden border-2 transition-all duration-300 hover:shadow-lg ${additionalMetrics.driftCount > 0
+              ? 'border-orange-500/50 hover:border-orange-500 dark:border-orange-400/50'
+              : 'hover:border-primary/50'
             }`}>
-              <AlertTriangle className={`h-4 w-4 ${
-                additionalMetrics.driftCount > 0
-                  ? 'text-orange-600 dark:text-orange-400'
-                  : 'text-amber-600 dark:text-amber-400'
+            <div className={`absolute inset-0 bg-gradient-to-br ${additionalMetrics.driftCount > 0
+                ? 'from-orange-50/70 to-red-50/50 dark:from-orange-950/30 dark:to-red-950/20'
+                : 'from-amber-50/50 to-transparent dark:from-amber-950/20'
               }`} />
-            </div>
-          </CardHeader>
-          <CardContent className="relative z-10">
-            <div className="text-2xl font-bold">
-              {additionalMetrics.driftCount > 0 ? (
-                <span className="text-orange-600 dark:text-orange-400">{additionalMetrics.driftCount}</span>
-              ) : (
-                <span className="text-muted-foreground">0</span>
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {additionalMetrics.driftCount > 0 ? (
-                <>
-                  {additionalMetrics.criticalDriftCount > 0 && (
-                    <span className="text-orange-600 dark:text-orange-400 font-semibold">
-                      {additionalMetrics.criticalDriftCount} critical
-                    </span>
-                  )}
-                  {additionalMetrics.criticalDriftCount > 0 && additionalMetrics.driftCount > additionalMetrics.criticalDriftCount && ' • '}
-                  {additionalMetrics.driftCount > additionalMetrics.criticalDriftCount && (
-                    <span>{additionalMetrics.driftCount - additionalMetrics.criticalDriftCount} other</span>
-                  )}
-                </>
-              ) : (
-                'No drift detected'
-              )}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+              <CardTitle className="text-sm font-medium">Drift Detected</CardTitle>
+              <div className={`p-2 rounded-lg ${additionalMetrics.driftCount > 0
+                  ? 'bg-orange-100 dark:bg-orange-900/30 animate-pulse'
+                  : 'bg-amber-100 dark:bg-amber-900/30'
+                }`}>
+                <AlertTriangle className={`h-4 w-4 ${additionalMetrics.driftCount > 0
+                    ? 'text-orange-600 dark:text-orange-400'
+                    : 'text-amber-600 dark:text-amber-400'
+                  }`} />
+              </div>
+            </CardHeader>
+            <CardContent className="relative z-10">
+              <div className="text-2xl font-bold">
+                {additionalMetrics.driftCount > 0 ? (
+                  <span className="text-orange-600 dark:text-orange-400">{additionalMetrics.driftCount}</span>
+                ) : (
+                  <span className="text-muted-foreground">0</span>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {additionalMetrics.driftCount > 0 ? (
+                  <>
+                    {additionalMetrics.criticalDriftCount > 0 && (
+                      <span className="text-orange-600 dark:text-orange-400 font-semibold">
+                        {additionalMetrics.criticalDriftCount} critical
+                      </span>
+                    )}
+                    {additionalMetrics.criticalDriftCount > 0 && additionalMetrics.driftCount > additionalMetrics.criticalDriftCount && ' • '}
+                    {additionalMetrics.driftCount > additionalMetrics.criticalDriftCount && (
+                      <span>{additionalMetrics.driftCount - additionalMetrics.criticalDriftCount} other</span>
+                    )}
+                  </>
+                ) : (
+                  'No drift detected'
+                )}
+              </p>
+            </CardContent>
+          </Card>
+        </AnimatedGridItem>
+      </AnimatedGrid>
 
       {/* PMBOK 8 Performance Domains & Document Quality */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -1061,15 +1098,15 @@ export function OverviewTab({
                 <div className="text-center py-4 bg-gradient-to-br from-primary/10 to-purple-100/50 dark:from-primary/20 dark:to-purple-950/50 rounded-lg border border-primary/20">
                   <div className="text-6xl font-bold mb-2" style={{
                     color: qualityMetrics.averageGrade === 'A' ? '#10b981' :
-                           qualityMetrics.averageGrade === 'B' ? '#3b82f6' :
-                           qualityMetrics.averageGrade === 'C' ? '#f59e0b' :
-                           qualityMetrics.averageGrade === 'D' ? '#ef4444' : '#6b7280'
+                      qualityMetrics.averageGrade === 'B' ? '#3b82f6' :
+                        qualityMetrics.averageGrade === 'C' ? '#f59e0b' :
+                          qualityMetrics.averageGrade === 'D' ? '#ef4444' : '#6b7280'
                   }}>
                     {qualityMetrics.averageGrade}
                   </div>
                   <p className="text-sm font-medium text-muted-foreground">Overall Quality Grade</p>
                   <div className="mt-2">
-                    <Badge 
+                    <Badge
                       variant={qualityMetrics.averageCompliance >= 80 ? "default" : qualityMetrics.averageCompliance >= 60 ? "secondary" : "destructive"}
                       className="text-sm px-3 py-1"
                     >
@@ -1203,101 +1240,87 @@ export function OverviewTab({
             </CardHeader>
             <CardContent className="relative z-10">
               <GenericPieChart
-              data={[
-                { name: 'Draft', value: documentStats.counts.draft, color: '#f97316' },
-                { name: 'Review', value: documentStats.counts.review, color: '#a855f7' },
-                { name: 'Published', value: documentStats.counts.published, color: '#10b981' },
-                { name: 'Archived', value: documentStats.counts.archived, color: '#6b7280' },
-              ]}
-              dataKey="value"
-              colorKey="color"
-              labelFormatter={(e: any) => (e.value > 0 ? `${e.name}: ${e.value}` : '')}
-            />
-          </CardContent>
-        </Card>
+                data={[
+                  { name: 'Draft', value: documentStats.counts.draft, color: '#f97316' },
+                  { name: 'Review', value: documentStats.counts.review, color: '#a855f7' },
+                  { name: 'Published', value: documentStats.counts.published, color: '#10b981' },
+                  { name: 'Archived', value: documentStats.counts.archived, color: '#6b7280' },
+                ]}
+                dataKey="value"
+                colorKey="color"
+                labelFormatter={(e: any) => (e.value > 0 ? `${e.name}: ${e.value}` : '')}
+              />
+            </CardContent>
+          </Card>
 
-        {/* Project Health */}
-        <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-xl">
-          <div className="absolute inset-0 bg-gradient-to-br from-emerald-50/30 to-teal-50/30 dark:from-emerald-950/20 dark:to-teal-950/20" />
-          <CardHeader className="relative z-10">
-            <CardTitle className="flex items-center gap-2">
-              <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/30">
-                <BarChart3 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-              </div>
-              Project Health Indicators
-            </CardTitle>
-            <CardDescription>PMBOK-aligned project performance metrics</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4 relative z-10">
-            {/* Documentation Completion Rate */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium">Documentation Completion</span>
-                <div className="text-right">
-                  <Badge variant={documentStats.counts.published / Math.max(documentStats.totalDocuments, 1) >= 0.7 ? "default" : "secondary"}>
-                    {documentStats.counts.published} / {documentStats.totalDocuments}
-                  </Badge>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {Math.round((documentStats.counts.published / Math.max(documentStats.totalDocuments, 1)) * 100)}% Complete
-                  </p>
+          {/* Project Health */}
+          <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-xl">
+            <div className="absolute inset-0 bg-gradient-to-br from-emerald-50/30 to-teal-50/30 dark:from-emerald-950/20 dark:to-teal-950/20" />
+            <CardHeader className="relative z-10">
+              <CardTitle className="flex items-center gap-2">
+                <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/30">
+                  <BarChart3 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                 </div>
-              </div>
-              <Progress value={(documentStats.counts.published / Math.max(documentStats.totalDocuments, 1)) * 100} className="h-2" />
-            </div>
-            
-            {/* Document Quality (Draft vs Published ratio) */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium">Document Quality Index</span>
-                <div className="text-right">
-                  <Badge variant={documentStats.counts.draft / Math.max(documentStats.totalDocuments, 1) <= 0.3 ? "default" : "secondary"}>
-                    {documentStats.counts.draft} Draft
-                  </Badge>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {Math.round(((documentStats.counts.published + documentStats.counts.review) / Math.max(documentStats.totalDocuments, 1)) * 100)}% Finalized
-                  </p>
+                Project Health Indicators
+              </CardTitle>
+              <CardDescription>PMBOK-aligned project performance metrics</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4 relative z-10">
+              {/* Documentation Completion Rate */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium">Documentation Completion</span>
+                  <div className="text-right">
+                    <Badge variant={documentStats.counts.published / Math.max(documentStats.totalDocuments, 1) >= 0.7 ? "default" : "secondary"}>
+                      {documentStats.counts.published} / {documentStats.totalDocuments}
+                    </Badge>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {Math.round((documentStats.counts.published / Math.max(documentStats.totalDocuments, 1)) * 100)}% Complete
+                    </p>
+                  </div>
                 </div>
+                <Progress value={(documentStats.counts.published / Math.max(documentStats.totalDocuments, 1)) * 100} className="h-2" />
               </div>
-              <Progress value={((documentStats.counts.published + documentStats.counts.review) / Math.max(documentStats.totalDocuments, 1)) * 100} className="h-2" />
-            </div>
-            
-            {/* Stakeholder Engagement */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium">Stakeholder Engagement</span>
-                <div className="text-right">
-                  <Badge variant={stakeholders.length >= 5 ? "default" : stakeholders.length >= 3 ? "secondary" : "destructive"}>
-                    {stakeholders.length} Identified
-                  </Badge>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {stakeholders.filter(s => s.engagement_approach === 'manage_closely').length} High Priority
-                  </p>
+
+              {/* Document Quality (Draft vs Published ratio) */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium">Document Quality Index</span>
+                  <div className="text-right">
+                    <Badge variant={documentStats.counts.draft / Math.max(documentStats.totalDocuments, 1) <= 0.3 ? "default" : "secondary"}>
+                      {documentStats.counts.draft} Draft
+                    </Badge>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {Math.round(((documentStats.counts.published + documentStats.counts.review) / Math.max(documentStats.totalDocuments, 1)) * 100)}% Finalized
+                    </p>
+                  </div>
                 </div>
+                <Progress value={((documentStats.counts.published + documentStats.counts.review) / Math.max(documentStats.totalDocuments, 1)) * 100} className="h-2" />
               </div>
-              <Progress value={Math.min(stakeholders.length * 10, 100)} className="h-2" />
-            </div>
-            
-            {/* Project Timeline Health */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium">Timeline Health</span>
-                <div className="text-right">
-                  <Badge variant={(() => {
-                    if (!project.start_date || !project.end_date) return "secondary"
-                    const now = new Date()
-                    const start = new Date(project.start_date)
-                    const end = new Date(project.end_date)
-                    const totalDays = (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)
-                    const elapsedDays = (now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)
-                    const timeProgress = (elapsedDays / totalDays) * 100
-                    const workProgress = progress
-                    
-                    if (workProgress >= timeProgress) return "default" // On track or ahead
-                    if (workProgress >= timeProgress - 10) return "secondary" // Slightly behind
-                    return "destructive" // Significantly behind
-                  })()}>
-                    {(() => {
-                      if (!project.start_date || !project.end_date) return "Not Set"
+
+              {/* Stakeholder Engagement */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium">Stakeholder Engagement</span>
+                  <div className="text-right">
+                    <Badge variant={stakeholders.length >= 5 ? "default" : stakeholders.length >= 3 ? "secondary" : "destructive"}>
+                      {stakeholders.length} Identified
+                    </Badge>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {stakeholders.filter(s => s.engagement_approach === 'manage_closely').length} High Priority
+                    </p>
+                  </div>
+                </div>
+                <Progress value={Math.min(stakeholders.length * 10, 100)} className="h-2" />
+              </div>
+
+              {/* Project Timeline Health */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium">Timeline Health</span>
+                  <div className="text-right">
+                    <Badge variant={(() => {
+                      if (!project.start_date || !project.end_date) return "secondary"
                       const now = new Date()
                       const start = new Date(project.start_date)
                       const end = new Date(project.end_date)
@@ -1305,26 +1328,40 @@ export function OverviewTab({
                       const elapsedDays = (now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)
                       const timeProgress = (elapsedDays / totalDays) * 100
                       const workProgress = progress
-                      
-                      if (workProgress >= timeProgress) return "On Schedule"
-                      if (workProgress >= timeProgress - 10) return "At Risk"
-                      return "Behind Schedule"
-                    })()}
-                  </Badge>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {project.start_date && project.end_date ? (() => {
-                      const now = new Date()
-                      const end = new Date(project.end_date)
-                      const daysRemaining = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-                      return daysRemaining > 0 ? `${daysRemaining} days left` : `${Math.abs(daysRemaining)} days overdue`
-                    })() : 'No timeline set'}
-                  </p>
+
+                      if (workProgress >= timeProgress) return "default" // On track or ahead
+                      if (workProgress >= timeProgress - 10) return "secondary" // Slightly behind
+                      return "destructive" // Significantly behind
+                    })()}>
+                      {(() => {
+                        if (!project.start_date || !project.end_date) return "Not Set"
+                        const now = new Date()
+                        const start = new Date(project.start_date)
+                        const end = new Date(project.end_date)
+                        const totalDays = (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)
+                        const elapsedDays = (now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)
+                        const timeProgress = (elapsedDays / totalDays) * 100
+                        const workProgress = progress
+
+                        if (workProgress >= timeProgress) return "On Schedule"
+                        if (workProgress >= timeProgress - 10) return "At Risk"
+                        return "Behind Schedule"
+                      })()}
+                    </Badge>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {project.start_date && project.end_date ? (() => {
+                        const now = new Date()
+                        const end = new Date(project.end_date)
+                        const daysRemaining = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+                        return daysRemaining > 0 ? `${daysRemaining} days left` : `${Math.abs(daysRemaining)} days overdue`
+                      })() : 'No timeline set'}
+                    </p>
+                  </div>
                 </div>
+                <Progress value={progress} className="h-2" />
               </div>
-              <Progress value={progress} className="h-2" />
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
         </div>
       </Suspense>
 

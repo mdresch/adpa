@@ -162,7 +162,7 @@ export interface ProjectsHeaderProps {
   statusFilter: string
   onStatusFilterChange: (status: string) => void
   onCreateClick: () => void
-  projectsCount: number
+  projectsCount: number | string
 }
 
 /**

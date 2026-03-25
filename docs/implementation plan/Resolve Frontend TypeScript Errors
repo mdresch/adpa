@@ -1,0 +1,41 @@
+# Resolve Frontend TypeScript Errors
+
+This plan outlines the systematic resolution of TypeScript errors in the main application's frontend pages for portfolio, programs, projects, templates, documents, and entities.
+
+## Proposed Changes
+
+### [Frontend] Type Safety Enhancement
+
+The primary goal is to replace [any](file:///d:/Source/adpa/lib/api.ts#1423-1426) types with proper interfaces, fix casting issues, and ensure consistent data handling across the target pages.
+
+#### [MODIFY] [portfolio/page.tsx](file:///d:/Source/adpa/app/portfolio/page.tsx)
+- Replace `catch (error: any)` with a typed error handling pattern.
+- Fix `error?.message` by checking `error instanceof Error`.
+- Properly type `payload` in `CustomTooltip` component.
+
+#### [MODIFY] [portfolios/page.tsx](file:///d:/Source/adpa/app/portfolios/page.tsx)
+- Fix untyped `catch (error)` in API handlers ([fetchPortfolios](file:///d:/Source/adpa/app/portfolios/page.tsx#98-120), [handleCreatePortfolio](file:///d:/Source/adpa/app/portfolios/page.tsx#121-147), etc.).
+
+#### [MODIFY] [programs/page.tsx](file:///d:/Source/adpa/app/programs/page.tsx)
+- Fix `catch (error: any)` and `error?.message` in [handleCreateProgram](file:///d:/Source/adpa/app/programs/page.tsx#98-131).
+
+#### [MODIFY] [projects/page.tsx](file:///d:/Source/adpa/app/projects/page.tsx)
+- Fix `catch (docCreateError: any)` and `catch (docError)`.
+- Replace `content: any` with `content: string` in [handleUploadDocumentSubmit](file:///d:/Source/adpa/app/projects/page.tsx#675-886).
+- Fix `catch (error: any)` in [handleUploadDocumentSubmit](file:///d:/Source/adpa/app/projects/page.tsx#675-886).
+
+#### [MODIFY] [documents/page.tsx](file:///d:/Source/adpa/app/documents/page.tsx)
+- Fix `catch (error: any)` and `error?.message` in [handleExportPdf](file:///d:/Source/adpa/app/documents/page.tsx#133-161).
+- Remove unnecessary `e as any` cast in the [handleDelete](file:///d:/Source/adpa/app/templates/page.tsx#330-336) call.
+
+#### [MODIFY] [entities/page.tsx](file:///d:/Source/adpa/app/entities/page.tsx)
+- Fix [(error as any).message](file:///d:/Source/adpa/lib/api.ts#315-323) in [loadEntities](file:///d:/Source/adpa/app/entities/page.tsx#113-137) and [handleExtract](file:///d:/Source/adpa/app/entities/page.tsx#158-189).
+- Replace `const err = error as any` with proper error type checking in [performVerification](file:///d:/Source/adpa/app/entities/page.tsx#206-241).
+
+## Verification Plan
+
+### Automated Tests
+- Run `pnpm tsc --noEmit` on the specific files to ensure no TypeScript errors remain.
+
+### Manual Verification
+- Verify that each page still functions correctly (navigation, filtering, actions).

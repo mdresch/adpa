@@ -110,7 +110,7 @@ export default function PortfoliosPage() {
       } else {
         toast.error("Failed to fetch portfolios")
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Error fetching portfolios:", error)
       toast.error("Failed to fetch portfolios")
     } finally {
@@ -139,7 +139,7 @@ export default function PortfoliosPage() {
       } else {
         toast.error(data.error || "Failed to create portfolio")
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Error creating portfolio:", error)
       toast.error("Failed to create portfolio")
     }
@@ -168,7 +168,7 @@ export default function PortfoliosPage() {
       } else {
         toast.error(data.error || "Failed to update portfolio")
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Error updating portfolio:", error)
       toast.error("Failed to update portfolio")
     }
@@ -186,7 +186,7 @@ export default function PortfoliosPage() {
       } else {
         toast.error(data.error || "Failed to archive portfolio")
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Error deleting portfolio:", error)
       toast.error("Failed to archive portfolio")
     }

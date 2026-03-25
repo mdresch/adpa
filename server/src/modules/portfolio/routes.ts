@@ -19,19 +19,19 @@ const domains = new PortfolioDomainController();
  * Mounted under /api/v1/portfolio
  */
 
-router.get('/programs', authenticateToken, requirePermission('programs.view'), programs.getAll);
-router.get('/programs/:id', authenticateToken, requirePermission('programs.view'), programs.getById);
+router.get('/programs', authenticateToken, programs.getAll);
+router.get('/programs/:id', authenticateToken, programs.getById);
 router.post('/programs', authenticateToken, requirePermission('programs.manage'), programs.create);
 router.put('/programs/:id', authenticateToken, requirePermission('programs.manage'), programs.update);
 router.delete('/programs/:id', authenticateToken, requirePermission('programs.manage'), programs.delete);
 
 // Portfolios
-router.get('/', authenticateToken, requirePermission('portfolio.view'), portfolios.getAll);
-router.get('/:id', authenticateToken, requirePermission('portfolio.view'), portfolios.getById);
+router.get('/', authenticateToken, portfolios.getAll);
+router.get('/:id', authenticateToken, portfolios.getById);
 router.post('/', authenticateToken, requirePermission('portfolio.manage'), portfolios.create);
 router.put('/:id', authenticateToken, requirePermission('portfolio.manage'), portfolios.update);
 router.delete('/:id', authenticateToken, requirePermission('portfolio.manage'), portfolios.delete);
-router.get('/:id/risks', authenticateToken, requirePermission('portfolio.view'), portfolios.getRisks);
+router.get('/:id/risks', authenticateToken, portfolios.getRisks);
 
 // Financials
 router.get('/financial', authenticateToken, requirePermission('portfolio.view'), financial.getPortfolioMetrics);

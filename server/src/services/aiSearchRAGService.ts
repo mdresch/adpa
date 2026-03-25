@@ -25,6 +25,8 @@ export interface AssistedSearchRequest extends GKGEnrichedSearchRequest {
   provider?: string
   model?: string
   systemPrompt?: string
+  includeStale?: boolean
+  maxPromptTokens?: number
 }
 
 export interface AssistedSearchSource {
@@ -32,17 +34,36 @@ export interface AssistedSearchSource {
   type: string
   title: string
   relevanceScore: number
+  accuracyScore: number
+  freshnessScore: number
+  compositeScore: number
   relationshipCount: number
   knowledgeRecommendationCount: number
+  estimatedTokens: number
+  updatedAt: string
+  isFresh: boolean
+}
+
+export interface ContextAssemblyMetrics {
+  retrievalLatencyMs: number
+  enrichmentLatencyMs: number
+  totalLatencyMs: number
+  tokenBudget: number
+  tokenCount: number
+  selectedSourceCount: number
+  filteredOutCount: number
+  staleItemCount: number
+  truncationApplied: boolean
 }
 
 export interface ContextAssemblyResponse {
   query: string
   totalResults: number
-  results: GKGEnrichedResult[]
+  results: ScoredContextResult[]
   sources: AssistedSearchSource[]
   followUpSuggestions: string[]
   contextPrompt: string
+  metrics: ContextAssemblyMetrics
 }
 
 export interface AssistedSearchResponse extends ContextAssemblyResponse {
@@ -54,6 +75,22 @@ export interface AssistedSearchResponse extends ContextAssemblyResponse {
     total_tokens: number
   }
 }
+
+export interface ScoredContextResult extends GKGEnrichedResult {
+  accuracyScore: number
+  freshnessScore: number
+  compositeScore: number
+  estimatedTokens: number
+  isFresh: boolean
+  accessValidated: boolean
+  validationWarnings: string[]
+}
+
+const DEFAULT_MAX_CONTEXT_ITEMS = 8
+const MAX_CONTEXT_ITEMS = 15
+const DEFAULT_MAX_PROMPT_TOKENS = 1800
+const MAX_PROMPT_TOKENS = 6000
+const STALE_CONTENT_DAYS = 180
 
 class AISearchRAGService {
   private resolveTypes(types?: string[]): string[] {
@@ -109,8 +146,6 @@ class AISearchRAGService {
       searchPromises.push(searchUsers(request, userId))
     }
 
-    // Add knowledge base search to assisted search queries
-    // This enables semantic search with 10 AI transformation KB entries
     if (typesToSearch.includes('knowledge_base') || (!request.types || request.types.length === 0)) {
       searchPromises.push(searchKnowledgeBase(request))
     }
@@ -119,10 +154,129 @@ class AISearchRAGService {
     return groupedResults.flat()
   }
 
-  private sortResults(
+  private normalizeScore(score: number | undefined | null): number {
+    if (typeof score !== 'number' || Number.isNaN(score)) {
+      return 0
+    }
+
+    return Math.max(0, Math.min(1, score))
+  }
+
+  private estimateTokens(...parts: Array<string | undefined>): number {
+    const text = parts.filter(Boolean).join(' ').trim()
+    if (!text) {
+      return 0
+    }
+
+    return Math.max(1, Math.ceil(text.length / 4))
+  }
+
+  private calculateFreshnessScore(updatedAt?: string): number {
+    if (!updatedAt) {
+      return 0.2
+    }
+
+    const parsed = new Date(updatedAt).getTime()
+    if (Number.isNaN(parsed)) {
+      return 0.2
+    }
+
+    const ageDays = (Date.now() - parsed) / (1000 * 60 * 60 * 24)
+
+    if (ageDays <= 7) return 1
+    if (ageDays <= 30) return 0.9
+    if (ageDays <= 90) return 0.7
+    if (ageDays <= 180) return 0.45
+    if (ageDays <= 365) return 0.2
+    return 0.05
+  }
+
+  private calculateAccuracyScore(result: GKGEnrichedResult): number {
+    let score = 0.2
+
+    if (result.title?.trim()) score += 0.2
+    if (result.description?.trim()) score += 0.15
+    if (result.content_preview?.trim()) score += 0.2
+    if (result.project_id || result.project_name) score += 0.05
+    if (result.author?.trim()) score += 0.05
+    if (Array.isArray(result.tags) && result.tags.length > 0) score += 0.05
+    if (result.gkgMetadata?.relationships?.length) score += 0.05
+    if (result.gkgMetadata?.knowledgeRecommendations?.length) score += 0.05
+    if (typeof result.gkgMetadata?.confidenceScore === 'number') {
+      score += this.normalizeScore(result.gkgMetadata.confidenceScore) * 0.05
+    }
+
+    const relevanceSignal = this.normalizeScore(result.relevance_score)
+    score += relevanceSignal * 0.2
+
+    return this.normalizeScore(score)
+  }
+
+  private validateAndScoreResults(
     results: GKGEnrichedResult[],
+    includeStale: boolean
+  ): { scoredResults: ScoredContextResult[]; filteredOutCount: number; staleItemCount: number } {
+    let filteredOutCount = 0
+    let staleItemCount = 0
+
+    const scoredResults = results.reduce<ScoredContextResult[]>((acc, result) => {
+      const warnings: string[] = []
+      const hasUsableContent = Boolean(
+        result.title?.trim() || result.description?.trim() || result.content_preview?.trim()
+      )
+
+      if (!hasUsableContent) {
+        filteredOutCount += 1
+        return acc
+      }
+
+      const freshnessScore = this.calculateFreshnessScore(result.updated_at)
+      const isFresh = freshnessScore >= 0.45
+      if (!isFresh) {
+        staleItemCount += 1
+        warnings.push('stale_context')
+      }
+
+      if (!includeStale && !isFresh) {
+        filteredOutCount += 1
+        return acc
+      }
+
+      const accuracyScore = this.calculateAccuracyScore(result)
+      if (!result.description?.trim() && !result.content_preview?.trim()) {
+        warnings.push('limited_content')
+      }
+
+      const relevanceScore = this.normalizeScore(result.relevance_score)
+      const compositeScore = this.normalizeScore(
+        relevanceScore * 0.5 +
+        freshnessScore * 0.25 +
+        accuracyScore * 0.2 +
+        (result.gkgMetadata?.relationships?.length ? 0.05 : 0)
+      )
+
+      acc.push({
+        ...result,
+        accuracyScore,
+        freshnessScore,
+        compositeScore,
+        estimatedTokens: this.estimateTokens(result.title, result.description, result.content_preview),
+        isFresh,
+        accessValidated: true,
+        validationWarnings: warnings,
+        relevance_score: relevanceScore
+      })
+
+      return acc
+    }, [])
+
+    return { scoredResults, filteredOutCount, staleItemCount }
+  }
+
+  private sortResults(
+    results: ScoredContextResult[],
     sortBy: 'relevance' | 'date' | 'title' = 'relevance'
-  ): GKGEnrichedResult[] {
+  ): ScoredContextResult[] {
     if (sortBy === 'date') {
       return [...results].sort(
         (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
@@ -133,68 +287,137 @@ class AISearchRAGService {
       return [...results].sort((a, b) => a.title.localeCompare(b.title))
     }
 
-    return [...results].sort((a, b) => (b.relevance_score || 0) - (a.relevance_score || 0))
+    return [...results].sort((a, b) => b.compositeScore - a.compositeScore)
   }
 
-  private buildSources(results: GKGEnrichedResult[], maxSources: number): AssistedSearchSource[] {
-    return results.slice(0, maxSources).map(result => ({
+  private toSource(result: ScoredContextResult): AssistedSearchSource {
+    return {
       id: result.id,
       type: result.type,
       title: result.title,
       relevanceScore: result.relevance_score || 0,
+      accuracyScore: result.accuracyScore,
+      freshnessScore: result.freshnessScore,
+      compositeScore: result.compositeScore,
       relationshipCount: result.gkgMetadata?.relationships?.length || 0,
-      knowledgeRecommendationCount: result.gkgMetadata?.knowledgeRecommendations?.length || 0
-    }))
+      knowledgeRecommendationCount: result.gkgMetadata?.knowledgeRecommendations?.length || 0,
+      estimatedTokens: result.estimatedTokens,
+      updatedAt: result.updated_at,
+      isFresh: result.isFresh
+    }
   }
 
-  private buildContextPrompt(results: GKGEnrichedResult[], query: string, maxItems: number): string {
+  private buildContextBlock(result: ScoredContextResult, index: number, compact = false): string {
+    if (compact) {
+      return [
+        `[Source ${index + 1}]`,
+        `Type: ${result.type} | Title: ${result.title}`,
+        `Scores: relevance=${result.relevance_score.toFixed(3)}, freshness=${result.freshnessScore.toFixed(3)}, composite=${result.compositeScore.toFixed(3)}`,
+        ''
+      ].join('\n')
+    }
+
+    const relationships = result.gkgMetadata?.relationships || []
+    const knowledge = result.gkgMetadata?.knowledgeRecommendations || []
+
+    const lines: string[] = [
+      `[Source ${index + 1}]`,
+      `ID: ${result.id}`,
+      `Type: ${result.type}`,
+      `Title: ${result.title}`,
+      `Description: ${result.description || 'N/A'}`,
+      `Preview: ${result.content_preview || 'N/A'}`,
+      `Scores: relevance=${result.relevance_score.toFixed(3)}, accuracy=${result.accuracyScore.toFixed(3)}, freshness=${result.freshnessScore.toFixed(3)}, composite=${result.compositeScore.toFixed(3)}`,
+      `Freshness: ${result.isFresh ? 'fresh' : 'stale'} | Updated: ${result.updated_at || 'unknown'}`
+    ]
+
+    if (relationships.length > 0) {
+      lines.push(
+        `Top Relationships: ${relationships
+          .slice(0, 3)
+          .map(r => `${r.type} -> ${r.targetTitle} (${r.targetType})`)
+          .join('; ')}`
+      )
+    }
+
+    if (knowledge.length > 0) {
+      lines.push(
+        `Knowledge Recommendations: ${knowledge
+          .slice(0, 2)
+          .map(k => `${k.title} [${k.category}]`)
+          .join('; ')}`
+      )
+    }
+
+    if (result.validationWarnings.length > 0) {
+      lines.push(`Validation Warnings: ${result.validationWarnings.join(', ')}`)
+    }
+
+    lines.push('')
+    return lines.join('\n')
+  }
+
+  private buildContextPrompt(
+    results: ScoredContextResult[],
+    query: string,
+    maxItems: number,
+    maxPromptTokens: number
+  ): { contextPrompt: string; selectedResults: ScoredContextResult[]; tokenCount: number; truncationApplied: boolean } {
     const selected = results.slice(0, maxItems)
 
     if (selected.length === 0) {
-      return `No internal ADPA search context was found for query: ${query}`
+      return {
+        contextPrompt: `No internal ADPA search context was found for query: ${query}`,
+        selectedResults: [],
+        tokenCount: this.estimateTokens(query),
+        truncationApplied: false
+      }
     }
 
-    const lines: string[] = [
+    const header = [
       `ADPA Assisted Search Context for query: "${query}"`,
       'Use this context as primary internal evidence before external assumptions.',
+      'Items are validated for usability, freshness, and scoring before inclusion.',
       ''
-    ]
+    ].join('\n')
+
+    const headerTokens = this.estimateTokens(header)
+    let usedTokens = headerTokens
+    const chosen: ScoredContextResult[] = []
+    const blocks: string[] = [header]
+    let truncationApplied = false
 
     selected.forEach((result, index) => {
-      const relationships = result.gkgMetadata?.relationships || []
-      const knowledge = result.gkgMetadata?.knowledgeRecommendations || []
-      lines.push(
-        `[Source ${index + 1}]`,
-        `ID: ${result.id}`,
-        `Type: ${result.type}`,
-        `Title: ${result.title}`,
-        `Description: ${result.description || 'N/A'}`,
-        `Preview: ${result.content_preview || 'N/A'}`,
-        `Relevance Score: ${Number(result.relevance_score || 0).toFixed(3)}`
-      )
+      const fullBlock = this.buildContextBlock(result, index)
+      const fullBlockTokens = this.estimateTokens(fullBlock)
 
-      if (relationships.length > 0) {
-        lines.push(
-          `Top Relationships: ${relationships
-            .slice(0, 3)
-            .map(r => `${r.type} -> ${r.targetTitle} (${r.targetType})`)
-            .join('; ')}`
-        )
+      if (usedTokens + fullBlockTokens <= maxPromptTokens) {
+        chosen.push(result)
+        blocks.push(fullBlock)
+        usedTokens += fullBlockTokens
+        return
       }
 
-      if (knowledge.length > 0) {
-        lines.push(
-          `Knowledge Recommendations: ${knowledge
-            .slice(0, 2)
-            .map(k => `${k.title} [${k.category}]`)
-            .join('; ')}`
-        )
+      const compactBlock = this.buildContextBlock(result, index, true)
+      const compactBlockTokens = this.estimateTokens(compactBlock)
+
+      if (usedTokens + compactBlockTokens <= maxPromptTokens) {
+        truncationApplied = true
+        chosen.push(result)
+        blocks.push(compactBlock)
+        usedTokens += compactBlockTokens
+        return
       }
 
-      lines.push('')
+      truncationApplied = true
     })
 
-    return lines.join('\n')
+    return {
+      contextPrompt: blocks.join('\n'),
+      selectedResults: chosen,
+      tokenCount: usedTokens,
+      truncationApplied
+    }
   }
 
   private async buildFollowUpSuggestions(
@@ -231,6 +454,7 @@ class AISearchRAGService {
     request: AssistedSearchRequest,
     userId: string
   ): Promise<ContextAssemblyResponse> {
+    const startedAt = Date.now()
     const baseRequest: UniversalSearchRequest = {
       query: request.query,
       types: request.types,
@@ -245,8 +469,11 @@ class AISearchRAGService {
       searchMode: 'hybrid'
     }
 
+    const retrievalStartedAt = Date.now()
     const rawResults = await this.runBaseSearch(baseRequest, userId)
+    const retrievalLatencyMs = Date.now() - retrievalStartedAt
 
+    const enrichmentStartedAt = Date.now()
     const enriched = await GKGEnrichedSearchService.enrichResults(
       rawResults,
       {
@@ -257,16 +484,46 @@ class AISearchRAGService {
       },
       userId
     )
+    const enrichmentLatencyMs = Date.now() - enrichmentStartedAt
 
-    const sorted = this.sortResults(enriched, request.sortBy || 'relevance')
+    const includeStale = request.includeStale !== false
+    const { scoredResults, filteredOutCount, staleItemCount } = this.validateAndScoreResults(
+      enriched,
+      includeStale
+    )
+
+    const sorted = this.sortResults(scoredResults, request.sortBy || 'relevance')
     const limit = request.limit || 20
     const offset = request.offset || 0
     const paginated = sorted.slice(offset, offset + limit)
-    const maxContextItems = Math.min(request.maxContextItems || 8, 15)
+    const maxContextItems = Math.min(request.maxContextItems || DEFAULT_MAX_CONTEXT_ITEMS, MAX_CONTEXT_ITEMS)
+    const maxPromptTokens = Math.min(request.maxPromptTokens || DEFAULT_MAX_PROMPT_TOKENS, MAX_PROMPT_TOKENS)
 
-    const contextPrompt = this.buildContextPrompt(paginated, request.query, maxContextItems)
-    const sources = this.buildSources(paginated, maxContextItems)
+    const promptData = this.buildContextPrompt(paginated, request.query, maxContextItems, maxPromptTokens)
+    const sources = promptData.selectedResults.map(result => this.toSource(result))
     const followUpSuggestions = await this.buildFollowUpSuggestions(paginated, request.query)
+    const totalLatencyMs = Date.now() - startedAt
+
+    const metrics: ContextAssemblyMetrics = {
+      retrievalLatencyMs,
+      enrichmentLatencyMs,
+      totalLatencyMs,
+      tokenBudget: maxPromptTokens,
+      tokenCount: promptData.tokenCount,
+      selectedSourceCount: sources.length,
+      filteredOutCount,
+      staleItemCount,
+      truncationApplied: promptData.truncationApplied
+    }
+
+    logger.info('[AI-SEARCH-RAG] Context assembly completed', {
+      query: request.query,
+      userId,
+      totalRawResults: rawResults.length,
+      totalValidatedResults: sorted.length,
+      selectedSourceCount: sources.length,
+      ...metrics
+    })
 
     return {
       query: request.query,
@@ -274,7 +531,8 @@ class AISearchRAGService {
       results: paginated,
       sources,
       followUpSuggestions,
-      contextPrompt
+      contextPrompt: promptData.contextPrompt,
+      metrics
     }
   }
 
@@ -296,6 +554,7 @@ class AISearchRAGService {
       '- Prioritize provided internal context over assumptions.',
       '- Explicitly mention uncertainty if context is insufficient.',
       '- Include short source references by title in your answer.',
+      '- Prefer fresher, higher-confidence context when sources conflict.',
       '',
       `User Query: ${request.query}`,
       '',
@@ -317,7 +576,9 @@ class AISearchRAGService {
         metadata: {
           query: request.query,
           sourceCount: context.sources.length,
-          totalResults: context.totalResults
+          totalResults: context.totalResults,
+          contextTokenCount: context.metrics.tokenCount,
+          truncated: context.metrics.truncationApplied
         }
       })
 

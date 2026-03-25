@@ -171,7 +171,7 @@ export default function Projects() {
   const fetchProjects = async () => {
     try {
       setLoading(true)
-      let params: any = {
+      let params: Record<string, string | number | undefined> = {
         page: pagination.page,
         limit: pagination.limit,
       }
@@ -298,9 +298,9 @@ export default function Projects() {
 
               console.log('✅ Document created successfully:', createdDocument)
               toast.success(`Project created with ${draft.templateName || 'initial document'}!`)
-            } catch (docCreateError: any) {
+            } catch (docCreateError: unknown) {
               console.error('❌ Document creation failed:', docCreateError)
-              toast.error(`Project created, but document failed to save: ${docCreateError.message || 'Unknown error'}`)
+              toast.error(`Project created, but document failed to save: ${docCreateError instanceof Error ? docCreateError.message : 'Unknown error'}`)
             }
           } else {
             console.log('⚠️ Skipping document creation:', {
@@ -315,7 +315,7 @@ export default function Projects() {
 
           // Clear the draft from session storage
           sessionStorage.removeItem('project-draft')
-        } catch (docError) {
+        } catch (docError: unknown) {
           console.error("❌ Failed to save business case as document:", docError)
           toast.error("Project created, but initial document could not be saved. You can upload it manually.")
         }
@@ -413,8 +413,8 @@ export default function Projects() {
 
     setEditingProject({
       ...project,
-      start_date: normalizeDate(project.start_date as any),
-      end_date: normalizeDate(project.end_date as any),
+      start_date: normalizeDate(project.start_date),
+      end_date: normalizeDate(project.end_date),
     })
     setEditDialogOpen(true)
   }
@@ -645,7 +645,7 @@ export default function Projects() {
       }
       setDocumentGenerationForm(resetForm)
       setGenerationProgress({ step: 0, totalSteps: 4, message: '', percentage: 0 })
-    } catch (error) {
+    } catch (error: unknown) {
       const totalDuration = Date.now() - startTime
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
 
@@ -709,7 +709,7 @@ export default function Projects() {
 
       // For binary files, we'll store them as base64 or use FormData
       // For now, let's handle text files and create a placeholder for binary files
-      let content: any
+      let content: string = ""
 
       // CRITICAL: For PDF/DOCX files, use the upload endpoint that converts to Markdown
       // For text files, we can create directly with Markdown content
@@ -853,15 +853,15 @@ export default function Projects() {
         })
         throw new Error(`Unsupported file type: ${documentUploadForm.file.name}. Please upload PDF, DOCX, TXT, or Markdown files. The file type could not be determined.`)
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       const totalDuration = Date.now() - startTime
-      const errorMessage = error.message || 'Unknown error'
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
 
       console.error("❌ Failed to upload document:", {
         error: errorMessage,
         fileName: documentUploadForm.file?.name,
         fileType: documentUploadForm.file?.type,
-        stack: error.stack
+        stack: error instanceof Error ? error.stack : undefined
       })
 
       // Track failed document upload
@@ -903,9 +903,9 @@ export default function Projects() {
   // Sort by most recently updated first
   const sortedProjects = [...filteredProjects].sort((a, b) => {
     // Sort by last_activity (most recent document or project update)
-    const aTime = (a as any).last_activity ? new Date((a as any).last_activity).getTime() :
+    const aTime = a.last_activity ? new Date(a.last_activity).getTime() :
       a.updated_at ? new Date(a.updated_at).getTime() : 0
-    const bTime = (b as any).last_activity ? new Date((b as any).last_activity).getTime() :
+    const bTime = b.last_activity ? new Date(b.last_activity).getTime() :
       b.updated_at ? new Date(b.updated_at).getTime() : 0
     return bTime - aTime
   })
@@ -1129,7 +1129,7 @@ export default function Projects() {
         sessionStorage.removeItem('auto-create-project')
 
         toast.success('Business case loaded! Review and complete the project details.')
-      } catch (error) {
+      } catch (error: unknown) {
         console.error('Failed to load project draft:', error)
         toast.error('Failed to load business case data')
         sessionStorage.removeItem('auto-create-project')
@@ -1150,13 +1150,12 @@ export default function Projects() {
   }
 
   return (
-    <PageTransition>
-      <div className="flex h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
-        <Sidebar />
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <Header title="Projects Portfolio" />
-          <main className="flex-1 overflow-y-auto p-6 custom-scrollbar">
-            <AnimatedLayout className="space-y-8">
+    <div className="flex h-screen bg-background">
+      <Sidebar />
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <Header />
+        <main className="flex-1 overflow-y-auto p-6">
+          <AnimatedLayout className="space-y-6">
               {/* Hero Header with Search and Filter */}
               <ProjectsHeader
                 searchTerm={searchTerm}
@@ -1164,7 +1163,7 @@ export default function Projects() {
                 statusFilter={statusFilter}
                 onStatusFilterChange={setStatusFilter}
                 onCreateClick={() => setDialogOpen(true)}
-                projectsCount={pagination.total}
+                projectsCount={loading ? "..." : pagination.total}
               />
 
               {/* Create Project Dialog */}
@@ -1243,6 +1242,5 @@ export default function Projects() {
           </main>
         </div>
       </div>
-    </PageTransition>
   )
 }

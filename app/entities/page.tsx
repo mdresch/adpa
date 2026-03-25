@@ -20,27 +20,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { apiClient } from '@/lib/api'
+import { apiClient, ExtractedEntity, Project } from "@/lib/api"
 import { Loader2, Search, Filter, Download, RefreshCw, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
 
-interface ExtractedEntity {
-  id: string
-  entity_type: string
-  entity_name: string
-  entity_data: Record<string, any>
-  extraction_confidence?: number
-  extraction_method?: string
-  source_document_id?: string
-  created_at: string
-  is_verified?: boolean
-}
-
-interface Project {
-  id: string
-  name: string
-  status?: string
-}
 
 export default function EntitiesPage() {
   const router = useRouter()
@@ -86,7 +69,7 @@ export default function EntitiesPage() {
     try {
       const response = await apiClient.getProjects({ limit: 100 })
       setProjects(response.projects || [])
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to load projects:', error)
     } finally {
       setLoadingProjects(false)
@@ -132,22 +115,19 @@ export default function EntitiesPage() {
 
     setLoading(true)
     try {
-      const params = new URLSearchParams()
-      if (filterType !== 'all') params.append('entityType', filterType)
-      if (filterStatus !== 'all') params.append('status', filterStatus)
-
-      const response = await apiClient.request<{ success: boolean; data: ExtractedEntity[] }>(
-        `/entities/project/${projectId}?${params.toString()}`
-      )
+      const response = await apiClient.getProjectEntities(projectId, {
+        entityType: filterType !== 'all' ? filterType : undefined,
+        status: filterStatus !== 'all' ? filterStatus : undefined,
+      })
       
       if (response.success) {
         setEntities(response.data || [])
         calculateStats(response.data || [])
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: 'Error',
-        description: error.message || 'Failed to load entities',
+        description: error instanceof Error ? error.message : 'Failed to load entities',
         variant: 'destructive'
       })
     } finally {
@@ -187,13 +167,7 @@ export default function EntitiesPage() {
 
     setExtracting(true)
     try {
-      const response = await apiClient.request<{ success: boolean; data: { totalExtracted: number } }>(
-        `/entities/extract/project/${projectId}`,
-        {
-          method: 'POST',
-          body: JSON.stringify({})
-        }
-      )
+      const response = await apiClient.extractProjectEntities(projectId)
       
       if (response.success) {
         toast({
@@ -202,10 +176,10 @@ export default function EntitiesPage() {
         })
         await loadEntities()
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: 'Error',
-        description: error.message || 'Failed to extract entities',
+        description: error instanceof Error ? error.message : 'Failed to extract entities',
         variant: 'destructive'
       })
     } finally {
@@ -232,19 +206,12 @@ export default function EntitiesPage() {
   const performVerification = async (entityId: string, verified: boolean) => {
     try {
       setVerifying(true)
-      const response = await apiClient.request<{ success: boolean; error?: string; requiresConfirmation?: boolean }>(
-        `/entities/${entityId}/verify`,
-        {
-          method: 'POST',
-          body: JSON.stringify({ 
-            verified,
-            confirmed: true // Always confirm when called from dialog
-          })
-        }
-      )
+      const response = await apiClient.verifyEntity(entityId, { 
+        verified,
+        confirmed: true // Always confirm when called from dialog
+      })
       
       if (response.error === 'CONFIRMATION_REQUIRED') {
-        const entity = entities.find(e => e.id === entityId)
         setPendingVerification({ entityId, verified })
         setShowConfirmDialog(true)
         return
@@ -255,15 +222,14 @@ export default function EntitiesPage() {
         description: `Entity ${verified ? 'verified' : 'unverified'}`
       })
       await loadEntities()
-    } catch (error: any) {
-      if (error.message?.includes('CONFIRMATION_REQUIRED')) {
-        const entity = entities.find(e => e.id === entityId)
+    } catch (error: unknown) {
+      if (error instanceof Error && error.message?.includes('CONFIRMATION_REQUIRED')) {
         setPendingVerification({ entityId, verified })
         setShowConfirmDialog(true)
       } else {
         toast({
           title: 'Error',
-          description: error.message || 'Failed to verify entity',
+          description: error instanceof Error ? error.message : 'Failed to verify entity',
           variant: 'destructive'
         })
       }

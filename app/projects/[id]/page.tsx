@@ -12,6 +12,9 @@ import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
+import { PageTransition } from "@/components/page-transition"
+import { AnimatedLayout, AnimatedCard, AnimatedGrid } from "@/components/animated-layout"
+import { motion } from "framer-motion"
 import { BaselineGanttChart } from "@/components/BaselineGanttChart"
 import { BaselineManagement } from "./components/BaselineManagement"
 import { ProjectDataExtraction } from "./components/ProjectDataExtraction"
@@ -96,6 +99,7 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { SkeletonCard, SkeletonStats, SkeletonTable, SkeletonChart, SkeletonLine } from "@/components/ui/skeleton"
 import dynamic from 'next/dynamic'
 
 const SimpleLineChart = dynamic(() => import('@/components/charts/RechartsWrappers').then(m => m.SimpleLineChart), { ssr: false })
@@ -1500,7 +1504,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
     try {
       setLoadingTemplates(true)
       console.log('🔵 Calling apiClient.getTemplates with limit=100')
-      const response: any = await apiClient.getTemplates({
+      const response = await apiClient.getTemplates({
         limit: 100  // Increased limit to get more templates
       })
       console.log('📊 Templates API response:', response)
@@ -2515,11 +2519,64 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
       <div className="flex h-screen bg-background">
         <Sidebar />
         <div className="flex-1 flex flex-col overflow-hidden">
-          <Header title={project?.name || "Project Dashboard"} />
-          <main className="flex-1 flex items-center justify-center">
-            <div className="flex items-center space-x-2">
-              <Loader2 className="h-6 w-6 animate-spin" />
-              <span>Loading project...</span>
+          <Header title="Loading project..." />
+          <main className="flex-1 overflow-y-auto p-6">
+            <div className="space-y-6">
+              {/* Breadcrumb Skeleton */}
+              <div className="flex items-center space-x-2">
+                <SkeletonLine className="w-20" />
+                <SkeletonLine className="w-4" />
+                <SkeletonLine className="w-24" />
+                <SkeletonLine className="w-4" />
+                <SkeletonLine className="w-32" />
+              </div>
+
+              {/* Project Header Skeleton */}
+              <div className="flex items-start justify-between">
+                <div className="space-y-4">
+                  <div className="flex items-center space-x-3">
+                    <SkeletonLine className="h-10 w-10 rounded-full" />
+                    <div>
+                      <SkeletonLine className="h-8 w-64" />
+                      <SkeletonLine className="h-4 w-96 mt-2" />
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-4">
+                    <SkeletonLine className="h-6 w-20 rounded-full" />
+                    <SkeletonLine className="h-6 w-24 rounded-full" />
+                    <SkeletonLine className="h-6 w-16 rounded-full" />
+                  </div>
+                </div>
+                <div className="flex space-x-2">
+                  <SkeletonLine className="h-10 w-32" />
+                  <SkeletonLine className="h-10 w-32" />
+                </div>
+              </div>
+
+              {/* Tabs Skeleton */}
+              <div className="space-y-4">
+                <div className="flex space-x-2 border-b">
+                  <SkeletonLine className="h-10 w-24" />
+                  <SkeletonLine className="h-10 w-24" />
+                  <SkeletonLine className="h-10 w-24" />
+                  <SkeletonLine className="h-10 w-24" />
+                </div>
+                
+                {/* Stats Grid Skeleton */}
+                <SkeletonStats items={4} />
+
+                {/* Content Area Skeleton */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <div className="lg:col-span-2 space-y-6">
+                    <SkeletonCard className="h-96" />
+                    <SkeletonTable rows={5} />
+                  </div>
+                  <div className="space-y-6">
+                    <SkeletonCard className="h-48" />
+                    <SkeletonCard className="h-64" />
+                  </div>
+                </div>
+              </div>
             </div>
           </main>
         </div>
@@ -2528,27 +2585,11 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
   }
 
   if (!project) {
-    if (loading) {
-      return (
-        <div className="flex h-screen bg-background">
-          <Sidebar />
-          <div className="flex-1 flex flex-col overflow-hidden">
-            <Header title={project?.name || "Project Dashboard"} />
-            <main className="flex-1 flex items-center justify-center">
-              <div className="text-center">
-                <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
-                <p className="text-muted-foreground">Loading project...</p>
-              </div>
-            </main>
-          </div>
-        </div>
-      )
-    }
     return (
       <div className="flex h-screen bg-background">
         <Sidebar />
         <div className="flex-1 flex flex-col overflow-hidden">
-          <Header title={project?.name || "Project Dashboard"} />
+          <Header title="Project Dashboard" />
           <main className="flex-1 flex items-center justify-center">
             <div className="text-center max-w-md">
               <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
@@ -2580,11 +2621,11 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
 
   return (
     <div className="flex h-screen bg-background">
-      <Sidebar />
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <Header />
-        <main className="flex-1 overflow-y-auto p-6">
-          <div className="space-y-6">
+        <Sidebar />
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <Header />
+          <main className="flex-1 overflow-y-auto p-6">
+            <AnimatedLayout className="space-y-6">
             {/* Breadcrumb */}
             <Breadcrumb>
               <BreadcrumbList>
@@ -3768,9 +3809,9 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                 <DigitalTwinAnalyticsTab projectId={projectId} />
               </TabsContent>
             </Tabs>
-          </div>
-        </main>
-      </div>
+            </AnimatedLayout>
+          </main>
+        </div>
 
       {/* Smart Document Versioning - Template Conflict Dialog */}
       {conflictData && (

@@ -1,0 +1,53 @@
+# Update AI Providers & Local AI Bootstrapping
+
+The goal is to update the application's AI provider configuration with new Azure cloud endpoints, integrate the **Foundry Local** on-device inference server, and ensure that local AI providers (Ollama and Foundry Local) are automatically started and configured during the application's bootstrap process. This ensures a seamless developer experience and robust local-first AI capabilities.
+
+## Proposed Changes
+
+### Configuration Updates
+
+#### [MODIFY] [.env](file:///d:/Source/adpa/.env)
+- Update `AZURE_OPENAI_ENDPOINT` to `https://adpa-resource.openai.azure.com/openai/v1`.
+- Add `AZURE_AI_PROJECT_ENDPOINT` with `https://adpa-resource.services.ai.azure.com/api/projects/adpa`.
+- Update `AZURE_OPENAI_API_KEY` (I will request the actual key from the user as it was provided in bullets).
+
+#### [MODIFY] [cloud.json](file:///d:/Source/adpa/lib/morphic/config/models/cloud.json) or [default.json](file:///d:/Source/adpa/lib/morphic/config/models/default.json)
+Update### Backend AI Layer
+Summary of changes to support the new Azure AI endpoints and resolve type errors.
+
+#### [MODIFY] [azure.ts](file:///d:/Source/adpa/server/src/modules/ai/azure.ts)
+- Refactor endpoint parsing to handle both `openai.azure.com` and `services.ai.azure.com`.
+- Remove hardcoded resource names in validation logic.
+- Update [getAvailableModels](file:///d:/Source/adpa/server/src/modules/ai/azure.ts#278-315) to handle the project endpoint if applicable.
+
+#### [MODIFY] [researcher.ts](file:///d:/Source/adpa/lib/morphic/agents/researcher.ts)
+- Finalize the localized fix for `activeToolsList` type to support snake_case aliases like `'ask_question'`.
+
+#### [NEW] [localAIService.ts](file:///d:/Source/adpa/server/src/services/localAIService.ts)
+- Implement a service to manage local AI process lifecycles.
+- Methods to check status, start service (CLI command), and ensure specific models are loaded.
+- Support for `ollama run <model>` and `foundry model run <model>`.
+
+#### [MODIFY] [aiProviders.ts](file:///d:/Source/adpa/server/src/startup/dependencies/aiProviders.ts)
+- Integrate `localAIService.bootstrap()` into the initialization sequence.
+- Ensure local services are ready before completing the dependency init.
+
+#### [MODIFY] [.env](file:///d:/Source/adpa/.env)
+- Add `LOCAL_AI_AUTO_START=true`.
+- Add `OLLAMA_BOOTSTRAP_MODELS="qwen2.5:0.5b"`.
+- Add `FOUNDRY_BOOTSTRAP_MODELS="qwen2.5-0.5b"`.
+
+### Database & Configuration
+Summary of changes to the database to ensure UI visibility and priority.
+
+#### [MODIFY] [sync-azure-providers.ts](file:///d:/Source/adpa/server/scripts/sync-azure-providers.ts)
+- Add Foundry Local to the sync script.
+[]` to `string[]`. This resolves the type mismatch error without requiring changes to the shared `ResearcherTools` definition, which the user prefers to keep as-is.
+
+## Verification Plan
+
+### Automated Tests
+- Run `pnpm lint` to ensure no TypeScript errors remain in [researcher.ts](file:///d:/Source/adpa/lib/morphic/agents/researcher.ts).
+
+### Manual Verification
+- Verify that [.env](file:///d:/Source/adpa/.env) changes are correctly reflected in the application (can be tested by the user once deployed/restarted).

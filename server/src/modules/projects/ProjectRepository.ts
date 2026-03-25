@@ -13,6 +13,9 @@ export interface ProjectData {
   team_members: string; // JSON string
   company_id?: string | null;
   correlation_id?: string;
+  start_date?: string | Date;
+  end_date?: string | Date;
+  budget?: number;
   created_at?: Date;
   updated_at?: Date;
 }
@@ -193,10 +196,10 @@ export class ProjectRepository {
    */
   async create(data: ProjectData): Promise<QueryResult<ProjectData>> {
     return this.db.query(
-      `INSERT INTO projects (id, name, description, framework, status, priority, program_id, owner_id, team_members, correlation_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      `INSERT INTO projects (id, name, description, framework, status, priority, program_id, owner_id, team_members, correlation_id, start_date, end_date, budget)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        RETURNING *`,
-      [data.id, data.name, data.description, data.framework, data.status, data.priority, data.program_id, data.owner_id, data.team_members, data.correlation_id]
+      [data.id, data.name, data.description, data.framework, data.status, data.priority, data.program_id, data.owner_id, data.team_members, data.correlation_id, data.start_date, data.end_date, data.budget]
     );
   }
 
@@ -205,7 +208,7 @@ export class ProjectRepository {
    */
   async update(id: string, data: Partial<ProjectData>): Promise<QueryResult<ProjectData>> {
     const fields = [];
-    const params = [id];
+    const params: any[] = [id];
     let count = 2;
 
     if (data.name !== undefined) { fields.push(`name = $${count++}`); params.push(data.name); }
@@ -215,6 +218,9 @@ export class ProjectRepository {
     if (data.priority !== undefined) { fields.push(`priority = $${count++}`); params.push(data.priority); }
     if (data.team_members !== undefined) { fields.push(`team_members = $${count++}`); params.push(data.team_members); }
     if (data.correlation_id !== undefined) { fields.push(`correlation_id = $${count++}`); params.push(data.correlation_id); }
+    if (data.start_date !== undefined) { fields.push(`start_date = $${count++}`); params.push(data.start_date); }
+    if (data.end_date !== undefined) { fields.push(`end_date = $${count++}`); params.push(data.end_date); }
+    if (data.budget !== undefined) { fields.push(`budget = $${count++}`); params.push(data.budget); }
     
     fields.push(`updated_at = CURRENT_TIMESTAMP`);
 

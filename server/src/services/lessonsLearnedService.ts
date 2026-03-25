@@ -15,6 +15,8 @@ import { driftDetectionService } from './driftDetectionService'
 import { aiRecommendationsService } from './aiRecommendationsService'
 import { aiService } from './aiService'
 import type { PoolClient } from 'pg'
+import { v4 as uuidv4 } from 'uuid'
+import { ProjectContextAnalyzer } from '../modules/contextGathering/analyzers/projectContextAnalyzer'
 
 // Initialize cache service
 const extractionCacheService = new ExtractionCacheService()
@@ -346,6 +348,111 @@ export class LessonsLearnedService {
                 error: error instanceof Error ? error.message : String(error)
             })
             throw error
+        }
+    }
+
+    /**
+     * Analyze a project upon completion to identify lessons learned and accomplishments
+     */
+    async analyzeProjectCompletion(projectId: string, userId: string): Promise<void> {
+        try {
+            logger.info(`[LESSONS-ANALYSIS] Starting completion analysis for project: ${projectId}`);
+            
+            const analyzer = new ProjectContextAnalyzer();
+            const projectContext = await analyzer.analyzeProjectContext(projectId);
+            
+            const prompt = `You are a senior project management consultant. A project has just been completed, and you need to identify key "Lessons Learned" and "Accomplishments".
+            
+            **Project Context:**
+            - Name: ${projectContext.project_name}
+            - Description: ${projectContext.project_description}
+            - Type: ${projectContext.project_type}
+            - Status: ${projectContext.project_status}
+            - Success Criteria: ${JSON.stringify(projectContext.success_criteria)}
+            - Budget: ${JSON.stringify(projectContext.budget_info)}
+            - Timeline: ${JSON.stringify(projectContext.timeline_info)}
+            - Risks identified: ${projectContext.risks.length}
+            - Milestones completed: ${projectContext.milestones.filter(m => m.status === 'completed').length}
+            
+            **Task:**
+            Analyze the project's performance, risks, and milestones to generate:
+            1. **Lessons Learned**: 2-4 valuable takeaways (both positive improvements and negative pitfalls).
+            2. **Accomplishments**: 2-4 major successes or milestones achieved.
+            
+            **Output Format (JSON):**
+            {
+              "lessons": [
+                {
+                  "title": "Brief title",
+                  "description": "Detailed explanation",
+                  "category": "technical|management|communication|budget|timeline",
+                  "positive_or_negative": true,
+                  "impact": "low|medium|high|critical"
+                }
+              ],
+              "accomplishments": [
+                {
+                  "title": "Achievement title",
+                  "description": "What was achieved and why it matters",
+                  "category": "milestone|deliverable|innovation|efficiency",
+                  "impact": "high|critical"
+                }
+              ]
+            }
+            
+            Analyze now:`;
+            
+            const response = await aiService.generateWithFallback({
+                provider: 'openai',
+                model: 'gpt-4o',
+                prompt,
+                temperature: 0.7,
+                max_tokens: 2000
+            });
+            
+            const jsonMatch = response.content.match(/\{[\s\S]*\}/);
+            if (!jsonMatch) throw new Error('No JSON found in AI response');
+            const result = JSON.parse(jsonMatch[0]);
+            
+            // Save Lessons
+            if (result.lessons && Array.isArray(result.lessons)) {
+                for (const l of result.lessons) {
+                    await this.create({
+                        project_id: projectId,
+                        title: l.title,
+                        description: l.description,
+                        category: l.category,
+                        positive_or_negative: l.positive_or_negative,
+                        impact: l.impact,
+                        status: 'identified', // Suggested for moderation
+                        tags: ['ai-suggested', 'completion-analysis']
+                    }, userId);
+                }
+            }
+            
+            // Save Accomplishments (as a special category in lessons for now)
+            if (result.accomplishments && Array.isArray(result.accomplishments)) {
+                for (const a of result.accomplishments) {
+                    await this.create({
+                        project_id: projectId,
+                        title: `Accomplishment: ${a.title}`,
+                        description: a.description,
+                        category: 'accomplishment',
+                        positive_or_negative: true,
+                        impact: a.impact,
+                        status: 'identified', // Suggested for moderation
+                        tags: ['ai-suggested', 'accomplishment', 'completion-analysis']
+                    }, userId);
+                }
+            }
+            
+            logger.info(`[LESSONS-ANALYSIS] Completed analysis for project: ${projectId}. Generated ${result.lessons?.length || 0} lessons and ${result.accomplishments?.length || 0} accomplishments.`);
+        } catch (error) {
+            logger.error('[LESSONS-ANALYSIS] Completion analysis failed', {
+                projectId,
+                error: error instanceof Error ? error.message : String(error)
+            });
+            // Don't throw - this is a background process
         }
     }
 

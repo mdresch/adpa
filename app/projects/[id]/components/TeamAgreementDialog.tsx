@@ -102,10 +102,10 @@ export function TeamAgreementDialog({
       }
 
       // Only include optional fields if they have values
-      if (formData.review_frequency && formData.review_frequency !== '') {
+      if (formData.review_frequency) {
         payload.review_frequency = formData.review_frequency
       }
-      if (formData.next_review_date && formData.next_review_date !== '') {
+      if (formData.next_review_date) {
         payload.next_review_date = new Date(formData.next_review_date).toISOString()
       }
       if (formData.notes && formData.notes.trim() !== '') {

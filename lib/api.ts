@@ -48,6 +48,9 @@ export interface Project {
   program_name?: string
   portfolio_id?: string
   portfolio_name?: string
+  document_count?: number
+  document_quality_score?: number
+  last_activity?: string
 }
 
 export interface ExtendedProject extends Project {
@@ -75,6 +78,7 @@ export interface Program {
   updated_by?: string
   portfolio_id?: string
   portfolio_name?: string
+  archived?: boolean
 }
 
 export interface Document {
@@ -132,6 +136,19 @@ export interface Stakeholder {
   updated_at: string
   created_by_name?: string
   updated_by_name?: string
+}
+
+export interface ExtractedEntity {
+  id: string
+  project_id: string
+  entity_type: string
+  entity_name: string
+  entity_data: any
+  extraction_confidence?: number
+  extraction_method?: string
+  source_document_id?: string
+  created_at: string
+  is_verified?: boolean
 }
 
 export interface Template {
@@ -195,11 +212,21 @@ export interface Template {
     final_format: 'markdown' | 'structured_json' | 'plain_text' | 'html'
     include_metadata: boolean
   }
+  // Soft delete fields
+  deleted_at?: string
+  deleted_by?: string
+  // Compatibility fields for UI
+  version?: string | number
+  usage?: number
+  author?: string
+  status?: string
+  created_by_name?: string
+  template_paragraphs?: any[]
 }
 
 
 
-export interface ProgramMetrics {
+export interface ProgramSummaryMetrics {
   budget: {
     total: number
     spent: number
@@ -226,6 +253,75 @@ export interface ProgramMetrics {
     medium: number
     low: number
   }
+}
+
+export interface ProgramDashboardMetrics {
+  budget: {
+    planned: number
+    actual: number
+    forecast: number
+    variance: number
+    timeline: Array<{
+      month: string
+      planned: number
+      actual: number
+      forecast?: number
+    }>
+  }
+  status: {
+    total: number
+    breakdown: {
+      green: number
+      amber: number
+      red: number
+    }
+  }
+  risks: Array<{
+    id: string
+    title: string
+    description: string
+    probability: number
+    impact: number
+    severity: 'critical' | 'high' | 'medium' | 'low'
+    projectId?: string
+    projectName?: string
+  }>
+  milestones: Array<{
+    id: string
+    name: string
+    plannedDate: string
+    actualDate?: string
+    status: 'completed' | 'on-track' | 'overdue'
+  }>
+}
+
+export interface PortfolioMetrics {
+  totalValue: number
+  valueChange: number
+  programCount: {
+    total: number
+    green: number
+    amber: number
+    red: number
+  }
+  totalInvestment: number
+  resourceUtilization: number
+}
+
+export interface KeyResult {
+  name: string
+  current: number
+  target: number
+  unit: string
+}
+
+export interface OKR {
+  objective: string
+  quarter: string
+  keyResults: KeyResult[]
+  confidence: 'high' | 'medium' | 'low'
+  owner: string
+  dueDate: string
 }
 
 export interface Risk {
@@ -1057,6 +1153,34 @@ class ApiClient {
     await this.request(`/projects/${id}`, { method: "DELETE" })
   }
 
+  // Entities API
+  async getProjectEntities(projectId: string, params?: Record<string, string | number | undefined>): Promise<{ success: boolean; data: ExtractedEntity[] }> {
+    const queryParams = new URLSearchParams()
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined) {
+          queryParams.append(key, value.toString())
+        }
+      })
+    }
+    const query = queryParams.toString()
+    return this.request<{ success: boolean; data: ExtractedEntity[] }>(`/entities/project/${projectId}${query ? `?${query}` : ''}`)
+  }
+
+  async extractProjectEntities(projectId: string): Promise<{ success: boolean; data: { totalExtracted: number } }> {
+    return this.request<{ success: boolean; data: { totalExtracted: number } }>(`/entities/extract/project/${projectId}`, {
+      method: 'POST',
+      body: JSON.stringify({})
+    })
+  }
+
+  async verifyEntity(entityId: string, payload: { verified: boolean; confirmed?: boolean }): Promise<{ success: boolean; error?: string; requiresConfirmation?: boolean }> {
+    return this.request<{ success: boolean; error?: string; requiresConfirmation?: boolean }>(`/entities/${entityId}/verify`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    })
+  }
+
   // Programs API
   async getPrograms(params?: {
     page?: number
@@ -1123,6 +1247,31 @@ class ApiClient {
 
   async deleteProgram(id: string): Promise<void> {
     await this.request(`/programs/${id}`, { method: "DELETE" })
+  }
+
+  async getProgramMetrics(id: string): Promise<ProgramDashboardMetrics> {
+    const response = await this.request<{ success: boolean; data: ProgramDashboardMetrics }>(`/programs/${id}/metrics`)
+    return response.data
+  }
+
+  async getProgramProjects(id: string): Promise<{ projects: Project[] }> {
+    const response = await this.request<{ success: boolean; data: Project[] }>(`/programs/${id}/projects`)
+    return {
+      projects: response.data || []
+    }
+  }
+
+  async canArchiveProgram(id: string): Promise<{ canArchive: boolean; reason?: string; unarchivedCount?: number }> {
+    const response = await this.request<{ success: boolean; data: { canArchive: boolean; reason?: string; unarchivedCount?: number } }>(`/programs/${id}/can-archive`)
+    return response.data
+  }
+
+  async archiveProgram(id: string): Promise<void> {
+    await this.request(`/programs/${id}/archive`, { method: "POST" })
+  }
+
+  async unarchiveProgram(id: string): Promise<void> {
+    await this.request(`/programs/${id}/unarchive`, { method: "POST" })
   }
 
   // Templates API

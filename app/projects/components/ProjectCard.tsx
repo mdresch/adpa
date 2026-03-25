@@ -43,13 +43,13 @@ export function ProjectCard({
   onUploadDocument
 }: ProjectCardProps) {
   const progress = getProjectProgress(project)
-  const documentsCount = (project as any).document_count || 0
+  const documentsCount = project.document_count || 0
 
   return (
     <AnimatedGridItem>
-      <Card className="glass border-0 shadow-lg hover:shadow-2xl transition-all duration-300 group overflow-hidden">
+      <Card className="glass border-0 shadow-lg hover:shadow-2xl transition-shadow duration-300 group overflow-hidden">
         {/* Hover gradient overlay */}
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+        <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
         
         <CardHeader className="relative">
           {/* Icon and Badges */}
@@ -63,29 +63,17 @@ export function ProjectCard({
             
             {/* Status Badges */}
             <div className="flex flex-col space-y-2">
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ delay: index * 0.1 + 0.3, type: "spring" }}
-              >
+              <div>
                 <Badge className={getStatusColor(project.status)}>{project.status}</Badge>
-              </motion.div>
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ delay: index * 0.1 + 0.4, type: "spring" }}
-              >
+              </div>
+              <div>
                 <Badge variant="outline" className="border-slate-300 dark:border-slate-600">
                   {project.framework}
                 </Badge>
-              </motion.div>
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ delay: index * 0.1 + 0.5, type: "spring" }}
-              >
+              </div>
+              <div>
                 <Badge className={getPriorityColor(project.priority)}>{project.priority}</Badge>
-              </motion.div>
+              </div>
             </div>
           </div>
           
@@ -107,39 +95,16 @@ export function ProjectCard({
           <div>
             <div className="flex justify-between text-sm mb-2">
               <span className="font-medium text-slate-700 dark:text-slate-200">Progress</span>
-              <motion.span
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: index * 0.1 + 0.6 }}
-                className="font-bold text-blue-600 dark:text-blue-400"
-              >
+              <span className="font-bold text-blue-600 dark:text-blue-400">
                 {progress}%
-              </motion.span>
+              </span>
             </div>
-            <motion.div
-              initial={{ width: 0 }}
-              animate={{ width: "100%" }}
-              transition={{ delay: index * 0.1 + 0.7, duration: 0.8 }}
-            >
-              <Progress value={progress} className="h-3 bg-slate-100 dark:bg-slate-700">
-                <motion.div
-                  initial={{ width: 0 }}
-                  animate={{ width: `${progress}%` }}
-                  transition={{ delay: index * 0.1 + 0.8, duration: 1, ease: "easeOut" }}
-                  className="h-full bg-gradient-to-r from-blue-500 to-purple-600 rounded-full"
-                />
-              </Progress>
-            </motion.div>
+            <Progress value={progress} className="h-3 bg-slate-100 dark:bg-slate-700" />
           </div>
 
           {/* Timeline and Documents Count */}
           <div className="grid grid-cols-2 gap-4 text-sm">
-            <motion.div
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: index * 0.1 + 0.9 }}
-              className="space-y-1"
-            >
+            <div className="space-y-1">
               <div className="flex items-center space-x-2 text-slate-500 dark:text-slate-400">
                 <Calendar className="h-3 w-3" />
                 <span>Timeline</span>
@@ -148,13 +113,8 @@ export function ProjectCard({
                 {project.start_date && new Date(project.start_date).toLocaleDateString()} -{" "}
                 {project.end_date && new Date(project.end_date).toLocaleDateString()}
               </p>
-            </motion.div>
-            <motion.div
-              initial={{ opacity: 0, x: 10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: index * 0.1 + 1.0 }}
-              className="space-y-1"
-            >
+            </div>
+            <div className="space-y-1">
               <div className="flex items-center space-x-2 text-slate-500 dark:text-slate-400">
                 <FileText className="h-3 w-3" />
                 <span>Documents</span>
@@ -162,16 +122,11 @@ export function ProjectCard({
               <p className="font-medium text-slate-700 dark:text-slate-200">
                 {documentsCount} files
               </p>
-            </motion.div>
+            </div>
           </div>
 
           {/* Team Info */}
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.1 + 1.1 }}
-            className="space-y-2"
-          >
+          <div className="space-y-2">
             <div className="flex items-center space-x-2 text-slate-500 dark:text-slate-400">
               <Users className="h-3 w-3" />
               <span className="text-sm">Team</span>
@@ -180,27 +135,23 @@ export function ProjectCard({
               <p className="font-medium text-sm text-slate-700 dark:text-slate-200">
                 {project.team_members?.length || 0} members
               </p>
-              {(project as any).owner_name && (
+              {project.owner_name && (
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Manager: {(project as any).owner_name}
+                  Manager: {project.owner_name}
                 </p>
               )}
             </div>
-          </motion.div>
+          </div>
 
           {/* Last Activity and Actions Menu */}
           <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-700">
             <div className="flex items-center space-x-2">
               <Clock className="h-3 w-3 text-slate-400" />
               <span className="text-xs text-slate-500 dark:text-slate-400">
-                Last activity: {new Date((project as any).last_activity || project.updated_at).toLocaleDateString()}
+                Last activity: {new Date(project.last_activity || project.updated_at).toLocaleDateString()}
               </span>
             </div>
-            <motion.div
-              initial={{ opacity: 0, scale: 0 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: index * 0.1 + 1.2, type: "spring" }}
-            >
+            <div>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -249,11 +200,10 @@ export function ProjectCard({
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-            </motion.div>
+            </div>
           </div>
         </CardContent>
       </Card>
     </AnimatedGridItem>
   )
 }
-

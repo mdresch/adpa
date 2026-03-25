@@ -3,6 +3,7 @@ import { TemplateController } from './TemplateController';
 import { authenticateToken, requirePermission, requireRole } from '../../middleware/auth';
 import { validate, validateParams, validateQuery } from '../../middleware/validation';
 import Joi from 'joi';
+import { RouteConfig } from '../../routes/registry';
 
 const router = express.Router();
 const controller = new TemplateController();
@@ -46,4 +47,13 @@ router.post('/analytics/rebuild-document-purposes/:projectId', authenticateToken
 router.post('/analytics/rebuild-all', authenticateToken, requireRole(['admin', 'super_admin']), controller.rebuildAll);
 router.get('/analytics/diagnostic/:templateId', authenticateToken, requireRole(['admin', 'super_admin']), controller.getDiagnostic);
 
-export default router;
+const routes: RouteConfig[] = [
+  {
+    path: '/templates',
+    router: router,
+    version: '1',
+    category: 'Templates'
+  }
+];
+
+export default routes;
