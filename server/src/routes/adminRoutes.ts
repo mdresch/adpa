@@ -707,7 +707,8 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params
-      const logPath = path.resolve(process.cwd(), 'logs', 'combined.log')
+      const LOG_FILENAME = 'combined.log'
+      const logPath = path.resolve(process.cwd(), 'logs', LOG_FILENAME)
 
       // 1. Fetch file logs with this correlation ID
       let logLines: any[] = []
@@ -796,11 +797,11 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const logDir = path.resolve(process.cwd(), 'logs')
-      const files = ['combined.log', 'server.log']
+      const ALLOWED_FILES = ['combined.log', 'server.log'] as const
       let allLines: string[] = []
       const limit = parseInt(req.query.limit as string) || 100
 
-      for (const file of files) {
+      for (const file of ALLOWED_FILES) {
         const filePath = path.join(logDir, file)
         if (fs.existsSync(filePath)) {
           const stats = fs.statSync(filePath)

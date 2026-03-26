@@ -28,7 +28,7 @@ export class MorphicRepository {
                              !morphicUrl.includes('localhost') && !morphicUrl.includes('127.0.0.1');
 
             const sslConfig = (isRemote || (process.env.MORPHIC_DB_SSL === 'true')) 
-                ? { rejectUnauthorized: false } 
+                ? { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED === 'false' ? false : true } 
                 : false;
             
             try {
@@ -48,7 +48,7 @@ export class MorphicRepository {
         if (mainUrl) {
             MorphicRepository._pool = new Pool({
                 connectionString: mainUrl.replace(/^["']|["']$/g, ''),
-                ssl: { rejectUnauthorized: false },
+                ssl: { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED === 'false' ? false : true },
                 max: 5
             });
             this.log.info('Morphic repository using main database as fallback');

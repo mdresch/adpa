@@ -6,7 +6,7 @@ const connectionString = 'postgresql://postgres.blxzjbxczpmmgiwbtmdo:QueIQ4ADPA$
 async function main() {
   const pool = new Pool({
     connectionString,
-    ssl: { rejectUnauthorized: false }
+    ssl: { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED === 'false' ? false : true }
   });
 
   try {
@@ -63,14 +63,16 @@ async function main() {
       paramCount = 2;
     }
 
-    query += ` ORDER BY 
-      CASE t.template_scope 
-        WHEN 'standard' THEN 1 
-        WHEN 'company' THEN 2 
-        WHEN 'user' THEN 3 
-      END,
-      t.usage_count DESC, 
-      t.created_at DESC 
+    const finalQuery = `
+      ${query} 
+      ORDER BY 
+        CASE t.template_scope 
+          WHEN 'standard' THEN 1 
+          WHEN 'company' THEN 2 
+          WHEN 'user' THEN 3 
+        END,
+        t.usage_count DESC, 
+        t.created_at DESC 
       LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`;
     
     params.push(filters.limit, filters.offset);
@@ -78,7 +80,7 @@ async function main() {
     console.log('Running query...');
     console.log('Params:', params);
     
-    const result = await client.query(query, params);
+    const result = await client.query(finalQuery, params);
     console.log(`Found ${result.rows.length} rows.`);
     
     if (result.rows.length > 0) {
