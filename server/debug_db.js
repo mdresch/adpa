@@ -16,9 +16,7 @@ async function main() {
     const isSuperAdmin = false;
     const userCompanyId = '110050cf-3792-45cd-b222-85f689e3549b'; // Demo User's company
     const userId = 'b1f3d2c4-e5a6-4b7c-8d9e-f0a1b2c3d4e5'; // Demo User
-    const filters = { limit: 100, offset: 0 };
-
-    let query = `
+    const query = `
       SELECT 
         t.*, 
         u.name as created_by_name,
@@ -46,25 +44,17 @@ async function main() {
       LEFT JOIN template_entity_profile tep ON tep.template_id = t.id
       WHERE t.deleted_at IS NULL
         AND (t.development_status IS NULL OR t.development_status != 'archived')
-    `;
-
-    const params = [];
-    let paramCount = 0;
-
-    if (!isSuperAdmin) {
-      query += ` AND (
-          t.template_scope = 'standard'
+        AND (
+          $1::boolean = true -- isSuperAdmin
           OR
-          (t.template_scope = 'company' AND t.company_id = $${paramCount + 1})
-          OR
-          (t.template_scope = 'user' AND (t.is_public = true OR t.created_by = $${paramCount + 2}))
-        )`;
-      params.push(userCompanyId, userId);
-      paramCount = 2;
-    }
-
-    const finalQuery = `
-      ${query} 
+          (
+            t.template_scope = 'standard'
+            OR
+            (t.template_scope = 'company' AND t.company_id = $2::uuid)
+            OR
+            (t.template_scope = 'user' AND (t.is_public = true OR t.created_by = $3::uuid))
+          )
+        )
       ORDER BY 
         CASE t.template_scope 
           WHEN 'standard' THEN 1 
@@ -73,14 +63,15 @@ async function main() {
         END,
         t.usage_count DESC, 
         t.created_at DESC 
-      LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`;
-    
-    params.push(filters.limit, filters.offset);
+      LIMIT $4 OFFSET $5
+    `;
+
+    const params = [isSuperAdmin, userCompanyId, userId, filters.limit, filters.offset];
 
     console.log('Running query...');
     console.log('Params:', params);
     
-    const result = await client.query(finalQuery, params);
+    const result = await client.query(query, params);
     console.log(`Found ${result.rows.length} rows.`);
     
     if (result.rows.length > 0) {

@@ -707,8 +707,7 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params
-      const LOG_FILENAME = 'combined.log'
-      const logPath = path.resolve(process.cwd(), 'logs', LOG_FILENAME)
+      const logPath = path.resolve(process.cwd(), 'logs', 'combined.log')
 
       // 1. Fetch file logs with this correlation ID
       let logLines: any[] = []
@@ -802,19 +801,32 @@ router.get(
       const limit = parseInt(req.query.limit as string) || 100
 
       for (const file of ALLOWED_FILES) {
-        const filePath = path.join(logDir, file)
-        if (fs.existsSync(filePath)) {
-          const stats = fs.statSync(filePath)
-          const fileSize = stats.size
-          const bufferSize = Math.min(fileSize, 250000) // Read 250KB from each
-          
-          const buffer = Buffer.alloc(bufferSize)
-          const fd = fs.openSync(filePath, 'r')
-          fs.readSync(fd, buffer, 0, bufferSize, Math.max(0, fileSize - bufferSize))
-          fs.closeSync(fd)
-          
-          const content = buffer.toString('utf8')
-          allLines = allLines.concat(content.split('\n').filter(l => l.trim() !== ''))
+        if (file === 'combined.log') {
+          const filePath = path.resolve(process.cwd(), 'logs', 'combined.log')
+          if (fs.existsSync(filePath)) {
+            const stats = fs.statSync(filePath)
+            const fileSize = stats.size
+            const bufferSize = Math.min(fileSize, 250000)
+            const buffer = Buffer.alloc(bufferSize)
+            const fd = fs.openSync(filePath, 'r')
+            fs.readSync(fd, buffer, 0, bufferSize, Math.max(0, fileSize - bufferSize))
+            fs.closeSync(fd)
+            const content = buffer.toString('utf8')
+            allLines = allLines.concat(content.split('\n').filter(l => l.trim() !== ''))
+          }
+        } else if (file === 'server.log') {
+          const filePath = path.resolve(process.cwd(), 'logs', 'server.log')
+          if (fs.existsSync(filePath)) {
+            const stats = fs.statSync(filePath)
+            const fileSize = stats.size
+            const bufferSize = Math.min(fileSize, 250000)
+            const buffer = Buffer.alloc(bufferSize)
+            const fd = fs.openSync(filePath, 'r')
+            fs.readSync(fd, buffer, 0, bufferSize, Math.max(0, fileSize - bufferSize))
+            fs.closeSync(fd)
+            const content = buffer.toString('utf8')
+            allLines = allLines.concat(content.split('\n').filter(l => l.trim() !== ''))
+          }
         }
       }
       
