@@ -10,7 +10,7 @@
  */
 
 import { pool } from '../database/connection'
-import { logger } from '../utils/logger'
+import { logger, asyncLocalStorage } from '../utils/logger'
 import nodemailer from 'nodemailer'
 
 interface EmailRecipient {
@@ -610,14 +610,16 @@ class NotificationService {
     metadata: any
   }) {
     try {
+      const correlationId = asyncLocalStorage.getStore()
       await pool.query(
         `INSERT INTO notification_logs (
           type,
           recipient_emails,
           metadata,
-          sent_at
-        ) VALUES ($1, $2, $3, NOW())`,
-        [data.type, data.recipientEmails, JSON.stringify(data.metadata)]
+          sent_at,
+          correlation_id
+        ) VALUES ($1, $2, $3, NOW(), $4)`,
+        [data.type, data.recipientEmails, JSON.stringify(data.metadata), correlationId]
       )
     } catch (error) {
       logger.error('[NOTIFICATION] Failed to log notification', { error })

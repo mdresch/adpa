@@ -12,7 +12,7 @@ import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { FileText, Plus, Edit, Copy, Archive, Download, Upload, Search, Filter, Minus, Wand2, Brain, Sparkles, Eye, Network } from "lucide-react"
 import { toast } from '@/lib/notify'
-import { apiClient } from "@/lib/api"
+import { apiClient, Template } from "@/lib/api"
 import {
   Dialog,
   DialogContent,
@@ -114,9 +114,18 @@ function getGkgSummary(gkg: { profile?: string; scope?: string; documentStatusFi
   return parts.length > 0 ? parts.join(' · ') : null
 }
 
+interface TemplateParagraph {
+  section_name: string
+  section_type: 'header' | 'paragraph' | 'list' | 'table' | 'code_block' | 'summary' | 'conclusion'
+  description: string
+  required: boolean
+  order: number
+  prompt_guidance?: string
+}
+
 export default function Templates() {
   const router = useRouter()
-  const [templates, setTemplates] = useState<any[]>([])
+  const [templates, setTemplates] = useState<Template[]>([])
   const [loading, setLoading] = useState<boolean>(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedFramework, setSelectedFramework] = useState("all")
@@ -129,9 +138,9 @@ export default function Templates() {
       if (opts?.framework && opts.framework !== "all") params.framework = opts.framework
       const resp = await apiClient.getTemplates(params)
       setTemplates(resp.templates || [])
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Failed to load templates", err)
-      toast.error(err?.message || "Failed to load templates")
+      toast.error(err instanceof Error ? err.message : "Failed to load templates")
     } finally {
       setLoading(false)
     }
@@ -161,7 +170,7 @@ export default function Templates() {
     }
   }, [selectedFramework])
   const [isDialogOpen, setIsDialogOpen] = useState(false)
-  const [editingTemplate, setEditingTemplate] = useState<any | null>(null)
+  const [editingTemplate, setEditingTemplate] = useState<Template | null>(null)
 
   // form fields
   const [formName, setFormName] = useState("")
@@ -170,14 +179,7 @@ export default function Templates() {
   const [formVersion, setFormVersion] = useState("")
   const [formDescription, setFormDescription] = useState("")
   const [formSystemPrompt, setFormSystemPrompt] = useState("")
-  const [formTemplateParagraphs, setFormTemplateParagraphs] = useState<Array<{
-    section_name: string
-    section_type: 'header' | 'paragraph' | 'list' | 'table' | 'code_block' | 'summary' | 'conclusion'
-    description: string
-    required: boolean
-    order: number
-    prompt_guidance?: string
-  }>>([])
+  const [formTemplateParagraphs, setFormTemplateParagraphs] = useState<TemplateParagraph[]>([])
   // client-side validation errors
   const [formErrors, setFormErrors] = useState<{ name?: string; framework?: string }>({})
 
@@ -193,7 +195,7 @@ export default function Templates() {
     setIsDialogOpen(true)
   }
 
-  const openEditDialog = (template: any) => {
+  const openEditDialog = (template: Template) => {
   // prefer freshest template data from state by id (in case the passed object is stale)
   const fresh = templates.find((t) => String(t.id) === String(template?.id)) || template
   setEditingTemplate(fresh || null)
@@ -238,18 +240,23 @@ export default function Templates() {
   const [downloadingIds, setDownloadingIds] = useState<string[]>([])
   const [cloningIds, setCloningIds] = useState<string[]>([])
   const [deletingIds, setDeletingIds] = useState<string[]>([])
-  const [confirmDeleteTemplate, setConfirmDeleteTemplate] = useState<any | null>(null)
+  const [confirmDeleteTemplate, setConfirmDeleteTemplate] = useState<Template | null>(null)
   const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false)
-  const [archiveTemplates, setArchiveTemplates] = useState<any[]>([])
+  const [archiveTemplates, setArchiveTemplates] = useState<Template[]>([])
   const [loadingArchive, setLoadingArchive] = useState(false)
   const [archivePage, setArchivePage] = useState(1)
   const [archiveLimit, setArchiveLimit] = useState(10)
-  const [archivePagination, setArchivePagination] = useState<any | null>(null)
+  const [archivePagination, setArchivePagination] = useState<{
+    page: number
+    limit: number
+    total: number
+    pages: number
+  } | null>(null)
   const [hardDeletingId, setHardDeletingId] = useState<string | null>(null)
-  const [confirmHardDeleteTemplate, setConfirmHardDeleteTemplate] = useState<any | null>(null)
+  const [confirmHardDeleteTemplate, setConfirmHardDeleteTemplate] = useState<Template | null>(null)
   const [isConfirmHardDeleteOpen, setIsConfirmHardDeleteOpen] = useState(false)
 
-  const handleDownload = async (template: any) => {
+  const handleDownload = async (template: Template) => {
     if (!template?.id) return
     const id = String(template.id)
     // avoid duplicate downloads
@@ -270,15 +277,15 @@ export default function Templates() {
       a.remove()
       URL.revokeObjectURL(url)
       toast.success("Download started")
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Failed to download template", err)
-      toast.error(err?.message || "Failed to download template")
+      toast.error(err instanceof Error ? err.message : "Failed to download template")
     } finally {
       setDownloadingIds((s) => s.filter((x) => x !== id))
     }
   }
 
-  const handleClone = async (template: any) => {
+  const handleClone = async (template: Template) => {
     if (!template?.id) return
     const id = String(template.id)
     if (cloningIds.includes(id)) return
@@ -294,9 +301,9 @@ export default function Templates() {
         showLoading: true,
         framework: selectedFramework !== 'all' ? selectedFramework : undefined,
       })
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to clone template', err)
-      toast.error(err?.message || 'Failed to clone template')
+      toast.error(err instanceof Error ? err.message : 'Failed to clone template')
     } finally {
       setCloningIds((s) => s.filter((x) => x !== id))
     }
@@ -312,15 +319,15 @@ export default function Templates() {
       setArchiveTemplates(resp.templates || [])
       setArchivePagination(resp.pagination || null)
       setArchivePage(p)
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to load archive', err)
-      toast.error(err?.message || 'Failed to load archive')
+      toast.error(err instanceof Error ? err.message : 'Failed to load archive')
     } finally {
       setLoadingArchive(false)
     }
   }
 
-  const handleDelete = async (template: any) => {
+  const handleDelete = (template: Template) => {
     // open confirmation dialog instead of using window.confirm
     if (!template?.id) return
     setConfirmDeleteTemplate(template)
@@ -344,9 +351,9 @@ export default function Templates() {
         showLoading: true,
         framework: selectedFramework !== 'all' ? selectedFramework : undefined,
       })
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to delete template', err)
-      toast.error(err?.message || 'Failed to delete template')
+      toast.error(err instanceof Error ? err.message : 'Failed to delete template')
     } finally {
       setDeletingIds((s) => s.filter((x) => x !== id))
       setIsConfirmDeleteOpen(false)
@@ -354,7 +361,7 @@ export default function Templates() {
     }
   }
 
-  const handleRestore = async (template: any) => {
+  const handleRestore = async (template: Template) => {
     if (!template?.id) return
     try {
       await apiClient.restoreTemplate(String(template.id))
@@ -364,13 +371,13 @@ export default function Templates() {
         framework: selectedFramework !== 'all' ? selectedFramework : undefined,
       })
       await loadArchive(archivePage)
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to restore template', err)
-      toast.error(err?.message || 'Failed to restore template')
+      toast.error(err instanceof Error ? err.message : 'Failed to restore template')
     }
   }
 
-  const handleConfirmHardDelete = (template: any) => {
+  const handleConfirmHardDelete = (template: Template) => {
     setConfirmHardDeleteTemplate(template)
     setIsConfirmHardDeleteOpen(true)
   }
@@ -390,9 +397,9 @@ export default function Templates() {
       toast.success('Template permanently deleted')
   // Reload the current page after deletion
   await loadArchive(archivePage)
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to hard delete template', err)
-      toast.error(err?.message || 'Failed to permanently delete template')
+      toast.error(err instanceof Error ? err.message : 'Failed to permanently delete template')
     } finally {
       setHardDeletingId(null)
       setIsConfirmHardDeleteOpen(false)
@@ -414,7 +421,7 @@ export default function Templates() {
 
     setSubmitting(true)
     try {
-      const payload: any = {
+      const payload = {
         name: formName,
         description: formDescription,
         framework: formFramework,
@@ -445,15 +452,16 @@ export default function Templates() {
       }
 
       closeDialog()
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err)
       // If server returned structured validation details, show them to the user
-      const details = err?.response?.data?.details || err?.response?.data?.errors
+      const responseData = (err as { response?: { data?: { details?: any[]; errors?: any[] } } })?.response?.data
+      const details = responseData?.details || responseData?.errors
       if (Array.isArray(details) && details.length > 0) {
-        const msg = details.map((d: any) => `${d.field || d.path || ''}: ${d.message || d}`).join('\n')
+        const msg = details.map((d: { field?: string; path?: string; message?: string }) => `${d.field || d.path || ''}: ${d.message || d}`).join('\n')
         toast.error(msg)
       } else {
-        toast.error(err?.message || "Failed to save template")
+        toast.error((err as Error)?.message || "Failed to save template")
       }
     } finally {
       setSubmitting(false)
@@ -923,15 +931,15 @@ export default function Templates() {
                           )}
 
                           {/* Health & Validation Info */}
-                          {template.validation_count > 0 && (
+                          {template.validation_count !== undefined && template.validation_count > 0 && (
                             <div className="pt-2 border-t">
                               <div className="flex items-center justify-between text-xs">
                                 <span className="text-muted-foreground">Success Rate:</span>
                                 <span className="font-semibold">
                                   {template.success_rate !== undefined && template.success_rate !== null
                                     ? Number(template.success_rate)
-                                    : template.validation_count > 0
-                                      ? Math.round((template.success_count / template.validation_count) * 100)
+                                    : (template.validation_count || 0) > 0
+                                      ? Math.round(((template.success_count || 0) / (template.validation_count || 1)) * 100)
                                       : 0}%
                                 </span>
                               </div>
@@ -999,7 +1007,7 @@ export default function Templates() {
                               </div>
                               <p className="text-sm text-muted-foreground">{template.description}</p>
                               <div className="flex items-center space-x-4 text-xs text-muted-foreground mt-1">
-                                <span>v{String((template?.content?.metadata?.version) || template.version || '—')}</span>
+                                <span>v{String((template?.content?.metadata?.version) || template.prompt_version || template.version || '—')}</span>
                                 <span>•</span>
                                 <span>{Number(template?.usage_count ?? template?.usage ?? 0)} uses</span>
                                 <span>•</span>
@@ -1073,8 +1081,8 @@ export default function Templates() {
                               </div>
                               <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{template.description}</p>
                               <div className="flex items-center justify-between text-xs text-muted-foreground">
-                                <span>v{template.version}</span>
-                                <span>{template.usage} uses</span>
+                                <span>v{template.prompt_version || template.version}</span>
+                                <span>{template.usage_count ?? template.usage} uses</span>
                               </div>
                             </div>
                           ))}
@@ -1088,7 +1096,7 @@ export default function Templates() {
                 {loadingArchive ? (
                   // show skeleton placeholders while loading
                   <div className="space-y-3">
-                    {[...Array(Math.min(3, archiveLimit || 3)).keys()].map((i: any) => (
+                    {[...Array(Math.min(3, archiveLimit || 3)).keys()].map((i: number) => (
                       <Card key={`skeleton-${i}`} className="animate-pulse">
                         <CardContent className="p-4">
                           <div className="flex items-center justify-between">
@@ -1126,7 +1134,7 @@ export default function Templates() {
                               </div>
                               <p className="text-sm text-muted-foreground">{template.description}</p>
                               <p className="text-xs text-muted-foreground mt-1">
-                                Framework: {template.framework} • Category: {template.category} • Archived: {new Date(template.deleted_at).toLocaleDateString()}
+                                Framework: {template.framework} • Category: {template.category} • Archived: {template.deleted_at ? new Date(template.deleted_at).toLocaleDateString() : '—'}
                               </p>
                             </div>
                             <div className="flex items-center space-x-2">

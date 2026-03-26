@@ -1333,14 +1333,14 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
                       <div className="flex items-center justify-between mb-2">
                         <Shield className="h-5 w-5 text-indigo-600" />
                         <span className="text-2xl font-bold text-indigo-900">
-                          {(viewingBaseline.technical_baseline?.quality_standards?.length || 0) + 
-                           (viewingBaseline.technical_baseline?.best_practices?.length || 0)}
+                          {(typeof viewingBaseline.technical_baseline === 'object' ? (viewingBaseline.technical_baseline as any)?.quality_standards?.length || 0 : 0) + 
+                           (typeof viewingBaseline.technical_baseline === 'object' ? (viewingBaseline.technical_baseline as any)?.best_practices?.length || 0 : 0)}
                         </span>
                       </div>
                       <p className="text-xs font-medium text-indigo-900 mb-1">Quality & Standards</p>
                       <div className="text-xs text-indigo-700 space-y-0.5">
-                        <p>{viewingBaseline.technical_baseline?.quality_standards?.length || 0} Quality Standards</p>
-                        <p>{viewingBaseline.technical_baseline?.best_practices?.length || 0} Best Practices</p>
+                        <p>{typeof viewingBaseline.technical_baseline === 'object' ? (viewingBaseline.technical_baseline as any)?.quality_standards?.length || 0 : 0} Quality Standards</p>
+                        <p>{typeof viewingBaseline.technical_baseline === 'object' ? (viewingBaseline.technical_baseline as any)?.best_practices?.length || 0 : 0} Best Practices</p>
                       </div>
                     </CardContent>
                   </Card>
@@ -1351,7 +1351,7 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
                       <div className="flex items-center justify-between mb-2">
                         <AlertTriangle className="h-5 w-5 text-red-600" />
                         <span className="text-2xl font-bold text-red-900">
-                          {viewingBaseline.success_criteria?.risks?.length || 0}
+                          {typeof viewingBaseline.success_criteria === 'object' ? (viewingBaseline.success_criteria as any)?.risks?.length || 0 : 0}
                         </span>
                       </div>
                       <p className="text-xs font-medium text-red-900 mb-1">Risks Identified</p>
@@ -1368,7 +1368,7 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
                       <div className="flex items-center justify-between mb-2">
                         <Database className="h-5 w-5 text-cyan-600" />
                         <span className="text-2xl font-bold text-cyan-900">
-                          {viewingBaseline.technical_baseline?.technology_stack?.length || 0}
+                          {typeof viewingBaseline.technical_baseline === 'object' ? (viewingBaseline.technical_baseline as any)?.technology_stack?.length || 0 : 0}
                         </span>
                       </div>
                       <p className="text-xs font-medium text-cyan-900 mb-1">Technologies</p>

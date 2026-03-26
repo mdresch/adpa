@@ -10,6 +10,7 @@ import { buildUIMessageFromDB } from '../../../../lib/morphic/utils/message-mapp
 import { CacheService } from '../../../../lib/kv';
 import aiSearchRAGService from '../../services/aiSearchRAGService';
 import { getTextFromParts } from '../../../../lib/morphic/utils/message-utils';
+import { getModelsConfig } from '../../../../lib/morphic/config/load-models-config';
 import { checkAndEnforceOverallChatLimit, checkAndEnforceGuestLimit } from '../../../../lib/morphic/rate-limit/chat-limits';
 
 /**
@@ -43,8 +44,13 @@ export class MorphicController {
             knowledgeEnabled: requestedKnowledgeEnabled
         } = req.body;
 
+        // Ensure message content is populated from parts if missing (fixes "message must not be empty" error)
+        if (message && (!message.content || message.content.trim().length === 0) && message.parts) {
+            message.content = getTextFromParts(message.parts);
+        }
+
         try {
-            this.log.info('Morphic chat request received', { chatId, userId, isNewChat });
+            this.log.debug('Morphic chat request received', { chatId, userId, isNewChat });
 
             // Enforce rate limits
             if (userId === 'anonymous-user') {
@@ -221,6 +227,20 @@ export class MorphicController {
             res.json(result);
         } catch (error: any) {
             this.log.error(`Error deleting chat ${chatId}:`, error);
+            res.status(500).json({ error: 'Internal Server Error' });
+        }
+    }
+
+    /**
+     * GET /api/v1/morphic/config/models
+     * Retrieve the current AI model configuration.
+     */
+    static async getModelsConfig(req: Request, res: Response) {
+        try {
+            const config = getModelsConfig();
+            res.json(config);
+        } catch (error: any) {
+            this.log.error('Error fetching model config:', error);
             res.status(500).json({ error: 'Internal Server Error' });
         }
     }

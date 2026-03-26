@@ -1,0 +1,32 @@
+# Tasks
+
+- [x] Analyze existing Admin Logs implementation
+    - [x] Research log and notification management
+    - [x] Read [app/admin/logs/page.tsx](file:///d:/Source/adpa/app/admin/logs/page.tsx)
+    - [x] Locate backend routes for admin logs (e.g., `/api/admin/logs`)
+- [x] Clear port 5000 and ensure server is running
+- [x] Database Migration: Add `correlation_id` to notification tables.
+- [x] Backend Service: Instrument NotificationService to capture [correlationId](file:///d:/Source/adpa/server/src/middleware/correlationId.ts#5-20).
+- [x] Backend Service: Instrument EscalationService to capture [correlationId](file:///d:/Source/adpa/server/src/middleware/correlationId.ts#5-20).
+- [x] Backend API: Create aggregated diagnostic endpoint in [adminRoutes.ts](file:///d:/Source/adpa/server/src/routes/adminRoutes.ts).
+- [x] Frontend UI: Enhance Admin Logs page with `CorrelationIntelligence` drill-down.
+- [x] Frontend UI: Implement React Flow visual trace component.
+- [x] Verification: Confirm end-to-end traceability and dashboard functionality.
+- [x] Investigate 500 errors in [error.log](file:///d:/Source/adpa/logs/error.log) (resolved via schema fix).
+- [x] Debug and fix API connectivity (401/500 errors).
+    - [x] Correct [.env](file:///d:/Source/adpa/.env) to use `/api` proxy.
+    - [x] Harden log sorting in [adminRoutes.ts](file:///d:/Source/adpa/server/src/routes/adminRoutes.ts).
+    - [x] Fix Next.js `Database not connected` error by prioritizing proxy in [next.config.mjs](file:///d:/Source/adpa/next.config.mjs).
+    - [x] Harden [lib/auth-utils.ts](file:///d:/Source/adpa/lib/auth-utils.ts) with explicit [connectDatabase()](file:///d:/Source/adpa/server/src/database/connection.ts#207-230) calls.
+- [x] Verify full traceability from request to notification.
+- [x] Documentation: Update walkthrough with tab descriptions.
+- [x] UI: Reorder log table columns (Timestamp -> Correlation ID -> Level).
+- [x] Fix `ECONNRESET` in Morphic DB by switching to `node-postgres` (`pg`) driver, increasing pool size, and supporting local Docker DB (localhost:5434) without SSL.
+- [x] Fix "No message content" by implementing `morphic_parts` storage and retrieval in [MorphicRepository.ts](file:///d:/Source/adpa/server/src/modules/morphic/MorphicRepository.ts).
+- [x] Align default models with `gemini-2.0-flash` to resolve quota issues and provide a stable fallback.
+- [x] Implement `GET /api/v1/morphic/config/models` to expose model mapping.
+- [x] Update `ModelTypeSelector.tsx` to display model names in the UI.
+- [x] Fix Ollama "unknown provider" error in [lib/morphic/utils/registry.ts](file:///d:/Source/adpa/lib/morphic/utils/registry.ts).
+- [x] Fix "Invalid prompt" by ensuring `content` is populated from `parts` in the backend.
+- [x] Fix Send button disabled state in `ChatPanel.tsx`.
+- [x] Fix Admin Logs dashboard crash due to numeric Pino levels.

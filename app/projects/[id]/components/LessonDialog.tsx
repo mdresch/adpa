@@ -30,6 +30,8 @@ export interface LessonItem {
   phase: string
   date_identified?: string
   shared_with_org: boolean
+  created_at?: string
+  updated_at?: string
 }
 
 interface LessonDialogProps {

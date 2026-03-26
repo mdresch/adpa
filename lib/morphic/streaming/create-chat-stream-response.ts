@@ -41,7 +41,7 @@ const DEFAULT_CHAT_TITLE = 'Untitled'
 export async function createChatStreamResponse(
     config: BaseStreamConfig
 ): Promise<Response> {
-    console.log('[MORPHIC-STREAM] createChatStreamResponse started', { chatId: config.chatId, userId: config.userId });
+    console.debug('[MORPHIC-STREAM] createChatStreamResponse started', { chatId: config.chatId, userId: config.userId });
     const {
         message,
         model,
@@ -200,9 +200,9 @@ export async function createChatStreamResponse(
         // We wrap the entire execution within createUIMessageStream so we can merge the result
         // matching the UI message protocol expected by the DefaultChatTransport on the frontend.
         let activeLangfuseGeneration: any = null
+        let finalMessagesToModel: UIMessage[] = []
         const stream = createUIMessageStream<UIMessage>({
             execute: async ({ writer }: { writer: UIMessageStreamWriter }) => {
-                let lastError: any = null
                 let success = false
 
                 // Fallback Orchestration Loop
@@ -229,6 +229,7 @@ export async function createChatStreamResponse(
                         }
 
                         const messagesToModel = await prepareMessages(context, message)
+                        finalMessagesToModel = messagesToModel
 
                         // Get the researcher agent — pass writer for tool UI streaming
                         const researchAgent = researcher({
@@ -282,14 +283,14 @@ export async function createChatStreamResponse(
                         // Strict Final Filter: Gemini crashes if content is an empty array, empty string, or an array of empty text objects
                         coreMessages = coreMessages.filter(msg => {
                             if (typeof msg.content === 'string') {
-                                return msg.content.trim().length > 0;
+                                return (msg.content || '').trim().length > 0;
                             }
                             if (Array.isArray(msg.content)) {
                                 if (msg.content.length === 0) return false;
                                 // Check if all parts are text parts with empty strings
                                 const hasRealContent = msg.content.some(part => {
                                     if (part.type === 'text') {
-                                        return part.text.trim().length > 0;
+                                        return (part.text || '').trim().length > 0;
                                     }
                                     return true; // tool invocations/results count as real content
                                 });
@@ -311,9 +312,9 @@ export async function createChatStreamResponse(
                         }
 
                         // DEBUGGING GEMINI ERROR:
-                        console.log("\n--- CORE MESSAGES PAYLOAD ---");
-                        console.log(JSON.stringify(coreMessages, null, 2));
-                        console.log("-----------------------------\n");
+                        console.debug("\n--- CORE MESSAGES PAYLOAD ---");
+                        console.debug(JSON.stringify(coreMessages, null, 2));
+                        console.debug("-----------------------------\n");
 
                         if (!initialChat && message && !titlePromise) {
                             const messageContent = getTextFromParts(message.parts)
@@ -441,11 +442,15 @@ export async function createChatStreamResponse(
                             }
                         })
 
-                        // Update the parent Trace with the final input and aggregated output
+                        // Update the parent Trace with the final input (full history) and aggregated output
                         if (langfuseTrace && textParts) {
+                            const inputSummary = finalMessagesToModel.length > 0
+                                ? finalMessagesToModel.map((m: UIMessage) => `[${m.role}]: ${getTextFromParts(m.parts)}`).join('\n\n')
+                                : (typeof message === 'string' ? message : JSON.stringify(message))
+
                             langfuseTrace.update({
-                                input: typeof message === 'string' ? message : JSON.stringify(message),
-                                output: textParts.substring(0, 10000)
+                                input: (inputSummary || '').substring(0, 20000),
+                                output: (textParts || '').substring(0, 10000)
                             })
                         }
                     } catch (e) {

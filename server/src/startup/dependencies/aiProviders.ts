@@ -1,5 +1,6 @@
 import { Dependency } from "../dependencyGraph"
 import { aiService } from "../../services/aiService"
+import { localAIService } from "../../services/localAIService"
 import { logger } from "../../utils/logger"
 import { getDatabasePoolSafe } from "../../database/connection"
 
@@ -32,6 +33,13 @@ export const aiProvidersDependency: Dependency = {
 
     if (elapsedTime >= maxWaitTime) {
       logger.warn("Database pool not ready after 15 seconds, initializing AI providers with defaults")
+    }
+
+    // Bootstrap local AI services if enabled
+    try {
+      await localAIService.bootstrap()
+    } catch (localError) {
+      logger.warn("Local AI bootstrap failed, continuing with provider initialization:", localError)
     }
 
     // Initialize AI providers (will use defaults if DB is unavailable)

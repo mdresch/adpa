@@ -78,9 +78,25 @@ export class AzureConnector {
           const decryptedApiKey = this.decryptApiKey(row.api_key_encrypted);
           console.log(`[AZURE AI] Decrypted API key: ${decryptedApiKey ? decryptedApiKey.substring(0, 10) + '...' : 'NULL'}`);
 
-          // Extract resource name from endpoint
+          // Extract resource name more robustly
           const endpoint = row.configuration?.endpoint || '';
-          const resourceName = endpoint.replace('https://', '').replace('.cognitiveservices.azure.com', '');
+          let resourceName = '';
+          
+          if (endpoint.includes('.openai.azure.com')) {
+              resourceName = endpoint.replace('https://', '').split('.')[0];
+          } else if (endpoint.includes('.services.ai.azure.com')) {
+              resourceName = endpoint.replace('https://', '').split('.')[0];
+          } else if (endpoint.includes('.cognitiveservices.azure.com')) {
+              resourceName = endpoint.replace('https://', '').replace('.cognitiveservices.azure.com', '');
+          } else {
+              // Fallback to extraction from host
+              try {
+                  const url = new URL(endpoint);
+                  resourceName = url.hostname.split('.')[0];
+              } catch (e) {
+                  resourceName = 'default';
+              }
+          }
 
           const config: AzureConfig = {
             resourceName: resourceName,
@@ -317,7 +333,7 @@ export class AzureConnector {
 
       // Create Azure AI client for validation
       const azure = createAzure({
-        resourceName: 'cognisync-knowledgehub-resource', // Default resource name for validation
+        resourceName: 'default-resource', 
         apiKey: apiKey,
       });
 

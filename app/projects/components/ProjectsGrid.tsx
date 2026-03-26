@@ -7,6 +7,7 @@ import React from "react"
 import { Loader2 } from "@/components/ui/icons-shim"
 import { AnimatedGrid } from "@/components/animated-layout"
 import { ProjectCard } from "./ProjectCard"
+import { ProjectCardSkeleton } from "./ProjectCardSkeleton"
 import type { ProjectsGridProps } from "../types"
 
 export function ProjectsGrid({
@@ -21,9 +22,10 @@ export function ProjectsGrid({
   // Loading state
   if (loading) {
     return (
-      <div className="flex justify-center items-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-        <span className="ml-2 text-slate-600 dark:text-slate-300">Loading projects...</span>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {[...Array(6)].map((_, i) => (
+          <ProjectCardSkeleton key={i} />
+        ))}
       </div>
     )
   }

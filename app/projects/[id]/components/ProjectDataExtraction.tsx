@@ -2796,7 +2796,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
                     value={selectedProvider}
                     onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
-                      const providerType = e.target.value
+                      const providerType = e.target.value as AIProviderType
                       console.log('[EXTRACTION] Provider changed to:', providerType)
 
                       const provider = aiProviders.find(p => p.provider_type === providerType)

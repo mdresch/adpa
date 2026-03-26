@@ -30,6 +30,7 @@ import {
   Trash2,
   Loader2,
 } from "lucide-react"
+import { AnimatedGrid, AnimatedGridItem, AnimatedLayout } from "@/components/animated-layout"
 
 import { Document } from "@/lib/api"
 
@@ -117,52 +118,60 @@ export function DocumentsTab({
   return (
     <div className="space-y-4">
       {/* Document Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Total Documents</p>
-                <p className="text-2xl font-bold">{documentStats.totalDocuments}</p>
+      <AnimatedGrid className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <AnimatedGridItem>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Total Documents</p>
+                  <p className="text-2xl font-bold">{documentStats.totalDocuments}</p>
+                </div>
+                <FileText className="h-8 w-8 text-blue-500" />
               </div>
-              <FileText className="h-8 w-8 text-blue-500" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Draft</p>
-                <p className="text-2xl font-bold">{documentStats.counts.draft}</p>
+            </CardContent>
+          </Card>
+        </AnimatedGridItem>
+        <AnimatedGridItem>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Draft</p>
+                  <p className="text-2xl font-bold">{documentStats.counts.draft}</p>
+                </div>
+                <Edit className="h-8 w-8 text-orange-500" />
               </div>
-              <Edit className="h-8 w-8 text-orange-500" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Published</p>
-                <p className="text-2xl font-bold">{documentStats.counts.published}</p>
+            </CardContent>
+          </Card>
+        </AnimatedGridItem>
+        <AnimatedGridItem>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Published</p>
+                  <p className="text-2xl font-bold">{documentStats.counts.published}</p>
+                </div>
+                <CheckCircle className="h-8 w-8 text-emerald-500" />
               </div>
-              <CheckCircle className="h-8 w-8 text-emerald-500" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">In Review</p>
-                <p className="text-2xl font-bold">{documentStats.counts.review}</p>
+            </CardContent>
+          </Card>
+        </AnimatedGridItem>
+        <AnimatedGridItem>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">In Review</p>
+                  <p className="text-2xl font-bold">{documentStats.counts.review}</p>
+                </div>
+                <Clock className="h-8 w-8 text-purple-500" />
               </div>
-              <Clock className="h-8 w-8 text-purple-500" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            </CardContent>
+          </Card>
+        </AnimatedGridItem>
+      </AnimatedGrid>
 
       {/* Search & Actions */}
       <div className="flex items-center space-x-4">
@@ -219,7 +228,7 @@ export function DocumentsTab({
           <span className="ml-2">Loading documents...</span>
         </div>
       ) : (
-        <div className="space-y-2">
+        <AnimatedLayout className="space-y-2">
           {displayDocuments.map((doc) => (
             <Card key={doc.id} className="hover:shadow-sm transition-shadow">
               <CardContent className="p-4">
@@ -349,7 +358,7 @@ export function DocumentsTab({
               </div>
             </div>
           )}
-        </div>
+        </AnimatedLayout>
       )}
     </div>
   )

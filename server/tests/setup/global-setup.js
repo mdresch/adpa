@@ -85,31 +85,37 @@ module.exports = async () => {
     if (adminPool) await adminPool.end();
   }
 
-  // Apply Base Schema - use schema-dev.sql (cloned from dev database)
-  let schemaFile = path.join(serverDir, 'schema-dev.sql');
-  if (!fs.existsSync(schemaFile)) {
-    // Fallback to src/database schema if available
-    schemaFile = path.join(serverDir, 'src/database/schema.sql');
-  }
-  
-  let templatePool;
-  try {
-    templatePool = await connectWithFallbacks(templateDbName);
-    const schemaSql = fs.readFileSync(schemaFile, 'utf8');
-    await templatePool.query(schemaSql);
-  } catch (err) {
-    throw err;
-  } finally {
-    if (templatePool) await templatePool.end();
-  }
-
-  // Run Incremental Migrations
+  const schemaDevFile = path.join(serverDir, 'schema-dev.sql');
   const templateDbUrl = `postgresql://test_user:test_pass@127.0.0.1:5433/${templateDbName}`;
-  execSync('node -r ts-node/register -r tsconfig-paths/register scripts/run-src-db-migrations.ts', {
+
+  // Build the template database from the authoritative migration chain.
+  execSync('npx tsx scripts/run-migrations.ts --reset', {
     cwd: serverDir,
     env: { ...process.env, DATABASE_URL: templateDbUrl },
     stdio: 'inherit'
   });
+
+  // Optionally import the development data snapshot. This dump is data-oriented and
+  // uses psql-specific COPY blocks, so it must be piped through psql rather than pg.
+  if (fs.existsSync(schemaDevFile)) {
+    const sanitizedSnapshot = fs.readFileSync(schemaDevFile, 'utf8')
+      .replace(/^\uFEFF/, '')
+      .split(/\r?\n/)
+      .filter(line => {
+        const trimmed = line.trim();
+        return !trimmed.startsWith('\\') && !trimmed.startsWith('SET transaction_timeout');
+      })
+      .join('\n');
+
+    execSync(`docker exec -i adpa-test-db psql -v ON_ERROR_STOP=1 -U test_user -d ${templateDbName}`, {
+      cwd: serverDir,
+      input: sanitizedSnapshot,
+      stdio: ['pipe', 'inherit', 'inherit'],
+      maxBuffer: 50 * 1024 * 1024
+    });
+
+    console.log('[GLOBAL-SETUP] Imported schema-dev.sql data snapshot into template database');
+  }
 
   // Apply minimal seed data (companies, ai_providers)
   let seedPool;

@@ -4,6 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/sidebar';
 import { Header } from '@/components/header';
+import { apiClient, Program, Project, ProgramDashboardMetrics } from '@/lib/api';
+import { Loader2, Archive, ArchiveRestore, AlertTriangle } from 'lucide-react';
 import { PageTransition } from '@/components/page-transition';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,8 +18,6 @@ import { ProgramRisksTab } from '@/components/program/ProgramRisksTab';
 import { ProgramReportsTab } from '@/components/program/ProgramReportsTab';
 import { ProgramResourcesTab } from '@/components/program/ProgramResourcesTab';
 import { ReviewSchedulingTab } from '@/components/program/ReviewSchedulingTab';
-import { Loader2, Archive, ArchiveRestore, AlertTriangle } from 'lucide-react';
-import { apiClient } from '@/lib/api';
 import { getApiUrl } from '@/lib/api-url';
 import { toast } from '@/lib/notify';
 import { Button } from '@/components/ui/button';
@@ -140,17 +140,6 @@ const mockProgramMetrics: ProgramMetrics = {
       status: 'on-track'
     }
   ]
-};
-
-interface Program {
-  id: string
-  name: string
-  description: string
-  status: string
-  budget?: number
-  start_date: string
-  end_date: string
-  owner_name?: string
 }
 
 export default function ProgramDetailPage() {
@@ -159,24 +148,13 @@ export default function ProgramDetailPage() {
   const programId = params?.id as string;
 
   const [program, setProgram] = useState<Program | null>(null);
-  const [metrics, setMetrics] = useState<ProgramMetrics | null>(null);
+  const [metrics, setMetrics] = useState<ProgramDashboardMetrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
   const [archiving, setArchiving] = useState(false);
   const [showArchiveDialog, setShowArchiveDialog] = useState(false);
   const [archiveCheck, setArchiveCheck] = useState<{ canArchive: boolean; reason?: string; unarchivedCount?: number } | null>(null);
-  const [assignedProjects, setAssignedProjects] = useState<Array<{
-    id: string;
-    name: string;
-    status: string;
-    description?: string;
-    budget?: number;
-    start_date?: string;
-    end_date?: string;
-    owner_name?: string;
-    document_count?: number;
-    document_quality_score?: number;
-  }>>([]);
+  const [assignedProjects, setAssignedProjects] = useState<Project[]>([]);
   const [projectsLoading, setProjectsLoading] = useState(false);
 
   useEffect(() => {
@@ -188,58 +166,14 @@ export default function ProgramDetailPage() {
         const programData = await apiClient.getProgram(programId);
         setProgram(programData);
 
-        // Fetch program metrics (use existing endpoint)
+        // Fetch program metrics using apiClient
         try {
-          const metricsResponse = await fetch(getApiUrl(`/programs/${programId}/metrics`), {
-            headers: {
-              'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-            }
-          });
-
-          if (metricsResponse.ok) {
-            const metricsData = await metricsResponse.json();
-            console.log('[METRICS] Raw API response:', metricsData);
-
-            if (metricsData.success && metricsData.data) {
-              const backendMetrics = metricsData.data;
-
-              // Transform backend response to frontend format
-              const transformedMetrics: ProgramMetrics = {
-                budget: backendMetrics.budget || {
-                  planned: 0,
-                  actual: 0,
-                  forecast: 0,
-                  variance: 0,
-                  timeline: []
-                },
-                status: {
-                  total: backendMetrics.status?.total || backendMetrics.projects?.total || 0,
-                  breakdown: backendMetrics.status?.breakdown || {
-                    green: 0,
-                    amber: 0,
-                    red: 0
-                  }
-                },
-                risks: backendMetrics.risks || [],
-                milestones: backendMetrics.milestones || []
-              };
-
-              console.log('[METRICS] Transformed metrics:', transformedMetrics);
-              setMetrics(transformedMetrics);
-            } else {
-              console.warn('[METRICS] Invalid response format, using mock data');
-              setMetrics(mockProgramMetrics);
-            }
-          } else {
-            const errorText = await metricsResponse.text();
-            console.error('[METRICS] API error:', metricsResponse.status, errorText);
-            // Fallback to mock data if metrics endpoint not ready
-            setMetrics(mockProgramMetrics);
-          }
+          const metricsData = await apiClient.getProgramMetrics(programId);
+          setMetrics(metricsData);
         } catch (error) {
           console.error('[METRICS] Failed to fetch metrics:', error);
-          // Use mock data if metrics endpoint fails
-          setMetrics(mockProgramMetrics);
+          // Fallback to mock data if metrics endpoint fails
+          setMetrics(mockProgramMetrics as unknown as ProgramDashboardMetrics);
         }
 
       } catch (error) {
@@ -265,23 +199,8 @@ export default function ProgramDetailPage() {
   const fetchAssignedProjects = async () => {
     try {
       setProjectsLoading(true);
-      const response = await apiClient.get<{
-        success: boolean
-        data: Array<{ id: string; name: string; status: string }>
-      }>(`/programs/${programId}/projects`);
-
-      if (response && response.success && response.data) {
-        const projects = response.data.map((p: any) => ({
-          id: p.id,
-          name: p.name || 'Unnamed Project',
-          status: p.status || 'active'
-        }));
-
-        console.log('[OVERVIEW] Mapped projects:', projects.length, 'projects');
-        setAssignedProjects(projects);
-      } else {
-        setAssignedProjects([]);
-      }
+      const response = await apiClient.getProgramProjects(programId);
+      setAssignedProjects(response.projects || []);
     } catch (error) {
       console.error('[OVERVIEW] Error fetching assigned projects:', error);
       setAssignedProjects([]);
@@ -292,16 +211,8 @@ export default function ProgramDetailPage() {
 
   const checkArchiveStatus = async () => {
     try {
-      const response = await fetch(getApiUrl(`/programs/${programId}/can-archive`), {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setArchiveCheck(data.data);
-      }
+      const data = await apiClient.canArchiveProgram(programId);
+      setArchiveCheck(data);
     } catch (error) {
       console.error('Failed to check archive status:', error);
     }
@@ -315,36 +226,17 @@ export default function ProgramDetailPage() {
   const handleArchiveConfirm = async () => {
     try {
       setArchiving(true);
-      const response = await fetch(getApiUrl(`/programs/${programId}/archive`), {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-        }
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to archive program');
-      }
-
+      await apiClient.archiveProgram(programId);
       toast.success('Program archived successfully');
       setShowArchiveDialog(false);
 
       // Refresh program data
-      const programResponse = await fetch(getApiUrl(`/programs/${programId}`), {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-        }
-      });
+      const programData = await apiClient.getProgram(programId);
+      setProgram(programData);
 
-      if (programResponse.ok) {
-        const programData = await programResponse.json();
-        setProgram(programData.data);
-      }
-
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to archive program:', error);
-      toast.error(error.message || 'Failed to archive program');
+      toast.error((error as any).message || 'Failed to archive program');
     } finally {
       setArchiving(false);
     }
@@ -353,34 +245,16 @@ export default function ProgramDetailPage() {
   const handleUnarchive = async () => {
     try {
       setArchiving(true);
-      const response = await fetch(getApiUrl(`/programs/${programId}/unarchive`), {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to unarchive program');
-      }
-
+      await apiClient.unarchiveProgram(programId);
       toast.success('Program unarchived successfully');
 
       // Refresh program data
-      const programResponse = await fetch(getApiUrl(`/programs/${programId}`), {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-        }
-      });
+      const programData = await apiClient.getProgram(programId);
+      setProgram(programData);
 
-      if (programResponse.ok) {
-        const programData = await programResponse.json();
-        setProgram(programData.data);
-      }
-
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Failed to unarchive program:', error);
-      toast.error('Failed to unarchive program');
+      toast.error((error as any).message || 'Failed to unarchive program');
     } finally {
       setArchiving(false);
     }
@@ -450,7 +324,7 @@ export default function ProgramDetailPage() {
                             </svg>
                             Settings
                           </Button>
-                          {(program as any).archived ? (
+                          {program?.archived ? (
                             <Button
                               onClick={handleUnarchive}
                               disabled={archiving}
@@ -501,7 +375,7 @@ export default function ProgramDetailPage() {
                             <span className="text-sm text-muted-foreground ml-4">Owner: {program.owner_name}</span>
                           </>
                         )}
-                        {(program as any).archived && (
+                        {program?.archived && (
                           <Badge className="bg-gray-100 text-gray-800 border-gray-300 ml-4">
                             📦 ARCHIVED
                           </Badge>

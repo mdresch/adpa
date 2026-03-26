@@ -76,23 +76,16 @@ export function AnimatedGridItem({ children, className }: AnimatedLayoutProps) {
         initial: {
           opacity: 0,
           y: 20,
-          scale: 0.95,
         },
         animate: {
           opacity: 1,
           y: 0,
-          scale: 1,
           transition: {
             type: "tween",
             ease: "easeOut",
             duration: 0.4,
           },
         },
-      }}
-      whileHover={{
-        y: -4,
-        scale: 1.02,
-        transition: { duration: 0.2 },
       }}
       className={className}
     >

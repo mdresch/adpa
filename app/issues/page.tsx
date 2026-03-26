@@ -662,7 +662,7 @@ export default function IssuesPage() {
                                 <div className="flex items-start justify-between">
                                   <div className="flex-1">
                                     <div className="flex items-center gap-3 mb-2">
-                                      <Badge className={PRIORITY_COLORS[issue.priority]}>
+                                      <Badge className={PRIORITY_COLORS[issue.priority as keyof typeof PRIORITY_COLORS] || 'bg-gray-500'}>
                                         {issue.priority}
                                       </Badge>
                                       <Badge variant="outline" className="flex items-center gap-1">

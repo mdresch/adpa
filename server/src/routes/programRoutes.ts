@@ -36,7 +36,7 @@ const programUpdateSchema = Joi.object({
 })
 
 // List programs
-router.get('/', authenticateToken, requirePermission('programs.view'), async (req, res) => {
+router.get('/', authenticateToken, async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId })
   try {
     const { limit, offset, owner_id, status, search } = req.query
@@ -562,8 +562,29 @@ router.put('/projects/:projectId/earned-value',
 // END FINANCIAL MANAGEMENT ROUTES
 // ================================================================
 
+/**
+ * GET /api/programs/:id/projects
+ * Get all projects assigned to a program
+ */
+router.get('/:id/projects',
+  authenticateToken,
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const programId = req.params.id
+      
+      const projects = await programService.getProgramProjects(programId)
+      
+      res.json({ success: true, data: projects })
+    } catch (error) {
+      log.error('Failed to fetch program projects', error)
+      res.status(500).json({ error: 'Failed to fetch program projects' })
+    }
+  }
+)
+
 // Get program (must come AFTER specific routes like /:id/projects and /:id/metrics)
-router.get('/:id', authenticateToken, requirePermission('programs.view'), async (req, res) => {
+router.get('/:id', authenticateToken, async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId })
   try {
     const id = req.params.id
@@ -603,27 +624,6 @@ router.delete('/:id', authenticateToken, requirePermission('programs.manage'), a
     res.status(500).json({ error: 'Failed to delete program' })
   }
 })
-
-/**
- * GET /api/programs/:id/projects
- * Get all projects assigned to a program
- */
-router.get('/:id/projects',
-  authenticateToken,
-  async (req, res) => {
-    const log = childLogger({ requestId: (req as any).requestId })
-    try {
-      const programId = req.params.id
-      
-      const projects = await programService.getProgramProjects(programId)
-      
-      res.json({ success: true, data: projects })
-    } catch (error) {
-      log.error('Failed to fetch program projects', error)
-      res.status(500).json({ error: 'Failed to fetch program projects' })
-    }
-  }
-)
 
 /**
  * POST /api/programs/:id/add-project

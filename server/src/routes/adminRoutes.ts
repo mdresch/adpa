@@ -697,6 +697,94 @@ router.get(
 )
 
 /**
+ * GET /api/admin/logs/correlation/:id
+ * Get focused diagnostic logs and notifications for a specific correlation ID
+ */
+router.get(
+  '/logs/correlation/:id',
+  authenticateToken,
+  requireAdmin,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { id } = req.params
+
+      // 1. Fetch file logs with this correlation ID
+      let logLines: any[] = []
+      if (fs.existsSync('logs/combined.log')) {
+        const stats = fs.statSync('logs/combined.log')
+        const fileSize = stats.size
+        const bufferSize = Math.min(fileSize, 2000000) // Read last 2MB for correlation search
+        
+        const buffer = Buffer.alloc(bufferSize)
+        const fd = fs.openSync('logs/combined.log', 'r')
+        fs.readSync(fd, buffer, 0, bufferSize, Math.max(0, fileSize - bufferSize))
+        fs.closeSync(fd)
+
+        const content = buffer.toString('utf8')
+        const lines = content.split('\n')
+        
+        logLines = lines
+          .map(line => {
+            try { 
+              if (!line.trim()) return null
+              const parsed = JSON.parse(line) 
+              // Normalize for search and display
+              if (parsed.msg && !parsed.message) parsed.message = parsed.msg
+              if (parsed.correlation_id && !parsed.correlationId) parsed.correlationId = parsed.correlation_id
+              
+              // Normalize Pino numeric levels to strings
+              if (typeof parsed.level === 'number') {
+                const levels: Record<number, string> = {
+                  10: 'trace', 20: 'debug', 30: 'info', 40: 'warn', 50: 'error', 60: 'fatal'
+                };
+                parsed.level = levels[parsed.level] || 'info';
+              }
+              
+              return parsed
+            } catch (e) { return null }
+          })
+          .filter(log => log && (log.correlationId === id || log.correlation_id === id))
+      }
+
+      // 2. Fetch email notification logs
+      const emailLogs = await pool.query(
+        'SELECT * FROM email_notification_logs WHERE correlation_id = $1 ORDER BY created_at DESC',
+        [id]
+      )
+
+      // 3. Fetch general notification logs
+      const notificationLogs = await pool.query(
+        'SELECT * FROM notification_logs WHERE correlation_id = $1 ORDER BY created_at DESC',
+        [id]
+      )
+
+      // 4. Fetch related extraction/dead-letter failures if applicable
+      const extractionFailures = await pool.query(
+        'SELECT * FROM extraction_failures WHERE correlation_id = $1 ORDER BY created_at DESC',
+        [id]
+      )
+
+      logger.info(`[ADMIN-CORRELATION] Found: logs=${logLines.length}, emails=${emailLogs.rows.length}, notifications=${notificationLogs.rows.length}, failures=${extractionFailures.rows.length} for ID: ${id}`)
+
+      res.json({
+        success: true,
+        correlationId: id,
+        data: {
+          logs: logLines,
+          email_notifications: emailLogs.rows,
+          notifications: notificationLogs.rows,
+          extraction_failures: extractionFailures.rows
+        }
+      })
+
+    } catch (error: any) {
+      logger.error('[ADMIN-ROUTES] Correlation lookup failed', { error: error.message, id: req.params.id })
+      res.status(500).json({ success: false, error: error.message })
+    }
+  }
+)
+
+/**
  * GET /api/admin/logs
  * Read and return the last few lines of the combined log file
  */
@@ -706,45 +794,92 @@ router.get(
   requireAdmin,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const logPath = path.resolve(process.cwd(), 'logs', 'combined.log')
+      const logDir = path.resolve(process.cwd(), 'logs')
+      const ALLOWED_FILES = ['combined.log', 'server.log'] as const
+      let allLines: string[] = []
       const limit = parseInt(req.query.limit as string) || 100
 
-      if (!fs.existsSync(logPath)) {
-        return res.json({
-          success: true,
-          data: [],
-          message: 'Log file not found'
-        })
+      for (const file of ALLOWED_FILES) {
+        if (file === 'combined.log') {
+          if (fs.existsSync('logs/combined.log')) {
+            const stats = fs.statSync('logs/combined.log')
+            const fileSize = stats.size
+            const bufferSize = Math.min(fileSize, 250000)
+            const buffer = Buffer.alloc(bufferSize)
+            const fd = fs.openSync('logs/combined.log', 'r')
+            fs.readSync(fd, buffer, 0, bufferSize, Math.max(0, fileSize - bufferSize))
+            fs.closeSync(fd)
+            const content = buffer.toString('utf8')
+            allLines = allLines.concat(content.split('\n').filter(l => l.trim() !== ''))
+          }
+        } else if (file === 'server.log') {
+          if (fs.existsSync('logs/server.log')) {
+            const stats = fs.statSync('logs/server.log')
+            const fileSize = stats.size
+            const bufferSize = Math.min(fileSize, 250000)
+            const buffer = Buffer.alloc(bufferSize)
+            const fd = fs.openSync('logs/server.log', 'r')
+            fs.readSync(fd, buffer, 0, bufferSize, Math.max(0, fileSize - bufferSize))
+            fs.closeSync(fd)
+            const content = buffer.toString('utf8')
+            allLines = allLines.concat(content.split('\n').filter(l => l.trim() !== ''))
+          }
+        }
       }
-
-      // Read the file and get the last lines
-      // For simplicity in this implementation, we read the whole file if it's small,
-      // or use a stream for larger files.
-      const stats = fs.statSync(logPath)
-      const fileSize = stats.size
-      const bufferSize = Math.min(fileSize, 500000) // Read last 500KB max
       
-      const buffer = Buffer.alloc(bufferSize)
-      const fd = fs.openSync(logPath, 'r')
-      fs.readSync(fd, buffer, 0, bufferSize, Math.max(0, fileSize - bufferSize))
-      fs.closeSync(fd)
-
-      const content = buffer.toString('utf8')
-      const lines = content.split('\n').filter(line => line.trim() !== '')
+      const lines = allLines
       
       // Parse NDJSON lines
+      let idsFound = 0
       const parsedLogs = lines.map(line => {
         try {
-          return JSON.parse(line)
+          const parsed = JSON.parse(line)
+          // Normalize field names (pino uses 'msg', others use 'message')
+          if (parsed.msg && !parsed.message) {
+            parsed.message = parsed.msg
+          }
+          // Normalize timestamp (pino uses 'time')
+          if (parsed.time && !parsed.timestamp) {
+            parsed.timestamp = typeof parsed.time === 'number' ? new Date(parsed.time).toISOString() : parsed.time
+          }
+          // Normalize correlationId from multiple common sources
+          const cId = parsed.correlationId || parsed.correlation_id || parsed.correlationID || parsed['x-correlation-id'] || parsed.requestId || parsed.request_id
+          if (cId) {
+            parsed.correlationId = cId
+            idsFound++
+          }
+
+          // Normalize Pino numeric levels to strings
+          if (typeof parsed.level === 'number') {
+            const levels: Record<number, string> = {
+              10: 'trace', 20: 'debug', 30: 'info', 40: 'warn', 50: 'error', 60: 'fatal'
+            };
+            parsed.level = levels[parsed.level] || 'info';
+          }
+          
+          return parsed
         } catch (e) {
           return { level: 'info', message: line, timestamp: new Date().toISOString(), raw: true }
         }
       })
 
-      // Return the requested limit, newest first
+      logger.info(`[ADMIN-LOGS] Retrieved ${parsedLogs.length} logs. Normalized IDs found: ${idsFound}`)
+
+      // Sort by timestamp newest first and apply limit
+      const sortedLogs = (parsedLogs || [])
+        .filter(log => log && (log.timestamp || log.time))
+        .sort((a, b) => {
+          try {
+            const timeA = new Date(a.timestamp || a.time).getTime()
+            const timeB = new Date(b.timestamp || b.time).getTime()
+            if (isNaN(timeA) || isNaN(timeB)) return 0
+            return timeB - timeA
+          } catch (e) { return 0 }
+        })
+
       res.json({
         success: true,
-        data: parsedLogs.reverse().slice(0, limit)
+        data: sortedLogs.slice(0, limit)
       })
 
     } catch (error: any) {

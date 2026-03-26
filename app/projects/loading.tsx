@@ -4,12 +4,12 @@ import { Header } from "@/components/header"
 
 export default function ProjectsLoading() {
   return (
-    <div className="flex h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
+    <div className="flex h-screen bg-background">
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header />
-        <main className="flex-1 overflow-y-auto p-6 custom-scrollbar">
-          <div className="space-y-8">
+        <main className="flex-1 overflow-y-auto p-6">
+          <div className="space-y-6">
             {/* Header Skeleton */}
             <div className="flex items-center justify-between">
               <div className="space-y-2">

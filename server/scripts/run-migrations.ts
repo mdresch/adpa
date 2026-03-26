@@ -28,7 +28,7 @@ async function resetPublicSchema() {
   console.log('🧨 Resetting public schema...');
   await db.query('DROP SCHEMA public CASCADE');
   await db.query('CREATE SCHEMA public');
-  await db.query('GRANT ALL ON SCHEMA public TO postgres');
+  await db.query('GRANT ALL ON SCHEMA public TO CURRENT_USER');
   await db.query('GRANT ALL ON SCHEMA public TO public');
   console.log('✅ Public schema reset successfully\n');
 }

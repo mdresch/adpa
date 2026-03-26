@@ -44,7 +44,7 @@ import {
     ChevronRight,
     RefreshCw,
 } from "@/components/ui/icons-shim"
-import { apiClient } from "@/lib/api"
+import { apiClient, Document } from "@/lib/api"
 import { useAuth } from "@/contexts/AuthContext"
 import { toast } from '@/lib/notify'
 import { format } from "date-fns"
@@ -55,7 +55,7 @@ export default function DocumentLibraryPage() {
     const { user, hasPermission } = useAuth()
 
     // State
-    const [documents, setDocuments] = useState<any[]>([])
+    const [documents, setDocuments] = useState<Document[]>([])
     const [loading, setLoading] = useState(true)
     const [total, setTotal] = useState(0)
     const [totalPages, setTotalPages] = useState(1)
@@ -71,7 +71,7 @@ export default function DocumentLibraryPage() {
     const fetchDocuments = useCallback(async () => {
         try {
             setLoading(true)
-            const params: any = {
+            const params: Record<string, string | number | undefined> = {
                 page,
                 limit,
                 search: search || undefined,
@@ -153,9 +153,9 @@ export default function DocumentLibraryPage() {
             }, 100)
 
             toast.success("PDF exported successfully")
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error("Failed to export PDF:", error)
-            toast.error(error?.message || "Failed to export PDF")
+            toast.error(error instanceof Error ? error.message : "Failed to export PDF")
         }
     }
 
@@ -313,7 +313,7 @@ export default function DocumentLibraryPage() {
                                                                             <DropdownMenuItem onClick={() => handleExportPdf(doc.id, doc.name)}>
                                                                                 <Download className="mr-2 h-4 w-4" /> Export PDF
                                                                             </DropdownMenuItem>
-                                                                            <DropdownMenuItem className="text-red-600" onClick={async (e: React.MouseEvent) => handleDelete(doc.id, e as any)}>
+                                                                            <DropdownMenuItem className="text-red-600" onClick={async (e: React.MouseEvent) => handleDelete(doc.id, e)}>
                                                                                 <Trash2 className="mr-2 h-4 w-4" /> Delete
                                                                             </DropdownMenuItem>
                                                                         </DropdownMenuContent>

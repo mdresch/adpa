@@ -20,6 +20,9 @@ router.get('/history', authenticateToken, (req, res) => MorphicController.getHis
 router.get('/chat/:id', authenticateToken, (req, res) => MorphicController.getChat(req, res));
 router.delete('/chat/:id', authenticateToken, (req, res) => MorphicController.deleteChat(req, res));
 
+// Config
+router.get('/config/models', authenticateToken, (req, res) => MorphicController.getModelsConfig(req, res));
+
 const routes: RouteConfig[] = [
     {
         path: '/morphic',

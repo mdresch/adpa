@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { ProjectRepository } from './ProjectRepository';
 import { AuthRepository } from '../auth/AuthRepository';
+import { lessonsLearnedService } from '../../services/lessonsLearnedService';
 import { childLogger, logger } from '../../utils/logger';
 import { asyncLocalStorage } from '../../infrastructure/logger';
 
@@ -138,7 +139,7 @@ export class ProjectsController {
   public static async create(req: Request, res: Response) {
     const log = childLogger({ requestId: (req as any).requestId });
     try {
-      const { name, description, framework, status = "active", priority = "medium", program_id, team_members } = req.body;
+      const { name, description, framework, status = "active", priority = "medium", program_id, team_members, start_date, end_date, budget } = req.body;
       const userId = (req as any).user?.id;
 
       if (!name) {
@@ -168,7 +169,10 @@ export class ProjectsController {
         program_id: program_id || null,
         owner_id: userId,
         team_members: JSON.stringify(finalTeamMembers),
-        correlation_id: correlationId
+        correlation_id: correlationId,
+        start_date,
+        end_date,
+        budget: budget !== undefined ? Number(budget) : undefined
       });
 
       log.info(`Project created: ${name}`, { projectId: id });
@@ -187,7 +191,7 @@ export class ProjectsController {
     const log = childLogger({ requestId: (req as any).requestId });
     try {
       const { id } = req.params;
-      const { name, description, framework, status, priority, team_members } = req.body;
+      const { name, description, framework, status, priority, team_members, start_date, end_date, budget } = req.body;
       const userId = (req as any).user?.id;
 
       if (!id || !UUID_RE.test(id)) {
@@ -206,17 +210,55 @@ export class ProjectsController {
       }
 
       const correlationId = asyncLocalStorage.getStore();
-      const updateData: any = { name, description, framework, status, priority, correlation_id: correlationId };
-      if (team_members) {
-        updateData.team_members = JSON.stringify(team_members);
+      const updateData: any = { 
+        name, 
+        description, 
+        framework, 
+        status, 
+        priority, 
+        correlation_id: correlationId,
+        start_date: start_date || undefined,
+        end_date: end_date || undefined
+      };
+
+      if (budget !== undefined && budget !== null && budget !== "") {
+        const numericBudget = Number(budget);
+        if (isNaN(numericBudget)) {
+          return res.status(400).json({ error: "Invalid budget value" });
+        }
+        updateData.budget = numericBudget;
       }
 
+      if (team_members) {
+        updateData.team_members = typeof team_members === 'string' ? team_members : JSON.stringify(team_members);
+      }
+
+      log.info(`Updating project ${id}`, { updateData });
+      
+      // Get current status to check for transition
+      const pResult = await ProjectsController.projectRepository.findById(id);
+      const oldStatus = pResult && pResult.rows ? pResult.rows[0]?.status : undefined;
+      
       const result = await ProjectsController.projectRepository.update(id, updateData);
+      const newStatus = result.rows[0]?.status;
+
+      // Trigger lessons learned analysis if status changed to completed
+      if (newStatus === 'completed' && oldStatus !== 'completed') {
+        log.info(`Project ${id} completed. Triggering lessons learned analysis.`);
+        // Run in background
+        void lessonsLearnedService.analyzeProjectCompletion(id, userId);
+      }
+
       log.info(`Project updated: ${id}`);
       res.json({ success: true, project: result.rows[0] });
-    } catch (error) {
-      log.error("Update Project error:", error);
-      res.status(500).json({ error: "Internal server error" });
+    } catch (error: any) {
+      log.error("Update Project error:", { 
+        message: error?.message, 
+        stack: error?.stack,
+        code: error?.code,
+        detail: error?.detail
+      });
+      res.status(500).json({ error: "Internal server error", message: error?.message });
     }
   }
 

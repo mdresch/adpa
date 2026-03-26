@@ -4,36 +4,36 @@
         "byMode": {
             "quick": {
                 "speed": {
-                    "id": "gemini-2.5-flash",
-                    "name": "Gemini 2.5 Flash",
+                    "id": "gemini-3-flash-preview",
+                    "name": "Gemini 3 Flash Preview",
                     "provider": "Google",
                     "providerId": "google"
                 },
                 "quality": {
-                    "id": "gemini-2.5-flash",
-                    "name": "Gemini 2.5 Flash",
+                    "id": "gemini-3-flash-preview",
+                    "name": "Gemini 3 Flash Preview",
                     "provider": "Google",
                     "providerId": "google"
                 }
             },
             "adaptive": {
                 "speed": {
-                    "id": "gemini-2.5-flash",
-                    "name": "Gemini 2.5 Flash",
+                    "id": "gemini-3-flash-preview",
+                    "name": "Gemini 3 Flash Preview",
                     "provider": "Google",
                     "providerId": "google"
                 },
                 "quality": {
-                    "id": "gemini-2.5-flash",
-                    "name": "Gemini 2.5 Flash",
+                    "id": "gemini-3-flash-preview",
+                    "name": "Gemini 3 Flash Preview",
                     "provider": "Google",
                     "providerId": "google"
                 }
             }
         },
         "relatedQuestions": {
-            "id": "gemini-2.5-flash",
-            "name": "Gemini 2.5 Flash",
+            "id": "gemini-3-flash-preview",
+            "name": "Gemini 3 Flash Preview",
             "provider": "Google",
             "providerId": "google"
         }

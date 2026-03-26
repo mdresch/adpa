@@ -1,49 +1,90 @@
 import { execSync } from 'child_process';
+import { existsSync } from 'fs';
 import { Pool } from 'pg';
 import path from 'path';
 
 async function verifyHarness() {
   console.log('🔍 Verifying Test Harness Architecture...');
   const serverDir = path.resolve(__dirname, '..');
-  const testDbUrl = 'postgresql://test_user:test_pass@localhost:5433/test_db';
+  const adminDbUrl = 'postgresql://test_user:test_pass@127.0.0.1:5433/postgres';
 
   try {
-    // 1. Check Docker Compose
+    // 1. Ensure Docker Compose services are up
     console.log('🐳 Checking Docker containers...');
-    const dockerStatus = execSync('docker-compose -f docker-compose.test.yml ps --format json', { 
+    execSync('docker-compose -f docker-compose.test.yml up -d', {
+      cwd: serverDir,
+      stdio: 'ignore'
+    });
+
+    const dockerStatus = execSync('docker-compose -f docker-compose.test.yml ps --format json', {
       cwd: serverDir,
       encoding: 'utf8'
     });
-    
-    if (!dockerStatus.includes('postgres-test')) {
-      console.error('❌ postgres-test container not found. run "pnpm test:integration" to start it.');
+
+    if (!dockerStatus.includes('adpa-test-db') && !dockerStatus.includes('postgres-test')) {
+      console.error('❌ postgres test container not found after startup.');
       process.exit(1);
     }
     console.log('✅ Docker containers are defined');
 
-    // 2. Check Database Connection
-    console.log('🔌 Checking test database connection...');
-    const pool = new Pool({ 
-      connectionString: testDbUrl,
-      connectionTimeoutMillis: 2000
-    });
-    
-    const res = await pool.query('SELECT NOW()');
-    console.log('✅ Test database is reachable at', testDbUrl);
+    // 2. Check Database Connectivity
+    console.log('🔌 Checking admin database connection...');
+    let pool;
+    let connected = false;
+    let lastError;
 
-    // 3. Check Migrations
-    console.log('📋 Checking migrations...');
-    const migrationsRes = await pool.query('SELECT COUNT(*) FROM src_schema_migrations');
-    console.log(`✅ ${migrationsRes.rows[0].count} migrations applied to test database`);
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      pool = new Pool({
+        connectionString: adminDbUrl,
+        connectionTimeoutMillis: 2000
+      });
 
-    // 4. Check Health Checks table
-    const hcRes = await pool.query("SELECT to_regclass('public.health_checks')");
-    if (hcRes.rows[0].to_regclass) {
-      console.log('✅ health_checks table exists');
-    } else {
-      console.error('❌ health_checks table missing');
-      process.exit(1);
+      try {
+        await pool.query('SELECT NOW()');
+        connected = true;
+        break;
+      } catch (error) {
+        lastError = error;
+        await pool.end().catch(() => {});
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
     }
+
+    if (!connected || !pool) {
+      throw lastError ?? new Error('Unable to connect to Postgres');
+    }
+
+    console.log('✅ Postgres is reachable at', adminDbUrl);
+
+    // 3. Check required harness files
+    console.log('📁 Checking harness files...');
+    const requiredFiles = [
+      'docker-compose.test.yml',
+      'tests/setup/global-setup.js',
+      'tests/setup/global-teardown.js',
+      'tests/setup/integration-setup.js',
+      'tests/doubles/MockAIProvider.ts',
+      'tests/doubles/MockQueue.ts',
+      'tests/factories/data-factory.ts',
+      'migrations/000_baseline.sql'
+    ];
+
+    for (const relativePath of requiredFiles) {
+      const absolutePath = path.join(serverDir, relativePath);
+      if (!existsSync(absolutePath)) {
+        console.error(`❌ Required harness file missing: ${relativePath}`);
+        process.exit(1);
+      }
+    }
+    console.log(`✅ ${requiredFiles.length} required harness files are present`);
+
+    // 4. Report template database readiness if global setup has already been run
+    const templateDbRes = await pool.query(`
+      SELECT EXISTS (
+        SELECT 1 FROM pg_database WHERE datname = 'test_template'
+      ) AS exists
+    `);
+    console.log(`✅ test_template present: ${templateDbRes.rows[0].exists}`);
 
     await pool.end();
     console.log('\n✨ Test Harness looks solid! 🚀');

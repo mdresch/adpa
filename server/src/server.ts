@@ -73,6 +73,7 @@ import documentUploadRoutes from "./routes/documentUploadRoutes"
 import adminRoutes from "./routes/adminRoutes"
 import ragRoutes from "./routes/ragRoutes"
 import tasksRoutes from "./routes/tasks"
+import programRoutes from "./routes/programRoutes"
 import goalsRoutes from "./routes/goals"
 import agentsRoutes from "./routes/agents"
 
@@ -360,6 +361,7 @@ app.use("/api/projects", projectSimilarityRoutes)
 app.use("/api/projects", developmentApproachRoutes)
 app.use("/api/development-approach", developmentApproachModuleRoutes)
 app.use("/api/tasks", tasksRoutes)
+app.use("/api/programs", programRoutes)
 app.use("/api/goals", goalsRoutes)
 app.use("/api/agents", agentsRoutes)
 app.use("/api/media", mediaRoutes)

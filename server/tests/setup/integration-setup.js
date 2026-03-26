@@ -261,4 +261,12 @@ afterAll(async () => {
 // Getter helpers for tests that need access to mocks
 const getMocks = () => ({ mockAIProvider, mockQueues });
 
-module.exports = { getMocks };
+module.exports = {
+  getMocks,
+  get mockAIProvider() {
+    return mockAIProvider;
+  },
+  get mockQueues() {
+    return mockQueues;
+  }
+};

@@ -628,6 +628,45 @@ async function seedDatabase() {
     ])
     }
 
+    // Create demo portfolio
+    const portfolioId = uuidv4()
+    await db.query(`
+      INSERT INTO portfolio_governance (id, portfolio_name, description, status, owner_id)
+      VALUES ($1, $2, $3, $4, $5)
+      ON CONFLICT (id) DO NOTHING
+    `, [
+      portfolioId,
+      "Global IT Strategy 2024",
+      "Core IT infrastructure and digital transformation portfolio",
+      "active",
+      userId
+    ])
+
+    // Create demo program
+    const programId = uuidv4()
+    await db.query(`
+      INSERT INTO programs (id, name, description, status, start_date, end_date, owner_id, created_by, portfolio_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      ON CONFLICT (id) DO NOTHING
+    `, [
+      programId,
+      "Enterprise AI Transformation",
+      "Strategic program to implement AI across all business units",
+      "green",
+      "2024-01-01",
+      "2025-12-31",
+      userId,
+      adminId,
+      portfolioId
+    ])
+
+    // Assign ADPA project to this program if it exists
+    await db.query(`
+      UPDATE projects 
+      SET program_id = $1 
+      WHERE name = 'ADPA Framework'
+    `, [programId])
+
     logger.info("Database seeding completed successfully")
     logger.info("Demo accounts created:")
     logger.info("  Admin: admin@adpa.com / admin123")

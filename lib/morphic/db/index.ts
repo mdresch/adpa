@@ -1,5 +1,5 @@
-import { drizzle } from 'drizzle-orm/postgres-js'
-import postgres from 'postgres'
+import { drizzle } from 'drizzle-orm/node-postgres'
+import { Pool } from 'pg'
 
 import * as schema from './schema'
 import * as relations from './relations'
@@ -7,7 +7,6 @@ import * as relations from './relations'
 const isDevelopment = process.env.NODE_ENV === 'development'
 
 const connectionString = process.env.MORPHIC_DATABASE_URL
-const isProduction = process.env.NODE_ENV === 'production'
 
 if (!connectionString) {
     throw new Error('MORPHIC_DATABASE_URL environment variable is not set')
@@ -18,33 +17,37 @@ const sslConfig =
         ? false
         : { rejectUnauthorized: false }
 
-// Force SSL for local development if not explicitly disabled
-const finalSslConfig = isDevelopment && process.env.DATABASE_SSL_DISABLED !== 'true' 
+// Force SSL for local development if not explicitly disabled or if remote host detected
+const isRemoteDb = connectionString.includes('rlwy.net') || 
+                   connectionString.includes('supabase') || 
+                   connectionString.includes('pooler.supabase.com');
+const isLocal = connectionString.includes('localhost') || connectionString.includes('127.0.0.1');
+
+const finalSslConfig = (isRemoteDb || (isDevelopment && process.env.DATABASE_SSL_DISABLED !== 'true')) && !isLocal
     ? { rejectUnauthorized: false } 
     : sslConfig
 
-console.log(`[DB:INIT] NODE_ENV=${process.env.NODE_ENV}, DATABASE_SSL_DISABLED=${process.env.DATABASE_SSL_DISABLED}, sslConfig=${JSON.stringify(sslConfig)}, finalSslConfig=${JSON.stringify(finalSslConfig)}`)
+console.log(`[DB:INIT] Using node-postgres. NODE_ENV=${process.env.NODE_ENV}, isRemoteDb=${isRemoteDb}, finalSslConfig=${JSON.stringify(finalSslConfig)}`)
 
 declare global {
-    var morphicPostgresClient: any
+    var morphicPgPool: Pool | undefined
 }
 
-const client =
-    globalThis.morphicPostgresClient ??
-    postgres(connectionString, {
+const pool =
+    globalThis.morphicPgPool ??
+    new Pool({
+        connectionString,
         ssl: finalSslConfig,
-        prepare: false,
-        max: isDevelopment ? 1 : 20,
-        connect_timeout: 30,
-        idle_timeout: 10,
-        onnotice: () => { }
+        max: isDevelopment ? 5 : 20,
+        idleTimeoutMillis: 10000,
+        connectionTimeoutMillis: 30000,
     })
 
-if (isDevelopment && !globalThis.morphicPostgresClient) {
-    globalThis.morphicPostgresClient = client
+if (isDevelopment && !globalThis.morphicPgPool) {
+    globalThis.morphicPgPool = pool
 }
 
-export const db = drizzle(client, {
+export const db = drizzle(pool, {
     schema: { ...schema, ...relations }
 })
 

@@ -141,8 +141,8 @@ export const createDbQueryTool = (userId: string) => tool({
 
                 return {
                     query: sqlQuery,
-                    rowCount: result.length,
-                    results: result
+                    rowCount: result.rowCount,
+                    results: result.rows
                 }
             })
 

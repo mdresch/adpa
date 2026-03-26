@@ -30,16 +30,14 @@ function getOllamaBaseUrl() {
     return process.env.NEXT_PUBLIC_OLLAMA_BASE_URL || process.env.OLLAMA_BASE_URL
 }
 
-/*
 if (getOllamaBaseUrl()) {
-    console.log(`[Registry] Ollama provider initialized: ${getOllamaBaseUrl()}/api`)
+    console.debug(`[Registry] Ollama provider initialized: ${getOllamaBaseUrl()}/api`)
     staticProviders.ollama = createOllama({
         baseURL: `${getOllamaBaseUrl()}/api`
     })
 } else {
     console.warn('[Registry] OLLAMA_BASE_URL not set — Ollama provider disabled')
 }
-*/
 
 let dynamicRegistry = createProviderRegistry(staticProviders)
 

@@ -12,9 +12,10 @@ import { openaiConnector } from '../modules/ai/openai'
 import { googleConnector } from '../modules/ai/google'
 import { azureConnector } from '../modules/ai/azure'
 import { mistralConnector } from '../modules/ai/mistral'
+import { foundryLocalConnector } from '../modules/ai/foundry-local'
 
 // AI Provider Types
-export type AIProviderType = 'openai' | 'google' | 'azure' | 'anthropic' | 'cohere' | 'huggingface' | 'ollama' | 'deepseek' | 'moonshot' | 'xai' | 'groq' | 'mistral'
+export type AIProviderType = 'openai' | 'google' | 'azure' | 'anthropic' | 'cohere' | 'huggingface' | 'ollama' | 'deepseek' | 'moonshot' | 'xai' | 'groq' | 'mistral' | 'foundry-local'
 
 // AI Provider Configuration
 export interface AIProviderConfig {
@@ -163,6 +164,8 @@ class AIProviderService {
         return new GroqProvider(config)
       case 'mistral':
         return new MistralProvider(config)
+      case 'foundry-local':
+        return new FoundryLocalProvider(config)
       default:
         throw new Error(`Unsupported provider type: ${config.type}`)
     }
@@ -1046,6 +1049,65 @@ class MistralProvider implements AIProvider {
       throw new Error(`Mistral API returned ${response.status}`);
     } catch (e: any) {
       logger.error('Failed to fetch Mistral models:', e);
+      throw new Error(`Model discovery failed for ${this.config.name}: ${e.message}`);
+    }
+  }
+}
+
+class FoundryLocalProvider implements AIProvider {
+  name: string
+  type: AIProviderType
+
+  constructor(private config: AIProviderConfig) {
+    this.name = config.name
+    this.type = config.type
+  }
+
+  async generate(request: AIRequest): Promise<AIResponse> {
+    const baseURL = this.config.endpoint || this.config.configuration?.endpoint || 'http://localhost:8080';
+    try {
+      const result = await foundryLocalConnector.generateText(
+        {
+          model: request.model || this.config.model || 'default',
+          messages: request.messages || [{ role: 'user', content: request.prompt }],
+          temperature: request.temperature,
+          max_tokens: request.maxTokens
+        },
+        { baseURL, apiKey: this.config.apiKey }
+      );
+
+      return {
+        content: result.choices?.[0]?.message?.content || '',
+        model: result.model,
+        provider: this.name,
+        usage: result.usage
+      };
+    } catch (e: any) {
+      logger.error('Foundry Local generation failed:', e);
+      throw new Error(`Generation failed for ${this.name}: ${e.message}`);
+    }
+  }
+
+  async test(): Promise<boolean> {
+    const baseURL = this.config.endpoint || this.config.configuration?.endpoint || 'http://localhost:8080';
+    try {
+      const status = await foundryLocalConnector.checkStatus({ baseURL, apiKey: this.config.apiKey });
+      return status.available;
+    } catch {
+      return false;
+    }
+  }
+
+  async getModels(): Promise<string[]> {
+    const baseURL = this.config.endpoint || this.config.configuration?.endpoint || 'http://localhost:8080';
+    try {
+      const status = await foundryLocalConnector.checkStatus({ baseURL, apiKey: this.config.apiKey });
+      if (!status.available || status.models.length === 0) {
+        throw new Error('No models found in Foundry Local');
+      }
+      return status.models;
+    } catch (e: any) {
+      logger.error('Failed to fetch Foundry Local models:', e);
       throw new Error(`Model discovery failed for ${this.config.name}: ${e.message}`);
     }
   }

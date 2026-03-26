@@ -103,9 +103,9 @@ export default function ProgramsPage() {
         name: createForm.name,
         description: createForm.description,
         status: createForm.status,
-        start_date: createForm.start_date || null,
-        end_date: createForm.end_date || null,
-        budget: createForm.budget ? parseFloat(createForm.budget) : null,
+        start_date: createForm.start_date || undefined,
+        end_date: createForm.end_date || undefined,
+        budget: createForm.budget ? parseFloat(createForm.budget) : undefined,
         currency: createForm.currency,
       })
       toast.success('Program created successfully')
@@ -121,9 +121,9 @@ export default function ProgramsPage() {
       })
       // Redirect to the new program
       router.push(`/programs/${newProgram.id}`)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to create program:', error)
-      toast.error(error?.message || 'Failed to create program')
+      toast.error(error instanceof Error ? error.message : 'Failed to create program')
     } finally {
       setCreating(false)
     }
