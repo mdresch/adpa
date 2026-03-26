@@ -707,17 +707,16 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params
-      const logPath = path.resolve(process.cwd(), 'logs', 'combined.log')
 
       // 1. Fetch file logs with this correlation ID
       let logLines: any[] = []
-      if (fs.existsSync(logPath)) {
-        const stats = fs.statSync(logPath)
+      if (fs.existsSync('logs/combined.log')) {
+        const stats = fs.statSync('logs/combined.log')
         const fileSize = stats.size
         const bufferSize = Math.min(fileSize, 2000000) // Read last 2MB for correlation search
         
         const buffer = Buffer.alloc(bufferSize)
-        const fd = fs.openSync(logPath, 'r')
+        const fd = fs.openSync('logs/combined.log', 'r')
         fs.readSync(fd, buffer, 0, bufferSize, Math.max(0, fileSize - bufferSize))
         fs.closeSync(fd)
 
@@ -802,26 +801,24 @@ router.get(
 
       for (const file of ALLOWED_FILES) {
         if (file === 'combined.log') {
-          const filePath = path.resolve(process.cwd(), 'logs', 'combined.log')
-          if (fs.existsSync(filePath)) {
-            const stats = fs.statSync(filePath)
+          if (fs.existsSync('logs/combined.log')) {
+            const stats = fs.statSync('logs/combined.log')
             const fileSize = stats.size
             const bufferSize = Math.min(fileSize, 250000)
             const buffer = Buffer.alloc(bufferSize)
-            const fd = fs.openSync(filePath, 'r')
+            const fd = fs.openSync('logs/combined.log', 'r')
             fs.readSync(fd, buffer, 0, bufferSize, Math.max(0, fileSize - bufferSize))
             fs.closeSync(fd)
             const content = buffer.toString('utf8')
             allLines = allLines.concat(content.split('\n').filter(l => l.trim() !== ''))
           }
         } else if (file === 'server.log') {
-          const filePath = path.resolve(process.cwd(), 'logs', 'server.log')
-          if (fs.existsSync(filePath)) {
-            const stats = fs.statSync(filePath)
+          if (fs.existsSync('logs/server.log')) {
+            const stats = fs.statSync('logs/server.log')
             const fileSize = stats.size
             const bufferSize = Math.min(fileSize, 250000)
             const buffer = Buffer.alloc(bufferSize)
-            const fd = fs.openSync(filePath, 'r')
+            const fd = fs.openSync('logs/server.log', 'r')
             fs.readSync(fd, buffer, 0, bufferSize, Math.max(0, fileSize - bufferSize))
             fs.closeSync(fd)
             const content = buffer.toString('utf8')
