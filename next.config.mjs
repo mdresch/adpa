@@ -13,11 +13,22 @@ const nextConfig = {
   output: 'standalone',
 
   // Explicitly expose server-side environment variables that are missing the NEXT_PUBLIC_ prefix
-  env: {
-    OLLAMA_BASE_URL: process.env.OLLAMA_BASE_URL,
-  },
+  transpilePackages: [
+    'lucide-react',
+    '@itwin/viewer-react',
+    '@itwin/itwinui-react',
+    '@itwin/appui-react',
+    '@itwin/components-react',
+    '@itwin/core-react',
+    '@itwin/imodel-components-react',
+    '@itwin/core-frontend',
+    '@itwin/core-common'
+  ],
 
-  transpilePackages: ['lucide-react'],
+  sassOptions: {
+    includePaths: ['./node_modules'],
+    quietDeps: true,
+  },
 
   // Exclude problematic server-side packages from bundling
   serverExternalPackages: [
@@ -25,6 +36,8 @@ const nextConfig = {
     '@documenso/pdf-sign',
     'puppeteer',
     'winston',
+    'pino',
+    'pino-pretty',
     'amqplib',
     'ioredis',
     'pg',

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { notFound } from 'next/navigation'
 import { Chat } from '@/components/morphic/chat'
 import { loadChat } from '@/lib/morphic/actions/chat'

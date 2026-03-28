@@ -18,7 +18,7 @@ export const logger = pino({
       },
       {
         target: 'pino/file',
-        options: { destination: 'd:/Source/adpa/server/logs/server.log', mkdir: true },
+        options: { destination: 'logs/server.log', mkdir: true },
         level: process.env.LOG_LEVEL || 'info'
       }
     ]

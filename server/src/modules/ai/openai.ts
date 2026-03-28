@@ -240,15 +240,19 @@ export class OpenAIConnector {
 
         // End Langfuse generation on success
         if (langfuseGeneration) {
-          langfuseGeneration.end({
-            output: response.choices[0]?.message?.content || '',
-            usage: {
-              promptTokens: response.usage?.prompt_tokens ?? 0,
-              completionTokens: response.usage?.completion_tokens ?? 0,
-              totalTokens: response.usage?.total_tokens ?? 0
-            }
-          })
-          await langfuse.flushAsync()
+          try {
+            langfuseGeneration.end({
+              output: response.choices[0]?.message?.content || '',
+              usage: {
+                promptTokens: response.usage?.prompt_tokens ?? 0,
+                completionTokens: response.usage?.completion_tokens ?? 0,
+                totalTokens: response.usage?.total_tokens ?? 0
+              }
+            })
+            await langfuse.flushAsync()
+          } catch (telemetryError) {
+            logger.warn('[OPENAI-CONNECTOR] Langfuse telemetry failed (non-blocking)', { error: telemetryError instanceof Error ? telemetryError.message : String(telemetryError) })
+          }
         }
 
         return {
@@ -277,11 +281,15 @@ export class OpenAIConnector {
 
     // All providers failed — end Langfuse generation with error
     if (langfuseGeneration) {
-      langfuseGeneration.end({
-        level: 'ERROR',
-        statusMessage: lastError?.message || 'All OpenAI providers failed'
-      })
-      await langfuse.flushAsync()
+      try {
+        langfuseGeneration.end({
+          level: 'ERROR',
+          statusMessage: lastError?.message || 'All OpenAI providers failed'
+        })
+        await langfuse.flushAsync()
+      } catch (telemetryError) {
+        logger.warn('[OPENAI-CONNECTOR] Langfuse failure telemetry failed (non-blocking)', { error: telemetryError instanceof Error ? telemetryError.message : String(telemetryError) })
+      }
     }
 
     throw new Error(`All OpenAI providers failed. Last error: ${lastError?.message || "Unknown error"}`)

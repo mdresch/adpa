@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { Chat } from '@/components/morphic/chat'
 
 export default function AISearchPage() {

@@ -10,13 +10,19 @@ export const mongodbDependency: Dependency = {
   init: async () => {
     const startTime = Date.now()
     try {
+      if (!process.env.MONGODB_URI) {
+        logger.warn("MongoDB (Optional) not configured, skipping initialization")
+        updateDependencyHealth("MongoDB Atlas", "healthy", 0, "Not configured")
+        return
+      }
       await mongoVectorStore.connect()
       const latency = Date.now() - startTime
       updateDependencyHealth("MongoDB Atlas", "healthy", latency)
     } catch (err) {
       const latency = Date.now() - startTime
       updateDependencyHealth("MongoDB Atlas", "unhealthy", latency, String(err))
-      throw err
+      // Only throw if critical, but this dependency is optional
+      logger.error("MongoDB initialization failed:", err)
     }
   },
   validate: async () => {

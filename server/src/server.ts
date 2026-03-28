@@ -111,7 +111,7 @@ import digitalTwinConnectorsRoutes from "./routes/digital-twin-connectors"
 import mediaRoutes from "./routes/mediaRoutes"
 import healthRoutes from "./routes/health"
 import aiProvidersRoutes from "./routes/ai-providers"
-import aiAnalyticsRoutes from "./routes/ai-analytics"
+// import aiAnalyticsRoutes from "./routes/ai-analytics" // Missing file
 import aiModelsRoutes from "./routes/ai-models"
 import documentModuleRoutes from "./modules/documents/routes"
 import analysisModuleRoutes from "./modules/analysis/routes"
@@ -367,7 +367,7 @@ app.use("/api/agents", agentsRoutes)
 app.use("/api/media", mediaRoutes)
 app.use("/api/ai-providers", aiProvidersRoutes)
 app.use("/api/ai", aiProvidersRoutes)
-app.use("/api/ai-analytics", aiAnalyticsRoutes)
+// app.use("/api/ai-analytics", aiAnalyticsRoutes) // Missing file
 app.use("/api/ai-models", aiModelsRoutes)
 console.log("✅ All API routes registered")
 app.use("/api/notifications", notificationsRoutes)

@@ -18,8 +18,11 @@ COPY types ./types
 # Copy backend package and source
 COPY server ./server
 
-# Install dependencies (only for backend)
-RUN pnpm install --frozen-lockfile --filter server...
+# Remove ANY local .env files to prevent shadowing Docker environment variables
+RUN rm -f .env* server/.env*
+
+# Install dependencies...
+RUN pnpm install --filter server...
 
 # Build the backend
 WORKDIR /app/server

@@ -24,8 +24,8 @@ interface FileSearchCustomMetadata {
 
 const DEFAULT_STORE_DISPLAY_NAME = 'ADPA Knowledge Base'
 
-// Use 'any' for SDK calls where TypeScript types are incomplete
-const stores = genai.fileSearchStores as any
+// Helper to get stores instance lazily
+const getStores = () => (genai as any).fileSearchStores
 
 // ─── Store Management ───────────────────────────────────────────────────
 
@@ -33,7 +33,7 @@ const stores = genai.fileSearchStores as any
  * Creates a new File Search store.
  */
 export async function createStore(displayName: string = DEFAULT_STORE_DISPLAY_NAME) {
-    const store = await stores.create({ displayName })
+    const store = await getStores().create({ displayName })
     return store
 }
 
@@ -41,7 +41,7 @@ export async function createStore(displayName: string = DEFAULT_STORE_DISPLAY_NA
  * Gets an existing File Search store by name.
  */
 export async function getStore(storeName: string) {
-    const store = await stores.get({ name: storeName })
+    const store = await getStores().get({ name: storeName })
     return store
 }
 
@@ -49,7 +49,7 @@ export async function getStore(storeName: string) {
  * Lists all File Search stores.
  */
 export async function listStores() {
-    const result = await stores.list()
+    const result = await getStores().list()
     // The SDK returns a Pager object; collect all items
     const items: any[] = []
     if (result && Symbol.asyncIterator in result) {
@@ -66,7 +66,7 @@ export async function listStores() {
  * Deletes a File Search store.
  */
 export async function deleteStore(storeName: string) {
-    await stores.delete({ name: storeName })
+    await getStores().delete({ name: storeName })
 }
 
 /**
@@ -131,7 +131,7 @@ export async function uploadDocument(
     }
 
     // Import into the File Search store with metadata
-    const operation = await stores.importFile({
+    const operation = await getStores().importFile({
         fileSearchStoreName: storeName,
         fileName: uploadedFile.name,
         config: {

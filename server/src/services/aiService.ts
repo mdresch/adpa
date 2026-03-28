@@ -935,24 +935,28 @@ class AIService {
           })
 
           if (langfuseGeneration) {
-            langfuseGeneration.end({
-              output: deepseekResult.text,
-              usage: {
-                promptTokens: inputTokens,
-                completionTokens: outputTokens,
-                totalTokens: totalTokens
-              }
-            });
-
-            // Explicitly update the root trace with the full input/output before flushing
-            if (langfuseTrace) {
-              langfuseTrace.update({
-                input: systemMessage ? `${systemMessage}\n\n---\n\n${userMessage}` : userMessage,
-                output: deepseekResult.text
+            try {
+              langfuseGeneration.end({
+                output: deepseekResult.text,
+                usage: {
+                  promptTokens: inputTokens,
+                  completionTokens: outputTokens,
+                  totalTokens: totalTokens
+                }
               });
-            }
 
-            await langfuse.flushAsync();
+              // Explicitly update the root trace with the full input/output before flushing
+              if (langfuseTrace) {
+                langfuseTrace.update({
+                  input: systemMessage ? `${systemMessage}\n\n---\n\n${userMessage}` : userMessage,
+                  output: deepseekResult.text
+                });
+              }
+
+              await langfuse.flushAsync();
+            } catch (telemetryError) {
+              logger.warn('[AI-SERVICE] Langfuse telemetry failed (non-blocking)', { error: telemetryError instanceof Error ? telemetryError.message : String(telemetryError) });
+            }
           }
 
           return {
@@ -1017,24 +1021,28 @@ class AIService {
           })
 
           if (langfuseGeneration) {
-            langfuseGeneration.end({
-              output: content,
-              usage: {
-                promptTokens: promptTokens,
-                completionTokens: completionTokens,
-                totalTokens: totalTokens
-              }
-            });
-
-            // Explicitly update the root trace with the full input/output before flushing
-            if (langfuseTrace) {
-              langfuseTrace.update({
-                input: systemMessage ? `${systemMessage}\n\n---\n\n${userMessage}` : userMessage,
-                output: content
+            try {
+              langfuseGeneration.end({
+                output: content,
+                usage: {
+                  promptTokens: promptTokens,
+                  completionTokens: completionTokens,
+                  totalTokens: totalTokens
+                }
               });
-            }
 
-            await langfuse.flushAsync();
+              // Explicitly update the root trace with the full input/output before flushing
+              if (langfuseTrace) {
+                langfuseTrace.update({
+                  input: systemMessage ? `${systemMessage}\n\n---\n\n${userMessage}` : userMessage,
+                  output: content
+                });
+              }
+
+              await langfuse.flushAsync();
+            } catch (telemetryError) {
+              logger.warn('[AI-SERVICE] Langfuse telemetry failed (non-blocking)', { error: telemetryError instanceof Error ? telemetryError.message : String(telemetryError) });
+            }
           }
 
           return {
@@ -1097,24 +1105,28 @@ class AIService {
           })
 
           if (langfuseGeneration) {
-            langfuseGeneration.end({
-              output: xaiResult.text,
-              usage: {
-                promptTokens: inputTokens,
-                completionTokens: outputTokens,
-                totalTokens: totalTokens
-              }
-            });
-
-            // Explicitly update the root trace with the full input/output before flushing
-            if (langfuseTrace) {
-              langfuseTrace.update({
-                input: systemMessage ? `${systemMessage}\n\n---\n\n${userMessage}` : userMessage,
-                output: xaiResult.text
+            try {
+              langfuseGeneration.end({
+                output: xaiResult.text,
+                usage: {
+                  promptTokens: inputTokens,
+                  completionTokens: outputTokens,
+                  totalTokens: totalTokens
+                }
               });
-            }
 
-            await langfuse.flushAsync();
+              // Explicitly update the root trace with the full input/output before flushing
+              if (langfuseTrace) {
+                langfuseTrace.update({
+                  input: systemMessage ? `${systemMessage}\n\n---\n\n${userMessage}` : userMessage,
+                  output: xaiResult.text
+                });
+              }
+
+              await langfuse.flushAsync();
+            } catch (telemetryError) {
+              logger.warn('[AI-SERVICE] Langfuse telemetry failed (non-blocking)', { error: telemetryError instanceof Error ? telemetryError.message : String(telemetryError) });
+            }
           }
 
           return {
@@ -1254,15 +1266,19 @@ class AIService {
           })
 
           if (langfuseGeneration) {
-            langfuseGeneration.end({
-              output: content,
-              usage: {
-                promptTokens: promptTokens,
-                completionTokens: completionTokens,
-                totalTokens: totalTokens
-              }
-            });
-            await langfuse.flushAsync();
+            try {
+              langfuseGeneration.end({
+                output: content,
+                usage: {
+                  promptTokens: promptTokens,
+                  completionTokens: completionTokens,
+                  totalTokens: totalTokens
+                }
+              });
+              await langfuse.flushAsync();
+            } catch (telemetryError) {
+              logger.warn('[AI-SERVICE] Langfuse telemetry failed (non-blocking)', { error: telemetryError instanceof Error ? telemetryError.message : String(telemetryError) });
+            }
           }
 
           return {
@@ -1466,24 +1482,28 @@ class AIService {
           logger.info(`[AI] ✓ Google AI/${finalModel} - ${estimatedTokens} tokens - ${Date.now() - startTime}ms`)
 
           if (langfuseGeneration) {
-            langfuseGeneration.end({
-              output: text,
-              usage: {
-                promptTokens: Math.ceil(promptLength / 4),
-                completionTokens: Math.ceil(text.length / 4),
-                totalTokens: estimatedTokens
-              }
-            });
-
-            // Explicitly update the root trace with the full input/output before flushing
-            if (langfuseTrace) {
-              langfuseTrace.update({
-                input: combinedPrompt,
-                output: text
+            try {
+              langfuseGeneration.end({
+                output: text,
+                usage: {
+                  promptTokens: Math.ceil(promptLength / 4),
+                  completionTokens: Math.ceil(text.length / 4),
+                  totalTokens: estimatedTokens
+                }
               });
-            }
 
-            await langfuse.flushAsync();
+              // Explicitly update the root trace with the full input/output before flushing
+              if (langfuseTrace) {
+                langfuseTrace.update({
+                  input: combinedPrompt,
+                  output: text
+                });
+              }
+
+              await langfuse.flushAsync();
+            } catch (telemetryError) {
+              logger.warn('[AI-SERVICE] Langfuse telemetry failed (non-blocking)', { error: telemetryError instanceof Error ? telemetryError.message : String(telemetryError) });
+            }
           }
 
           return {
@@ -1557,15 +1577,19 @@ class AIService {
           logger.info(`[AI] ✓ Mistral AI/${modelName} - ${totalTokens} tokens - ${Date.now() - startTime}ms`)
 
           if (langfuseGeneration) {
-            langfuseGeneration.end({
-              output: mistralResult.text,
-              usage: {
-                promptTokens: inputTokens,
-                completionTokens: outputTokens,
-                totalTokens: totalTokens
-              }
-            });
-            await langfuse.flushAsync();
+            try {
+              langfuseGeneration.end({
+                output: mistralResult.text,
+                usage: {
+                  promptTokens: inputTokens,
+                  completionTokens: outputTokens,
+                  totalTokens: totalTokens
+                }
+              });
+              await langfuse.flushAsync();
+            } catch (telemetryError) {
+              logger.warn('[AI-SERVICE] Langfuse telemetry failed (non-blocking)', { error: telemetryError instanceof Error ? telemetryError.message : String(telemetryError) });
+            }
           }
 
           return {
@@ -1642,15 +1666,19 @@ class AIService {
           logger.info(`[AI] ✓ DeepSeek/${modelName} - ${totalTokens} tokens - ${Date.now() - startTime}ms`)
 
           if (langfuseGeneration) {
-            langfuseGeneration.end({
-              output: deepseekResult.text,
-              usage: {
-                promptTokens: inputTokens,
-                completionTokens: outputTokens,
-                totalTokens: totalTokens
-              }
-            });
-            await langfuse.flushAsync();
+            try {
+              langfuseGeneration.end({
+                output: deepseekResult.text,
+                usage: {
+                  promptTokens: inputTokens,
+                  completionTokens: outputTokens,
+                  totalTokens: totalTokens
+                }
+              });
+              await langfuse.flushAsync();
+            } catch (telemetryError) {
+              logger.warn('[AI-SERVICE] Langfuse telemetry failed (non-blocking)', { error: telemetryError instanceof Error ? telemetryError.message : String(telemetryError) });
+            }
           }
 
           return {
@@ -1725,15 +1753,19 @@ class AIService {
           })
 
           if (langfuseGeneration) {
-            langfuseGeneration.end({
-              output: moonshotResult.text,
-              usage: {
-                promptTokens: inputTokens,
-                completionTokens: outputTokens,
-                totalTokens: totalTokens
-              }
-            });
-            await langfuse.flushAsync();
+            try {
+              langfuseGeneration.end({
+                output: moonshotResult.text,
+                usage: {
+                  promptTokens: inputTokens,
+                  completionTokens: outputTokens,
+                  totalTokens: totalTokens
+                }
+              });
+              await langfuse.flushAsync();
+            } catch (telemetryError) {
+              logger.warn('[AI-SERVICE] Langfuse telemetry failed (non-blocking)', { error: telemetryError instanceof Error ? telemetryError.message : String(telemetryError) });
+            }
           }
 
           return {
@@ -1847,15 +1879,19 @@ class AIService {
               logger.info(`[AI] ✓ Ollama/${modelName} - ${totalTokens} tokens - ${responseTimeMs}ms`)
 
               if (langfuseGeneration) {
-                langfuseGeneration.end({
-                  output: generatedText,
-                  usage: {
-                    promptTokens: promptTokens,
-                    completionTokens: completionTokens,
-                    totalTokens: totalTokens
-                  }
-                });
-                await langfuse.flushAsync();
+                try {
+                  langfuseGeneration.end({
+                    output: generatedText,
+                    usage: {
+                      promptTokens: promptTokens,
+                      completionTokens: completionTokens,
+                      totalTokens: totalTokens
+                    }
+                  });
+                  await langfuse.flushAsync();
+                } catch (telemetryError) {
+                  logger.warn('[AI-SERVICE] Langfuse telemetry failed (non-blocking)', { error: telemetryError instanceof Error ? telemetryError.message : String(telemetryError) });
+                }
               }
 
               return {
@@ -1966,15 +2002,19 @@ class AIService {
           logger.info(`[AI] ✓ OpenAI/${modelName} - ${totalTokens} tokens - ${responseTimeMs}ms`)
 
           if (langfuseGeneration) {
-            langfuseGeneration.end({
-              output: openaiResult.text,
-              usage: {
-                promptTokens: inputTokens,
-                completionTokens: outputTokens,
-                totalTokens: totalTokens
-              }
-            });
-            await langfuse.flushAsync();
+            try {
+              langfuseGeneration.end({
+                output: openaiResult.text,
+                usage: {
+                  promptTokens: inputTokens,
+                  completionTokens: outputTokens,
+                  totalTokens: totalTokens
+                }
+              });
+              await langfuse.flushAsync();
+            } catch (telemetryError) {
+              logger.warn('[AI-SERVICE] Langfuse telemetry failed (non-blocking)', { error: telemetryError instanceof Error ? telemetryError.message : String(telemetryError) });
+            }
           }
 
           return {
@@ -2062,15 +2102,19 @@ class AIService {
           logger.info(`[AI] ✓ Groq/${modelName} - ${totalTokens} tokens - ${responseTimeMs}ms`)
 
           if (langfuseGeneration) {
-            langfuseGeneration.end({
-              output: groqResult.text,
-              usage: {
-                promptTokens: inputTokens,
-                completionTokens: outputTokens,
-                totalTokens: totalTokens
-              }
-            });
-            await langfuse.flushAsync();
+            try {
+              langfuseGeneration.end({
+                output: groqResult.text,
+                usage: {
+                  promptTokens: inputTokens,
+                  completionTokens: outputTokens,
+                  totalTokens: totalTokens
+                }
+              });
+              await langfuse.flushAsync();
+            } catch (telemetryError) {
+              logger.warn('[AI-SERVICE] Langfuse telemetry failed (non-blocking)', { error: telemetryError instanceof Error ? telemetryError.message : String(telemetryError) });
+            }
           }
 
           return {
@@ -2136,15 +2180,19 @@ class AIService {
         logger.info('✅ [AI-SERVICE-8/8] Usage stats updated. Returning response.')
 
         if (langfuseGeneration) {
-          langfuseGeneration.end({
-            output: result.text,
-            usage: {
-              promptTokens: gatewayInputTokens,
-              completionTokens: gatewayOutputTokens,
-              totalTokens: gatewayTotalTokens
-            }
-          });
-          await langfuse.flushAsync();
+          try {
+            langfuseGeneration.end({
+              output: result.text,
+              usage: {
+                promptTokens: gatewayInputTokens,
+                completionTokens: gatewayOutputTokens,
+                totalTokens: gatewayTotalTokens
+              }
+            });
+            await langfuse.flushAsync();
+          } catch (telemetryError) {
+            logger.warn('[AI-SERVICE] Langfuse telemetry failed (non-blocking)', { error: telemetryError instanceof Error ? telemetryError.message : String(telemetryError) });
+          }
         }
 
         return {
@@ -2174,11 +2222,15 @@ class AIService {
         stack: error instanceof Error ? error.stack : undefined
       })
       if (typeof langfuseGeneration !== 'undefined' && langfuseGeneration) {
-        langfuseGeneration.end({
-          level: "ERROR",
-          statusMessage: error instanceof Error ? error.message : String(error)
-        });
-        await langfuse.flushAsync();
+        try {
+          langfuseGeneration.end({
+            level: "ERROR",
+            statusMessage: error instanceof Error ? error.message : String(error)
+          });
+          await langfuse.flushAsync();
+        } catch (telemetryError) {
+          logger.warn('[AI-SERVICE] Langfuse error telemetry failed (non-blocking)', { error: telemetryError instanceof Error ? telemetryError.message : String(telemetryError) });
+        }
       }
       throw error
     }

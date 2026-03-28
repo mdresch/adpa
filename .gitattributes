@@ -1,0 +1,9 @@
+# Enforce LF line endings for all shell scripts
+*.sh text eol=lf
+# Enforce LF line endings for entrypoint scripts specifically
+entrypoint.sh text eol=lf
+# Ensure other potential scripts are also LF
+*.bash text eol=lf
+*.zsh text eol=lf
+# Keep other files as default (usually will be CRLF on Windows)
+* text=auto

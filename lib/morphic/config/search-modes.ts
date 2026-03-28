@@ -1,12 +1,11 @@
-import { Search } from 'lucide-react'
 import { SearchMode } from '../types/search'
-import { IconLogoOutline } from '../../../components/morphic/ui/icons'
+// Remove React dependency for backend compatibility
 
 export interface SearchModeConfig {
     value: SearchMode
     label: string
     description: string
-    icon: React.ComponentType<{ className?: string }>
+    icon: 'search' | 'logo'
     color: string
 }
 
@@ -15,14 +14,14 @@ export const SEARCH_MODE_CONFIGS: SearchModeConfig[] = [
         value: 'quick',
         label: 'Quick',
         description: 'Streamlined search for fast, concise responses',
-        icon: Search,
+        icon: 'search',
         color: 'text-amber-500'
     },
     {
         value: 'adaptive',
         label: 'Adaptive',
         description: 'Adaptive agentic search with intelligent query understanding',
-        icon: IconLogoOutline,
+        icon: 'logo',
         color: 'text-violet-500'
     }
 ]
