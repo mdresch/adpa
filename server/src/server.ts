@@ -141,7 +141,6 @@ const allowedOrigins = [
   /https:\/\/.*\.vercel\.app$/,               // All Vercel preview deployments
   /https:\/\/adpa.*\.vercel\.app$/,           // ADPA Vercel deployments
   "https://adpa.vercel.app",                  // Production Vercel domain
-  "https://adpa-production.up.railway.app",   // Railway frontend (if accessing directly)
 ].filter(Boolean) as (string | RegExp)[]
 
 app.use(

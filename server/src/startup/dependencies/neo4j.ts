@@ -6,7 +6,7 @@ import { updateDependencyHealth } from "../../routes/health"
 export const neo4jDependency: Dependency = {
   name: "Neo4j",
   critical: false,
-  timeout: 10000, // 10 seconds
+  timeout: 30000, // 30 seconds
   init: async () => {
     const startTime = Date.now()
     try {

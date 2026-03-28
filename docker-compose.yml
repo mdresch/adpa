@@ -118,6 +118,7 @@ services:
       - DATABASE_URL=postgres://myuser:mypassword@postgres:5432/adpa
       - MORPHIC_DATABASE_URL=postgres://morphic_user:morphic_password@morphic-db:5432/morphic
       - REDIS_URL=redis://redis:6379
+      - REDIS_HOST=redis
       - MONGODB_URI=mongodb://root:mypassword@mongodb:27017/adpa_rag?authSource=admin
       - NEO4J_URI=bolt://neo4j:7687
       - NEO4J_USERNAME=neo4j
@@ -134,6 +135,9 @@ services:
       - LANGFUSE_OTLP_ENDPOINT=http://langfuse-web:3000/api/public/otel/v1/traces
       - LANGFUSE_PUBLIC_KEY=pk-lf-5fc3bd74-750d-4ab7-9560-ed085e2671fb
       - LANGFUSE_SECRET_KEY=sk-lf-a25cc92d-8320-47b0-a554-4e60d8e1f12f
+      - PINECONE_API_KEY=pcsk_5vEdP3_NUYZTUwJ8RV8zgSjGwAUTKtAwgTsm7enwDhxwDSZiWfwRRp9wG3Xjsbc9SbvjGT
+      - PINECONE_INDEX=adpa-rag-index
+      - ADDITIONAL_ALLOWED_ORIGINS=http://localhost:3005
     ports:
       - "5000:5000"
     depends_on:

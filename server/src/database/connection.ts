@@ -1,5 +1,4 @@
-import * as dotenv from "dotenv"
-// Only load .env if not in production (Railway injects env vars directly)
+// Load environment variables
 
 import { Pool } from "pg"
 import type { PoolConfig } from "pg"
@@ -230,8 +229,8 @@ export async function connectDatabase(): Promise<void> {
 
 async function connectDatabaseInternal(): Promise<void> {
   // retry configuration: can be tuned via env vars (e.g. DB_MAX_RETRIES_PER_METHOD)
-  const maxRetriesPerMethod = DEFAULT_DB_MAX_RETRIES_PER_METHOD // Reduced retries for Railway timeout by default
-  const retryDelay = 3000 // Reduced to 3 seconds
+  const maxRetriesPerMethod = DEFAULT_DB_MAX_RETRIES_PER_METHOD
+  const retryDelay = 3000 // 3 seconds
 
   const currentDbUrl = getDatabaseUrl()
   console.log(`🔍 DATABASE_URL check: ${currentDbUrl ? `Found (${currentDbUrl.substring(0, 30)}...)` : 'Not found'}`)
