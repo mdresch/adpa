@@ -152,7 +152,7 @@
     "js-yaml": "^4.1.1",
     "json2csv": "6.0.0-alpha.2",
     "jsonwebtoken": "latest",
-    "jspdf": "^4.2.0",
+    "jspdf": "^4.2.1",
     "langfuse": "^3.38.6",
     "langsmith": "^0.5.7",
     "lodash": "^4.17.23",
