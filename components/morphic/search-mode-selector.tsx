@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Check, ChevronDown } from 'lucide-react'
+import { Check, ChevronDown, Search } from 'lucide-react'
+import { IconLogoOutline } from './ui/icons'
 import { SEARCH_MODE_CONFIGS } from '@/lib/morphic/config/search-modes'
 import { SearchMode } from '@/lib/morphic/types/search'
 import { cn } from '@/lib/morphic/utils'
@@ -14,6 +15,11 @@ import {
     DropdownMenuTrigger
 } from './ui/dropdown-menu'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from './ui/hover-card'
+
+const ICON_MAP = {
+    search: Search,
+    logo: IconLogoOutline
+}
 
 export function SearchModeSelector() {
     const [value, setValue] = useState<SearchMode>('quick')
@@ -63,7 +69,7 @@ export function SearchModeSelector() {
     const selectedMode = SEARCH_MODE_CONFIGS.find(
         config => config.value === value
     )
-    const SelectedIcon = selectedMode?.icon
+    const SelectedIcon = selectedMode ? ICON_MAP[selectedMode.icon] : null
 
     return (
         <>
@@ -93,7 +99,7 @@ export function SearchModeSelector() {
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start" className="w-64" sideOffset={5}>
                         {SEARCH_MODE_CONFIGS.map(config => {
-                            const ModeIcon = config.icon
+                            const ModeIcon = ICON_MAP[config.icon]
                             const isSelected = value === config.value
                             return (
                                 <DropdownMenuItem
@@ -131,7 +137,7 @@ export function SearchModeSelector() {
 
                     <div className="relative flex items-center">
                         {SEARCH_MODE_CONFIGS.map((config, index) => {
-                            const Icon = config.icon
+                            const Icon = ICON_MAP[config.icon]
                             const isSelected = value === config.value
 
                             return (

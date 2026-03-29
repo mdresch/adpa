@@ -2,27 +2,27 @@ import { createClient } from "redis"
 import { logger } from "./logger"
 import CircuitBreaker from "./circuitBreaker"
 
-// Define connection methods - try environment variables first, then fallback to localhost
+// Define connection methods - prioritize REDIS_URL, then host-based, then fallback to localhost
 const redisConnectionMethods = [
-  // Method 1: Host-based connection (Railway, local, etc.)
+  // Method 1: URL-based connection (Standard, Railway, Render, etc.)
   {
-    host: process.env.REDIS_HOST || "localhost",
-    description: "Railway External/Proxy Redis"
+    url: process.env.REDIS_URL,
+    description: "Primary REDIS_URL"
   },
-  // Method 2: Upstash fallback (if configured)
+  // Method 2: Host-based connection (Standard, local, etc.)
+  {
+    host: process.env.REDIS_HOST,
+    description: "Primary REDIS_HOST"
+  },
+  // Method 3: Upstash fallback (if configured)
   {
     url: process.env.UPSTASH_REDIS_URL,
     description: "Upstash Serverless Redis (Fallback)"
   },
-  // Method 3: Internal Railway Redis (for when running inside Railway)
-  {
-    host: "redis.railway.internal",
-    description: "Railway Internal Redis"
-  },
-  // Method 4: Default Localhost
+  // Method 4: Default Localhost fallback for development
   {
     host: "localhost",
-    description: "Localhost Redis"
+    description: "Localhost Fallback"
   }
 ]
 
@@ -151,7 +151,7 @@ export async function connectRedis() {
   try {
     // Try each connection method
     for (const method of redisConnectionMethods) {
-      const connStr = method.url || (method.host === process.env.REDIS_HOST ? process.env.REDIS_URL : method.host) || method.host;
+      const connStr = method.url || method.host;
       
       if (!connStr) continue;
 

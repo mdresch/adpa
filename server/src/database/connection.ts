@@ -1,5 +1,4 @@
-import * as dotenv from "dotenv"
-// Only load .env if not in production (Railway injects env vars directly)
+// Load environment variables
 
 import { Pool } from "pg"
 import type { PoolConfig } from "pg"
@@ -230,8 +229,8 @@ export async function connectDatabase(): Promise<void> {
 
 async function connectDatabaseInternal(): Promise<void> {
   // retry configuration: can be tuned via env vars (e.g. DB_MAX_RETRIES_PER_METHOD)
-  const maxRetriesPerMethod = DEFAULT_DB_MAX_RETRIES_PER_METHOD // Reduced retries for Railway timeout by default
-  const retryDelay = 3000 // Reduced to 3 seconds
+  const maxRetriesPerMethod = DEFAULT_DB_MAX_RETRIES_PER_METHOD
+  const retryDelay = 3000 // 3 seconds
 
   const currentDbUrl = getDatabaseUrl()
   console.log(`🔍 DATABASE_URL check: ${currentDbUrl ? `Found (${currentDbUrl.substring(0, 30)}...)` : 'Not found'}`)
@@ -297,18 +296,38 @@ async function connectDatabaseInternal(): Promise<void> {
             throw ipv4Error
           }
         } else {
-          // For pooler connections, use hostname directly (pooler handles IPv4/IPv6)
-          const poolerType = dbUrl.hostname.includes('pooler.supabase.com') ? 'Supabase Transaction Pooler' : 'Connection Pooler'
-          console.log(`🔧 Using ${poolerType} (port ${dbUrl.port}) - using hostname directly`)
-          console.log(`   Hostname: ${dbUrl.hostname}`)
-          console.log(`   Username: ${dbUrl.username}`)
-          poolConfig = {
-            ...poolConfig,
-            host: dbUrl.hostname,
-            port: parseInt(dbUrl.port) || 6543,
-            database: dbUrl.pathname.slice(1).split('?')[0],
-            user: dbUrl.username,
-            password: dbUrl.password,
+          // For pooler connections, try to resolve to IPv4 if it's the new pooler domain
+          const isSupabasePooler = dbUrl.hostname.includes('pooler.supabase.com')
+          const poolerType = isSupabasePooler ? 'Supabase Transaction Pooler' : 'Connection Pooler'
+          console.log(`🔧 Using ${poolerType} (port ${dbUrl.port}) - attempting DNS resolution`)
+
+          try {
+            console.log(`🔧 Resolving ${dbUrl.hostname} via dns.lookup (pooler)...`)
+            const { address } = await dnsLookup(dbUrl.hostname, { family: 4 })
+            if (address) {
+              console.log(`✅ Pooler resolved to IPv4: ${address}`)
+              poolConfig = {
+                ...poolConfig,
+                host: address, // Use resolved IPv4 address
+                port: parseInt(dbUrl.port) || 6543,
+                database: dbUrl.pathname.slice(1).split('?')[0],
+                user: dbUrl.username,
+                password: dbUrl.password,
+              }
+            } else {
+              throw new Error(`No IPv4 addresses found for pooler: ${dbUrl.hostname}`)
+            }
+          } catch (dnsErr: any) {
+            console.warn(`⚠️ Pooler DNS resolution failed: ${dnsErr.message}`)
+            console.log(`   Falling back to hostname directly: ${dbUrl.hostname}`)
+            poolConfig = {
+              ...poolConfig,
+              host: dbUrl.hostname,
+              port: parseInt(dbUrl.port) || 6543,
+              database: dbUrl.pathname.slice(1).split('?')[0],
+              user: dbUrl.username,
+              password: dbUrl.password,
+            }
           }
         }
       } catch (e: any) {

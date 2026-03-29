@@ -264,15 +264,19 @@ class UnifiedAIService {
       } = this.normalizeUsage(response.usage)
 
       if (langfuseGeneration) {
-        langfuseGeneration.end({
-          output: response.text,
-          usage: {
-            promptTokens,
-            completionTokens,
-            totalTokens
-          }
-        })
-        await langfuse.flushAsync()
+        try {
+          langfuseGeneration.end({
+            output: response.text,
+            usage: {
+              promptTokens,
+              completionTokens,
+              totalTokens
+            }
+          })
+          await langfuse.flushAsync()
+        } catch (telemetryError) {
+          logger.warn('[UNIFIED-AI] Langfuse telemetry failed (non-blocking)', { error: telemetryError instanceof Error ? telemetryError.message : String(telemetryError) })
+        }
       }
 
       return {
@@ -292,11 +296,15 @@ class UnifiedAIService {
     } catch (error) {
       logger.error(`Failed to generate content with AI provider ${request.provider}:`, error)
       if (langfuseGeneration) {
-        langfuseGeneration.end({
-          level: 'ERROR',
-          statusMessage: error instanceof Error ? error.message : String(error)
-        })
-        await langfuse.flushAsync()
+        try {
+          langfuseGeneration.end({
+            level: 'ERROR',
+            statusMessage: error instanceof Error ? error.message : String(error)
+          })
+          await langfuse.flushAsync()
+        } catch (telemetryError) {
+          logger.warn('[UNIFIED-AI] Langfuse telemetry failure in error handler (non-blocking)', { error: telemetryError instanceof Error ? telemetryError.message : String(telemetryError) })
+        }
       }
       throw error
     }
@@ -393,15 +401,19 @@ class UnifiedAIService {
       } = this.normalizeUsage(response.usage)
 
       if (langfuseGeneration) {
-        langfuseGeneration.end({
-          output: JSON.stringify(response.object),
-          usage: {
-            promptTokens,
-            completionTokens,
-            totalTokens
-          }
-        })
-        await langfuse.flushAsync()
+        try {
+          langfuseGeneration.end({
+            output: JSON.stringify(response.object),
+            usage: {
+              promptTokens,
+              completionTokens,
+              totalTokens
+            }
+          })
+          await langfuse.flushAsync()
+        } catch (telemetryError) {
+          logger.warn('[UNIFIED-AI] Langfuse structured telemetry failed (non-blocking)', { error: telemetryError instanceof Error ? telemetryError.message : String(telemetryError) })
+        }
       }
 
       return {
@@ -416,11 +428,15 @@ class UnifiedAIService {
     } catch (error) {
       logger.error(`Failed to generate structured object with AI provider ${request.provider}:`, error)
       if (langfuseGeneration) {
-        langfuseGeneration.end({
-          level: 'ERROR',
-          statusMessage: error instanceof Error ? error.message : String(error)
-        })
-        await langfuse.flushAsync()
+        try {
+          langfuseGeneration.end({
+            level: 'ERROR',
+            statusMessage: error instanceof Error ? error.message : String(error)
+          })
+          await langfuse.flushAsync()
+        } catch (telemetryError) {
+          logger.warn('[UNIFIED-AI] Langfuse structured failure telemetry failed (non-blocking)', { error: telemetryError instanceof Error ? telemetryError.message : String(telemetryError) })
+        }
       }
       throw error
     }
@@ -622,15 +638,19 @@ class UnifiedAIService {
       logger.info(`Streaming content using AI provider: ${provider.name}`)
 
       if (langfuseGeneration) {
-        langfuseGeneration.end({
-          output: result.text,
-          usage: {
-            promptTokens: (result as any)?.usage?.promptTokens ?? 0,
-            completionTokens: (result as any)?.usage?.completionTokens ?? 0,
-            totalTokens: (result as any)?.usage?.totalTokens ?? 0
-          }
-        })
-        await langfuse.flushAsync()
+        try {
+          langfuseGeneration.end({
+            output: result.text,
+            usage: {
+              promptTokens: (result as any)?.usage?.promptTokens ?? 0,
+              completionTokens: (result as any)?.usage?.completionTokens ?? 0,
+              totalTokens: (result as any)?.usage?.totalTokens ?? 0
+            }
+          })
+          await langfuse.flushAsync()
+        } catch (telemetryError) {
+          logger.warn('[UNIFIED-AI] Langfuse stream telemetry failed (non-blocking)', { error: telemetryError instanceof Error ? telemetryError.message : String(telemetryError) })
+        }
       }
 
       return result
@@ -638,11 +658,15 @@ class UnifiedAIService {
     } catch (error) {
       logger.error(`Failed to stream content with AI provider ${request.provider}:`, error)
       if (langfuseGeneration) {
-        langfuseGeneration.end({
-          level: 'ERROR',
-          statusMessage: error instanceof Error ? error.message : String(error)
-        })
-        await langfuse.flushAsync()
+        try {
+          langfuseGeneration.end({
+            level: 'ERROR',
+            statusMessage: error instanceof Error ? error.message : String(error)
+          })
+          await langfuse.flushAsync()
+        } catch (telemetryError) {
+          logger.warn('[UNIFIED-AI] Langfuse stream failure telemetry failed (non-blocking)', { error: telemetryError instanceof Error ? telemetryError.message : String(telemetryError) })
+        }
       }
       throw error
     }

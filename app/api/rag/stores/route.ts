@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createStore, listStores, deleteStore, getOrCreateStore } from '@/lib/morphic/services/rag-service'
 
+export const dynamic = 'force-dynamic'
+
 /**
  * GET /api/rag/stores - List all File Search stores
  */

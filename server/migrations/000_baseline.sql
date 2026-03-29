@@ -10,7 +10,7 @@ SET xmloption = content;
 SET client_min_messages = warning;
 SET row_security = off;
 
-BEGIN;
+-- BEGIN;
 
 -- Supabase Compatibility Shim
 DO $$ 
@@ -9492,7 +9492,7 @@ CREATE UNIQUE INDEX idx_action_items_idempotency ON public.action_items USING bt
 CREATE UNIQUE INDEX activities_project_name_unique ON public.activities USING btree (project_id, activity_name);
 CREATE INDEX idx_activities_source_document ON public.activities USING btree (source_document_id) WHERE (source_document_id IS NOT NULL);
 CREATE INDEX idx_activities_source_location ON public.activities USING btree (source_document_id, source_text_start);
-CREATE UNIQUE INDEX activities_idempotency_key_key ON public.activities USING btree (idempotency_key);
+-- CREATE UNIQUE INDEX activities_idempotency_key_key ON public.activities USING btree (idempotency_key);
 CREATE INDEX idx_activities_idempotency_key ON public.activities USING btree (idempotency_key);
 CREATE INDEX idx_ai_fallback_chain_entries_chain ON public.ai_fallback_chain_entries USING btree (chain_id);
 CREATE INDEX idx_ai_fallback_chains_task ON public.ai_fallback_chains USING btree (task_type);
@@ -17340,4 +17340,4 @@ DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'morphic_
      JOIN morphic_chats ON (((morphic_chats.id)::text = (morphic_messages.chat_id)::text)))
   WHERE (((morphic_messages.id)::text = (morphic_parts.message_id)::text) AND ((morphic_chats.visibility)::text = 'public'::text))))) ; END IF; END $$;
 
-COMMIT;
+-- COMMIT;

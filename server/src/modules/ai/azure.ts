@@ -223,11 +223,15 @@ export class AzureConnector {
 
       // End Langfuse generation on success
       if (langfuseGeneration) {
-        langfuseGeneration.end({
-          output: result.text,
-          usage: response.usage
-        });
-        await langfuse.flushAsync();
+        try {
+          langfuseGeneration.end({
+            output: result.text,
+            usage: response.usage
+          });
+          await langfuse.flushAsync();
+        } catch (telemetryError) {
+          console.error(`[AZURE AI] Langfuse telemetry failed (non-blocking)`, telemetryError);
+        }
       }
 
       console.log(`[AZURE AI] Content generated successfully for ${providerName}`);
@@ -235,11 +239,15 @@ export class AzureConnector {
     } catch (error) {
       console.error(`[AZURE AI] Error generating content for ${providerName}:`, error);
       if (langfuseGeneration) {
-        langfuseGeneration.end({
-          level: 'ERROR',
-          statusMessage: error instanceof Error ? error.message : String(error)
-        });
-        await langfuse.flushAsync();
+        try {
+          langfuseGeneration.end({
+            level: 'ERROR',
+            statusMessage: error instanceof Error ? error.message : String(error)
+          });
+          await langfuse.flushAsync();
+        } catch (telemetryError) {
+          console.error(`[AZURE AI] Langfuse failure telemetry failed (non-blocking)`, telemetryError);
+        }
       }
       throw error;
     }

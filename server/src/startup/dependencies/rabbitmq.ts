@@ -9,7 +9,7 @@ import { updateDependencyHealth } from "../../routes/health"
 export const rabbitmqDependency: Dependency = {
   name: "RabbitMQ",
   critical: false,
-  timeout: 10000, // 10 seconds
+  timeout: 30000, // 30 seconds
   init: async () => {
     // RabbitMQ is not yet implemented in ADPA
     // This is a placeholder for future integration
