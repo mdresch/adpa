@@ -1,0 +1,17 @@
+services:
+  # ADPA Frontend (Render Free Tier)
+  - type: web
+    name: adpa-frontend
+    runtime: docker
+    dockerfilePath: Dockerfile.frontend
+    dockerContext: .
+    plan: free # Strictly using $0 free tier
+    envVars:
+      - key: PORT
+        value: 3005
+      - key: NODE_ENV
+        value: production
+      - key: BACKEND_URL
+        sync: false # Point to your Northflank backend URL
+      - key: NEXT_PUBLIC_BACKEND_URL
+        sync: false # Point to your Northflank backend URL (Public)

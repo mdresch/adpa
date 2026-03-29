@@ -1,35 +1,56 @@
-# Use Node.js LTS image
-FROM node:20-slim
-
-# Set working directory
-WORKDIR /app
+# --- Build Stage ---
+FROM node:20-slim AS builder
 
 # Install pnpm
 RUN npm install -g pnpm
 
-# Copy workspace configuration
+WORKDIR /app
+
+# Copy workspace files
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json .npmrc ./
 COPY patches ./patches
 
-# Copy shared lib and types (required for the backend)
+# Copy source code (Backend requires lib and types)
 COPY lib ./lib
 COPY types ./types
-
-# Copy backend package and source
 COPY server ./server
 
-# Remove ANY local .env files to prevent shadowing Docker environment variables
-RUN rm -f .env* server/.env*
-
-# Install dependencies...
-RUN pnpm install --filter server...
+# Install all dependencies (including devDependencies for build)
+RUN pnpm install --frozen-lockfile --filter server...
 
 # Build the backend
 WORKDIR /app/server
 RUN pnpm build
 
-# Expose backend port
+# --- Production Stage ---
+FROM node:20-slim AS runner
+
+WORKDIR /app
+
+# Install pnpm for production install
+RUN npm install -g pnpm
+
+# Set production environment
+ENV NODE_ENV=production
+ENV PORT=5000
+
+# Copy workspace files for production install
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json .npmrc ./
+COPY patches ./patches
+
+# Copy built files and package.json from builder
+COPY --from=builder /app/server/package.json ./server/
+COPY --from=builder /app/server/dist ./server/dist
+COPY --from=builder /app/lib ./lib
+COPY --from=builder /app/types ./types
+
+# Install production dependencies only
+RUN pnpm install --frozen-lockfile --prod --filter server...
+
 EXPOSE 5000
 
-# Start production server
-CMD ["pnpm", "start"]
+# Use non-root user for security if possible, though Render handles some of this
+# USER node
+
+WORKDIR /app/server
+CMD ["node", "-r", "tsconfig-paths/register", "dist/server/src/server.js"]

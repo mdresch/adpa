@@ -16,6 +16,8 @@
     "test:mcp-sentry": "tsx scripts/test-mcp-sentry.ts",
     "rovo": "tsx scripts/rovo.ts",
     "gemini-cli": "tsx scripts/gemini-cli.ts",
+    "sync:prod": "npx tsx scripts/sync-supabase.ts",
+    "sync:watch": "npx tsx scripts/sync-scheduler.ts",
     "test:gemini-langsmith": "tsx scripts/test-gemini-langsmith.ts",
     "test:vercel-ai-langsmith": "tsx scripts/test-vercel-ai-langsmith.ts",
     "chunk:documents": "tsx scripts/chunk-documents.ts"

@@ -511,7 +511,7 @@ class AIService {
       }
 
       const result = await dbPool.query(
-        `SELECT provider_type, api_key_encrypted, configuration
+        `SELECT provider_type, name, api_key_encrypted, configuration
          FROM ai_providers 
          WHERE is_active = true 
          ORDER BY priority ASC, name ASC`
@@ -553,8 +553,10 @@ class AIService {
         return true
       })
 
+      // Include both types and names for flexible matching
       const providers = Array.from(new Set([
         ...filteredRows.map(row => row.provider_type),
+        ...filteredRows.map(row => row.name),
         LOCAL_FALLBACK_PROVIDER
       ]))
       logger.info(`📋 [AI-FALLBACK] Active providers available: ${providers.join(', ')}`)

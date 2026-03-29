@@ -307,6 +307,16 @@ router.post("/ai-gateway", authenticateToken, requireRole(['admin', 'super_admin
 // Helper function to get AI Gateway API key (for use by aiService)
 export async function getAIGatewayKey(): Promise<string | null> {
   try {
+    // 1. Check if enabled first
+    const enabledResult = await pool.query(
+      `SELECT setting_value FROM system_settings WHERE setting_key = 'ai_gateway_enabled' LIMIT 1`
+    )
+    
+    if (enabledResult.rows.length > 0 && enabledResult.rows[0].setting_value === 'false') {
+      return null
+    }
+
+    // 2. Fetch the key
     const result = await pool.query(
       `SELECT setting_value, is_encrypted 
        FROM system_settings 
