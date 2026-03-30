@@ -138,6 +138,7 @@ services:
       - PINECONE_API_KEY=pcsk_5vEdP3_NUYZTUwJ8RV8zgSjGwAUTKtAwgTsm7enwDhxwDSZiWfwRRp9wG3Xjsbc9SbvjGT
       - PINECONE_INDEX=adpa-rag-index
       - ADDITIONAL_ALLOWED_ORIGINS=http://localhost:3005
+      - OLLAMA_ENDPOINT=http://host.docker.internal:11434
     ports:
       - "5000:5000"
     depends_on:

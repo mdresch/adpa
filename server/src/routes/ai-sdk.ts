@@ -416,7 +416,7 @@ function getDefaultEndpoint(providerType: string): string {
     case 'cohere': return 'https://api.cohere.ai'
     case 'huggingface': return 'https://api-inference.huggingface.co'
     case 'copilot': return 'https://api.github.com'
-    case 'ollama': return 'http://localhost:11434'
+    case 'ollama': return process.env.OLLAMA_ENDPOINT || process.env.OLLAMA_BASE_URL || 'http://host.docker.internal:11434'
     default: return 'https://api.openai.com/v1'
   }
 }

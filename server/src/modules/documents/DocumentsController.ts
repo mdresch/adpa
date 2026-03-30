@@ -27,6 +27,7 @@ import AuditService from '../../services/auditService';
 import { markdownToPdf } from '../../utils/pdfGenerator';
 import { storageArchivalService } from '../../services/storageArchivalService';
 import { extractionQueue } from '../../services/queueService';
+import { DocxService } from '../../services/docxService';
 import { pool } from '../../database/connection';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -390,6 +391,58 @@ const result = await DocumentsController.documentRepository.create({
             await zip.finalize();
         } catch (error) {
             log.error("Bulk PDF export error:", error);
+            res.status(500).json({ error: "Internal server error" });
+        }
+    }
+
+    /**
+     * GET /api/v1/documents/:id/export/docx
+     */
+    public static async exportDocx(req: Request, res: Response) {
+        const log = childLogger({ requestId: (req as any).requestId });
+        try {
+            const { id } = req.params;
+            const result = await DocumentsController.documentRepository.findById(id);
+            if (result.rows.length === 0) return res.status(404).json({ error: "Document not found" });
+            const doc = result.rows[0];
+
+            const hasAccess = await DocumentsController.checkProjectAccess(req, doc.project_id);
+            if (!hasAccess) return res.status(403).json({ error: "Access denied" });
+
+            let content = doc.content;
+            if (typeof content === 'object') content = content.text || content.markdown || JSON.stringify(content);
+
+            const docxBuffer = await DocxService.generateDocx(content, doc.name || 'document', doc.metadata);
+            res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+            res.setHeader("Content-Disposition", `attachment; filename="${doc.name || 'document'}.docx"`);
+            res.send(docxBuffer);
+        } catch (error) {
+            log.error("DOCX Export error:", error);
+            res.status(500).json({ error: "Internal server error" });
+        }
+    }
+
+    /**
+     * POST /api/v1/documents/bulk-export/docx
+     */
+    public static async bulkExportDocx(req: Request, res: Response) {
+        const log = childLogger({ requestId: (req as any).requestId });
+        try {
+            const { document_ids } = req.body;
+            const result = await pool.query(`SELECT id, name, content, metadata FROM documents WHERE id = ANY($1)`, [document_ids]);
+            const zip = archiver("zip", { zlib: { level: 9 } });
+            res.setHeader("Content-Type", "application/zip");
+            res.setHeader("Content-Disposition", `attachment; filename="bulk-docx-${Date.now()}.zip"`);
+            zip.pipe(res);
+            for (const doc of result.rows) {
+                let content = doc.content;
+                if (typeof content === 'object') content = content.text || content.markdown || JSON.stringify(content);
+                const docxBuffer = await DocxService.generateDocx(content, doc.name || 'document', doc.metadata);
+                zip.append(docxBuffer, { name: `${doc.name?.replace(/[^a-z0-9]/gi, '_')}.docx` });
+            }
+            await zip.finalize();
+        } catch (error) {
+            log.error("Bulk DOCX export error:", error);
             res.status(500).json({ error: "Internal server error" });
         }
     }
