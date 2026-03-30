@@ -522,7 +522,7 @@ class AIService {
         return [LOCAL_FALLBACK_PROVIDER]
       }
 
-      const rows = (result.rows || []) as ActiveProviderRow[]
+      const rows = (result.rows || []) as Array<ActiveProviderRow & { name: string }>
 
       const isPlaceholderApiKey = (key?: string | null): boolean => {
         if (!key) return false
