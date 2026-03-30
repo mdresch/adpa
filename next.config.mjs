@@ -50,7 +50,7 @@ const nextConfig = {
       beforeFiles: [
         {
           source: '/api/:path((?!morphic).*)',
-          destination: `${process.env.BACKEND_URL || 'https://adpa-backend.agreeablegrass-418bd4ba.westeurope.azurecontainerapps.io'}/api/:path*`,
+          destination: `${process.env.BACKEND_URL || 'http://backend:5000'}/api/:path*`,
         },
       ],
     };
