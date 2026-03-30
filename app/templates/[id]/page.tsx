@@ -1,5 +1,6 @@
 "use client"
 
+import * as React from "react"
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -162,10 +163,10 @@ const healthConfig = {
 }
 
 export default function TemplateDetailPage() {
-  const params = React.use(useParams() as any)
+  const params = useParams()
   const router = useRouter()
   const { user, hasPermission } = useAuth()
-  const templateId = params.id as string
+  const templateId = params?.id as string
   
   const [template, setTemplate] = useState<Template | null>(null)
   const [recentUsage, setRecentUsage] = useState<TemplateUsage[]>([])
@@ -184,11 +185,13 @@ export default function TemplateDetailPage() {
   const [gkgError, setGkgError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetchTemplate()
+    if (templateId && templateId !== 'undefined') {
+      fetchTemplate()
+    }
   }, [templateId])
 
   const fetchGkgTemplate = async () => {
-    if (!templateId) return
+    if (!templateId || templateId === 'undefined') return
     setGkgLoading(true)
     setGkgError(null)
     try {
@@ -216,9 +219,13 @@ export default function TemplateDetailPage() {
   }
 
   const fetchTemplate = async () => {
+    if (!templateId || templateId === 'undefined') {
+      setLoading(false)
+      return
+    }
     try {
       setLoading(true)
-      const response = await apiClient.request(`/templates/${templateId}`, {
+      const response = await apiClient.request<any>(`/templates/${templateId}`, {
         method: 'GET',
       })
       
@@ -420,8 +427,9 @@ export default function TemplateDetailPage() {
     )
   }
 
-  const currentConfig = statusConfig[template.development_status]
-  const HealthIcon = healthConfig[template.health_rating]?.icon || Clock
+  const currentConfig = statusConfig[template.development_status] || statusConfig.draft
+  const healthInfo = healthConfig[template.health_rating] || healthConfig['Not tested yet']
+  const HealthIcon = healthInfo.icon || Clock
   
   // Calculate success rate if not provided by backend
   const successRate = template.success_rate !== undefined && template.success_rate !== null
