@@ -801,7 +801,7 @@ class OllamaProvider implements AIProvider {
   }
 
   async generate(request: AIRequest): Promise<AIResponse> {
-    const endpoint = this.config.endpoint || this.config.configuration?.endpoint || process.env.OLLAMA_ENDPOINT || 'http://host.docker.internal:11434';
+    const endpoint = this.config.endpoint || this.config.configuration?.endpoint || process.env.OLLAMA_ENDPOINT || process.env.OLLAMA_BASE_URL || 'http://host.docker.internal:11434';
     const model = request.model || this.config.model || 'llama3';
 
     try {
@@ -842,7 +842,7 @@ class OllamaProvider implements AIProvider {
   }
 
   async test(): Promise<boolean> {
-    const endpoint = this.config.endpoint || this.config.configuration?.endpoint || process.env.OLLAMA_ENDPOINT || 'http://host.docker.internal:11434';
+    const endpoint = this.config.endpoint || this.config.configuration?.endpoint || process.env.OLLAMA_ENDPOINT || process.env.OLLAMA_BASE_URL || 'http://host.docker.internal:11434';
     try {
       const response = await fetch(`${endpoint}/api/tags`);
       return response.ok;
@@ -852,7 +852,7 @@ class OllamaProvider implements AIProvider {
   }
 
   async getModels(): Promise<string[]> {
-    const endpoint = this.config.endpoint || this.config.configuration?.endpoint || process.env.OLLAMA_ENDPOINT || 'http://host.docker.internal:11434';
+    const endpoint = this.config.endpoint || this.config.configuration?.endpoint || process.env.OLLAMA_ENDPOINT || process.env.OLLAMA_BASE_URL || 'http://host.docker.internal:11434';
     try {
       const response = await fetch(`${endpoint}/api/tags`);
       if (response.ok) {

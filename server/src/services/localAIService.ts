@@ -19,7 +19,7 @@ class LocalAIService {
     ollamaModels: (process.env.OLLAMA_BOOTSTRAP_MODELS || '').split(',').filter(m => !!m),
     foundryModels: (process.env.FOUNDRY_BOOTSTRAP_MODELS || '').split(',').filter(m => !!m),
     foundryEndpoint: process.env.FOUNDRY_LOCAL_ENDPOINT || 'http://localhost:8080',
-    ollamaEndpoint: process.env.OLLAMA_ENDPOINT || 'http://host.docker.internal:11434'
+    ollamaEndpoint: process.env.OLLAMA_ENDPOINT || process.env.OLLAMA_BASE_URL || 'http://host.docker.internal:11434'
   }
 
   /**

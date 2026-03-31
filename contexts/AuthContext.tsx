@@ -4,11 +4,23 @@ import React, { createContext, useContext, useEffect, useState, ReactNode } from
 import { useRouter } from "next/navigation"
 import { apiClient, User } from "@/lib/api"
 import { toast } from "@/lib/notify"
+import { 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  signOut, 
+  onAuthStateChanged, 
+  getIdToken,
+  GoogleAuthProvider,
+  signInWithPopup,
+  User as FirebaseUser
+} from "firebase/auth"
+import { auth } from "@/lib/firebase"
 
 interface AuthContextType {
   user: User | null
   loading: boolean
   login: (email: string, password: string, redirect?: string) => Promise<void>
+  loginWithGoogle: (redirect?: string) => Promise<void>
   register: (userData: { email: string; password: string; name: string; role?: string; companyName?: string }, options?: { redirect?: string | false }) => Promise<void>
   demoLogin: () => Promise<void>
   logout: () => Promise<void>
@@ -64,47 +76,52 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return parts.length === 3 && parts.every(part => part.length > 0)
   }
 
-  // Initialize auth state
+  // Initialize auth state using Firebase
   useEffect(() => {
-    const initAuth = async () => {
-      try {
-        const token = localStorage.getItem("auth_token")
-        if (token) {
-          // Validate token format before using it
-          if (!isValidTokenFormat(token)) {
-            console.warn("Invalid token format in localStorage, clearing it")
-            localStorage.removeItem("auth_token")
-            apiClient.clearToken()
-            setToken(null)
-            setLoading(false)
-            return
-          }
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
+      if (firebaseUser) {
+        try {
+          // Get the ID token from Firebase
+          const idToken = await getIdToken(firebaseUser)
+          
+          if (idToken) {
+            // Set the token in the API client for all subsequent requests
+            apiClient.setToken(idToken)
+            setToken(idToken)
+            
+            // Set auth cookie for server-side access (middleware, etc.)
+            setCookie('auth_token', idToken, 1)
 
-          apiClient.setToken(token)
-          setToken(token)
-          try {
-            const currentUser = await apiClient.getCurrentUser()
-            setUser(currentUser)
-          } catch (userError) {
-            console.error("Failed to get current user:", userError)
-            // Clear invalid token
-            localStorage.removeItem("auth_token")
-            apiClient.clearToken()
-            setToken(null)
+            // Fetch the full ADPA user profile from the Azure backend
+            try {
+              const currentUser = await apiClient.getCurrentUser()
+              setUser(currentUser)
+              
+              // Connect WebSocket after successful profile fetch
+              apiClient.connectWebSocket()
+            } catch (profileError) {
+              console.error("Failed to fetch ADPA user profile:", profileError)
+              // If profile fetch fails, we might still be authenticated in Firebase,
+              // but we can't function properly in ADPA. 
+              toast.error("Authenticated but failed to load user profile.")
+            }
           }
+        } catch (tokenError) {
+          console.error("Failed to get Firebase ID token:", tokenError)
         }
-      } catch (error) {
-        console.error("Auth initialization failed:", error)
-        // Clear invalid token
-        localStorage.removeItem("auth_token")
-        apiClient.clearToken()
+      } else {
+        // User is signed out
+        setUser(null)
         setToken(null)
-      } finally {
-        setLoading(false)
+        apiClient.clearToken()
+        removeCookie('auth_token')
       }
-    }
+      
+      setLoading(false)
+    })
 
-    initAuth()
+    // Cleanup subscription
+    return () => unsubscribe()
   }, [])
 
   // Helper to set cookie
@@ -121,27 +138,37 @@ export function AuthProvider({ children }: AuthProviderProps) {
     document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`
   }
 
-  // Login function
+  // Login function utilizing Firebase
   const login = async (email: string, password: string, redirect?: string) => {
     try {
       setLoading(true)
-      const { user: loggedInUser, token } = await apiClient.login(email, password)
-      setUser(loggedInUser)
-      setToken(token)
+      
+      // 1. Sign in with Firebase
+      const userCredential = await signInWithEmailAndPassword(auth, email, password)
+      const firebaseUser = userCredential.user
+      
+      // 2. Get the ID token
+      const idToken = await getIdToken(firebaseUser)
+      
+      // 3. Update the API client immediately
+      apiClient.setToken(idToken)
+      setToken(idToken)
+      setCookie('auth_token', idToken, 1)
 
-      // Set auth cookie for server-side access
-      setCookie('auth_token', token, 1) // 1 day expiration
-
-      // Connect WebSocket after successful login
+      // 4. Fetch ADPA profile from Azure backend
+      const adpaUser = await apiClient.getCurrentUser()
+      setUser(adpaUser)
+      
+      // 5. Setup extra services
       apiClient.connectWebSocket()
 
       toast.success("Login successful!")
 
-      // Use provided redirect, or default to home
+      // 6. Navigation
       const redirectPath = redirect || "/"
       router.push(redirectPath)
     } catch (error) {
-      console.error("Login failed:", error)
+      console.error("Firebase Login failed:", error)
       toast.error(error instanceof Error ? error.message : "Login failed")
       throw error
     } finally {
@@ -149,33 +176,73 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }
 
-  // Register function
+  // Google Login function
+  const loginWithGoogle = async (redirect?: string) => {
+    try {
+      setLoading(true)
+      const provider = new GoogleAuthProvider()
+      
+      // 1. Sign in with Google Popup
+      const userCredential = await signInWithPopup(auth, provider)
+      const firebaseUser = userCredential.user
+      
+      // 2. Token extraction & sync
+      const idToken = await getIdToken(firebaseUser)
+      apiClient.setToken(idToken)
+      setToken(idToken)
+      setCookie('auth_token', idToken, 1)
+
+      // 3. ADPA Backend fetch
+      const adpaUser = await apiClient.getCurrentUser()
+      setUser(adpaUser)
+      apiClient.connectWebSocket()
+
+      toast.success("Google Login successful!")
+      router.push(redirect || "/")
+    } catch (error) {
+      console.error("Google Login failed:", error)
+      toast.error(error instanceof Error ? error.message : "Google Login failed")
+      throw error
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Register function utilizing Firebase
   const register = async (userData: { email: string; password: string; name: string; role?: string; companyName?: string }, options?: { redirect?: string | false }) => {
     try {
       setLoading(true)
-      const { user: newUser, token, company } = await apiClient.register(userData)
-      setUser(newUser)
-      setToken(token)
+      
+      // 1. Create user in Firebase
+      const userCredential = await createUserWithEmailAndPassword(auth, userData.email, userData.password)
+      const firebaseUser = userCredential.user
+      
+      // 2. Get the ID token
+      const idToken = await getIdToken(firebaseUser)
+      
+      // 3. Initialize API client
+      apiClient.setToken(idToken)
+      setToken(idToken)
+      setCookie('auth_token', idToken, 1)
 
-      // Set auth cookie for server-side access
-      setCookie('auth_token', token, 1) // 1 day expiration
+      // 4. Create user record in ADPA backend (Azure) 
+      // We pass the full userData so the backend can create the profile/company linked to this Firebase ID
+      const { user: adpaUser, company } = await apiClient.register(userData)
+      setUser(adpaUser)
 
-      // Connect WebSocket after successful registration
       apiClient.connectWebSocket()
 
-      // Show success message with company info if company was created
       if (company) {
         toast.success(`Account and company "${company.name}" created successfully!`)
       } else {
         toast.success("Registration successful!")
       }
 
-      // Only redirect if not explicitly disabled
       if (options?.redirect !== false) {
         router.push(options?.redirect || "/")
       }
     } catch (error) {
-      console.error("Registration failed:", error)
+      console.error("Firebase Registration failed:", error)
       toast.error(error instanceof Error ? error.message : "Registration failed")
       throw error
     } finally {
@@ -183,21 +250,25 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }
 
-  // Logout function
+  // Logout function utilizing Firebase
   const logout = async () => {
     try {
-      await apiClient.logout()
+      // Sign out from Firebase
+      await signOut(auth)
+      
+      // Local state cleanup (also handled by onAuthStateChanged, but good to be explicit)
       setUser(null)
       setToken(null)
+      apiClient.clearToken()
       removeCookie('auth_token')
+      
       toast.success("Logged out successfully")
       router.push("/auth/login")
     } catch (error) {
       console.error("Logout failed:", error)
-      // Force logout even if API call fails
       setUser(null)
-      apiClient.clearToken()
       setToken(null)
+      apiClient.clearToken()
       removeCookie('auth_token')
       router.push("/auth/login")
     }
@@ -242,6 +313,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     user,
     loading,
     login,
+    loginWithGoogle,
     register,
     demoLogin,
     logout,

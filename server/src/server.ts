@@ -9,6 +9,14 @@ import cors from "cors"
 import helmet from "helmet"
 import { createServer } from "http"
 import { initSocketIO } from "./socket"
+import * as admin from 'firebase-admin'
+
+// Initialize Firebase Admin for ID token verification
+if (!admin.apps.length) {
+  admin.initializeApp({
+    projectId: process.env.FIREBASE_PROJECT_ID || 'adpa-frontend'
+  });
+}
 
 import { errorHandler } from "./middleware/errorHandler"
 import { correlationIdMiddleware } from "./middleware/correlationId";
@@ -133,6 +141,8 @@ app.use(helmet({
 const allowedOrigins = [
   "http://localhost:3000",                    // Local development
   "http://localhost:3001",                    // Alternative local port
+  "http://localhost:3005",                    // Standard Next.js dev port
+  "http://localhost:4280",                    // Azure SWA local emulator
   process.env.FRONTEND_URL,                   // Configured frontend URL
   process.env.CORS_ORIGIN,                    // Configured CORS origin
   ...(process.env.ADDITIONAL_ALLOWED_ORIGINS
@@ -140,7 +150,12 @@ const allowedOrigins = [
     : []),
   /https:\/\/.*\.vercel\.app$/,               // All Vercel preview deployments
   /https:\/\/adpa.*\.vercel\.app$/,           // ADPA Vercel deployments
+  /https:\/\/.*\.onrender\.com$/,             // Render deployments
+  /https:\/\/.*\.azurestaticapps\.net$/,      // Azure Static Web Apps
+  "https://adpa-frontend.onrender.com",       // Specific Render Frontend
+  "https://adpa-backend.agreeablegrass-418bd4ba.westeurope.azurecontainerapps.io", // Azure Container Apps Backend (Self)
   "https://adpa.vercel.app",                  // Production Vercel domain
+  "https://adpa--adpa-frontend.europe-west4.hosted.app", // NEW Production Firebase App Hosting URL
 ].filter(Boolean) as (string | RegExp)[]
 
 app.use(
@@ -418,23 +433,30 @@ io.on("connection", (socket) => {
           return
         }
 
-        try {
-          // VALIDATE JWT FIRST - don't hit database if token is malformed
-          let decoded: any
           try {
-            decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key')
+            // DUAL-AUTH: Try Firebase first, then legacy JWT
+            if (token.length > 500) { // Firebase tokens are significantly longer than legacy ones
+              try {
+                const firebaseUser = await admin.auth().verifyIdToken(token);
+                decoded = { userId: firebaseUser.uid, email: firebaseUser.email, firebase: true };
+              } catch (fbError) {
+                // Fallback to legacy JWT if Firebase fails
+                decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+              }
+            } else {
+              decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+            }
           } catch (jwtError: any) {
-            // JWT malformed, expired, or invalid - reject immediately
+            // Both methods failed
             logger.warn({
               error: jwtError.message,
               room
-            }, 'WebSocket JWT validation failed')
+            }, 'WebSocket authentication failed (Dual-Auth)')
             socket.emit('join:error', {
               room,
               message: 'Invalid or expired token. Please log out and log back in.',
-              code: 'JWT_INVALID'
+              code: 'AUTH_INVALID'
             })
-            // Disconnect socket to prevent retry storm
             socket.disconnect(true)
             return
           }

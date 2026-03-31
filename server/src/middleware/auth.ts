@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from "express"
 import jwt from "jsonwebtoken"
+import * as admin from "firebase-admin"
 import { pool } from "../database/connection"
 import { logger } from "../utils/logger"
 
@@ -42,10 +43,26 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
     return res.status(401).json({ error: "Invalid token format" })
   }
 
-  // Verify JWT first and handle token-specific errors separately
+  // DUAL-AUTH: Verify JWT first and handle token-specific errors separately
   let decoded: any
   try {
-    decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key") as any
+    // Determine token type by length (Firebase tokens are typically > 500 chars)
+    if (token.length > 500) {
+      try {
+        const firebaseUser = await admin.auth().verifyIdToken(token)
+        // Map Firebase user to our internal format
+        decoded = { 
+          fromFirebase: true, 
+          email: firebaseUser.email, 
+          firebaseUid: firebaseUser.uid 
+        }
+      } catch (fbError: any) {
+        // Fallback to legacy JWT if Firebase fails
+        decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key") as any
+      }
+    } else {
+      decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key") as any
+    }
   } catch (error: any) {
     if (error && error.name === "TokenExpiredError") {
       logger.warn("Token expired:", { expiredAt: error.expiredAt })
@@ -56,11 +73,22 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
     return res.status(401).json({ error: "Invalid token" })
   }
 
-  // Now perform database lookup in its own error scope so DB failures don't surface as token errors
+  // Now perform database lookup in its own error scope
   try {
-    const result = await pool.query("SELECT id, email, role, permissions, is_active FROM users WHERE id = $1", [
-      decoded.userId,
-    ])
+    let query: string
+    let params: any[]
+
+    if (decoded.fromFirebase) {
+      // Look up by email for Firebase users
+      query = "SELECT id, email, role, permissions, is_active FROM users WHERE email = $1"
+      params = [decoded.email]
+    } else {
+      // Look up by internal userId for legacy JWTs
+      query = "SELECT id, email, role, permissions, is_active FROM users WHERE id = $1"
+      params = [decoded.userId]
+    }
+
+    const result = await pool.query(query, params)
 
     if (!result || !result.rows) {
       logger.error('Database lookup returned invalid result during authentication', { userId: decoded.userId, result })
