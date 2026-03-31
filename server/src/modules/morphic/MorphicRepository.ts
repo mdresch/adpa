@@ -148,11 +148,11 @@ export class MorphicRepository {
             morphicUrl = morphicUrl.replace(/^["']|["']$/g, '');
             
             // Force SSL for remote hosts or if explicitly enabled
-            const isRemote = (morphicUrl.includes('rlwy.net') || morphicUrl.includes('supabase') || morphicUrl.includes('pooler.supabase.com')) && 
+            const isRemote = (morphicUrl.includes('rlwy.net') || morphicUrl.includes('supabase') || morphicUrl.includes('pooler.supabase.com') || morphicUrl.includes('azure')) && 
                              !morphicUrl.includes('localhost') && !morphicUrl.includes('127.0.0.1');
 
             const sslConfig = (isRemote || (process.env.MORPHIC_DB_SSL === 'true')) 
-                ? { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED === 'false' ? false : true } 
+                ? { rejectUnauthorized: false } 
                 : false;
             
             try {
