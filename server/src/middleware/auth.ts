@@ -46,7 +46,6 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
   // DUAL-AUTH: Verify JWT first and handle token-specific errors separately
   let decoded: any
   try {
-    // Determine token type by length (Firebase tokens are typically > 500 chars)
     if (token.length > 500) {
       try {
         const firebaseUser = await admin.auth().verifyIdToken(token)
@@ -57,8 +56,25 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
           firebaseUid: firebaseUser.uid 
         }
       } catch (fbError: any) {
+        // Log the specific Firebase error for debugging in non-Google environments (like Azure)
+        logger.warn("Firebase ID Token verification failed during dual-auth:", { 
+          errorCode: fbError.code, 
+          errorMessage: fbError.message 
+        })
+        
         // Fallback to legacy JWT if Firebase fails
-        decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key") as any
+        try {
+          decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key") as any
+        } catch (jwtError: any) {
+          logger.error("Token verification failed (Both Firebase and Legacy JWT failed):", {
+            firebaseError: fbError.message,
+            jwtError: jwtError.message
+          })
+          return res.status(401).json({ 
+            error: "Invalid token", 
+            details: process.env.NODE_ENV === 'production' ? undefined : `FB: ${fbError.message} | JWT: ${jwtError.message}`
+          })
+        }
       }
     } else {
       decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key") as any
@@ -69,7 +85,7 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
       return res.status(401).json({ error: "Token expired", expiredAt: error.expiredAt })
     }
 
-    logger.error("Token verification failed:", error)
+    logger.error("Token verification failed (Unhandled):", error)
     return res.status(401).json({ error: "Invalid token" })
   }
 

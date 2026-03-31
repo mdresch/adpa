@@ -25,3 +25,11 @@ env:
     value: "203130648004"
   - variable: NEXT_PUBLIC_FIREBASE_APP_ID
     value: "1:203130648004:web:0b09a2059381ed52766091"
+  
+  # Supabase Morphic Configuration
+  - variable: NEXT_PUBLIC_SUPABASE_URL
+    value: "https://sikifybsmhlletxmlbrc.supabase.co"
+  - variable: NEXT_PUBLIC_SUPABASE_ANON_KEY
+    value: "sb_publishable_yOczOrDd5WAWDxWcfc9Zwg_QjGLAV8N"
+  - variable: NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY
+    value: "sb_publishable_yOczOrDd5WAWDxWcfc9Zwg_QjGLAV8N"
