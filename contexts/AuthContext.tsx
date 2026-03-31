@@ -78,6 +78,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   // Initialize auth state using Firebase
   useEffect(() => {
+    // Safety check for build-time or missing Firebase config
+    if (!auth || typeof auth.onIdTokenChanged !== 'function') {
+      console.warn("🔐 AuthProvider: Skipping registration (invalid Auth object).");
+      setLoading(false);
+      return;
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
       if (firebaseUser) {
         try {
