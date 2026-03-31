@@ -1,0 +1,29 @@
+[debug] [2026-03-31T08:58:22.100Z] ----------------------------------------------------------------------
+[debug] [2026-03-31T08:58:22.102Z] Command:       F:\Program Files\nodejs\node.exe C:\Users\MennoDrescher\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js emulators:start
+[debug] [2026-03-31T08:58:22.102Z] CLI Version:   15.12.0
+[debug] [2026-03-31T08:58:22.102Z] Platform:      win32
+[debug] [2026-03-31T08:58:22.102Z] Node Version:  v24.14.0
+[debug] [2026-03-31T08:58:22.103Z] Time:          Tue Mar 31 2026 10:58:22 GMT+0200 (Central European Summer Time)
+[debug] [2026-03-31T08:58:22.103Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-03-31T08:58:22.104Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[debug] [2026-03-31T08:58:23.674Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-03-31T08:58:23.674Z] > authorizing via signed-in user (menno.drescher@gmail.com)
+[info] i  emulators: Starting emulators: apphosting, auth, hosting {"metadata":{"emulator":{"name":"hub"},"message":"Starting emulators: apphosting, auth, hosting"}}
+[debug] [2026-03-31T08:58:23.687Z] [logging] Logging Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2026-03-31T08:58:23.687Z] [apphosting] App Hosting Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2026-03-31T08:58:23.688Z] [auth] Authentication Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2026-03-31T08:58:23.688Z] [hosting] Hosting Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2026-03-31T08:58:23.688Z] assigned listening specs for emulators {"user":{"hub":[{"address":"127.0.0.1","family":"IPv4","port":4400},{"address":"::1","family":"IPv6","port":4400}],"ui":[{"address":"127.0.0.1","family":"IPv4","port":4000},{"address":"::1","family":"IPv6","port":4000}],"logging":[{"address":"127.0.0.1","family":"IPv4","port":4500}],"apphosting":[{"address":"127.0.0.1","family":"IPv4","port":5002}],"auth":[{"address":"127.0.0.1","family":"IPv4","port":9099}],"hosting":[{"address":"127.0.0.1","family":"IPv4","port":5000}]},"metadata":{"message":"assigned listening specs for emulators"}}
+[debug] [2026-03-31T08:58:23.691Z] Write emulator hub locator at C:\Users\MENNOD~1\AppData\Local\Temp\hub-adpa-frontend.json
+[debug] [2026-03-31T08:58:23.700Z] Checked if tokens are valid: false, expires at: 1774947883983
+[debug] [2026-03-31T08:58:23.700Z] Checked if tokens are valid: false, expires at: 1774947883983
+[debug] [2026-03-31T08:58:23.700Z] > refreshing access token with scopes: []
+[debug] [2026-03-31T08:58:23.701Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-03-31T08:58:23.701Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-03-31T08:58:23.805Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-03-31T08:58:23.805Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-03-31T08:58:23.821Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/adpa-frontend [none]
+[debug] [2026-03-31T08:58:23.971Z] <<< [apiv2][status] GET https://firebase-public.firebaseio.com/cli.json 200
+[debug] [2026-03-31T08:58:23.971Z] <<< [apiv2][body] GET https://firebase-public.firebaseio.com/cli.json {"cloudBuildErrorAfter":1594252800000,"cloudBuildWarnAfter":1590019200000,"defaultNode10After":1594252800000,"minVersion":"3.0.5","node8DeploysDisabledAfter":1613390400000,"node8RuntimeDisabledAfter":1615809600000,"node8WarnAfter":1600128000000}
+[debug] [2026-03-31T08:58:24.183Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/adpa-frontend 200

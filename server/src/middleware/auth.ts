@@ -46,38 +46,34 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
   // DUAL-AUTH: Verify JWT first and handle token-specific errors separately
   let decoded: any
   try {
-    if (token.length > 500) {
+    // Attempt Firebase verification first
+    try {
+      const firebaseUser = await admin.auth().verifyIdToken(token)
+      // Map Firebase user to our internal format
+      decoded = { 
+        fromFirebase: true, 
+        email: firebaseUser.email, 
+        firebaseUid: firebaseUser.uid 
+      }
+    } catch (fbError: any) {
+      // Fallback to legacy JWT if Firebase fails
       try {
-        const firebaseUser = await admin.auth().verifyIdToken(token)
-        // Map Firebase user to our internal format
-        decoded = { 
-          fromFirebase: true, 
-          email: firebaseUser.email, 
-          firebaseUid: firebaseUser.uid 
-        }
-      } catch (fbError: any) {
-        // Log the specific Firebase error for debugging in non-Google environments (like Azure)
-        logger.warn("Firebase ID Token verification failed during dual-auth:", { 
-          errorCode: fbError.code, 
-          errorMessage: fbError.message 
+        decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key") as any
+      } catch (jwtError: any) {
+        // Log both errors if they both fail
+        logger.error("Token verification failed (Both Firebase and Legacy JWT failed):", {
+          firebaseError: fbError.message,
+          jwtError: jwtError.message,
+          tokenLength: token.length
         })
         
-        // Fallback to legacy JWT if Firebase fails
-        try {
-          decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key") as any
-        } catch (jwtError: any) {
-          logger.error("Token verification failed (Both Firebase and Legacy JWT failed):", {
-            firebaseError: fbError.message,
-            jwtError: jwtError.message
-          })
-          return res.status(401).json({ 
-            error: "Invalid token", 
-            details: process.env.NODE_ENV === 'production' ? undefined : `FB: ${fbError.message} | JWT: ${jwtError.message}`
-          })
-        }
+        return res.status(401).json({ 
+          error: "Invalid token", 
+          details: process.env.NODE_ENV === 'production' 
+            ? "Authentication failed" 
+            : `Firebase: ${fbError.message} | JWT: ${jwtError.message}`
+        })
       }
-    } else {
-      decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key") as any
     }
   } catch (error: any) {
     if (error && error.name === "TokenExpiredError") {

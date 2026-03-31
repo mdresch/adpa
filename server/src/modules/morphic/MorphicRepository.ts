@@ -264,6 +264,9 @@ export class MorphicRepository {
     /**
      * Delete a chat and its messages.
      */
+    /**
+     * Delete a chat and its messages.
+     */
     async deleteChat(chatId: string, userId: string): Promise<{ success: boolean }> {
         try {
             // Delete messages first
@@ -281,6 +284,126 @@ export class MorphicRepository {
             return { success: result.length > 0 };
         } catch (error) {
             this.log.error(`Error deleting chat ${chatId}:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * List all AI providers.
+     */
+    async listAIProviders() {
+        try {
+            return await this.query(
+                `SELECT * FROM ai_providers ORDER BY priority ASC, name ASC`
+            );
+        } catch (error) {
+            this.log.error('Error listing AI providers:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Upsert an AI provider.
+     */
+    async upsertAIProvider(provider: any) {
+        try {
+            const { id, name, type, baseUrl, apiKey, isEnabled, configuration, priority } = provider;
+            return await this.query(
+                `INSERT INTO ai_providers (id, name, type, base_url, api_key, is_enabled, configuration, priority, updated_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+                 ON CONFLICT (id) DO UPDATE SET
+                    name = EXCLUDED.name,
+                    base_url = EXCLUDED.base_url,
+                    api_key = COALESCE(EXCLUDED.api_key, ai_providers.api_key),
+                    is_enabled = EXCLUDED.is_enabled,
+                    configuration = EXCLUDED.configuration,
+                    priority = EXCLUDED.priority,
+                    updated_at = NOW()
+                 RETURNING *`,
+                [id, name, type, baseUrl, apiKey || null, isEnabled ? 1 : 0, configuration || {}, priority || 1]
+            );
+        } catch (error) {
+            this.log.error('Error upserting AI provider:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * List all AI models.
+     */
+    async listAIModels() {
+        try {
+            return await this.query(
+                `SELECT m.*, p.name as provider_name 
+                 FROM ai_models m
+                 JOIN ai_providers p ON m.provider_id = p.id
+                 ORDER BY p.name ASC, m.name ASC`
+            );
+        } catch (error) {
+            this.log.error('Error listing AI models:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Upsert an AI model.
+     */
+    async upsertAIModel(model: any) {
+        try {
+            const { id, providerId, name, modelId, isEnabled } = model;
+            return await this.query(
+                `INSERT INTO ai_models (id, provider_id, name, model_id, is_enabled)
+                 VALUES ($1, $2, $3, $4, $5)
+                 ON CONFLICT (id) DO UPDATE SET
+                    name = EXCLUDED.name,
+                    model_id = EXCLUDED.model_id,
+                    is_enabled = EXCLUDED.is_enabled
+                 RETURNING *`,
+                [id, providerId, name, modelId, isEnabled ? 1 : 0]
+            );
+        } catch (error) {
+            this.log.error('Error upserting AI model:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Get the active AI model configuration (Search Mode slotting).
+     */
+    async getAIModelConfigs() {
+        try {
+            return await this.query(
+                `SELECT c.*, m.name as model_name, m.model_id as raw_model_id, p.name as provider_name
+                 FROM ai_model_config c
+                 JOIN ai_models m ON c.model_id = m.id
+                 JOIN ai_providers p ON m.provider_id = p.id
+                 ORDER BY c.search_mode, c.priority DESC`
+            );
+        } catch (error) {
+            this.log.error('Error getting AI model configs:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Upsert an AI model configuration slot.
+     */
+    async upsertAIModelConfig(config: any) {
+        try {
+            const { id, searchMode, modelType, modelId, priority } = config;
+            return await this.query(
+                `INSERT INTO ai_model_config (id, search_mode, model_type, model_id, priority)
+                 VALUES ($1, $2, $3, $4, $5)
+                 ON CONFLICT (id) DO UPDATE SET
+                    search_mode = EXCLUDED.search_mode,
+                    model_type = EXCLUDED.model_type,
+                    model_id = EXCLUDED.model_id,
+                    priority = EXCLUDED.priority
+                 RETURNING *`,
+                [id || `cfg_${Date.now()}`, searchMode, modelType, modelId, priority || 0]
+            );
+        } catch (error) {
+            this.log.error('Error upserting AI model config:', error);
             throw error;
         }
     }
