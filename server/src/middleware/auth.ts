@@ -56,6 +56,13 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
         firebaseUid: firebaseUser.uid 
       }
     } catch (fbError: any) {
+      // Log the specific Firebase error for diagnostics
+      logger.warn("Firebase token verification failed:", {
+        message: fbError.message,
+        code: fbError.code,
+        tokenPrefix: token.substring(0, 10)
+      })
+      
       // Fallback to legacy JWT if Firebase fails
       try {
         decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key") as any

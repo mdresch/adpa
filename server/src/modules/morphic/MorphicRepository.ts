@@ -11,6 +11,130 @@ export class MorphicRepository {
     private log = childLogger({ module: 'MorphicRepository' });
 
     /**
+     * Ensure the necessary schema exists in the Morphic database.
+     * This is useful when connecting to a fresh Supabase instance.
+     */
+    async ensureSchema() {
+        try {
+            const pool = await this.getPool();
+            
+            // 1. Check if morphic_chats exists
+            const tableCheck = await pool.query(`
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_schema = 'public' 
+                    AND table_name = 'morphic_chats'
+                )
+            `);
+
+            if (tableCheck.rows[0].exists) {
+                this.log.debug('Morphic DB tables already exist.');
+                return true;
+            }
+
+            this.log.info('Morphic DB tables missing. Bootstrapping schema...');
+
+            // 2. Create tables if they don't exist
+            // Using the schema definitions found in the baseline migration
+            const schemaSql = `
+                CREATE TABLE IF NOT EXISTS public."ai_model_config" (
+                    "id" character varying(191) NOT NULL,
+                    "search_mode" character varying(256) NOT NULL,
+                    "model_type" character varying(256) NOT NULL,
+                    "model_id" character varying(191) NOT NULL,
+                    "priority" integer DEFAULT 0 NOT NULL,
+                    "created_at" timestamp without time zone DEFAULT now() NOT NULL,
+                    PRIMARY KEY (id)
+                );
+
+                CREATE TABLE IF NOT EXISTS public."ai_models" (
+                    "id" character varying(191) NOT NULL,
+                    "provider_id" character varying(191) NOT NULL,
+                    "name" character varying(256) NOT NULL,
+                    "model_id" character varying(256) NOT NULL,
+                    "is_enabled" integer DEFAULT 1 NOT NULL,
+                    "created_at" timestamp without time zone DEFAULT now() NOT NULL,
+                    PRIMARY KEY (id)
+                );
+
+                CREATE TABLE IF NOT EXISTS public."ai_providers" (
+                    "id" character varying(191) NOT NULL,
+                    "name" character varying(256) NOT NULL,
+                    "type" character varying(256) DEFAULT 'openai'::character varying NOT NULL,
+                    "base_url" text,
+                    "api_key" text,
+                    "is_enabled" integer DEFAULT 1 NOT NULL,
+                    "configuration" jsonb DEFAULT '{}'::jsonb,
+                    "priority" integer DEFAULT 1 NOT NULL,
+                    "status" character varying(256) DEFAULT 'disabled'::character varying,
+                    "last_error" text,
+                    "last_checked_at" timestamp without time zone,
+                    "created_at" timestamp without time zone DEFAULT now() NOT NULL,
+                    "updated_at" timestamp without time zone,
+                    PRIMARY KEY (id)
+                );
+
+                CREATE TABLE IF NOT EXISTS public."morphic_chats" (
+                    "id" character varying(191) NOT NULL,
+                    "created_at" timestamp without time zone DEFAULT now() NOT NULL,
+                    "updated_at" timestamp without time zone DEFAULT now(),
+                    "title" text NOT NULL,
+                    "user_id" character varying(255) NOT NULL,
+                    "visibility" character varying(256) DEFAULT 'private'::character varying NOT NULL,
+                    PRIMARY KEY (id)
+                );
+
+                CREATE TABLE IF NOT EXISTS public."morphic_messages" (
+                    "id" character varying(191) NOT NULL,
+                    "chat_id" character varying(191) NOT NULL,
+                    "role" character varying(256) NOT NULL,
+                    "created_at" timestamp without time zone DEFAULT now() NOT NULL,
+                    "updated_at" timestamp without time zone,
+                    "metadata" jsonb,
+                    PRIMARY KEY (id)
+                );
+
+                CREATE TABLE IF NOT EXISTS public."morphic_parts" (
+                    "id" character varying(191) NOT NULL,
+                    "message_id" character varying(191) NOT NULL,
+                    "order" integer NOT NULL,
+                    "type" character varying(256) NOT NULL,
+                    "text_text" text,
+                    "reasoning_text" text,
+                    "tool_tool_call_id" character varying(256),
+                    "tool_state" character varying(256),
+                    "tool_search_input" json,
+                    "tool_search_output" json,
+                    "created_at" timestamp without time zone DEFAULT now() NOT NULL,
+                    PRIMARY KEY (id)
+                );
+            `;
+
+            await pool.query(schemaSql);
+            
+            // 3. Seed default providers if empty
+            const providerCount = await pool.query('SELECT count(*) FROM ai_providers');
+            if (parseInt(providerCount.rows[0].count) === 0) {
+                this.log.info('Seeding default AI providers...');
+                await pool.query(`
+                    INSERT INTO ai_providers (id, name, type, is_enabled, priority, configuration)
+                    VALUES 
+                        ('openai', 'OpenAI', 'openai', 1, 1, '{"models": ["gpt-4o", "gpt-4o-mini"]}'),
+                        ('azure', 'Azure OpenAI', 'azure', 1, 2, '{"deployment": "gpt-4o-mini", "apiVersion": "2024-08-01-preview"}'),
+                        ('groq', 'Groq', 'openai', 1, 3, '{"baseUrl": "https://api.groq.com/openai/v1", "models": ["llama-3.3-70b-versatile", "mixtral-8x7b-32768"]}'),
+                        ('ollama', 'Ollama (Local)', 'openai', 1, 10, '{"baseUrl": "http://localhost:11434/v1", "models": ["llama3.2", "mistral"]}')
+                `);
+            }
+
+            this.log.info('Morphic DB schema bootstrapped and seeded successfully.');
+            return true;
+        } catch (error) {
+            this.log.error('Failed to bootstrap Morphic DB schema:', error);
+            return false;
+        }
+    }
+
+    /**
      * Get the active database pool, falling back to main DB if Morphic DB is unavailable.
      */
     private async getPool() {
