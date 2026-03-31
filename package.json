@@ -277,6 +277,7 @@
   "packageManager": "pnpm@10.32.1",
   "pnpm": {
     "overrides": {
+      "firebase": "11.10.0",
       "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
       "qs": "^6.14.1",
       "lodash": "^4.17.23",
