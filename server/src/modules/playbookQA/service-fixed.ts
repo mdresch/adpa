@@ -125,7 +125,7 @@ export class PlaybookQAService {
     const requiredLevels = ['critical', 'high', 'medium', 'low']
     const providedLevels = severityModel.levels.map(l => l.level)
 
-    const coverage = requiredLevels.filter(level => providedLevels.includes(level)).length
+    const coverage = requiredLevels.filter(level => (providedLevels as any[]).includes(level)).length
     return (coverage / requiredLevels.length) * 100
   }
 
