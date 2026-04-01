@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node -r tsconfig-paths/register dist/server/src/server.js",
     "dev": "nodemon --exec tsx src/server.ts",
+    "lint": "eslint .",
     "build": "tsc -p tsconfig.json && tsc-alias -p tsconfig.json",
     "test": "jest",
     "test:watch": "jest --watch",

@@ -33,7 +33,7 @@ lint_frontend:
     - npm install -g pnpm
     - pnpm install --no-frozen-lockfile
   script:
-    - pnpm lint
+    - pnpm --filter adpa-admin-frontend lint
   rules:
     - if: $CI_COMMIT_BRANCH == "adpa-project-charter"
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
@@ -44,8 +44,7 @@ lint_backend:
     - npm install -g pnpm
     - pnpm install --no-frozen-lockfile
   script:
-    - cd server
-    - pnpm lint
+    - pnpm --filter server lint
   rules:
     - if: $CI_COMMIT_BRANCH == "adpa-project-charter"
 
