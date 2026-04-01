@@ -39,14 +39,22 @@ export interface Dependency {
 
 #### StartupManager (`server/src/startup/startupManager.ts`)
 
-Orchestrates the complete startup sequence using the dependency graph. Registers all 6 dependencies in order of criticality:
+Orchestrates the complete startup sequence using the dependency graph. Registers all dependencies in order of criticality:
 
-1. **Database** (critical: true) - 30s timeout
-2. **Redis** (critical: false) - 10s timeout
-3. **Neo4j** (critical: false) - 10s timeout
-4. **RabbitMQ** (critical: false) - 10s timeout (placeholder)
-5. **AI Providers** (critical: false) - 20s timeout
-6. **Workers** (critical: false) - 15s timeout
+1. **Security Validation** (critical: true) - 5s timeout. Validates TLS settings.
+2. **Database** (critical: true) - 30s timeout. Primary PostgreSQL connection.
+3. **Azure Backend Availability** (critical: true) - 10s timeout. Validates Azure environment and public endpoint reachability.
+4. **Firebase Auth Provider** (critical: true) - 10s timeout. Validates Firebase Admin SDK initialization and connectivity.
+5. **Redis** (critical: false) - 10s timeout
+6. **Neo4j** (critical: false) - 10s timeout
+7. **RabbitMQ** (critical: false) - 10s timeout (placeholder)
+8. **AI Providers** (critical: false) - 20s timeout
+9. **Workers** (critical: false) - 15s timeout
+10. **MongoDB Atlas** (critical: false) - 10s timeout
+11. **Pinecone** (critical: false) - 10s timeout
+12. **Langfuse** (critical: false) - 10s timeout
+13. **Upstash Redis** (critical: false) - 10s timeout
+14. **Morphic DB** (critical: false) - 15s timeout
 
 ## Configuration
 

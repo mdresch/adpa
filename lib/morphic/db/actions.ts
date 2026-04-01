@@ -473,9 +473,9 @@ export async function getModelConfig(searchMode: any, modelType: any) {
     return await db.query.aiModelConfig.findFirst({
         where: and(eq(aiModelConfig.searchMode, searchMode), eq(aiModelConfig.modelType, modelType)),
         with: {
-            model: {
+            aiModel: {
                 with: {
-                    provider: true
+                    aiProvider: true
                 }
             }
         },
