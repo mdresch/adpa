@@ -13,18 +13,29 @@ import * as admin from 'firebase-admin'
 
 // Initialize Firebase Admin for ID token verification
 if (!admin.apps.length) {
-  const serviceAccountVar = process.env.FIREBASE_SERVICE_ACCOUNT;
+  let serviceAccountVar = process.env.FIREBASE_SERVICE_ACCOUNT;
   const options: any = {
     projectId: process.env.FIREBASE_PROJECT_ID || 'adpa-frontend'
   };
   
   if (serviceAccountVar) {
     try {
-      const serviceAccount = JSON.parse(serviceAccountVar);
+      // Robust cleaning for Azure/Docker env var weirdness
+      let cleanedVar = serviceAccountVar.trim();
+      
+      // Remove wrapping double quotes if present
+      if (cleanedVar.startsWith('"') && cleanedVar.endsWith('"')) {
+        cleanedVar = cleanedVar.substring(1, cleanedVar.length - 1);
+      }
+      
+      // Handle double-escaped characters
+      cleanedVar = cleanedVar.replace(/\\n/g, '\n').replace(/\\"/g, '"');
+      
+      const serviceAccount = JSON.parse(cleanedVar);
       options.credential = admin.credential.cert(serviceAccount);
       console.log("✅ Firebase Admin initialized with Service Account");
-    } catch (err) {
-      console.error("❌ Failed to parse FIREBASE_SERVICE_ACCOUNT. Falling back to Project ID only.");
+    } catch (err: any) {
+      console.error(`❌ Failed to parse FIREBASE_SERVICE_ACCOUNT: ${err.message}. Falling back to Project ID only.`);
     }
   }
 
