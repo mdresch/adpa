@@ -9,6 +9,38 @@ import cors from "cors"
 import helmet from "helmet"
 import { createServer } from "http"
 import { initSocketIO } from "./socket"
+import * as admin from 'firebase-admin'
+
+// Initialize Firebase Admin for ID token verification
+if (!admin.apps.length) {
+  let serviceAccountVar = process.env.FIREBASE_SERVICE_ACCOUNT;
+  const options: any = {
+    projectId: process.env.FIREBASE_PROJECT_ID || 'adpa-frontend'
+  };
+  
+  if (serviceAccountVar) {
+    try {
+      // Robust cleaning for Azure/Docker env var weirdness
+      let cleanedVar = serviceAccountVar.trim();
+      
+      // Remove wrapping double quotes if present
+      if (cleanedVar.startsWith('"') && cleanedVar.endsWith('"')) {
+        cleanedVar = cleanedVar.substring(1, cleanedVar.length - 1);
+      }
+      
+      // Handle double-escaped characters
+      cleanedVar = cleanedVar.replace(/\\n/g, '\n').replace(/\\"/g, '"');
+      
+      const serviceAccount = JSON.parse(cleanedVar);
+      options.credential = admin.credential.cert(serviceAccount);
+      console.log("✅ Firebase Admin initialized with Service Account");
+    } catch (err: any) {
+      console.error(`❌ Failed to parse FIREBASE_SERVICE_ACCOUNT: ${err.message}. Falling back to Project ID only.`);
+    }
+  }
+
+  admin.initializeApp(options);
+}
 
 import { errorHandler } from "./middleware/errorHandler"
 import { correlationIdMiddleware } from "./middleware/correlationId";
@@ -133,6 +165,8 @@ app.use(helmet({
 const allowedOrigins = [
   "http://localhost:3000",                    // Local development
   "http://localhost:3001",                    // Alternative local port
+  "http://localhost:3005",                    // Standard Next.js dev port
+  "http://localhost:4280",                    // Azure SWA local emulator
   process.env.FRONTEND_URL,                   // Configured frontend URL
   process.env.CORS_ORIGIN,                    // Configured CORS origin
   ...(process.env.ADDITIONAL_ALLOWED_ORIGINS
@@ -140,7 +174,12 @@ const allowedOrigins = [
     : []),
   /https:\/\/.*\.vercel\.app$/,               // All Vercel preview deployments
   /https:\/\/adpa.*\.vercel\.app$/,           // ADPA Vercel deployments
+  /https:\/\/.*\.onrender\.com$/,             // Render deployments
+  /https:\/\/.*\.azurestaticapps\.net$/,      // Azure Static Web Apps
+  "https://adpa-frontend.onrender.com",       // Specific Render Frontend
+  "https://adpa-backend.agreeablegrass-418bd4ba.westeurope.azurecontainerapps.io", // Azure Container Apps Backend (Self)
   "https://adpa.vercel.app",                  // Production Vercel domain
+  "https://adpa--adpa-frontend.europe-west4.hosted.app", // NEW Production Firebase App Hosting URL
 ].filter(Boolean) as (string | RegExp)[]
 
 app.use(
@@ -418,100 +457,108 @@ io.on("connection", (socket) => {
           return
         }
 
+        let decoded: any
         try {
-          // VALIDATE JWT FIRST - don't hit database if token is malformed
-          let decoded: any
-          try {
-            decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key')
-          } catch (jwtError: any) {
-            // JWT malformed, expired, or invalid - reject immediately
-            logger.warn({
-              error: jwtError.message,
-              room
-            }, 'WebSocket JWT validation failed')
-            socket.emit('join:error', {
-              room,
-              message: 'Invalid or expired token. Please log out and log back in.',
-              code: 'JWT_INVALID'
-            })
-            // Disconnect socket to prevent retry storm
-            socket.disconnect(true)
-            return
-          }
-
-          const userId = decoded?.userId
-          if (!userId) {
-            socket.emit('join:error', { room, message: 'Invalid token payload', code: 'USER_ID_MISSING' })
-            socket.disconnect(true)
-            return
-          }
-
-          // Fetch user and project to validate membership
-          const userRes = await safeQuery(pool, 'SELECT id, name, role FROM users WHERE id = $1', [userId])
-          if (!userRes || userRes.rows.length === 0) {
-            socket.emit('join:error', { room, message: 'User not found' })
-            return
-          }
-
-          const user = userRes.rows[0]
-
-          const projRes = await safeQuery(pool, 'SELECT id, owner_id, created_by, team_members FROM projects WHERE id = $1', [projectId])
-          if (!projRes || projRes.rows.length === 0) {
-            socket.emit('join:error', { room, message: 'Project not found' })
-            return
-          }
-
-          const project = projRes.rows[0]
-
-          const isOwner = project.owner_id === userId
-          const isCreator = project.created_by === userId
-          let isTeamMember = false
-          try {
-            let teamMembers = project.team_members || []
-            // Handle JSONB: might be string or already parsed array
-            if (typeof teamMembers === 'string') {
-              try {
-                teamMembers = JSON.parse(teamMembers)
-              } catch (parseError) {
-                logger.warn(parseError, `Failed to parse team_members for project ${projectId}:`)
-                teamMembers = []
-              }
+          // DUAL-AUTH: Try Firebase first, then legacy JWT
+          if (token.length > 500) { // Firebase tokens are significantly longer than legacy ones
+            try {
+              const firebaseUser = await admin.auth().verifyIdToken(token);
+              decoded = { userId: firebaseUser.uid, email: firebaseUser.email, firebase: true };
+            } catch (fbError) {
+              // Fallback to legacy JWT if Firebase fails
+              decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
             }
-            if (Array.isArray(teamMembers)) {
-              // team_members is an array of user IDs, not names
-              isTeamMember = teamMembers.includes(userId) || teamMembers.includes(user.id)
-            }
-          } catch (e) {
-            logger.warn(`Error checking team membership for project ${projectId}:`, e)
-            isTeamMember = false
-          }
-
-          const hasAccess = isOwner || isCreator || isTeamMember || user.role === 'admin' || user.role === 'super_admin'
-
-          if (hasAccess) {
-            socket.join(room)
-            logger.info(`Client ${socket.id} (user: ${userId}) joined room ${room}`, {
-              isOwner,
-              isCreator,
-              isTeamMember,
-              userRole: user.role
-            })
-            socket.emit('join:ok', { room })
           } else {
-            logger.warn(`Access denied for user ${userId} to join room ${room}`, {
-              projectId,
-              isOwner,
-              isCreator,
-              isTeamMember,
-              userRole: user.role,
-              ownerId: project.owner_id,
-              createdBy: project.created_by
-            })
-            socket.emit('join:error', { room, message: 'Access denied' })
+            decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
           }
-        } catch (err) {
-          logger.error(err, 'Socket auth error:')
-          socket.emit('join:error', { room, message: 'Authentication failed' })
+        } catch (jwtError: any) {
+          // Both methods failed
+          logger.warn({
+            error: jwtError.message,
+            room
+          }, 'WebSocket authentication failed (Dual-Auth)')
+          socket.emit('join:error', {
+            room,
+            message: 'Invalid or expired token. Please log out and log back in.',
+            code: 'AUTH_INVALID'
+          })
+          socket.disconnect(true)
+          return
+        }
+
+        const userId = decoded?.userId || decoded?.uid || (decoded?.firebase ? decoded.userId : null); 
+        // Note: Firebase uses .uid, Legacy uses .userId. Handled below.
+        
+        const finalUserId = decoded?.firebase ? decoded.userId : decoded?.userId;
+
+        if (!finalUserId) {
+          socket.emit('join:error', { room, message: 'Invalid token payload', code: 'USER_ID_MISSING' })
+          socket.disconnect(true)
+          return
+        }
+
+        // Fetch user and project to validate membership
+        const userRes = await safeQuery(pool, 'SELECT id, name, role FROM users WHERE id = $1', [finalUserId])
+        if (!userRes || userRes.rows.length === 0) {
+          socket.emit('join:error', { room, message: 'User not found' })
+          return
+        }
+
+        const user = userRes.rows[0]
+
+        const projRes = await safeQuery(pool, 'SELECT id, owner_id, created_by, team_members FROM projects WHERE id = $1', [projectId])
+        if (!projRes || projRes.rows.length === 0) {
+          socket.emit('join:error', { room, message: 'Project not found' })
+          return
+        }
+
+        const project = projRes.rows[0]
+
+        const isOwner = project.owner_id === finalUserId
+        const isCreator = project.created_by === finalUserId
+        let isTeamMember = false
+        try {
+          let teamMembers = project.team_members || []
+          // Handle JSONB: might be string or already parsed array
+          if (typeof teamMembers === 'string') {
+            try {
+              teamMembers = JSON.parse(teamMembers)
+            } catch (parseError) {
+              logger.warn(parseError, `Failed to parse team_members for project ${projectId}:`)
+              teamMembers = []
+            }
+          }
+          if (Array.isArray(teamMembers)) {
+            // team_members is an array of user IDs, not names
+            isTeamMember = teamMembers.includes(finalUserId) || teamMembers.includes(user.id)
+          }
+        } catch (e) {
+          logger.warn(`Error checking team membership for project ${projectId}:`, e)
+          isTeamMember = false
+        }
+
+        const hasAccess = isOwner || isCreator || isTeamMember || user.role === 'admin' || user.role === 'super_admin'
+
+        if (hasAccess) {
+          socket.join(room)
+          logger.info(`Client ${socket.id} (user: ${finalUserId}) joined room ${room}`, {
+            isOwner,
+            isCreator,
+            isTeamMember,
+            userRole: user.role
+          })
+          socket.emit('join:ok', { room })
+        } else {
+          logger.warn(`Access denied for user ${finalUserId} to join room ${room}`, {
+            projectId,
+            isOwner,
+            isCreator,
+            isTeamMember,
+            userRole: user.role,
+            ownerId: project.owner_id,
+            createdBy: project.created_by
+          })
+          socket.emit('join:error', { room, message: 'Access denied' })
         }
       } else {
         // Non-project rooms: allow join without special checks

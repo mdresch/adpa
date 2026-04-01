@@ -532,3 +532,67 @@
 .btn-animate:hover::before {
   left: 100%;
 }
+/* --- Morphic Mission Control: Rising Glass Aesthetic --- */
+
+:root {
+  --neo-shadow-light: 10px 10px 20px #d1d9e6, -10px -10px 20px #ffffff;
+  --neo-shadow-inset: inset 6px 6px 12px #d1d9e6, inset -6px -6px 12px #ffffff;
+}
+
+.dark {
+  --neo-shadow-light: 10px 10px 20px #0a0f1d, -10px -10px 20px #1a233a;
+  --neo-shadow-inset: inset 6px 6px 12px #0a0f1d, inset -6px -6px 12px #1a233a;
+}
+
+/* Neomorphic Utilities */
+.shadow-neo-out {
+  box-shadow: var(--neo-shadow-light);
+}
+
+.shadow-neo-in {
+  box-shadow: var(--neo-shadow-inset);
+}
+
+/* Glassmorphic Refinement */
+.glass-morphic {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(12px) saturate(160%);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.05);
+}
+
+.dark .glass-morphic {
+  background: rgba(15, 23, 42, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Rising Animation: Majestic */
+@keyframes rising-majestic {
+  0% {
+    opacity: 0;
+    transform: translateY(30px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-rising {
+  animation: rising-majestic 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Focus Bloom Effect */
+.focus-bloom:focus-within {
+  box-shadow: 0 0 30px rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.3);
+  transition: all 0.5s ease;
+}
+
+/* Staggered Rising for items */
+.stagger-rising > *:nth-child(1) { animation-delay: 0.1s; }
+.stagger-rising > *:nth-child(2) { animation-delay: 0.2s; }
+.stagger-rising > *:nth-child(3) { animation-delay: 0.3s; }
+.stagger-rising > *:nth-child(4) { animation-delay: 0.4s; }
+.stagger-rising > *:nth-child(5) { animation-delay: 0.5s; }

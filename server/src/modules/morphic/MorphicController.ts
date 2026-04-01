@@ -244,4 +244,91 @@ export class MorphicController {
             res.status(500).json({ error: 'Internal Server Error' });
         }
     }
+
+    /**
+     * GET /api/v1/morphic/admin/providers
+     * List all AI providers (Admin).
+     */
+    static async listAIProviders(req: Request, res: Response) {
+        try {
+            const providers = await this.repository.listAIProviders();
+            res.json(providers);
+        } catch (error: any) {
+            this.log.error('Error listing AI providers:', error);
+            res.status(500).json({ error: 'Internal Server Error' });
+        }
+    }
+
+    /**
+     * POST /api/v1/morphic/admin/providers
+     * Upsert an AI provider (Admin).
+     */
+    static async upsertAIProvider(req: Request, res: Response) {
+        try {
+            const provider = req.body;
+            const updated = await this.repository.upsertAIProvider(provider);
+            res.json(updated[0]);
+        } catch (error: any) {
+            this.log.error('Error upserting AI provider:', error);
+            res.status(500).json({ error: 'Internal Server Error' });
+        }
+    }
+
+    /**
+     * GET /api/v1/morphic/admin/models
+     * List all AI models (Admin).
+     */
+    static async listAIModels(req: Request, res: Response) {
+        try {
+            const models = await this.repository.listAIModels();
+            res.json(models);
+        } catch (error: any) {
+            this.log.error('Error listing AI models:', error);
+            res.status(500).json({ error: 'Internal Server Error' });
+        }
+    }
+
+    /**
+     * POST /api/v1/morphic/admin/models
+     * Upsert an AI model (Admin).
+     */
+    static async upsertAIModel(req: Request, res: Response) {
+        try {
+            const model = req.body;
+            const updated = await this.repository.upsertAIModel(model);
+            res.json(updated[0]);
+        } catch (error: any) {
+            this.log.error('Error upserting AI model:', error);
+            res.status(500).json({ error: 'Internal Server Error' });
+        }
+    }
+
+    /**
+     * GET /api/v1/morphic/admin/config
+     * Get AI model configurations (Admin).
+     */
+    static async getAIModelConfigs(req: Request, res: Response) {
+        try {
+            const configs = await this.repository.getAIModelConfigs();
+            res.json(configs);
+        } catch (error: any) {
+            this.log.error('Error getting AI model configs:', error);
+            res.status(500).json({ error: 'Internal Server Error' });
+        }
+    }
+
+    /**
+     * POST /api/v1/morphic/admin/config
+     * Upsert an AI model configuration slot (Admin).
+     */
+    static async upsertAIModelConfig(req: Request, res: Response) {
+        try {
+            const config = req.body;
+            const updated = await this.repository.upsertAIModelConfig(config);
+            res.json(updated[0]);
+        } catch (error: any) {
+            this.log.error('Error upserting AI model config:', error);
+            res.status(500).json({ error: 'Internal Server Error' });
+        }
+    }
 }
