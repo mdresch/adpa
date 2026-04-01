@@ -13,24 +13,27 @@ export const morphicDbDependency: Dependency = {
   init: async () => {
     const startTime = Date.now()
     try {
-      // Force a simple query to initialize the connection pool
-      await (morphicRepo as any).query('SELECT 1 as initialized')
+      // Perform schema validation and auto-bootstrap if needed
+      const success = await morphicRepo.ensureSchema()
+      
       const latency = Date.now() - startTime
-      updateDependencyHealth("Morphic DB", "healthy", latency)
-      logger.info("[STARTUP] Morphic DB connection initialized successfully.")
+      if (success) {
+        updateDependencyHealth("Morphic DB", "healthy", latency)
+        logger.info("[STARTUP] Morphic DB initialized and schema validated.")
+      } else {
+        throw new Error("Schema initialization returned false")
+      }
     } catch (err) {
       const latency = Date.now() - startTime
       updateDependencyHealth("Morphic DB", "unhealthy", latency, String(err))
-      logger.warn("[STARTUP] Morphic DB connection failed or is using fallback.", err)
+      logger.warn("[STARTUP] Morphic DB initialization failed. Check credentials and permissions.", err)
     }
   },
   validate: async () => {
     try {
-      const result = await (morphicRepo as any).query('SELECT 1 as ok')
-      if (result && result.length > 0 && result[0].ok === 1) {
-        return true
-      }
-      return false
+      // Re-verify the most critical table exists
+      const success = await morphicRepo.ensureSchema()
+      return success
     } catch (error) {
       logger.error("Morphic DB validation failed:", error)
       updateDependencyHealth("Morphic DB", "unhealthy", 0, String(error))
