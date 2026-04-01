@@ -1,11 +1,20 @@
-import { headers } from 'next/headers'
+// Use dynamic require so this file can be imported in the Express backend without Next.js
+let nextHeaders: any = null;
+try {
+  nextHeaders = require('next/headers');
+} catch (e) {
+  // Ignore error in backend environment
+}
 
 /**
  * Helper function to get base URL from headers
  * Extracts URL information from Next.js request headers
  */
 export async function getBaseUrlFromHeaders(): Promise<URL> {
-    const headersList = await headers()
+    if (!nextHeaders?.headers) {
+       return new URL('http://localhost:3000');
+    }
+    const headersList = await nextHeaders.headers()
     const baseUrl = headersList.get('x-base-url')
     const url = headersList.get('x-url')
     const host = headersList.get('x-host')

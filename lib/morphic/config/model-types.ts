@@ -31,9 +31,48 @@ export async function getModelsForSlot(
     const addedModelIds = new Set<string>()
 
     try {
-        // 1. Fetch active providers from DB
+        // 0. Fetch explicit slots from aiModelConfig (The Mission Control override)
+        // We import schema directly to ensure types
+        const { aiModelConfig, aiModels, aiProviders: aiProvidersTable } = await import('@/lib/morphic/db/schema')
+        
+        const explicitConfigs = await db.query.aiModelConfig.findMany({
+            where: (cfg, { and, eq }) => and(
+                eq(cfg.searchMode, mode as any),
+                eq(cfg.modelType, type as any)
+            ),
+            with: {
+                aiModel: {
+                    with: {
+                        aiProvider: true
+                    }
+                }
+            },
+            orderBy: (cfg, { desc }) => [desc(cfg.priority)]
+        })
+
+        if (explicitConfigs && explicitConfigs.length > 0) {
+            for (const cfg of explicitConfigs) {
+                const model = cfg.aiModel
+                const provider = model?.aiProvider
+                if (model && provider && provider.isEnabled === 1 && model.isEnabled === 1) {
+                    const fullId = `${provider.id}:${model.modelId}`
+                    if (!addedModelIds.has(fullId)) {
+                        candidates.push({
+                            id: model.modelId,
+                            name: `${provider.name}: ${model.name}`,
+                            provider: provider.name,
+                            providerId: provider.id,
+                            modelId: model.modelId
+                        })
+                        addedModelIds.add(fullId)
+                    }
+                }
+            }
+        }
+
+        // 1. Fetch active providers from DB (Discovery fallback)
         const activeProviders = await db.query.aiProviders.findMany({
-            where: eq(aiProviders.isEnabled, 1)
+            where: eq(aiProvidersTable.isEnabled, 1)
         })
 
         // Sort by priority (lower values = higher precedence)

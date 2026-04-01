@@ -6,6 +6,7 @@ import Textarea from 'react-textarea-autosize'
 import { UseChatHelpers } from '@ai-sdk/react'
 import { ArrowUp, ChevronDown, MessageCirclePlus, Square } from 'lucide-react'
 import { toast } from 'sonner'
+import { motion } from 'framer-motion'
 import type { UploadedFile } from '@/lib/morphic/types'
 import type { UIDataTypes, UIMessage, UITools } from '@/lib/morphic/types/ai'
 import { cn } from '@/lib/morphic/utils'
@@ -182,17 +183,22 @@ export function ChatPanel({
     }
 
     return (
-        <div
+        <motion.div
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
             className={cn(
-                'w-full bg-background group/form-container shrink-0',
+                'w-full bg-transparent group/form-container shrink-0 z-50',
                 messages.length > 0 ? 'sticky bottom-0 px-2 pb-4' : 'px-6'
             )}
         >
+            <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-background to-transparent pointer-events-none -z-10" />
+            
             {messages.length === 0 && (
                 <div className="mb-10 flex flex-col items-center gap-4">
                     <IconBlinkingLogo className="size-12" />
-                    <h1 className="text-2xl font-medium text-foreground">
-                        What would you like to know?
+                    <h1 className="text-3xl font-semibold tracking-tight text-foreground/90">
+                        How can I help you research today?
                     </h1>
                 </div>
             )}
@@ -211,24 +217,24 @@ export function ChatPanel({
                     setIsInputFocused(false);
                     inputRef.current?.blur();
                 }}
-                className={cn('max-w-full md:max-w-3xl w-full mx-auto relative')}
+                className={cn('max-w-full md:max-w-3xl w-full mx-auto relative group')}
             >
                 {showScrollToBottomButton && messages.length > 0 && (
                     <Button
                         type="button"
                         variant="outline"
                         size="icon"
-                        className="absolute -top-10 right-4 z-20 size-8 rounded-full shadow-md"
+                        className="absolute -top-12 right-4 z-20 size-10 rounded-full shadow-neo-out border-none glass-morphic"
                         onClick={handleScrollToBottom}
                         title="Scroll to bottom"
                     >
-                        <ChevronDown size={16} />
+                        <ChevronDown size={18} />
                     </Button>
                 )}
 
                 <div
                     className={cn(
-                        'relative flex flex-col w-full gap-2 bg-muted rounded-3xl border border-input transition-shadow'
+                        'relative flex flex-col w-full gap-2 bg-secondary/50 rounded-[2rem] border-0 transition-all duration-500 shadow-neo-in focus-bloom group-hover:bg-secondary/70'
                     )}
                 >
                     <Textarea
@@ -392,7 +398,7 @@ export function ChatPanel({
                     />
                 )}
             </form>
-        </div>
+        </motion.div>
     )
 }
 
