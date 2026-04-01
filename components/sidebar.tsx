@@ -53,6 +53,7 @@ const navigation: NavItem[] = [
   { name: "Search", href: "/search", icon: Search },
   { name: "AI Providers", href: "/ai-providers", icon: Zap, adminOnly: true },
   { name: "AI Model Settings", href: "/settings/ai-models", icon: Brain, adminOnly: true },
+  { name: "Morphic Mission Control", href: "/ai/morphic/settings", icon: Activity, adminOnly: true },
   { name: "AI Analytics", href: "/ai-analytics", icon: TrendingUp },
   { name: "AI Search", href: "/ai-search", icon: MessageSquare },
   { name: "Integrations", href: "/integrations", icon: LinkIcon, adminOnly: true },

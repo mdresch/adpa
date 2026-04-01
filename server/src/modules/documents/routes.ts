@@ -25,7 +25,9 @@ router.post('/:id/feedback', authenticateToken, DocumentsController.submitFeedba
 
 // Exports
 router.get('/:id/export/pdf', authenticateToken, DocumentsController.exportPdf);
+router.get('/:id/export/docx', authenticateToken, DocumentsController.exportDocx);
 router.post('/bulk-export/pdf', authenticateToken, DocumentsController.bulkExportPdf);
+router.post('/bulk-export/docx', authenticateToken, DocumentsController.bulkExportDocx);
 
 const documentRoutes: RouteConfig[] = [
   {

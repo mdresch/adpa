@@ -513,6 +513,14 @@ class QualityAuditService {
   ): string {
     const frameworkGuidance = this.getFrameworkGuidance(documentType)
     
+    // Extract template info from context if available
+    const templateInfo = projectContext.template_id ? `
+## Template Context:
+- Template Name: ${projectContext.template_name || 'Selected Template'}
+- Framework: ${projectContext.template_framework || projectContext.framework || 'N/A'}
+- System Prompt Used: ${projectContext.system_prompt || 'Standard prompt guidance'}
+` : ''
+
     return `# Quality Audit Task
 
 You are an expert document quality auditor. Analyze the following ${documentType} document and provide a comprehensive quality assessment.
@@ -524,6 +532,8 @@ You are an expert document quality auditor. Analyze the following ${documentType
 - Framework: ${projectContext.framework || 'N/A'}
 - Objectives: ${projectContext.description || 'N/A'}
 
+${templateInfo}
+
 ${frameworkGuidance}
 
 ## Document to Analyze:
@@ -532,78 +542,30 @@ ${documentContent.substring(0, 50000)} ${documentContent.length > 50000 ? '... (
 \`\`\`
 
 ## Your Task:
-Analyze the document across 6 quality dimensions and provide scores (0-100) for each:
+Analyze the document across quality dimensions and provide scores (0-100) for each:
 
 ### 1. Completeness (0-100)
 - Are all required sections present and fully populated?
 - Are there any placeholders like "[Insert X]" or "TBD"?
-- Are tables, charts, and examples complete?
-- Are all cross-references populated?
-
-**Scoring**:
-- 90-100: Fully complete, no placeholders, all sections robust
-- 70-89: Mostly complete, minor gaps (1-3 missing elements)
-- 50-69: Significant gaps (4-7 missing elements)
-- <50: Major sections incomplete or placeholder-heavy
 
 ### 2. Consistency (0-100)
-- Are stakeholder names consistent throughout?
-- Are dates formatted consistently?
-- Is terminology used consistently (acronyms expanded on first use)?
-- Are numbers and metrics consistent across sections?
-- Do cross-references match?
-
-**Scoring**:
-- 90-100: Perfect consistency, no issues found
-- 70-89: Minor inconsistencies (1-3 issues)
-- 50-69: Moderate inconsistencies (4-7 issues)
-- <50: Significant inconsistencies throughout
+- Are stakeholder names and terminology consistent throughout?
 
 ### 3. Professional Quality (0-100)
-- Is the writing clear, concise, and professional?
-- Is tone appropriate for executive audience?
-- Are there grammar, spelling, or formatting errors?
-- Is active voice used (not passive)?
-- Is the document well-structured and easy to navigate?
-
-**Scoring**:
-- 90-100: Executive-ready, polished, publication-quality
-- 70-89: Good quality, minor editing needed (5-10 minor issues)
-- 50-69: Acceptable but needs significant polish (10-20 issues)
-- <50: Unprofessional, requires major rewrite
+- Is the writing clear, concise, and professional? Tone? Active voice?
 
 ### 4. Standards Compliance (0-100)
 ${this.getComplianceGuidance(documentType)}
 
-**Scoring**:
-- 90-100: Fully compliant with all standards
-- 70-89: Mostly compliant, minor gaps (1-2 principles missing)
-- 50-69: Partial compliance, major gaps (3-5 principles missing)
-- <50: Non-compliant or incorrect application
-
 ### 5. Accuracy (0-100)
-- Is all data correctly extracted from project context?
-- Are there any hallucinations or fabricated information?
-- Do numbers, dates, and names match the source?
-- Are calculations correct?
-
-**Scoring**:
-- 90-100: 100% accurate, no errors found
-- 70-89: Minor errors (1-2 issues)
-- 50-69: Several errors (3-5 issues)
-- <50: Significant inaccuracies or hallucinations
+- Is all data correctly extracted from project context? No hallucinations?
 
 ### 6. Context Relevance (0-100)
-- Does content align with stated project objectives?
-- Is there scope creep or irrelevant content?
-- Are all sections relevant to the project type?
-- Does the document address the specific project needs?
+- Does content align with project objectives?
 
-**Scoring**:
-- 90-100: Perfect alignment with project context
-- 70-89: Good alignment, minor drift (1-2 irrelevant sections)
-- 50-69: Partial alignment, some irrelevant content
-- <50: Significant drift or mostly irrelevant
+### 7. Template Analysis
+- Evaluate if the document adhered to the template structure.
+- CRITICAL: If you identify quality issues, analyze if the "System Prompt Used" could be improved to prevent these issues. Provide a recommended revision for the prompt if necessary.
 
 ## Response Format (MUST BE VALID JSON):
 \`\`\`json
@@ -615,33 +577,31 @@ ${this.getComplianceGuidance(documentType)}
   "accuracy": <score 0-100>,
   "context_relevance": <score 0-100>,
   "findings": {
-    "completeness": "<2-3 sentence finding>",
-    "consistency": "<2-3 sentence finding with 1-2 specific examples>",
-    "professional_quality": "<2-3 sentence finding with examples>",
-    "standards_compliance": "<2-3 sentence finding>",
-    "accuracy": "<2-3 sentence finding>",
-    "context_relevance": "<2-3 sentence finding>"
+    "completeness": "<finding>",
+    "consistency": "<finding>",
+    "professional_quality": "<finding>",
+    "standards_compliance": "<finding>",
+    "accuracy": "<finding>",
+    "context_relevance": "<finding>",
+    "template_analysis": "<analysis of template adherence and SPECIFIC recommendation for prompt improvement>"
   },
   "issues": [
     {
       "severity": "critical|major|minor",
       "dimension": "<dimension name>",
       "description": "<specific issue description>",
-      "location": "<section or page reference>",
+      "location": "<section reference>",
       "recommendation": "<how to fix>"
     }
   ],
   "recommendations": [
     "<actionable recommendation 1>",
-    "<actionable recommendation 2>",
-    "<actionable recommendation 3>"
+    "<actionable recommendation 2>"
   ]
 }
 \`\`\`
 
 **CRITICAL**: Respond ONLY with valid JSON. No explanatory text before or after.
-
-Be thorough, specific, and constructive. Provide concrete examples of issues found.
 `
   }
 
@@ -710,6 +670,9 @@ For Stakeholder Register (PMBOK):
 Your role is to perform rigorous, constructive quality audits of project management and business analysis documents. You evaluate documents against industry standards (PMBOK, BABOK, DMBOK) and best practices.
 
 You are thorough but fair, identifying both strengths and weaknesses. Your feedback is specific, actionable, and professional. You provide concrete examples when identifying issues.
+
+SPECIAL TASK: Template Evaluation
+If template information is provided, evaluate how well the document followed the template and whether the template's instructions (system prompt) eliciting high-quality responses. If you detect patterns of failure (e.g., passive voice, missing details) that stem from the template's guidance, provide specific prompt improvement recommendations.
 
 CRITICAL INSTRUCTIONS:
 1. Respond ONLY with valid JSON (no text before or after)
@@ -854,7 +817,8 @@ Remember: Your audit helps improve future document generation, so be detailed an
       professionalQuality: findings.professional_quality || 'No detailed findings available',
       standardsCompliance: findings.standards_compliance || 'No detailed findings available',
       accuracy: findings.accuracy || 'No detailed findings available',
-      contextRelevance: findings.context_relevance || 'No detailed findings available'
+      contextRelevance: findings.context_relevance || 'No detailed findings available',
+      templateAnalysis: findings.template_analysis || 'Template adherence and effectiveness analysis not available'
     }
   }
 
@@ -991,9 +955,9 @@ Remember: Your audit helps improve future document generation, so be detailed an
         auditData.dimensionalScores.standardsCompliance,
         auditData.dimensionalScores.accuracy,
         auditData.dimensionalScores.contextRelevance,
-        JSON.stringify(auditData.findings),
-        JSON.stringify(auditData.issues),
-        JSON.stringify(auditData.recommendations),
+        typeof auditData.findings === 'string' ? auditData.findings : JSON.stringify(auditData.findings),
+        typeof auditData.issues === 'string' ? auditData.issues : JSON.stringify(auditData.issues),
+        typeof auditData.recommendations === 'string' ? auditData.recommendations : JSON.stringify(auditData.recommendations),
         auditData.aiProvider,
         auditData.aiModel,
         auditData.analysisTokens,
