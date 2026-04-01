@@ -4,8 +4,10 @@ import { pool } from "../database/connection"
 import { logger } from "../utils/logger"
 
 // Dynamic import helper to prevent frontend build crashes
+// We use a variable for the module name to hide it from static analysis
 const getAdmin = async () => {
-  return await import("firebase-admin");
+  const moduleName = "firebase-admin";
+  return await import(moduleName);
 };
 
 interface AuthRequest extends Request {
