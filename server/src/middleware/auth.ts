@@ -1,8 +1,14 @@
 import type { Request, Response, NextFunction } from "express"
 import jwt from "jsonwebtoken"
-import * as admin from "firebase-admin"
 import { pool } from "../database/connection"
 import { logger } from "../utils/logger"
+
+// Dynamic import helper to prevent frontend build crashes
+// We use a variable for the module name to hide it from static analysis
+const getAdmin = async () => {
+  const moduleName = "firebase-admin";
+  return await import(moduleName);
+};
 
 interface AuthRequest extends Request {
   user?: {
@@ -48,6 +54,7 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
   try {
     // Attempt Firebase verification first
     try {
+      const admin = await getAdmin();
       const firebaseUser = await admin.auth().verifyIdToken(token)
       // Map Firebase user to our internal format
       decoded = { 
