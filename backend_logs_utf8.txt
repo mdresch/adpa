@@ -1,0 +1,500 @@
+[02:28:50 UTC] [32mINFO[39m (30): [36m[AI] ✓ Mistral AI/mistral-large-latest - 6173 tokens - 40884ms[39m
+[02:28:50 UTC] [32mINFO[39m (30): [36m✅ [AI-FALLBACK] Success with provider: mistral[39m
+[02:28:50 UTC] [32mINFO[39m (30): [36m[TEMPLATE-IMPROVEMENT] Generated suggestions[39m
+    [35mtemplateId[39m: "cd866273-d956-4c18-a020-9ff8ff56f014"
+    [35msuggestionCount[39m: 10
+    [35mexpectedGain[39m: 0
+    [35mpriority[39m: "low"
+    [35manalysisTokens[39m: 6173
+    [35manalysisCost[39m: "$0.0031"
+[02:28:50 UTC] [32mINFO[39m (30): [36m[TEMPLATE-IMPROVEMENT] Analyzing template[39m
+    [35mtemplateId[39m: "747c8628-e2b3-4c95-85a1-095f005a2fef"
+[02:28:50 UTC] [32mINFO[39m (30): [36m[TEMPLATE-IMPROVEMENT] Suggestions saved[39m
+    [35msuggestionId[39m: "3d0513d1-17c8-4651-be49-57f3135ad0fd"
+    [35mtemplateId[39m: "cd866273-d956-4c18-a020-9ff8ff56f014"
+    [35mpriority[39m: "low"
+[02:28:50 UTC] [32mINFO[39m (30): [36m[TEMPLATE-IMPROVEMENT] Analysis complete[39m
+    [35mtemplateId[39m: "cd866273-d956-4c18-a020-9ff8ff56f014"
+    [35mpriority[39m: "low"
+    [35mexpectedGain[39m: 0
+[02:28:50 UTC] [32mINFO[39m (30): [36m📊 [ANALYTICS] Tracked: mistral/mistral-large-latest - 6173 tokens, $0.0043[39m
+[02:28:50 UTC] [32mINFO[39m (30): [36m[TEMPLATE-IMPROVEMENT] Insufficient data for analysis, attempting static analysis[39m
+    [35mtemplateId[39m: "747c8628-e2b3-4c95-85a1-095f005a2fef"
+    [35mauditCount[39m: 0
+    [35mrequired[39m: 1
+[02:28:50 UTC] [32mINFO[39m (30): [36m[TEMPLATE-IMPROVEMENT] Running static analysis[39m
+    [35mtemplateId[39m: "747c8628-e2b3-4c95-85a1-095f005a2fef"
+[02:28:50 UTC] [32mINFO[39m (30): [36m📋 [AI-FALLBACK] Active providers available: mistral, ollama, xai, azure, moonshot, foundry-local[39m
+[02:28:50 UTC] [32mINFO[39m (30): [36m🔄 [AI-FALLBACK] Provider chain (active only): ollama → mistral → xai → azure → moonshot → foundry-local[39m
+[02:28:50 UTC] [32mINFO[39m (30): [36m🔄 [AI-FALLBACK] Trying provider: ollama (attempt 1/6)[39m
+[02:28:50 UTC] [33mWARN[39m (30): [36m[AI-FALLBACK] Adjusting incompatible model for provider[39m
+    [35mprovider[39m: "ollama"
+    [35moriginalModel[39m: "gemini-2.5-flash"
+    [35madjustedModel[39m: "llama3"
+[02:28:50 UTC] [32mINFO[39m (30): [36m[AI-SERVICE] No AI Gateway API key configured - will use direct provider APIs[39m
+[02:28:50 UTC] [33mWARN[39m (30): [36m⚠️ [AI-SERVICE] Model llama3 not compatible with ollama, using default: gpt-4o[39m
+[02:28:50 UTC] [32mINFO[39m (30): [36m🌐 [AI-SERVICE-6/8] AI Gateway generation starting:[39m
+[02:28:50 UTC] [32mINFO[39m (30): [36m⏱️ [AI-SERVICE] Temperature:[39m
+[02:28:50 UTC] [32mINFO[39m (30): [36m📝 [AI-SERVICE] User message length:[39m
+[02:28:50 UTC] [32mINFO[39m (30): [36m📝 [AI-SERVICE] System message length:[39m
+[02:28:50 UTC] [32mINFO[39m (30): [36m🔑 [AI-SERVICE] Using AI Gateway API key (thread-safe as possible)[39m
+[02:28:50 UTC] [32mINFO[39m (30): [36m🔗 [AI-SERVICE] Calling generateText() with AI Gateway...[39m
+[02:28:50 UTC] [32mINFO[39m (30): [36m🔗 [AI-SERVICE] Model ID:[39m
+[02:28:50 UTC] [32mINFO[39m (30): [36m🔑 [AI-SERVICE] API Key configured:[39m
+[02:28:50 UTC] [32mINFO[39m (30): [36m🔄 [AI-SERVICE] AI Gateway not configured - using direct provider API for ollama[39m
+[02:28:50 UTC] [32mINFO[39m (30): [36m🔄 [AI-SERVICE] AI Gateway not configured - using direct provider API[39m
+[02:28:50 UTC] [32mINFO[39m (30): [36m🔄 [AI-SERVICE] Falling back to direct Ollama...[39m
+[02:28:50 UTC] [33mWARN[39m (30): [36m[AI-SERVICE] Failed to fetch installed Ollama models from /api/tags, continuing with configured defaults[39m
+[02:28:50 UTC] [33mWARN[39m (30): [36m⚠️ [AI-SERVICE] Ollama connection refused - ensure Ollama is running locally[39m
+[02:28:50 UTC] [31mERROR[39m (30): [36m❌ [AI-SERVICE-ERROR] AI generation failed for provider ollama:[39m
+    err: {
+      "type": "Error",
+      "message": "Ollama service unavailable (ECONNREFUSED)",
+      "stack":
+          Error: Ollama service unavailable (ECONNREFUSED)
+              at AIService.generate (/app/server/dist/server/src/services/aiService.js:1465:39)
+              at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+              at async AIService.generateWithFallback (/app/server/dist/server/src/services/aiService.js:495:32)
+              at async TemplateImprovementService.analyzeTemplateStatic (/app/server/dist/server/src/services/templateImprovementService.js:145:28)
+              at async TemplateImprovementService.analyzeTemplateQuality (/app/server/dist/server/src/services/templateImprovementService.js:72:17)
+              at async TemplateImprovementService.analyzeAllTemplates (/app/server/dist/server/src/services/templateImprovementService.js:769:21)
+              at async runTemplateAnalysisJob (/app/server/dist/server/src/jobs/templateAnalysisJob.js:19:9)
+              at async /app/server/dist/server/src/jobs/templateAnalysisJob.js:39:9
+              at async Timeout._onTimeout (/app/node_modules/.pnpm/node-cron@4.2.1/node_modules/node-cron/dist/cjs/scheduler/runner.js:70:44)
+    }
+[02:28:50 UTC] [31mERROR[39m (30): [36m❌ [AI-SERVICE-ERROR] Error details:[39m
+    [35mmessage[39m: "Ollama service unavailable (ECONNREFUSED)"
+    [35mstack[39m: "Error: Ollama service unavailable (ECONNREFUSED)\n    at AIService.generate (/app/server/dist/server/src/services/aiService.js:1465:39)\n    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at async AIService.generateWithFallback (/app/server/dist/server/src/services/aiService.js:495:32)\n    at async TemplateImprovementService.analyzeTemplateStatic (/app/server/dist/server/src/services/templateImprovementService.js:145:28)\n    at async TemplateImprovementService.analyzeTemplateQuality (/app/server/dist/server/src/services/templateImprovementService.js:72:17)\n    at async TemplateImprovementService.analyzeAllTemplates (/app/server/dist/server/src/services/templateImprovementService.js:769:21)\n    at async runTemplateAnalysisJob (/app/server/dist/server/src/jobs/templateAnalysisJob.js:19:9)\n    at async /app/server/dist/server/src/jobs/templateAnalysisJob.js:39:9\n    at async Timeout._onTimeout (/app/node_modules/.pnpm/node-cron@4.2.1/node_modules/node-cron/dist/cjs/scheduler/runner.js:70:44)"
+[02:28:50 UTC] [33mWARN[39m (30): [36m⚠️ [AI-FALLBACK] Provider ollama failed: Ollama service unavailable (ECONNREFUSED)[39m
+[02:28:50 UTC] [33mWARN[39m (30): [36m⏸️ [AI-BACKOFF] Provider ollama failed (attempt 87), backing off for 64s[39m
+[02:28:50 UTC] [32mINFO[39m (30): [36m⏳ [AI-FALLBACK] Waiting 1000ms before trying next provider (2/6)...[39m
+[02:28:51 UTC] [32mINFO[39m (30): [36m🔄 [AI-FALLBACK] Trying provider: mistral (attempt 2/6)[39m
+[02:28:51 UTC] [33mWARN[39m (30): [36m[AI-FALLBACK] Adjusting incompatible model for provider[39m
+    [35mprovider[39m: "mistral"
+    [35moriginalModel[39m: "gemini-2.5-flash"
+    [35madjustedModel[39m: "mistral-large-latest"
+[02:28:51 UTC] [32mINFO[39m (30): [36m[AI-SERVICE] No AI Gateway API key configured - will use direct provider APIs[39m
+[02:28:51 UTC] [32mINFO[39m (30): [36m🌐 [AI-SERVICE-6/8] AI Gateway generation starting:[39m
+[02:28:51 UTC] [32mINFO[39m (30): [36m⏱️ [AI-SERVICE] Temperature:[39m
+[02:28:51 UTC] [32mINFO[39m (30): [36m📝 [AI-SERVICE] User message length:[39m
+[02:28:51 UTC] [32mINFO[39m (30): [36m📝 [AI-SERVICE] System message length:[39m
+[02:28:51 UTC] [32mINFO[39m (30): [36m🔑 [AI-SERVICE] Using AI Gateway API key (thread-safe as possible)[39m
+[02:28:51 UTC] [32mINFO[39m (30): [36m🔗 [AI-SERVICE] Calling generateText() with AI Gateway...[39m
+[02:28:51 UTC] [32mINFO[39m (30): [36m🔗 [AI-SERVICE] Model ID:[39m
+[02:28:51 UTC] [32mINFO[39m (30): [36m🔑 [AI-SERVICE] API Key configured:[39m
+[02:28:51 UTC] [32mINFO[39m (30): [36m🔄 [AI-SERVICE] AI Gateway not configured - using direct provider API for mistral[39m
+[02:28:51 UTC] [32mINFO[39m (30): [36m🔄 [AI-SERVICE] AI Gateway not configured - using direct provider API[39m
+[02:28:51 UTC] [32mINFO[39m (30): [36m🔄 [AI-SERVICE] Falling back to direct Mistral AI...[39m
+[02:29:06 UTC] [32mINFO[39m (30): [36m[AI] ✓ Mistral AI/mistral-large-latest - 1862 tokens - 14797ms[39m
+[02:29:06 UTC] [32mINFO[39m (30): [36m✅ [AI-FALLBACK] Success with provider: mistral[39m
+[02:29:06 UTC] [32mINFO[39m (30): [36m📊 [ANALYTICS] Tracked: mistral/mistral-large-latest - 1862 tokens, $0.0013[39m
+[02:29:06 UTC] [32mINFO[39m (30): [36m[TEMPLATE-IMPROVEMENT] Suggestions saved[39m
+    [35msuggestionId[39m: "4f11c702-1acd-4ecc-896a-c17e8561e2e8"
+    [35mtemplateId[39m: "747c8628-e2b3-4c95-85a1-095f005a2fef"
+    [35mpriority[39m: "medium"
+[02:29:06 UTC] [32mINFO[39m (30): [36m[TEMPLATE-IMPROVEMENT] Analyzing template[39m
+    [35mtemplateId[39m: "421744a2-74ea-4014-bf66-794160ca3a73"
+[02:29:06 UTC] [32mINFO[39m (30): [36m[TEMPLATE-IMPROVEMENT] Insufficient data for analysis, attempting static analysis[39m
+    [35mtemplateId[39m: "421744a2-74ea-4014-bf66-794160ca3a73"
+    [35mauditCount[39m: 0
+    [35mrequired[39m: 1
+[02:29:06 UTC] [32mINFO[39m (30): [36m[TEMPLATE-IMPROVEMENT] Running static analysis[39m
+    [35mtemplateId[39m: "421744a2-74ea-4014-bf66-794160ca3a73"
+[02:29:06 UTC] [32mINFO[39m (30): [36m📋 [AI-FALLBACK] Active providers available: mistral, ollama, xai, azure, moonshot, foundry-local[39m
+[02:29:06 UTC] [32mINFO[39m (30): [36m🔄 [AI-FALLBACK] Provider chain (active only): ollama → mistral → xai → azure → moonshot → foundry-local[39m
+[02:29:06 UTC] [32mINFO[39m (30): [36m🔄 [AI-FALLBACK] Trying provider: ollama (attempt 1/6)[39m
+[02:29:06 UTC] [33mWARN[39m (30): [36m[AI-FALLBACK] Adjusting incompatible model for provider[39m
+    [35mprovider[39m: "ollama"
+    [35moriginalModel[39m: "gemini-2.5-flash"
+    [35madjustedModel[39m: "llama3"
+[02:29:06 UTC] [32mINFO[39m (30): [36m[AI-SERVICE] No AI Gateway API key configured - will use direct provider APIs[39m
+[02:29:06 UTC] [33mWARN[39m (30): [36m⚠️ [AI-SERVICE] Model llama3 not compatible with ollama, using default: gpt-4o[39m
+[02:29:06 UTC] [32mINFO[39m (30): [36m🌐 [AI-SERVICE-6/8] AI Gateway generation starting:[39m
+[02:29:06 UTC] [32mINFO[39m (30): [36m⏱️ [AI-SERVICE] Temperature:[39m
+[02:29:06 UTC] [32mINFO[39m (30): [36m📝 [AI-SERVICE] User message length:[39m
+[02:29:06 UTC] [32mINFO[39m (30): [36m📝 [AI-SERVICE] System message length:[39m
+[02:29:06 UTC] [32mINFO[39m (30): [36m🔑 [AI-SERVICE] Using AI Gateway API key (thread-safe as possible)[39m
+[02:29:06 UTC] [32mINFO[39m (30): [36m🔗 [AI-SERVICE] Calling generateText() with AI Gateway...[39m
+[02:29:06 UTC] [32mINFO[39m (30): [36m🔗 [AI-SERVICE] Model ID:[39m
+[02:29:06 UTC] [32mINFO[39m (30): [36m🔑 [AI-SERVICE] API Key configured:[39m
+[02:29:06 UTC] [32mINFO[39m (30): [36m🔄 [AI-SERVICE] AI Gateway not configured - using direct provider API for ollama[39m
+[02:29:06 UTC] [32mINFO[39m (30): [36m🔄 [AI-SERVICE] AI Gateway not configured - using direct provider API[39m
+[02:29:06 UTC] [32mINFO[39m (30): [36m🔄 [AI-SERVICE] Falling back to direct Ollama...[39m
+[02:29:06 UTC] [33mWARN[39m (30): [36m[AI-SERVICE] Failed to fetch installed Ollama models from /api/tags, continuing with configured defaults[39m
+[02:29:06 UTC] [33mWARN[39m (30): [36m⚠️ [AI-SERVICE] Ollama connection refused - ensure Ollama is running locally[39m
+[02:29:06 UTC] [31mERROR[39m (30): [36m❌ [AI-SERVICE-ERROR] AI generation failed for provider ollama:[39m
+    err: {
+      "type": "Error",
+      "message": "Ollama service unavailable (ECONNREFUSED)",
+      "stack":
+          Error: Ollama service unavailable (ECONNREFUSED)
+              at AIService.generate (/app/server/dist/server/src/services/aiService.js:1465:39)
+              at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+              at async AIService.generateWithFallback (/app/server/dist/server/src/services/aiService.js:495:32)
+              at async TemplateImprovementService.analyzeTemplateStatic (/app/server/dist/server/src/services/templateImprovementService.js:145:28)
+              at async TemplateImprovementService.analyzeTemplateQuality (/app/server/dist/server/src/services/templateImprovementService.js:72:17)
+              at async TemplateImprovementService.analyzeAllTemplates (/app/server/dist/server/src/services/templateImprovementService.js:769:21)
+              at async runTemplateAnalysisJob (/app/server/dist/server/src/jobs/templateAnalysisJob.js:19:9)
+              at async /app/server/dist/server/src/jobs/templateAnalysisJob.js:39:9
+              at async Timeout._onTimeout (/app/node_modules/.pnpm/node-cron@4.2.1/node_modules/node-cron/dist/cjs/scheduler/runner.js:70:44)
+    }
+[02:29:06 UTC] [31mERROR[39m (30): [36m❌ [AI-SERVICE-ERROR] Error details:[39m
+    [35mmessage[39m: "Ollama service unavailable (ECONNREFUSED)"
+    [35mstack[39m: "Error: Ollama service unavailable (ECONNREFUSED)\n    at AIService.generate (/app/server/dist/server/src/services/aiService.js:1465:39)\n    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at async AIService.generateWithFallback (/app/server/dist/server/src/services/aiService.js:495:32)\n    at async TemplateImprovementService.analyzeTemplateStatic (/app/server/dist/server/src/services/templateImprovementService.js:145:28)\n    at async TemplateImprovementService.analyzeTemplateQuality (/app/server/dist/server/src/services/templateImprovementService.js:72:17)\n    at async TemplateImprovementService.analyzeAllTemplates (/app/server/dist/server/src/services/templateImprovementService.js:769:21)\n    at async runTemplateAnalysisJob (/app/server/dist/server/src/jobs/templateAnalysisJob.js:19:9)\n    at async /app/server/dist/server/src/jobs/templateAnalysisJob.js:39:9\n    at async Timeout._onTimeout (/app/node_modules/.pnpm/node-cron@4.2.1/node_modules/node-cron/dist/cjs/scheduler/runner.js:70:44)"
+[02:29:06 UTC] [33mWARN[39m (30): [36m⚠️ [AI-FALLBACK] Provider ollama failed: Ollama service unavailable (ECONNREFUSED)[39m
+[02:29:06 UTC] [33mWARN[39m (30): [36m⏸️ [AI-BACKOFF] Provider ollama failed (attempt 88), backing off for 58s[39m
+[02:29:06 UTC] [32mINFO[39m (30): [36m⏳ [AI-FALLBACK] Waiting 1000ms before trying next provider (2/6)...[39m
+[02:29:07 UTC] [32mINFO[39m (30): [36m🔄 [AI-FALLBACK] Trying provider: mistral (attempt 2/6)[39m
+[02:29:07 UTC] [33mWARN[39m (30): [36m[AI-FALLBACK] Adjusting incompatible model for provider[39m
+    [35mprovider[39m: "mistral"
+    [35moriginalModel[39m: "gemini-2.5-flash"
+    [35madjustedModel[39m: "mistral-large-latest"
+[02:29:07 UTC] [32mINFO[39m (30): [36m[AI-SERVICE] No AI Gateway API key configured - will use direct provider APIs[39m
+[02:29:07 UTC] [32mINFO[39m (30): [36m🌐 [AI-SERVICE-6/8] AI Gateway generation starting:[39m
+[02:29:07 UTC] [32mINFO[39m (30): [36m⏱️ [AI-SERVICE] Temperature:[39m
+[02:29:07 UTC] [32mINFO[39m (30): [36m📝 [AI-SERVICE] User message length:[39m
+[02:29:07 UTC] [32mINFO[39m (30): [36m📝 [AI-SERVICE] System message length:[39m
+[02:29:07 UTC] [32mINFO[39m (30): [36m🔑 [AI-SERVICE] Using AI Gateway API key (thread-safe as possible)[39m
+[02:29:07 UTC] [32mINFO[39m (30): [36m🔗 [AI-SERVICE] Calling generateText() with AI Gateway...[39m
+[02:29:07 UTC] [32mINFO[39m (30): [36m🔗 [AI-SERVICE] Model ID:[39m
+[02:29:07 UTC] [32mINFO[39m (30): [36m🔑 [AI-SERVICE] API Key configured:[39m
+[02:29:07 UTC] [32mINFO[39m (30): [36m🔄 [AI-SERVICE] AI Gateway not configured - using direct provider API for mistral[39m
+[02:29:07 UTC] [32mINFO[39m (30): [36m🔄 [AI-SERVICE] AI Gateway not configured - using direct provider API[39m
+[02:29:07 UTC] [32mINFO[39m (30): [36m🔄 [AI-SERVICE] Falling back to direct Mistral AI...[39m
+[02:29:20 UTC] [32mINFO[39m (30): [36m[AI] ✓ Mistral AI/mistral-large-latest - 1476 tokens - 12955ms[39m
+[02:29:20 UTC] [32mINFO[39m (30): [36m✅ [AI-FALLBACK] Success with provider: mistral[39m
+[02:29:20 UTC] [32mINFO[39m (30): [36m[TEMPLATE-IMPROVEMENT] Suggestions saved[39m
+    [35msuggestionId[39m: "409c4e01-6d7b-4a04-8d91-c2f777603b5c"
+    [35mtemplateId[39m: "421744a2-74ea-4014-bf66-794160ca3a73"
+    [35mpriority[39m: "medium"
+[02:29:20 UTC] [32mINFO[39m (30): [36m[TEMPLATE-IMPROVEMENT] Analyzing template[39m
+    [35mtemplateId[39m: "ccf70d31-0792-4304-ad38-452f6be42d13"
+[02:29:20 UTC] [32mINFO[39m (30): [36m📊 [ANALYTICS] Tracked: mistral/mistral-large-latest - 1476 tokens, $0.0010[39m
+[02:29:20 UTC] [32mINFO[39m (30): [36m[TEMPLATE-IMPROVEMENT] Insufficient data for analysis, attempting static analysis[39m
+    [35mtemplateId[39m: "ccf70d31-0792-4304-ad38-452f6be42d13"
+    [35mauditCount[39m: 0
+    [35mrequired[39m: 1
+[02:29:20 UTC] [32mINFO[39m (30): [36m[TEMPLATE-IMPROVEMENT] Running static analysis[39m
+    [35mtemplateId[39m: "ccf70d31-0792-4304-ad38-452f6be42d13"
+[02:29:20 UTC] [32mINFO[39m (30): [36m📋 [AI-FALLBACK] Active providers available: mistral, ollama, xai, azure, moonshot, foundry-local[39m
+[02:29:20 UTC] [32mINFO[39m (30): [36m🔄 [AI-FALLBACK] Provider chain (active only): ollama → mistral → xai → azure → moonshot → foundry-local[39m
+[02:29:20 UTC] [32mINFO[39m (30): [36m🔄 [AI-FALLBACK] Trying provider: ollama (attempt 1/6)[39m
+[02:29:20 UTC] [33mWARN[39m (30): [36m[AI-FALLBACK] Adjusting incompatible model for provider[39m
+    [35mprovider[39m: "ollama"
+    [35moriginalModel[39m: "gemini-2.5-flash"
+    [35madjustedModel[39m: "llama3"
+[02:29:20 UTC] [32mINFO[39m (30): [36m[AI-SERVICE] No AI Gateway API key configured - will use direct provider APIs[39m
+[02:29:20 UTC] [33mWARN[39m (30): [36m⚠️ [AI-SERVICE] Model llama3 not compatible with ollama, using default: gpt-4o[39m
+[02:29:20 UTC] [32mINFO[39m (30): [36m🌐 [AI-SERVICE-6/8] AI Gateway generation starting:[39m
+[02:29:20 UTC] [32mINFO[39m (30): [36m⏱️ [AI-SERVICE] Temperature:[39m
+[02:29:20 UTC] [32mINFO[39m (30): [36m📝 [AI-SERVICE] User message length:[39m
+[02:29:20 UTC] [32mINFO[39m (30): [36m📝 [AI-SERVICE] System message length:[39m
+[02:29:20 UTC] [32mINFO[39m (30): [36m🔑 [AI-SERVICE] Using AI Gateway API key (thread-safe as possible)[39m
+[02:29:20 UTC] [32mINFO[39m (30): [36m🔗 [AI-SERVICE] Calling generateText() with AI Gateway...[39m
+[02:29:20 UTC] [32mINFO[39m (30): [36m🔗 [AI-SERVICE] Model ID:[39m
+[02:29:20 UTC] [32mINFO[39m (30): [36m🔑 [AI-SERVICE] API Key configured:[39m
+[02:29:20 UTC] [32mINFO[39m (30): [36m🔄 [AI-SERVICE] AI Gateway not configured - using direct provider API for ollama[39m
+[02:29:20 UTC] [32mINFO[39m (30): [36m🔄 [AI-SERVICE] AI Gateway not configured - using direct provider API[39m
+[02:29:20 UTC] [32mINFO[39m (30): [36m🔄 [AI-SERVICE] Falling back to direct Ollama...[39m
+[02:29:20 UTC] [33mWARN[39m (30): [36m[AI-SERVICE] Failed to fetch installed Ollama models from /api/tags, continuing with configured defaults[39m
+[02:29:20 UTC] [33mWARN[39m (30): [36m⚠️ [AI-SERVICE] Ollama connection refused - ensure Ollama is running locally[39m
+[02:29:20 UTC] [31mERROR[39m (30): [36m❌ [AI-SERVICE-ERROR] AI generation failed for provider ollama:[39m
+    err: {
+      "type": "Error",
+      "message": "Ollama service unavailable (ECONNREFUSED)",
+      "stack":
+          Error: Ollama service unavailable (ECONNREFUSED)
+              at AIService.generate (/app/server/dist/server/src/services/aiService.js:1465:39)
+              at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+              at async AIService.generateWithFallback (/app/server/dist/server/src/services/aiService.js:495:32)
+              at async TemplateImprovementService.analyzeTemplateStatic (/app/server/dist/server/src/services/templateImprovementService.js:145:28)
+              at async TemplateImprovementService.analyzeTemplateQuality (/app/server/dist/server/src/services/templateImprovementService.js:72:17)
+              at async TemplateImprovementService.analyzeAllTemplates (/app/server/dist/server/src/services/templateImprovementService.js:769:21)
+              at async runTemplateAnalysisJob (/app/server/dist/server/src/jobs/templateAnalysisJob.js:19:9)
+              at async /app/server/dist/server/src/jobs/templateAnalysisJob.js:39:9
+              at async Timeout._onTimeout (/app/node_modules/.pnpm/node-cron@4.2.1/node_modules/node-cron/dist/cjs/scheduler/runner.js:70:44)
+    }
+[02:29:20 UTC] [31mERROR[39m (30): [36m❌ [AI-SERVICE-ERROR] Error details:[39m
+    [35mmessage[39m: "Ollama service unavailable (ECONNREFUSED)"
+    [35mstack[39m: "Error: Ollama service unavailable (ECONNREFUSED)\n    at AIService.generate (/app/server/dist/server/src/services/aiService.js:1465:39)\n    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at async AIService.generateWithFallback (/app/server/dist/server/src/services/aiService.js:495:32)\n    at async TemplateImprovementService.analyzeTemplateStatic (/app/server/dist/server/src/services/templateImprovementService.js:145:28)\n    at async TemplateImprovementService.analyzeTemplateQuality (/app/server/dist/server/src/services/templateImprovementService.js:72:17)\n    at async TemplateImprovementService.analyzeAllTemplates (/app/server/dist/server/src/services/templateImprovementService.js:769:21)\n    at async runTemplateAnalysisJob (/app/server/dist/server/src/jobs/templateAnalysisJob.js:19:9)\n    at async /app/server/dist/server/src/jobs/templateAnalysisJob.js:39:9\n    at async Timeout._onTimeout (/app/node_modules/.pnpm/node-cron@4.2.1/node_modules/node-cron/dist/cjs/scheduler/runner.js:70:44)"
+[02:29:20 UTC] [33mWARN[39m (30): [36m⚠️ [AI-FALLBACK] Provider ollama failed: Ollama service unavailable (ECONNREFUSED)[39m
+[02:29:20 UTC] [33mWARN[39m (30): [36m⏸️ [AI-BACKOFF] Provider ollama failed (attempt 89), backing off for 66s[39m
+[02:29:20 UTC] [32mINFO[39m (30): [36m⏳ [AI-FALLBACK] Waiting 1000ms before trying next provider (2/6)...[39m
+[02:29:21 UTC] [32mINFO[39m (30): [36m🔄 [AI-FALLBACK] Trying provider: mistral (attempt 2/6)[39m
+[02:29:21 UTC] [33mWARN[39m (30): [36m[AI-FALLBACK] Adjusting incompatible model for provider[39m
+    [35mprovider[39m: "mistral"
+    [35moriginalModel[39m: "gemini-2.5-flash"
+    [35madjustedModel[39m: "mistral-large-latest"
+[02:29:21 UTC] [32mINFO[39m (30): [36m[AI-SERVICE] No AI Gateway API key configured - will use direct provider APIs[39m
+[02:29:21 UTC] [32mINFO[39m (30): [36m🌐 [AI-SERVICE-6/8] AI Gateway generation starting:[39m
+[02:29:21 UTC] [32mINFO[39m (30): [36m⏱️ [AI-SERVICE] Temperature:[39m
+[02:29:21 UTC] [32mINFO[39m (30): [36m📝 [AI-SERVICE] User message length:[39m
+[02:29:21 UTC] [32mINFO[39m (30): [36m📝 [AI-SERVICE] System message length:[39m
+[02:29:21 UTC] [32mINFO[39m (30): [36m🔑 [AI-SERVICE] Using AI Gateway API key (thread-safe as possible)[39m
+[02:29:21 UTC] [32mINFO[39m (30): [36m🔗 [AI-SERVICE] Calling generateText() with AI Gateway...[39m
+[02:29:21 UTC] [32mINFO[39m (30): [36m🔗 [AI-SERVICE] Model ID:[39m
+[02:29:21 UTC] [32mINFO[39m (30): [36m🔑 [AI-SERVICE] API Key configured:[39m
+[02:29:21 UTC] [32mINFO[39m (30): [36m🔄 [AI-SERVICE] AI Gateway not configured - using direct provider API for mistral[39m
+[02:29:21 UTC] [32mINFO[39m (30): [36m🔄 [AI-SERVICE] AI Gateway not configured - using direct provider API[39m
+[02:29:21 UTC] [32mINFO[39m (30): [36m🔄 [AI-SERVICE] Falling back to direct Mistral AI...[39m
+[02:29:42 UTC] [32mINFO[39m (30): [36m[AI] ✓ Mistral AI/mistral-large-latest - 3898 tokens - 21243ms[39m
+[02:29:42 UTC] [32mINFO[39m (30): [36m✅ [AI-FALLBACK] Success with provider: mistral[39m
+[02:29:42 UTC] [32mINFO[39m (30): [36m[TEMPLATE-IMPROVEMENT] Suggestions saved[39m
+    [35msuggestionId[39m: "42de5257-630e-4158-995c-40543eb4a379"
+    [35mtemplateId[39m: "ccf70d31-0792-4304-ad38-452f6be42d13"
+    [35mpriority[39m: "medium"
+[02:29:42 UTC] [32mINFO[39m (30): [36m[TEMPLATE-IMPROVEMENT] Analyzing template[39m
+    [35mtemplateId[39m: "3a2d5dc7-7041-4d6b-b0f4-2189c7cbf92b"
+[02:29:43 UTC] [32mINFO[39m (30): [36m[TEMPLATE-IMPROVEMENT] Insufficient data for analysis, attempting static analysis[39m
+    [35mtemplateId[39m: "3a2d5dc7-7041-4d6b-b0f4-2189c7cbf92b"
+    [35mauditCount[39m: 0
+    [35mrequired[39m: 1
+[02:29:43 UTC] [32mINFO[39m (30): [36m[TEMPLATE-IMPROVEMENT] Running static analysis[39m
+    [35mtemplateId[39m: "3a2d5dc7-7041-4d6b-b0f4-2189c7cbf92b"
+[02:29:43 UTC] [32mINFO[39m (30): [36m📋 [AI-FALLBACK] Active providers available: mistral, ollama, xai, azure, moonshot, foundry-local[39m
+[02:29:43 UTC] [32mINFO[39m (30): [36m🔄 [AI-FALLBACK] Provider chain (active only): ollama → mistral → xai → azure → moonshot → foundry-local[39m
+[02:29:43 UTC] [32mINFO[39m (30): [36m🔄 [AI-FALLBACK] Trying provider: ollama (attempt 1/6)[39m
+[02:29:43 UTC] [33mWARN[39m (30): [36m[AI-FALLBACK] Adjusting incompatible model for provider[39m
+    [35mprovider[39m: "ollama"
+    [35moriginalModel[39m: "gemini-2.5-flash"
+    [35madjustedModel[39m: "llama3"
+[02:29:43 UTC] [32mINFO[39m (30): [36m[AI-SERVICE] No AI Gateway API key configured - will use direct provider APIs[39m
+[02:29:43 UTC] [33mWARN[39m (30): [36m⚠️ [AI-SERVICE] Model llama3 not compatible with ollama, using default: gpt-4o[39m
+[02:29:43 UTC] [32mINFO[39m (30): [36m🌐 [AI-SERVICE-6/8] AI Gateway generation starting:[39m
+[02:29:43 UTC] [32mINFO[39m (30): [36m⏱️ [AI-SERVICE] Temperature:[39m
+[02:29:43 UTC] [32mINFO[39m (30): [36m📝 [AI-SERVICE] User message length:[39m
+[02:29:43 UTC] [32mINFO[39m (30): [36m📝 [AI-SERVICE] System message length:[39m
+[02:29:43 UTC] [32mINFO[39m (30): [36m🔑 [AI-SERVICE] Using AI Gateway API key (thread-safe as possible)[39m
+[02:29:43 UTC] [32mINFO[39m (30): [36m🔗 [AI-SERVICE] Calling generateText() with AI Gateway...[39m
+[02:29:43 UTC] [32mINFO[39m (30): [36m🔗 [AI-SERVICE] Model ID:[39m
+[02:29:43 UTC] [32mINFO[39m (30): [36m🔑 [AI-SERVICE] API Key configured:[39m
+[02:29:43 UTC] [32mINFO[39m (30): [36m🔄 [AI-SERVICE] AI Gateway not configured - using direct provider API for ollama[39m
+[02:29:43 UTC] [32mINFO[39m (30): [36m🔄 [AI-SERVICE] AI Gateway not configured - using direct provider API[39m
+[02:29:43 UTC] [32mINFO[39m (30): [36m🔄 [AI-SERVICE] Falling back to direct Ollama...[39m
+[02:29:43 UTC] [33mWARN[39m (30): [36m[AI-SERVICE] Failed to fetch installed Ollama models from /api/tags, continuing with configured defaults[39m
+[02:29:43 UTC] [33mWARN[39m (30): [36m⚠️ [AI-SERVICE] Ollama connection refused - ensure Ollama is running locally[39m
+[02:29:43 UTC] [31mERROR[39m (30): [36m❌ [AI-SERVICE-ERROR] AI generation failed for provider ollama:[39m
+    err: {
+      "type": "Error",
+      "message": "Ollama service unavailable (ECONNREFUSED)",
+      "stack":
+          Error: Ollama service unavailable (ECONNREFUSED)
+              at AIService.generate (/app/server/dist/server/src/services/aiService.js:1465:39)
+              at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+              at async AIService.generateWithFallback (/app/server/dist/server/src/services/aiService.js:495:32)
+              at async TemplateImprovementService.analyzeTemplateStatic (/app/server/dist/server/src/services/templateImprovementService.js:145:28)
+              at async TemplateImprovementService.analyzeTemplateQuality (/app/server/dist/server/src/services/templateImprovementService.js:72:17)
+              at async TemplateImprovementService.analyzeAllTemplates (/app/server/dist/server/src/services/templateImprovementService.js:769:21)
+              at async runTemplateAnalysisJob (/app/server/dist/server/src/jobs/templateAnalysisJob.js:19:9)
+              at async /app/server/dist/server/src/jobs/templateAnalysisJob.js:39:9
+              at async Timeout._onTimeout (/app/node_modules/.pnpm/node-cron@4.2.1/node_modules/node-cron/dist/cjs/scheduler/runner.js:70:44)
+    }
+[02:29:43 UTC] [31mERROR[39m (30): [36m❌ [AI-SERVICE-ERROR] Error details:[39m
+    [35mmessage[39m: "Ollama service unavailable (ECONNREFUSED)"
+    [35mstack[39m: "Error: Ollama service unavailable (ECONNREFUSED)\n    at AIService.generate (/app/server/dist/server/src/services/aiService.js:1465:39)\n    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at async AIService.generateWithFallback (/app/server/dist/server/src/services/aiService.js:495:32)\n    at async TemplateImprovementService.analyzeTemplateStatic (/app/server/dist/server/src/services/templateImprovementService.js:145:28)\n    at async TemplateImprovementService.analyzeTemplateQuality (/app/server/dist/server/src/services/templateImprovementService.js:72:17)\n    at async TemplateImprovementService.analyzeAllTemplates (/app/server/dist/server/src/services/templateImprovementService.js:769:21)\n    at async runTemplateAnalysisJob (/app/server/dist/server/src/jobs/templateAnalysisJob.js:19:9)\n    at async /app/server/dist/server/src/jobs/templateAnalysisJob.js:39:9\n    at async Timeout._onTimeout (/app/node_modules/.pnpm/node-cron@4.2.1/node_modules/node-cron/dist/cjs/scheduler/runner.js:70:44)"
+[02:29:43 UTC] [33mWARN[39m (30): [36m⚠️ [AI-FALLBACK] Provider ollama failed: Ollama service unavailable (ECONNREFUSED)[39m
+[02:29:43 UTC] [33mWARN[39m (30): [36m⏸️ [AI-BACKOFF] Provider ollama failed (attempt 90), backing off for 65s[39m
+[02:29:43 UTC] [32mINFO[39m (30): [36m⏳ [AI-FALLBACK] Waiting 1000ms before trying next provider (2/6)...[39m
+[02:29:43 UTC] [32mINFO[39m (30): [36m📊 [ANALYTICS] Tracked: mistral/mistral-large-latest - 3898 tokens, $0.0027[39m
+[02:29:44 UTC] [32mINFO[39m (30): [36m🔄 [AI-FALLBACK] Trying provider: mistral (attempt 2/6)[39m
+[02:29:44 UTC] [33mWARN[39m (30): [36m[AI-FALLBACK] Adjusting incompatible model for provider[39m
+    [35mprovider[39m: "mistral"
+    [35moriginalModel[39m: "gemini-2.5-flash"
+    [35madjustedModel[39m: "mistral-large-latest"
+[02:29:44 UTC] [32mINFO[39m (30): [36m[AI-SERVICE] No AI Gateway API key configured - will use direct provider APIs[39m
+[02:29:44 UTC] [32mINFO[39m (30): [36m🌐 [AI-SERVICE-6/8] AI Gateway generation starting:[39m
+[02:29:44 UTC] [32mINFO[39m (30): [36m⏱️ [AI-SERVICE] Temperature:[39m
+[02:29:44 UTC] [32mINFO[39m (30): [36m📝 [AI-SERVICE] User message length:[39m
+[02:29:44 UTC] [32mINFO[39m (30): [36m📝 [AI-SERVICE] System message length:[39m
+[02:29:44 UTC] [32mINFO[39m (30): [36m🔑 [AI-SERVICE] Using AI Gateway API key (thread-safe as possible)[39m
+[02:29:44 UTC] [32mINFO[39m (30): [36m🔗 [AI-SERVICE] Calling generateText() with AI Gateway...[39m
+[02:29:44 UTC] [32mINFO[39m (30): [36m🔗 [AI-SERVICE] Model ID:[39m
+[02:29:44 UTC] [32mINFO[39m (30): [36m🔑 [AI-SERVICE] API Key configured:[39m
+[02:29:44 UTC] [32mINFO[39m (30): [36m🔄 [AI-SERVICE] AI Gateway not configured - using direct provider API for mistral[39m
+[02:29:44 UTC] [32mINFO[39m (30): [36m🔄 [AI-SERVICE] AI Gateway not configured - using direct provider API[39m
+[02:29:44 UTC] [32mINFO[39m (30): [36m🔄 [AI-SERVICE] Falling back to direct Mistral AI...[39m
+[02:30:03 UTC] [32mINFO[39m (30): [36m[AI] ✓ Mistral AI/mistral-large-latest - 1871 tokens - 19574ms[39m
+[02:30:03 UTC] [32mINFO[39m (30): [36m✅ [AI-FALLBACK] Success with provider: mistral[39m
+[02:30:04 UTC] [32mINFO[39m (30): [36m[TEMPLATE-IMPROVEMENT] Suggestions saved[39m
+    [35msuggestionId[39m: "84c5414c-50ac-443a-a5aa-e128aea26600"
+    [35mtemplateId[39m: "3a2d5dc7-7041-4d6b-b0f4-2189c7cbf92b"
+    [35mpriority[39m: "medium"
+[02:30:04 UTC] [32mINFO[39m (30): [36m[TEMPLATE-IMPROVEMENT] Analyzing template[39m
+    [35mtemplateId[39m: "1fced295-705d-4b45-b47e-d7e20ef4767f"
+[02:30:04 UTC] [32mINFO[39m (30): [36m[TEMPLATE-IMPROVEMENT] Analyzing quality history[39m
+    [35mtemplateId[39m: "1fced295-705d-4b45-b47e-d7e20ef4767f"
+    [35mauditCount[39m: 5
+[02:30:04 UTC] [32mINFO[39m (30): [36m[TEMPLATE-IMPROVEMENT] Found common issues[39m
+    [35mtemplateId[39m: "1fced295-705d-4b45-b47e-d7e20ef4767f"
+    [35missueCount[39m: 27
+    [35mavgQuality[39m: 80
+[02:30:04 UTC] [32mINFO[39m (30): [36m[TEMPLATE-IMPROVEMENT] Generating AI suggestions[39m
+    [35mtemplateId[39m: "1fced295-705d-4b45-b47e-d7e20ef4767f"
+    [35mavgQuality[39m: 80
+    [35missueCount[39m: 27
+[02:30:04 UTC] [32mINFO[39m (30): [36m📋 [AI-FALLBACK] Active providers available: mistral, ollama, xai, azure, moonshot, foundry-local[39m
+[02:30:04 UTC] [32mINFO[39m (30): [36m🔄 [AI-FALLBACK] Provider chain (active only): ollama → mistral → xai → azure → moonshot → foundry-local[39m
+[02:30:04 UTC] [32mINFO[39m (30): [36m🔄 [AI-FALLBACK] Trying provider: ollama (attempt 1/6)[39m
+[02:30:04 UTC] [33mWARN[39m (30): [36m[AI-FALLBACK] Adjusting incompatible model for provider[39m
+    [35mprovider[39m: "ollama"
+    [35moriginalModel[39m: "gpt-4o"
+    [35madjustedModel[39m: "llama3"
+[02:30:04 UTC] [32mINFO[39m (30): [36m[AI-SERVICE] No AI Gateway API key configured - will use direct provider APIs[39m
+[02:30:04 UTC] [33mWARN[39m (30): [36m⚠️ [AI-SERVICE] Model llama3 not compatible with ollama, using default: gpt-4o[39m
+[02:30:04 UTC] [32mINFO[39m (30): [36m🌐 [AI-SERVICE-6/8] AI Gateway generation starting:[39m
+[02:30:04 UTC] [32mINFO[39m (30): [36m⏱️ [AI-SERVICE] Temperature:[39m
+[02:30:04 UTC] [32mINFO[39m (30): [36m📝 [AI-SERVICE] User message length:[39m
+[02:30:04 UTC] [32mINFO[39m (30): [36m📝 [AI-SERVICE] System message length:[39m
+[02:30:04 UTC] [32mINFO[39m (30): [36m🔑 [AI-SERVICE] Using AI Gateway API key (thread-safe as possible)[39m
+[02:30:04 UTC] [32mINFO[39m (30): [36m🔗 [AI-SERVICE] Calling generateText() with AI Gateway...[39m
+[02:30:04 UTC] [32mINFO[39m (30): [36m🔗 [AI-SERVICE] Model ID:[39m
+[02:30:04 UTC] [32mINFO[39m (30): [36m🔑 [AI-SERVICE] API Key configured:[39m
+[02:30:04 UTC] [32mINFO[39m (30): [36m🔄 [AI-SERVICE] AI Gateway not configured - using direct provider API for ollama[39m
+[02:30:04 UTC] [32mINFO[39m (30): [36m🔄 [AI-SERVICE] AI Gateway not configured - using direct provider API[39m
+[02:30:04 UTC] [32mINFO[39m (30): [36m🔄 [AI-SERVICE] Falling back to direct Ollama...[39m
+[02:30:04 UTC] [33mWARN[39m (30): [36m[AI-SERVICE] Failed to fetch installed Ollama models from /api/tags, continuing with configured defaults[39m
+[02:30:04 UTC] [32mINFO[39m (30): [36m📊 [ANALYTICS] Tracked: mistral/mistral-large-latest - 1871 tokens, $0.0013[39m
+[02:30:04 UTC] [33mWARN[39m (30): [36m⚠️ [AI-SERVICE] Ollama connection refused - ensure Ollama is running locally[39m
+[02:30:04 UTC] [31mERROR[39m (30): [36m❌ [AI-SERVICE-ERROR] AI generation failed for provider ollama:[39m
+    err: {
+      "type": "Error",
+      "message": "Ollama service unavailable (ECONNREFUSED)",
+      "stack":
+          Error: Ollama service unavailable (ECONNREFUSED)
+              at AIService.generate (/app/server/dist/server/src/services/aiService.js:1465:39)
+              at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+              at async AIService.generateWithFallback (/app/server/dist/server/src/services/aiService.js:495:32)
+              at async TemplateImprovementService.generateImprovementSuggestions (/app/server/dist/server/src/services/templateImprovementService.js:320:22)
+              at async TemplateImprovementService.analyzeTemplateQuality (/app/server/dist/server/src/services/templateImprovementService.js:87:38)
+              at async TemplateImprovementService.analyzeAllTemplates (/app/server/dist/server/src/services/templateImprovementService.js:769:21)
+              at async runTemplateAnalysisJob (/app/server/dist/server/src/jobs/templateAnalysisJob.js:19:9)
+              at async /app/server/dist/server/src/jobs/templateAnalysisJob.js:39:9
+              at async Timeout._onTimeout (/app/node_modules/.pnpm/node-cron@4.2.1/node_modules/node-cron/dist/cjs/scheduler/runner.js:70:44)
+    }
+[02:30:04 UTC] [31mERROR[39m (30): [36m❌ [AI-SERVICE-ERROR] Error details:[39m
+    [35mmessage[39m: "Ollama service unavailable (ECONNREFUSED)"
+    [35mstack[39m: "Error: Ollama service unavailable (ECONNREFUSED)\n    at AIService.generate (/app/server/dist/server/src/services/aiService.js:1465:39)\n    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at async AIService.generateWithFallback (/app/server/dist/server/src/services/aiService.js:495:32)\n    at async TemplateImprovementService.generateImprovementSuggestions (/app/server/dist/server/src/services/templateImprovementService.js:320:22)\n    at async TemplateImprovementService.analyzeTemplateQuality (/app/server/dist/server/src/services/templateImprovementService.js:87:38)\n    at async TemplateImprovementService.analyzeAllTemplates (/app/server/dist/server/src/services/templateImprovementService.js:769:21)\n    at async runTemplateAnalysisJob (/app/server/dist/server/src/jobs/templateAnalysisJob.js:19:9)\n    at async /app/server/dist/server/src/jobs/templateAnalysisJob.js:39:9\n    at async Timeout._onTimeout (/app/node_modules/.pnpm/node-cron@4.2.1/node_modules/node-cron/dist/cjs/scheduler/runner.js:70:44)"
+[02:30:04 UTC] [33mWARN[39m (30): [36m⚠️ [AI-FALLBACK] Provider ollama failed: Ollama service unavailable (ECONNREFUSED)[39m
+[02:30:04 UTC] [33mWARN[39m (30): [36m⏸️ [AI-BACKOFF] Provider ollama failed (attempt 91), backing off for 65s[39m
+[02:30:04 UTC] [32mINFO[39m (30): [36m⏳ [AI-FALLBACK] Waiting 1000ms before trying next provider (2/6)...[39m
+[02:30:05 UTC] [32mINFO[39m (30): [36m🔄 [AI-FALLBACK] Trying provider: mistral (attempt 2/6)[39m
+[02:30:05 UTC] [33mWARN[39m (30): [36m[AI-FALLBACK] Adjusting incompatible model for provider[39m
+    [35mprovider[39m: "mistral"
+    [35moriginalModel[39m: "gpt-4o"
+    [35madjustedModel[39m: "mistral-large-latest"
+[02:30:05 UTC] [32mINFO[39m (30): [36m[AI-SERVICE] No AI Gateway API key configured - will use direct provider APIs[39m
+[02:30:05 UTC] [32mINFO[39m (30): [36m🌐 [AI-SERVICE-6/8] AI Gateway generation starting:[39m
+[02:30:05 UTC] [32mINFO[39m (30): [36m⏱️ [AI-SERVICE] Temperature:[39m
+[02:30:05 UTC] [32mINFO[39m (30): [36m📝 [AI-SERVICE] User message length:[39m
+[02:30:05 UTC] [32mINFO[39m (30): [36m📝 [AI-SERVICE] System message length:[39m
+[02:30:05 UTC] [32mINFO[39m (30): [36m🔑 [AI-SERVICE] Using AI Gateway API key (thread-safe as possible)[39m
+[02:30:05 UTC] [32mINFO[39m (30): [36m🔗 [AI-SERVICE] Calling generateText() with AI Gateway...[39m
+[02:30:05 UTC] [32mINFO[39m (30): [36m🔗 [AI-SERVICE] Model ID:[39m
+[02:30:05 UTC] [32mINFO[39m (30): [36m🔑 [AI-SERVICE] API Key configured:[39m
+[02:30:05 UTC] [32mINFO[39m (30): [36m🔄 [AI-SERVICE] AI Gateway not configured - using direct provider API for mistral[39m
+[02:30:05 UTC] [32mINFO[39m (30): [36m🔄 [AI-SERVICE] AI Gateway not configured - using direct provider API[39m
+[02:30:05 UTC] [32mINFO[39m (30): [36m🔄 [AI-SERVICE] Falling back to direct Mistral AI...[39m
+[02:30:40 UTC] [32mINFO[39m (30): [36m[AI] ✓ Mistral AI/mistral-large-latest - 7981 tokens - 35568ms[39m
+[02:30:40 UTC] [32mINFO[39m (30): [36m✅ [AI-FALLBACK] Success with provider: mistral[39m
+[02:30:40 UTC] [32mINFO[39m (30): [36m[TEMPLATE-IMPROVEMENT] Generated suggestions[39m
+    [35mtemplateId[39m: "1fced295-705d-4b45-b47e-d7e20ef4767f"
+    [35msuggestionCount[39m: 10
+    [35mexpectedGain[39m: 0
+    [35mpriority[39m: "low"
+    [35manalysisTokens[39m: 7981
+    [35manalysisCost[39m: "$0.0040"
+[02:30:40 UTC] [32mINFO[39m (30): [36m[TEMPLATE-IMPROVEMENT] Analyzing template[39m
+    [35mtemplateId[39m: "4b1f8a4c-2c70-4c7b-a9d0-2e6e2f5a1a02"
+[02:30:41 UTC] [32mINFO[39m (30): [36m[TEMPLATE-IMPROVEMENT] Suggestions saved[39m
+    [35msuggestionId[39m: "b8fe2d7f-8708-4a7a-8654-e447eeed2a47"
+    [35mtemplateId[39m: "1fced295-705d-4b45-b47e-d7e20ef4767f"
+    [35mpriority[39m: "low"
+[02:30:41 UTC] [32mINFO[39m (30): [36m[TEMPLATE-IMPROVEMENT] Analysis complete[39m
+    [35mtemplateId[39m: "1fced295-705d-4b45-b47e-d7e20ef4767f"
+    [35mpriority[39m: "low"
+    [35mexpectedGain[39m: 0
+[02:30:42 UTC] [32mINFO[39m (30): [36m📊 [ANALYTICS] Tracked: mistral/mistral-large-latest - 7981 tokens, $0.0056[39m
+[02:30:42 UTC] [32mINFO[39m (30): [36m[TEMPLATE-IMPROVEMENT] Insufficient data for analysis, attempting static analysis[39m
+    [35mtemplateId[39m: "4b1f8a4c-2c70-4c7b-a9d0-2e6e2f5a1a02"
+    [35mauditCount[39m: 0
+    [35mrequired[39m: 1
+[02:30:42 UTC] [32mINFO[39m (30): [36m[TEMPLATE-IMPROVEMENT] Running static analysis[39m
+    [35mtemplateId[39m: "4b1f8a4c-2c70-4c7b-a9d0-2e6e2f5a1a02"
+[02:30:42 UTC] [32mINFO[39m (30): [36m📋 [AI-FALLBACK] Active providers available: mistral, ollama, xai, azure, moonshot, foundry-local[39m
+[02:30:42 UTC] [32mINFO[39m (30): [36m🔄 [AI-FALLBACK] Provider chain (active only): ollama → mistral → xai → azure → moonshot → foundry-local[39m
+[02:30:42 UTC] [32mINFO[39m (30): [36m🔄 [AI-FALLBACK] Trying provider: ollama (attempt 1/6)[39m
+[02:30:42 UTC] [33mWARN[39m (30): [36m[AI-FALLBACK] Adjusting incompatible model for provider[39m
+    [35mprovider[39m: "ollama"
+    [35moriginalModel[39m: "gemini-2.5-flash"
+    [35madjustedModel[39m: "llama3"
+[02:30:42 UTC] [32mINFO[39m (30): [36m[AI-SERVICE] No AI Gateway API key configured - will use direct provider APIs[39m
+[02:30:42 UTC] [33mWARN[39m (30): [36m⚠️ [AI-SERVICE] Model llama3 not compatible with ollama, using default: gpt-4o[39m
+[02:30:42 UTC] [32mINFO[39m (30): [36m🌐 [AI-SERVICE-6/8] AI Gateway generation starting:[39m
+[02:30:42 UTC] [32mINFO[39m (30): [36m⏱️ [AI-SERVICE] Temperature:[39m
+[02:30:42 UTC] [32mINFO[39m (30): [36m📝 [AI-SERVICE] User message length:[39m
+[02:30:42 UTC] [32mINFO[39m (30): [36m📝 [AI-SERVICE] System message length:[39m
+[02:30:42 UTC] [32mINFO[39m (30): [36m🔑 [AI-SERVICE] Using AI Gateway API key (thread-safe as possible)[39m
+[02:30:42 UTC] [32mINFO[39m (30): [36m🔗 [AI-SERVICE] Calling generateText() with AI Gateway...[39m
+[02:30:42 UTC] [32mINFO[39m (30): [36m🔗 [AI-SERVICE] Model ID:[39m
+[02:30:42 UTC] [32mINFO[39m (30): [36m🔑 [AI-SERVICE] API Key configured:[39m
+[02:30:42 UTC] [32mINFO[39m (30): [36m🔄 [AI-SERVICE] AI Gateway not configured - using direct provider API for ollama[39m
+[02:30:42 UTC] [32mINFO[39m (30): [36m🔄 [AI-SERVICE] AI Gateway not configured - using direct provider API[39m
+[02:30:42 UTC] [32mINFO[39m (30): [36m🔄 [AI-SERVICE] Falling back to direct Ollama...[39m
+[02:30:42 UTC] [33mWARN[39m (30): [36m[AI-SERVICE] Failed to fetch installed Ollama models from /api/tags, continuing with configured defaults[39m
+[02:30:42 UTC] [33mWARN[39m (30): [36m⚠️ [AI-SERVICE] Ollama connection refused - ensure Ollama is running locally[39m
+[02:30:42 UTC] [31mERROR[39m (30): [36m❌ [AI-SERVICE-ERROR] AI generation failed for provider ollama:[39m
+    err: {
+      "type": "Error",
+      "message": "Ollama service unavailable (ECONNREFUSED)",
+      "stack":
+          Error: Ollama service unavailable (ECONNREFUSED)
+              at AIService.generate (/app/server/dist/server/src/services/aiService.js:1465:39)
+              at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+              at async AIService.generateWithFallback (/app/server/dist/server/src/services/aiService.js:495:32)
+              at async TemplateImprovementService.analyzeTemplateStatic (/app/server/dist/server/src/services/templateImprovementService.js:145:28)
+              at async TemplateImprovementService.analyzeTemplateQuality (/app/server/dist/server/src/services/templateImprovementService.js:72:17)
+              at async TemplateImprovementService.analyzeAllTemplates (/app/server/dist/server/src/services/templateImprovementService.js:769:21)
+              at async runTemplateAnalysisJob (/app/server/dist/server/src/jobs/templateAnalysisJob.js:19:9)
+              at async /app/server/dist/server/src/jobs/templateAnalysisJob.js:39:9
+              at async Timeout._onTimeout (/app/node_modules/.pnpm/node-cron@4.2.1/node_modules/node-cron/dist/cjs/scheduler/runner.js:70:44)
+    }
+[02:30:42 UTC] [31mERROR[39m (30): [36m❌ [AI-SERVICE-ERROR] Error details:[39m
+    [35mmessage[39m: "Ollama service unavailable (ECONNREFUSED)"
+    [35mstack[39m: "Error: Ollama service unavailable (ECONNREFUSED)\n    at AIService.generate (/app/server/dist/server/src/services/aiService.js:1465:39)\n    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at async AIService.generateWithFallback (/app/server/dist/server/src/services/aiService.js:495:32)\n    at async TemplateImprovementService.analyzeTemplateStatic (/app/server/dist/server/src/services/templateImprovementService.js:145:28)\n    at async TemplateImprovementService.analyzeTemplateQuality (/app/server/dist/server/src/services/templateImprovementService.js:72:17)\n    at async TemplateImprovementService.analyzeAllTemplates (/app/server/dist/server/src/services/templateImprovementService.js:769:21)\n    at async runTemplateAnalysisJob (/app/server/dist/server/src/jobs/templateAnalysisJob.js:19:9)\n    at async /app/server/dist/server/src/jobs/templateAnalysisJob.js:39:9\n    at async Timeout._onTimeout (/app/node_modules/.pnpm/node-cron@4.2.1/node_modules/node-cron/dist/cjs/scheduler/runner.js:70:44)"
+[02:30:42 UTC] [33mWARN[39m (30): [36m⚠️ [AI-FALLBACK] Provider ollama failed: Ollama service unavailable (ECONNREFUSED)[39m
+[02:30:42 UTC] [33mWARN[39m (30): [36m⏸️ [AI-BACKOFF] Provider ollama failed (attempt 92), backing off for 55s[39m
+[02:30:42 UTC] [32mINFO[39m (30): [36m⏳ [AI-FALLBACK] Waiting 1000ms before trying next provider (2/6)...[39m
+[02:30:43 UTC] [32mINFO[39m (30): [36m🔄 [AI-FALLBACK] Trying provider: mistral (attempt 2/6)[39m
+[02:30:43 UTC] [33mWARN[39m (30): [36m[AI-FALLBACK] Adjusting incompatible model for provider[39m
+    [35mprovider[39m: "mistral"
+    [35moriginalModel[39m: "gemini-2.5-flash"
+    [35madjustedModel[39m: "mistral-large-latest"
+[02:30:43 UTC] [32mINFO[39m (30): [36m[AI-SERVICE] No AI Gateway API key configured - will use direct provider APIs[39m
+[02:30:43 UTC] [32mINFO[39m (30): [36m🌐 [AI-SERVICE-6/8] AI Gateway generation starting:[39m
+[02:30:43 UTC] [32mINFO[39m (30): [36m⏱️ [AI-SERVICE] Temperature:[39m
+[02:30:43 UTC] [32mINFO[39m (30): [36m📝 [AI-SERVICE] User message length:[39m
+[02:30:43 UTC] [32mINFO[39m (30): [36m📝 [AI-SERVICE] System message length:[39m
+[02:30:43 UTC] [32mINFO[39m (30): [36m🔑 [AI-SERVICE] Using AI Gateway API key (thread-safe as possible)[39m
+[02:30:43 UTC] [32mINFO[39m (30): [36m🔗 [AI-SERVICE] Calling generateText() with AI Gateway...[39m
+[02:30:43 UTC] [32mINFO[39m (30): [36m🔗 [AI-SERVICE] Model ID:[39m
+[02:30:43 UTC] [32mINFO[39m (30): [36m🔑 [AI-SERVICE] API Key configured:[39m
+[02:30:43 UTC] [32mINFO[39m (30): [36m🔄 [AI-SERVICE] AI Gateway not configured - using direct provider API for mistral[39m
+[02:30:43 UTC] [32mINFO[39m (30): [36m🔄 [AI-SERVICE] AI Gateway not configured - using direct provider API[39m
+[02:30:43 UTC] [32mINFO[39m (30): [36m🔄 [AI-SERVICE] Falling back to direct Mistral AI...[39m
+[02:31:00 UTC] [32mINFO[39m (30): [36m[AI] ✓ Mistral AI/mistral-large-latest - 1925 tokens - 16337ms[39m
+[02:31:00 UTC] [32mINFO[39m (30): [36m✅ [AI-FALLBACK] Success with provider: mistral[39m
+[02:31:00 UTC] [32mINFO[39m (30): [36m📊 [ANALYTICS] Tracked: mistral/mistral-large-latest - 1925 tokens, $0.0013[39m
+[02:31:00 UTC] [32mINFO[39m (30): [36m[TEMPLATE-IMPROVEMENT] Suggestions saved[39m
+    [35msuggestionId[39m: "c9a9300f-ef02-40cf-937d-d2f18f1325f8"
+    [35mtemplateId[39m: "4b1f8a4c-2c70-4c7b-a9d0-2e6e2f5a1a02"
+    [35mpriority[39m: "medium"
+[02:31:00 UTC] [32mINFO[39m (30): [36m[TEMPLATE-IMPROVEMENT] Weekly analysis complete[39m
+    [35mtotal[39m: 92
+    [35manalyzed[39m: 92
+    [35mskipped[39m: 0
+    [35mfailed[39m: 0
+[02:31:00 UTC] [32mINFO[39m (30): [36m[TEMPLATE-ANALYSIS-JOB] ========================================[39m
+[02:31:00 UTC] [32mINFO[39m (30): [36m[TEMPLATE-ANALYSIS-JOB] Weekly analysis complete[39m
+    [35mduration[39m: "1855161ms"
+    [35mdurationMinutes[39m: 31
+[02:31:00 UTC] [32mINFO[39m (30): [36m[TEMPLATE-ANALYSIS-JOB] ========================================[39m

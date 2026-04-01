@@ -7,7 +7,7 @@
 import { ollamaConnector, OllamaConfig, OllamaRequest } from './ollama'
 
 const config: OllamaConfig = {
-  baseURL: process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434',
+  baseURL: process.env.OLLAMA_ENDPOINT || process.env.OLLAMA_BASE_URL || 'http://host.docker.internal:11434',
   defaultModel: 'llama3.2',
 }
 

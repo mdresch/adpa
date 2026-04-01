@@ -564,6 +564,19 @@ router.post("/generate",
         generationMetadataKeys: Object.keys(generationMetadata)
       })
 
+      // 🔍 Increment template usage
+      if (templateId) {
+        try {
+          await pool.query(
+            `UPDATE templates SET usage_count = usage_count + 1, last_used_at = NOW(), updated_at = NOW() WHERE id = $1`,
+            [templateId]
+          )
+          log.info(`Template usage incremented for ${templateId}`)
+        } catch (usageErr) {
+          log.warn(`Failed to increment template usage for ${templateId}`, usageErr)
+        }
+      }
+
       // 🔍 Automatic Quality Audit: Trigger quality audit after document generation
       // This runs asynchronously and doesn't block the response
       setImmediate(() => {

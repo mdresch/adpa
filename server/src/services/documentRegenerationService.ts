@@ -371,6 +371,19 @@ Please generate a comprehensive, updated version that incorporates all recent pr
         newDocumentId
       )
 
+      // 🔍 Increment template usage
+      if (templateId) {
+        try {
+          await pool.query(
+            `UPDATE templates SET usage_count = usage_count + 1, last_used_at = NOW(), updated_at = NOW() WHERE id = $1`,
+            [templateId]
+          )
+          log.info(`Template usage incremented for ${templateId}`)
+        } catch (usageErr) {
+          log.warn(`Failed to increment template usage for ${templateId}`, usageErr)
+        }
+      }
+
       // Update job with context summary, version info, and conflict status
       await pool.query(
         `UPDATE regeneration_jobs

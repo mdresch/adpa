@@ -138,6 +138,7 @@ services:
       - PINECONE_API_KEY=pcsk_5vEdP3_NUYZTUwJ8RV8zgSjGwAUTKtAwgTsm7enwDhxwDSZiWfwRRp9wG3Xjsbc9SbvjGT
       - PINECONE_INDEX=adpa-rag-index
       - ADDITIONAL_ALLOWED_ORIGINS=http://localhost:3005
+      - OLLAMA_ENDPOINT=http://host.docker.internal:11434
     ports:
       - "5000:5000"
     depends_on:
@@ -168,7 +169,7 @@ services:
     restart: always
     environment:
       - NODE_ENV=development
-      - BACKEND_URL=http://backend:5000
+      - BACKEND_URL=https://adpa-backend.agreeablegrass-418bd4ba.westeurope.azurecontainerapps.io
       - NEXT_PUBLIC_BACKEND_URL=http://localhost:5000
     ports:
       - "3005:3005"

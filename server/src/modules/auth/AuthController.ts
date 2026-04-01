@@ -178,7 +178,11 @@ export class AuthController {
         expiresIn: "24h",
       });
 
-      await AuthController.repository.updateLastLogin(user.id);
+      try {
+        await AuthController.repository.updateLastLogin(user.id);
+      } catch (updateErr) {
+        log.warn('Failed to update last_login for user (database column may not exist yet)', { userId: user.id });
+      }
 
       if (process.env.NODE_ENV !== 'production') {
         trackActivity.login(user.id, token.substring(0, 20)).catch((err) => {

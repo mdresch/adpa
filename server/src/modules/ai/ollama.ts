@@ -17,7 +17,7 @@ const langfuse = new Langfuse({
 
 // Types for Ollama integration
 export interface OllamaConfig {
-  baseURL: string  // e.g., "http://localhost:11434"
+  baseURL: string  // e.g., "http://host.docker.internal:11434"
   defaultModel?: string
 }
 
