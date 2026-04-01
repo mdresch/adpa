@@ -1,8 +1,14 @@
 import type { Request, Response, NextFunction } from "express"
 import jwt from "jsonwebtoken"
-import * as admin from "firebase-admin"
 import { pool } from "../database/connection"
 import { logger } from "../utils/logger"
+
+// Dynamic import helper to prevent frontend build crashes
+// We use a variable for the module name to hide it from static analysis
+const getAdmin = async () => {
+  const moduleName = "firebase-admin";
+  return await import(moduleName);
+};
 
 interface AuthRequest extends Request {
   user?: {
@@ -46,22 +52,42 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
   // DUAL-AUTH: Verify JWT first and handle token-specific errors separately
   let decoded: any
   try {
-    // Determine token type by length (Firebase tokens are typically > 500 chars)
-    if (token.length > 500) {
-      try {
-        const firebaseUser = await admin.auth().verifyIdToken(token)
-        // Map Firebase user to our internal format
-        decoded = { 
-          fromFirebase: true, 
-          email: firebaseUser.email, 
-          firebaseUid: firebaseUser.uid 
-        }
-      } catch (fbError: any) {
-        // Fallback to legacy JWT if Firebase fails
-        decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key") as any
+    // Attempt Firebase verification first
+    try {
+      const admin = await getAdmin();
+      const firebaseUser = await admin.auth().verifyIdToken(token)
+      // Map Firebase user to our internal format
+      decoded = { 
+        fromFirebase: true, 
+        email: firebaseUser.email, 
+        firebaseUid: firebaseUser.uid 
       }
-    } else {
-      decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key") as any
+    } catch (fbError: any) {
+      // Log the specific Firebase error for diagnostics
+      logger.warn("Firebase token verification failed:", {
+        message: fbError.message,
+        code: fbError.code,
+        tokenPrefix: token.substring(0, 10)
+      })
+      
+      // Fallback to legacy JWT if Firebase fails
+      try {
+        decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key") as any
+      } catch (jwtError: any) {
+        // Log both errors if they both fail
+        logger.error("Token verification failed (Both Firebase and Legacy JWT failed):", {
+          firebaseError: fbError.message,
+          jwtError: jwtError.message,
+          tokenLength: token.length
+        })
+        
+        return res.status(401).json({ 
+          error: "Invalid token", 
+          details: process.env.NODE_ENV === 'production' 
+            ? "Authentication failed" 
+            : `Firebase: ${fbError.message} | JWT: ${jwtError.message}`
+        })
+      }
     }
   } catch (error: any) {
     if (error && error.name === "TokenExpiredError") {
@@ -69,7 +95,7 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
       return res.status(401).json({ error: "Token expired", expiredAt: error.expiredAt })
     }
 
-    logger.error("Token verification failed:", error)
+    logger.error("Token verification failed (Unhandled):", error)
     return res.status(401).json({ error: "Invalid token" })
   }
 
