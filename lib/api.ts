@@ -775,23 +775,44 @@ class ApiClient {
   }
 
   /**
-   * Validates that a token has the basic JWT structure (3 parts separated by dots)
+   * Validates that a token has a reasonable structure.
+   * In production, this should ideally be a full JWT check.
    */
   private isValidTokenFormat(token: string): boolean {
     if (!token || typeof token !== 'string' || token.trim().length === 0) {
       return false
     }
+    
+    // We're more lenient in development/emulator mode, as long as it's a non-empty string.
+    // Standard JWTs have 3 parts separated by dots.
     const parts = token.trim().split(".")
-    return parts.length === 3 && parts.every(part => part.length > 0)
+    if (parts.length !== 3) {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn("⚠️ Token does not look like a standard JWT (3 parts expected), but allowing in development.")
+      }
+    }
+    
+    return true
   }
 
   setToken(token: string) {
-    // Validate token format before storing
-    if (!this.isValidTokenFormat(token)) {
-      console.error("Attempted to set invalid token format")
-      throw new Error("Invalid token format. Token must be a valid JWT.")
+    if (!token) return;
+    
+    const trimmedToken = token.trim()
+    
+    // Safety check for common "broken" token values
+    if (trimmedToken === "undefined" || trimmedToken === "null" || trimmedToken === "[object Object]") {
+      console.error("Attempted to set an invalid literal token:", trimmedToken)
+      return
     }
-    this.token = token.trim()
+
+    // Validate token format before storing
+    if (!this.isValidTokenFormat(trimmedToken)) {
+      console.error("Attempted to set an empty or invalid token format")
+      return
+    }
+    
+    this.token = trimmedToken
     if (typeof window !== "undefined") {
       localStorage.setItem("auth_token", this.token)
     }

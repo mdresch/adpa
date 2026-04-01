@@ -16,7 +16,7 @@ COPY types ./types
 COPY server ./server
 
 # Install all dependencies (including devDependencies for build)
-RUN pnpm install --frozen-lockfile --filter server...
+RUN pnpm install --no-frozen-lockfile --filter server...
 
 # Build the backend
 WORKDIR /app/server
@@ -45,7 +45,7 @@ COPY --from=builder /app/lib ./lib
 COPY --from=builder /app/types ./types
 
 # Install production dependencies only
-RUN pnpm install --frozen-lockfile --prod --filter server...
+RUN pnpm install --no-frozen-lockfile --prod --filter server...
 
 EXPOSE 5000
 

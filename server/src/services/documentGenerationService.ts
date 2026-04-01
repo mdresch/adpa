@@ -141,6 +141,19 @@ class DocumentGenerationService {
 
       const markdown = this.validateAndCleanMarkdown(finalMarkdown)
 
+      // 🔍 Increment template usage
+      if (request.templateId) {
+        try {
+          await pool.query(
+            `UPDATE templates SET usage_count = usage_count + 1, last_used_at = NOW(), updated_at = NOW() WHERE id = $1`,
+            [request.templateId]
+          )
+          logger.info(`Template usage incremented for ${request.templateId}`)
+        } catch (usageErr) {
+          logger.warn(`Failed to increment template usage for ${request.templateId}`, usageErr)
+        }
+      }
+
       // 7. Return structured result
       return {
         content: markdown,

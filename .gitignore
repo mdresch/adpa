@@ -32,6 +32,11 @@ yarn-error.log*
 .env.vercel.production
 .env.test
 
+# Firebase Service Accounts
+adpa-frontend-firebase-adminsdk-fbsvc-5a482f275b.json
+serviceAccount.json
+*-firebase-adminsdk-*.json
+
 # vercel
 .vercel
 
