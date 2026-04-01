@@ -12,6 +12,8 @@ import {
   securityValidationDependency,
   upstashDependency,
   morphicDbDependency,
+  azureBackendDependency,
+  firebaseAuthDependency,
 } from "./dependencies"
 import { logger } from "../utils/logger"
 
