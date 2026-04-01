@@ -15,6 +15,8 @@ import { Citing } from './custom-link'
 
 import 'katex/dist/katex.min.css'
 
+import { motion } from 'framer-motion'
+
 export function MarkdownMessage({
     message,
     className,
@@ -34,9 +36,12 @@ export function MarkdownMessage({
 
     return (
         <CitationProvider citationMaps={citationMaps}>
-            <div
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, ease: 'easeOut' }}
                 className={cn(
-                    'prose-sm prose-neutral prose-a:text-accent-foreground/50',
+                    'prose-sm prose-neutral prose-a:text-accent-foreground/50 glass-morphic p-4 rounded-3xl animate-rising',
                     className
                 )}
             >
@@ -50,7 +55,7 @@ export function MarkdownMessage({
                 >
                     {processedMessage}
                 </Streamdown>
-            </div>
+            </motion.div>
         </CitationProvider>
     )
 }

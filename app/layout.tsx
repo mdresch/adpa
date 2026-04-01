@@ -10,8 +10,6 @@ import { MobileWarning } from "@/components/MobileWarning"
 import { AuthProvider } from "@/contexts/AuthContext"
 import { WebSocketProvider } from "@/contexts/WebSocketContext"
 import RoomStatusList from "@/components/room-status-list"
-import { Analytics } from "@vercel/analytics/next"
-import { SpeedInsights } from "@vercel/speed-insights/next"
 import { ClarityProvider } from "@/components/analytics/ClarityProvider"
 
 const inter = Inter({
@@ -61,8 +59,6 @@ export default function RootLayout({
             </AuthProvider>
           </ThemeProvider>
         </ClarityProvider>
-        <Analytics />
-        <SpeedInsights />
       </body>
     </html>
   )

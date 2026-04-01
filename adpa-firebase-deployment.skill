@@ -1,0 +1,49 @@
+# ADPA Firebase App Hosting Skill
+
+This skill provides procedural guidance for deploying the ADPA (Advanced Document Processing & Automation) Framework to **Firebase App Hosting**, the dedicated platform for SSR-capable frameworks like Next.js.
+
+## When to use
+- When a user or contributor wants a "Vercel-like" Git-integrated deployment on Google Cloud.
+- When hosting Next.js 14+ with full support for SSR, ISR, and the App Router.
+- When setting up automated CI/CD pipelines that sync with GitHub branches.
+
+## Context
+- **Framework**: Next.js 14+ (App Router).
+- **Hosting Type**: Firebase App Hosting (managed Cloud Run + CDN).
+- **GitHub Integration**: App Hosting connects directly to your repository.
+
+## Procedural Steps
+
+### 1. Initial Setup
+- Ensure the Firebase CLI is updated: `npm install -g firebase-tools`.
+- Log in: `firebase login`.
+
+### 2. Initialization for App Hosting
+- Run the dedicated App Hosting init command:
+  ```bash
+  firebase apphosting:backends:create
+  ```
+- **Step 1**: Select your Firebase Project.
+- **Step 2**: Connect your GitHub account and select the `adpa` repository.
+- **Step 3**: Specify the branch (e.g., `main` or `adpa-project-charter`).
+- **Step 4**: Firebase will automatically detect the Next.js settings and create a "Backend" resource.
+
+### 3. Configuration (`apphosting.yaml`)
+Firebase App Hosting uses an `apphosting.yaml` file (instead of just `firebase.json`) to manage environment variables and secrets.
+- Create an `apphosting.yaml` in the root:
+  ```yaml
+  kind: "AppStack"
+  schemaVersion: "v1"
+  env:
+    - variable: BACKEND_URL
+      value: "https://your-backend-url.com"
+  ```
+
+### 4. Continuous Deployment
+- Once the backend is created, every push to your tracked branch will trigger a new build and rollout.
+- You can monitor builds in the Firebase Console under **App Hosting**.
+
+## Important Considerations
+- **Environment Variables**: Use the `apphosting.yaml` file or the Firebase Console to manage secrets. 
+- **Database Access**: If your database (PostgreSQL) is on Azure or Render, ensure the App Hosting outbound IP (Cloud Run) is whitelisted or use a public connection string.
+- **Preview Environments**: App Hosting automatically creates preview URLs for Pull Requests, making it excellent for reviewing contributor changes.

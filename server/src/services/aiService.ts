@@ -522,7 +522,7 @@ class AIService {
         return [LOCAL_FALLBACK_PROVIDER]
       }
 
-      const rows = (result.rows || []) as ActiveProviderRow[]
+      const rows = (result.rows || []) as Array<ActiveProviderRow & { name: string }>
 
       const isPlaceholderApiKey = (key?: string | null): boolean => {
         if (!key) return false
@@ -1789,7 +1789,7 @@ class AIService {
           // Ollama doesn't require API key for local connections
           const ollamaEndpoint = providerConfiguration?.endpoint ||
             providerConfiguration?.baseURL ||
-            'http://localhost:11434'
+            process.env.OLLAMA_ENDPOINT || 'http://host.docker.internal:11434'
 
           const defaultOllamaModel = providerConfiguration?.default_model || process.env.OLLAMA_MODEL || this.getModelsForProvider('ollama')[0] || 'llama3.1'
           const preferredOllamaModel = this.normalizeModelForProvider('ollama', request.model) || defaultOllamaModel
@@ -2667,7 +2667,7 @@ class AIService {
 
     // Handle Ollama (Direct API for streaming)
     if (providerType === 'ollama') {
-      const ollamaEndpoint = process.env.OLLAMA_BASE_URL || 'http://localhost:11434'
+      const ollamaEndpoint = process.env.OLLAMA_BASE_URL || process.env.OLLAMA_ENDPOINT || 'http://host.docker.internal:11434'
       const modelName = request.model || process.env.OLLAMA_MODEL || 'llama3.1'
 
       const response = await fetch(`${ollamaEndpoint}/api/chat`, {
