@@ -89,3 +89,15 @@ Drizzle Kit is used for managing database schemas and migrations.
     -   Most API calls (to `/api/*`) are proxied to the external Express backend.
 -   **Database Schema**: All database schema changes must be managed through Drizzle ORM and migrations. The schema is located at `lib/morphic/db/schema.ts`.
 -   **Environment Variables**: Use the `.env.local.example` file as a template for local development. Do not commit `.env.local` files to version control.
+
+## DRACO AI Governance
+
+The framework incorporates **DRACO** (Document Reasoning and Assessment Compliance Orchestra), an automated AI Review Board for enterprise-grade quality control.
+
+-   **Architecture**: Multi-agent orchestration using specialized roles (Evidence Validator, Governance Evaluator, Counterfactual Challenger).
+-   **Modes**:
+    -   **Advisory**: High-integrity feedback without blocking workflow.
+    -   **Blocking**: Mandatory quality gates for high-risk templates.
+-   **Human Accountability**: Blocked documents require a formal human override with justification, which is logged for security auditing.
+-   **Observability**: Real-time progress streaming with per-member elapsed timers and "high-convergence" detection to surface shared model blind spots.
+-   **Documentation**: See [ADR-004](file:///f:/Source/Repos/adpa/docs/07-architecture/ADR-004-DRACO-AI-GOVERNANCE.md) and the [Governance Lifecycle Diagram](file:///f:/Source/Repos/adpa/docs/06-features/DRACO_GOVERNANCE_DIAGRAM.md).

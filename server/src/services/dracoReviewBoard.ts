@@ -12,6 +12,7 @@
 import { getDatabasePoolSafe } from '../database/connection'
 import { aiService } from './aiService'
 import { logger } from '../utils/logger'
+import { dracoProgressEmitter } from './dracoProgressEmitter'
 import type {
   DracoBoardRole,
   DracoThresholds,
@@ -21,6 +22,7 @@ import type {
   BoardMemberResult,
   ModelRotationRecord,
 } from '../types/draco'
+
 
 // ─── Model Rotation Registry ──────────────────────────────────────────────────
 
@@ -532,6 +534,7 @@ export interface BoardReviewInput {
   documentType: string
   projectContext: Record<string, unknown>
   thresholds: DracoThresholds
+  documentId: string   // required for progress streaming
 }
 
 export interface BoardReviewOutput {
@@ -541,10 +544,87 @@ export interface BoardReviewOutput {
   model_rotation_used: ModelRotationRecord[]
   objectivity_score: number
   citation_integrity_score: number
+  challenger_found_nothing: boolean  // signal for prompt sharpening monitoring
+}
+
+
+// ─── Per-Member Timeout Wrapper ───────────────────────────────────────────────
+// Each board member runs independently. If one provider is slow or hangs,
+// we don't want to stall the entire review — the other two continue uninhibited.
+//
+// Two-stage timer:
+//   Stage 1 (SLOW_WARN_MS): emit a 'slow' progress event — informative only
+//   Stage 2 (HARD_TIMEOUT_MS): apply conservative fallback and emit 'timed_out'
+//
+// The fallback score is conservative (60) because a non-response from a reviewer
+// should not silently improve the overall verdict. The user sees this is fallback.
+
+const SLOW_WARN_MS    = 30_000  // 30 seconds — 'taking longer than expected'
+const HARD_TIMEOUT_MS = 90_000  // 90 seconds — apply fallback and continue
+
+function withBoardMemberTimeout<T extends { provider_used: string; score: number; passed: boolean }>(
+  memberPromise: Promise<T>,
+  fallback: T,
+  documentId: string,
+  role: string,
+  provider: string,
+  completionProgressPercent: number
+): Promise<T> {
+  return new Promise<T>((resolve) => {
+    let settled = false
+
+    // Stage 1: slow warning
+    const slowTimer = setTimeout(() => {
+      if (!settled) {
+        logger.warn('[DRACO-BOARD] Board member slow — still awaiting provider response', {
+          documentId, role, provider, elapsed_ms: SLOW_WARN_MS,
+        })
+        dracoProgressEmitter.emitBoardMemberSlow(documentId, role, provider, SLOW_WARN_MS)
+      }
+    }, SLOW_WARN_MS)
+
+    // Stage 2: hard timeout — proceed with fallback
+    const hardTimer = setTimeout(() => {
+      if (!settled) {
+        settled = true
+        clearTimeout(slowTimer)
+        logger.error('[DRACO-BOARD] Board member timed out — applying conservative fallback', {
+          documentId, role, provider, timeout_ms: HARD_TIMEOUT_MS,
+          note: 'Fallback score 60 prevents a non-response from silently improving the verdict.',
+        })
+        dracoProgressEmitter.emitBoardMemberComplete(
+          documentId, role, fallback.provider_used,
+          fallback.score, fallback.passed, completionProgressPercent,
+          true  // timedOut=true — transparent to the user via progress event copy
+        )
+        resolve(fallback)
+      }
+    }, HARD_TIMEOUT_MS)
+
+    memberPromise
+      .then(result => {
+        if (!settled) {
+          settled = true
+          clearTimeout(slowTimer)
+          clearTimeout(hardTimer)
+          resolve(result)
+        }
+      })
+      .catch(() => {
+        // Individual runners already catch and return fallbacks — this is belt-and-suspenders
+        if (!settled) {
+          settled = true
+          clearTimeout(slowTimer)
+          clearTimeout(hardTimer)
+          resolve(fallback)
+        }
+      })
+  })
 }
 
 export async function runBoardReview(input: BoardReviewInput): Promise<BoardReviewOutput> {
-  logger.info('[DRACO-BOARD] Starting board review with model rotation')
+  const { documentId } = input
+  logger.info('[DRACO-BOARD] Starting board review with model rotation', { documentId })
 
   const candidates = await getRotationCandidates()
   const sessionOffsets = await buildSessionOffsets(candidates)
@@ -561,57 +641,125 @@ export async function runBoardReview(input: BoardReviewInput): Promise<BoardRevi
     counterfactual_challenger: challengerAssignment.provider,
   })
 
-  // Run all three board members in parallel
-  const [evResult, govResult, challengerResult] = await Promise.all([
+  // Emit "started" events for all three board members before kicking off parallel calls.
+  // This immediately shows the user that three independent reviewers are working simultaneously.
+  dracoProgressEmitter.emitBoardMemberStarted(documentId, 'evidence_validator', evAssignment.provider, 15)
+  dracoProgressEmitter.emitBoardMemberStarted(documentId, 'governance_evaluator', govAssignment.provider, 20)
+  dracoProgressEmitter.emitBoardMemberStarted(documentId, 'counterfactual_challenger', challengerAssignment.provider, 25)
+
+  // Run all three board members in parallel, emitting completion individually as each resolves.
+  // Using separate promises so each emits as soon as it's done (not waiting for slowest).
+  let evResult: EvidenceValidatorResult
+  let govResult: GovernanceEvaluatorResult
+  let challengerResult: CounterfactualChallengerResult
+
+  const evFallback  = buildFallbackBoardResult('evidence_validator',        'Evidence Validator',        evAssignment.provider,          evAssignment.model,          input.thresholds.evidence_score,  0) as EvidenceValidatorResult
+  const govFallback = buildFallbackBoardResult('governance_evaluator',      'Governance Evaluator',      govAssignment.provider,         govAssignment.model,         input.thresholds.governance_score, 0) as GovernanceEvaluatorResult
+  const chalFallback= buildFallbackBoardResult('counterfactual_challenger','Counterfactual Challenger', challengerAssignment.provider,  challengerAssignment.model,  input.thresholds.resilience_score, 0) as CounterfactualChallengerResult
+
+  const evPromise = withBoardMemberTimeout(
     runEvidenceValidator(
       input.content, input.documentType, input.projectContext,
       evAssignment.provider, evAssignment.model, input.thresholds.evidence_score
     ),
+    evFallback, documentId, 'evidence_validator', evAssignment.provider, 50
+  ).then(result => {
+    evResult = result
+    // Only emit 'complete' (not 'timed_out') if the result wasn't already emitted by the timeout handler
+    if (result.processing_time_ms > 0) {
+      dracoProgressEmitter.emitBoardMemberComplete(documentId, 'evidence_validator', result.provider_used, result.score, result.passed, 50)
+    }
+    return result
+  })
+
+  const govPromise = withBoardMemberTimeout(
     runGovernanceEvaluator(
       input.content, input.documentType, input.projectContext,
       govAssignment.provider, govAssignment.model, input.thresholds.governance_score
     ),
+    govFallback, documentId, 'governance_evaluator', govAssignment.provider, 60
+  ).then(result => {
+    govResult = result
+    if (result.processing_time_ms > 0) {
+      dracoProgressEmitter.emitBoardMemberComplete(documentId, 'governance_evaluator', result.provider_used, result.score, result.passed, 60)
+    }
+    return result
+  })
+
+  const challengerPromise = withBoardMemberTimeout(
     runCounterfactualChallenger(
       input.content, input.documentType, input.projectContext,
       challengerAssignment.provider, challengerAssignment.model, input.thresholds.resilience_score
     ),
-  ])
+    chalFallback, documentId, 'counterfactual_challenger', challengerAssignment.provider, 70
+  ).then(result => {
+    challengerResult = result
+    if (result.processing_time_ms > 0) {
+      dracoProgressEmitter.emitBoardMemberComplete(documentId, 'counterfactual_challenger', result.provider_used, result.score, result.passed, 70)
+    }
+    return result
+  })
+
+  ;[evResult!, govResult!, challengerResult!] = await Promise.all([evPromise, govPromise, challengerPromise])
+
+
+  // ─── Challenger Absence Detection ─────────────────────────────────────────────
+  // If the Counterfactual Challenger found no challenged assumptions AND no logical
+  // vulnerabilities, this may indicate the challenger prompt needs sharpening for
+  // this document type, or the document is genuinely very resilient.
+  // Track this as a signal — never penalise it, but monitor accumulation over time.
+  const challengerFoundNothing =
+    (challengerResult!.challenged_assumptions?.length ?? 0) === 0 &&
+    (challengerResult!.logical_vulnerabilities?.length ?? 0) === 0
+
+  if (challengerFoundNothing) {
+    logger.info('[DRACO-BOARD] ℹ Counterfactual Challenger found no assumptions to challenge', {
+      documentId,
+      score: challengerResult!.score,
+      overall_resilience: challengerResult!.overall_resilience,
+      note: 'This may indicate the document is genuinely resilient, or the challenger prompt '
+          + 'needs domain-specific sharpening. Monitor frequency per template to distinguish.',
+    })
+  }
 
   // Calculate peer average for independence metrics
-  const peerAvg = (evResult.score + govResult.score + challengerResult.score) / 3
+  const peerAvg = (evResult!.score + govResult!.score + challengerResult!.score) / 3
 
   // Record performance asynchronously
   Promise.all([
-    recordProviderPerformance('evidence_validator', evResult.provider_used, evResult.model_used, evResult.score, peerAvg, evResult.processing_time_ms, false),
-    recordProviderPerformance('governance_evaluator', govResult.provider_used, govResult.model_used, govResult.score, peerAvg, govResult.processing_time_ms, false),
-    recordProviderPerformance('counterfactual_challenger', challengerResult.provider_used, challengerResult.model_used, challengerResult.score, peerAvg, challengerResult.processing_time_ms, false),
+    recordProviderPerformance('evidence_validator', evResult!.provider_used, evResult!.model_used, evResult!.score, peerAvg, evResult!.processing_time_ms, false),
+    recordProviderPerformance('governance_evaluator', govResult!.provider_used, govResult!.model_used, govResult!.score, peerAvg, govResult!.processing_time_ms, false),
+    recordProviderPerformance('counterfactual_challenger', challengerResult!.provider_used, challengerResult!.model_used, challengerResult!.score, peerAvg, challengerResult!.processing_time_ms, false),
   ]).catch(err => logger.warn('[DRACO-BOARD] Performance recording failed', { error: String(err) }))
 
   const rotationUsed: ModelRotationRecord[] = [
-    { board_role: 'evidence_validator', session_index: evAssignment.sessionIndex, provider: evResult.provider_used, model: evResult.model_used, assigned_at: new Date() },
-    { board_role: 'governance_evaluator', session_index: govAssignment.sessionIndex, provider: govResult.provider_used, model: govResult.model_used, assigned_at: new Date() },
-    { board_role: 'counterfactual_challenger', session_index: challengerAssignment.sessionIndex, provider: challengerResult.provider_used, model: challengerResult.model_used, assigned_at: new Date() },
+    { board_role: 'evidence_validator', session_index: evAssignment.sessionIndex, provider: evResult!.provider_used, model: evResult!.model_used, assigned_at: new Date() },
+    { board_role: 'governance_evaluator', session_index: govAssignment.sessionIndex, provider: govResult!.provider_used, model: govResult!.model_used, assigned_at: new Date() },
+    { board_role: 'counterfactual_challenger', session_index: challengerAssignment.sessionIndex, provider: challengerResult!.provider_used, model: challengerResult!.model_used, assigned_at: new Date() },
   ]
 
   // Extract objectivity + citation scores from governance evaluator (which is the compliance specialist)
-  const govExtended = govResult as GovernanceEvaluatorResult & { _objectivity_score?: number; _citation_integrity_score?: number }
+  const govExtended = govResult! as GovernanceEvaluatorResult & { _objectivity_score?: number; _citation_integrity_score?: number }
   const objectivity_score = govExtended._objectivity_score ?? 75
   const citation_integrity_score = govExtended._citation_integrity_score ?? 80
 
   logger.info('[DRACO-BOARD] Board review complete', {
-    evidence: evResult.score,
-    governance: govResult.score,
-    challenger: challengerResult.score,
+    documentId,
+    evidence: evResult!.score,
+    governance: govResult!.score,
+    challenger: challengerResult!.score,
+    challenger_found_nothing: challengerFoundNothing,
     objectivity: objectivity_score,
     citation_integrity: citation_integrity_score,
   })
 
   return {
-    evidence_validator: evResult,
-    governance_evaluator: govResult,
-    counterfactual_challenger: challengerResult,
+    evidence_validator: evResult!,
+    governance_evaluator: govResult!,
+    counterfactual_challenger: challengerResult!,
     model_rotation_used: rotationUsed,
     objectivity_score,
     citation_integrity_score,
+    challenger_found_nothing: challengerFoundNothing,
   }
 }

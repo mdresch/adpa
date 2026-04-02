@@ -12,6 +12,7 @@ import { getDatabasePoolSafe } from '../database/connection'
 import { runBoardReview } from './dracoReviewBoard'
 import { runStrategicValueAssessment } from './dracoStrategicValueAssessor'
 import { renderVerdict } from './dracoVerdictEngine'
+import { dracoProgressEmitter, PROGRESS_MESSAGES } from './dracoProgressEmitter'
 import type {
   DracoReviewRequest,
   DracoReviewResult,
@@ -20,6 +21,7 @@ import type {
   DracoQualityScores,
 } from '../types/draco'
 import { DRACO_DEFAULT_THRESHOLDS } from '../types/draco'
+
 
 // ─── Template Config Loader ───────────────────────────────────────────────────
 
@@ -265,18 +267,30 @@ export class DracoService {
     } = options
 
     logger.info('[DRACO] Starting full DRACO review', {
-      documentId,
-      documentType,
-      templateId,
-      contentLength: content.length,
+      documentId, documentType, templateId, contentLength: content.length,
     })
 
-    // Load template config (includes draco_enabled check, thresholds, mode)
+    // Emit: convening — board is being assembled
+    dracoProgressEmitter.emitProgress(documentId, {
+      type: 'convening',
+      documentId,
+      message: PROGRESS_MESSAGES.convening,
+      progress_percent: 5,
+      timestamp: new Date().toISOString(),
+    })
+
+    // Load template config
     const templateConfig = await getTemplateConfig(templateId)
 
-    // Check if DRACO is enabled for this template
     if (templateId && templateConfig && !templateConfig.draco_enabled) {
       logger.info('[DRACO] Skipped — DRACO not enabled for this template', { templateId })
+      dracoProgressEmitter.emitProgress(documentId, {
+        type: 'failed',
+        documentId,
+        message: 'DRACO is not enabled for this template.',
+        progress_percent: 100,
+        timestamp: new Date().toISOString(),
+      })
       throw new Error('DRACO_DISABLED_FOR_TEMPLATE')
     }
 
@@ -289,59 +303,117 @@ export class DracoService {
       thresholds_completeness: thresholds.completeness,
     })
 
-    // Run board review and strategic assessment in parallel for speed
-    const [boardReview, strategicAssessment] = await Promise.all([
-      runBoardReview({
-        content,
-        documentType,
-        projectContext,
+    // Emit: strategic assessor starting (runs in parallel with board)
+    dracoProgressEmitter.emitProgress(documentId, {
+      type: 'strategic_started',
+      documentId,
+      message: PROGRESS_MESSAGES.strategic_started,
+      progress_percent: 10,
+      timestamp: new Date().toISOString(),
+    })
+
+    try {
+      // Run board review and strategic assessment in parallel for speed.
+      // Board members emit their own started/complete events as they resolve.
+      const [boardReview, strategicAssessment] = await Promise.all([
+        runBoardReview({
+          content,
+          documentType,
+          projectContext,
+          thresholds,
+          documentId,   // ← required for per-member progress streaming
+        }),
+        runStrategicValueAssessment(content, documentType, projectContext, thresholds)
+          .then(result => {
+            dracoProgressEmitter.emitProgress(documentId, {
+              type: 'strategic_complete',
+              documentId,
+              message: PROGRESS_MESSAGES.strategic_complete,
+              progress_percent: 80,
+              score: result.score,
+              passed: result.passed,
+              timestamp: new Date().toISOString(),
+            })
+            return result
+          }),
+      ])
+
+      // Verdict rendering
+      dracoProgressEmitter.emitProgress(documentId, {
+        type: 'verdict_rendering',
+        documentId,
+        message: PROGRESS_MESSAGES.verdict_rendering,
+        progress_percent: 88,
+        timestamp: new Date().toISOString(),
+      })
+
+      const qualityScores = buildQualityScores(
+        existingAuditScores ?? null,
+        boardReview.objectivity_score,
+        boardReview.citation_integrity_score
+      )
+
+      const totalTime = Date.now() - startTime
+      const result = renderVerdict({
+        document_id: documentId,
+        mode,
         thresholds,
-      }),
-      runStrategicValueAssessment(content, documentType, projectContext, thresholds),
-    ])
+        templateId,
+        quality_scores: qualityScores,
+        evidence_result: boardReview.evidence_validator,
+        governance_result: boardReview.governance_evaluator,
+        challenger_result: boardReview.counterfactual_challenger,
+        strategic_result: strategicAssessment,
+        model_rotation_used: boardReview.model_rotation_used,
+        objectivity_score: boardReview.objectivity_score,
+        citation_integrity_score: boardReview.citation_integrity_score,
+        total_processing_time_ms: totalTime,
+      })
 
-    // Build quality scores (merging existing audit with new DRACO dimensions)
-    const qualityScores = buildQualityScores(
-      existingAuditScores ?? null,
-      boardReview.objectivity_score,
-      boardReview.citation_integrity_score
-    )
+      // Emit final verdict — human-readable message based on outcome
+      const completeKey = result.verdict === 'PASS' ? 'complete_pass'
+        : result.verdict === 'CONDITIONAL_PASS' ? 'complete_conditional'
+        : 'complete_reject'
 
-    const totalTime = Date.now() - startTime
+      dracoProgressEmitter.emitProgress(documentId, {
+        type: 'complete',
+        documentId,
+        message: PROGRESS_MESSAGES[completeKey],
+        progress_percent: 100,
+        score: result.overall_draco_score,
+        timestamp: new Date().toISOString(),
+      })
 
-    // Render final verdict
-    const result = renderVerdict({
-      document_id: documentId,
-      mode,
-      thresholds,
-      templateId,
-      quality_scores: qualityScores,
-      evidence_result: boardReview.evidence_validator,
-      governance_result: boardReview.governance_evaluator,
-      challenger_result: boardReview.counterfactual_challenger,
-      strategic_result: strategicAssessment,
-      model_rotation_used: boardReview.model_rotation_used,
-      objectivity_score: boardReview.objectivity_score,
-      citation_integrity_score: boardReview.citation_integrity_score,
-      total_processing_time_ms: totalTime,
-    })
+      // Persist and feed improvements asynchronously (non-blocking)
+      Promise.all([
+        persistDracoReview(result, userId, templateId),
+        feedTemplateImprovements(result, userId),
+      ]).catch(err => logger.error('[DRACO] Post-review tasks failed', { error: String(err) }))
 
-    // Persist and feed improvements asynchronously (non-blocking)
-    Promise.all([
-      persistDracoReview(result, userId, templateId),
-      feedTemplateImprovements(result, userId),
-    ]).catch(err => logger.error('[DRACO] Post-review tasks failed', { error: String(err) }))
+      logger.info('[DRACO] Full review complete', {
+        review_id: result.review_id,
+        verdict: result.verdict,
+        overall_score: result.overall_draco_score,
+        mode,
+        processing_time_ms: totalTime,
+      })
 
-    logger.info('[DRACO] Full review complete', {
-      review_id: result.review_id,
-      verdict: result.verdict,
-      overall_score: result.overall_draco_score,
-      mode,
-      processing_time_ms: totalTime,
-    })
+      return result
 
-    return result
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message === 'DRACO_DISABLED_FOR_TEMPLATE') throw err
+
+      dracoProgressEmitter.emitProgress(documentId, {
+        type: 'failed',
+        documentId,
+        message: PROGRESS_MESSAGES.failed,
+        progress_percent: 100,
+        timestamp: new Date().toISOString(),
+      })
+      throw err
+    }
   }
+
 
   /**
    * Get the latest DRACO review result for a document.
@@ -396,6 +468,56 @@ export class DracoService {
     } catch (err) {
       logger.error('[DRACO] Failed to fetch stats', { error: String(err) })
       return {}
+    }
+  }
+
+  /**
+   * Record a manual human override for a rejected DRACO review.
+   * This is a critical governance action that requires a reason.
+   */
+  async recordHumanOverride(options: {
+    documentId: string
+    reviewId: string
+    userId: string
+    reason: string
+  }): Promise<void> {
+    const { documentId, reviewId, userId, reason } = options
+
+    try {
+      const pool = getDatabasePoolSafe()
+      if (!pool) throw new Error('DB_POOL_UNAVAILABLE')
+
+      // 1. Insert the override record
+      const overrideResult = await pool.query<{ id: string }>(
+        `INSERT INTO draco_overrides (review_id, document_id, user_id, reason, override_at)
+         VALUES ($1, $2, $3, $4, NOW())
+         RETURNING id`,
+        [reviewId, documentId, userId, reason]
+      )
+
+      const overrideId = overrideResult.rows[0].id
+
+      // 2. Link the override to the document
+      await pool.query(
+        `UPDATE documents SET draco_override_id = $1 WHERE id = $2`,
+        [overrideId, documentId]
+      )
+
+      logger.info('[DRACO-OVERRIDE] 🛡 Human override recorded', {
+        documentId,
+        reviewId,
+        userId,
+        overrideId,
+        reason_length: reason.length,
+      })
+
+      // 3. Security log for audit trail (audit_logs table if exists, otherwise standard logger)
+      // We log at INFO level so it's captured in cloud logs for governance reviews.
+      logger.warn(`[SECURITY-AUDIT] DRACO Override by ${userId} for Document ${documentId}. Reason: ${reason}`)
+
+    } catch (err) {
+      logger.error('[DRACO-OVERRIDE] Failed to record override', { documentId, error: String(err) })
+      throw err
     }
   }
 }

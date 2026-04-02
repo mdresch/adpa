@@ -18,6 +18,12 @@ import { AgentRunHistory } from "./components/AgentRunHistory"
 export default function AgentWorkspacePage() {
   const { isAuthenticated, loading: authLoading } = useAuth()
   const [activeTab, setActiveTab] = useState("new-task")
+  const [activeRunId, setActiveRunId] = useState<string | null>(null)
+
+  const handleStartOrchestration = (runId: string) => {
+    setActiveRunId(runId)
+    setActiveTab("live-monitor")
+  }
 
   if (authLoading) {
     return (
@@ -97,7 +103,7 @@ export default function AgentWorkspacePage() {
                     </TabsContent>
 
                     <TabsContent value="agent" className="animate-in fade-in-50 duration-500 fill-mode-both">
-                      <AgentInteraction />
+                      <AgentInteraction onStartOrchestration={handleStartOrchestration} />
                     </TabsContent>
 
                     <TabsContent value="discovery" className="animate-in fade-in-50 duration-500 fill-mode-both">
@@ -109,7 +115,7 @@ export default function AgentWorkspacePage() {
                     </TabsContent>
                     
                     <TabsContent value="live-monitor" className="animate-in fade-in-50 duration-500 fill-mode-both">
-                      <AgentRunMonitor />
+                      <AgentRunMonitor runId={activeRunId} />
                     </TabsContent>
 
                     <TabsContent value="run-history" className="animate-in fade-in-50 duration-500 fill-mode-both">

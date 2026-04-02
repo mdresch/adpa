@@ -686,7 +686,6 @@ router.post(
   }
 )
 
-export default router
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -751,30 +750,30 @@ router.post(
       logger.info('[DRACO-API] Manual DRACO review triggered', { documentId, userId })
 
       const { dracoService } = await import('../services/dracoService')
-      try {
-        const review = await dracoService.runFullReview({
-          documentId,
-          content: doc.content,
-          documentType: doc.template_name || doc.name || 'Document',
-          projectContext,
-          templateId: doc.template_id || undefined,
-          userId: userId || 'system',
-        })
+      
+      // Respond immediately with 202 Accepted to prevent 502 Gateway timeouts
+      // The client should listen to the SSE progress stream for real-time updates.
+      res.status(202).json({
+        success: true,
+        documentId,
+        message: 'DRACO Review Board convened. Deliberation starting...',
+      })
 
-        res.json({
-          success: true,
-          review,
-          message: `DRACO Review Board completed. Verdict: ${review.verdict}`,
+      // Run the full review asynchronously in the background
+      dracoService.runFullReview({
+        documentId,
+        content: doc.content,
+        documentType: doc.template_name || doc.name || 'Document',
+        projectContext,
+        templateId: doc.template_id || undefined,
+        userId: userId || 'system',
+      }).catch(err => {
+        // Since we already responded to the request, we just log the background failure
+        logger.error('[DRACO-API] Background DRACO review failed', {
+          documentId,
+          error: err instanceof Error ? err.message : String(err)
         })
-      } catch (dracoErr: any) {
-        if (dracoErr?.message === 'DRACO_DISABLED_FOR_TEMPLATE') {
-          return res.status(400).json({
-            success: false,
-            error: 'DRACO is not enabled for this document\'s template. Enable it in template settings.',
-          })
-        }
-        throw dracoErr
-      }
+      })
     } catch (error: unknown) {
       logger.error('[DRACO-API] Failed to run DRACO review', {
         error: error instanceof Error ? error.message : String(error),
@@ -874,3 +873,120 @@ router.get(
     }
   }
 )
+
+/**
+ * GET /api/quality-audits/draco-progress/:documentId
+ *
+ * Server-Sent Events (SSE) stream that delivers real-time DRACO review progress
+ * to the client as the board deliberates. Each event is a JSON-encoded
+ * DracoProgressEvent with human-readable message text.
+ *
+ * The stream closes automatically when the review completes or fails.
+ * Clients should reconnect if they need to follow a subsequent review.
+ *
+ * Usage:
+ *   const es = new EventSource('/api/quality-audits/draco-progress/<documentId>')
+ *   es.onmessage = (e) => console.log(JSON.parse(e.data))
+ */
+router.get(
+  '/draco-progress/:documentId',
+  authenticateToken,
+  async (req: Request, res: Response) => {
+    const { documentId } = req.params
+
+    // SSE headers
+    res.setHeader('Content-Type', 'text/event-stream')
+    res.setHeader('Cache-Control', 'no-cache, no-transform')
+    res.setHeader('Connection', 'keep-alive')
+    res.setHeader('X-Accel-Buffering', 'no') // Disable Nginx buffering if present
+    res.flushHeaders()
+
+    // Keep-alive heartbeat every 15 seconds to prevent proxy timeouts
+    const heartbeatInterval = setInterval(() => {
+      res.write(': heartbeat\n\n')
+    }, 15000)
+
+    // Send an event to the SSE client
+    const sendEvent = (data: object) => {
+      try {
+        res.write(`data: ${JSON.stringify(data)}\n\n`)
+      } catch {
+        // Client disconnected
+      }
+    }
+
+    // Send initial connection confirmation
+    sendEvent({ type: 'connected', documentId, message: 'Review Board progress stream connected', progress_percent: 0, timestamp: new Date().toISOString() })
+
+    const { dracoProgressEmitter } = await import('../services/dracoProgressEmitter')
+
+    // Close the stream when review finishes
+    const closeStream = () => {
+      clearInterval(heartbeatInterval)
+      dracoProgressEmitter.offProgress(documentId, progressListener)
+      try { res.end() } catch { /* already ended */ }
+    }
+
+    const progressListener = (event: object & { type?: string }) => {
+      sendEvent(event)
+      // Auto-close on terminal events
+      if (event.type === 'complete' || event.type === 'failed') {
+        setTimeout(closeStream, 500) // brief delay so client receives final event
+      }
+    }
+
+    dracoProgressEmitter.onProgress(documentId, progressListener as (e: any) => void)
+
+    // Clean up if client disconnects early
+    req.on('close', () => {
+      clearInterval(heartbeatInterval)
+      dracoProgressEmitter.offProgress(documentId, progressListener as (e: any) => void)
+    })
+
+    // Auto-close after 10 minutes regardless (failsafe for orphaned streams)
+    setTimeout(closeStream, 10 * 60 * 1000)
+  }
+)
+
+/**
+ * POST /api/quality-audits/draco-override
+ * Record a manual human override for a rejected DRACO review.
+ * This is a critical governance action that requires a reason.
+ */
+router.post(
+  '/draco-override',
+  authenticateToken,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { documentId, reviewId, reason } = req.body
+      const userId = (req as any).user?.id
+
+      if (!documentId || !reviewId || !reason) {
+        return res.status(400).json({
+          success: false,
+          error: 'Missing required fields: documentId, reviewId, and reason are required.'
+        })
+      }
+
+      const { dracoService } = await import('../services/dracoService')
+      await dracoService.recordHumanOverride({
+        documentId,
+        reviewId,
+        userId,
+        reason
+      })
+
+      res.json({
+        success: true,
+        message: 'Human override recorded successfully. Governance block lifted.'
+      })
+    } catch (error: unknown) {
+      logger.error('[DRACO-API] Failed to record override', {
+        error: error instanceof Error ? error.message : String(error),
+      })
+      next(error)
+    }
+  }
+)
+
+export default router

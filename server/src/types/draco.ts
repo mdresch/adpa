@@ -210,7 +210,18 @@ export interface PublicationAdvisory {
   advisable_to_publish: boolean
   advisory_summary: string
   blocking_enabled: boolean    // false in advisory mode
+  override_required?: boolean  // true if verdict=REJECT and mode=blocking
   conditions_for_approval?: string[]
+}
+
+export interface DracoOverride {
+  id: string
+  review_id: string
+  document_id: string
+  user_id: string
+  reason: string
+  override_at: Date
+  metadata?: Record<string, unknown>
 }
 
 // ─── Model Rotation ───────────────────────────────────────────────────────────

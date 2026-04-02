@@ -29,10 +29,15 @@ interface Message {
   trace?: any[]
 }
 
-export function AgentInteraction() {
+interface AgentInteractionProps {
+  onStartOrchestration?: (runId: string) => void
+}
+
+export function AgentInteraction({ onStartOrchestration }: AgentInteractionProps) {
   const [input, setInput] = useState("")
   const [messages, setMessages] = useState<Message[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [isOrchestrating, setIsOrchestrating] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -41,17 +46,45 @@ export function AgentInteraction() {
     }
   }, [messages, isLoading])
 
+  const handleStartOrchestration = async () => {
+    if (!input.trim() || isOrchestrating) return
+    
+    setIsOrchestrating(true)
+    try {
+      // Assuming we use the first project for demo purposes if none selected
+      const projectsRes = await apiClient.getProjects()
+      const projectId = projectsRes.projects?.[0]?.id
+      
+      if (!projectId) {
+        toast.error("Please create a project first")
+        return
+      }
+
+      const response: any = await apiClient.post(`/agents/project/${projectId}/run`, { goal: input })
+      if (response.data.runId) {
+        toast.success("10-Phase Orchestration Started!")
+        onStartOrchestration?.(response.data.runId)
+      }
+    } catch (error) {
+      console.error("Orchestration start failed:", error)
+      toast.error("Failed to start orchestration sequence")
+    } finally {
+      setIsOrchestrating(false)
+    }
+  }
+
   const handleSendMessage = async (e?: React.FormEvent) => {
     e?.preventDefault()
     if (!input.trim() || isLoading) return
 
     const userMessage: Message = { role: 'user', content: input }
     setMessages(prev => [...prev, userMessage])
+    const currentInput = input
     setInput("")
     setIsLoading(true)
 
     try {
-      const response: any = await apiClient.post('/agents/chat', { goal: input })
+      const response: any = await apiClient.post('/agents/chat', { goal: currentInput })
       const assistantMessage: Message = {
         role: 'assistant',
         content: response.data.response,
@@ -88,7 +121,19 @@ export function AgentInteraction() {
               </CardDescription>
             </div>
           </div>
-          <Badge variant="outline" className="font-mono text-[10px]">RE-ACT LOOP V1.2</Badge>
+          <div className="flex items-center space-x-2">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="hidden sm:flex border-primary/20 hover:bg-primary/5 text-primary"
+              onClick={handleStartOrchestration}
+              disabled={!input.trim() || isOrchestrating}
+            >
+              {isOrchestrating ? <Loader2 className="h-3 w-3 mr-2 animate-spin" /> : <Zap className="h-3 w-3 mr-2" />}
+              Full Orchestration
+            </Button>
+            <Badge variant="outline" className="font-mono text-[10px]">RE-ACT LOOP V1.2</Badge>
+          </div>
         </div>
       </CardHeader>
       

@@ -138,6 +138,43 @@ router.post('/', async (req, res) => {
       userId
     })
 
+    // 🛡️ DRACO GOVERNANCE CHECK
+    // If this is a document approval (linked via change_request_id), check DRACO status
+    if (change_request_id) {
+      const { dracoService } = await import('../services/dracoService')
+      const latestReview = await dracoService.getDocumentReview(change_request_id)
+
+      if (latestReview && 
+          latestReview.verdict === 'REJECT' && 
+          latestReview.publication_advisory.blocking_enabled) {
+        
+        // Check if there is an override
+        const overrideResult = await pool.query(
+          `SELECT id FROM documents WHERE id = $1 AND draco_override_id IS NOT NULL`,
+          [change_request_id]
+        )
+
+        if (overrideResult.rows.length === 0) {
+          logger.warn('[DRACO-BLOCK] 🚫 Approval blocked by DRACO governance', {
+            documentId: change_request_id,
+            reviewId: latestReview.review_id
+          })
+          return res.status(403).json({
+            success: false,
+            error: 'DRACO_GOVERNANCE_BLOCK',
+            message: 'DRACO AI Review Board has REJECTED this document. A formal Human Override is required before this document can be sent for approval.',
+            review_id: latestReview.review_id,
+            remediation_steps: latestReview.remediation_steps
+          })
+        }
+        
+        logger.info('[DRACO-BLOCK] 🛡️ Approval allowed via Human Override', {
+          documentId: change_request_id,
+          overrideId: overrideResult.rows[0].id
+        })
+      }
+    }
+
     const approvalRequest = await approvalWorkflowService.createApprovalRequest({
       request_type,
       change_request_id,

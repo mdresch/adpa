@@ -37,6 +37,7 @@ export default function LoginPage() {
     confirmPassword: "",
   })
   const [isSubmitting, setIsSubmitting] = React.useState(false)
+  const [authStatus, setAuthStatus] = React.useState("")
   const [error, setError] = React.useState("")
 
   // Redirect if already authenticated
@@ -82,20 +83,24 @@ export default function LoginPage() {
     if (!validateForm()) return
 
     setIsSubmitting(true)
+    setAuthStatus("Connecting to Security Provider...")
     setError("")
 
     try {
       if (activeTab === "login") {
         await login(formData.email, formData.password)
+        setAuthStatus("Fetching ADPA Profile...")
       } else {
         await register({
           email: formData.email,
           password: formData.password,
           name: formData.name,
         })
+        setAuthStatus("Provisioning Workspace...")
       }
     } catch (error) {
       setError(error instanceof Error ? error.message : "Authentication failed")
+      setAuthStatus("")
     } finally {
       setIsSubmitting(false)
     }
@@ -103,10 +108,12 @@ export default function LoginPage() {
 
   const demoLogin = async () => {
     setIsSubmitting(true)
+    setAuthStatus("Initializing Demo Environment...")
     try {
       await login("admin@adpa.com", "admin123")
     } catch (error) {
       setError("Demo login failed")
+      setAuthStatus("")
     } finally {
       setIsSubmitting(false)
     }
@@ -241,7 +248,7 @@ export default function LoginPage() {
                           >
                             <Sparkles className="h-4 w-4" />
                           </motion.div>
-                          Signing in...
+                          {authStatus || "Signing in..."}
                         </>
                       ) : (
                         "Sign In"
