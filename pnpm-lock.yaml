@@ -991,6 +991,9 @@ importers:
       nodemailer:
         specifier: ^8.0.4
         version: 8.0.4
+      ollama-ai-provider-v2:
+        specifier: ^3.3.1
+        version: 3.3.1(ai@5.0.156(zod@3.25.76))(zod@3.25.76)
       openai:
         specifier: ^6.15.0
         version: 6.21.0(ws@8.19.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.25.76)
@@ -24042,6 +24045,13 @@ snapshots:
       es-object-atoms: 1.1.1
 
   obuf@1.1.2: {}
+
+  ollama-ai-provider-v2@3.3.1(ai@5.0.156(zod@3.25.76))(zod@3.25.76):
+    dependencies:
+      '@ai-sdk/provider': 3.0.8
+      '@ai-sdk/provider-utils': 4.0.21(zod@3.25.76)
+      ai: 5.0.156(zod@3.25.76)
+      zod: 3.25.76
 
   ollama-ai-provider-v2@3.3.1(ai@6.0.90(zod@3.24.1(patch_hash=99447639c57a97aecf6e33f715d29c14e2e6503bd04dd97ce56ab473d578dc52)))(zod@3.24.1(patch_hash=99447639c57a97aecf6e33f715d29c14e2e6503bd04dd97ce56ab473d578dc52)):
     dependencies:
