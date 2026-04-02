@@ -8,7 +8,7 @@ import * as admin from 'firebase-admin'
  */
 export const firebaseAuthDependency: Dependency = {
   name: "Firebase Auth Provider",
-  critical: true,
+  critical: process.env.NODE_ENV !== "development",
   timeout: 10000,
   init: async () => {
     logger.info("🔐 Validating Firebase Auth connectivity...")

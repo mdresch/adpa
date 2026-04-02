@@ -631,6 +631,67 @@ router.post("/generate",
         })()
       })
 
+      // 🎯 DRACO Review: Trigger AI Review Board analysis after quality audit
+      // Advisory mode by default — never blocks document creation
+      // Only runs if draco_enabled = true on the template
+      if (templateId) {
+        setImmediate(() => {
+          (async () => {
+            try {
+              // Check if DRACO is enabled for this template
+              const templateDracoCheck = await pool.query(
+                'SELECT draco_enabled FROM templates WHERE id = $1 LIMIT 1',
+                [templateId]
+              )
+              const dracoEnabled = templateDracoCheck.rows[0]?.draco_enabled === true
+
+              if (!dracoEnabled) {
+                log.info('🎯 [DRACO] Skipping DRACO review — not enabled for template', { templateId })
+                return
+              }
+
+              log.info('🎯 [DRACO] Triggering DRACO AI Review Board for generated document', {
+                documentId,
+                documentName: name,
+                templateId,
+              })
+
+              const projectCtxResult = await pool.query(
+                'SELECT * FROM projects WHERE id = $1',
+                [projectId]
+              )
+              const projectCtx = projectCtxResult.rows[0] ?? {}
+
+              const { dracoService } = await import('../services/dracoService')
+              const dracoResult = await dracoService.runFullReview({
+                documentId,
+                content: result.content,
+                documentType: name || 'Document',
+                projectContext: projectCtx,
+                templateId,
+                userId: req.user?.id || 'system',
+              })
+
+              log.info('🎯 [DRACO] Review Board completed', {
+                documentId,
+                verdict: dracoResult.verdict,
+                overall_score: dracoResult.overall_draco_score,
+                mode: dracoResult.mode,
+              })
+            } catch (dracoError: any) {
+              if (dracoError?.message === 'DRACO_DISABLED_FOR_TEMPLATE') {
+                return // silently skip
+              }
+              // Non-blocking — log but don't fail
+              log.error('🎯 [DRACO] Review Board failed (non-blocking)', {
+                documentId,
+                error: dracoError?.message,
+              })
+            }
+          })()
+        })
+      }
+
       // 🔗 Auto-integration: Check project settings and auto-publish to Confluence/Jira if enabled
       // This runs asynchronously and doesn't block the response
       let confluenceUrl: string | null = null

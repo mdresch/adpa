@@ -688,3 +688,189 @@ router.post(
 
 export default router
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DRACO (AI Review Board) Routes
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * POST /api/quality-audits/draco-review
+ * Manually trigger a full DRACO AI Review Board analysis for a document.
+ * DRACO must be enabled on the document's template for this to run.
+ * In advisory mode (default), always runs and returns results without blocking.
+ */
+const triggerDracoSchema = Joi.object({
+  documentId: Joi.string().uuid().required(),
+})
+
+router.post(
+  '/draco-review',
+  authenticateToken,
+  validate(triggerDracoSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { documentId } = req.body
+      const userId = (req as any).user?.id
+
+      // Fetch document + project context
+      const docResult = await pool.query(
+        `SELECT d.id, d.content, d.name, d.template_id, d.project_id, t.name as template_name, t.draco_enabled
+         FROM documents d
+         LEFT JOIN templates t ON d.template_id = t.id
+         WHERE d.id = $1`,
+        [documentId]
+      )
+
+      if (!docResult.rows.length) {
+        return res.status(404).json({ success: false, error: 'Document not found' })
+      }
+
+      const doc = docResult.rows[0]
+
+      if (!doc.content || doc.content.trim().length === 0) {
+        return res.status(400).json({ success: false, error: 'Document has no content' })
+      }
+
+      // Check access
+      const accessCheck = await pool.query(
+        `SELECT d.id FROM documents d
+         JOIN projects p ON d.project_id = p.id
+         WHERE d.id = $1 AND (p.created_by = $2 OR p.owner_id = $2 OR p.team_members ? $2::text)`,
+        [documentId, userId]
+      )
+
+      const userRole = (req as any).user?.role?.toLowerCase()
+      if (accessCheck.rows.length === 0 && userRole !== 'super_admin' && userRole !== 'admin') {
+        return res.status(403).json({ success: false, error: 'Access denied' })
+      }
+
+      // Get project context
+      const projectResult = await pool.query('SELECT * FROM projects WHERE id = $1', [doc.project_id])
+      const projectContext = projectResult.rows[0] ?? {}
+
+      logger.info('[DRACO-API] Manual DRACO review triggered', { documentId, userId })
+
+      const { dracoService } = await import('../services/dracoService')
+      try {
+        const review = await dracoService.runFullReview({
+          documentId,
+          content: doc.content,
+          documentType: doc.template_name || doc.name || 'Document',
+          projectContext,
+          templateId: doc.template_id || undefined,
+          userId: userId || 'system',
+        })
+
+        res.json({
+          success: true,
+          review,
+          message: `DRACO Review Board completed. Verdict: ${review.verdict}`,
+        })
+      } catch (dracoErr: any) {
+        if (dracoErr?.message === 'DRACO_DISABLED_FOR_TEMPLATE') {
+          return res.status(400).json({
+            success: false,
+            error: 'DRACO is not enabled for this document\'s template. Enable it in template settings.',
+          })
+        }
+        throw dracoErr
+      }
+    } catch (error: unknown) {
+      logger.error('[DRACO-API] Failed to run DRACO review', {
+        error: error instanceof Error ? error.message : String(error),
+      })
+      next(error)
+    }
+  }
+)
+
+/**
+ * GET /api/quality-audits/draco-review/:documentId
+ * Get the latest DRACO review result for a document
+ */
+router.get(
+  '/draco-review/:documentId',
+  authenticateToken,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { documentId } = req.params
+
+      const { dracoService } = await import('../services/dracoService')
+      const review = await dracoService.getDocumentReview(documentId)
+
+      if (!review) {
+        return res.status(404).json({
+          success: false,
+          error: 'No DRACO review found for this document',
+        })
+      }
+
+      res.json({ success: true, review })
+    } catch (error: unknown) {
+      logger.error('[DRACO-API] Failed to get DRACO review', {
+        error: error instanceof Error ? error.message : String(error),
+      })
+      next(error)
+    }
+  }
+)
+
+/**
+ * GET /api/quality-audits/draco-board/:documentId
+ * Get individual board member results for a document's latest DRACO review
+ */
+router.get(
+  '/draco-board/:documentId',
+  authenticateToken,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { documentId } = req.params
+
+      const { dracoService } = await import('../services/dracoService')
+      const review = await dracoService.getDocumentReview(documentId)
+
+      if (!review) {
+        return res.status(404).json({ success: false, error: 'No DRACO review found' })
+      }
+
+      res.json({
+        success: true,
+        board: {
+          evidence_validator: review.board_results.evidence_validator,
+          governance_evaluator: review.board_results.governance_evaluator,
+          counterfactual_challenger: review.board_results.counterfactual_challenger,
+        },
+        strategic_assessment: review.strategic_assessment,
+        model_rotation_used: review.model_rotation_used,
+        verdict: review.verdict,
+        overall_score: review.overall_draco_score,
+      })
+    } catch (error: unknown) {
+      logger.error('[DRACO-API] Failed to get board results', {
+        error: error instanceof Error ? error.message : String(error),
+      })
+      next(error)
+    }
+  }
+)
+
+/**
+ * GET /api/quality-audits/draco-stats
+ * Get DRACO review board statistics and provider independence rankings (admin)
+ */
+router.get(
+  '/draco-stats',
+  authenticateToken,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { dracoService } = await import('../services/dracoService')
+      const stats = await dracoService.getReviewStats()
+      res.json({ success: true, stats })
+    } catch (error: unknown) {
+      logger.error('[DRACO-API] Failed to get stats', {
+        error: error instanceof Error ? error.message : String(error),
+      })
+      next(error)
+    }
+  }
+)

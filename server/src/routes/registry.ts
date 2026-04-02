@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { pathToFileURL } from 'url';
 import { Application, Router } from 'express';
 import { logger } from '../infrastructure/logger';
 interface ModuleExports {
@@ -39,9 +40,8 @@ export async function discoverRoutes(): Promise<RouteConfig[]> {
     if (fs.existsSync(routesFile)) {
       try {
         // Dynamically import the routes file
-        // Note: Using pathToFileURL or similar might be needed for absolute paths in some ESM/TS environments,
-        // but for standard Node.js with TS-Node/Jest, a relative require/import usually works.
-        const moduleExports = (await import(routesFile)) as ModuleExports;
+        // On Windows, absolute paths must be converted to file:// URLs for the ESM loader
+        const moduleExports = (await import(pathToFileURL(routesFile).href)) as ModuleExports;
         const moduleRoutes = moduleExports.default || moduleExports;
 
         // Only add if it's the new RouteConfig array format
