@@ -49,7 +49,7 @@ const nextConfig = {
     return {
       beforeFiles: [
         {
-          source: '/api/:path((?!morphic).*)',
+          source: '/api/:path((?!morphic|auth).*)',
           destination: `${process.env.BACKEND_URL || 'https://adpa-backend.agreeablegrass-418bd4ba.westeurope.azurecontainerapps.io'}/api/:path*`,
         },
       ],

@@ -2,6 +2,15 @@ import type { Request, Response, NextFunction } from "express"
 import jwt from "jsonwebtoken"
 import { pool } from "../database/connection"
 import { logger } from "../utils/logger"
+import { v4 as uuidv4 } from "uuid"
+
+// Default permissions for new JIT-provisioned users
+const DEFAULT_USER_PERMISSIONS = {
+  'projects.read': true,
+  'documents.read': true,
+  'templates.read': true,
+  'stakeholders.read': true,
+};
 
 // Dynamic import helper to prevent frontend build crashes
 // We use a variable for the module name to hide it from static analysis
@@ -122,6 +131,40 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
     }
 
     if (result.rows.length === 0) {
+      if (decoded.fromFirebase) {
+        // JIT PROVISIONING: Create the user on the fly if they are verified by Firebase
+        logger.info(`[Auth] JIT provisioning new Firebase user: ${decoded.email}`);
+        
+        const newUserId = uuidv4();
+        const role = 'user';
+        const permissions = JSON.stringify(DEFAULT_USER_PERMISSIONS);
+        
+        try {
+          const insertResult = await pool.query(
+            "INSERT INTO users (id, email, role, permissions, is_active) VALUES ($1, $2, $3, $4, $5) RETURNING id, email, role, permissions, is_active",
+            [newUserId, decoded.email, role, permissions, true]
+          );
+          
+          if (!insertResult.rows || insertResult.rows.length === 0) {
+             throw new Error("Failed to insert new JIT user");
+          }
+          
+          // Use the newly created user for the rest of the request
+          const newUser = insertResult.rows[0];
+          req.user = {
+            id: newUser.id,
+            email: newUser.email,
+            role: newUser.role,
+            permissions: newUser.permissions,
+          };
+          
+          return next();
+        } catch (insertErr: any) {
+          logger.error('[Auth] JIT Provisioning failed:', insertErr);
+          return res.status(500).json({ error: "Failed to provision user account" });
+        }
+      }
+      
       return res.status(401).json({ error: "User not found" })
     }
 
