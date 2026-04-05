@@ -7,7 +7,7 @@ RUN npm install -g pnpm
 WORKDIR /app
 
 # Copy workspace files
-COPY pnpm-lock.yaml pnpm-workspace.yaml package.json .npmrc ./
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json tsconfig.json .npmrc ./
 COPY patches ./patches
 
 # Copy source code (Backend requires lib and types)
