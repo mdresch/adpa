@@ -15,7 +15,14 @@ let driver: Driver | null = null
 const neo4jBreaker = new CircuitBreaker(3, 30000)
 
 export function isNeo4jConfigured(): boolean {
-  return !!NEO4J_URI
+  if (!NEO4J_URI) return false
+  
+  // Prevent local fallback in production
+  if (process.env.NODE_ENV === "production" && NEO4J_URI.includes("localhost")) {
+    return false
+  }
+  
+  return true
 }
 
 export function getNeo4jDriver(): Driver | null {

@@ -266,92 +266,52 @@ async function connectDatabaseInternal(): Promise<void> {
           dbUrl.hostname.includes('pooler.supabase.com')
 
         if (isDirectConnection) {
-          // Try to resolve to IPv4 for direct connections
+          // Try to resolve to IPv4 for direct connections (Postgres port 5432)
           try {
-            console.log(`🔧 Resolving ${dbUrl.hostname} via dns.lookup...`)
+            console.log(`🔧 Resolving direct connection ${dbUrl.hostname} via dns.lookup...`)
             const { address } = await dnsLookup(dbUrl.hostname, { family: 4 })
 
             if (address) {
-              const ipv4Address = address
-              console.log(`✅ Resolved to IPv4: ${ipv4Address}`)
-
+              console.log(`✅ Resolved to IPv4: ${address}`)
               poolConfig = {
                 ...poolConfig,
-                host: ipv4Address, // Use resolved IPv4 address instead of hostname
+                host: address, 
                 port: parseInt(dbUrl.port) || 5432,
                 database: dbUrl.pathname.slice(1).split('?')[0],
                 user: dbUrl.username,
-                password: dbUrl.password,
+                password: decodeURIComponent(dbUrl.password),
               }
-            } else {
-              throw new Error(`No IPv4 addresses found for hostname: ${dbUrl.hostname}`)
             }
           } catch (ipv4Error: any) {
-            // If IPv4 resolution fails, suggest using pooler instead
-            console.warn('⚠️  Could not resolve hostname to IPv4:', ipv4Error?.message || ipv4Error)
-            console.warn('💡 TIP: Use connection pooler (port 6543) for better IPv4 compatibility')
-            console.warn('   Example: postgresql://postgres:password@host:6543/db?pgbouncer=true')
-
-            // Fall through to use hostname (might resolve to IPv6)
-            throw ipv4Error
+            console.warn('⚠️  IPv4 resolution skipped/failed:', ipv4Error?.message)
+            // Fallback: use connection string directly in the catch-all below
           }
         } else {
-          // For pooler connections, try to resolve to IPv4 if it's the new pooler domain
+          // For pooler connections (Port 6543), try resolution but fallback safely
           const isSupabasePooler = dbUrl.hostname.includes('pooler.supabase.com')
-          const poolerType = isSupabasePooler ? 'Supabase Transaction Pooler' : 'Connection Pooler'
-          console.log(`🔧 Using ${poolerType} (port ${dbUrl.port}) - attempting DNS resolution`)
+          console.log(`🔧 Using Pooler (port ${dbUrl.port}) - attempting resolution`)
 
           try {
-            console.log(`🔧 Resolving ${dbUrl.hostname} via dns.lookup (pooler)...`)
             const { address } = await dnsLookup(dbUrl.hostname, { family: 4 })
             if (address) {
               console.log(`✅ Pooler resolved to IPv4: ${address}`)
               poolConfig = {
                 ...poolConfig,
-                host: address, // Use resolved IPv4 address
+                host: address,
                 port: parseInt(dbUrl.port) || 6543,
                 database: dbUrl.pathname.slice(1).split('?')[0],
                 user: dbUrl.username,
-                password: dbUrl.password,
+                password: decodeURIComponent(dbUrl.password),
               }
-            } else {
-              throw new Error(`No IPv4 addresses found for pooler: ${dbUrl.hostname}`)
             }
           } catch (dnsErr: any) {
-            console.warn(`⚠️ Pooler DNS resolution failed: ${dnsErr.message}`)
-            console.log(`   Falling back to hostname directly: ${dbUrl.hostname}`)
-            poolConfig = {
-              ...poolConfig,
-              host: dbUrl.hostname,
-              port: parseInt(dbUrl.port) || 6543,
-              database: dbUrl.pathname.slice(1).split('?')[0],
-              user: dbUrl.username,
-              password: dbUrl.password,
-            }
+            console.warn(`⚠️ Pooler DNS lookup failed: ${dnsErr.message} - falling back to raw hostname`)
           }
         }
       } catch (e: any) {
-        // Fallback: Parse connection string manually
-        console.warn('⚠️  Could not resolve hostname, parsing connectionString with SSL config:', e?.message || e)
-        try {
-          const dbUrl = new URL(currentDbUrl)
-          poolConfig = {
-            host: dbUrl.hostname,
-            port: parseInt(dbUrl.port) || 5432,
-            database: dbUrl.pathname.slice(1).split('?')[0],
-            user: dbUrl.username,
-            password: dbUrl.password,
-            ssl: buildSslConfig(currentDbUrl),
-            max: 50,
-            idleTimeoutMillis: 30000,
-            connectionTimeoutMillis: DEFAULT_DB_CONN_TIMEOUT_MS,
-          }
-          console.log(`🔧 Using parsed connection with SSL to: ${dbUrl.hostname}:${dbUrl.port}`)
-        } catch (parseError) {
-          // Last resort: use connectionString as-is
-          console.error('⚠️  Could not parse DATABASE_URL, using raw connectionString')
-          poolConfig.connectionString = currentDbUrl
-        }
+        // Ultimate Fallback: Just use the raw connectionString with our determined SSL config
+        console.warn('⚠️  Advanced parsing failed or was bypassed, ensuring raw string use')
+        poolConfig.connectionString = currentDbUrl
       }
 
       const testPool = new Pool(poolConfig)

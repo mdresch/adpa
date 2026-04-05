@@ -155,13 +155,21 @@ router.get("/ready", async (req: Request, res: Response) => {
         message: "Server is ready to receive traffic",
       } as HealthStatus)
     } else {
-      logger.warn("Readiness check failed", { failedDeps })
+      const detailedFailures = failedDeps.map(name => {
+        const depStatus = dependencyHealth.get(name)
+        return {
+          name,
+          error: depStatus?.error || "Unknown error"
+        }
+      })
+
+      logger.warn("Readiness check failed", { failedDeps: detailedFailures })
       res.status(503).json({
         status: "unhealthy",
         timestamp: new Date().toISOString(),
         uptime: process.uptime(),
         message: "Server is not ready",
-        failedDependencies: failedDeps,
+        failedDependencies: detailedFailures,
       })
     }
   } catch (error) {

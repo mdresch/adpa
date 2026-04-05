@@ -37,9 +37,11 @@ ENV PORT=5000
 # Copy workspace files for production install
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json .npmrc ./
 COPY patches ./patches
+COPY --from=builder /app/tsconfig.json ./tsconfig.json
 
 # Copy built files and package.json from builder
 COPY --from=builder /app/server/package.json ./server/
+COPY --from=builder /app/server/tsconfig.json ./server/tsconfig.json
 COPY --from=builder /app/server/dist ./server/dist
 COPY --from=builder /app/lib ./lib
 COPY --from=builder /app/types ./types
