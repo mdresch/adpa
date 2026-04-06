@@ -35,28 +35,39 @@ export async function discoverRoutes(): Promise<RouteConfig[]> {
   const modules = fs.readdirSync(modulesDir);
 
   for (const moduleName of modules) {
-    const routesFileTs = path.join(modulesDir, moduleName, 'routes.ts');
+    // In production (dist), only .js compiled files exist — never try to import .ts at runtime.
+    // In development (ts-node), only .ts files exist.
+    // Prefer .js if it exists on disk, otherwise try .ts (dev only).
     const routesFileJs = path.join(modulesDir, moduleName, 'routes.js');
-    const routesFile = fs.existsSync(routesFileJs) ? routesFileJs : routesFileTs;
+    const routesFileTs = path.join(modulesDir, moduleName, 'routes.ts');
     
-    if (fs.existsSync(routesFile)) {
-      try {
-        // Dynamically import the routes file
-        // On Windows, absolute paths must be converted to file:// URLs for the ESM loader
-        const moduleExports = (await import(pathToFileURL(routesFile).href)) as ModuleExports;
-        const moduleRoutes = moduleExports.default || moduleExports;
+    // Only attempt to load a file that physically exists on disk.
+    // This prevents "Cannot find module" errors for modules that have a source
+    // routes.ts but no compiled routes.js (i.e., modules not yet migrated to modular format).
+    const routesFile = fs.existsSync(routesFileJs) 
+      ? routesFileJs 
+      : (fs.existsSync(routesFileTs) ? routesFileTs : null);
+    
+    if (!routesFile) {
+      // No routes file found for this module — skip silently
+      continue;
+    }
 
-        // Only add if it's the new RouteConfig array format
-        if (Array.isArray(moduleRoutes)) {
-          routes.push(...moduleRoutes);
-        } else {
-          // If it's a single Router (legacy modular style), it will be skipped by auto-discovery
-          // and should be registered manually in server.ts if needed.
-          logger.debug(`ℹ️ Skipping module ${moduleName}: routes.ts does not export a RouteConfig array.`);
-        }
-      } catch (err: any) {
-        logger.error({ error: err.message }, `❌ Failed to load routes from module: ${moduleName}`);
+    try {
+      // Dynamically import the routes file
+      // On Windows, absolute paths must be converted to file:// URLs for the ESM loader
+      const moduleExports = (await import(pathToFileURL(routesFile).href)) as ModuleExports;
+      const moduleRoutes = moduleExports.default || moduleExports;
+
+      // Only add if it's the new RouteConfig array format
+      if (Array.isArray(moduleRoutes)) {
+        routes.push(...moduleRoutes);
+        logger.debug(`✅ Loaded routes from module: ${moduleName}`);
+      } else {
+        logger.debug(`ℹ️ Skipping module ${moduleName}: routes file does not export a RouteConfig array.`);
       }
+    } catch (err: any) {
+      logger.error({ error: err.message }, `❌ Failed to load routes from module: ${moduleName}`);
     }
   }
 
