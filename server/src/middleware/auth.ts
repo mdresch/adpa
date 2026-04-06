@@ -137,46 +137,46 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
         
         const newUserId = uuidv4();
         const role = 'user';
-        const permissions = JSON.stringify(DEFAULT_USER_PERMISSIONS);
+        const permissions = DEFAULT_USER_PERMISSIONS;
         
-        let newUser;
+        let user;
         try {
           const insertResult = await pool.query(
-            "INSERT INTO users (id, email, role, permissions, is_active) VALUES ($1, $2, $3, $4, $5) RETURNING id, email, role, permissions, is_active",
-            [newUserId, decoded.email, role, permissions, true]
+            "INSERT INTO users (id, email, role, permissions, is_active) VALUES ($1, $2, $3, $4, $5) RETURNING *",
+            [newUserId, decoded.email, role, JSON.stringify(permissions), true]
           );
           
-          if (!insertResult.rows || insertResult.rows.length === 0) {
-             throw new Error("Failed to insert new JIT user");
-          }
-          newUser = insertResult.rows[0];
+          user = insertResult.rows[0];
+          logger.info(`[Auth] JIT Provisioned new user: ${decoded.email}`);
         } catch (insertErr: any) {
           // Check for Unique Constraint Violation (Postgres code 23505)
           // This happens if a concurrent request already created the user
           if (insertErr.code === '23505') {
-            logger.info(`[Auth] JIT Provisioning conflict for ${decoded.email}, fetching existing user instead.`);
+            logger.warn(`[Auth] JIT Race condition detected for ${decoded.email}. Fetching existing record.`);
             const retryResult = await pool.query(
-              "SELECT id, email, role, permissions, is_active FROM users WHERE email = $1",
-              [decoded.email]
+              "SELECT * FROM users WHERE email = $1 OR id = $2",
+              [decoded.email, newUserId]
             );
             
-            if (retryResult.rows.length > 0) {
-              newUser = retryResult.rows[0];
-            } else {
-              throw new Error("User conflict detected but user not found on retry");
-            }
+            user = retryResult.rows[0];
           } else {
-            logger.error('[Auth] JIT Provisioning failed with database error:', insertErr);
+            logger.error('[Auth] JIT Provisioning failed on non-conflict error:', insertErr);
             return res.status(500).json({ error: "Failed to provision user account" });
           }
         }
         
+        // Crucial: After the catch/retry, ensure 'user' exists before assigning to req.user
+        if (!user) {
+          logger.error(`[Auth] User provisioning failed: record not found after insert attempt for ${decoded.email}`);
+          return res.status(500).json({ error: "User provisioning failed: record not found after insert attempt." });
+        }
+        
         // Use the newly created or fetched user for the rest of the request
         req.user = {
-          id: newUser.id,
-          email: newUser.email,
-          role: newUser.role,
-          permissions: newUser.permissions,
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          permissions: typeof user.permissions === 'string' ? JSON.parse(user.permissions) : user.permissions,
         };
         
         return next();

@@ -138,7 +138,13 @@ export class AuthController {
       res.status(201).json({
         success: true,
         token,
-        user: { id: user.id, email: user.email, name: user.name, role: user.role }
+        user: { 
+          id: user.id, 
+          email: user.email, 
+          name: user.name, 
+          role: user.role,
+          permissions: typeof user.permissions === 'string' ? JSON.parse(user.permissions) : user.permissions
+        }
       });
     } catch (error: any) {
       if (error.message === "User creation failed") {
@@ -193,7 +199,13 @@ export class AuthController {
       res.json({
         success: true,
         token,
-        user: { id: user.id, email: user.email, name: user.name, role: user.role }
+        user: { 
+          id: user.id, 
+          email: user.email, 
+          name: user.name, 
+          role: user.role,
+          permissions: typeof user.permissions === 'string' ? JSON.parse(user.permissions) : user.permissions
+        }
       });
     } catch (error) {
       log.error("Login error:", error);
@@ -340,7 +352,13 @@ export class AuthController {
       return res.json({
         success: true,
         message: "Demo login",
-        user: { id: user.id, email: user.email, name: user.name, role: user.role, permissions: user.permissions },
+        user: { 
+          id: user.id, 
+          email: user.email, 
+          name: user.name, 
+          role: user.role, 
+          permissions: typeof user.permissions === 'string' ? JSON.parse(user.permissions) : user.permissions 
+        },
         token
       });
     } catch (error) {
