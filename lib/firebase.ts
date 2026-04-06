@@ -1,4 +1,4 @@
-import { initializeApp, getApps, getApp } from "firebase/app";
+import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
 import { 
   getAuth, 
   connectAuthEmulator, 
@@ -6,7 +6,8 @@ import {
   browserLocalPersistence, 
   browserPopupRedirectResolver, 
   browserSessionPersistence,
-  indexedDBLocalPersistence
+  indexedDBLocalPersistence,
+  Auth
 } from "firebase/auth";
 
 // Firebase configuration
@@ -20,35 +21,27 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase with safety for build-time (Vercel/Static Prerendering)
-let app;
-let auth;
-
 const hasFirebaseConfig = !!firebaseConfig.apiKey;
 
-if (hasFirebaseConfig) {
-  app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+export const app: FirebaseApp = (hasFirebaseConfig 
+  ? (getApps().length > 0 ? getApp() : initializeApp(firebaseConfig))
+  : {} as any) as FirebaseApp;
+
+export const auth: Auth = (() => {
+  if (!hasFirebaseConfig) return {} as any;
   
-  // Use initializeAuth for better control over persistence and resolvers
-  // This often resolves the 'RecaptchaConfig' error by ensuring clean initialization
   if (typeof window !== "undefined") {
-    auth = initializeAuth(app, {
+    return initializeAuth(app, {
       persistence: [indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence],
       popupRedirectResolver: browserPopupRedirectResolver,
     });
-  } else {
-    auth = getAuth(app);
   }
+  return getAuth(app);
+})() as Auth;
 
-  // Connect to emulator in development
-  if (process.env.NODE_ENV === "development" && typeof window !== "undefined") {
-    const authEmulatorHost = process.env.NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST || "localhost:9099";
-    console.log(`🔌 Connecting Firebase Auth to emulator at ${authEmulatorHost}`);
-    connectAuthEmulator(auth, `http://${authEmulatorHost}`);
-  }
-} else {
-  console.warn("⚠️ Firebase API Key missing. Skipping initialization (expected during build).");
-  app = {} as any;
-  auth = {} as any;
+// Connect to emulator in development
+if (hasFirebaseConfig && process.env.NODE_ENV === "development" && typeof window !== "undefined") {
+  const authEmulatorHost = process.env.NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST || "localhost:9099";
+  console.log(`🔌 Connecting Firebase Auth to emulator at ${authEmulatorHost}`);
+  connectAuthEmulator(auth, `http://${authEmulatorHost}`);
 }
-
-export { app, auth };
