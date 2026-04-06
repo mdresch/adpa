@@ -106,11 +106,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
               
               // Connect WebSocket after successful profile fetch
               apiClient.connectWebSocket()
-            } catch (profileError) {
-              console.error("Failed to fetch ADPA user profile:", profileError)
-              // If profile fetch fails, we might still be authenticated in Firebase,
-              // but we can't function properly in ADPA. 
-              toast.error("Authenticated but failed to load user profile.")
+            } catch (profileError: any) {
+              // If the backend is down (500/502), silently clear state so the user
+              // lands on a clean login page rather than seeing a confusing error toast.
+              // This handles cases where the browser has a cached Firebase session
+              // but the backend is temporarily unavailable or being redeployed.
+              const status = profileError?.status || profileError?.response?.status
+              if (status >= 500 || !status) {
+                console.warn("[Auth] Backend unavailable during session restore, clearing auth state silently.")
+                apiClient.clearToken()
+                removeCookie('auth_token')
+                // Don't setUser — leave it as null so the app shows the login page
+              } else {
+                console.error("Failed to fetch ADPA user profile:", profileError)
+                toast.error("Authenticated but failed to load user profile.")
+              }
             }
           }
         } catch (tokenError) {
