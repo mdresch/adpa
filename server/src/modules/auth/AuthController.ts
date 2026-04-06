@@ -207,22 +207,43 @@ export class AuthController {
    */
   public static async getMe(req: Request, res: Response) {
     const log = childLogger({ requestId: (req as any).requestId });
+    const userId = (req as any).user?.id;
+    
     try {
-      const userId = (req as any).user?.id;
       if (!userId) {
+        log.warn("getMe called without userId in request");
         return res.status(401).json({ error: "Unauthorized" });
       }
 
       const result = await AuthController.repository.findById(userId);
 
       if (result.rows.length === 0) {
+        log.warn(`User profile not found in database for ID: ${userId}`);
         return res.status(404).json({ error: "User not found" });
       }
 
-      res.json({ success: true, user: result.rows[0] });
-    } catch (error) {
-      log.error("GetMe error:", error);
-      res.status(500).json({ error: "Internal server error" });
+      const user = result.rows[0];
+      
+      // SAFE PERMISSION PARSING: Ensure permissions is an object
+      if (typeof user.permissions === 'string') {
+        try {
+          user.permissions = JSON.parse(user.permissions);
+        } catch (e) {
+          log.error(`Failed to parse permissions string for user ${userId}:`, user.permissions);
+          user.permissions = {};
+        }
+      }
+
+      res.json({ success: true, user });
+    } catch (error: any) {
+      log.error(`GetMe error for user ${userId}:`, {
+        message: error.message,
+        stack: error.stack
+      });
+      res.status(500).json({ 
+        error: "Internal server error",
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
     }
   }
 

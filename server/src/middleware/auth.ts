@@ -139,6 +139,7 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
         const role = 'user';
         const permissions = JSON.stringify(DEFAULT_USER_PERMISSIONS);
         
+        let newUser;
         try {
           const insertResult = await pool.query(
             "INSERT INTO users (id, email, role, permissions, is_active) VALUES ($1, $2, $3, $4, $5) RETURNING id, email, role, permissions, is_active",
@@ -148,21 +149,37 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
           if (!insertResult.rows || insertResult.rows.length === 0) {
              throw new Error("Failed to insert new JIT user");
           }
-          
-          // Use the newly created user for the rest of the request
-          const newUser = insertResult.rows[0];
-          req.user = {
-            id: newUser.id,
-            email: newUser.email,
-            role: newUser.role,
-            permissions: newUser.permissions,
-          };
-          
-          return next();
+          newUser = insertResult.rows[0];
         } catch (insertErr: any) {
-          logger.error('[Auth] JIT Provisioning failed:', insertErr);
-          return res.status(500).json({ error: "Failed to provision user account" });
+          // Check for Unique Constraint Violation (Postgres code 23505)
+          // This happens if a concurrent request already created the user
+          if (insertErr.code === '23505') {
+            logger.info(`[Auth] JIT Provisioning conflict for ${decoded.email}, fetching existing user instead.`);
+            const retryResult = await pool.query(
+              "SELECT id, email, role, permissions, is_active FROM users WHERE email = $1",
+              [decoded.email]
+            );
+            
+            if (retryResult.rows.length > 0) {
+              newUser = retryResult.rows[0];
+            } else {
+              throw new Error("User conflict detected but user not found on retry");
+            }
+          } else {
+            logger.error('[Auth] JIT Provisioning failed with database error:', insertErr);
+            return res.status(500).json({ error: "Failed to provision user account" });
+          }
         }
+        
+        // Use the newly created or fetched user for the rest of the request
+        req.user = {
+          id: newUser.id,
+          email: newUser.email,
+          role: newUser.role,
+          permissions: newUser.permissions,
+        };
+        
+        return next();
       }
       
       return res.status(401).json({ error: "User not found" })
