@@ -2,10 +2,26 @@ node_modules
 .next
 .env.local
 .env
-# server removed to allow next.js build access
-# server
-*.log
+# Keep server/src but ignore everything else in server
+server/node_modules
+server/dist
+server/logs
+server/coverage
+server/scripts
+# Large subrepos/directories
+langfuse-repo
+AI-Foundry-Projects
+open-webui-repo
+.venv
+backups
+minio
+grafana
+docs
+legacy
+tmp
 logs
+# Other common ignores
+*.log
 .DS_Store
 *.tsbuildinfo
 coverage
@@ -25,4 +41,6 @@ Dockerfile*
 *.ps1
 *.sh
 .cursor
-
+.agents
+.continue
+.kiro
