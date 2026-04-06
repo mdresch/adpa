@@ -35,7 +35,9 @@ export async function discoverRoutes(): Promise<RouteConfig[]> {
   const modules = fs.readdirSync(modulesDir);
 
   for (const moduleName of modules) {
-    const routesFile = path.join(modulesDir, moduleName, 'routes.ts');
+    const routesFileTs = path.join(modulesDir, moduleName, 'routes.ts');
+    const routesFileJs = path.join(modulesDir, moduleName, 'routes.js');
+    const routesFile = fs.existsSync(routesFileJs) ? routesFileJs : routesFileTs;
     
     if (fs.existsSync(routesFile)) {
       try {

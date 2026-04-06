@@ -137,16 +137,16 @@ export function initTracing(): void {
         getNodeAutoInstrumentations({
           // Customize instrumentations as needed
           '@opentelemetry/instrumentation-http': {
-            enabled: true,
+            enabled: false,
           },
           '@opentelemetry/instrumentation-express': {
-            enabled: true,
+            enabled: false,
           },
           '@opentelemetry/instrumentation-pg': {
-            enabled: true, // PostgreSQL instrumentation
+            enabled: false, // Disable PostgreSQL instrumentation
           },
           '@opentelemetry/instrumentation-redis': {
-            enabled: true, // Redis instrumentation
+            enabled: false, // Disable Redis instrumentation
           },
           '@opentelemetry/instrumentation-fs': {
             enabled: false, // Disable file system to reduce noise
