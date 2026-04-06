@@ -54,9 +54,24 @@ export async function discoverRoutes(): Promise<RouteConfig[]> {
     }
 
     try {
-      // Dynamically import the routes file
-      // On Windows, absolute paths must be converted to file:// URLs for the ESM loader
-      const moduleExports = (await import(pathToFileURL(routesFile).href)) as ModuleExports;
+      // Dynamically import the routes file.
+      // If we're in a CommonJS environment (which the logs suggest), require() is used.
+      // require() does NOT support file:// URLs. 
+      // ts-node/tsx and modern Node.js handle dynamic import() of absolute paths fine without the file:// prefix on Linux.
+      let moduleExports;
+      if (typeof require !== 'undefined' && routesFile.endsWith('.js')) {
+        // We're in a CommonJS context (likely compiled dist)
+        moduleExports = require(routesFile);
+      } else {
+        // We're in an ESM context or using ts-node/tsx (likely dev)
+        // On Windows, absolute paths MUST be file:// URLs for the ESM loader.
+        // On Linux/Docker, simple absolute paths are fine.
+        const importPath = process.platform === 'win32' 
+          ? pathToFileURL(routesFile).href 
+          : routesFile;
+        moduleExports = await import(importPath);
+      }
+      
       const moduleRoutes = moduleExports.default || moduleExports;
 
       // Only add if it's the new RouteConfig array format

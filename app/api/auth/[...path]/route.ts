@@ -45,36 +45,50 @@ async function proxyAuthRequest(request: NextRequest, pathSegments: string[]) {
   // Ensure the backend-origin is respected in CORS contexts if needed
   headers.set('Origin', new URL(request.url).origin);
 
-  try {
-    // Handle potential body for POST/PUT
-    let body: any = undefined;
-    if (['POST', 'PUT', 'PATCH'].includes(request.method)) {
-      try {
+  // Handle potential body for POST/PUT
+  let body: any = undefined;
+  if (['POST', 'PUT', 'PATCH'].includes(request.method)) {
+    try {
+      const contentLength = request.headers.get('content-length');
+      if (contentLength && parseInt(contentLength) > 0) {
         body = await request.blob();
-      } catch (e) {
-        // Fallback for empty bodies
       }
+    } catch (e: any) {
+      console.warn(`[SmartProxy] Failed to read request body: ${e.message}`);
     }
+  }
 
-    console.log(`[SmartProxy] Forwarding ${request.method} /api/auth/${path} to Azure...`);
+  console.log(`[SmartProxy] Forwarding ${request.method} /api/auth/${path} to Azure: ${url.toString()}`);
 
-    const response = await fetch(url.toString(), {
-      method: request.method,
-      headers: headers,
-      body: body,
-      cache: 'no-store',
-      // If deployed in a Vercel region far from Azure, we might need a higher timeout
-      // but fetch() in Next.js usually follows the Function timeout.
-    });
+  const response = await fetch(url.toString(), {
+    method: request.method,
+    headers: headers,
+    body: body,
+    cache: 'no-store',
+  });
 
-    const data = await response.blob();
-    
-    // Create the proxied response
-    const proxiedResponse = new NextResponse(data, {
-      status: response.status,
-      headers: response.headers,
-    });
+  console.log(`[SmartProxy] Azure response: ${response.status} ${response.statusText}`);
 
+  // Read the response carefully
+  let data: any;
+  const contentType = response.headers.get('content-type');
+
+  try {
+    if (response.status === 204 || !contentType) {
+      data = null;
+    } else {
+      data = await response.blob();
+    }
+  } catch (e: any) {
+    console.error(`[SmartProxy] Failed to read response body: ${e.message}`);
+    data = null;
+  }
+
+  // Create the proxied response
+  const proxiedResponse = new NextResponse(data, {
+    status: response.status,
+    headers: response.headers,
+  });
     return proxiedResponse;
   } catch (error: any) {
     console.error('[SmartProxy] Connectivity Failure:', error.message);
