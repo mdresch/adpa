@@ -241,11 +241,9 @@ app.get("/api/debug-env", (req, res) => {
 
 console.log("🔧 Registering API routes...")
 
-if (authModuleRoutes && authModuleRoutes[0]) app.use("/api/auth", authModuleRoutes[0].router)
-if (identityModuleRoutes && identityModuleRoutes[0]) {
-  app.use("/api/users", (req, res, next) => { req.url = '/users' + req.url; next(); }, identityModuleRoutes[0].router) 
-  app.use("/api/companies", (req, res, next) => { req.url = '/companies' + req.url; next(); }, identityModuleRoutes[0].router)
-  app.use("/api", identityModuleRoutes[0].router)
+if (morphicModuleRoutes && morphicModuleRoutes[0]) {
+  app.use("/api/v1/morphic", morphicModuleRoutes[0].router)
+  app.use("/api/morphic", morphicModuleRoutes[0].router)
 }
 if (projectsModuleRoutes && projectsModuleRoutes[0]) app.use("/api/projects", projectsModuleRoutes[0].router)
 if (morphicModuleRoutes && morphicModuleRoutes[0]) {

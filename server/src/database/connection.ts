@@ -245,7 +245,7 @@ async function connectDatabaseInternal(): Promise<void> {
 
       // Parse connection string to extract components
       // This allows us to force IPv4 by explicitly setting the family option
-      let poolConfig: PoolConfig & { family?: number } = {
+      let poolConfig: any = {
         ssl: buildSslConfig(currentDbUrl),
         max: 50,
         idleTimeoutMillis: 30000,
@@ -265,6 +265,12 @@ async function connectDatabaseInternal(): Promise<void> {
           dbUrl.searchParams.has('pgbouncer') ||
           dbUrl.hostname.includes('pooler.supabase.com')
 
+        // HARDENING: If it's a pooler connection and missing pgbouncer=true, add it!
+        if (isPoolerConnection && !dbUrl.searchParams.has('pgbouncer')) {
+          console.log('🔧 Auto-appending pgbouncer=true for transaction pooler compatibility')
+          dbUrl.searchParams.set('pgbouncer', 'true')
+        }
+
         if (isDirectConnection) {
           // Try to resolve to IPv4 for direct connections (Postgres port 5432)
           try {
@@ -281,6 +287,10 @@ async function connectDatabaseInternal(): Promise<void> {
                 user: dbUrl.username,
                 password: decodeURIComponent(dbUrl.password),
               }
+              // Add pgbouncer if we detected it was needed but we are using parsed config
+              if (isPoolerConnection) {
+                poolConfig.connectionString = dbUrl.toString()
+              }
             }
           } catch (ipv4Error: any) {
             console.warn('⚠️  IPv4 resolution skipped/failed:', ipv4Error?.message)
@@ -288,14 +298,13 @@ async function connectDatabaseInternal(): Promise<void> {
           }
         } else {
           // For pooler connections (Port 6543), try resolution but fallback safely
-          const isSupabasePooler = dbUrl.hostname.includes('pooler.supabase.com')
           console.log(`🔧 Using Pooler (port ${dbUrl.port}) - attempting resolution`)
 
           try {
             const { address } = await dnsLookup(dbUrl.hostname, { family: 4 })
             if (address) {
               console.log(`✅ Pooler resolved to IPv4: ${address}`)
-              poolConfig = {
+              const newConfig: any = {
                 ...poolConfig,
                 host: address,
                 port: parseInt(dbUrl.port) || 6543,
@@ -303,16 +312,28 @@ async function connectDatabaseInternal(): Promise<void> {
                 user: dbUrl.username,
                 password: decodeURIComponent(dbUrl.password),
               }
+              // CRITICAL: Even if we use parsed config, we might need a modified connection string 
+              // for some internal node-postgres features to honor pgbouncer mode
+              newConfig.connectionString = dbUrl.toString()
+              poolConfig = newConfig
             }
           } catch (dnsErr: any) {
             console.warn(`⚠️ Pooler DNS lookup failed: ${dnsErr.message} - falling back to raw hostname`)
           }
+        }
+        
+        // Final sanity check: if advanced parsing didn't set a host, use the (potentially patched) URL string
+        if (!poolConfig.host && !poolConfig.connectionString) {
+           poolConfig.connectionString = dbUrl.toString()
         }
       } catch (e: any) {
         // Ultimate Fallback: Just use the raw connectionString with our determined SSL config
         console.warn('⚠️  Advanced parsing failed or was bypassed, ensuring raw string use')
         poolConfig.connectionString = currentDbUrl
       }
+
+      // Optimize pool size for Supabase (default 20 is safer for shared clusters)
+      poolConfig.max = Number(process.env.PG_MAX) || 20
 
       const testPool = new Pool(poolConfig)
 

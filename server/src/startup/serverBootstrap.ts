@@ -21,11 +21,14 @@ export async function initializeServerWithDependencyGraph(
   try {
     // Initialize all dependencies using the dependency graph
     startupManager = new StartupManager()
-    await startupManager.initialize()
-    // Initialize health endpoint dependency tracking
+    
+    // Initialize health endpoint dependency tracking FIRST
     const depNames = startupManager.getDependencyNames()
     initializeDependencyHealthTracking(depNames)
     console.log(`✅ Health endpoint tracking initialized for ${depNames.length} dependencies`)
+
+    // Then start the actual initialization
+    await startupManager.initialize()
 
     server.listen(PORT, "0.0.0.0", () => {
       console.log(`✅ Server running on port ${PORT}`)

@@ -157,9 +157,10 @@ router.get("/ready", async (req: Request, res: Response) => {
     } else {
       const detailedFailures = failedDeps.map(name => {
         const depStatus = dependencyHealth.get(name)
+        let error = depStatus?.error || (depStatus?.status === "unknown" ? "Still initializing/connecting..." : "Unknown error")
         return {
           name,
-          error: depStatus?.error || "Unknown error"
+          error
         }
       })
 

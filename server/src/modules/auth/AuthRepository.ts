@@ -46,6 +46,7 @@ export class AuthRepository {
         [email]
       );
     } catch (err: any) {
+      console.error(`[AUTH-REPO] Database query error for email ${email}:`, err.message);
       if (err.message?.includes('column "metadata"') || err.message?.includes('column "company_id"') || err.code === '42703') {
         return await this.db.query(
           "SELECT id, email, password_hash, name, role, permissions, is_active FROM users WHERE email = $1",

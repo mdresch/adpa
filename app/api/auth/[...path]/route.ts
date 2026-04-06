@@ -29,7 +29,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { path:
 
 async function proxyAuthRequest(request: NextRequest, pathSegments: string[]) {
   const path = pathSegments.join('/');
-  const url = new URL(`${BACKEND_URL}/api/auth/${path}`);
+  const url = new URL(`${BACKEND_URL}/api/v1/auth/${path}`);
   
   // Append original search params
   request.nextUrl.searchParams.forEach((value, key) => {
