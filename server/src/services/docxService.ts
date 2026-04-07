@@ -148,6 +148,45 @@ export class DocxService {
                     spacing: { before: 200, after: 200 }
                 });
 
+            case 'table':
+                const tableRows: TableRow[] = [];
+                
+                // Header row
+                const headerCells: TableCell[] = [];
+                for (let i = 0; i < token.header.length; i++) {
+                    headerCells.push(
+                        new TableCell({
+                            children: await this.parseInlineText(token.tokens.header[i] || []),
+                            shading: {
+                                fill: "F2F2F2",
+                                type: ShadingType.CLEAR,
+                            },
+                        })
+                    );
+                }
+                tableRows.push(new TableRow({ children: headerCells }));
+
+                // Body rows
+                for (let i = 0; i < token.rows.length; i++) {
+                    const bodyCells: TableCell[] = [];
+                    for (let j = 0; j < token.rows[i].length; j++) {
+                        bodyCells.push(
+                            new TableCell({
+                                children: await this.parseInlineText(token.tokens.rows[i][j] || []),
+                            })
+                        );
+                    }
+                    tableRows.push(new TableRow({ children: bodyCells }));
+                }
+
+                return new Table({
+                    rows: tableRows,
+                    width: {
+                        size: 100,
+                        type: WidthType.PERCENTAGE,
+                    },
+                });
+
             case 'image':
                 try {
                     // Handle standalone image block if usage occurs, though markdown usually wraps in p

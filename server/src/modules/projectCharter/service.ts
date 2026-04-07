@@ -932,7 +932,7 @@ Return JSON:
   /**
    * Assemble Project Charter content in Markdown
    */
-  private async assembleCharterContent(data: Partial<ProjectCharterData>): Promise<string> {
+  public async assembleCharterContent(data: Partial<ProjectCharterData>): Promise<string> {
     const sections: string[] = []
 
     // Header
