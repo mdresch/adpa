@@ -221,7 +221,6 @@ export class DocumentGeneratorService {
       this.registerHandlebarsHelpers()
 
       // Compile template - use content directly, not JSON.stringify
-      // Compile template - check for wrapped template string first
       let templateContent: string
       if (typeof template.content === 'string') {
         templateContent = template.content
@@ -319,8 +318,8 @@ export class DocumentGeneratorService {
     const filename = options?.filename || `document-${generationId}.pdf`
     const filePath = path.join(this.config.output_directory, filename)
 
-    // Convert content to HTML first
-    const htmlContent = await this.convertToHTML(processedTemplate.content, options)
+    // Convert content to HTML first with metadata for professional headers
+    const htmlContent = await this.convertToHTML(processedTemplate.content, options, processedTemplate.metadata)
 
     // Check if Adobe PDF Services should be used
     if (options?.use_adobe_pdf) {
@@ -364,14 +363,54 @@ export class DocumentGeneratorService {
     // Use Puppeteer for standard PDF generation
     logger.info(`Using Puppeteer for standard PDF generation: ${filename}`)
 
-    const browser = await puppeteer.launch({
+    let browser = null;
+    const launchOptions: any = {
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
-    })
+      args: [
+        '--no-sandbox', 
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu'
+      ]
+    };
+
+    // Try to use system Chrome/Chromium if available (for Railway/production)
+    if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+      launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+    } else {
+      // Try common system paths
+      const possiblePaths = [
+        "/usr/bin/google-chrome",
+        "/usr/bin/google-chrome-stable",
+        "/usr/bin/chromium",
+        "/usr/bin/chromium-browser",
+        "/snap/bin/chromium",
+      ];
+      for (const p of possiblePaths) {
+        try {
+          if (require('fs').existsSync(p)) {
+            launchOptions.executablePath = p;
+            break;
+          }
+        } catch (e) {}
+      }
+    }
 
     try {
-      const page = await browser.newPage()
-      await page.setContent(htmlContent, { waitUntil: 'networkidle0' })
+      try {
+        browser = await puppeteer.launch(launchOptions);
+      } catch (launchError: any) {
+        if (!launchOptions.executablePath && launchError.message.includes("Could not find Chrome")) {
+          logger.warn("System Chrome not found, attempting bundled Puppeteer launch...");
+          delete launchOptions.executablePath;
+          browser = await puppeteer.launch(launchOptions);
+        } else {
+          throw launchError;
+        }
+      }
+
+      const page = await browser.newPage();
+      await page.setContent(htmlContent, { waitUntil: 'networkidle0', timeout: 30000 });
 
       // Generate PDF
       const pdfOptions = {
@@ -380,15 +419,19 @@ export class DocumentGeneratorService {
         landscape: options?.orientation === 'landscape',
         margin: options?.margins || this.config.pdf_options.margins,
         printBackground: this.config.pdf_options.print_background,
-        displayHeaderFooter: options?.include_header || options?.include_footer || false,
-        headerTemplate: options?.header_template || this.config.pdf_options.header_template,
-        footerTemplate: options?.footer_template || this.config.pdf_options.footer_template
-      }
+        displayHeaderFooter: options?.include_header || options?.include_footer || true,
+        headerTemplate: options?.header_template || '<div></div>',
+        footerTemplate: options?.footer_template || `
+          <div style="font-size: 9px; text-align: center; width: 100%; color: #888; padding-bottom: 10px;">
+            <span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
+          </div>
+        `
+      };
 
-      await page.pdf(pdfOptions as any)
+      await page.pdf(pdfOptions as any);
 
     } finally {
-      await browser.close()
+      if (browser) await browser.close();
     }
 
     return filePath
@@ -433,7 +476,7 @@ export class DocumentGeneratorService {
     const filename = options?.filename || `document-${generationId}.html`
     const filePath = path.join(this.config.output_directory, filename)
 
-    const htmlContent = await this.convertToHTML(processedTemplate.content, options)
+    const htmlContent = await this.convertToHTML(processedTemplate.content, options, processedTemplate.metadata)
 
     await fs.writeFile(filePath, htmlContent, { encoding: 'utf8' })
 
@@ -441,24 +484,29 @@ export class DocumentGeneratorService {
   }
 
   /**
-   * Convert content to HTML
+   * Convert content to HTML with professional styling for PDF
    */
-  private async convertToHTML(content: string, options?: GenerationOptions): Promise<string> {
-    // If content is already HTML, return as-is
+  private async convertToHTML(content: string, options?: GenerationOptions, metadata?: any): Promise<string> {
+    // 1. Configure marked for professional output
+    marked.setOptions({
+      gfm: true,
+      breaks: false
+    });
+
+    // 2. Convert Markdown to HTML body
+    let htmlBody: string;
     if (content.trim().startsWith('<')) {
-      return this.wrapInHTMLDocument(content, options)
+      htmlBody = content;
+    } else {
+      htmlBody = await marked(content);
     }
 
-    // Convert Markdown to HTML
-    const htmlBody = await marked(content)
-    return this.wrapInHTMLDocument(htmlBody, options)
-  }
-
-  /**
-   * Wrap content in full HTML document
-   */
-  private wrapInHTMLDocument(bodyContent: string, options?: GenerationOptions): string {
-    const styles = options?.css_styles || this.getDefaultStyles()
+    // 3. Wrap in professional document structure
+    const styles = options?.css_styles || this.getDefaultStyles();
+    const title = metadata?.name || 'ADPA Generated Document';
+    const dateStr = new Date().toLocaleDateString('en-US', { 
+      year: 'numeric', month: 'long', day: 'numeric' 
+    });
 
     return `
 <!DOCTYPE html>
@@ -466,15 +514,98 @@ export class DocumentGeneratorService {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Generated Document</title>
+    <title>${title}</title>
     <style>
         ${styles}
     </style>
 </head>
 <body>
-    ${bodyContent}
+    <div class="metadata-block">
+        <div class="metadata-item"><strong>Document:</strong> ${title}</div>
+        <div class="metadata-item"><strong>Date:</strong> ${dateStr}</div>
+        ${metadata?.framework ? `<div class="metadata-item"><strong>Framework:</strong> ${metadata.framework}</div>` : ''}
+        ${metadata?.category ? `<div class="metadata-item"><strong>Category:</strong> ${metadata.category}</div>` : ''}
+    </div>
+    <div class="content-body">
+        ${htmlBody}
+    </div>
 </body>
-</html>`
+</html>`;
+  }
+
+  /**
+   * Get default professional CSS styles for PDF/HTML
+   */
+  private getDefaultStyles(): string {
+    return `
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        line-height: 1.6;
+        color: #333;
+        max-width: 850px;
+        margin: 0 auto;
+        padding: 10px;
+      }
+      .metadata-block {
+        background-color: #f8f9fa;
+        padding: 20px;
+        border-radius: 8px;
+        margin-bottom: 40px;
+        border: 1px solid #e1e4e8;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+      .metadata-item { font-size: 13px; color: #586069; }
+      h1, h2, h3, h4 {
+        color: #24292e;
+        margin-top: 1.5em;
+        margin-bottom: 0.5em;
+        font-weight: 600;
+      }
+      h1 { font-size: 2.2em; border-bottom: 2px solid #3498db; padding-bottom: 10px; margin-top: 0; }
+      h2 { font-size: 1.7em; border-bottom: 1px solid #eaecef; padding-bottom: 5px; }
+      h3 { font-size: 1.3em; }
+      p { margin-bottom: 1.2em; }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        margin: 25px 0;
+        font-size: 14px;
+      }
+      th, td {
+        border: 1px solid #dfe2e5;
+        padding: 10px 12px;
+        text-align: left;
+      }
+      th {
+        background-color: #f6f8fa;
+        font-weight: 600;
+      }
+      tr:nth-child(even) { background-color: #fafbfc; }
+      code {
+        background-color: rgba(27,31,35,0.05);
+        padding: 0.2em 0.4em;
+        border-radius: 3px;
+        font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+        font-size: 85%;
+      }
+      pre {
+        background-color: #f6f8fa;
+        padding: 16px;
+        border-radius: 6px;
+        overflow: auto;
+        margin-bottom: 1.5em;
+      }
+      blockquote {
+        border-left: 4px solid #3498db;
+        padding: 0 1em;
+        color: #6a737d;
+        margin: 0 0 1.5em 0;
+      }
+      img { max-width: 100%; height: auto; border-radius: 4px; }
+      .page-break { page-break-after: always; }
+    `;
   }
 
   /**
@@ -585,57 +716,6 @@ export class DocumentGeneratorService {
 
       return toc.trim()
     })
-  }
-
-  /**
-   * Get default CSS styles
-   */
-  private getDefaultStyles(): string {
-    return `
-      body {
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        line-height: 1.6;
-        color: #333;
-        max-width: 800px;
-        margin: 0 auto;
-        padding: 20px;
-      }
-      h1, h2, h3, h4, h5, h6 {
-        color: #2c3e50;
-        margin-top: 2em;
-        margin-bottom: 1em;
-      }
-      h1 { font-size: 2.5em; }
-      h2 { font-size: 2em; }
-      h3 { font-size: 1.5em; }
-      p { margin-bottom: 1em; }
-      table {
-        border-collapse: collapse;
-        width: 100%;
-        margin: 1em 0;
-      }
-      th, td {
-        border: 1px solid #ddd;
-        padding: 8px;
-        text-align: left;
-      }
-      th {
-        background-color: #f2f2f2;
-        font-weight: bold;
-      }
-      code {
-        background-color: #f4f4f4;
-        padding: 2px 4px;
-        border-radius: 3px;
-        font-family: monospace;
-      }
-      pre {
-        background-color: #f4f4f4;
-        padding: 1em;
-        border-radius: 5px;
-        overflow-x: auto;
-      }
-    `
   }
 
   /**
