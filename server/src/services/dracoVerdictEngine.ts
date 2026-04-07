@@ -110,7 +110,8 @@ function analyseAgreement(
 function calcOverallDracoScore(
   boardScores: { evidence: number; governance: number; challenger: number },
   qualityScores: DracoQualityScores,
-  strategicScore: number
+  strategicScore: number,
+  registryHealthScore: number // 0.0 - 1.0 from Registry Manager
 ): number {
   const boardComposite =
     boardScores.evidence * BOARD_WEIGHTS.evidence_validator +
@@ -126,8 +127,11 @@ function calcOverallDracoScore(
     qualityScores.professional_quality * QUALITY_WEIGHTS.professional_quality +
     qualityScores.standards_compliance * QUALITY_WEIGHTS.standards_compliance
 
-  // 60% board + 40% quality dimensions
-  return Math.round((boardComposite * 0.6) + (qualityComposite * 0.4))
+  // Registry Health integration (scaled to 100)
+  const registryComposite = registryHealthScore * 100
+
+  // 50% board + 30% quality dimensions + 20% registry governance
+  return Math.round((boardComposite * 0.5) + (qualityComposite * 0.3) + (registryComposite * 0.2))
 }
 
 // ─── Verdict Determination ────────────────────────────────────────────────────
@@ -139,7 +143,8 @@ function determineVerdict(
   governanceResult: GovernanceEvaluatorResult,
   challengerResult: CounterfactualChallengerResult,
   strategicResult: StrategicValueAssessmentResult,
-  qualityScores: DracoQualityScores
+  qualityScores: DracoQualityScores,
+  registryHealth: number // 0.0 - 1.0
 ): { verdict: DracoVerdict; reasoning: string; failedDimensions: string[] } {
   const failedDimensions: string[] = []
 
@@ -162,6 +167,11 @@ function determineVerdict(
     failedDimensions.push(`Professional Quality (${qualityScores.professional_quality} < ${thresholds.professional_quality})`)
   if (qualityScores.standards_compliance < thresholds.standards_compliance)
     failedDimensions.push(`Standards Compliance (${qualityScores.standards_compliance} < ${thresholds.standards_compliance})`)
+
+  // Check Registry Governance Health
+  if (registryHealth < 0.7) {
+    failedDimensions.push(`Registry Governance Health (${Math.round(registryHealth * 100)}% < 70%)`)
+  }
 
   const criticalFailures = failedDimensions.filter(d =>
     d.includes('Evidence') || d.includes('Accuracy') || d.includes('Governance')
@@ -191,9 +201,23 @@ function buildRemediationSteps(
   evidenceResult: EvidenceValidatorResult,
   governanceResult: GovernanceEvaluatorResult,
   challengerResult: CounterfactualChallengerResult,
-  strategicResult: StrategicValueAssessmentResult
+  strategicResult: StrategicValueAssessmentResult,
+  registryReport: any // Added for V7 Registry breaches
 ): RemediationStep[] {
   const steps: RemediationStep[] = []
+
+  // V7 Registry Active Breaches → remediation steps
+  if (registryReport?.active_breaches) {
+    registryReport.active_breaches.forEach((breach: any) => {
+      steps.push({
+        priority: breach.severity === 'critical' ? 'critical' : 'high',
+        dimension: 'Registry: Operational Governance',
+        description: breach.reason,
+        action_required: `Resolve breach for entity ${breach.entity_id}: ${breach.reason}`,
+        originating_board_member: 'governance_evaluator',
+      })
+    })
+  }
 
   // Evidence Validator findings → remediation steps
   evidenceResult.recommendations.forEach((rec, i) => {
@@ -365,6 +389,7 @@ export interface VerdictInput {
   objectivity_score: number
   citation_integrity_score: number
   total_processing_time_ms: number
+  registry_report?: any // Added for V7 integration
 }
 
 export function renderVerdict(input: VerdictInput): DracoReviewResult & { board_agreement: BoardAgreementSignal } {
@@ -374,7 +399,9 @@ export function renderVerdict(input: VerdictInput): DracoReviewResult & { board_
     challenger: input.challenger_result.score,
   }
 
-  const overallScore = calcOverallDracoScore(boardScores, input.quality_scores, input.strategic_result.score)
+  const registryScore = input.registry_report?.overall_health_score ?? 1.0
+
+  const overallScore = calcOverallDracoScore(boardScores, input.quality_scores, input.strategic_result.score, registryScore)
 
   // Analyse board agreement before rendering verdict — high convergence at high scores
   // may indicate shared blind spots rather than genuine independent validation.
@@ -396,7 +423,8 @@ export function renderVerdict(input: VerdictInput): DracoReviewResult & { board_
     input.governance_result,
     input.challenger_result,
     input.strategic_result,
-    input.quality_scores
+    input.quality_scores,
+    registryScore
   )
 
   const remediationSteps = buildRemediationSteps(
@@ -404,7 +432,8 @@ export function renderVerdict(input: VerdictInput): DracoReviewResult & { board_
     input.evidence_result,
     input.governance_result,
     input.challenger_result,
-    input.strategic_result
+    input.strategic_result,
+    input.registry_report
   )
 
   const templateImprovements = collectTemplateImprovements(

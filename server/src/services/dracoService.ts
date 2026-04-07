@@ -13,6 +13,7 @@ import { runBoardReview } from './dracoReviewBoard'
 import { runStrategicValueAssessment } from './dracoStrategicValueAssessor'
 import { renderVerdict } from './dracoVerdictEngine'
 import { dracoProgressEmitter, PROGRESS_MESSAGES } from './dracoProgressEmitter'
+import { dracoRegistryConsumer } from './dracoRegistryConsumer'
 import type {
   DracoReviewRequest,
   DracoReviewResult,
@@ -313,15 +314,14 @@ export class DracoService {
     })
 
     try {
-      // Run board review and strategic assessment in parallel for speed.
-      // Board members emit their own started/complete events as they resolve.
-      const [boardReview, strategicAssessment] = await Promise.all([
+      // Run board review, strategic assessment, and registry governance sync in parallel.
+      const [boardReview, strategicAssessment, registryReport] = await Promise.all([
         runBoardReview({
           content,
           documentType,
           projectContext,
           thresholds,
-          documentId,   // ← required for per-member progress streaming
+          documentId,
         }),
         runStrategicValueAssessment(content, documentType, projectContext, thresholds)
           .then(result => {
@@ -336,6 +336,11 @@ export class DracoService {
             })
             return result
           }),
+        dracoRegistryConsumer.syncProjectGovernance(String(projectContext.projectId || 'adpa-v7'))
+          .catch(err => {
+            logger.warn('[DRACO] Registry sync failed (non-blocking)', { error: String(err) })
+            return null
+          })
       ])
 
       // Verdict rendering
@@ -368,6 +373,7 @@ export class DracoService {
         objectivity_score: boardReview.objectivity_score,
         citation_integrity_score: boardReview.citation_integrity_score,
         total_processing_time_ms: totalTime,
+        registry_report: registryReport, // Pass the V7 registry report here
       })
 
       // Emit final verdict — human-readable message based on outcome

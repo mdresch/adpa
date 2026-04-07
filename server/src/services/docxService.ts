@@ -8,7 +8,12 @@ import {
     AlignmentType,
     UnderlineType,
     convertInchesToTwip,
-    ImageRun
+    ImageRun,
+    Table,
+    TableRow,
+    TableCell,
+    ShadingType,
+    WidthType
 } from 'docx';
 import { marked } from 'marked';
 import axios from 'axios';
@@ -156,7 +161,9 @@ export class DocxService {
                 for (let i = 0; i < token.header.length; i++) {
                     headerCells.push(
                         new TableCell({
-                            children: await this.parseInlineText(token.tokens.header[i] || []),
+                            children: [new Paragraph({
+                                children: await this.parseInlineText(token.tokens.header[i] || [])
+                            })],
                             shading: {
                                 fill: "F2F2F2",
                                 type: ShadingType.CLEAR,
@@ -172,7 +179,9 @@ export class DocxService {
                     for (let j = 0; j < token.rows[i].length; j++) {
                         bodyCells.push(
                             new TableCell({
-                                children: await this.parseInlineText(token.tokens.rows[i][j] || []),
+                                children: [new Paragraph({
+                                    children: await this.parseInlineText(token.tokens.rows[i][j] || [])
+                                })],
                             })
                         );
                     }
