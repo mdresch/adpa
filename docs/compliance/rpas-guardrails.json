@@ -1,0 +1,219 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RPAS‑CM‑GRA‑001",
+  "version": "2.0.0",
+  "csr": "CSR‑42",
+  "description": "RPAS Governance Guardrails and Cloud‑Ready Criteria — Authoritative machine‑readable encoding.",
+  "amended": "AMD‑2026‑04‑09‑0007 (EXP — Full G1–G5 Expansion)",
+  "timestamp": "2026-04-09T23:03:00+02:00",
+  "guardrails": {
+    "G1": {
+      "id": "G1",
+      "title": "Authority Boundary",
+      "principle": "AI proposes, humans decide, orchestrator executes.",
+      "rules": [
+        "AI may only provide advisory output.",
+        "AI must never apply changes, approve changes, or bypass governance rituals.",
+        "All state‑changing actions require explicit human authorization.",
+        "The Orchestrator (C# layer) is the only execution authority."
+      ],
+      "purpose": "Prevent unauthorized or implicit mutation of state.",
+      "enforced_at": ["orchestration_tier"],
+      "violations": ["autonomous_mutation", "implicit_write", "ai_execution"]
+    },
+    "G2": {
+      "id": "G2",
+      "title": "Lifecycle Integrity",
+      "principle": "Every state transition must follow the ritual sequence.",
+      "sequence": [
+        "Ideation",
+        "Business Case",
+        "Approval",
+        "RTM Seed",
+        "Amendment Proposal",
+        "Amendment Decision",
+        "Execution",
+        "CSR‑Certified Baseline"
+      ],
+      "rules": [
+        "No skipping steps.",
+        "No fast‑tracking.",
+        "No retroactive mutation.",
+        "Every artifact must reflect its correct stage in the lifecycle."
+      ],
+      "purpose": "Protect governance flow and prevent corruption of process.",
+      "enforced_at": ["orchestration_tier"],
+      "violations": ["step_skip", "retroactive_edit", "fast_track"]
+    },
+    "G3": {
+      "id": "G3",
+      "title": "Evidence & Lineage",
+      "principle": "Every artifact must be fully traceable.",
+      "required_fields": [
+        "origin",
+        "authorizing_decision",
+        "amendment_id",
+        "csr_version",
+        "executor_identity",
+        "deterministic_timestamp"
+      ],
+      "rules": [
+        "RTM entries, amendments, decisions, and CSR versions must be append‑only.",
+        "No in‑place edits to governed artifacts.",
+        "All history is preserved."
+      ],
+      "purpose": "Ensure immutability, auditability, and reconstruction of truth.",
+      "enforced_at": ["data_tier", "orchestration_tier"],
+      "violations": ["in_place_edit", "history_rewrite", "missing_lineage"]
+    },
+    "G4": {
+      "id": "G4",
+      "title": "Determinism",
+      "principle": "Execution must be predictable, idempotent, and replay‑safe.",
+      "rules": [
+        "No nondeterministic side effects.",
+        "No implicit writes.",
+        "No state mutation outside Execution rituals.",
+        "No replays causing double‑writes.",
+        "CSR stamping happens exactly once per execution."
+      ],
+      "purpose": "Prevent divergence between intended and actual system state.",
+      "enforced_at": ["orchestration_tier"],
+      "violations": ["nondeterministic_side_effect", "double_write", "implicit_mutation"]
+    },
+    "G5": {
+      "id": "G5",
+      "title": "Read vs Act",
+      "principle": "Experience tiers may observe, visualize, analyze, and advise — but only the Orchestrator may act.",
+      "rules": [
+        "Next.js Researcher Dashboard is advisory‑only.",
+        "Blazor Governor Portal approves/executes, but cannot propose on behalf of users.",
+        "AI never performs execution.",
+        "No UI may bypass rituals and directly mutate the ledger.",
+        "No endpoint may accept writes without ritual context."
+      ],
+      "purpose": "Enforce strict separation between view, advice, and authority.",
+      "enforced_at": ["experience_tier", "orchestration_tier"],
+      "violations": ["direct_ledger_write", "ui_bypass", "ai_execution"]
+    }
+  },
+  "cloud_ready_criteria": {
+    "CR1": {
+      "id": "CR1",
+      "title": "Deterministic Execution",
+      "requirement": "All rituals are idempotent and safe for distributed retries.",
+      "maps_to_guardrail": "G4"
+    },
+    "CR2": {
+      "id": "CR2",
+      "title": "Authority‑Gated Mutation",
+      "requirement": "No mutation occurs without explicit human‑attributed decision artifacts.",
+      "maps_to_guardrail": "G1"
+    },
+    "CR3": {
+      "id": "CR3",
+      "title": "Append‑Only History",
+      "requirement": "All superseded state remains queryable. History is never rewritten.",
+      "maps_to_guardrail": "G3"
+    },
+    "CR4": {
+      "id": "CR4",
+      "title": "Failure Safety",
+      "requirement": "System remains safe under restarts, retry storms, and multi‑region duplication.",
+      "maps_to_guardrail": "G4"
+    },
+    "CR5": {
+      "id": "CR5",
+      "title": "Experience Decoupling",
+      "requirement": "The UI is replaceable. Governance must live in the core, not in the interface.",
+      "maps_to_guardrail": "G5"
+    }
+  },
+  "tiers": {
+    "intelligence": {
+      "name": "Intelligence Tier",
+      "tech": "Python / FastAPI",
+      "role": "RTM Research Advisor",
+      "authority": "advisory_only",
+      "may_propose": true,
+      "may_decide": false,
+      "may_execute": false,
+      "may_mutate_ledger": false,
+      "output_contract": "Advisory JSON (suggestedType, proposedDescription, justification, confidence, metadata)"
+    },
+    "orchestration": {
+      "name": "Orchestration Tier",
+      "tech": ".NET 10 / Aspire 13.2.2 / MassTransit",
+      "role": "Sole Execution Authority",
+      "authority": "execution",
+      "may_propose": false,
+      "may_decide": false,
+      "may_execute": true,
+      "may_mutate_ledger": true,
+      "constraint": "Only via governance rituals"
+    },
+    "experience_governor": {
+      "name": "Experience Tier — Governor Portal",
+      "tech": "Blazor",
+      "role": "Decision Interface",
+      "authority": "decision",
+      "may_propose": false,
+      "may_decide": true,
+      "may_execute": true,
+      "may_mutate_ledger": false,
+      "constraint": "Triggers execution via Orchestrator only"
+    },
+    "experience_researcher": {
+      "name": "Experience Tier — Researcher Dashboard",
+      "tech": "Next.js",
+      "role": "Advisory Dashboard",
+      "authority": "advisory_only",
+      "may_propose": true,
+      "may_decide": false,
+      "may_execute": false,
+      "may_mutate_ledger": false,
+      "constraint": "Draft amendments only; no execution authority"
+    },
+    "data": {
+      "name": "Data Tier",
+      "tech": "PostgreSQL / RabbitMQ / Redis",
+      "role": "Governance Ledger",
+      "authority": "storage",
+      "may_propose": false,
+      "may_decide": false,
+      "may_execute": false,
+      "may_mutate_ledger": false,
+      "constraint": "Append‑only storage for RTM, Amendments, and CSR stamps"
+    }
+  },
+  "validation_gates": [
+    {
+      "gate": 1,
+      "name": "Mechanical Integrity",
+      "owner": "AEV",
+      "validates": "Only declared files modified, no untracked artifacts",
+      "on_failure": "rollback"
+    },
+    {
+      "gate": 2,
+      "name": "Build Integrity",
+      "owner": "AEV",
+      "validates": "Full compilation, dependency resolution, Aspire mesh health",
+      "on_failure": "rollback"
+    },
+    {
+      "gate": 3,
+      "name": "Topology Check",
+      "owner": "DRACO",
+      "validates": "Project structure, component graph, service mesh consistency",
+      "on_failure": "rollback"
+    },
+    {
+      "gate": 4,
+      "name": "Governance Attestation",
+      "owner": "RPAS",
+      "validates": "Compliance with G1–G5, CSR stamp",
+      "on_failure": "rollback"
+    }
+  ]
+}

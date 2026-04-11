@@ -1,16 +1,70 @@
-# ADPA Framework `GEMINI.md`
+# ✅ **RPAS‑CM‑ENV‑001 v2.0.0 (CSR‑42)**
+## **ADPA Framework Agent Envelope**
 
-This document provides essential context for the ADPA (Advanced Document Processing & Automation) Framework, a full-stack enterprise application. Use this as a guide for understanding the project's architecture, conventions, and key commands.
+***
 
-## Project Overview
+## ✅ **RPAS‑CM Naming Convention & Versioning System**
 
-ADPA is a comprehensive platform for AI-powered document generation, management, and automation. It is built with a modern, enterprise-grade architecture.
+### **1. Artifact Identity Prefix**
 
--   **Frontend**: A Next.js 14+ application using the App Router, located in the `app/` directory. It uses TypeScript, Tailwind CSS, and various Radix UI components for the user interface.
--   **Backend**: A separate Express.js server, which seems to handle the core business logic. The `next.config.mjs` file is configured to proxy requests from `/api` on the frontend to a backend server running on port `5000`.
--   **Database**: The project uses PostgreSQL as its database. Drizzle ORM is used for database access, with the main schema likely located at `lib/morphic/db/schema.ts` as indicated by `drizzle.config.ts`.
--   **AI Integration**: The application integrates multiple AI providers, including OpenAI, Google AI (Gemini), and local models via Ollama. It also uses Langfuse for tracing.
--   **Core Technologies**: TypeScript, Next.js, React, Express.js, PostgreSQL, Drizzle ORM, Tailwind CSS, Sentry (for error monitoring), and various AI SDKs.
+| Prefix | Meaning                       | Examples                     |
+| ------ | ----------------------------- | ---------------------------- |
+| `GRA`  | Governance Rule Artifact      | RPAS‑CM‑GRA‑001 (Guardrails) |
+| `ENV`  | Agent Envelope Artifact       | RPAS‑CM‑ENV‑001 (GEMINI.md)  |
+| `AEV`  | Atomic Execution & Validation | RPAS‑CM‑AEV‑001              |
+| `CSR`  | Certified Stable Release      | CSR‑36, CSR‑42               |
+| `AMD`  | Amendment Record              | AMD‑2026‑04‑09‑0007          |
+
+***
+
+### **2. Version Maturity Levels**
+
+All governance artifacts adhere to the same progression:
+
+| Version | Meaning                                    |
+| ------- | ------------------------------------------ |
+| `v0.x`  | Exploration (not governed)                 |
+| `v1.x`  | ADPA Baseline                              |
+| `v2.x`  | RPAS‑Aligned Governance                    |
+| `v3.x`  | DRACO‑Supervised & Lineage Bound           |
+| `v4.x`  | Fully deterministic AI‑assisted governance |
+
+***
+
+### **3. Amendment Naming & Change Types**
+
+Each amendment uses the canonical form:
+`AMD‑YYYY‑MM‑DD‑#### (Semantic Description)`
+
+**Change Types**:
+- `EXP` — Expansion
+- `REP` — Replacement
+- `FIX` — Hotfix
+- `DEL` — Deprecation
+- `INT` — Integration
+- `NEW` — New governance artifact
+
+***
+
+## Project Overview (RPAS-CM Certified)
+
+ADPA is a **governed execution platform** built on the **RPAS-CM (Regulated Process Assurance System - Cloud Master)** methodology. It is organized into four logical tiers with strictly enforced operational boundaries:
+
+-   **Intelligence Tier (Advisory‑Only)**: Python FastAPI services (located in `AI-Foundry-Projects/services/intelligence`) handle advanced AI processing and PMBOK‑aligned reasoning. **Constraint**: Advisory JSON only; no state mutation.
+-   **Orchestration Tier (Authority)**: A **.NET 10** backend orchestrated by **.NET Aspire 13.2.2**.
+    -   `Adpa.AppHost`: The central orchestrator project that manages service discovery, secrets, and telemetry for the entire stack.
+    -   `Adpa.Orchestrator` (apiservice): The sole execution authority for governance rituals.
+-   **Experience Tier (Read‑Only/Decision)**: Multi-platform management interfaces.
+    -   `Adpa.Web`: The **Governor Portal** (Blazor) for high-integrity decisions and execution.
+    -   Next.js Frontend: The **Researcher Dashboard** for read‑only exploration and AI‑assisted drafting.
+-   **Data Tier (Append‑Only)**: PostgreSQL (Governance Ledger), RabbitMQ, and Redis.
+
+### Core Technologies
+
+- **Languages**: C# (.NET 10), Python (3.12+), TypeScript, SQL.
+- **Frameworks**: .NET Aspire 13.2.2, FastAPI, Next.js, Blazor.
+-   **Messaging/Storage**: MassTransit (RabbitMQ), Drizzle ORM (PostgreSQL), Entity Framework Core.
+-   **AI Integration**: OpenAI, Google AI (Gemini), Ollama, and Langfuse for tracing.
 
 ## Agent Skills System
 
@@ -65,6 +119,16 @@ The project uses `pnpm` as its package manager. The `README.md` and `package.jso
     pnpm lint
     ```
 
+### Full Orchestration (Aspire)
+
+The entire polyglot stack is orchestrated using .NET Aspire. This is the recommended way to run the project locally.
+
+-   **Run Full Stack**:
+    ```bash
+    dotnet run --project orchestrator/Adpa.AppHost
+    ```
+    This starts the interactive Dashboard on `http://localhost:18888`, providing real-time logs, metrics, and traces for all services (Intelligence, Orchestrator, Web).
+
 ### Database Migrations
 
 Drizzle Kit is used for managing database schemas and migrations.
@@ -89,6 +153,7 @@ Drizzle Kit is used for managing database schemas and migrations.
     -   Most API calls (to `/api/*`) are proxied to the external Express backend.
 -   **Database Schema**: All database schema changes must be managed through Drizzle ORM and migrations. The schema is located at `lib/morphic/db/schema.ts`.
 -   **Environment Variables**: Use the `.env.local.example` file as a template for local development. Do not commit `.env.local` files to version control.
+-   **Mandatory Change Protocol**: All agent-driven edits must follow the **Atomic Execution & Validation (AEV)** workflow. See [CONTRIBUTING.md](file:///f:/Source/Repos/adpa/CONTRIBUTING.md) for the full specification and validation gates.
 
 ## DRACO AI Governance
 

@@ -6,7 +6,7 @@
  */
 
 import { logger } from '../utils/logger';
-import puppeteer from 'puppeteer';
+import { unifiedPdfService } from './pdfService';
 import Handlebars from 'handlebars';
 import fs from 'fs';
 import path from 'path';
@@ -176,46 +176,19 @@ async function generateReportHTML(
 }
 
 /**
- * Convert HTML to PDF using Puppeteer
+ * Convert HTML to PDF using the centralized UnifiedPdfService
  */
 async function convertHTMLToPDF(html: string): Promise<Buffer> {
-  
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
+  return unifiedPdfService.generateFromHtml(html, {
+    format: 'A4',
+    printBackground: true,
+    margin: {
+      top: '20mm',
+      right: '15mm',
+      bottom: '20mm',
+      left: '15mm'
+    }
   });
-  
-  try {
-    const page = await browser.newPage();
-    
-    // Set viewport for consistent rendering
-    await page.setViewport({
-      width: 1200,
-      height: 800
-    });
-    
-    // Set content
-    await page.setContent(html, {
-      waitUntil: 'networkidle0'
-    });
-    
-    // Generate PDF
-    const pdfBuffer = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      margin: {
-        top: '20mm',
-        right: '15mm',
-        bottom: '20mm',
-        left: '15mm'
-      }
-    });
-    
-    return Buffer.from(pdfBuffer);
-    
-  } finally {
-    await browser.close();
-  }
 }
 
 // ============================================================================

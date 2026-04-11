@@ -24,11 +24,13 @@ import { asyncLocalStorage } from '../../infrastructure/logger';
 import { cache } from '../../utils/redis';
 import { trackActivity } from '../../middleware/analyticsMiddleware';
 import AuditService from '../../services/auditService';
-import { markdownToPdf } from '../../utils/pdfGenerator';
-import { storageArchivalService } from '../../services/storageArchivalService';
+import { unifiedPdfService } from '../../services/pdfService';
+import { documentConversionService } from '../../services/documentConversionService';
 import { extractionQueue } from '../../services/queueService';
 import { DocxService } from '../../services/docxService';
 import { pool } from '../../database/connection';
+import { storageArchivalService } from '../../services/storageArchivalService';
+
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -296,7 +298,7 @@ const result = await DocumentsController.documentRepository.create({
             let content = doc.content;
             if (typeof content === 'object') content = content.text || content.markdown || JSON.stringify(content);
 
-            const pdfBuffer = await markdownToPdf(content, { format: "A4", printBackground: true });
+            const pdfBuffer = await unifiedPdfService.generateFromMarkdown(content, { format: "A4", printBackground: true });
             res.setHeader("Content-Type", "application/pdf");
             res.setHeader("Content-Disposition", `inline; filename="${doc.name || 'document'}.pdf"`);
             res.send(pdfBuffer);
@@ -385,7 +387,7 @@ const result = await DocumentsController.documentRepository.create({
             for (const doc of result.rows) {
                 let content = doc.content;
                 if (typeof content === 'object') content = content.text || content.markdown || JSON.stringify(content);
-                const pdfBuffer = await markdownToPdf(content, { format: "A4" });
+                const pdfBuffer = await unifiedPdfService.generateFromMarkdown(content, { format: "A4" });
                 zip.append(pdfBuffer, { name: `${doc.name?.replace(/[^a-z0-9]/gi, '_')}.pdf` });
             }
             await zip.finalize();

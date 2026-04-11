@@ -7,7 +7,7 @@
 import { IBabsService, IBabsConfig, IBabsMeeting, IBabsActionItem } from "./ibabsService"
 import { pool } from "../database/connection"
 import { logger } from "../utils/logger"
-import { markdownToPdf } from "../utils/pdfGenerator"
+import { unifiedPdfService } from "./pdfService"
 import { scheduleJob, Job } from "node-schedule"
 
 export type ReportType = "ceo" | "cfo" | "audit" | "program-detail"
@@ -148,7 +148,7 @@ export class IBabsUploadService {
       }
 
       // Convert to PDF
-      const pdf = await markdownToPdf(markdown, {
+      const pdf = await unifiedPdfService.generateFromMarkdown(markdown, {
         format: "A4",
         displayHeaderFooter: true,
         headerTemplate: `<div style="font-size: 10px; text-align: center; width: 100%;">${options.reportType.toUpperCase()} Board Report</div>`,
