@@ -1,4 +1,4 @@
-# ✅ **RPAS‑CM‑GRA‑001 v2.1.0 (CSR-42)**
+# ✅ **RPAS‑CM‑GRA‑001 v2.2.0 (CSR-42)**
 
 ### *Authoritative framework guardrails and naming convention baseline.*
 
@@ -156,6 +156,22 @@ RTM entries, amendments, decisions, and CSR versions must be **append‑only**.
 
 ***
 
+# ✅ **Project Glasswing Immunity (Autonomous Safety)**
+
+RPAS-CM is structurally designed to neutralize the failure modes associated with **unverified autonomous AI mutations** (e.g., Project Glasswing). The framework enforces five defensive layers that prevent unauthorized "shadow" patches.
+
+### **Defensive Layers**
+
+1. **G1/G5 Authority Isolation**: AI models are strictly limited to advisory JSON. No execution path exists for autonomous mutation.
+2. **G2 Ritual Enforcement**: Patching velocity is hard-governed by human decision rituals. No bypasses for "emergency" AI-driven fixes.
+3. **Gate 1 Scope Verification**: Any change outside the declared scope causes immediate mechanical failure of the transition.
+4. **Gate 4 Schema Attestation**: Every proposal must match the `TAR-COL` metadata schema, proving intent and authority before certification.
+5. **COL-G3 Pessimistic Locking**: Prevents multi-agent race conditions or uncoordinated "patch storms."
+
+**Governed Verdict**: Glasswing-class initiative (e.g., sandbox breakouts, unasked-for disclosure) is impossible under RPAS v2.2.0.
+
+***
+
 ### **Quick Reference (Compact)**
 
 | Guardrail | Title                   | Description                                                                                    |
@@ -270,7 +286,8 @@ Every atomic change must pass the four RPAS Gates, enforced by **AEV (Atomic Exe
 *   **Capability**: Detects "High-Convergence" failure modes (shared AI blind spots).
 
 ### **Gate 4 — Governance Attestation (RPAS)**
-*   **Enforcement**: Explicit human/agent certification of compliance with **G1–G5**.
+*   **Enforcement**: Machine-verifiable certification of compliance with **G1–G5**.
+*   **Automation**: Validated via `validate-governance.js` against the `rpas-tar-col.schema.json`.
 *   **Output**: Final CSR-stamped state transition.
 
 ***

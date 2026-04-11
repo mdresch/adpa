@@ -1,10 +1,10 @@
 {
   "traceability": {
-    "artifactId": "RPAS-CM-GRA-002",
+    "artifactId": "RPAS-CM-GRA-003",
     "origin": "Orchestration",
-    "humanDecisionId": "DEC-2026-04-11-001",
-    "csrVersion": "v2.1.0+CSR.2026-04-11T20:56Z",
-    "timestamp": "2026-04-11T20:56:12Z"
+    "humanDecisionId": "DEC-2026-04-11-002",
+    "csrVersion": "v2.2.0+CSR.2026-04-11T21:26Z",
+    "timestamp": "2026-04-11T21:26:12Z"
   },
   "authority": {
     "actorId": "Antigravity-Agent-773",
@@ -12,12 +12,12 @@
     "ritualRole": "Executor"
   },
   "collision_prevention": {
-    "taskId": "TASK-GATE4-AUTOMATION",
+    "taskId": "TASK-GRA-003-V2.2.0",
     "scope": [
-      "scripts/validate-rpas.ps1",
-      "scripts/validate-governance.js",
-      "package.json",
-      "pnpm-lock.yaml"
+      "governance/RPAS.md",
+      "governance/v2.2.0-Release-Notes.md",
+      "GEMINI.md",
+      "governance/rpas-attestation.json"
     ],
     "status": "IN_PROGRESS",
     "locks": [
