@@ -153,7 +153,7 @@ Drizzle Kit is used for managing database schemas and migrations.
     -   Most API calls (to `/api/*`) are proxied to the external Express backend.
 -   **Database Schema**: All database schema changes must be managed through Drizzle ORM and migrations. The schema is located at `lib/morphic/db/schema.ts`.
 -   **Environment Variables**: Use the `.env.local.example` file as a template for local development. Do not commit `.env.local` files to version control.
--   **Mandatory Change Protocol**: All agent-driven edits must follow the **Atomic Execution & Validation (AEV)** workflow. See [CONTRIBUTING.md](file:///f:/Source/Repos/adpa/CONTRIBUTING.md) for the full specification and validation gates.
+-   **Mandatory Change Protocol**: All agent-driven edits must follow the **Atomic Execution & Validation (AEV)** workflow. See [CONTRIBUTING.md](file:///f:/Source/Repos/adpa/governance/CONTRIBUTING.md) for the full specification and validation gates.
 
 ## DRACO AI Governance
 
@@ -165,4 +165,4 @@ The framework incorporates **DRACO** (Document Reasoning and Assessment Complian
     -   **Blocking**: Mandatory quality gates for high-risk templates.
 -   **Human Accountability**: Blocked documents require a formal human override with justification, which is logged for security auditing.
 -   **Observability**: Real-time progress streaming with per-member elapsed timers and "high-convergence" detection to surface shared model blind spots.
--   **Documentation**: See [ADR-004](file:///f:/Source/Repos/adpa/docs/07-architecture/ADR-004-DRACO-AI-GOVERNANCE.md) and the [Governance Lifecycle Diagram](file:///f:/Source/Repos/adpa/docs/06-features/DRACO_GOVERNANCE_DIAGRAM.md).
+-   **Documentation**: See [ADR-004](file:///f:/Source/Repos/adpa/docs/07-architecture/ADR-004-DRACO-AI-GOVERNANCE.md) and the [Governance Lifecycle Diagram](file:///f:/Source/Repos/adpa/governance/visuals/RPAS-TAR-COL-Matrix.md).

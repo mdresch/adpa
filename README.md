@@ -151,6 +151,8 @@ cd server && npm run build
 
 ✅ **Minimal local startup runbook**: [Known Good Local Runbook](docs/01-getting-started/KNOWN_GOOD_LOCAL_RUNBOOK.md)
 
+⚖️ **RPAS Governance (G1–G5)**: See [governance/](governance/) for authoritative framework guardrails, contribution protocols, and collision-prevention rules.
+
 ### ℹ️ Note: Docker Deprecated
 
 This project now uses **Supabase PostgreSQL** (serverless) and **Railway Redis** instead of local Docker containers. Legacy Docker files have been archived to `legacy/docker/` for reference only.
