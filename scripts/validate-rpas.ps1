@@ -310,21 +310,36 @@ if ($g5Violations.Count -gt 0) {
     Write-Host "  [OK] No G5 violations in Experience Tier" -ForegroundColor DarkGray
 }
 
-# --- 4b: Governance Guardrails Attestation ---
 Write-Host ""
-Write-Host "  RPAS Governance Invariants (G1-G5):" -ForegroundColor Cyan
-Write-Host ""
-Write-Host "    [G1] Authority Boundary" -ForegroundColor White
-Write-Host "         AI proposes, humans decide, orchestrator executes." -ForegroundColor DarkGray
-Write-Host "    [G2] Lifecycle Integrity" -ForegroundColor White
-Write-Host "         No skipped rituals; canonical sequence enforced." -ForegroundColor DarkGray
-Write-Host "    [G3] Evidence and Lineage" -ForegroundColor White
-Write-Host "         Append-only, fully traceable, audit-safe." -ForegroundColor DarkGray
-Write-Host "    [G4] Determinism" -ForegroundColor White
-Write-Host "         Idempotent, predictable, CSR-stamped once." -ForegroundColor DarkGray
-Write-Host "    [G5] Read vs Act" -ForegroundColor White
-Write-Host "         UI/AI observe; only Orchestrator executes." -ForegroundColor DarkGray
-Write-Host ""
+
+# --- 4b: Schema Enforcement (TAR-COL) ---
+$attestationFile = "governance/rpas-attestation.json"
+$schemaFile = "governance/schemas/rpas-tar-col.schema.json"
+
+if (Test-Path $attestationFile) {
+    Write-Host "  [OK] Attestation found: $attestationFile" -ForegroundColor DarkGray
+    Write-Host "  Validating against TAR-COL schema..." -ForegroundColor DarkGray
+    
+    # Call Node.js validator
+    $valOutput = node scripts/validate-governance.js --schema $schemaFile --data $attestationFile 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  [XX] Schema validation FAILED" -ForegroundColor Red
+        $valOutput | ForEach-Object { Write-Host "    $_" -ForegroundColor Red }
+        $gate4Failed = $true
+    } else {
+        Write-Host "  [OK] Schema validation PASSED" -ForegroundColor Green
+    }
+} else {
+    # Skip hard fail for Hygiene tasks to maintain flexibility
+    if ($ChangeDescription -notmatch "(?i)(HYG|DOC)") {
+        Write-Host "  [XX] Attestation file NOT FOUND: $attestationFile" -ForegroundColor Red
+        $gate4Failed = $true
+    } else {
+        Write-Host "  [WARN] Attestation file NOT FOUND (skipped for cleanup/docs)" -ForegroundColor Yellow
+    }
+}
+
+# --- 4c: Governance Guardrails Attestation ---
 
 if ($NonInteractive) {
     Write-Host "  Mode: Non-Interactive -- attestation assumed via PR review." -ForegroundColor Yellow

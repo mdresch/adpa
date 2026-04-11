@@ -247,6 +247,8 @@
     "@types/react-syntax-highlighter": "^15.5.13",
     "@types/uuid": "^9.0.8",
     "@upstash/redis": "^1.36.2",
+    "ajv": "^8.18.0",
+    "ajv-formats": "^3.0.1",
     "autoprefixer": "^10.4.20",
     "baseline-browser-mapping": "^2.9.11",
     "drizzle-kit": "^0.31.9",
