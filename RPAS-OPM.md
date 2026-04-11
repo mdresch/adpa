@@ -71,6 +71,9 @@ memorize them — refer back here whenever you encounter one.
 | **Preflight** | The agent's startup checklist. It loads the rules, identifies the task, and prepares its proposal before doing anything. |
 | **Escalation** | When the agent encounters something unclear, it stops and asks you instead of guessing. |
 | **Classification** | Labeling the task type (bugfix, cleanup, feature, etc.) so the correct validation rules apply. |
+| **Traceability** | The ability to verify the origin, owner, decision, and system path for any artifact or execution. |
+| **Collision** | When two actions, agents, or tiers attempt to modify the same scope or conflict semantically. |
+| **TAR-COL** | Traceability, Authority, Responsibility & Collision-Prevention. The protocol for multi-agent coordination. |
 | **Diff** | A side-by-side view of what the agent proposes to change — showing the old code and the new code. |
 | **Decision Point** | A specific moment where the agent pauses and waits for your explicit instruction. There are five of these. |
 
@@ -463,6 +466,7 @@ If you observe any of these, the agent is not behaving correctly:
 | `TCL‑001` | Task Classification Layer | Taxonomy of all valid task types | `RPAS-TCL.md` |
 | `PRE‑001` | Agent Preflight Ritual | The agent's mandatory startup sequence | `RPAS-PRE.md` |
 | `ESC‑001` | Ambiguity Escalation Protocol | How the agent handles uncertainty | `RPAS-ESC.md` |
+| `TAR‑COL` | Traceability, Authority, Responsibility & Collision‑Prevention | Rituals for coordination and collision safety | `RPAS-TAR-COL.md` |
 | `HIL‑001` | Human‑in‑the‑Loop Protocol | Your decision points and valid responses | `RPAS-HIL.md` |
 | `OPM‑001` | Operator Manual (this document) | Plain‑language guide to everything above | `RPAS-OPM.md` |
 

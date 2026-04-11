@@ -1,4 +1,4 @@
-# ✅ **RPAS‑CM‑GRA‑001 v2.0.0 (CSR‑42)**
+# ✅ **RPAS‑CM‑GRA‑001 v2.1.0 (CSR-42)**
 
 ### *Authoritative framework guardrails and naming convention baseline.*
 
@@ -10,9 +10,8 @@
 
 | Prefix | Meaning                       | Examples                     |
 | ------ | ----------------------------- | ---------------------------- |
-| `GRA`  | Governance Rule Artifact      | RPAS‑CM‑GRA‑001 (Guardrails) |
-| `ENV`  | Agent Envelope Artifact       | RPAS‑CM‑ENV‑001 (GEMINI.md)  |
-| `AEV`  | Atomic Execution & Validation | RPAS‑CM‑AEV‑001              |
+| `TAR`  | Traceability, Authority & Responsibility | RPAS‑CM‑TAR‑COL‑001     |
+| `COL`  | Collision‑Prevention Protocol | RPAS‑CM‑TAR‑COL‑001     |
 | `CSR`  | Certified Stable Release      | CSR‑36, CSR‑42               |
 | `AMD`  | Amendment Record              | AMD‑2026‑04‑09‑0007          |
 
@@ -207,6 +206,20 @@ To ensure deterministic agent behavior and DRACO-verifiable evidence, all Intell
 
 ### **4. Governance Ledger (PostgreSQL)**
 *   **Constraint**: Append‑only storage for RTM, Amendments, and CSR version stamps.
+
+***
+
+# ✅ **RPAS‑TAR‑COL (Collision Prevention)**
+
+Every action in the ecosystem is governed by the **Traceability, Authority, Responsibility & Collision‑Prevention Protocol (TAR‑COL‑001)**. 
+
+### **Guarantees**
+*   **Traceability (T1–T2)**: Every artifact and execution has a verifiable owner and forensic lineage.
+*   **Authority (T3–T4)**: Tiers operate strictly within non-overlapping boundaries.
+*   **Collision Prevention (CP1–CP6)**: Deterministic locks and semantic validation prevent authority, execution, and semantic collisions.
+*   **Multi-Agent Coordination (COL-G1–G6)**: Pessimistic locking and atomic rollback ensure multi-agent stability.
+
+**See [RPAS‑CM‑TAR‑COL‑001](file:///f:/Source/Repos/adpa/RPAS-TAR-COL.md) for full specification.**
 
 ***
 
