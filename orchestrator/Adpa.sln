@@ -1,0 +1,28 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adpa.AppHost", "Adpa.AppHost\Adpa.AppHost.csproj", "{34B86AF6-115E-4E7C-A92D-53223105FC9B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adpa.ServiceDefaults", "Adpa.ServiceDefaults\Adpa.ServiceDefaults.csproj", "{5CED3969-EC79-439B-9B81-041B1251473B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adpa.Orchestrator", "Adpa.Orchestrator\Adpa.Orchestrator.csproj", "{C3D75DE9-6A66-49E2-846C-13EC61F5CFCC}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adpa.Web", "Adpa.Web\Adpa.Web.csproj", "{096EFF3E-DAF2-455C-AEAB-51FF51551E44}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{34B86AF6-115E-4E7C-A92D-53223105FC9B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{34B86AF6-115E-4E7C-A92D-53223105FC9B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5CED3969-EC79-439B-9B81-041B1251473B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5CED3969-EC79-439B-9B81-041B1251473B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C3D75DE9-6A66-49E2-846C-13EC61F5CFCC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C3D75DE9-6A66-49E2-846C-13EC61F5CFCC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{096EFF3E-DAF2-455C-AEAB-51FF51551E44}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{096EFF3E-DAF2-455C-AEAB-51FF51551E44}.Debug|Any CPU.Build.0 = Debug|Any CPU
+	EndGlobalSection
+EndGlobal
