@@ -3,6 +3,7 @@
  * Resolves variable values using conditional logic and rules
  */
 
+import { Parser } from 'expr-eval';
 import { logger } from '../../../utils/logger'
 import type { TemplateVariable, ResolutionContext, ResolutionStrategy } from '../types'
 
@@ -183,14 +184,9 @@ export class ConditionalLogicStrategy {
 
   private async evaluateStringCondition(condition: string, context: any): Promise<boolean> {
     try {
-      // Create a safe evaluation function
-      const func = new Function('context', `
-        with (context) {
-          return ${condition};
-        }
-      `)
-
-      return Boolean(func(context))
+      const parser = new Parser();
+      const expr = parser.parse(condition);
+      return Boolean(expr.evaluate(context));
     } catch (error) {
       logger.error('String condition evaluation failed', {
         condition,

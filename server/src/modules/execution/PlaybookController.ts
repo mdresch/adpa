@@ -26,7 +26,8 @@ export class PlaybookController {
 
   getById = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const playbook = await playbookService.getPlaybookById(req.params.id);
+      const userId = (req as any).user?.id;
+      const playbook = await playbookService.getPlaybookById(req.params.id, userId);
       if (!playbook) return res.status(404).json({ success: false, error: 'Playbook not found' });
       res.json({ success: true, data: playbook });
     } catch (error) {
@@ -56,8 +57,9 @@ export class PlaybookController {
 
   delete = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const deleted = await playbookService.deletePlaybook(req.params.id);
-      if (!deleted) return res.status(404).json({ success: false, error: 'Playbook not found' });
+      const userId = (req as any).user.id;
+      const deleted = await playbookService.deletePlaybook(req.params.id, userId);
+      if (!deleted) return res.status(404).json({ success: false, error: 'Playbook not found or access denied' });
       res.json({ success: true, message: 'Playbook deleted successfully' });
     } catch (error) {
       next(error);

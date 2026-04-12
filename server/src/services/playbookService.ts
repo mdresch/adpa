@@ -281,20 +281,30 @@ export async function getPlaybooks(
 
 /**
  * Get a single playbook by ID with scenarios and steps
+ * SECURITY FIX: Filter by owner or public status
  */
-export async function getPlaybookById(id: string): Promise<Playbook | null> {
+export async function getPlaybookById(id: string, userId?: string): Promise<Playbook | null> {
     const log = logger.child({ service: 'playbookService', method: 'getPlaybookById' })
 
     try {
-        // Get playbook
-        const playbookResult = await pool.query(`
+        // Get playbook with optional ownership check
+        // If userId is provided, we only return the playbook if it's public or the user owns it
+        let query = `
       SELECT 
         p.*,
         u.name as created_by_name
       FROM operational_playbooks p
       LEFT JOIN users u ON p.created_by = u.id
       WHERE p.id = $1
-    `, [id])
+    `;
+        const params: any[] = [id];
+
+        if (userId) {
+            query += ` AND p.created_by = $2`;
+            params.push(userId);
+        }
+
+        const playbookResult = await pool.query(query, params)
 
         if (playbookResult.rows.length === 0) {
             return null
@@ -453,18 +463,19 @@ export async function updatePlaybook(
 
 /**
  * Delete a playbook
+ * SECURITY FIX: Check ownership
  */
-export async function deletePlaybook(id: string): Promise<boolean> {
+export async function deletePlaybook(id: string, userId: string): Promise<boolean> {
     const log = logger.child({ service: 'playbookService', method: 'deletePlaybook' })
 
     try {
         const result = await pool.query(
-            'DELETE FROM operational_playbooks WHERE id = $1 RETURNING id',
-            [id]
+            'DELETE FROM operational_playbooks WHERE id = $1 AND created_by = $2 RETURNING id',
+            [id, userId]
         )
 
         const deleted = result.rows.length > 0
-        log.info('[PLAYBOOKS] Deleted playbook', { id, deleted })
+        log.info('[PLAYBOOKS] Deleted playbook', { id, deleted, userId })
         return deleted
     } catch (error: any) {
         log.error('[PLAYBOOKS] Failed to delete playbook:', error)

@@ -925,6 +925,9 @@ importers:
       exa-js:
         specifier: ^2.4.0
         version: 2.4.0(ws@8.19.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))
+      expr-eval:
+        specifier: ^2.0.2
+        version: 2.0.2
       express:
         specifier: ^4.18.2
         version: 4.22.1
@@ -8324,6 +8327,9 @@ packages:
   expect@30.3.0:
     resolution: {integrity: sha512-1zQrciTiQfRdo7qJM1uG4navm8DayFa2TgCSRlzUyNkhcJ6XUZF3hjnpkyr3VhAqPH7i/9GkG7Tv5abz6fqz0Q==}
     engines: {node: ^18.14.0 || ^20.0.0 || ^22.0.0 || >=24.0.0}
+
+  expr-eval@2.0.2:
+    resolution: {integrity: sha512-4EMSHGOPSwAfBiibw3ndnP0AvjDWLsMvGOvWEZ2F96IGk0bIVdjQisOHxReSkE13mHcfbuCiXw+G4y0zv6N8Eg==}
 
   express-rate-limit@8.3.1:
     resolution: {integrity: sha512-D1dKN+cmyPWuvB+G2SREQDzPY1agpBIcTa9sJxOPMCNeH3gwzhqJRDWCXW3gg0y//+LQ/8j52JbMROWyrKdMdw==}
@@ -20885,6 +20891,8 @@ snapshots:
       jest-message-util: 30.3.0
       jest-mock: 30.3.0
       jest-util: 30.3.0
+
+  expr-eval@2.0.2: {}
 
   express-rate-limit@8.3.1(express@5.2.1):
     dependencies:

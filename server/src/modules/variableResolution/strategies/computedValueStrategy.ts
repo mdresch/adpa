@@ -3,6 +3,7 @@
  * Computes variable values using expressions and calculations
  */
 
+import { Parser } from 'expr-eval';
 import { logger } from '../../../utils/logger'
 import type { TemplateVariable, ResolutionContext, ResolutionStrategy } from '../types'
 
@@ -157,14 +158,9 @@ export class ComputedValueStrategy {
 
   private async evaluateExpression(expression: string, context: any): Promise<any> {
     try {
-      // Create a safe evaluation function
-      const func = new Function('context', `
-        with (context) {
-          return ${expression};
-        }
-      `)
-
-      return func(context)
+      const parser = new Parser();
+      const expr = parser.parse(expression);
+      return expr.evaluate(context);
 
     } catch (error) {
       logger.error('Expression evaluation failed', {
