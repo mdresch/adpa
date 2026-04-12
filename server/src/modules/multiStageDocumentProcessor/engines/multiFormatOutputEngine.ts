@@ -6,7 +6,7 @@
 import { marked } from 'marked'
 import { Document, Packer, Paragraph, TextRun, HeadingLevel } from 'docx'
 import jsPDF from 'jspdf'
-import puppeteer from 'puppeteer'
+import { unifiedPdfService } from '../../../services/pdfService'
 import { logger } from '../../../utils/logger'
 
 export interface FormatConversionOptions {
@@ -41,7 +41,6 @@ export interface ConversionResult {
 
 export class MultiFormatOutputEngine {
   private static instance: MultiFormatOutputEngine
-  private browser: any = null
 
   private constructor() {}
 
@@ -107,18 +106,8 @@ export class MultiFormatOutputEngine {
       const htmlResult = await this.convertToHTML(markdownContent, options)
       const htmlContent = htmlResult.content as string
 
-      // Use puppeteer for high-quality PDF generation
-      if (!this.browser) {
-        this.browser = await puppeteer.launch({
-          headless: true,
-          args: ['--no-sandbox', '--disable-setuid-sandbox']
-        })
-      }
-
-      const page = await this.browser.newPage()
-      await page.setContent(htmlContent, { waitUntil: 'networkidle0' })
-
-      const pdfBuffer = await page.pdf({
+      // Use the centralized UnifiedPdfService
+      const pdfBuffer = await unifiedPdfService.generateFromHtml(htmlContent, {
         format: options.pageSettings?.format || 'A4',
         landscape: options.pageSettings?.orientation === 'landscape',
         margin: {
@@ -130,8 +119,6 @@ export class MultiFormatOutputEngine {
         printBackground: true
       })
 
-      await page.close()
-
       return {
         content: pdfBuffer,
         metadata: {
@@ -139,7 +126,7 @@ export class MultiFormatOutputEngine {
           size: pdfBuffer.length,
           pages: await this.estimatePageCount(markdownContent),
           generatedAt: new Date(),
-          generator: 'puppeteer-pdf-engine'
+          generator: 'unified-pdf-engine'
         }
       }
     } catch (error) {
@@ -600,12 +587,9 @@ export class MultiFormatOutputEngine {
   }
 
   /**
-   * Cleanup resources
+   * Cleanup resources (delegated to unified service)
    */
   async cleanup(): Promise<void> {
-    if (this.browser) {
-      await this.browser.close()
-      this.browser = null
-    }
+    // No longer managing local browser instance
   }
 }

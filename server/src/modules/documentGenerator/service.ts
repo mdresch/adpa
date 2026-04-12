@@ -8,13 +8,13 @@ import * as fs from 'fs/promises'
 import * as path from 'path'
 import Handlebars from 'handlebars'
 import { marked } from 'marked'
-import puppeteer from 'puppeteer'
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from 'docx'
 import { pool } from '../../database/connection'
 import { cache } from '../../utils/redis'
 import { logger } from '../../utils/logger'
 import { documentTemplateService } from '../documentTemplates/service'
 import { adobePdfService } from '../../services/adobePdfService'
+import { unifiedPdfService } from '../../services/pdfService'
 import {
   OutputFormat,
   GenerationStatus
@@ -308,7 +308,7 @@ export class DocumentGeneratorService {
   }
 
   /**
-   * Generate PDF document using Puppeteer or Adobe PDF Services
+   * Generate PDF document using the centralized UnifiedPdfService
    */
   private async generatePDF(
     processedTemplate: ProcessedTemplate,
@@ -321,118 +321,37 @@ export class DocumentGeneratorService {
     // Convert content to HTML first with metadata for professional headers
     const htmlContent = await this.convertToHTML(processedTemplate.content, options, processedTemplate.metadata)
 
-    // Check if Adobe PDF Services should be used
-    if (options?.use_adobe_pdf) {
-      try {
-        logger.info(`Using Adobe PDF Services for premium PDF generation: ${filename}`)
+    logger.info(`Generating PDF via UnifiedPdfService: ${filename}`, {
+      use_adobe: options?.use_adobe_pdf
+    })
 
-        const adobeOptions = {
-          quality: options.adobe_quality || 'high',
-          compress: options.adobe_compress || false,
-          linearize: options.adobe_linearize || false,
-          protect: options.adobe_protect || false,
-          password: options.adobe_password,
-          permissions: options.adobe_permissions,
-          documentLanguage: options.document_language || 'en-US',
-          includeTaggedPDF: options.include_tagged_pdf || false
-        }
+    const pdfBuffer = await unifiedPdfService.generateFromHtml(htmlContent, {
+      useAdobe: options?.use_adobe_pdf,
+      adobeOptions: {
+        quality: options?.adobe_quality || 'high',
+        compress: options?.adobe_compress || false,
+        linearize: options?.adobe_linearize || false,
+        protect: options?.adobe_protect || false,
+        password: options?.adobe_password,
+        permissions: options?.adobe_permissions,
+        documentLanguage: options?.document_language || 'en-US',
+        includeTaggedPDF: options?.include_tagged_pdf || false
+      },
+      format: options?.page_size || this.config.pdf_options.format,
+      landscape: options?.orientation === 'landscape',
+      margin: options?.margins || this.config.pdf_options.margins,
+      printBackground: this.config.pdf_options.print_background,
+      displayHeaderFooter: options?.include_header || options?.include_footer || true,
+      headerTemplate: options?.header_template || '<div></div>',
+      footerTemplate: options?.footer_template || `
+        <div style="font-size: 9px; text-align: center; width: 100%; color: #888; padding-bottom: 10px;">
+          <span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
+        </div>
+      `
+    })
 
-        const result = await adobePdfService.generatePremiumPDF(
-          htmlContent,
-          filename,
-          adobeOptions
-        )
-
-        if (result.success && result.filePath) {
-          logger.info(`Adobe PDF generation completed: ${filename}`, {
-            fileSize: result.fileSize,
-            processingTime: result.metadata?.processingTime,
-            compressionRatio: result.metadata?.compressionRatio
-          })
-          return result.filePath
-        } else {
-          logger.warn(`Adobe PDF generation failed, falling back to Puppeteer: ${result.error}`)
-          // Fall through to Puppeteer generation
-        }
-      } catch (error) {
-        logger.error(`Adobe PDF generation error, falling back to Puppeteer:`, error)
-        // Fall through to Puppeteer generation
-      }
-    }
-
-    // Use Puppeteer for standard PDF generation
-    logger.info(`Using Puppeteer for standard PDF generation: ${filename}`)
-
-    let browser = null;
-    const launchOptions: any = {
-      headless: true,
-      args: [
-        '--no-sandbox', 
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu'
-      ]
-    };
-
-    // Try to use system Chrome/Chromium if available (for Railway/production)
-    if (process.env.PUPPETEER_EXECUTABLE_PATH) {
-      launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
-    } else {
-      // Try common system paths
-      const possiblePaths = [
-        "/usr/bin/google-chrome",
-        "/usr/bin/google-chrome-stable",
-        "/usr/bin/chromium",
-        "/usr/bin/chromium-browser",
-        "/snap/bin/chromium",
-      ];
-      for (const p of possiblePaths) {
-        try {
-          if (require('fs').existsSync(p)) {
-            launchOptions.executablePath = p;
-            break;
-          }
-        } catch (e) {}
-      }
-    }
-
-    try {
-      try {
-        browser = await puppeteer.launch(launchOptions);
-      } catch (launchError: any) {
-        if (!launchOptions.executablePath && launchError.message.includes("Could not find Chrome")) {
-          logger.warn("System Chrome not found, attempting bundled Puppeteer launch...");
-          delete launchOptions.executablePath;
-          browser = await puppeteer.launch(launchOptions);
-        } else {
-          throw launchError;
-        }
-      }
-
-      const page = await browser.newPage();
-      await page.setContent(htmlContent, { waitUntil: 'networkidle0', timeout: 30000 });
-
-      // Generate PDF
-      const pdfOptions = {
-        path: filePath,
-        format: options?.page_size || this.config.pdf_options.format,
-        landscape: options?.orientation === 'landscape',
-        margin: options?.margins || this.config.pdf_options.margins,
-        printBackground: this.config.pdf_options.print_background,
-        displayHeaderFooter: options?.include_header || options?.include_footer || true,
-        headerTemplate: options?.header_template || '<div></div>',
-        footerTemplate: options?.footer_template || `
-          <div style="font-size: 9px; text-align: center; width: 100%; color: #888; padding-bottom: 10px;">
-            <span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
-          </div>
-        `
-      };
-
-      await page.pdf(pdfOptions as any);
-
-    } finally {
-      if (browser) await browser.close();
-    }
+    // Write buffer to file
+    await fs.writeFile(filePath, pdfBuffer)
 
     return filePath
   }

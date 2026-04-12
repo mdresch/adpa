@@ -1,0 +1,63 @@
+body {
+    background-color: #0f172a;
+    color: #f1f5f9;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    line-height: 1.6;
+}
+
+h1, h2, h3, h4, h5 {
+    color: #38bdf8;
+    font-weight: 700;
+}
+
+.card {
+    background: rgba(30, 41, 59, 0.7);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+    border-color: #38bdf8;
+}
+
+.badge {
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-weight: 800;
+    padding: 0.5em 1em;
+}
+
+.card-title {
+    font-size: 1.25rem;
+    margin-bottom: 1rem;
+}
+
+.text-muted {
+    color: #94a3b8 !important;
+}
+
+.btn-primary {
+    background-color: #0ea5e9;
+    border: none;
+    font-weight: 600;
+}
+
+.btn-primary:hover {
+    background-color: #0284c7;
+}
+
+.container {
+    max-width: 1200px;
+}
+
+/* Ritual Ledger Specifics */
+.border-primary {
+    border-color: #0ea5e9 !important;
+}
+
+hr {
+    border-color: rgba(255, 255, 255, 0.1);
+}

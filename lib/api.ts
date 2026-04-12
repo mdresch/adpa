@@ -1,5 +1,6 @@
 import { io, Socket } from "socket.io-client"
 import { getApiBaseUrl, getWsUrl } from "./api-url"
+export { getApiBaseUrl }
 
 // API Configuration
 const API_BASE_URL = getApiBaseUrl()
@@ -114,6 +115,60 @@ export interface Document {
   tags?: string[]
   quality_score?: number
   quality_status?: string
+}
+
+// ---------------------------------------------------------------------------
+// RTM & Governance Types (RPAS-CM)
+// ---------------------------------------------------------------------------
+
+export interface RtmRequirement {
+  id: string
+  business_case_id: string
+  description: string
+  domain: string
+  priority: string
+  status: "ACTIVE" | "SUPERSEDED"
+  source_version: number
+  amendment_id?: string
+  csr_version?: string
+  executed_at?: string
+  created_at: string
+}
+
+export interface RtmAmendment {
+  id: string
+  requirement_id: string
+  proposed_description: string
+  justification: string
+  amendment_type: "REPLACEMENT" | "EXPANSION"
+  amendment_sub_type: string
+  status: "PENDING" | "APPROVED" | "REJECTED" | "APPLIED"
+  proposed_by: string
+  proposed_at: string
+  decided_by?: string
+  decided_at?: string
+  decision_notes?: string
+  applied_by?: string
+  applied_at?: string
+  resulting_requirement_id?: string
+}
+
+export interface AmendmentProposalRequest {
+  requirement_id: string
+  proposed_description: string
+  justification: string
+  amendment_type: "REPLACEMENT" | "EXPANSION"
+  amendment_sub_type: string
+}
+
+export interface ResearchAdvice {
+  target_requirement_id: string
+  suggested_description: string
+  justification: string
+  amendment_type: "REPLACEMENT" | "EXPANSION"
+  amendment_sub_type: string
+  confidence_score: number
+  analysis_context: string
 }
 
 export interface Stakeholder {
@@ -752,7 +807,7 @@ interface ApiError extends Error {
   data?: unknown
 }
 
-class ApiClient {
+export class ApiClient {
   private baseURL: string
   private token: string | null = null
   private socket: Socket | null = null
@@ -1295,10 +1350,40 @@ class ApiClient {
     await this.request(`/programs/${id}/unarchive`, { method: "POST" })
   }
 
-  // Templates API
-  // Duplicate getTemplates method removed
+  // ---------------------------------------------------------------------------
+  // RTM & Governance Rituals (RPAS-CM)
+  // ---------------------------------------------------------------------------
 
-  // Duplicate createTemplate method removed
+  /**
+   * Fetches the full RTM Ledger (Historical or Baseline)
+   * Authored under RPAS-CM for Researcher Dashboard
+   */
+  async getRtmLedger(): Promise<RtmRequirement[]> {
+    // Note: Orchestrator identifies this as GET api/ritual/rtm/ledger
+    const response = await this.request<{ success: boolean; data: RtmRequirement[] }>("/ritual/rtm/ledger")
+    return response.data || []
+  }
+
+  /**
+   * Proposes a new RTM Amendment
+   * Complies with RPAS G5 (Read vs Act) - Drafting only.
+   */
+  async proposeRtmAmendment(request: AmendmentProposalRequest): Promise<RtmAmendment> {
+    return this.request<RtmAmendment>("/ritual/rtm/propose-amendment", {
+      method: "POST",
+      body: JSON.stringify(request)
+    })
+  }
+
+  /**
+   * Triggers an AI Research Ritual for a given requirement.
+   * Leverages Full Historical Ledger context via Orchestrator.
+   */
+  async getRtmResearchAdvice(requirementId: string): Promise<ResearchAdvice> {
+    return this.request<ResearchAdvice>(`/ritual/rtm/research-advice/${requirementId}`, {
+      method: "POST"
+    })
+  }
 
   // Search API
   async search(query: string, filters?: any): Promise<any[]> {
@@ -1308,9 +1393,6 @@ class ApiClient {
     })
     return response.results
   }
-
-  // Analytics API
-  // Removed duplicate getSystemAnalytics method
 
   // System Settings API
   async getSystemSettings(): Promise<any> {
@@ -1375,14 +1457,6 @@ class ApiClient {
     return response
   }
 
-  // Removed duplicate getDocument method
-
-  // Duplicate createDocument method removed
-
-  // Removed duplicate updateDocument method
-
-  // Removed duplicate deleteDocument method
-
   // Users endpoints
   async getUsers(params?: { page?: number; limit?: number; search?: string }) {
     const queryParams = new URLSearchParams()
@@ -1405,24 +1479,11 @@ class ApiClient {
     })
   }
 
-  // Templates endpoints
-  // Duplicate getTemplates() method removed
-
-  // Removed duplicate getTemplate method
-
-  // Duplicate createTemplate method removed
-
-  // AI endpoints
-
-
   // Analytics endpoints
   async getAnalytics(timeRange?: string) {
     const query = timeRange ? `?timeRange=${timeRange}` : ""
     return this.request<any>(`/analytics${query}`)
   }
-
-  // Jobs endpoints
-  // Removed duplicate getJobs() and getJob() methods
 
   // Security endpoints
   async getSecurityEvents() {
@@ -1467,12 +1528,6 @@ class ApiClient {
       method: "DELETE",
     })
   }
-
-  // Integrations endpoints (duplicate removed - using the one at line 337)
-
-  // Duplicate createIntegration method removed
-
-  // Duplicate updateIntegration method removed
 
   // Documents API
   async getProjectDocuments(
@@ -1552,7 +1607,7 @@ class ApiClient {
       console.log("API Client: Test response received:", response)
       return response
     } catch (error) {
-      console.error("API Client: Error testing feedback endpoint:", error)
+      console.error("API Client: Test error occurred:", error)
       throw error
     }
   }

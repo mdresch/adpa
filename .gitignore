@@ -144,8 +144,29 @@ scripts/output/
 scripts/logs/
 scripts/*.log
 
+# RPAS validation logs (local operator evidence)
+.rpas/
+
 # Legacy Docker files (archived)
 /legacy/
 
 # Sentry Config File
 .env.sentry-build-plugin
+
+# .NET / Aspire Orchestration (build artifacts)
+**/bin/
+**/obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.DotSettings.user
+
+# NuGet
+**/packages/
+*.nupkg
+**/project.assets.json
+
+# Aspire runtime / developer tools
+.aspire/
+**/Properties/launchSettings.json

@@ -226,11 +226,11 @@ export async function getIssues(
 
 /**
  * Get a single issue by ID
+ * SECURITY FIX: Enforce ownership
  */
-export async function getIssueById(id: string): Promise<Issue | null> {
+export async function getIssueById(id: string, userId?: string): Promise<Issue | null> {
   try {
-    const result = await pool.query(
-      `SELECT 
+    let query = `SELECT 
         i.*,
         u1.name as raised_by_name,
         u2.name as assigned_to_name,
@@ -239,9 +239,16 @@ export async function getIssueById(id: string): Promise<Issue | null> {
       LEFT JOIN users u1 ON i.raised_by = u1.id
       LEFT JOIN users u2 ON i.assigned_to = u2.id
       LEFT JOIN users u3 ON i.escalated_to = u3.id
-      WHERE i.id = $1`,
-      [id]
-    )
+      WHERE i.id = $1`;
+    
+    const params: any[] = [id];
+
+    if (userId) {
+      query += ` AND i.created_by = $2`;
+      params.push(userId);
+    }
+
+    const result = await pool.query(query, params)
 
     if (result.rows.length === 0) {
       return null
@@ -466,10 +473,11 @@ export async function updateIssue(
 
 /**
  * Delete an issue
+ * SECURITY FIX: Check ownership
  */
-export async function deleteIssue(id: string): Promise<boolean> {
+export async function deleteIssue(id: string, userId: string): Promise<boolean> {
   try {
-    const result = await pool.query('DELETE FROM issues WHERE id = $1', [id])
+    const result = await pool.query('DELETE FROM issues WHERE id = $1 AND created_by = $2', [id, userId])
     return result.rowCount !== null && result.rowCount > 0
   } catch (error: any) {
     logger.error('[ISSUE-SERVICE] Failed to delete issue:', error)

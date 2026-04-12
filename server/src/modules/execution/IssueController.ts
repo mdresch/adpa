@@ -33,7 +33,8 @@ export class IssueController {
   getById = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
-      const issue = await issueService.getIssueById(id);
+      const userId = (req as any).user.id;
+      const issue = await issueService.getIssueById(id, userId);
       if (!issue) return res.status(404).json({ success: false, error: 'Issue not found' });
       res.json({ success: true, data: issue });
     } catch (error) {
@@ -65,8 +66,9 @@ export class IssueController {
   delete = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
-      const deleted = await issueService.deleteIssue(id);
-      if (!deleted) return res.status(404).json({ success: false, error: 'Issue not found' });
+      const userId = (req as any).user.id;
+      const deleted = await issueService.deleteIssue(id, userId);
+      if (!deleted) return res.status(404).json({ success: false, error: 'Issue not found or access denied' });
       res.json({ success: true, message: 'Issue deleted successfully' });
     } catch (error) {
       next(error);

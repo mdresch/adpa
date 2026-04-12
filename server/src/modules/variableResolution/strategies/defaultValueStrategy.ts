@@ -3,6 +3,7 @@
  * Uses default values from variable definitions
  */
 
+import { Parser } from 'expr-eval';
 import { logger } from '../../../utils/logger'
 import type { TemplateVariable, ResolutionContext, ResolutionStrategy } from '../types'
 
@@ -103,24 +104,23 @@ export class DefaultValueStrategy {
     return processedString
   }
 
-  private async evaluateDefaultFunction(functionString: string, context: ResolutionContext): Promise<any> {
+  private async evaluateDefaultFunction(expression: string, context: ResolutionContext): Promise<any> {
     try {
-      // Create a safe evaluation context
       const evalContext = {
         project: context.project_context,
         user: context.user_context?.user_profile,
         template: context.template_context,
         date: new Date(),
-        random: Math.random
-      }
+        random: Math.random()
+      };
 
-      // Evaluate the function in a safe context
-      const func = new Function('context', `return (${functionString})(context)`)
-      return func(evalContext)
+      const parser = new Parser();
+      const expr = parser.parse(expression);
+      return expr.evaluate(evalContext);
 
     } catch (error) {
-      logger.error('Failed to evaluate default function', {
-        functionString,
+      logger.error('Failed to evaluate default expression', {
+        expression,
         error: error.message
       })
       throw error

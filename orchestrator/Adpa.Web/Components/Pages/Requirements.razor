@@ -1,0 +1,115 @@
+@page "/requirements"
+@using Adpa.Orchestrator.Models.Rituals
+@inject IHttpClientFactory HttpClientFactory
+
+<PageTitle>Requirements Traceability Matrix</PageTitle>
+
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Requirements Traceability Matrix</h1>
+        <div class="d-flex align-items-center gap-3">
+            <span class="badge bg-primary p-2 border border-light shadow-sm">
+                <i class="bi bi-patch-check-fill me-1"></i> RPAS CLOUD MASTER
+            </span>
+            <div class="form-check form-switch ms-2 me-3">
+                <input class="form-check-input" type="checkbox" id="baselineToggle" @bind="showBaselineOnly">
+                <label class="form-check-label small" for="baselineToggle">Current Baseline Only</label>
+            </div>
+            <span class="badge bg-secondary">RPAS-CR Visibility: Read-Only</span>
+        </div>
+    </div>
+
+    @if (matrix == null)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-secondary" role="status">
+                <span class="visually-hidden">Loading requirements...</span>
+            </div>
+            <p class="mt-3">Consulting the RTM Ledger...</p>
+        </div>
+    }
+    else if (!VisibleRequirements.Any())
+    {
+        <div class="alert alert-info border-start border-info border-4">
+            <h4 class="alert-heading">No Visible Requirements</h4>
+            <p>There are no requirements matching the current filter. Requirements are seeded after Phase 0 approval.</p>
+        </div>
+    }
+    else
+    {
+        <div class="card shadow-sm">
+            <div class="card-body p-0">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Description</th>
+                            <th>Domain</th>
+                            <th>Priority</th>
+                            <th>Status</th>
+                            <th>Source / Amendment</th>
+                            <th>Created</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var req in VisibleRequirements)
+                        {
+                            <tr class="@(req.Status == "SUPERSEDED" ? "text-muted bg-light opacity-75" : "")">
+                                <td class="@(req.Status == "SUPERSEDED" ? "text-decoration-line-through" : "fw-bold")">
+                                    @req.Description
+                                </td>
+                                <td><span class="badge bg-info text-dark">@req.Domain</span></td>
+                                <td><span class="badge bg-light text-dark">@req.Priority</span></td>
+                                <td>
+                                    <span class="badge @(req.Status == "SUPERSEDED" ? "bg-warning text-dark" : "bg-success")">
+                                        @req.Status
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="small">
+                                        <div class="text-uppercase fw-bold text-primary" style="font-size: 0.65rem;">CSR Certified</div>
+                                        <div class="font-monospace text-dark bg-light px-1 rounded" style="font-size: 0.75rem;">
+                                            @(string.IsNullOrEmpty(req.CsrVersion) ? "LEGACY" : req.CsrVersion)
+                                        </div>
+                                        
+                                        <div class="text-uppercase fw-bold mt-2" style="font-size: 0.65rem;">Source Version</div>
+                                        <div>v@req.SourceVersion</div>
+                                        
+                                        @if (!string.IsNullOrEmpty(req.AmendmentId))
+                                        {
+                                            <div class="text-uppercase fw-bold mt-2" style="font-size: 0.65rem;">Amendment Intent</div>
+                                            <div class="text-truncate" style="max-width: 120px;" title="@req.AmendmentId">
+                                                @req.AmendmentId.Substring(0, 8)...
+                                            </div>
+                                        }
+                                    </div>
+                                </td>
+                                <td class="small text-muted">@req.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<RtmRequirement>? matrix;
+    private bool showBaselineOnly = true;
+
+    private IEnumerable<RtmRequirement> VisibleRequirements => 
+        matrix?.Where(r => !showBaselineOnly || r.Status == "ACTIVE") ?? Enumerable.Empty<RtmRequirement>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var client = HttpClientFactory.CreateClient("api");
+            matrix = await client.GetFromJsonAsync<List<RtmRequirement>>("/api/ritual/ledger/rtm");
+        }
+        catch (Exception ex)
+        {
+            matrix = new List<RtmRequirement>();
+        }
+    }
+}

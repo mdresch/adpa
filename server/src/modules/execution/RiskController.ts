@@ -16,7 +16,8 @@ export class RiskController {
         status: req.query.status as string,
         priority: req.query.priority as string
       };
-      const risks = await this.repository.findRegistry(filters);
+      const userId = (req as any).user.id;
+      const risks = await this.repository.findRegistry(filters, userId);
       res.json({ success: true, data: risks, count: risks.length });
     } catch (error) {
       next(error);
@@ -32,7 +33,8 @@ export class RiskController {
         status: req.query.status as string,
         overdue_only: req.query.overdue_only === 'true'
       };
-      const report = await this.repository.findMitigationReport(filters);
+      const userId = (req as any).user.id;
+      const report = await this.repository.findMitigationReport(filters, userId);
       res.json({ success: true, data: report, count: report.length });
     } catch (error) {
       next(error);
@@ -42,7 +44,8 @@ export class RiskController {
   getSummary = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const programId = req.query.program_id as string;
-      const summary = await this.repository.findSummary(programId);
+      const userId = (req as any).user.id;
+      const summary = await this.repository.findSummary(programId, userId);
       res.json({ success: true, data: summary, count: summary.length });
     } catch (error) {
       next(error);
@@ -52,7 +55,8 @@ export class RiskController {
   getCompliance = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const programId = req.query.program_id as string;
-      const compliance = await this.repository.findCompliance(programId);
+      const userId = (req as any).user.id;
+      const compliance = await this.repository.findCompliance(programId, userId);
       res.json({ success: true, data: compliance, count: compliance.length });
     } catch (error) {
       next(error);

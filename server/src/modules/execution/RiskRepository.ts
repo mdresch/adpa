@@ -6,7 +6,7 @@ export class RiskRepository {
 
   constructor(private pool: Pool) {}
 
-  async findRegistry(filters: any, client?: PoolClient) {
+  async findRegistry(filters: any, userId?: string, client?: PoolClient) {
     const db = client || this.pool;
     
     // Logic from riskReportingRoutes.ts
@@ -23,7 +23,7 @@ export class RiskRepository {
     let paramCount = 0;
     
     if (useView) {
-      query = 'SELECT * FROM risk_registry WHERE 1=1';
+      query = 'SELECT rr.* FROM risk_registry rr JOIN risks r ON rr.id = r.id WHERE 1=1';
     } else {
       query = `
         SELECT 
@@ -43,53 +43,59 @@ export class RiskRepository {
         WHERE 1=1
       `;
     }
+
+    // SECURITY FIX: Enforce ownership
+    if (userId) {
+      paramCount++;
+      query += ` AND r.created_by = $${paramCount}`;
+      params.push(userId);
+    }
     
     if (filters.project_id) {
       paramCount++;
-      query += ` AND project_id = $${paramCount}`;
+      query += ` AND r.project_id = $${paramCount}`;
       params.push(filters.project_id);
     }
     
     if (filters.program_id) {
       paramCount++;
-      query += ` AND program_id = $${paramCount}`;
+      query += ` AND r.program_id = $${paramCount}`;
       params.push(filters.program_id);
     }
     
     if (filters.risk_level) {
       paramCount++;
-      query += ` AND ${useView ? 'risk_level' : 'COALESCE(r.risk_level, \'project\')'} = $${paramCount}`;
+      query += ` AND ${useView ? 'r.' : ''}risk_level = $${paramCount}`;
       params.push(filters.risk_level);
     }
     
     if (filters.status) {
       paramCount++;
-      query += ` AND status = $${paramCount}`;
+      query += ` AND r.status = $${paramCount}`;
       params.push(filters.status);
     } else if (!useView) {
       query += ` AND (r.status NOT IN ('closed', 'mitigated') OR COALESCE(r.risk_level, 'project') IN ('portfolio', 'systemic'))`;
     }
     
-    query += ` ORDER BY 
-      CASE 
-        WHEN priority = 'critical' THEN 1
-        WHEN priority = 'high' THEN 2
-        WHEN priority = 'medium' THEN 3
-        WHEN priority = 'low' THEN 4
-        ELSE 5
-      END,
-      created_at DESC
-    `;
+    query += ` ORDER BY r.created_at DESC`;
+
     
     const result = await db.query(query, params);
     return result.rows;
   }
 
-  async findMitigationReport(filters: any, client?: PoolClient) {
+  async findMitigationReport(filters: any, userId?: string, client?: PoolClient) {
     const db = client || this.pool;
     let query = 'SELECT * FROM risk_mitigation_report WHERE 1=1';
     const params: any[] = [];
     let paramCount = 0;
+
+    // SECURITY FIX: Enforce ownership via risks table subquery
+    if (userId) {
+      paramCount++;
+      query += ` AND risk_id IN (SELECT id FROM risks WHERE created_by = $${paramCount})`;
+      params.push(userId);
+    }
     
     if (filters.project_id) {
       paramCount++;
@@ -125,12 +131,21 @@ export class RiskRepository {
     return result.rows;
   }
 
-  async findSummary(programId?: string, client?: PoolClient) {
+  async findSummary(programId?: string, userId?: string, client?: PoolClient) {
     const db = client || this.pool;
     let query = 'SELECT * FROM portfolio_risk_summary WHERE 1=1';
     const params: any[] = [];
+    let paramCount = 0;
+
+    if (userId) {
+      paramCount++;
+      query += ` AND created_by = $${paramCount}`;
+      params.push(userId);
+    }
+
     if (programId) {
-      query += ` AND program_id = $1`;
+      paramCount++;
+      query += ` AND program_id = $${paramCount}`;
       params.push(programId);
     }
     query += ` ORDER BY total_risks DESC`;
@@ -138,12 +153,21 @@ export class RiskRepository {
     return result.rows;
   }
 
-  async findCompliance(programId?: string, client?: PoolClient) {
+  async findCompliance(programId?: string, userId?: string, client?: PoolClient) {
     const db = client || this.pool;
     let query = 'SELECT * FROM portfolio_risk_review_compliance WHERE 1=1';
     const params: any[] = [];
+    let paramCount = 0;
+
+    if (userId) {
+      paramCount++;
+      query += ` AND created_by = $${paramCount}`;
+      params.push(userId);
+    }
+
     if (programId) {
-      query += ` AND program_id = $1`;
+      paramCount++;
+      query += ` AND program_id = $${paramCount}`;
       params.push(programId);
     }
     query += ` ORDER BY compliance_percentage DESC`;
