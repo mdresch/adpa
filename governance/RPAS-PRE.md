@@ -1,4 +1,4 @@
-# ✅ **RPAS‑CM‑PRE‑001 v1.0.0 (CSR‑42)**
+# ✅ **RPAS‑CM‑PRE‑001 v2.3.0 (CSR‑42)**
 
 ### *Agent Preflight Ritual — Mandatory startup sequence for governed agent execution.*
 
@@ -22,6 +22,16 @@ non‑negotiable sequence** every agent must execute before performing any work.
 > An agent that has not completed all preflight steps is in an
 > **ungoverned state** and must not produce diffs, execute commands,
 > or modify any file.
+
+***
+
+## The Three‑Phase Doctrine (Ritual Phases)
+
+As of **v2.3.0**, all governance rituals are executed within the context of three logical phases. These phases determine the enforcement level of **Gate 5 (Semantic Integrity)**.
+
+1.  **Phase 1 — AI Proposes (Advisory)**: The agent drafts a proposal and attestation. Gate 5 provides semantic guidance.
+2.  **Phase 2 — Human Decides (Advisory)**: The operator reviews the proposal. Gate 5 flags risks but does not block.
+3.  **Phase 3 — AI Orchestrates (Blocking)**: The Orchestrator applies the change. Gate 5 is **MANDATORY BLOCKING**.
 
 ***
 
@@ -108,22 +118,24 @@ AEV Scope Declaration:
 
 ***
 
-### Step 5 — Produce Advisory Output
-
 The agent **must** present its proposed change as advisory output **before**
-any execution:
+any execution. This constitutes **Phase 1 (AI Proposes)**.
 
 - A unified diff, or
-- A structured description of the proposed modification, or
-- An advisory JSON payload.
+- A structured description, or
+- An advisory JSON payload (`rpas-attestation.json`).
+
+**Gate 5 (DRACO)**: During this step, Gate 5 runs in **Advisory Mode**. It helps the agent refine the intent and detect early semantic drift.
 
 The agent **must not** apply the change during this step.
 
 ***
 
-### Step 6 — Await Human Decision
+### Step 6 — Await Human Decision (Phase 2)
 
-The agent **must** halt and wait for explicit human authorization.
+The agent **must** halt and wait for explicit human authorization. This constitutes **Phase 2 (Human Decides)**.
+
+**Gate 5 (DRACO)**: Gate 5 provides a "Semantic Risk Assessment" to the human operator. It highlights potential unasked-for logic (Mythos-class) but **cannot block the human from deciding**.
 
 **Acceptable authorizations**:
 - "Proceed" / "Approved" / "Go ahead"
@@ -139,6 +151,17 @@ Silence is **not** consent. Timeout is **not** approval.
 
 ***
 
+### Step 7 — Final Implementation (Phase 3)
+
+Once human authorization is received, the agent enters **Phase 3 (AI Orchestrates)** for execution.
+
+> [!NOTE]
+> **Semantic Latency**: Gate 5 performing the semantic audit may require **60–90 seconds** in Phase 3. This is an intentional safety delay and does not indicate system failure.
+
+**Gate 5 (DRACO)**: Gate 5 is now in **MANDATORY BLOCKING MODE**. If the implementation logic deviates from the approved attestation, or if unasked-for initiative is detected, the **AEV pipeline HALTS** and the mutation is rejected.
+
+***
+
 ## Preflight Completion Gate
 
 The Preflight Ritual is complete **only** when all six steps have been
@@ -149,11 +172,12 @@ executed in order:
 ✅ Step 2: Tier confirmed
 ✅ Step 3: Task classified
 ✅ Step 4: Scope declared
-✅ Step 5: Advisory output produced
-✅ Step 6: Human authorization received
+✅ Step 5: Advisory output produced (Phase 1)
+✅ Step 6: Human authorization received (Phase 2)
+✅ Step 7: Final Implementation (Phase 3 - G5 BLOCKING)
 ```
 
-Only after this gate passes may the agent enter **AEV Phase 2 (Implementation)**.
+Only after this gate passes may the agent be considered **RPAS v2.3.0 Certified**.
 
 ***
 
@@ -182,9 +206,9 @@ to the ritual sequence.
 | Field | Value |
 |---|---|
 | Artifact ID | `RPAS‑CM‑PRE‑001` |
-| Version | `v1.0.0` |
-| Maturity | ADPA Baseline |
-| Parent | `RPAS‑CM‑GRA‑001 v2.0.0 (CSR‑42)` |
+| Version | `v2.3.0` |
+| Maturity | RPAS‑Aligned Governance |
+| Parent | `RPAS‑CM‑GRA‑001 v2.3.0 (CSR‑42)` |
 | Related | `RPAS‑CM‑TCL‑001`, `RPAS‑CM‑ESC‑001`, `RPAS‑CM‑AEV‑001` |
 | Author | Agent (advisory) — awaiting human decision |
 | CSR Epoch | Pending attestation |

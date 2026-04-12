@@ -586,9 +586,21 @@ For enterprise customers and commercial licensing:
 
 ---
 
+## Frequently Asked Questions (FAQ)
+
+### ℹ️ **Why does Phase 3 (Orchestration) take ~90 seconds?**
+The ADPA Framework implements **Gate 5 (Semantic Integrity)** using the DRACO Review Board. This board performs a high-integrity semantic audit of your code mutations against the stated intent.
+- **Evidence Validator**: Confirms the diff implements the intent correctly.
+- **Governance Evaluator**: Checks for authority and ritual violations.
+- **Counterfactual Challenger**: Audits for "Shadow Initiative" (e.g., unauthorized network calls or data exports).
+
+This 60–90 second delay is a **deliberate safety features** designed to prevent "Mythos-Class" autonomous AI exploits. It is only required during the final orchestration of a governed change.
+
+---
+
 **Built with ❤️ by the ADPA Framework Team**
 
 *Empowering organizations with intelligent document automation and seamless enterprise integrations.*
 
 ---
-*Last updated: 2024*
+*Last updated: 2026-04-12 (v2.3.0)*

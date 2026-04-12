@@ -1,4 +1,4 @@
-# ✅ **RPAS‑CM‑GRA‑001 v2.2.0 (CSR-42)**
+# ✅ **RPAS‑CM‑GRA‑001 v2.3.0 (CSR-42)**
 
 ### *Authoritative framework guardrails and naming convention baseline.*
 
@@ -168,7 +168,23 @@ RPAS-CM is structurally designed to neutralize the failure modes associated with
 4. **Gate 4 Schema Attestation**: Every proposal must match the `TAR-COL` metadata schema, proving intent and authority before certification.
 5. **COL-G3 Pessimistic Locking**: Prevents multi-agent race conditions or uncoordinated "patch storms."
 
-**Governed Verdict**: Glasswing-class initiative (e.g., sandbox breakouts, unasked-for disclosure) is impossible under RPAS v2.2.0.
+**Governed Verdict**: Glasswing-class initiative (e.g., sandbox breakouts, unasked-for disclosure) is impossible under RPAS v2.3.0.
+
+***
+
+# ✅ **Gate 5 — Semantic Integrity (DRACO)**
+
+Gate 5 uses a localized multi-agent Review Board (**DRACO**) to audit the *semantic intent* of every state mutation. It ensures that the code changes match the human-approved attestation and do not exhibit "Shadow Initiative."
+
+### **G5-BLOCKING-MODE Rule**
+
+To preserve human sovereignty while maintaining execution safety, Gate 5 enforcement is ritual-aware:
+
+*   **Phase 1 (Ideation)**: DRACO runs in **Advisory Mode**. Provides feedback on intent and scope without blocking.
+*   **Phase 2 (Decision)**: DRACO runs in **Advisory Mode**. Issues warnings if intent is ambiguous or risky.
+*   **Phase 3 (Orchestration)**: DRACO runs in **Mandatory Blocking Mode**. Any detected semantic drift, hidden logic, or unauthorized initiative **HALTS** the execution.
+
+**Purpose**: Detect and block unsafe emergent AI behavior (Mythos-Class) before it is committed to the CSR baseline.
 
 ***
 
@@ -288,6 +304,11 @@ Every atomic change must pass the four RPAS Gates, enforced by **AEV (Atomic Exe
 ### **Gate 4 — Governance Attestation (RPAS)**
 *   **Enforcement**: Machine-verifiable certification of compliance with **G1–G5**.
 *   **Automation**: Validated via `validate-governance.js` against the `rpas-tar-col.schema.json`.
+*   **Output**: Validated `rpas-attestation.json`.
+
+### **Gate 5 — Semantic Integrity (DRACO)**
+*   **Enforcement**: Local Board Review (Evidence, Governance, Challenger) of the `git diff`.
+*   **Automation**: Triggered via `pnpm run draco:preflight`.
 *   **Output**: Final CSR-stamped state transition.
 
 ***

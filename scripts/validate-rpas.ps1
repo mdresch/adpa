@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
     validate-rpas.ps1 -- RPAS-CM AEV/DRACO Validation Pipeline
-    RPAS-CM-GRA-001 v2.0.0 (CSR-42)
+    RPAS-CM-GRA-001 v2.3.0 (CSR-42)
 
 .DESCRIPTION
     Enforces the four RPAS Gates (Mechanical Integrity, Build Integrity,
@@ -9,6 +9,7 @@
       - RPAS.md (CSR-42)
       - CONTRIBUTING.md (AEV Workflow)
       - rpas-guardrails.json (G1-G5 machine-readable)
+      - Gate 5 (DRACO Semantic Integrity)
 
     Must be run from the repository root.
 
@@ -25,6 +26,10 @@
 .PARAMETER PostCommit
     Run in post-commit mode: Gate 1 verifies a CLEAN tree (no leftover changes).
     Default (pre-commit) mode expects changes to be present and reviews scope.
+    
+.PARAMETER RitualPhase
+    The current governance phase (1: Propose, 2: Decide, 3: Orchestrate).
+    Gate 5 (DRACO) is advisory in Phases 1-2, but mandatory blocking in Phase 3.
 
 .EXAMPLE
     .\scripts\validate-rpas.ps1 -ChangeDescription "Add RTM seed endpoint"
@@ -36,13 +41,14 @@ param (
     [string]$ChangeDescription = "unspecified change",
     [switch]$NonInteractive,
     [switch]$SkipBuild,
-    [switch]$PostCommit
+    [switch]$PostCommit,
+    [int]$RitualPhase = 1
 )
 
 $ErrorActionPreference = "Stop"
 $env:GIT_REDIRECT_STDERR = '2>&1'
 $script:GatesPassed = 0
-$script:GatesTotal = 4
+$script:GatesTotal = 5
 $script:StartTime = Get-Date
 $script:Violations = @()
 
@@ -90,13 +96,14 @@ function Write-GateSkip([int]$Gate, [string]$Reason) {
 # ---------------------------------------------------------------------------
 Write-Host ""
 Write-Host "==============================================================" -ForegroundColor Cyan
-Write-Host "  RPAS Validation Pipeline -- RPAS-CM-GRA-001 v2.0.0         " -ForegroundColor Cyan
+Write-Host "  RPAS Validation Pipeline -- RPAS-CM-GRA-001 v2.3.0         " -ForegroundColor Cyan
 Write-Host "  Regulated Process Assurance System (CSR-42)                 " -ForegroundColor Cyan
 Write-Host "==============================================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "  Change: $ChangeDescription" -ForegroundColor White
 Write-Host "  Time:   $($script:StartTime.ToString('yyyy-MM-ddTHH:mm:ssK'))" -ForegroundColor DarkGray
 Write-Host "  Mode:   $(if ($NonInteractive) { 'CI (Non-Interactive)' } else { 'Interactive' }) | $(if ($PostCommit) { 'Post-Commit' } else { 'Pre-Commit' })" -ForegroundColor DarkGray
+Write-Host "  Phase:  $RitualPhase ($(if ($RitualPhase -eq 3) { 'Orchestration/BLOCKING' } else { 'Advisory' }))" -ForegroundColor DarkGray
 
 Log "=== RPAS Validation Pipeline Start ==="
 Log "Change: $ChangeDescription"
@@ -358,6 +365,33 @@ if ($NonInteractive) {
     } else {
         Write-GatePass 4
     }
+}
+
+# ---------------------------------------------------------------------------
+# RPAS Gate 5: Semantic Integrity (DRACO)
+# Ref: RPAS.md Gate 5 -- Semantic drift, intent audit, and initiative check.
+# ---------------------------------------------------------------------------
+Write-GateHeader 5 "Semantic Integrity" "DRACO"
+
+$dracoMode = if ($RitualPhase -eq 3) { "blocking" } else { "advisory" }
+Write-Host "  Checking semantic intent via DRACO ($dracoMode)..." -ForegroundColor DarkGray
+
+# Call Node.js DRACO Preflight
+if ($dracoMode -eq "blocking") {
+    Write-Host "  [INFO] DRACO semantic review may take up to 90 seconds in Phase 3." -ForegroundColor Cyan
+}
+$dracoOutput = pnpm run draco:preflight --mode $dracoMode 2>&1
+if ($LASTEXITCODE -ne 0) {
+    if ($dracoMode -eq "blocking") {
+        Write-GateFail 5 "DRACO Semantic Review detected critical risks."
+        $dracoOutput | ForEach-Object { Write-Host "    $_" -ForegroundColor Red }
+    } else {
+        Write-GateSkip 5 "DRACO Semantic Review detected risks (Advisory mode)."
+        $dracoOutput | ForEach-Object { Write-Host "    $_" -ForegroundColor Yellow }
+    }
+} else {
+    $dracoOutput | ForEach-Object { Write-Host "    $_" -ForegroundColor DarkGray }
+    Write-GatePass 5
 }
 
 # ---------------------------------------------------------------------------

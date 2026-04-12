@@ -1,4 +1,4 @@
-# ✅ **RPAS‑CM‑ENV‑001 v2.2.0 (CSR‑42)**
+# ✅ **RPAS‑CM‑ENV‑001 v2.3.0 (CSR‑42)**
 ## **ADPA Framework Agent Envelope**
 
 ***
