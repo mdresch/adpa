@@ -262,7 +262,7 @@
     "js-tiktoken": "^1.0.21",
     "jsdom": "^29.0.0",
     "katex": "^0.16.28",
-    "next": "16.1.7",
+    "next": "16.2.3",
     "node-html-parser": "^7.0.2",
     "ollama-ai-provider-v2": "^3.3.1",
     "postcss": "^8.4.47",
