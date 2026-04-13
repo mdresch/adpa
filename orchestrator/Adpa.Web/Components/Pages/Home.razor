@@ -1,0 +1,244 @@
+@page "/"
+
+<PageTitle>ADPA Governor Portal</PageTitle>
+
+<div class="governance-center">
+    <!-- Hero Section -->
+    <header class="hero-section text-center py-5 mb-5">
+        <div class="badge-rpas mb-3">RPAS-CM v2.4.1 Baseline</div>
+        <h1 class="display-3 mb-3">Governance Center</h1>
+        <p class="lead max-w-2xl mx-auto text-muted">
+            The authoritative framework for <strong>Regulated Process Assurance</strong> in AI-driven ecosystems. 
+            Enforcing deterministic execution through machine-verifiable rituals.
+        </p>
+        <div class="d-flex justify-content-center gap-3 mt-4">
+            <a class="btn btn-primary btn-lg px-4" href="/ledger">Governance Ledger</a>
+            <a class="btn btn-outline-secondary btn-lg px-4" href="/requirements">Verify RTM</a>
+        </div>
+    </header>
+
+    <!-- Core Guardrails (G1-G5) -->
+    <section class="principles-bar mb-5">
+        <div class="row g-3 justify-content-center text-center">
+            <div class="col-6 col-md-2">
+                <div class="principle-item">
+                    <span class="p-label text-cyan">G1</span>
+                    <span class="p-text">Authority</span>
+                </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="principle-item">
+                    <span class="p-label text-cyan">G2</span>
+                    <span class="p-text">Lifecycle</span>
+                </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="principle-item">
+                    <span class="p-label text-cyan">G3</span>
+                    <span class="p-text">Evidence</span>
+                </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="principle-item">
+                    <span class="p-label text-cyan">G4</span>
+                    <span class="p-text">Determinism</span>
+                </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="principle-item">
+                    <span class="p-label text-cyan">G5</span>
+                    <span class="p-text">Read vs Act</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- The 5 Gates Section -->
+    <section class="gates-section">
+        <div class="section-header text-center mb-5">
+            <h2 class="h3">The 5 Mandatory Gates</h2>
+            <p class="text-muted">Every state transition must pass these five levels of integrity before certification.</p>
+        </div>
+
+        <div class="row g-4 row-cols-1 row-cols-md-3 row-cols-lg-5">
+            <!-- Gate 1 -->
+            <div class="col">
+                <div class="card h-100 gate-card">
+                    <div class="card-body">
+                        <div class="gate-number">01</div>
+                        <h3 class="card-title h5">Mechanical Integrity</h3>
+                        <p class="card-text small text-muted">Verifies atomic change scope. Ensures only declared files are modified and no silent scope creep occurs.</p>
+                        <div class="gate-tag">AEV Enforced</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Gate 2 -->
+            <div class="col">
+                <div class="card h-100 gate-card">
+                    <div class="card-body">
+                        <div class="gate-number">02</div>
+                        <h3 class="card-title h5">Build Integrity</h3>
+                        <p class="card-text small text-muted">Ensures full source compilation, dependency resolution, and service mesh health via .NET Aspire.</p>
+                        <div class="gate-tag">AEV Enforced</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Gate 3 -->
+            <div class="col">
+                <div class="card h-100 gate-card border-cyan">
+                    <div class="card-body">
+                        <div class="gate-number">03</div>
+                        <h3 class="card-title h5">Topology Check</h3>
+                        <p class="card-text small text-muted">DRACO-supervised validation of component graphs and service mesh consistency across tiers.</p>
+                        <div class="gate-tag-draco">DRACO Aware</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Gate 4 -->
+            <div class="col">
+                <div class="card h-100 gate-card">
+                    <div class="card-body">
+                        <div class="gate-number">04</div>
+                        <h3 class="card-title h5">Attestation</h3>
+                        <p class="card-text small text-muted">Machine-verifiable certification of compliance with G1-G5 guardrails against the TAR-COL schema.</p>
+                        <div class="gate-tag shadow-sm">RPAS Certified</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Gate 5 -->
+            <div class="col">
+                <div class="card h-100 gate-card border-blue">
+                    <div class="card-body">
+                        <div class="gate-number">05</div>
+                        <h3 class="card-title h5">Semantic Audit</h3>
+                        <p class="card-text small text-muted">Multi-agent Board Review (Evidence, Governance, Challenger) of intent to block Shadow Initiative.</p>
+                        <div class="gate-tag-draco active">DRACO Active</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Boundary Statement -->
+    <footer class="boundary-statement text-center mt-5 mb-4 p-4 rounded-3 bg-dark shadow-sm border border-secondary border-opacity-25">
+        <p class="small text-muted mb-0">
+            <strong>Operational Boundary Notice:</strong> RPAS-CM enforces governance at the system level. 
+            This portal is strictly informational — all state transitions are authorized by Human Decision Rituals and enforced by the DRACO Board, .NET Orchestrator, and CI/CD pipelines.
+        </p>
+    </footer>
+</div>
+
+<style>
+    .governance-center {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding-bottom: 3rem;
+    }
+
+    .badge-rpas {
+        display: inline-block;
+        background: rgba(56, 189, 248, 0.1);
+        color: #38bdf8;
+        padding: 4px 12px;
+        border-radius: 99px;
+        border: 1px solid rgba(56, 189, 248, 0.2);
+        font-size: 0.85rem;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+    }
+
+    .hero-section h1 {
+        background: linear-gradient(135deg, #f8fafc 30%, #38bdf8 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+    }
+
+    .principle-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        background: rgba(30, 41, 59, 0.4);
+        padding: 12px;
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .p-label {
+        font-weight: 900;
+        font-size: 0.75rem;
+        margin-bottom: 2px;
+    }
+
+    .p-text {
+        font-size: 0.9rem;
+        font-weight: 500;
+        color: #e2e8f0;
+    }
+
+    .text-cyan { color: #38bdf8; }
+
+    .gate-card {
+        background: rgba(30, 41, 59, 0.7) !important;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .gate-number {
+        font-size: 2.5rem;
+        font-weight: 900;
+        color: rgba(255, 255, 255, 0.03);
+        position: absolute;
+        top: -5px;
+        right: 10px;
+    }
+
+    .gate-tag {
+        font-size: 0.7rem;
+        font-weight: 800;
+        color: #94a3b8;
+        background: rgba(148, 163, 184, 0.1);
+        padding: 3px 8px;
+        border-radius: 4px;
+        display: inline-block;
+        margin-top: 10px;
+        text-transform: uppercase;
+    }
+
+    .gate-tag-draco {
+        font-size: 0.7rem;
+        font-weight: 800;
+        color: #0ea5e9;
+        background: rgba(14, 165, 233, 0.1);
+        padding: 3px 8px;
+        border-radius: 4px;
+        display: inline-block;
+        margin-top: 10px;
+        text-transform: uppercase;
+        border-left: 2px solid #0ea5e9;
+    }
+
+    .gate-tag-draco.active {
+        color: #f1f5f9;
+        background: #0ea5e9;
+    }
+
+    .border-cyan { border-color: rgba(56, 189, 248, 0.4) !important; }
+    .border-blue { border-color: rgba(37, 99, 235, 0.4) !important; }
+
+    .btn-outline-secondary {
+        border-color: rgba(255, 255, 255, 0.1);
+        color: #94a3b8;
+    }
+
+    .btn-outline-secondary:hover {
+        background: rgba(255, 255, 255, 0.05);
+        color: #f1f5f9;
+        border-color: rgba(255, 255, 255, 0.2);
+    }
+</style>
