@@ -254,7 +254,7 @@
     "autoprefixer": "^10.4.20",
     "baseline-browser-mapping": "^2.9.11",
     "drizzle-kit": "^0.31.9",
-    "drizzle-orm": "^0.45.1",
+    "drizzle-orm": "^0.45.2",
     "eslint": "^9",
     "eslint-config-next": "^14.2.30",
     "exa-js": "^2.4.0",
