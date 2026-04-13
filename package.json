@@ -157,7 +157,7 @@
     "jsonwebtoken": "latest",
     "jspdf": "^4.2.1",
     "langfuse": "^3.38.6",
-    "langsmith": "^0.5.7",
+    "langsmith": "^0.5.18",
     "lodash": "^4.17.23",
     "lucide-react": "^0.575.0",
     "mammoth": "latest",
