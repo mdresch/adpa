@@ -1,0 +1,411 @@
+@page "/governance-center"
+@using Adpa.Orchestrator.Models.Rituals
+@using Adpa.Orchestrator.Models.System
+@using Adpa.Orchestrator.Controllers
+@inject IHttpClientFactory HttpClientFactory
+
+<PageTitle>RPAS Governance Center | CSR-42 Baseline</PageTitle>
+
+<div class="container-fluid mt-4 mb-5 px-4">
+    <!-- RPAS Authority Header -->
+    <div class="d-flex justify-content-between align-items-start mb-4 border-bottom pb-3">
+        <div>
+            <h1 class="display-5 fw-bold text-dark"><i class="bi bi-shield-shaded me-3 text-primary"></i>RPAS Governance Center</h1>
+            <p class="text-muted lead mb-0">Governor Portal for Institutional Stability and Accountability Audit.</p>
+        </div>
+        <div class="text-end">
+            <div class="d-flex align-items-center mb-2 justify-content-end">
+                <span class="badge bg-dark px-3 py-2 me-2">ADPA AUTHORITY: ACTIVE</span>
+                <span class="badge bg-secondary px-3 py-2">BASELINE: CSR-42</span>
+            </div>
+            @if (health?.DbHealthy ?? false) {
+                <span class="badge bg-success bg-opacity-10 text-success border border-success px-2 py-1"><i class="bi bi-check-circle-fill me-1"></i> AEV System Healthy</span>
+            } else {
+                <span class="badge bg-danger bg-opacity-10 text-danger border border-danger px-2 py-1"><i class="bi bi-exclamation-octagon-fill me-1"></i> AEV System Degraded</span>
+            }
+        </div>
+    </div>
+
+    <!-- CSR-42 Ritual Stepper -->
+    <div class="card shadow-sm mb-4 border-0 bg-light bg-opacity-50">
+        <div class="card-body py-3">
+            <div class="d-flex justify-content-around text-center ritual-stepper">
+                <div class="step @(msrfResult != null ? "active" : "") @(activeTab == "msrf" ? "current" : "")" role="button" @onclick='() => SetTab("msrf")'>
+                    <div class="step-icon mb-1"><i class="bi bi-shield-check"></i></div>
+                    <div class="step-label x-small fw-bold text-uppercase">Grounding</div>
+                </div>
+                <div class="step-line mt-3"></div>
+                <div class="step @(ideationResult != null ? "active" : "") @(activeTab == "workflow" ? "current" : "")" role="button" @onclick='() => SetTab("workflow")'>
+                    <div class="step-icon mb-1"><i class="bi bi-lightbulb"></i></div>
+                    <div class="step-label x-small fw-bold text-uppercase">Ingestion</div>
+                </div>
+                <div class="step-line mt-3"></div>
+                <div class="step @(bcResult != null ? "active" : "")" role="button">
+                    <div class="step-icon mb-1"><i class="bi bi-briefcase"></i></div>
+                    <div class="step-label x-small fw-bold text-uppercase">Case</div>
+                </div>
+                <div class="step-line mt-3"></div>
+                <div class="step @(activeTab == "research" ? "active" : "")" role="button">
+                    <div class="step-icon mb-1"><i class="bi bi-search"></i></div>
+                    <div class="step-label x-small fw-bold text-uppercase">Seeding</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <!-- Sidebar Navigation -->
+        <div class="col-lg-2">
+            <div class="nav flex-column nav-pills shadow-sm p-2 bg-white rounded-3 border">
+                <button class="nav-link @(activeTab == "msrf" ? "active" : "") mb-1 text-start" @onclick='() => SetTab("msrf")'>
+                    <i class="bi bi-shield-check me-2"></i>MSRF Grounding
+                </button>
+                <button class="nav-link @(activeTab == "workflow" ? "active" : "") mb-1 text-start" @onclick='() => SetTab("workflow")'>
+                    <i class="bi bi-diagram-3 me-2"></i>CSR-42 Flow
+                </button>
+                <button class="nav-link @(activeTab == "integrity" ? "active" : "") mb-1 text-start" @onclick='() => SetTab("integrity")'>
+                    <i class="bi bi-activity me-2"></i>AEV Integrity
+                </button>
+                <button class="nav-link @(activeTab == "ledger" ? "active" : "") mb-1 text-start" @onclick='() => SetTab("ledger")'>
+                    <i class="bi bi-journal-text me-2"></i>Governance Ledger
+                </button>
+                <button class="nav-link @(activeTab == "registry" ? "active" : "") text-start" @onclick='() => SetTab("registry")'>
+                    <i class="bi bi-safe me-2"></i>Pattern Registry
+                </button>
+            </div>
+
+            <!-- Context Awareness Card -->
+            <div class="card mt-4 border-0 shadow-sm bg-primary bg-opacity-10 text-primary">
+                <div class="card-body p-3">
+                    <h6 class="fw-bold x-small text-uppercase mb-2"><i class="bi bi-info-circle me-1"></i> Governance Context</h6>
+                    <p class="x-small mb-0">Rituals are currently mediated by the **Intelligence Tier** via Model 1 Direct Access.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content Area -->
+        <div class="col-lg-10">
+            <div class="tab-content bg-white shadow-sm rounded-3 border p-4" style="min-height: 600px;">
+                
+                @if (activeTab == "msrf")
+                {
+                    <div class="row g-4">
+                        <div class="col-md-7">
+                            <h4 class="fw-bold mb-3">MSRF Accountability Audit</h4>
+                            <p class="text-muted small">Establish the baseline stability of a project concept against the 8 accountability pillars.</p>
+                            <div class="card border-0 bg-light p-4 mb-4">
+                                <div class="mb-3">
+                                    <label class="form-label x-small fw-bold text-uppercase">Project Title</label>
+                                    <input type="text" class="form-control border-0 shadow-sm" @bind="ideationTitle" placeholder="e.g. Infrastructure_Expansion_2026" />
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label x-small fw-bold text-uppercase">Strategic Concept</label>
+                                    <textarea class="form-control border-0 shadow-sm" @bind="ideationContent" rows="6" placeholder="Describe the goal and stakeholder impact..."></textarea>
+                                </div>
+                                <button class="btn btn-primary d-flex align-items-center justify-content-center py-2" @onclick="RunMsrfValidation" disabled="@isExecuting">
+                                    @if (isExecuting) { <span class="spinner-border spinner-border-sm me-2"></span> }
+                                    <span>Execute High-Integrity Audit</span>
+                                </button>
+                            </div>
+
+                            @if (msrfResult != null)
+                            {
+                                <div class="alert @(msrfResult.Status == "UNLOCKED" ? "alert-success" : "alert-danger") border-0 shadow-sm d-flex align-items-center mb-0">
+                                    <i class="bi @(msrfResult.Status == "UNLOCKED" ? "bi-check-circle" : "bi-slash-circle") fs-4 me-3"></i>
+                                    <div>
+                                        <div class="fw-bold">Status: @msrfResult.Status</div>
+                                        <div class="x-small opacity-75">Compliance Score: @msrfResult.OverallComplianceScore.ToString("F1")% | Stability: @msrfResult.StabilityScore.ToString("F1")%</div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                        <div class="col-md-5">
+                            <h6 class="fw-bold text-uppercase x-small mb-3">Pillar Heatmap</h6>
+                            <div class="text-center p-3 border rounded-3 bg-light bg-opacity-25 shadow-inner">
+                                @if (msrfResult != null)
+                                {
+                                    <!-- MSRF SVG Radial Heatmap -->
+                                    <svg viewBox="0 0 400 400" width="300" height="300" class="mx-auto d-block">
+                                        <circle cx="200" cy="200" r="180" fill="none" stroke="#eee" stroke-width="2" />
+                                        <circle cx="200" cy="200" r="100" fill="none" stroke="#eee" stroke-width="1" stroke-dasharray="5 5" />
+                                        
+                                        @for (int i = 0; i < 8; i++)
+                                        {
+                                            var angle = i * 45 - 90;
+                                            var radians = angle * Math.PI / 180;
+                                            var score = msrfResult.PillarScores.Count > i ? msrfResult.PillarScores[i].Score : 0;
+                                            var radius = 180 * (score / 100.0);
+                                            var x = 200 + radius * Math.Cos(radians);
+                                            var y = 200 + radius * Math.Sin(radians);
+                                            <line x1="200" y1="200" x2="@(200 + 190 * Math.Cos(radians))" y2="@(200 + 190 * Math.Sin(radians))" stroke="#f0f0f0" stroke-width="1" />
+                                            <circle cx="@x" cy="@y" r="8" fill="@(score >= 85 ? "#198754" : "#ffc107")" />
+                                        }
+                                        
+                                        <!-- Connect segments -->
+                                        <path d="@GetHeatmapPath()" fill="rgba(13, 110, 253, 0.2)" stroke="#0d6efd" stroke-width="2" />
+                                    </svg>
+                                    <div class="mt-3 x-small text-muted">Hover nodes for pillar detail (Mock)</div>
+                                }
+                                else
+                                {
+                                    <div class="py-5 text-muted opacity-50">
+                                        <i class="bi bi-radar fs-1"></i>
+                                        <p class="mt-2 text-uppercase fw-bold x-small">Awaiting Data Pulse</p>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                @if (activeTab == "integrity")
+                {
+                    <h4 class="fw-bold mb-3">AEV Mechanical Integrity</h4>
+                    <p class="text-muted small">Real-time pulse monitoring of hardware, processes, and network authority.</p>
+                    
+                    <div class="row g-4 mb-4">
+                        <div class="col-md-3">
+                            <div class="card h-100 border-0 shadow-sm bg-light">
+                                <div class="card-body text-center">
+                                    <div class="h1 mb-0 text-success"><i class="bi bi-database-check"></i></div>
+                                    <div class="fw-bold text-uppercase x-small mt-2">Governance DB</div>
+                                    <div class="small fw-bold @((health?.DbHealthy ?? false) ? "text-success" : "text-danger")">
+                                        @((health?.DbHealthy ?? false) ? "CONNECTED" : "OFFLINE")
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card h-100 border-0 shadow-sm bg-light">
+                                <div class="card-body text-center">
+                                    <div class="h1 mb-0 text-primary"><i class="bi bi-cpu"></i></div>
+                                    <div class="fw-bold text-uppercase x-small mt-2">Intelligence Core</div>
+                                    <div class="small fw-bold @((health?.IntelligenceHealthy ?? false) ? "text-success" : "text-danger")">
+                                        @((health?.IntelligenceHealthy ?? false) ? "RESPONSIVE" : "LATENCY")
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card h-100 border-0 shadow-sm bg-light">
+                                <div class="card-body text-center">
+                                    <div class="h1 mb-0 text-info"><i class="bi bi-stopwatch"></i></div>
+                                    <div class="fw-bold text-uppercase x-small mt-2">System Uptime</div>
+                                    <div class="small fw-bold text-dark">
+                                        @(health?.Uptime.ToString(@"hh\:mm\:ss") ?? "00:00:00")
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card h-100 border-0 shadow-sm bg-light">
+                                <div class="card-body text-center">
+                                    <div class="h1 mb-0 text-secondary"><i class="bi bi-vinyl"></i></div>
+                                    <div class="fw-bold text-uppercase x-small mt-2">Active Rituals</div>
+                                    <div class="small fw-bold">@(health?.ActiveRituals ?? 0)</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card border-0 shadow-sm bg-dark text-white font-monospace">
+                        <div class="card-header border-secondary bg-transparent d-flex justify-content-between align-items-center">
+                            <span class="x-small fw-bold text-uppercase">AEV Diagnostic Pulse (CSR-42)</span>
+                            <button class="btn btn-outline-info btn-sm x-small px-3" @onclick="UpdateHealth">REFRESH PULSE</button>
+                        </div>
+                        <div class="card-body py-2 x-small">
+                            <div>BASELINE: @(health?.EnvironmentBaseline ?? "UNKNOWN")</div>
+                            <div class="text-info mt-1">> Checking mass-sharing network status... OK</div>
+                            <div class="text-info">> Validating memory parity... OK</div>
+                            <div class="text-info">> Auditing zombie process lock matrix... CLEAN</div>
+                        </div>
+                    </div>
+                }
+
+                @if (activeTab == "ledger")
+                {
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h4 class="fw-bold mb-0">Governance Ledger</h4>
+                        <button class="btn btn-outline-primary btn-sm" @onclick="RefreshLedger"><i class="bi bi-arrow-clockwise me-1"></i> Sync</button>
+                    </div>
+                    @if (ledgerSummaries == null) {
+                        <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+                    } else {
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle x-small">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>TIMESTAMP</th>
+                                        <th>PROJECT</th>
+                                        <th>GOVERNANCE STATUS</th>
+                                        <th>RITUAL AUTHORITY</th>
+                                        <th>ACTIONS</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var s in ledgerSummaries) {
+                                        <tr>
+                                            <td class="text-muted">@(DateTime.Now.AddDays(-1).ToShortDateString())</td>
+                                            <td class="fw-bold">@s.Title</td>
+                                            <td><span class="badge bg-success bg-opacity-10 text-success border border-success">CSR-42 VALIDATED</span></td>
+                                            <td><span class="badge bg-dark">INGESTION</span></td>
+                                            <td><button class="btn btn-link btn-sm p-0 text-primary">VIEW AUDIT</button></td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                }
+
+                @if (activeTab == "registry")
+                {
+                    <h4 class="fw-bold mb-3">Pattern Registry (Class A-D)</h4>
+                    <p class="text-muted small">Educational taxonomy of financial and structural patterns detected by the MSRF engine.</p>
+                    
+                    <div class="row g-4">
+                        <div class="col-md-6">
+                            <div class="card h-100 border-start border-success border-4 shadow-sm">
+                                <div class="card-body">
+                                    <h6 class="fw-bold text-success"><span class="badge bg-success me-2">CLASS A</span> Supported Constructs</h6>
+                                    <p class="x-small text-muted">Backed sovereign debt, transparent corporate bonds, and regulated settlement layers. These signals trigger automatic MSRF Unlocking.</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card h-100 border-start border-warning border-4 shadow-sm">
+                                <div class="card-body">
+                                    <h6 class="fw-bold text-warning"><span class="badge bg-warning text-dark me-2">CLASS B</span> Speculative Signals</h6>
+                                    <p class="x-small text-muted">High-yield futures, uncollateralized lending, and VC-locked equity models. These require mandatory Governor overrides or public backstops.</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card h-100 border-start border-orange border-4 shadow-sm">
+                                <div class="card-body">
+                                    <h6 class="fw-bold text-orange" style="color: #fd7e14;"><span class="badge me-2" style="background-color: #fd7e14;">CLASS C</span> Anonymized Risks</h6>
+                                    <p class="x-small text-muted">Obfuscated stakeholder lineage, shell-company layering, and layer-2 mixer constructs. These trigger immediate AEV Integrity warnings.</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card h-100 border-start border-danger border-4 shadow-sm">
+                                <div class="card-body">
+                                    <h6 class="fw-bold text-danger"><span class="badge bg-danger me-2">CLASS D</span> Prohibited Fraud Patterns</h6>
+                                    <p class="x-small text-muted">Synthetic algorithmic assets, unbaked yield promises, and unregulated nuclear/infra financing. These cause an absolute MSRF Hard Block.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .ritual-stepper .step { opacity: 0.3; transition: all 0.3s ease; }
+    .ritual-stepper .step.active { opacity: 1; color: var(--bs-primary); }
+    .ritual-stepper .step-icon { font-size: 1.5rem; }
+    .ritual-stepper .step-line { flex-grow: 1; height: 2px; background: #eee; margin: 0 10px; }
+    .ritual-stepper .step.active ~ .step-line { background: var(--bs-primary); opacity: 0.3; }
+    
+    .x-small { font-size: 0.75rem; }
+    .shadow-inner { box-shadow: inset 0 2px 4px rgba(0,0,0,0.05); }
+    .nav-pills .nav-link { font-size: 0.85rem; color: #555; border-radius: 8px; }
+    .nav-pills .nav-link:hover { background: #f8f9fa; }
+    .nav-pills .nav-link.active { background: #0d6efd; color: white; }
+</style>
+
+@code {
+    private string activeTab = "msrf";
+    private bool isExecuting = false;
+    private string? errorMessage;
+    private SystemHealthResult? health;
+
+    // MSRF State
+    private MsrfEvaluation? msrfResult;
+    private string ideationTitle = "";
+    private string ideationContent = "";
+    
+    // Workflow State
+    private IdeationSummary? ideationResult;
+    private BusinessCase? bcResult;
+
+    // Ledger State
+    private List<IdeationSummary>? ledgerSummaries;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await UpdateHealth();
+        await RefreshLedger();
+    }
+
+    private void SetTab(string tab)
+    {
+        activeTab = tab;
+        errorMessage = null;
+    }
+
+    private async Task UpdateHealth()
+    {
+        try {
+            var client = HttpClientFactory.CreateClient("api");
+            health = await client.GetFromJsonAsync<SystemHealthResult>("/api/ritual/system/health");
+        } catch (Exception) { /* Fail silent for UX */ }
+    }
+
+    private async Task RefreshLedger()
+    {
+        try {
+            var client = HttpClientFactory.CreateClient("api");
+            ledgerSummaries = await client.GetFromJsonAsync<List<IdeationSummary>>("/api/ritual/ledger/ideation");
+        } catch (Exception) { /* Handled in UI */ }
+    }
+
+    private async Task RunMsrfValidation()
+    {
+        if (string.IsNullOrEmpty(ideationTitle) || string.IsNullOrEmpty(ideationContent)) return;
+
+        isExecuting = true;
+        errorMessage = null;
+        msrfResult = null;
+
+        try {
+            var client = HttpClientFactory.CreateClient("api");
+            var payload = new { 
+                projectId = "P-" + Guid.NewGuid().ToString().Substring(0, 6).ToUpper(), 
+                title = ideationTitle, 
+                concept = ideationContent 
+            };
+            var response = await client.PostAsJsonAsync("/api/ritual/msrf/validate", payload);
+            
+            if (response.IsSuccessStatusCode) {
+                msrfResult = await response.Content.ReadFromJsonAsync<MsrfEvaluation>();
+                await UpdateHealth();
+            }
+        } catch (Exception ex) {
+            errorMessage = ex.Message;
+        } finally {
+            isExecuting = false;
+        }
+    }
+
+    private string GetHeatmapPath()
+    {
+        if (msrfResult == null || msrfResult.PillarScores.Count < 8) return "";
+        
+        var points = new List<string>();
+        for (int i = 0; i < 8; i++)
+        {
+            var angle = i * 45 - 90;
+            var radians = angle * Math.PI / 180;
+            var radius = 180 * (msrfResult.PillarScores[i].Score / 100.0);
+            var x = 200 + radius * Math.Cos(radians);
+            var y = 200 + radius * Math.Sin(radians);
+            points.Add($"{x.ToString("F1")},{y.ToString("F1")}");
+        }
+        return "M " + string.Join(" L ", points) + " Z";
+    }
+}

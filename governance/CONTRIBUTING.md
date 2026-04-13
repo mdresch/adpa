@@ -156,6 +156,17 @@ Failure → rollback.
 
 ***
 
+### 🟢 Gate 6 — PR Semantic Audit (DRACO)
+
+All Pull Requests targeting `main` or `develop` must pass a semantic integrity audit.
+- **Trigger**: Automatic on push/synchronize.
+- **Output**: Structured Board Report in PR comments.
+- **Policy**: See [governance/PR-GOVERNANCE.md](file:///f:/Source/Repos/adpa/governance/PR-GOVERNANCE.md).
+
+Failure → Investigations and findings resolved before merger.
+
+***
+
 ## 4. Commit Certification
 
 Only after all gates pass:

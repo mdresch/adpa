@@ -33,6 +33,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext"
 import { useWebSocket, useJobUpdates } from "@/contexts/WebSocketContext"
 import { apiClient } from "@/lib/api"
+import * as ritualApi from "@/lib/ritual-api"
 import { toast } from '@/lib/notify'
 
 // Status configuration for template badges
@@ -241,6 +242,7 @@ Please create a document that considers the project context above and ensures co
         }
       }
 
+      const selectedTemplateInfo = templates.find(t => t.id === selectedTemplate)
       const generateData = {
         prompt: enhancedPrompt,
         provider: selectedProvider,
@@ -248,8 +250,40 @@ Please create a document that considers the project context above and ensures co
         max_tokens: maxTokens[0],
         template_id: selectedTemplate || undefined,
         variables: Object.keys(variables).length > 0 ? variables : undefined,
-        project_id: saveMode === 'existing-project' && selectedProjectId ? selectedProjectId : undefined,
-        project_name: saveMode === 'existing-project' && selectedProjectId ? projects.find(p => p.id === selectedProjectId)?.name : undefined,
+        projectId: saveMode === 'existing-project' && selectedProjectId ? selectedProjectId : undefined,
+        projectName: saveMode === 'existing-project' && selectedProjectId ? projects.find(p => p.id === selectedProjectId)?.name : undefined,
+      }
+
+      // Special handling for RPAS-CM Rituals (Phase 0)
+      const templateNameLower = selectedTemplateInfo?.name.toLowerCase() || "";
+      const isRitual = templateNameLower.includes("ideation") || templateNameLower.includes("business case");
+
+      if (isRitual) {
+        setIsGenerating(true);
+        toast.info("Executing RPAS-CM Ritual via Orchestrator...");
+        
+        try {
+          if (templateNameLower.includes("ideation")) {
+            const ritualResult = await ritualApi.ingestIdeation({ 
+              filename: "Direct Input", 
+              content: prompt 
+            });
+            setResult({ content: ritualResult.proposed_solution, ...ritualResult });
+            toast.success("Ideation Ritual Complete: Captured in Governance Ledger.");
+          } else {
+            // Business Case Ritual
+            const ritualResult = await ritualApi.generateBusinessCase(prompt);
+            setResult({ content: ritualResult.executive_summary, ...ritualResult });
+            toast.success("Business Case Ritual Complete: Captured in Governance Ledger.");
+          }
+          setIsGenerating(false);
+          return;
+        } catch (ritualError: any) {
+          console.error("Ritual Execution Failed:", ritualError);
+          toast.error(`Governance Ritual Failed: ${ritualError.message}`);
+          setIsGenerating(false);
+          return;
+        }
       }
 
       const response = await apiClient.generateContent(generateData)
