@@ -1433,8 +1433,13 @@ class AIService {
           const requestedModel = request.model || 'gemini-1.5-flash-latest'
           let modelName = modelMap[requestedModel] || requestedModel
 
+          if (modelName !== requestedModel) {
+            logger.info(`[AI-SERVICE] Resilient Map: ${requestedModel} -> ${modelName} (CSR-43 Governance)`)
+          }
+
           // Environment-specific override (e.g. if 1.5 is 404/503)
           if (process.env.GEMINI_MODEL_OVERRIDE) {
+            logger.warn(`[AI-SERVICE] Explicit Model Override active: ${process.env.GEMINI_MODEL_OVERRIDE}`)
             modelName = process.env.GEMINI_MODEL_OVERRIDE
           }
 

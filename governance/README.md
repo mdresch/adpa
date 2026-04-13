@@ -22,6 +22,15 @@ To adopt these principles in a new repository:
 -   `visuals/`: Graphical representations of governance flows and matrix logic.
 -   `security/archive/`: Historical remediation records and reference artifacts.
 
+## CI/CD & Operational Secrets (Mandatory)
+The following secrets must be configured in your environment (e.g., GitHub Secrets) to support the DRACO Review Board and G5 validation:
+
+| Secret Name | Purpose | Scope |
+| :--- | :--- | :--- |
+| `GOOGLE_AI_API_KEY` | Authority for Gemini Agents | Gate 5 (DRACO) |
+| `DATABASE_URL` | Access to Governance Ledger | Audit & Persistence |
+| `GITHUB_TOKEN` | Automated PR Reporting | Gate 6 (Workflow) |
+
 ---
 **Certification**: Certified for cross-project deployment (April 2026).  
 *Latest Baseline*: RPAS-CM v2.4.1 (Optimized DRACO Semantic Governance).
