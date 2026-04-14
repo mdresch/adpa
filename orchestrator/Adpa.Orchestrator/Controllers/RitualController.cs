@@ -4,10 +4,10 @@ using Adpa.Orchestrator.Clients;
 using Adpa.Orchestrator.Data;
 using Adpa.Orchestrator.Models.Rituals;
 using Adpa.Orchestrator.Services;
+using Adpa.Orchestrator.Models.System;
+using System.Diagnostics;
 
 namespace Adpa.Orchestrator.Controllers;
-
-public record IngestionRequest(string Filename, string Content);
 
 public record AmendmentProposalRequest(
     string TargetRequirementId, 
@@ -27,6 +27,11 @@ public record ApplyAmendmentRequest(
     string AmendmentId,
     string Actor);
 
+public record MsrfValidationInput(
+    string ProjectId,
+    string Title,
+    string Concept);
+
 [ApiController]
 [Route("api/[controller]")]
 public class RitualController(
@@ -34,7 +39,8 @@ public class RitualController(
     GovernanceDbContext db, 
     ILogger<RitualController> logger,
     ISemanticRtmSeeder rtmSeeder,
-    IRtmExecutionService executionService) : ControllerBase
+    IRtmExecutionService executionService,
+    IHttpClientFactory httpClientFactory) : ControllerBase
 {
     // ---------------------------------------------------------------------------
     // Phase 0: Ideation & Business Case
@@ -63,6 +69,33 @@ public class RitualController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Ritual Failure: phase0/ingest");
+            return StatusCode(500, ex.Message);
+        }
+    }
+
+    [HttpPost("msrf/validate")]
+    public async Task<ActionResult<MsrfEvaluation>> ValidateMsrf([FromBody] MsrfValidationInput input)
+    {
+        try
+        {
+            logger.LogInformation("Starting MSRF Validation ritual for: {Title}", input.Title);
+            
+            var evaluation = await intelligence.ValidateMsrfAsync(input.ProjectId, input.Title, input.Concept);
+            
+            if (evaluation == null)
+            {
+                return BadRequest("Failed to perform MSRF validation ritual.");
+            }
+
+            // Persist to Governance Ledger
+            db.MsrfEvaluations.Update(evaluation);
+            await db.SaveChangesAsync();
+
+            return Ok(evaluation);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Ritual Failure: msrf/validate");
             return StatusCode(500, ex.Message);
         }
     }
@@ -295,6 +328,46 @@ public class RitualController(
         {
             logger.LogError(ex, "Ritual Failure: rtm/apply-amendment");
             return StatusCode(500, new { Error = "Amendment application failed.", Detail = ex.Message });
+        }
+    }
+
+    // ---------------------------------------------------------------------------
+    // System Integrity & Observability
+    // ---------------------------------------------------------------------------
+
+    [HttpGet("system/health")]
+    public async Task<ActionResult<SystemHealthResult>> GetSystemHealth()
+    {
+        try
+        {
+            var dbHealthy = await db.Database.CanConnectAsync();
+            
+            // Basic intelligence health check
+            bool intelligenceHealthy = await intelligence.CheckHealthAsync();
+
+            // Active rituals count (simplified for health reporting)
+            var activeRituals = 0;
+            try {
+                activeRituals = await db.IdeationSummaries.CountAsync();
+            } catch (Exception ex) {
+                logger.LogWarning("Health check failed to count rituals: {Msg}", ex.Message);
+            }
+
+            var result = new SystemHealthResult(
+                DbHealthy: dbHealthy,
+                MessagingHealthy: true, // Simplified for this baseline; would normally check MassTransit bus health
+                IntelligenceHealthy: intelligenceHealthy,
+                ActiveRituals: activeRituals,
+                EnvironmentBaseline: "CSR-42-ADPA-ORCHESTRATOR",
+                Uptime: TimeSpan.FromMilliseconds(Environment.TickCount64)
+            );
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Integrity Failure: system/health");
+            return StatusCode(500, ex.Message);
         }
     }
 }

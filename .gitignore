@@ -170,3 +170,6 @@ scripts/*.log
 # Aspire runtime / developer tools
 .aspire/
 **/Properties/launchSettings.json
+
+# Local logs
+logs/

@@ -9,6 +9,7 @@ public class GovernanceDbContext(DbContextOptions<GovernanceDbContext> options) 
     public DbSet<BusinessCase> BusinessCases => Set<BusinessCase>();
     public DbSet<RtmRequirement> RequirementsTraceabilityMatrix => Set<RtmRequirement>();
     public DbSet<RtmAmendment> RtmAmendments => Set<RtmAmendment>();
+    public DbSet<MsrfEvaluation> MsrfEvaluations => Set<MsrfEvaluation>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -21,6 +22,9 @@ public class GovernanceDbContext(DbContextOptions<GovernanceDbContext> options) 
             
             // Map lists as JSONB for Postgres
             entity.Property(e => e.Constraints).HasColumnType("jsonb");
+            entity.Property(e => e.KeyGoals).HasColumnType("jsonb");
+            entity.Property(e => e.Assumptions).HasColumnType("jsonb");
+            entity.Property(e => e.Conflicts).HasColumnType("jsonb");
         });
 
         // Map the BusinessCase
@@ -48,6 +52,17 @@ public class GovernanceDbContext(DbContextOptions<GovernanceDbContext> options) 
         {
             entity.HasKey(e => e.Id);
             entity.ToTable("rtm_amendments");
+        });
+
+        // Map the MsrfEvaluation
+        modelBuilder.Entity<MsrfEvaluation>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.ToTable("msrf_evaluations");
+
+            // Map lists as JSONB for Postgres
+            entity.Property(e => e.PillarScores).HasColumnType("jsonb");
+            entity.Property(e => e.RemediationInstructions).HasColumnType("jsonb");
         });
     }
 }

@@ -13,6 +13,7 @@
     "migrate:baseline": "node server/scripts/generate-migration-from-db.js",
     "migrate:vercel": "tsx scripts/migrate-to-vercel.ts",
     "draco:preflight": "tsx scripts/draco-gate-5.ts",
+    "draco:audit": "tsx scripts/rpas-pr-reporter.ts",
     "seed:vercel": "tsx scripts/seed-vercel.ts",
     "test:mcp-sentry": "tsx scripts/test-mcp-sentry.ts",
     "rovo": "tsx scripts/rovo.ts",
