@@ -1,0 +1,77 @@
+{
+  "version": "2.3.0",
+  "artifact_id": "RPAS-CM-GRA-001",
+  "csr_epoch": "CSR-42",
+  "taxonomy_ref": "RPAS-CM-TCL-001",
+  "gates": [
+    {
+      "id": 1,
+      "name": "Mechanical Integrity",
+      "owner": "AEV",
+      "description": "Ensures working directory state and atomic change scope.",
+      "requirements": [
+        "Clean working tree for post-commit validation",
+        "Declared scope alignment for pre-commit validation",
+        "No unauthorized untracked files"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Build Integrity",
+      "owner": "AEV",
+      "description": "Ensures compilation of all system tiers.",
+      "requirements": [
+        ".NET Orchestration solution build (Adpa.sln)",
+        "Next.js Experience Tier build (pnpm build)",
+        "No blocking compiler errors"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Orchestration Topology",
+      "owner": "DRACO",
+      "description": "Enforces architectural service mesh and project relationships.",
+      "requirements": [
+        "Existence of core projects: AppHost, Orchestrator, Web",
+        "AppHost references both Orchestrator and Web",
+        "Correct Aspire SDK versioning (v13.2.2)"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "Governance Attestation",
+      "owner": "RPAS",
+      "description": "Validation of TAR-COL invariants and human accountability.",
+      "requirements": [
+        "Validated rpas-attestation.json against schema",
+        "G5 Check: No direct ledger mutations in Experience Tier",
+        "Manual 'RPAS-OK' attestation for interactive sessions"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Semantic Integrity",
+      "owner": "DRACO",
+      "description": "Ensures intent alignment and prevents semantic drift.",
+      "requirements": [
+        "Intent audit via DRACO preflight",
+        "Blocking validation in Ritual Phase 3",
+        "No deviation from approved implementation plan"
+      ]
+    }
+  ],
+  "guardrails": {
+    "G1_AUTHORITY_BOUNDARY": "All agent actions must be proposed and human-approved before execution.",
+    "G2_TASK_TAXONOMY": "Every task must be classified per RPAS-CM-TCL-001 taxonomy.",
+    "G3_EVIDENCE_LINEAGE": "All changes must be recorded in the immutable governance ledger with valid CSR context.",
+    "G4_COLLISION_PREVENTION": "Resource locks must be acquired in the agent task registry before mutation.",
+    "G5_EXECUTION_ISOLATION": "Direct ledger mutations are forbidden in the Experience Tier; all mutations must route through Orchestrator authority."
+  },
+  "enforcement": {
+    "default_mode": "interactive",
+    "ci_mode": "non-interactive",
+    "blocking_phase": 3,
+    "log_directory": ".rpas",
+    "history_file": "csr-history.log"
+  }
+}
