@@ -4,7 +4,6 @@ using MassTransit;
 using Adpa.Orchestrator.Clients;
 using Adpa.Orchestrator.Data;
 using Microsoft.EntityFrameworkCore;
-
 using Adpa.Orchestrator.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -16,10 +15,25 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddServiceDefaults();
 
 // ---------------------------------------------------------------------------
-// 2. Data Persistence (PostgreSQL Governance Ledger)
+// 2. Data Persistence (PostgreSQL governance ledger — shared with RPAS.Governance.Api)
 // ---------------------------------------------------------------------------
 
 builder.AddNpgsqlDbContext<GovernanceDbContext>("governance-ledger");
+
+// ---------------------------------------------------------------------------
+// 2a. Sovereign governance API (singular write authority for law-bound transitions)
+// ---------------------------------------------------------------------------
+
+builder.Services.AddHttpClient<GovernanceApiClient>(client =>
+{
+    var govUrl = builder.Configuration["RPAS_GOVERNANCE_URL"] ?? "http://governance-api";
+    if (builder.Environment.IsDevelopment() && govUrl == "http://governance-api")
+    {
+        govUrl = "http://localhost:5005";
+    }
+
+    client.BaseAddress = new Uri(govUrl);
+});
 
 // ---------------------------------------------------------------------------
 // 2. Authentication (Firebase JWT Validation)
@@ -102,6 +116,7 @@ builder.Services.AddHttpClient<IntelligenceClient>(client =>
 
 builder.Services.AddScoped<ISemanticRtmSeeder, SemanticRtmSeeder>();
 builder.Services.AddScoped<IRtmExecutionService, RtmExecutionService>();
+builder.Services.AddSingleton<ITaskApprovalGate, TaskApprovalGate>();
 
 // ---------------------------------------------------------------------------
 // 6. Controller Infrastructure
@@ -112,6 +127,8 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
+
+TaskApprovalGate.ValidateConfigurationAtStartup(app.Configuration);
 
 // ---------------------------------------------------------------------------
 // 6. Middleware & Endpoints
@@ -150,7 +167,7 @@ if (app.Environment.IsDevelopment())
             loggerSvc.LogInformation("RPAS-CM: Synchronizing Governance Ledger (Attempt {Count}/{Max})...", retryCount + 1, maxRetries);
             
             // Log connection string info (safely)
-            var connectionString = context.Database.GetConnectionString();
+            var connectionString = app.Configuration.GetConnectionString("governance-ledger");
             loggerSvc.LogInformation("RPAS-CM: Using connection: {Conn}", connectionString?.Split(';')[0]);
 
             // Apply migrations to create database and tables if missing

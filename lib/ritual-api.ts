@@ -45,6 +45,20 @@ export interface BusinessCase {
   approval_status: string;
 }
 
+/** Use with {@link TaskApprovalAttestation.scope} when calling gated rituals under ApprovalsEnforced. */
+export const TASK_APPROVAL_SCOPE_PHASE0_APPROVE = 'phase0.approve' as const;
+export const TASK_APPROVAL_SCOPE_RTM_APPLY_AMENDMENT = 'rtm.apply_amendment' as const;
+
+/** JIT human approval for a scoped task (required when Governance:ApprovalsEnforced is true). */
+export interface TaskApprovalAttestation {
+  scope: string;
+  task_id: string;
+  human_decision_id: string;
+  decided_by: string;
+  /** ISO-8601 instant; must be in the future and within the server's JIT window */
+  expires_at: string;
+}
+
 /**
  * Phase 0: Ingest raw ideation data.
  */
@@ -83,12 +97,28 @@ export async function generateBusinessCase(ideationTitle: string): Promise<Busin
 
 /**
  * Phase 0: Approve Business Case and trigger RTM seeding.
+ * When the orchestrator has Governance:ApprovalsEnforced, pass {@link TaskApprovalAttestation}
+ * (scope should be `phase0.approve`, task_id should match the business case id).
  */
-export async function approveBusinessCase(businessCaseId: string) {
+export async function approveBusinessCase(businessCaseId: string, approval?: TaskApprovalAttestation) {
+  const body =
+    approval !== undefined
+      ? JSON.stringify({
+          business_case_id: businessCaseId,
+          approval: {
+            scope: approval.scope,
+            task_id: approval.task_id,
+            human_decision_id: approval.human_decision_id,
+            decided_by: approval.decided_by,
+            expires_at: approval.expires_at,
+          },
+        })
+      : JSON.stringify(businessCaseId);
+
   const response = await fetch(`${ORCHESTRATOR_URL}/phase0/approve`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(businessCaseId)
+    body,
   });
 
   if (!response.ok) {
@@ -169,6 +199,8 @@ export async function decideAmendment(payload: {
 export async function applyAmendment(payload: {
   amendment_id: string;
   actor: string;
+  /** Required when Governance:ApprovalsEnforced (scope `rtm.apply_amendment`, task_id = amendment_id). */
+  approval?: TaskApprovalAttestation;
 }) {
   const response = await fetch(`${ORCHESTRATOR_URL}/rtm/apply-amendment`, {
     method: 'POST',

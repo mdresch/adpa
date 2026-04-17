@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
+using Adpa.Orchestrator.Models.Governance;
 using Adpa.Orchestrator.Models.Rituals;
 
 namespace Adpa.Orchestrator.Data;
@@ -10,6 +12,8 @@ public class GovernanceDbContext(DbContextOptions<GovernanceDbContext> options) 
     public DbSet<RtmRequirement> RequirementsTraceabilityMatrix => Set<RtmRequirement>();
     public DbSet<RtmAmendment> RtmAmendments => Set<RtmAmendment>();
     public DbSet<MsrfEvaluation> MsrfEvaluations => Set<MsrfEvaluation>();
+    public DbSet<GovernanceLedgerRow> GovernanceLedgerRows => Set<GovernanceLedgerRow>();
+    public DbSet<AuthorityTokenRow> AuthorityTokenRows => Set<AuthorityTokenRow>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -31,13 +35,34 @@ public class GovernanceDbContext(DbContextOptions<GovernanceDbContext> options) 
         modelBuilder.Entity<BusinessCase>(entity =>
         {
             entity.HasKey(e => e.Id);
-            
+            entity.ToTable("BusinessCases", t =>
+                t.HasCheckConstraint("CK_BusinessCase_Status", "\"ApprovalStatus\" IN ('PENDING', 'APPROVED', 'REJECTED')"));
+
             // Map complex lists as JSONB for Postgres
             entity.Property(e => e.ExpectedBenefits).HasColumnType("jsonb");
             entity.Property(e => e.EstimatedCosts).HasColumnType("jsonb");
             entity.Property(e => e.KeyRisks).HasColumnType("jsonb");
             entity.Property(e => e.Placeholders).HasColumnType("jsonb");
             entity.Property(e => e.CoreRequirements).HasColumnType("jsonb");
+        });
+
+        modelBuilder.Entity<GovernanceLedgerRow>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.ToTable("governance_ledger", t =>
+                t.HasCheckConstraint("CK_Ledger_Override",
+                    "(\"IsOverridden\" = false) OR (\"IsOverridden\" = true AND \"OverrideJustification\" IS NOT NULL AND \"OverrideJustification\" != '')"));
+        });
+
+        modelBuilder.Entity<AuthorityTokenRow>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.AllowedPaths)
+                .HasConversion(
+                    v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                    v => JsonSerializer.Deserialize<List<string>>(v, (JsonSerializerOptions?)null) ?? new List<string>())
+                .HasColumnType("jsonb");
+            entity.ToTable("authority_tokens");
         });
 
         // Map the RtmRequirement

@@ -25,6 +25,10 @@ if you do not respond.
 > authorization. Your silence is always interpreted as "do not proceed" —
 > never as consent.
 
+### Administrator note
+
+Even **administrators** operate inside this model: they **govern laws** and participate in rituals; they do **not** replace mechanical validation. Super‑user bypass of validators, tokens, or ledger rules is **out of scope** for a lawful deployment—approval and **cryptographic authority tokens** (after successful validation) are how scoped work is permitted.
+
 ***
 
 ## Your Decision Points

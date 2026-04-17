@@ -1,11 +1,16 @@
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Adpa.Orchestrator.Clients;
 using Adpa.Orchestrator.Data;
 using Adpa.Orchestrator.Models.Rituals;
 using Adpa.Orchestrator.Services;
 using Adpa.Orchestrator.Models.System;
+using Adpa.Orchestrator.Models.Exceptions;
+using Adpa.Orchestrator.Models.Governance;
 using System.Diagnostics;
+using System.Net.Http;
 
 namespace Adpa.Orchestrator.Controllers;
 
@@ -23,9 +28,17 @@ public record AmendmentDecisionRequest(
     string DecidedBy,
     string? DecisionNotes);
 
-public record ApplyAmendmentRequest(
-    string AmendmentId,
-    string Actor);
+public sealed class ApplyAmendmentRequest
+{
+    [JsonPropertyName("amendment_id")]
+    public string AmendmentId { get; set; } = string.Empty;
+
+    [JsonPropertyName("actor")]
+    public string Actor { get; set; } = string.Empty;
+
+    [JsonPropertyName("approval")]
+    public TaskApprovalAttestation? Approval { get; set; }
+}
 
 public record MsrfValidationInput(
     string ProjectId,
@@ -36,11 +49,13 @@ public record MsrfValidationInput(
 [Route("api/[controller]")]
 public class RitualController(
     IntelligenceClient intelligence,
-    GovernanceDbContext db, 
+    GovernanceDbContext db,
+    GovernanceApiClient governance,
+    IConfiguration configuration,
+    ITaskApprovalGate approvalGate,
     ILogger<RitualController> logger,
     ISemanticRtmSeeder rtmSeeder,
-    IRtmExecutionService executionService,
-    IHttpClientFactory httpClientFactory) : ControllerBase
+    IRtmExecutionService executionService) : ControllerBase
 {
     // ---------------------------------------------------------------------------
     // Phase 0: Ideation & Business Case
@@ -135,11 +150,16 @@ public class RitualController(
     }
 
     [HttpPost("phase0/approve")]
-    public async Task<IActionResult> ApproveBusinessCase([FromBody] string businessCaseId)
+    public async Task<IActionResult> ApproveBusinessCase([FromBody] ApproveBusinessCaseRequest body)
     {
+        var businessCaseId = body.BusinessCaseId;
         try
         {
             logger.LogInformation("Attempting to approve Business Case: {BusinessCaseId}", businessCaseId);
+
+            var gate = approvalGate.EnsureJitApproval(TaskApprovalScopes.Phase0Approve, businessCaseId, body.Approval);
+            if (gate is not null)
+                return gate;
 
             // 1. Fetch and Validate
             var bc = await db.BusinessCases.FirstOrDefaultAsync(x => x.Id == businessCaseId);
@@ -153,9 +173,35 @@ public class RitualController(
                 return BadRequest("Business Case is already approved.");
             }
 
-            // 2. Update Governance State
-            bc.ApprovalStatus = "APPROVED";
-            await db.SaveChangesAsync();
+            // 2. Law-bound approval: sovereign RPAS.Governance.Api (shared PostgreSQL) or local fallback (dev only)
+            var sovereignRequired = configuration.GetValue("Governance:SovereignApiRequired", true);
+            if (sovereignRequired)
+            {
+                object payload = body.Approval is { } jit
+                    ? new
+                    {
+                        justification = "phase0/approve via Adpa.Orchestrator (JIT attested)",
+                        humanDecisionId = jit.HumanDecisionId,
+                        decidedBy = jit.DecidedBy,
+                        expiresAt = jit.ExpiresAt
+                    }
+                    : new { justification = "phase0/approve via Adpa.Orchestrator" };
+
+                await governance.ValidateStateTransitionAsync(new ValidationPetition
+                {
+                    EntityType = "BusinessCase",
+                    EntityId = businessCaseId,
+                    Action = "MarkApproved",
+                    Payload = payload
+                });
+            }
+            else
+            {
+                bc.ApprovalStatus = "APPROVED";
+                await db.SaveChangesAsync();
+            }
+
+            await db.Entry(bc).ReloadAsync();
 
             // 3. Trigger Semantic RTM Seeding (Post-Approval Ritual)
             logger.LogInformation("Business Case {BusinessCaseId} approved. Triggering Semantic RTM Seeder.", businessCaseId);
@@ -166,6 +212,16 @@ public class RitualController(
                 RtmSeeding = "COMPLETED", 
                 BusinessCaseId = businessCaseId 
             });
+        }
+        catch (RpasLawViolationException ex)
+        {
+            logger.LogWarning(ex, "RPAS law blocked approval for {BusinessCaseId}", businessCaseId);
+            return Conflict(new { error = ex.Message, rule = ex.RuleName });
+        }
+        catch (HttpRequestException ex)
+        {
+            logger.LogError(ex, "Governance API unreachable during approval for {BusinessCaseId}", businessCaseId);
+            return StatusCode(503, new { Error = "Governance authority unreachable.", Detail = ex.Message });
         }
         catch (Exception ex)
         {
@@ -315,6 +371,10 @@ public class RitualController(
     {
         try
         {
+            var gate = approvalGate.EnsureJitApproval(TaskApprovalScopes.RtmApplyAmendment, request.AmendmentId, request.Approval);
+            if (gate is not null)
+                return gate;
+
             var result = await executionService.ApplyAmendmentAsync(request.AmendmentId, request.Actor);
             
             if (!result.Success)

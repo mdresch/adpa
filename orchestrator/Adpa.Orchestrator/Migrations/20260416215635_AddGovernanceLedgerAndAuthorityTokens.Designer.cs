@@ -5,6 +5,7 @@ using Adpa.Orchestrator.Data;
 using Adpa.Orchestrator.Models.Rituals;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -13,9 +14,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Adpa.Orchestrator.Migrations
 {
     [DbContext(typeof(GovernanceDbContext))]
-    partial class GovernanceDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260416215635_AddGovernanceLedgerAndAuthorityTokens")]
+    partial class AddGovernanceLedgerAndAuthorityTokens
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
