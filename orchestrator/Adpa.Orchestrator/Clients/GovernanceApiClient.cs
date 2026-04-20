@@ -5,6 +5,20 @@ using Adpa.Orchestrator.Models.Exceptions;
 
 namespace Adpa.Orchestrator.Clients;
 
+public sealed class GovernanceAuthorityToken
+{
+    public Guid Id { get; set; }
+    public DateTime ExpiresAt { get; set; }
+    public string RitualType { get; set; } = string.Empty;
+}
+
+public sealed class GovernanceValidationResult
+{
+    public string Status { get; set; } = string.Empty;
+    public string Message { get; set; } = string.Empty;
+    public GovernanceAuthorityToken? AuthorityToken { get; set; }
+}
+
 public class ValidationPetition
 {
     public string EntityType { get; set; } = string.Empty;
@@ -15,12 +29,22 @@ public class ValidationPetition
 
 public class GovernanceApiClient(HttpClient http)
 {
-    public async Task ValidateStateTransitionAsync(ValidationPetition petition, CancellationToken cancellationToken = default)
+    public async Task<GovernanceValidationResult> ValidateStateTransitionAsync(ValidationPetition petition, CancellationToken cancellationToken = default)
     {
         var response = await http.PostAsJsonAsync("/Validation/validate", petition, cancellationToken);
 
         if (response.IsSuccessStatusCode)
-            return;
+        {
+            var result = await response.Content.ReadFromJsonAsync<GovernanceValidationResult>(
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true },
+                cancellationToken);
+
+            return result ?? new GovernanceValidationResult
+            {
+                Status = "valid",
+                Message = "State transition approved."
+            };
+        }
 
         if (response.StatusCode == HttpStatusCode.Conflict)
         {
@@ -40,5 +64,6 @@ public class GovernanceApiClient(HttpClient http)
         }
 
         response.EnsureSuccessStatusCode();
+        return new GovernanceValidationResult();
     }
 }

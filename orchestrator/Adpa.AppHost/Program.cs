@@ -1,4 +1,5 @@
 using Aspire.Hosting;
+using System.IO;
 
 var builder = DistributedApplication.CreateBuilder(args);
 
@@ -19,7 +20,7 @@ var governanceDb = postgres.AddDatabase("governance-ledger");
 
 var governanceApi = builder.AddProject("governance-api", "../../rpas-governance/RPAS.Governance.Api/RPAS.Governance.Api.csproj")
     .WithReference(governanceDb)
-    .WithHttpEndpoint(port: 5005, name: "http")
+    .WithEndpoint("http", endpoint => endpoint.Port = 5005)
     .WithEnvironment("Governance__SkipEfMigrations", "true")
     .WithEnvironment("Governance__RpasLawMode", "Enforced");
 
@@ -29,7 +30,21 @@ var messaging = builder.AddRabbitMQ("messaging");
 // 2. Intelligence Tier (Python FastAPI Service)
 // ---------------------------------------------------------------------------
 
-var intelligence = builder.AddExecutable("intelligence", "py", "../../AI-Foundry-Projects/services/intelligence", "main.py")
+var pythonExecutable = File.Exists("../../../.venv/Scripts/python.exe")
+    ? "../../../.venv/Scripts/python.exe"
+    : "py";
+
+var intelligence = builder.AddExecutable(
+    "intelligence",
+    pythonExecutable,
+    "../../AI-Foundry-Projects/services/intelligence",
+    "-m",
+    "uvicorn",
+    "main:app",
+    "--host",
+    "0.0.0.0",
+    "--port",
+    "8000")
     .WithHttpEndpoint(port: 8000, name: "api");
 intelligence.WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317"); // Connect back to Aspire Dashboard
 intelligence.WithEnvironment("FIREBASE_PROJECT_ID", firebaseProjectId);
@@ -48,6 +63,7 @@ var apiservice = builder.AddProject<Projects.Adpa_Orchestrator>("apiservice")
 apiservice.WithReference(governanceDb);
 apiservice.WithReference(messaging);
 apiservice.WithReference(intelligence.GetEndpoint("api")); // Using GetEndpoint to resolve generic variance in Aspire 13.x
+apiservice.WithEnvironment("INTELLIGENCE_URL", intelligence.GetEndpoint("api"));
 apiservice.WithReference(governanceApi);
 apiservice.WithEnvironment("Governance__SovereignApiRequired", "true");
 apiservice.WithEnvironment("Governance__ApprovalsEnforced", "true");

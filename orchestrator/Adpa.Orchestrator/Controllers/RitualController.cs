@@ -153,6 +153,7 @@ public class RitualController(
     public async Task<IActionResult> ApproveBusinessCase([FromBody] ApproveBusinessCaseRequest body)
     {
         var businessCaseId = body.BusinessCaseId;
+        GovernanceAuthorityToken? authorityToken = null;
         try
         {
             logger.LogInformation("Attempting to approve Business Case: {BusinessCaseId}", businessCaseId);
@@ -187,13 +188,14 @@ public class RitualController(
                     }
                     : new { justification = "phase0/approve via Adpa.Orchestrator" };
 
-                await governance.ValidateStateTransitionAsync(new ValidationPetition
+                var validation = await governance.ValidateStateTransitionAsync(new ValidationPetition
                 {
                     EntityType = "BusinessCase",
                     EntityId = businessCaseId,
                     Action = "MarkApproved",
                     Payload = payload
                 });
+                authorityToken = validation.AuthorityToken;
             }
             else
             {
@@ -210,7 +212,15 @@ public class RitualController(
             return Ok(new { 
                 Status = "APPROVED", 
                 RtmSeeding = "COMPLETED", 
-                BusinessCaseId = businessCaseId 
+                BusinessCaseId = businessCaseId,
+                AuthorityToken = authorityToken is null
+                    ? null
+                    : new
+                    {
+                        Id = authorityToken.Id,
+                        ExpiresAt = authorityToken.ExpiresAt,
+                        RitualType = authorityToken.RitualType
+                    }
             });
         }
         catch (RpasLawViolationException ex)

@@ -28,7 +28,11 @@ public class GovernanceDbContext(DbContextOptions<GovernanceDbContext> options) 
             entity.Property(e => e.Constraints).HasColumnType("jsonb");
             entity.Property(e => e.KeyGoals).HasColumnType("jsonb");
             entity.Property(e => e.Assumptions).HasColumnType("jsonb");
-            entity.Property(e => e.Conflicts).HasColumnType("jsonb");
+            entity.Property(e => e.Conflicts)
+                .HasConversion(
+                    v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                    v => JsonSerializer.Deserialize<List<Conflict>>(v, (JsonSerializerOptions?)null) ?? new List<Conflict>())
+                .HasColumnType("jsonb");
         });
 
         // Map the BusinessCase

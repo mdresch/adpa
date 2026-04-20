@@ -77,6 +77,34 @@ restart-*.bat
 *.tmp
 *.temp
 
+# Python local runtime artifacts
+.venv/
+**/.venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+
+# Local build verification outputs (generated during troubleshooting)
+tmp/apphost-build-verify*/
+tmp/orchestrator-build-verify*/
+tmp/*-build-verify*/
+!tmp/check-models.ts
+!tmp/*.ts
+
+# Downloaded artifact caches (reproducible from tracked source manifests)
+artifacts/cache/
+artifacts/downloads/
+artifacts/extracted/
+tools/cache/
+tools/downloads/
+third_party/cache/
+third_party/downloads/
+# Keep manifest/checksum metadata in source control
+!artifacts/README.md
+!artifacts/sources.lock.json
+!artifacts/**/*.sha256
+!tools/sources.lock.json
+
 
 # Quantum and simulation modules (experimental)
 server/src/modules/quantum/
