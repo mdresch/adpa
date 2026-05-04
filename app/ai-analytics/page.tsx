@@ -94,7 +94,9 @@ export default function AIAnalyticsPage() {
       setAnalyticsData(systemData)
       
       // Fetch detailed AI model usage data
-      const response = await apiClient.get<any>(`/ai-analytics/models?period=${timeRange}`)
+      const response = await apiClient.get<any>(`/ai-analytics/models?period=${timeRange}`, {
+        suppressNotFoundError: true,
+      })
       if (response.success) {
         setModelUsageData(response.usageOverTime || [])
         setProviderStats(response.providerStats || [])
@@ -110,7 +112,17 @@ export default function AIAnalyticsPage() {
         })
       }
       
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.status === 404 || error?.response?.status === 404) {
+        // Endpoint is optional in some deployments; keep page usable with system analytics only.
+        setModelUsageData([])
+        setProviderStats([])
+        setModelStats([])
+        setAiSummary(null)
+        setHourlyUsage([])
+        setLoading(false)
+        return
+      }
       console.error("Failed to fetch AI analytics:", error)
       toast({
         title: "Error",

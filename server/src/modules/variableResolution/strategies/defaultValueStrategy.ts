@@ -116,7 +116,8 @@ export class DefaultValueStrategy {
 
       const parser = new Parser();
       const expr = parser.parse(expression);
-      return expr.evaluate(evalContext);
+      // expr-eval Value is a recursive index signature; ADPA context objects are wider than Value.
+      return expr.evaluate(evalContext as never);
 
     } catch (error) {
       logger.error('Failed to evaluate default expression', {

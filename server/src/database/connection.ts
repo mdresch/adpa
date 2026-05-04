@@ -9,6 +9,15 @@ import { promisify } from "util"
 
 const dnsLookup = promisify(dns.lookup)
 
+/** Thrown when the DB circuit breaker is open — callers must not treat this as an empty result set. */
+export class DatabaseCircuitOpenError extends Error {
+  readonly code = "DB_CIRCUIT_OPEN" as const
+  constructor() {
+    super("Database temporarily unavailable (circuit open)")
+    this.name = "DatabaseCircuitOpenError"
+  }
+}
+
 // Helper to get current database URL (allows dynamic updates in tests)
 const getDatabaseUrl = () => process.env.DATABASE_URL || process.env.POSTGRES_URL
 
@@ -35,6 +44,19 @@ const shouldRejectUnauthorized = () => {
   return process.env.ADPA_ALLOW_INSECURE_TLS === "true" ? false : true
 }
 
+/**
+ * libpq-style ssl query params in the URL cause node-postgres to replace/ignore a merged `ssl`
+ * object on the Pool, which breaks Supabase pooler TLS on some hosts (SELF_SIGNED_CERT_IN_CHAIN).
+ * @see https://github.com/brianc/node-postgres/issues/2375
+ */
+function stripLibpqSslQueryParams(connectionUrl: URL): string {
+  const u = new URL(connectionUrl.toString())
+  for (const k of ["sslmode", "sslcert", "sslkey", "sslrootcert", "sslcrl"]) {
+    u.searchParams.delete(k)
+  }
+  return u.toString()
+}
+
 export function buildSslConfig(target?: string) {
   if (isTrustedPoolingProvider(target)) {
     // Supabase/Azure with PgBouncer: certificate chain cannot be validated in dev environments
@@ -59,8 +81,14 @@ const createPool = (host: string) => {
   // If DATABASE_URL is provided, use it directly
   if (currentDbUrl && host === connectionMethods[0].host) {
     console.log('Using DATABASE_URL connection string')
+    let connStr = currentDbUrl
+    try {
+      connStr = stripLibpqSslQueryParams(new URL(currentDbUrl))
+    } catch {
+      /* keep raw string */
+    }
     return new Pool({
-      connectionString: currentDbUrl,
+      connectionString: connStr,
       ssl: buildSslConfig(currentDbUrl),
       max: 50,
       idleTimeoutMillis: 30000,
@@ -167,8 +195,8 @@ function patchPoolQuery(p: Pool) {
       ; (p as any).query = async (text: any, params?: any) => {
         // If circuit is open, short-circuit and return null so callers can handle service-unavailable
         if (dbBreaker.isOpen()) {
-          logger.warn('[DB-GUARD] Database circuit open - short-circuiting query', { sql: text, params })
-          return { rows: [], rowCount: 0 }
+          logger.warn('[DB-GUARD] Database circuit open - rejecting query', { sql: text, params })
+          throw new DatabaseCircuitOpenError()
         }
 
         try {
@@ -289,7 +317,7 @@ async function connectDatabaseInternal(): Promise<void> {
               }
               // Add pgbouncer if we detected it was needed but we are using parsed config
               if (isPoolerConnection) {
-                poolConfig.connectionString = dbUrl.toString()
+                poolConfig.connectionString = stripLibpqSslQueryParams(dbUrl)
               }
             }
           } catch (ipv4Error: any) {
@@ -297,39 +325,26 @@ async function connectDatabaseInternal(): Promise<void> {
             // Fallback: use connection string directly in the catch-all below
           }
         } else {
-          // For pooler connections (Port 6543), try resolution but fallback safely
-          console.log(`🔧 Using Pooler (port ${dbUrl.port}) - attempting resolution`)
-
-          try {
-            const { address } = await dnsLookup(dbUrl.hostname, { family: 4 })
-            if (address) {
-              console.log(`✅ Pooler resolved to IPv4: ${address}`)
-              const newConfig: any = {
-                ...poolConfig,
-                host: address,
-                port: parseInt(dbUrl.port) || 6543,
-                database: dbUrl.pathname.slice(1).split('?')[0],
-                user: dbUrl.username,
-                password: decodeURIComponent(dbUrl.password),
-              }
-              // CRITICAL: Even if we use parsed config, we might need a modified connection string 
-              // for some internal node-postgres features to honor pgbouncer mode
-              newConfig.connectionString = dbUrl.toString()
-              poolConfig = newConfig
-            }
-          } catch (dnsErr: any) {
-            console.warn(`⚠️ Pooler DNS lookup failed: ${dnsErr.message} - falling back to raw hostname`)
-          }
+          // Transaction pooler (e.g. Supabase :6543 + pgbouncer): use the URL hostname as-is.
+          // Do NOT substitute IPv4 into `host` while also passing `connectionString` — node-postgres
+          // can end up with a broken TLS handshake (SELF_SIGNED_CERT_IN_CHAIN) on PaaS like Render.
+          console.log(`🔧 Pooler (${dbUrl.hostname}:${dbUrl.port}): using connection string as-is (no IPv4 substitution)`)
+          poolConfig.connectionString = stripLibpqSslQueryParams(dbUrl)
+          poolConfig.ssl = buildSslConfig(currentDbUrl)
         }
         
         // Final sanity check: if advanced parsing didn't set a host, use the (potentially patched) URL string
         if (!poolConfig.host && !poolConfig.connectionString) {
-           poolConfig.connectionString = dbUrl.toString()
+          poolConfig.connectionString = stripLibpqSslQueryParams(dbUrl)
         }
       } catch (e: any) {
         // Ultimate Fallback: Just use the raw connectionString with our determined SSL config
         console.warn('⚠️  Advanced parsing failed or was bypassed, ensuring raw string use')
-        poolConfig.connectionString = currentDbUrl
+        try {
+          poolConfig.connectionString = stripLibpqSslQueryParams(new URL(currentDbUrl))
+        } catch {
+          poolConfig.connectionString = currentDbUrl
+        }
       }
 
       // Optimize pool size for Supabase (default 20 is safer for shared clusters)

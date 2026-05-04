@@ -42,7 +42,8 @@ param (
     [switch]$NonInteractive,
     [switch]$SkipBuild,
     [switch]$PostCommit,
-    [int]$RitualPhase = 1
+    [int]$RitualPhase = 1,
+    [switch]$FullDiff
 )
 
 $ErrorActionPreference = "Stop"
@@ -378,9 +379,14 @@ Write-Host "  Checking semantic intent via DRACO ($dracoMode)..." -ForegroundCol
 
 # Call Node.js DRACO Preflight
 if ($dracoMode -eq "blocking") {
-    Write-Host "  [INFO] DRACO semantic review may take up to 90 seconds in Phase 3." -ForegroundColor Cyan
+    Write-Host "  [INFO] DRACO semantic review is now optimized (Parallel Mode)." -ForegroundColor Cyan
+    Write-Host "  [INFO] Processing may take ~30-40 seconds." -ForegroundColor Cyan
 }
-$dracoOutput = pnpm run draco:preflight --mode $dracoMode 2>&1
+
+$dracoArgs = "--mode $dracoMode"
+if ($FullDiff) { $dracoArgs += " --full-diff" }
+
+$dracoOutput = pnpm run draco:preflight $dracoArgs 2>&1
 if ($LASTEXITCODE -ne 0) {
     if ($dracoMode -eq "blocking") {
         Write-GateFail 5 "DRACO Semantic Review detected critical risks."

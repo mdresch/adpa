@@ -1,13 +1,18 @@
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Adpa.Orchestrator.Clients;
 using Adpa.Orchestrator.Data;
 using Adpa.Orchestrator.Models.Rituals;
 using Adpa.Orchestrator.Services;
+using Adpa.Orchestrator.Models.System;
+using Adpa.Orchestrator.Models.Exceptions;
+using Adpa.Orchestrator.Models.Governance;
+using System.Diagnostics;
+using System.Net.Http;
 
 namespace Adpa.Orchestrator.Controllers;
-
-public record IngestionRequest(string Filename, string Content);
 
 public record AmendmentProposalRequest(
     string TargetRequirementId, 
@@ -23,15 +28,31 @@ public record AmendmentDecisionRequest(
     string DecidedBy,
     string? DecisionNotes);
 
-public record ApplyAmendmentRequest(
-    string AmendmentId,
-    string Actor);
+public sealed class ApplyAmendmentRequest
+{
+    [JsonPropertyName("amendment_id")]
+    public string AmendmentId { get; set; } = string.Empty;
+
+    [JsonPropertyName("actor")]
+    public string Actor { get; set; } = string.Empty;
+
+    [JsonPropertyName("approval")]
+    public TaskApprovalAttestation? Approval { get; set; }
+}
+
+public record MsrfValidationInput(
+    string ProjectId,
+    string Title,
+    string Concept);
 
 [ApiController]
 [Route("api/[controller]")]
 public class RitualController(
     IntelligenceClient intelligence,
-    GovernanceDbContext db, 
+    GovernanceDbContext db,
+    GovernanceApiClient governance,
+    IConfiguration configuration,
+    ITaskApprovalGate approvalGate,
     ILogger<RitualController> logger,
     ISemanticRtmSeeder rtmSeeder,
     IRtmExecutionService executionService) : ControllerBase
@@ -63,6 +84,33 @@ public class RitualController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Ritual Failure: phase0/ingest");
+            return StatusCode(500, ex.Message);
+        }
+    }
+
+    [HttpPost("msrf/validate")]
+    public async Task<ActionResult<MsrfEvaluation>> ValidateMsrf([FromBody] MsrfValidationInput input)
+    {
+        try
+        {
+            logger.LogInformation("Starting MSRF Validation ritual for: {Title}", input.Title);
+            
+            var evaluation = await intelligence.ValidateMsrfAsync(input.ProjectId, input.Title, input.Concept);
+            
+            if (evaluation == null)
+            {
+                return BadRequest("Failed to perform MSRF validation ritual.");
+            }
+
+            // Persist to Governance Ledger
+            db.MsrfEvaluations.Update(evaluation);
+            await db.SaveChangesAsync();
+
+            return Ok(evaluation);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Ritual Failure: msrf/validate");
             return StatusCode(500, ex.Message);
         }
     }
@@ -102,11 +150,17 @@ public class RitualController(
     }
 
     [HttpPost("phase0/approve")]
-    public async Task<IActionResult> ApproveBusinessCase([FromBody] string businessCaseId)
+    public async Task<IActionResult> ApproveBusinessCase([FromBody] ApproveBusinessCaseRequest body)
     {
+        var businessCaseId = body.BusinessCaseId;
+        GovernanceAuthorityToken? authorityToken = null;
         try
         {
             logger.LogInformation("Attempting to approve Business Case: {BusinessCaseId}", businessCaseId);
+
+            var gate = approvalGate.EnsureJitApproval(TaskApprovalScopes.Phase0Approve, businessCaseId, body.Approval);
+            if (gate is not null)
+                return gate;
 
             // 1. Fetch and Validate
             var bc = await db.BusinessCases.FirstOrDefaultAsync(x => x.Id == businessCaseId);
@@ -120,9 +174,36 @@ public class RitualController(
                 return BadRequest("Business Case is already approved.");
             }
 
-            // 2. Update Governance State
-            bc.ApprovalStatus = "APPROVED";
-            await db.SaveChangesAsync();
+            // 2. Law-bound approval: sovereign RPAS.Governance.Api (shared PostgreSQL) or local fallback (dev only)
+            var sovereignRequired = configuration.GetValue("Governance:SovereignApiRequired", true);
+            if (sovereignRequired)
+            {
+                object payload = body.Approval is { } jit
+                    ? new
+                    {
+                        justification = "phase0/approve via Adpa.Orchestrator (JIT attested)",
+                        humanDecisionId = jit.HumanDecisionId,
+                        decidedBy = jit.DecidedBy,
+                        expiresAt = jit.ExpiresAt
+                    }
+                    : new { justification = "phase0/approve via Adpa.Orchestrator" };
+
+                var validation = await governance.ValidateStateTransitionAsync(new ValidationPetition
+                {
+                    EntityType = "BusinessCase",
+                    EntityId = businessCaseId,
+                    Action = "MarkApproved",
+                    Payload = payload
+                });
+                authorityToken = validation.AuthorityToken;
+            }
+            else
+            {
+                bc.ApprovalStatus = "APPROVED";
+                await db.SaveChangesAsync();
+            }
+
+            await db.Entry(bc).ReloadAsync();
 
             // 3. Trigger Semantic RTM Seeding (Post-Approval Ritual)
             logger.LogInformation("Business Case {BusinessCaseId} approved. Triggering Semantic RTM Seeder.", businessCaseId);
@@ -131,8 +212,26 @@ public class RitualController(
             return Ok(new { 
                 Status = "APPROVED", 
                 RtmSeeding = "COMPLETED", 
-                BusinessCaseId = businessCaseId 
+                BusinessCaseId = businessCaseId,
+                AuthorityToken = authorityToken is null
+                    ? null
+                    : new
+                    {
+                        Id = authorityToken.Id,
+                        ExpiresAt = authorityToken.ExpiresAt,
+                        RitualType = authorityToken.RitualType
+                    }
             });
+        }
+        catch (RpasLawViolationException ex)
+        {
+            logger.LogWarning(ex, "RPAS law blocked approval for {BusinessCaseId}", businessCaseId);
+            return Conflict(new { error = ex.Message, rule = ex.RuleName });
+        }
+        catch (HttpRequestException ex)
+        {
+            logger.LogError(ex, "Governance API unreachable during approval for {BusinessCaseId}", businessCaseId);
+            return StatusCode(503, new { Error = "Governance authority unreachable.", Detail = ex.Message });
         }
         catch (Exception ex)
         {
@@ -282,6 +381,10 @@ public class RitualController(
     {
         try
         {
+            var gate = approvalGate.EnsureJitApproval(TaskApprovalScopes.RtmApplyAmendment, request.AmendmentId, request.Approval);
+            if (gate is not null)
+                return gate;
+
             var result = await executionService.ApplyAmendmentAsync(request.AmendmentId, request.Actor);
             
             if (!result.Success)
@@ -295,6 +398,46 @@ public class RitualController(
         {
             logger.LogError(ex, "Ritual Failure: rtm/apply-amendment");
             return StatusCode(500, new { Error = "Amendment application failed.", Detail = ex.Message });
+        }
+    }
+
+    // ---------------------------------------------------------------------------
+    // System Integrity & Observability
+    // ---------------------------------------------------------------------------
+
+    [HttpGet("system/health")]
+    public async Task<ActionResult<SystemHealthResult>> GetSystemHealth()
+    {
+        try
+        {
+            var dbHealthy = await db.Database.CanConnectAsync();
+            
+            // Basic intelligence health check
+            bool intelligenceHealthy = await intelligence.CheckHealthAsync();
+
+            // Active rituals count (simplified for health reporting)
+            var activeRituals = 0;
+            try {
+                activeRituals = await db.IdeationSummaries.CountAsync();
+            } catch (Exception ex) {
+                logger.LogWarning("Health check failed to count rituals: {Msg}", ex.Message);
+            }
+
+            var result = new SystemHealthResult(
+                DbHealthy: dbHealthy,
+                MessagingHealthy: true, // Simplified for this baseline; would normally check MassTransit bus health
+                IntelligenceHealthy: intelligenceHealthy,
+                ActiveRituals: activeRituals,
+                EnvironmentBaseline: "CSR-42-ADPA-ORCHESTRATOR",
+                Uptime: TimeSpan.FromMilliseconds(Environment.TickCount64)
+            );
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Integrity Failure: system/health");
+            return StatusCode(500, ex.Message);
         }
     }
 }

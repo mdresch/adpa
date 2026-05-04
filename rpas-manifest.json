@@ -1,0 +1,147 @@
+{
+  "version": "1.0.0",
+  "csr_epoch": "CSR-42",
+  "last_modified": "2026-04-16T00:00:00Z",
+  "approved_directories": [
+    {
+      "path": "server/src/",
+      "description": "Backend server source code - TypeScript/Node.js",
+      "allowed_extensions": [".ts", ".js", ".json", ".sql"],
+      "allowed_task_classes": ["TCL-FEAT", "TCL-REFAC", "TCL-FIX", "TCL-SEC", "TCL-MIG"],
+      "recursive": true,
+      "max_file_size_bytes": 0,
+      "requires_human_approval": false,
+      "owner_tier": "Orchestration"
+    },
+    {
+      "path": "server/src/orchestrator/",
+      "description": "C# Orchestrator layer - RPAS enforcement",
+      "allowed_extensions": [".cs", ".csproj", ".json", ".yaml"],
+      "allowed_task_classes": ["TCL-FEAT", "TCL-REFAC", "TCL-FIX", "TCL-SEC", "TCL-GOV"],
+      "recursive": true,
+      "max_file_size_bytes": 0,
+      "requires_human_approval": true,
+      "owner_tier": "Orchestration"
+    },
+    {
+      "path": "server/migrations/",
+      "description": "Database migration files",
+      "allowed_extensions": [".sql"],
+      "allowed_task_classes": ["TCL-MIG", "TCL-GOV"],
+      "recursive": true,
+      "max_file_size_bytes": 0,
+      "requires_human_approval": true,
+      "owner_tier": "Orchestration"
+    },
+    {
+      "path": "app/",
+      "description": "Frontend Next.js application",
+      "allowed_extensions": [".tsx", ".ts", ".jsx", ".js", ".css", ".scss", ".json"],
+      "allowed_task_classes": ["TCL-FEAT", "TCL-REFAC", "TCL-FIX", "TCL-HYG"],
+      "recursive": true,
+      "max_file_size_bytes": 0,
+      "requires_human_approval": false,
+      "owner_tier": "Experience"
+    },
+    {
+      "path": "components/",
+      "description": "Shared UI components",
+      "allowed_extensions": [".tsx", ".ts", ".css", ".scss"],
+      "allowed_task_classes": ["TCL-FEAT", "TCL-REFAC", "TCL-FIX"],
+      "recursive": true,
+      "max_file_size_bytes": 0,
+      "requires_human_approval": false,
+      "owner_tier": "Experience"
+    },
+    {
+      "path": "contexts/",
+      "description": "React context providers",
+      "allowed_extensions": [".tsx", ".ts"],
+      "allowed_task_classes": ["TCL-FEAT", "TCL-REFAC", "TCL-FIX"],
+      "recursive": true,
+      "max_file_size_bytes": 0,
+      "requires_human_approval": false,
+      "owner_tier": "Experience"
+    },
+    {
+      "path": "hooks/",
+      "description": "Custom React hooks",
+      "allowed_extensions": [".ts", ".tsx"],
+      "allowed_task_classes": ["TCL-FEAT", "TCL-REFAC", "TCL-FIX"],
+      "recursive": true,
+      "max_file_size_bytes": 0,
+      "requires_human_approval": false,
+      "owner_tier": "Experience"
+    },
+    {
+      "path": "lib/",
+      "description": "Shared library code",
+      "allowed_extensions": [".ts", ".tsx", ".js", ".json"],
+      "allowed_task_classes": ["TCL-FEAT", "TCL-REFAC", "TCL-FIX", "TCL-SEC"],
+      "recursive": true,
+      "max_file_size_bytes": 0,
+      "requires_human_approval": false,
+      "owner_tier": "Orchestration"
+    },
+    {
+      "path": "governance/",
+      "description": "RPAS governance artifacts",
+      "allowed_extensions": [".md", ".json", ".yaml", ".yml", ".ts", ".sql"],
+      "allowed_task_classes": ["TCL-GOV", "TCL-DOC", "TCL-SEC"],
+      "recursive": true,
+      "max_file_size_bytes": 0,
+      "requires_human_approval": true,
+      "owner_tier": "Orchestration"
+    },
+    {
+      "path": "docs/",
+      "description": "Documentation files",
+      "allowed_extensions": [".md", ".txt", ".json", ".yaml"],
+      "allowed_task_classes": ["TCL-DOC"],
+      "recursive": true,
+      "max_file_size_bytes": 0,
+      "requires_human_approval": false,
+      "owner_tier": "Intelligence"
+    },
+    {
+      "path": "__tests__/",
+      "description": "Test files",
+      "allowed_extensions": [".test.ts", ".test.tsx", ".spec.ts", ".spec.tsx"],
+      "allowed_task_classes": ["TCL-FEAT", "TCL-FIX"],
+      "recursive": true,
+      "max_file_size_bytes": 0,
+      "requires_human_approval": false,
+      "owner_tier": "Experience"
+    },
+    {
+      "path": "e2e/",
+      "description": "End-to-end tests",
+      "allowed_extensions": [".ts", ".spec.ts", ".test.ts"],
+      "allowed_task_classes": ["TCL-FEAT", "TCL-FIX"],
+      "recursive": true,
+      "max_file_size_bytes": 0,
+      "requires_human_approval": false,
+      "owner_tier": "Experience"
+    }
+  ],
+  "blocked_paths": [
+    ".env",
+    ".env.local",
+    ".env.production",
+    "secrets/",
+    "credentials/",
+    "node_modules/",
+    "dist/",
+    "build/",
+    ".git/",
+    "angular-intro/"
+  ],
+  "global_allowed_extensions": [
+    ".ts", ".tsx", ".js", ".jsx", ".json", ".md", ".css", ".scss",
+    ".sql", ".cs", ".csproj", ".yaml", ".yml", ".xml", ".html"
+  ],
+  "global_blocked_extensions": [
+    ".exe", ".dll", ".bat", ".cmd", ".ps1", ".sh",
+    ".env", ".pem", ".key", ".pfx", ".p12"
+  ]
+}

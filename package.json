@@ -7,12 +7,14 @@
     "dev": "next dev",
     "lint": "next lint",
     "start": "next start",
+    "firebase:auth": "npx -y firebase-tools@latest emulators:start --only auth",
     "migrate": "tsx server/scripts/run-migrations.ts",
     "migrate:reset": "tsx server/scripts/run-migrations.ts --reset",
     "migrate:dev": "npm run migrate:reset && tsx server/src/database/seed-all.ts",
     "migrate:baseline": "node server/scripts/generate-migration-from-db.js",
     "migrate:vercel": "tsx scripts/migrate-to-vercel.ts",
     "draco:preflight": "tsx scripts/draco-gate-5.ts",
+    "draco:audit": "tsx scripts/rpas-pr-reporter.ts",
     "seed:vercel": "tsx scripts/seed-vercel.ts",
     "test:mcp-sentry": "tsx scripts/test-mcp-sentry.ts",
     "rovo": "tsx scripts/rovo.ts",
@@ -302,6 +304,9 @@
     },
     "patchedDependencies": {
       "zod@3.24.1": "patches/zod@3.24.1.patch"
-    }
+    },
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }

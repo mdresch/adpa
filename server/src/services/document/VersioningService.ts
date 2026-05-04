@@ -5,7 +5,7 @@
  * for documents in the ADPA system.
  */
 
-import { pool } from '../../database/connection';
+import { connectDatabase, getDatabasePool } from '../../database/connection';
 import { logger } from '../../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
@@ -81,6 +81,14 @@ export interface CreateVersionOptions {
 export class VersioningService {
     private readonly MAJOR_THRESHOLD = 0.3; // 30% structural change
     private readonly MINOR_THRESHOLD = 0.1; // 10% content change
+
+    /**
+     * Ensure the DB connection is initialized before issuing queries.
+     */
+    private async getDbPool() {
+        await connectDatabase();
+        return getDatabasePool();
+    }
 
     /**
      * Generate SHA-256 hash of content
@@ -184,7 +192,8 @@ export class VersioningService {
         changeType: ChangeType,
         options: CreateVersionOptions
     ): Promise<DocumentVersion> {
-        const client = await pool.connect();
+        const dbPool = await this.getDbPool();
+        const client = await dbPool.connect();
 
         try {
             await client.query('BEGIN');
@@ -253,8 +262,8 @@ export class VersioningService {
             if (!options.skipAudit) {
                 await client.query(
                     `INSERT INTO document_audit_trail (
-            id, document_id, version_id, action_type, performed_by, metadata
-          ) VALUES ($1, $2, $3, $4, $5, $6)`,
+            id, document_id, version_id, action_type, performed_by, metadata, event_type, event_data, user_id
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
                     [
                         uuidv4(),
                         documentId,
@@ -266,7 +275,15 @@ export class VersioningService {
                             semanticVersion,
                             contentHash,
                             parentVersionId: options.parentVersionId || (currentVersion ? currentVersion.id : null)
-                        }
+                        },
+                        this.mapChangeTypeToAction(changeType),
+                        {
+                            changeType,
+                            semanticVersion,
+                            contentHash,
+                            parentVersionId: options.parentVersionId || (currentVersion ? currentVersion.id : null)
+                        },
+                        options.userId || null
                     ]
                 );
             }
@@ -323,7 +340,8 @@ export class VersioningService {
      * Get current version of a document
      */
     async getCurrentVersion(documentId: string): Promise<DocumentVersion | null> {
-        const result = await pool.query(
+        const dbPool = await this.getDbPool();
+        const result = await dbPool.query(
             `SELECT * FROM document_versions
        WHERE document_id = $1
        ORDER BY version DESC
@@ -342,7 +360,8 @@ export class VersioningService {
         limit: number = 20,
         offset: number = 0
     ): Promise<DocumentVersion[]> {
-        const result = await pool.query(
+        const dbPool = await this.getDbPool();
+        const result = await dbPool.query(
             `SELECT * FROM document_versions
        WHERE document_id = $1
        ORDER BY version DESC
@@ -357,7 +376,8 @@ export class VersioningService {
      * Get a specific version by ID
      */
     async getVersionById(versionId: string): Promise<DocumentVersion | null> {
-        const result = await pool.query(
+        const dbPool = await this.getDbPool();
+        const result = await dbPool.query(
             `SELECT * FROM document_versions WHERE id = $1`,
             [versionId]
         );
@@ -372,7 +392,8 @@ export class VersioningService {
         documentId: string,
         semanticVersion: string
     ): Promise<DocumentVersion | null> {
-        const result = await pool.query(
+        const dbPool = await this.getDbPool();
+        const result = await dbPool.query(
             `SELECT * FROM document_versions
        WHERE document_id = $1 AND semantic_version = $2`,
             [documentId, semanticVersion]
@@ -390,7 +411,8 @@ export class VersioningService {
         userId: string,
         notes?: string
     ): Promise<DocumentVersion> {
-        const client = await pool.connect();
+        const dbPool = await this.getDbPool();
+        const client = await dbPool.connect();
 
         try {
             await client.query('BEGIN');
@@ -448,8 +470,8 @@ export class VersioningService {
             // 4. Create audit trail entry
             await client.query(
                 `INSERT INTO document_audit_trail (
-          id, document_id, version_id, action_type, performed_by, metadata
-        ) VALUES ($1, $2, $3, $4, $5, $6)`,
+          id, document_id, version_id, action_type, performed_by, metadata, event_type, event_data, user_id
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
                 [
                     uuidv4(),
                     documentId,
@@ -460,7 +482,14 @@ export class VersioningService {
                         rollbackFromVersion: targetVersion.id,
                         rollbackToContentHash: targetVersion.content_hash,
                         notes
-                    }
+                    },
+                    'rollback',
+                    {
+                        rollbackFromVersion: targetVersion.id,
+                        rollbackToContentHash: targetVersion.content_hash,
+                        notes
+                    },
+                    userId
                 ]
             );
 
@@ -661,7 +690,8 @@ export class VersioningService {
                 const templateComplexity = options.metadata?.complexity || options.metadata?.template_complexity || 'medium';
 
                 // Create new document
-                const result = await pool.query(
+                const dbPool = await this.getDbPool();
+                const result = await dbPool.query(
                     `INSERT INTO documents (
                         id, project_id, name, content, template_id, status, created_by, updated_by,
                         word_count, character_count, version, semantic_version,
