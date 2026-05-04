@@ -15,6 +15,7 @@ import {
   User as FirebaseUser
 } from "firebase/auth"
 import { auth } from "@/lib/firebase"
+import { isPrivilegedAppRole, normalizeAppRole } from "@/lib/auth-roles"
 
 /** Firebase account fields for UI when the ADPA profile API has not loaded yet (or failed). */
 export type FirebaseSessionProfile = {
@@ -79,16 +80,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // Align with server `requirePermission`: admins implicitly have all permissions (UI only; API still enforces).
   const hasPermission = useCallback((permission: string): boolean => {
     if (!user) return false
-    const r = (user.role || "").toLowerCase()
-    if (r === "super_admin" || r === "admin") return true
+    if (isPrivilegedAppRole(user.role)) return true
     if (!user.permissions) return false
     return user.permissions[permission] === true
   }, [user])
 
   const hasRole = useCallback((roles: string | string[]): boolean => {
     if (!user) return false
-    const r = (user.role || "").toLowerCase()
-    const roleArray = (Array.isArray(roles) ? roles : [roles]).map((x) => x.toLowerCase())
+    const r = normalizeAppRole(user.role)
+    const roleArray = (Array.isArray(roles) ? roles : [roles]).map((x) => normalizeAppRole(x))
     return roleArray.includes(r)
   }, [user])
 

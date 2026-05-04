@@ -9,6 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/contexts/AuthContext"
 import { apiClient } from "@/lib/api"
+import { isPrivilegedAppRole } from "@/lib/auth-roles"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   LayoutDashboard,
@@ -79,7 +80,7 @@ export function Sidebar({ className }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false)
   const [pendingCount, setPendingCount] = useState(0)
   const pathname = usePathname()
-  const { user, firebaseSession, token, logout } = useAuth()
+  const { user, firebaseSession, token, isAuthenticated, logout } = useAuth()
 
   const displayName = user?.name || firebaseSession?.displayName || null
   const displayEmail = user?.email || firebaseSession?.email || null
@@ -106,13 +107,11 @@ export function Sidebar({ className }: SidebarProps) {
     "?"
 
   useEffect(() => {
-    if (user) {
-      fetchPendingApprovals()
-      // Refresh every 30 seconds
-      const interval = setInterval(fetchPendingApprovals, 30000)
-      return () => clearInterval(interval)
-    }
-  }, [user])
+    if (!token) return
+    void fetchPendingApprovals()
+    const interval = setInterval(fetchPendingApprovals, 30000)
+    return () => clearInterval(interval)
+  }, [token])
 
   const fetchPendingApprovals = async () => {
     try {
@@ -165,18 +164,15 @@ export function Sidebar({ className }: SidebarProps) {
       </div>
 
       {/* Navigation */}
-      <ScrollArea className="flex-1 px-3 py-6 custom-scrollbar">
+      <ScrollArea className="flex-1 min-h-0 px-3 py-6 custom-scrollbar">
         <nav className="space-y-2">
           {navigation
             .filter((item: NavItem) => {
-              // Hide admin-only items for non-admin/super-admin users
-              // Super admin has all admin privileges (match server: case-insensitive role)
-              const r = user?.role?.toLowerCase()
-              const isAdminOrSuperAdmin = r === "admin" || r === "super_admin"
-              if (item.adminOnly && !isAdminOrSuperAdmin) {
-                return false
-              }
-              return true
+              if (!item.adminOnly) return true
+              if (!isAuthenticated) return false
+              // While `/auth/me` is still loading, `user` may be null — show full nav; pages still enforce API authz.
+              if (user == null) return true
+              return isPrivilegedAppRole(user.role)
             })
             .map((item, index) => {
               const isActive = pathname === item.href
