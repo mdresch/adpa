@@ -31,7 +31,7 @@ export class DocxService {
         const tokens = marked.lexer(markdownContent);
 
         // 2. Create Document sections
-        const children: Paragraph[] = [];
+        const children: (Paragraph | Table)[] = [];
 
         // Add Title
         children.push(
@@ -112,7 +112,7 @@ export class DocxService {
         return await Packer.toBuffer(doc);
     }
 
-    private static async processToken(token: any): Promise<Paragraph | Paragraph[] | null> {
+    private static async processToken(token: any): Promise<Paragraph | Paragraph[] | Table | null> {
         switch (token.type) {
             case 'heading':
                 return new Paragraph({
