@@ -297,29 +297,12 @@ async function connectDatabaseInternal(): Promise<void> {
             // Fallback: use connection string directly in the catch-all below
           }
         } else {
-          // For pooler connections (Port 6543), try resolution but fallback safely
-          console.log(`🔧 Using Pooler (port ${dbUrl.port}) - attempting resolution`)
-
-          try {
-            const { address } = await dnsLookup(dbUrl.hostname, { family: 4 })
-            if (address) {
-              console.log(`✅ Pooler resolved to IPv4: ${address}`)
-              const newConfig: any = {
-                ...poolConfig,
-                host: address,
-                port: parseInt(dbUrl.port) || 6543,
-                database: dbUrl.pathname.slice(1).split('?')[0],
-                user: dbUrl.username,
-                password: decodeURIComponent(dbUrl.password),
-              }
-              // CRITICAL: Even if we use parsed config, we might need a modified connection string 
-              // for some internal node-postgres features to honor pgbouncer mode
-              newConfig.connectionString = dbUrl.toString()
-              poolConfig = newConfig
-            }
-          } catch (dnsErr: any) {
-            console.warn(`⚠️ Pooler DNS lookup failed: ${dnsErr.message} - falling back to raw hostname`)
-          }
+          // Transaction pooler (e.g. Supabase :6543 + pgbouncer): use the URL hostname as-is.
+          // Do NOT substitute IPv4 into `host` while also passing `connectionString` — node-postgres
+          // can end up with a broken TLS handshake (SELF_SIGNED_CERT_IN_CHAIN) on PaaS like Render.
+          console.log(`🔧 Pooler (${dbUrl.hostname}:${dbUrl.port}): using connection string as-is (no IPv4 substitution)`)
+          poolConfig.connectionString = dbUrl.toString()
+          poolConfig.ssl = buildSslConfig(currentDbUrl)
         }
         
         // Final sanity check: if advanced parsing didn't set a host, use the (potentially patched) URL string
