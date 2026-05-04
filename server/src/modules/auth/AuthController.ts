@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from "uuid";
 import { AuthRepository } from './AuthRepository';
 import { childLogger } from "../../utils/logger";
 import { trackActivity } from "../../middleware/analyticsMiddleware";
+import { pool } from "../../database/connection";
 
 /**
  * AuthController (Modular)
@@ -46,6 +47,51 @@ const ADMIN_PERMISSIONS = {
   'integrations.update': true,
   'integrations.delete': true,
 };
+
+/** Full permission map applied when claiming bootstrap elevation (matches typical admin seed scripts). */
+const BOOTSTRAP_SUPER_ADMIN_PERMISSIONS: Record<string, boolean> = {
+  admin: true,
+  "ai.read": true,
+  "ai.generate": true,
+  "ai.configure": true,
+  "jobs.admin": true,
+  "jobs.stats": true,
+  "users.create": true,
+  "users.read": true,
+  "users.update": true,
+  "users.delete": true,
+  "projects.create": true,
+  "projects.read": true,
+  "projects.update": true,
+  "projects.delete": true,
+  "documents.create": true,
+  "documents.read": true,
+  "documents.update": true,
+  "documents.delete": true,
+  "templates.create": true,
+  "templates.read": true,
+  "templates.update": true,
+  "templates.delete": true,
+  "stakeholders.create": true,
+  "stakeholders.read": true,
+  "stakeholders.update": true,
+  "stakeholders.delete": true,
+  "integrations.create": true,
+  "integrations.read": true,
+  "integrations.update": true,
+  "integrations.delete": true,
+  "integrations.sync": true,
+  "integrations.test": true,
+  "integrations.manage": true,
+  "security.view": true,
+  "security.audit": true,
+  "security.manage": true,
+  "analytics.system": true,
+  "settings.read": true,
+  "settings.update": true,
+};
+
+const BOOTSTRAP_TOKEN_CONSUMED_KEY = "adpa_bootstrap_token_consumed";
 
 export class AuthController {
   private static _repository: AuthRepository;
@@ -374,6 +420,175 @@ export class AuthController {
    * POST /api/v1/auth/change-password
    * Changes the current user's password.
    */
+  /**
+   * POST /api/v1/auth/bootstrap-elevation
+   * Elevates the **currently authenticated** Firebase user to `admin` or `super_admin` when:
+   * 1) **Cold start**: there are no `admin` / `super_admin` users in the database (one-time org bootstrap), or
+   * 2) **Recovery**: header `x-adpa-bootstrap-token` matches env `ADPA_BOOTSTRAP_TOKEN` (single use; stored in system_settings).
+   */
+  public static async claimBootstrapElevation(req: Request, res: Response) {
+    const log = childLogger({ requestId: (req as any).requestId });
+    const userId = (req as any).user?.id as string | undefined;
+    const userEmail = (req as any).user?.email as string | undefined;
+
+    if (!userId || !userEmail) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const rawRole = (req.body?.role as string | undefined)?.toLowerCase?.() || "super_admin";
+    const targetRole = rawRole === "admin" ? "admin" : "super_admin";
+
+    try {
+      const selfRow = await pool.query(
+        `SELECT id, email, role FROM users WHERE id = $1`,
+        [userId]
+      );
+      if (selfRow.rows.length === 0) {
+        return res.status(404).json({ error: "User record not found" });
+      }
+
+      const currentRole = String(selfRow.rows[0].role || "").toLowerCase();
+      if (currentRole === "admin" || currentRole === "super_admin") {
+        return res.status(400).json({
+          error: "Account already has an elevated role",
+          role: selfRow.rows[0].role,
+        });
+      }
+
+      const privCount = await pool.query(
+        `SELECT COUNT(*)::int AS c FROM users WHERE LOWER(TRIM(role::text)) IN ('admin', 'super_admin')`
+      );
+      const hasPrivilegedUsers = (privCount.rows[0]?.c ?? 0) > 0;
+
+      let viaToken = false;
+      if (hasPrivilegedUsers) {
+        const expected = process.env.ADPA_BOOTSTRAP_TOKEN;
+        if (!expected || expected.length < 16) {
+          return res.status(403).json({
+            error:
+              "Bootstrap via token is not configured. Set a strong ADPA_BOOTSTRAP_TOKEN (16+ chars) on the server, or use DB/SQL to promote a user.",
+          });
+        }
+        const supplied =
+          (req.headers["x-adpa-bootstrap-token"] as string | undefined)?.trim() ||
+          (typeof req.body?.bootstrapToken === "string" ? req.body.bootstrapToken.trim() : "");
+        if (supplied !== expected) {
+          log.warn("[Auth] Bootstrap elevation denied: invalid bootstrap token");
+          return res.status(403).json({ error: "Invalid bootstrap token" });
+        }
+
+        const consumed = await pool.query(
+          `SELECT setting_key FROM system_settings WHERE setting_key = $1 LIMIT 1`,
+          [BOOTSTRAP_TOKEN_CONSUMED_KEY]
+        );
+        if (consumed.rows.length > 0) {
+          return res.status(403).json({
+            error: "Bootstrap token was already used. Rotate ADPA_BOOTSTRAP_TOKEN and clear system_settings row if you must repeat (not recommended).",
+          });
+        }
+        viaToken = true;
+      }
+
+      const permissionsJson =
+        targetRole === "super_admin"
+          ? BOOTSTRAP_SUPER_ADMIN_PERMISSIONS
+          : { ...BOOTSTRAP_SUPER_ADMIN_PERMISSIONS, ...ADMIN_PERMISSIONS };
+
+      let row: any;
+      if (viaToken) {
+        const client = await pool.connect();
+        try {
+          await client.query("BEGIN");
+          const updated = await client.query(
+            `UPDATE users
+             SET role = $1,
+                 permissions = $2::jsonb,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = $3
+             RETURNING id, email, name, role, permissions, is_active, company_id, created_at, updated_at`,
+            [targetRole, JSON.stringify(permissionsJson), userId]
+          );
+          row = updated.rows[0];
+          if (!row) {
+            await client.query("ROLLBACK");
+            return res.status(500).json({ error: "Failed to update user" });
+          }
+          await client.query(
+            `INSERT INTO system_settings (setting_key, setting_value, description, updated_by)
+             VALUES ($1, $2, $3, $4)`,
+            [
+              BOOTSTRAP_TOKEN_CONSUMED_KEY,
+              new Date().toISOString(),
+              "One-time ADPA_BOOTSTRAP_TOKEN consumption (auth bootstrap-elevation)",
+              userEmail,
+            ]
+          );
+          await client.query("COMMIT");
+        } catch (e) {
+          try {
+            await client.query("ROLLBACK");
+          } catch {
+            /* ignore */
+          }
+          throw e;
+        } finally {
+          client.release();
+        }
+      } else {
+        const updated = await pool.query(
+          `UPDATE users
+           SET role = $1,
+               permissions = $2::jsonb,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE id = $3
+           RETURNING id, email, name, role, permissions, is_active, company_id, created_at, updated_at`,
+          [targetRole, JSON.stringify(permissionsJson), userId]
+        );
+        row = updated.rows[0];
+        if (!row) {
+          return res.status(500).json({ error: "Failed to update user" });
+        }
+      }
+
+      log.info("[Auth] Bootstrap elevation applied", {
+        userId,
+        email: userEmail,
+        targetRole,
+        viaToken,
+        coldStart: !hasPrivilegedUsers,
+      });
+
+      let perms = row.permissions;
+      if (typeof perms === "string") {
+        try {
+          perms = JSON.parse(perms);
+        } catch {
+          perms = {};
+        }
+      }
+
+      return res.json({
+        success: true,
+        message: hasPrivilegedUsers
+          ? "Elevated via one-time bootstrap token. Remove ADPA_BOOTSTRAP_TOKEN from production when finished."
+          : "Elevated: no administrator existed yet (cold start).",
+        user: {
+          id: row.id,
+          email: row.email,
+          name: row.name,
+          role: row.role,
+          permissions: perms,
+        },
+      });
+    } catch (error: any) {
+      log.error("[Auth] Bootstrap elevation error:", error);
+      return res.status(500).json({
+        error: "Bootstrap elevation failed",
+        details: process.env.NODE_ENV === "development" ? error?.message : undefined,
+      });
+    }
+  }
+
   public static async changePassword(req: Request, res: Response) {
     const log = childLogger({ requestId: (req as any).requestId });
     try {

@@ -1177,6 +1177,28 @@ export class ApiClient {
     return response.user || response as any
   }
 
+  /**
+   * One-time / cold-start elevation to admin or super_admin. See server: POST /auth/bootstrap-elevation.
+   * When admins already exist, requires env ADPA_BOOTSTRAP_TOKEN as header x-adpa-bootstrap-token or body.bootstrapToken.
+   */
+  async claimBootstrapElevation(options?: {
+    role?: "admin" | "super_admin"
+    bootstrapToken?: string
+  }): Promise<{ success: boolean; message?: string; user: User }> {
+    const headers: Record<string, string> = {}
+    if (options?.bootstrapToken) {
+      headers["x-adpa-bootstrap-token"] = options.bootstrapToken
+    }
+    return this.request("/auth/bootstrap-elevation", {
+      method: "POST",
+      body: JSON.stringify({
+        role: options?.role ?? "super_admin",
+        ...(options?.bootstrapToken ? { bootstrapToken: options.bootstrapToken } : {}),
+      }),
+      headers,
+    })
+  }
+
   async logout(): Promise<void> {
     this.clearToken()
   }

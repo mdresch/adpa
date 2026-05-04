@@ -9,7 +9,6 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/contexts/AuthContext"
 import { apiClient } from "@/lib/api"
-import { isPrivilegedAppRole } from "@/lib/auth-roles"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   LayoutDashboard,
@@ -169,10 +168,9 @@ export function Sidebar({ className }: SidebarProps) {
           {navigation
             .filter((item: NavItem) => {
               if (!item.adminOnly) return true
-              if (!isAuthenticated) return false
-              // While `/auth/me` is still loading, `user` may be null — show full nav; pages still enforce API authz.
-              if (user == null) return true
-              return isPrivilegedAppRole(user.role)
+              // `adminOnly` marks routes that typically require elevated API access; we still show them when
+              // signed in so navigation matches the full product surface. The server enforces RBAC on each request.
+              return isAuthenticated
             })
             .map((item, index) => {
               const isActive = pathname === item.href
