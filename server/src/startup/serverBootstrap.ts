@@ -27,38 +27,6 @@ export async function initializeServerWithDependencyGraph(
     initializeDependencyHealthTracking(depNames)
     console.log(`✅ Health endpoint tracking initialized for ${depNames.length} dependencies`)
 
-    // Then start the actual initialization
-    await startupManager.initialize()
-
-    server.listen(PORT, "0.0.0.0", () => {
-      console.log(`✅ Server running on port ${PORT}`)
-      console.log(`📍 Environment: ${process.env.NODE_ENV || "development"}`)
-      console.log("🔗 SharePoint test endpoint available at /api/integrations/sharepoint/test")
-
-      // Initialize weekly template analysis job
-      if (!process.env.SKIP_JOBS && !process.env.VERCEL) {
-        const { initializeTemplateAnalysisJob } = require('../jobs/templateAnalysisJob')
-        initializeTemplateAnalysisJob()
-        console.log("✅ Template analysis job scheduled (Mondays at 2:00 AM)")
-      } else {
-        console.log("⏭️  Skipping in-memory template analysis job (handled by Vercel Cron)")
-      }
-
-      // Start stuck-job health monitor
-      try {
-        const { StuckJobMonitor } = require('../services/stuckJobMonitor')
-        const monitor = new StuckJobMonitor(pool, io, {
-          intervalMs: Number(process.env.STUCK_JOB_MONITOR_INTERVAL_MS || 300000),
-          thresholdMinutes: Number(process.env.STUCK_JOB_THRESHOLD_MINUTES || 30),
-        })
-        monitor.start()
-        console.log('✅ Stuck-job monitor started')
-      } catch (err) {
-        console.warn('⚠️ Could not start stuck-job monitor', err)
-      }
-    })
-
-    // Graceful shutdown handler
     const handleShutdown = async (signal: string) => {
       console.log(`
 🛑 ${signal} received, shutting down gracefully...`)
@@ -73,9 +41,46 @@ export async function initializeServerWithDependencyGraph(
         process.exit(1)
       }
     }
+    process.on("SIGTERM", () => handleShutdown("SIGTERM"))
+    process.on("SIGINT", () => handleShutdown("SIGINT"))
 
-    process.on('SIGTERM', () => handleShutdown('SIGTERM'))
-    process.on('SIGINT', () => handleShutdown('SIGINT'))
+    // Bind HTTP before dependency init so PaaS port checks (Render, Fly, etc.) see an open port
+    // while DATABASE_URL / Redis and other deps may still be connecting.
+    await new Promise<void>((resolve, reject) => {
+      server.listen(PORT, "0.0.0.0", () => {
+        console.log(`✅ Server listening on port ${PORT} (initializing dependencies…)`)
+        resolve()
+      })
+      server.once("error", reject)
+    })
+
+    await startupManager.initialize()
+
+    console.log(`✅ Dependencies ready — server fully up on port ${PORT}`)
+    console.log(`📍 Environment: ${process.env.NODE_ENV || "development"}`)
+    console.log("🔗 SharePoint test endpoint available at /api/integrations/sharepoint/test")
+
+    // Initialize weekly template analysis job
+    if (!process.env.SKIP_JOBS && !process.env.VERCEL) {
+      const { initializeTemplateAnalysisJob } = require('../jobs/templateAnalysisJob')
+      initializeTemplateAnalysisJob()
+      console.log("✅ Template analysis job scheduled (Mondays at 2:00 AM)")
+    } else {
+      console.log("⏭️  Skipping in-memory template analysis job (handled by Vercel Cron)")
+    }
+
+    // Start stuck-job health monitor
+    try {
+      const { StuckJobMonitor } = require('../services/stuckJobMonitor')
+      const monitor = new StuckJobMonitor(pool, io, {
+        intervalMs: Number(process.env.STUCK_JOB_MONITOR_INTERVAL_MS || 300000),
+        thresholdMinutes: Number(process.env.STUCK_JOB_THRESHOLD_MINUTES || 30),
+      })
+      monitor.start()
+      console.log('✅ Stuck-job monitor started')
+    } catch (err) {
+      console.warn('⚠️ Could not start stuck-job monitor', err)
+    }
 
   } catch (error) {
     console.error("❌ Failed to start server:", error)
@@ -85,6 +90,11 @@ export async function initializeServerWithDependencyGraph(
       } catch (shutdownError) {
         console.error("❌ Error during shutdown:", shutdownError)
       }
+    }
+    try {
+      server.close()
+    } catch {
+      /* ignore */
     }
     process.exit(1)
   }

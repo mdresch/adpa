@@ -556,7 +556,9 @@ export default function AIProviders() {
   // Load usage analytics
   const loadUsageAnalytics = async (): Promise<void> => {
     try {
-      const response = await apiClient.get<any>('/ai-analytics/models?period=30d')
+      const response = await apiClient.get<any>('/ai-analytics/models?period=30d', {
+        suppressNotFoundError: true,
+      })
       if (response.success) {
         setUsageAnalytics({
           summary: response.summary,

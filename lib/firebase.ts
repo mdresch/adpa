@@ -39,9 +39,24 @@ export const auth: Auth = (() => {
   return getAuth(app);
 })() as Auth;
 
-// Connect to emulator in development
-if (hasFirebaseConfig && process.env.NODE_ENV === "development" && typeof window !== "undefined") {
-  const authEmulatorHost = process.env.NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST || "localhost:9099";
-  console.log(`🔌 Connecting Firebase Auth to emulator at ${authEmulatorHost}`);
-  connectAuthEmulator(auth, `http://${authEmulatorHost}`);
+// Auth emulator: opt-in only. Unconditional dev wiring caused connection refused
+// when NEXT_PUBLIC_FIREBASE_* pointed at a real project but nothing listened on :9099.
+const useAuthEmulator =
+  process.env.NEXT_PUBLIC_FIREBASE_USE_AUTH_EMULATOR === "true" ||
+  process.env.NEXT_PUBLIC_FIREBASE_USE_AUTH_EMULATOR === "1";
+
+if (
+  hasFirebaseConfig &&
+  useAuthEmulator &&
+  process.env.NODE_ENV === "development" &&
+  typeof window !== "undefined"
+) {
+  const authEmulatorHost =
+    process.env.NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST || "localhost:9099";
+  const hasConnectedEmulator = Boolean((auth as Auth & { emulatorConfig?: unknown }).emulatorConfig);
+
+  if (!hasConnectedEmulator) {
+    console.log(`Connecting Firebase Auth to emulator at ${authEmulatorHost}`);
+    connectAuthEmulator(auth, `http://${authEmulatorHost}`, { disableWarnings: true });
+  }
 }

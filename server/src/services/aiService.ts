@@ -768,7 +768,7 @@ class AIService {
     try {
       const { getAIGatewayKey } = await import("../routes/settings")
       const result = await getAIGatewayKey()
-      gatewayApiKey = result?.key
+      gatewayApiKey = result ?? undefined
       if (!gatewayApiKey) {
         logger.info('[AI-SERVICE] No AI Gateway API key configured - will use direct provider APIs')
       } else {
