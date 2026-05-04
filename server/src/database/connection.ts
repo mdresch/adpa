@@ -35,6 +35,19 @@ const shouldRejectUnauthorized = () => {
   return process.env.ADPA_ALLOW_INSECURE_TLS === "true" ? false : true
 }
 
+/**
+ * libpq-style ssl query params in the URL cause node-postgres to replace/ignore a merged `ssl`
+ * object on the Pool, which breaks Supabase pooler TLS on some hosts (SELF_SIGNED_CERT_IN_CHAIN).
+ * @see https://github.com/brianc/node-postgres/issues/2375
+ */
+function stripLibpqSslQueryParams(connectionUrl: URL): string {
+  const u = new URL(connectionUrl.toString())
+  for (const k of ["sslmode", "sslcert", "sslkey", "sslrootcert", "sslcrl"]) {
+    u.searchParams.delete(k)
+  }
+  return u.toString()
+}
+
 export function buildSslConfig(target?: string) {
   if (isTrustedPoolingProvider(target)) {
     // Supabase/Azure with PgBouncer: certificate chain cannot be validated in dev environments
@@ -59,8 +72,14 @@ const createPool = (host: string) => {
   // If DATABASE_URL is provided, use it directly
   if (currentDbUrl && host === connectionMethods[0].host) {
     console.log('Using DATABASE_URL connection string')
+    let connStr = currentDbUrl
+    try {
+      connStr = stripLibpqSslQueryParams(new URL(currentDbUrl))
+    } catch {
+      /* keep raw string */
+    }
     return new Pool({
-      connectionString: currentDbUrl,
+      connectionString: connStr,
       ssl: buildSslConfig(currentDbUrl),
       max: 50,
       idleTimeoutMillis: 30000,
@@ -289,7 +308,7 @@ async function connectDatabaseInternal(): Promise<void> {
               }
               // Add pgbouncer if we detected it was needed but we are using parsed config
               if (isPoolerConnection) {
-                poolConfig.connectionString = dbUrl.toString()
+                poolConfig.connectionString = stripLibpqSslQueryParams(dbUrl)
               }
             }
           } catch (ipv4Error: any) {
@@ -301,18 +320,22 @@ async function connectDatabaseInternal(): Promise<void> {
           // Do NOT substitute IPv4 into `host` while also passing `connectionString` — node-postgres
           // can end up with a broken TLS handshake (SELF_SIGNED_CERT_IN_CHAIN) on PaaS like Render.
           console.log(`🔧 Pooler (${dbUrl.hostname}:${dbUrl.port}): using connection string as-is (no IPv4 substitution)`)
-          poolConfig.connectionString = dbUrl.toString()
+          poolConfig.connectionString = stripLibpqSslQueryParams(dbUrl)
           poolConfig.ssl = buildSslConfig(currentDbUrl)
         }
         
         // Final sanity check: if advanced parsing didn't set a host, use the (potentially patched) URL string
         if (!poolConfig.host && !poolConfig.connectionString) {
-           poolConfig.connectionString = dbUrl.toString()
+          poolConfig.connectionString = stripLibpqSslQueryParams(dbUrl)
         }
       } catch (e: any) {
         // Ultimate Fallback: Just use the raw connectionString with our determined SSL config
         console.warn('⚠️  Advanced parsing failed or was bypassed, ensuring raw string use')
-        poolConfig.connectionString = currentDbUrl
+        try {
+          poolConfig.connectionString = stripLibpqSslQueryParams(new URL(currentDbUrl))
+        } catch {
+          poolConfig.connectionString = currentDbUrl
+        }
       }
 
       // Optimize pool size for Supabase (default 20 is safer for shared clusters)
