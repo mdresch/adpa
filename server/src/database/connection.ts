@@ -9,6 +9,15 @@ import { promisify } from "util"
 
 const dnsLookup = promisify(dns.lookup)
 
+/** Thrown when the DB circuit breaker is open — callers must not treat this as an empty result set. */
+export class DatabaseCircuitOpenError extends Error {
+  readonly code = "DB_CIRCUIT_OPEN" as const
+  constructor() {
+    super("Database temporarily unavailable (circuit open)")
+    this.name = "DatabaseCircuitOpenError"
+  }
+}
+
 // Helper to get current database URL (allows dynamic updates in tests)
 const getDatabaseUrl = () => process.env.DATABASE_URL || process.env.POSTGRES_URL
 
@@ -186,8 +195,8 @@ function patchPoolQuery(p: Pool) {
       ; (p as any).query = async (text: any, params?: any) => {
         // If circuit is open, short-circuit and return null so callers can handle service-unavailable
         if (dbBreaker.isOpen()) {
-          logger.warn('[DB-GUARD] Database circuit open - short-circuiting query', { sql: text, params })
-          return { rows: [], rowCount: 0 }
+          logger.warn('[DB-GUARD] Database circuit open - rejecting query', { sql: text, params })
+          throw new DatabaseCircuitOpenError()
         }
 
         try {

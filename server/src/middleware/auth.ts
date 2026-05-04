@@ -149,6 +149,9 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
           user = insertResult.rows[0];
           logger.info(`[Auth] JIT Provisioned new user: ${decoded.email}`);
         } catch (insertErr: any) {
+          if (insertErr?.code === "DB_CIRCUIT_OPEN") {
+            return res.status(503).json({ error: "Service unavailable" })
+          }
           // Check for Unique Constraint Violation (Postgres code 23505)
           // This happens if a concurrent request already created the user
           if (insertErr.code === '23505') {

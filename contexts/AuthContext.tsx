@@ -16,8 +16,17 @@ import {
 } from "firebase/auth"
 import { auth } from "@/lib/firebase"
 
+/** Firebase account fields for UI when the ADPA profile API has not loaded yet (or failed). */
+export type FirebaseSessionProfile = {
+  email: string | null
+  displayName: string | null
+  photoURL: string | null
+}
+
 interface AuthContextType {
   user: User | null
+  /** Present while Firebase has a session; use for display fallbacks when `user` is still null. */
+  firebaseSession: FirebaseSessionProfile | null
   loading: boolean
   login: (email: string, password: string, redirect?: string) => Promise<void>
   loginWithGoogle: (redirect?: string) => Promise<void>
@@ -47,9 +56,22 @@ interface AuthProviderProps {
 
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null)
+  const [firebaseSession, setFirebaseSession] = useState<FirebaseSessionProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [token, setToken] = useState<string | null>(null)
   const router = useRouter()
+
+  const syncFirebaseSessionProfile = (firebaseUser: FirebaseUser | null) => {
+    if (!firebaseUser) {
+      setFirebaseSession(null)
+      return
+    }
+    setFirebaseSession({
+      email: firebaseUser.email ?? null,
+      displayName: firebaseUser.displayName ?? null,
+      photoURL: firebaseUser.photoURL ?? null,
+    })
+  }
 
   // Check if user is authenticated
   const isAuthenticated = !!user
@@ -87,6 +109,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
       if (firebaseUser) {
+        syncFirebaseSessionProfile(firebaseUser)
         try {
           // Get the ID token from Firebase
           const idToken = await getIdToken(firebaseUser)
@@ -112,7 +135,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
               // This handles cases where the browser has a cached Firebase session
               // but the backend is temporarily unavailable or being redeployed.
               const status = profileError?.status || profileError?.response?.status
-              if (status >= 500 || !status) {
+              if (status === 503) {
+                console.warn(
+                  "[Auth] Backend temporarily unavailable (503) during session restore; keeping Firebase session."
+                )
+              } else if (status >= 500 || !status) {
                 console.warn("[Auth] Backend unavailable during session restore, clearing auth state silently.")
                 apiClient.clearToken()
                 removeCookie('auth_token')
@@ -129,6 +156,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       } else {
         // User is signed out
         setUser(null)
+        syncFirebaseSessionProfile(null)
         setToken(null)
         apiClient.clearToken()
         removeCookie('auth_token')
@@ -275,6 +303,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       
       // Local state cleanup (also handled by onAuthStateChanged, but good to be explicit)
       setUser(null)
+      setFirebaseSession(null)
       setToken(null)
       apiClient.clearToken()
       removeCookie('auth_token')
@@ -284,6 +313,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     } catch (error) {
       console.error("Logout failed:", error)
       setUser(null)
+      setFirebaseSession(null)
       setToken(null)
       apiClient.clearToken()
       removeCookie('auth_token')
@@ -328,6 +358,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const value: AuthContextType = {
     user,
+    firebaseSession,
     loading,
     login,
     loginWithGoogle,

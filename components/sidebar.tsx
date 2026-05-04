@@ -79,15 +79,31 @@ export function Sidebar({ className }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false)
   const [pendingCount, setPendingCount] = useState(0)
   const pathname = usePathname()
-  const { user, logout } = useAuth()
+  const { user, firebaseSession, logout } = useAuth()
+
+  const displayName = user?.name || firebaseSession?.displayName || null
+  const displayEmail = user?.email || firebaseSession?.email || null
+  const displayAvatarUrl = user?.avatar_url || firebaseSession?.photoURL || null
 
   const userInitials =
-    user?.name
+    displayName
       ?.split(/\s+/)
+      .filter(Boolean)
       .map((w) => w[0])
       .join("")
       .toUpperCase()
-      .slice(0, 2) || "?"
+      .slice(0, 2) ||
+    (displayEmail
+      ? displayEmail
+          .split("@")[0]
+          .split(/[._-]/)
+          .filter(Boolean)
+          .slice(0, 2)
+          .map((p) => p[0])
+          .join("")
+          .toUpperCase()
+      : "") ||
+    "?"
 
   useEffect(() => {
     if (user) {
@@ -216,8 +232,8 @@ export function Sidebar({ className }: SidebarProps) {
       <div className="p-4 border-t border-slate-200 dark:border-slate-700 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm">
         <div className={cn("flex items-center space-x-3 transition-all duration-200", collapsed && "justify-center")}>
           <Avatar className="h-10 w-10 shadow-lg ring-2 ring-white/30 dark:ring-slate-700/50">
-            {user?.avatar_url ? (
-              <AvatarImage src={user.avatar_url} alt={user?.name || "User"} />
+            {displayAvatarUrl ? (
+              <AvatarImage src={displayAvatarUrl} alt={displayName || displayEmail || "User"} />
             ) : null}
             <AvatarFallback className="bg-gradient-to-br from-emerald-400 to-blue-500 text-white font-semibold text-sm">
               {userInitials === "?" ? <Users className="h-5 w-5" /> : userInitials}
@@ -226,10 +242,10 @@ export function Sidebar({ className }: SidebarProps) {
           {!collapsed && (
             <div className="flex-1 min-w-0 animate-slide-in-right">
               <p className="text-sm font-semibold truncate text-slate-700 dark:text-slate-200">
-                {user?.name || "User"}
+                {displayName || displayEmail?.split("@")[0] || "User"}
               </p>
               <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
-                {user?.email || "user@example.com"}
+                {displayEmail || "user@example.com"}
               </p>
             </div>
           )}

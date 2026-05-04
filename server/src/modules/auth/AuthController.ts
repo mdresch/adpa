@@ -248,6 +248,9 @@ export class AuthController {
 
       res.json({ success: true, user });
     } catch (error: any) {
+      if (error?.code === "DB_CIRCUIT_OPEN") {
+        return res.status(503).json({ error: "Service temporarily unavailable" });
+      }
       log.error(`GetMe error for user ${userId}:`, {
         message: error.message,
         stack: error.stack
