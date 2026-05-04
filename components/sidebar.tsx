@@ -79,7 +79,7 @@ export function Sidebar({ className }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false)
   const [pendingCount, setPendingCount] = useState(0)
   const pathname = usePathname()
-  const { user, firebaseSession, logout } = useAuth()
+  const { user, firebaseSession, token, logout } = useAuth()
 
   const displayName = user?.name || firebaseSession?.displayName || null
   const displayEmail = user?.email || firebaseSession?.email || null
@@ -170,8 +170,9 @@ export function Sidebar({ className }: SidebarProps) {
           {navigation
             .filter((item: NavItem) => {
               // Hide admin-only items for non-admin/super-admin users
-              // Super admin has all admin privileges
-              const isAdminOrSuperAdmin = user?.role === "admin" || user?.role === "super_admin"
+              // Super admin has all admin privileges (match server: case-insensitive role)
+              const r = user?.role?.toLowerCase()
+              const isAdminOrSuperAdmin = r === "admin" || r === "super_admin"
               if (item.adminOnly && !isAdminOrSuperAdmin) {
                 return false
               }

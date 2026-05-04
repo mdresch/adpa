@@ -1,6 +1,6 @@
 "use client"
 
-import React, { createContext, useContext, useEffect, useState, ReactNode } from "react"
+import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import { apiClient, User } from "@/lib/api"
 import { toast } from "@/lib/notify"
@@ -73,21 +73,24 @@ export function AuthProvider({ children }: AuthProviderProps) {
     })
   }
 
-  // Check if user is authenticated
-  const isAuthenticated = !!user
+  // True when ADPA profile is loaded, or Firebase session + API token exist (profile may still be loading / retrying).
+  const isAuthenticated = !!user || (!loading && !!token && !!firebaseSession)
 
-  // Check if user has specific permission
-  const hasPermission = (permission: string): boolean => {
-    if (!user || !user.permissions) return false
-    return user.permissions[permission] === true
-  }
-
-  // Check if user has specific role(s)
-  const hasRole = (roles: string | string[]): boolean => {
+  // Align with server `requirePermission`: admins implicitly have all permissions (UI only; API still enforces).
+  const hasPermission = useCallback((permission: string): boolean => {
     if (!user) return false
-    const roleArray = Array.isArray(roles) ? roles : [roles]
-    return roleArray.includes(user.role)
-  }
+    const r = (user.role || "").toLowerCase()
+    if (r === "super_admin" || r === "admin") return true
+    if (!user.permissions) return false
+    return user.permissions[permission] === true
+  }, [user])
+
+  const hasRole = useCallback((roles: string | string[]): boolean => {
+    if (!user) return false
+    const r = (user.role || "").toLowerCase()
+    const roleArray = (Array.isArray(roles) ? roles : [roles]).map((x) => x.toLowerCase())
+    return roleArray.includes(r)
+  }, [user])
 
   // Helper function to validate JWT token format
   const isValidTokenFormat = (token: string): boolean => {
@@ -168,6 +171,41 @@ export function AuthProvider({ children }: AuthProviderProps) {
     // Cleanup subscription
     return () => unsubscribe()
   }, [])
+
+  // If Firebase + API token exist but `/auth/me` failed transiently, retry so role/permissions populate (sidebar, analytics).
+  useEffect(() => {
+    if (!auth?.app) return
+    if (loading) return
+    if (user) return
+    if (!token || !firebaseSession) return
+
+    let cancelled = false
+    let attempt = 0
+    const maxAttempts = 8
+
+    const schedule = () => {
+      if (cancelled || attempt >= maxAttempts) return
+      const delay = Math.min(3500 * (attempt + 1), 20000)
+      setTimeout(async () => {
+        if (cancelled) return
+        attempt += 1
+        try {
+          const u = await apiClient.getCurrentUser()
+          if (!cancelled) {
+            setUser(u)
+            apiClient.connectWebSocket()
+          }
+        } catch {
+          if (!cancelled) schedule()
+        }
+      }, delay)
+    }
+
+    schedule()
+    return () => {
+      cancelled = true
+    }
+  }, [loading, user, token, firebaseSession])
 
   // Helper to set cookie
   const setCookie = (name: string, value: string, days: number) => {
@@ -324,10 +362,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // Refresh user data
   const refreshUser = async () => {
     try {
-      if (isAuthenticated) {
-        const currentUser = await apiClient.getCurrentUser()
-        setUser(currentUser)
-      }
+      if (!token) return
+      const currentUser = await apiClient.getCurrentUser()
+      setUser(currentUser)
     } catch (error) {
       console.error("Failed to refresh user:", error)
       // If refresh fails, user might be logged out
