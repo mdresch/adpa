@@ -9,6 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/contexts/AuthContext"
 import { apiClient } from "@/lib/api"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   LayoutDashboard,
   Settings,
@@ -79,6 +80,14 @@ export function Sidebar({ className }: SidebarProps) {
   const [pendingCount, setPendingCount] = useState(0)
   const pathname = usePathname()
   const { user, logout } = useAuth()
+
+  const userInitials =
+    user?.name
+      ?.split(/\s+/)
+      .map((w) => w[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2) || "?"
 
   useEffect(() => {
     if (user) {
@@ -206,9 +215,14 @@ export function Sidebar({ className }: SidebarProps) {
       {/* User Profile */}
       <div className="p-4 border-t border-slate-200 dark:border-slate-700 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm">
         <div className={cn("flex items-center space-x-3 transition-all duration-200", collapsed && "justify-center")}>
-          <div className="w-10 h-10 bg-gradient-to-br from-emerald-400 to-blue-500 rounded-full flex items-center justify-center shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105">
-            <Users className="h-5 w-5 text-white" />
-          </div>
+          <Avatar className="h-10 w-10 shadow-lg ring-2 ring-white/30 dark:ring-slate-700/50">
+            {user?.avatar_url ? (
+              <AvatarImage src={user.avatar_url} alt={user?.name || "User"} />
+            ) : null}
+            <AvatarFallback className="bg-gradient-to-br from-emerald-400 to-blue-500 text-white font-semibold text-sm">
+              {userInitials === "?" ? <Users className="h-5 w-5" /> : userInitials}
+            </AvatarFallback>
+          </Avatar>
           {!collapsed && (
             <div className="flex-1 min-w-0 animate-slide-in-right">
               <p className="text-sm font-semibold truncate text-slate-700 dark:text-slate-200">
