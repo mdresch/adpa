@@ -267,7 +267,7 @@
     "next": "16.2.3",
     "node-html-parser": "^7.0.2",
     "ollama-ai-provider-v2": "^3.3.1",
-    "postcss": "^8.4.47",
+    "postcss": "^8.5.10",
     "postgres": "^3.4.8",
     "react-textarea-autosize": "^8.5.9",
     "rehype-external-links": "^3.0.0",
