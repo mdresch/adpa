@@ -304,6 +304,9 @@
     },
     "patchedDependencies": {
       "zod@3.24.1": "patches/zod@3.24.1.patch"
-    }
+    },
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }
