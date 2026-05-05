@@ -33,6 +33,7 @@ import { CacheService } from '@/lib/kv'
 import { createHash } from 'crypto'
 import type { StreamContext } from './helpers/types'
 import { BaseStreamConfig } from './types'
+import { getMaxStepsForMode } from '../utils/search-mode-steps'
 
 // ... existing code ...
 
@@ -165,10 +166,12 @@ export async function createChatStreamResponse(
             const cached = await CacheService.get<UIMessage>(`chat:cache:${chatId}:${cacheKey}`)
             if (cached) {
                 perfLog('Cache hit — returning cached response')
-                // Replay the cached response as a one-shot UI message stream
+                // Replay the cached UIMessage as a one-shot stream response.
+                // The SDK does not expose a UIMessage → UIMessageStreamPart converter,
+                // so we cast through 'unknown' to satisfy the writer.write signature.
                 const cachedStream = createUIMessageStream<UIMessage>({
-                    execute: ({ writer }) => {
-                        writer.write(cached as any)
+                    execute: ({ writer: cacheWriter }) => {
+                        cacheWriter.write(cached as unknown as Parameters<typeof cacheWriter.write>[0])
                     }
                 })
                 return createUIMessageStreamResponse({ stream: cachedStream, consumeSseStream: consumeStream })
@@ -364,9 +367,6 @@ export async function createChatStreamResponse(
                         // Consume and map the stream to the UI
                         result.consumeStream()
 
-                        // Determine the step budget for this mode so the UI can render a progress indicator
-                        const maxStepsForMode = searchMode === 'quick' ? 20 : searchMode === 'deep' ? 100 : 50
-
                         writer.merge(
                             result.toUIMessageStream({
                                 messageMetadata: ({ part }: any) => {
@@ -375,7 +375,7 @@ export async function createChatStreamResponse(
                                             traceId: parentTraceId,
                                             searchMode,
                                             modelId: currentModelId,
-                                            maxSteps: maxStepsForMode
+                                            maxSteps: getMaxStepsForMode(searchMode)
                                         }
                                     }
                                 }

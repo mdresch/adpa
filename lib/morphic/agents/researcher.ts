@@ -22,6 +22,7 @@ import { createTodoTools } from '../tools/todo'
 import { createRunProjectAgentTool } from '../tools/run-project-agent'
 import { getModel } from '../utils/registry'
 import { isTracingEnabled } from '@/lib/morphic/utils/telemetry'
+import { getMaxStepsForMode } from '../utils/search-mode-steps'
 
 import {
     ADAPTIVE_MODE_PROMPT,
@@ -121,7 +122,7 @@ export function createResearcher({
                 )
                 systemPrompt = QUICK_MODE_PROMPT
                 activeToolsList = ['search', 'fetch']
-                maxSteps = 20
+                maxSteps = getMaxStepsForMode('quick')
                 searchTool = wrapSearchToolForQuickMode(originalSearchTool, model)
                 break
 
@@ -136,10 +137,10 @@ export function createResearcher({
                 if (writer && 'todoWrite' in todoTools) {
                     activeToolsList.push('todoWrite')
                 }
+                maxSteps = getMaxStepsForMode('deep')
                 console.log(
-                    `[Researcher] Deep Research mode: maxSteps=100, modelType=${modelType}, tools=[${activeToolsList.join(', ')}]`
+                    `[Researcher] Deep Research mode: maxSteps=${maxSteps}, modelType=${modelType}, tools=[${activeToolsList.join(', ')}]`
                 )
-                maxSteps = 100
                 searchTool = originalSearchTool
                 break
 
@@ -157,10 +158,10 @@ export function createResearcher({
                 if (writer && 'todoWrite' in todoTools && modelType === 'quality') {
                     activeToolsList.push('todoWrite')
                 }
+                maxSteps = getMaxStepsForMode('adaptive')
                 console.log(
-                    `[Researcher] Adaptive mode: maxSteps=50, modelType=${modelType}, tools=[${activeToolsList.join(', ')}]`
+                    `[Researcher] Adaptive mode: maxSteps=${maxSteps}, modelType=${modelType}, tools=[${activeToolsList.join(', ')}]`
                 )
-                maxSteps = 50
                 searchTool = originalSearchTool
                 break
         }

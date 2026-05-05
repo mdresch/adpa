@@ -155,6 +155,8 @@ export const createRagSearchTool = (userId: string) => tool({
                 ]).toArray()
             ])
 
+            // MongoDB aggregation results are `Document[]` at runtime; casting to RankedItem[] is safe
+            // because both pipelines project the same fields (_id, content, documentId, metadata).
             const vectorResults: RankedItem[] = vectorOutcome.status === 'fulfilled' ? vectorOutcome.value as RankedItem[] : []
             const textResults: RankedItem[] = textOutcome.status === 'fulfilled' ? textOutcome.value as RankedItem[] : []
 
@@ -192,6 +194,12 @@ const FORBIDDEN_SQL_KEYWORDS = [
     'call', 'merge', 'replace', 'upsert', 'vacuum', 'analyze'
 ]
 
+// Pre-compile regex patterns at module load time to avoid repeated compilation overhead
+const FORBIDDEN_KEYWORD_PATTERNS = FORBIDDEN_SQL_KEYWORDS.map(kw => ({
+    keyword: kw,
+    pattern: new RegExp(`\\b${kw}\\b`)
+}))
+
 // Forbidden table/schema prefixes that expose system internals
 const FORBIDDEN_TABLE_PREFIXES = ['pg_', 'information_schema']
 
@@ -217,9 +225,9 @@ function validateReadOnlySql(query: string): string | null {
         return 'SQL comments are not allowed.'
     }
 
-    // Block destructive keywords using whole-word matching
-    for (const keyword of FORBIDDEN_SQL_KEYWORDS) {
-        if (new RegExp(`\\b${keyword}\\b`).test(lower)) {
+    // Block destructive keywords using whole-word matching (patterns are pre-compiled at module load)
+    for (const { keyword, pattern } of FORBIDDEN_KEYWORD_PATTERNS) {
+        if (pattern.test(lower)) {
             return `Forbidden SQL keyword detected: '${keyword}'.`
         }
     }
