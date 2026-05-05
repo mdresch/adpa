@@ -342,7 +342,7 @@ export const aiModelConfig = pgTable(
             .$defaultFn(() => generateId()),
         searchMode: varchar('search_mode', {
             length: VARCHAR_LENGTH,
-            enum: ['quick', 'adaptive', 'utility', 'planning']
+            enum: ['quick', 'adaptive', 'deep', 'utility', 'planning']
         }).notNull(),
         modelType: varchar('model_type', {
             length: VARCHAR_LENGTH,

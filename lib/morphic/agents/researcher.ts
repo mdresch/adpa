@@ -14,7 +14,8 @@ import { type RAGScope } from '@/lib/morphic/streaming/types'
 
 import { createFileSearchTool } from '../tools/file-search'
 import { fetchTool } from '../tools/fetch'
-import { createDbQueryTool, createRagSearchTool } from '../tools/knowledge'
+import { createDbQueryTool, createRagSearchTool, createSearchPriorResearchTool } from '../tools/knowledge'
+import { createParallelSearchTool } from '../tools/parallel-search'
 import { createQuestionTool } from '../tools/question'
 import { createSearchTool } from '../tools/search'
 import { createTodoTools } from '../tools/todo'
@@ -24,6 +25,7 @@ import { isTracingEnabled } from '@/lib/morphic/utils/telemetry'
 
 import {
     ADAPTIVE_MODE_PROMPT,
+    DEEP_RESEARCH_MODE_PROMPT,
     QUICK_MODE_PROMPT
 } from './prompts/search-mode-prompts'
 
@@ -101,6 +103,7 @@ export function createResearcher({
 
         // Create model-specific tools with proper typing
         const originalSearchTool = createSearchTool(model)
+        const parallelSearchTool = createParallelSearchTool()
         const askQuestionTool = createQuestionTool(model)
         // Todo tools dynamically need a writer in original Morphic
         const todoTools = writer ? createTodoTools() : {}
@@ -120,6 +123,24 @@ export function createResearcher({
                 activeToolsList = ['search', 'fetch']
                 maxSteps = 20
                 searchTool = wrapSearchToolForQuickMode(originalSearchTool, model)
+                break
+
+            case 'deep':
+                systemPrompt = DEEP_RESEARCH_MODE_PROMPT
+                activeToolsList = [
+                    'search', 'parallelSearch', 'fetch',
+                    'runProjectAgent', 'askQuestion',
+                    'ragSearch', 'dbQuery', 'fileSearch', 'searchPriorResearch'
+                ]
+                // Todo tools always enabled for deep research (structured planning is mandatory)
+                if (writer && 'todoWrite' in todoTools) {
+                    activeToolsList.push('todoWrite')
+                }
+                console.log(
+                    `[Researcher] Deep Research mode: maxSteps=100, modelType=${modelType}, tools=[${activeToolsList.join(', ')}]`
+                )
+                maxSteps = 100
+                searchTool = originalSearchTool
                 break
 
             case 'adaptive':
@@ -145,11 +166,14 @@ export function createResearcher({
         }
 
         // Initialize knowledge tools if enabled and user is present
+        // Deep Research mode always enables knowledge tools when userId is available
+        const enableKnowledge = knowledgeEnabled || searchMode === 'deep'
         let knowledgeTools = {}
-        if (knowledgeEnabled && userId) {
+        if (enableKnowledge && userId) {
             knowledgeTools = {
                 ragSearch: createRagSearchTool(userId),
-                dbQuery: createDbQueryTool(userId)
+                dbQuery: createDbQueryTool(userId),
+                searchPriorResearch: createSearchPriorResearchTool(userId)
             }
         }
 
@@ -167,6 +191,8 @@ export function createResearcher({
         // Build tools object with proper typing
         const tools = {
             search: searchTool,
+            parallelSearch: parallelSearchTool,
+            parallel_search: parallelSearchTool,
             fetch: fetchTool,
             askQuestion: askQuestionTool,
             ask_question: askQuestionTool,
@@ -182,15 +208,18 @@ export function createResearcher({
         if (tools.todoWrite) tools.todo_write = tools.todoWrite
         if (tools.ragSearch) tools.rag_search = tools.ragSearch
         if (tools.dbQuery) tools.db_query = tools.dbQuery
+        if (tools.searchPriorResearch) tools.search_prior_research = tools.searchPriorResearch
 
         // Update activeToolsList with aliases
         const aliases: Record<string, string> = {
             askQuestion: 'ask_question',
             runProjectAgent: 'run_project_agent',
+            parallelSearch: 'parallel_search',
             fileSearch: 'file_search',
             todoWrite: 'todo_write',
             ragSearch: 'rag_search',
-            dbQuery: 'db_query'
+            dbQuery: 'db_query',
+            searchPriorResearch: 'search_prior_research'
         }
 
         activeToolsList.forEach(toolName => {

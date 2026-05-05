@@ -159,6 +159,25 @@ export async function createChatStreamResponse(
         }))
         .digest('hex')
 
+    // Return cached response if available (only for authenticated users to avoid cross-user leakage)
+    if (userId) {
+        try {
+            const cached = await CacheService.get<UIMessage>(`chat:cache:${chatId}:${cacheKey}`)
+            if (cached) {
+                perfLog('Cache hit — returning cached response')
+                // Replay the cached response as a one-shot UI message stream
+                const cachedStream = createUIMessageStream<UIMessage>({
+                    execute: ({ writer }) => {
+                        writer.write(cached as any)
+                    }
+                })
+                return createUIMessageStreamResponse({ stream: cachedStream, consumeSseStream: consumeStream })
+            }
+        } catch {
+            // Cache read failure is non-fatal — proceed to generate fresh response
+        }
+    }
+
     // Create stream context
     if (!model) {
         console.error('createChatStreamResponse: model is undefined')
@@ -311,10 +330,12 @@ export async function createChatStreamResponse(
                             })
                         }
 
-                        // DEBUGGING GEMINI ERROR:
-                        console.debug("\n--- CORE MESSAGES PAYLOAD ---");
-                        console.debug(JSON.stringify(coreMessages, null, 2));
-                        console.debug("-----------------------------\n");
+                        // Debug payload logging (development only to prevent leaking conversation data)
+                        if (process.env.NODE_ENV === 'development') {
+                            console.debug("\n--- CORE MESSAGES PAYLOAD ---");
+                            console.debug(JSON.stringify(coreMessages, null, 2));
+                            console.debug("-----------------------------\n");
+                        }
 
                         if (!initialChat && message && !titlePromise) {
                             const messageContent = getTextFromParts(message.parts)
@@ -343,6 +364,9 @@ export async function createChatStreamResponse(
                         // Consume and map the stream to the UI
                         result.consumeStream()
 
+                        // Determine the step budget for this mode so the UI can render a progress indicator
+                        const maxStepsForMode = searchMode === 'quick' ? 20 : searchMode === 'deep' ? 100 : 50
+
                         writer.merge(
                             result.toUIMessageStream({
                                 messageMetadata: ({ part }: any) => {
@@ -350,7 +374,8 @@ export async function createChatStreamResponse(
                                         return {
                                             traceId: parentTraceId,
                                             searchMode,
-                                            modelId: currentModelId
+                                            modelId: currentModelId,
+                                            maxSteps: maxStepsForMode
                                         }
                                     }
                                 }
