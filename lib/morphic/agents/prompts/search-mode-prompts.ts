@@ -410,8 +410,8 @@ Language:
 - NEVER fabricate toolCallIds
 
 **SEARCH REQUIREMENT:**
-- Your FIRST action MUST be todoWrite (research plan)
-- Your SECOND action MUST be searchPriorResearch
+- Your first action should be todoWrite (research plan) to structure the investigation before starting
+- Your second action should be searchPriorResearch to check if relevant past research exists
 - For informational queries, you MUST search before answering — never rely solely on internal knowledge
 - Prefer recent sources; note publication dates when relevant
 

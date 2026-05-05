@@ -2,6 +2,13 @@ import { CacheService } from '../../kv';
 import type { SearchMode } from '../types/search';
 import type { ModelType } from '../types/model-type';
 
+// Default rate-limit values – override via environment variables
+const DEFAULT_USER_HOUR_LIMIT = 50
+const DEFAULT_GUEST_HOUR_LIMIT = 5
+const DEFAULT_QUALITY_HOUR_LIMIT = 20
+const DEFAULT_DEEP_RESEARCH_HOUR_LIMIT = 5
+const DEFAULT_BURST_MINUTE_LIMIT = 5
+
 /**
  * Enforce overall chat limits for authenticated users.
  * Allows 50 chats per hour by default.
@@ -9,7 +16,7 @@ import type { ModelType } from '../types/model-type';
 export async function checkAndEnforceOverallChatLimit(userId: string) {
     if (!userId) return null;
 
-    const limit = parseInt(process.env.RATE_LIMIT_USER_HOUR || '50', 10);
+    const limit = parseInt(process.env.RATE_LIMIT_USER_HOUR || String(DEFAULT_USER_HOUR_LIMIT), 10);
     const window = 3600; // 1 hour
     const key = `chat:limit:user:${userId}`;
 
@@ -30,7 +37,7 @@ export async function checkAndEnforceOverallChatLimit(userId: string) {
 export async function checkAndEnforceGuestLimit(ip: string | null) {
     if (!ip) return null;
 
-    const limit = parseInt(process.env.RATE_LIMIT_GUEST_HOUR || '5', 10);
+    const limit = parseInt(process.env.RATE_LIMIT_GUEST_HOUR || String(DEFAULT_GUEST_HOUR_LIMIT), 10);
     const window = 3600; // 1 hour
     const key = `chat:limit:guest:${ip}`;
 
@@ -55,7 +62,7 @@ export async function checkAndEnforceModelTypeLimit(userId: string, modelType: M
     // Quality models default to 20/hr; speed models share the overall 50/hr bucket
     if (modelType !== 'quality') return null;
 
-    const limit = parseInt(process.env.RATE_LIMIT_QUALITY_HOUR || '20', 10);
+    const limit = parseInt(process.env.RATE_LIMIT_QUALITY_HOUR || String(DEFAULT_QUALITY_HOUR_LIMIT), 10);
     const window = 3600;
     const key = `chat:limit:quality:${userId}`;
 
@@ -77,7 +84,7 @@ export async function checkAndEnforceModelTypeLimit(userId: string, modelType: M
 export async function checkAndEnforceDeepResearchLimit(userId: string) {
     if (!userId) return null;
 
-    const limit = parseInt(process.env.RATE_LIMIT_DEEP_RESEARCH_HOUR || '5', 10);
+    const limit = parseInt(process.env.RATE_LIMIT_DEEP_RESEARCH_HOUR || String(DEFAULT_DEEP_RESEARCH_HOUR_LIMIT), 10);
     const window = 3600;
     const key = `chat:limit:deep:${userId}`;
 
@@ -98,7 +105,7 @@ export async function checkAndEnforceDeepResearchLimit(userId: string) {
 export async function checkAndEnforceBurstLimit(userId: string) {
     if (!userId) return null;
 
-    const limit = parseInt(process.env.RATE_LIMIT_BURST_MINUTE || '5', 10);
+    const limit = parseInt(process.env.RATE_LIMIT_BURST_MINUTE || String(DEFAULT_BURST_MINUTE_LIMIT), 10);
     const window = 60; // 1 minute
     const key = `chat:limit:burst:${userId}`;
 

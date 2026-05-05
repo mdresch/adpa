@@ -167,8 +167,10 @@ export async function createChatStreamResponse(
             if (cached) {
                 perfLog('Cache hit — returning cached response')
                 // Replay the cached UIMessage as a one-shot stream response.
-                // The SDK does not expose a UIMessage → UIMessageStreamPart converter,
-                // so we cast through 'unknown' to satisfy the writer.write signature.
+                // The AI SDK does not expose a direct UIMessage → UIMessageStreamPart converter.
+                // The cast through 'unknown' bridges the structural mismatch; a proper fix would
+                // require either storing raw SSE bytes in the cache or using an SDK utility once
+                // one is available in future SDK versions.
                 const cachedStream = createUIMessageStream<UIMessage>({
                     execute: ({ writer: cacheWriter }) => {
                         cacheWriter.write(cached as unknown as Parameters<typeof cacheWriter.write>[0])
