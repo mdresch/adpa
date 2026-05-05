@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PageTransition } from "@/components/page-transition"
@@ -112,6 +113,7 @@ const topUsersData = [
 export default function AnalyticsPage() {
   const { user, hasPermission } = useAuth()
   const { isConnected } = useWebSocket()
+  const canViewSystemAnalytics = hasPermission("analytics.system")
 
   const [timeRange, setTimeRange] = useState<"7d" | "30d" | "90d" | "1y">("7d")
   const [analyticsData, setAnalyticsData] = useState<{
@@ -139,10 +141,8 @@ export default function AnalyticsPage() {
     try {
       setLoading(true)
 
-      // Only attempt to fetch system analytics if user is admin
-      if (!hasPermission('analytics.system')) {
-        console.log('User does not have analytics.system permission, using mock data')
-        setAnalyticsData(null) // Will fall back to mock data
+      if (!canViewSystemAnalytics) {
+        setAnalyticsData(null)
         return
       }
 
@@ -174,7 +174,7 @@ export default function AnalyticsPage() {
   useEffect(() => {
     void fetchAnalytics()
     void fetchSearchAnalytics()
-  }, [timeRange, hasPermission])
+  }, [timeRange, user?.id, canViewSystemAnalytics])
 
   // Stats with real data from API (fallback to mock if unavailable)
   const stats = {
@@ -198,28 +198,6 @@ export default function AnalyticsPage() {
     performance: -2.1,
   }
 
-  if (!hasPermission("analytics.system")) {
-    return (
-      <PageTransition>
-        <div className="flex h-screen bg-background">
-          <Sidebar />
-          <div className="flex-1 flex flex-col overflow-hidden">
-            <Header />
-            <main className="flex-1 overflow-y-auto p-6">
-              <div className="flex items-center justify-center h-96">
-                <div className="text-center">
-                  <BarChart3 className="h-12 w-12 text-red-500 mx-auto mb-4" />
-                  <h2 className="text-xl font-semibold mb-2">Access Denied</h2>
-                  <p className="text-muted-foreground">You don't have permission to view analytics.</p>
-                </div>
-              </div>
-            </main>
-          </div>
-        </div>
-      </PageTransition>
-    )
-  }
-
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/30 dark:from-slate-900 dark:via-blue-900/20 dark:to-purple-900/20">
       <Sidebar />
@@ -229,6 +207,17 @@ export default function AnalyticsPage() {
           <div className="container mx-auto px-6 py-8">
             <PageTransition>
               <AnimatedLayout className="space-y-8">
+                {!canViewSystemAnalytics && (
+                  <Alert>
+                    <BarChart3 className="h-4 w-4" />
+                    <AlertTitle>Sample analytics view</AlertTitle>
+                    <AlertDescription>
+                      Live system metrics require the <code className="text-xs">analytics.system</code> permission
+                      (typically administrators). Charts below use illustrative data; API calls for restricted metrics
+                      are skipped.
+                    </AlertDescription>
+                  </Alert>
+                )}
                 {/* Header */}
                 <div className="flex flex-col space-y-4 md:flex-row md:items-center md:justify-between md:space-y-0">
                   <div>

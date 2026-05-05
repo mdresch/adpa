@@ -1,6 +1,6 @@
 "use client"
 
-import React, { createContext, useContext, useEffect, useState, ReactNode } from "react"
+import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import { apiClient, User } from "@/lib/api"
 import { toast } from "@/lib/notify"
@@ -15,9 +15,19 @@ import {
   User as FirebaseUser
 } from "firebase/auth"
 import { auth } from "@/lib/firebase"
+import { isPrivilegedAppRole, normalizeAppRole } from "@/lib/auth-roles"
+
+/** Firebase account fields for UI when the ADPA profile API has not loaded yet (or failed). */
+export type FirebaseSessionProfile = {
+  email: string | null
+  displayName: string | null
+  photoURL: string | null
+}
 
 interface AuthContextType {
   user: User | null
+  /** Present while Firebase has a session; use for display fallbacks when `user` is still null. */
+  firebaseSession: FirebaseSessionProfile | null
   loading: boolean
   login: (email: string, password: string, redirect?: string) => Promise<void>
   loginWithGoogle: (redirect?: string) => Promise<void>
@@ -47,25 +57,40 @@ interface AuthProviderProps {
 
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null)
+  const [firebaseSession, setFirebaseSession] = useState<FirebaseSessionProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [token, setToken] = useState<string | null>(null)
   const router = useRouter()
 
-  // Check if user is authenticated
-  const isAuthenticated = !!user
-
-  // Check if user has specific permission
-  const hasPermission = (permission: string): boolean => {
-    if (!user || !user.permissions) return false
-    return user.permissions[permission] === true
+  const syncFirebaseSessionProfile = (firebaseUser: FirebaseUser | null) => {
+    if (!firebaseUser) {
+      setFirebaseSession(null)
+      return
+    }
+    setFirebaseSession({
+      email: firebaseUser.email ?? null,
+      displayName: firebaseUser.displayName ?? null,
+      photoURL: firebaseUser.photoURL ?? null,
+    })
   }
 
-  // Check if user has specific role(s)
-  const hasRole = (roles: string | string[]): boolean => {
+  // True when ADPA profile is loaded, or Firebase session + API token exist (profile may still be loading / retrying).
+  const isAuthenticated = !!user || (!loading && !!token && !!firebaseSession)
+
+  // Align with server `requirePermission`: admins implicitly have all permissions (UI only; API still enforces).
+  const hasPermission = useCallback((permission: string): boolean => {
     if (!user) return false
-    const roleArray = Array.isArray(roles) ? roles : [roles]
-    return roleArray.includes(user.role)
-  }
+    if (isPrivilegedAppRole(user.role)) return true
+    if (!user.permissions) return false
+    return user.permissions[permission] === true
+  }, [user])
+
+  const hasRole = useCallback((roles: string | string[]): boolean => {
+    if (!user) return false
+    const r = normalizeAppRole(user.role)
+    const roleArray = (Array.isArray(roles) ? roles : [roles]).map((x) => normalizeAppRole(x))
+    return roleArray.includes(r)
+  }, [user])
 
   // Helper function to validate JWT token format
   const isValidTokenFormat = (token: string): boolean => {
@@ -87,6 +112,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
       if (firebaseUser) {
+        syncFirebaseSessionProfile(firebaseUser)
         try {
           // Get the ID token from Firebase
           const idToken = await getIdToken(firebaseUser)
@@ -112,7 +138,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
               // This handles cases where the browser has a cached Firebase session
               // but the backend is temporarily unavailable or being redeployed.
               const status = profileError?.status || profileError?.response?.status
-              if (status >= 500 || !status) {
+              if (status === 503) {
+                console.warn(
+                  "[Auth] Backend temporarily unavailable (503) during session restore; keeping Firebase session."
+                )
+              } else if (status >= 500 || !status) {
                 console.warn("[Auth] Backend unavailable during session restore, clearing auth state silently.")
                 apiClient.clearToken()
                 removeCookie('auth_token')
@@ -129,6 +159,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       } else {
         // User is signed out
         setUser(null)
+        syncFirebaseSessionProfile(null)
         setToken(null)
         apiClient.clearToken()
         removeCookie('auth_token')
@@ -140,6 +171,41 @@ export function AuthProvider({ children }: AuthProviderProps) {
     // Cleanup subscription
     return () => unsubscribe()
   }, [])
+
+  // If Firebase + API token exist but `/auth/me` failed transiently, retry so role/permissions populate (sidebar, analytics).
+  useEffect(() => {
+    if (!auth?.app) return
+    if (loading) return
+    if (user) return
+    if (!token || !firebaseSession) return
+
+    let cancelled = false
+    let attempt = 0
+    const maxAttempts = 8
+
+    const schedule = () => {
+      if (cancelled || attempt >= maxAttempts) return
+      const delay = Math.min(3500 * (attempt + 1), 20000)
+      setTimeout(async () => {
+        if (cancelled) return
+        attempt += 1
+        try {
+          const u = await apiClient.getCurrentUser()
+          if (!cancelled) {
+            setUser(u)
+            apiClient.connectWebSocket()
+          }
+        } catch {
+          if (!cancelled) schedule()
+        }
+      }, delay)
+    }
+
+    schedule()
+    return () => {
+      cancelled = true
+    }
+  }, [loading, user, token, firebaseSession])
 
   // Helper to set cookie
   const setCookie = (name: string, value: string, days: number) => {
@@ -275,6 +341,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       
       // Local state cleanup (also handled by onAuthStateChanged, but good to be explicit)
       setUser(null)
+      setFirebaseSession(null)
       setToken(null)
       apiClient.clearToken()
       removeCookie('auth_token')
@@ -284,6 +351,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     } catch (error) {
       console.error("Logout failed:", error)
       setUser(null)
+      setFirebaseSession(null)
       setToken(null)
       apiClient.clearToken()
       removeCookie('auth_token')
@@ -294,10 +362,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // Refresh user data
   const refreshUser = async () => {
     try {
-      if (isAuthenticated) {
-        const currentUser = await apiClient.getCurrentUser()
-        setUser(currentUser)
-      }
+      if (!token) return
+      const currentUser = await apiClient.getCurrentUser()
+      setUser(currentUser)
     } catch (error) {
       console.error("Failed to refresh user:", error)
       // If refresh fails, user might be logged out
@@ -328,6 +395,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const value: AuthContextType = {
     user,
+    firebaseSession,
     loading,
     login,
     loginWithGoogle,
