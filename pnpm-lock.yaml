@@ -8,7 +8,7 @@ overrides:
   firebase: 11.10.0
   xlsx: https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz
   qs: ^6.14.1
-  lodash: ^4.17.23
+  lodash: ^4.18.1
   js-yaml: ^4.1.1
   body-parser: ^1.20.3
   jws: ^4.0.1
@@ -436,8 +436,8 @@ importers:
         specifier: ^0.5.19
         version: 0.5.19(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.55.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@1.26.0(@opentelemetry/api@1.9.0))(openai@6.21.0(ws@8.19.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.1(patch_hash=99447639c57a97aecf6e33f715d29c14e2e6503bd04dd97ce56ab473d578dc52)))(ws@8.19.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))
       lodash:
-        specifier: ^4.17.23
-        version: 4.17.23
+        specifier: ^4.18.1
+        version: 4.18.1
       lucide-react:
         specifier: ^0.575.0
         version: 0.575.0(react@18.3.1)
@@ -974,8 +974,8 @@ importers:
         specifier: ^3.38.6
         version: 3.38.6
       lodash:
-        specifier: ^4.17.23
-        version: 4.17.23
+        specifier: ^4.18.1
+        version: 4.18.1
       mammoth:
         specifier: ^1.11.0
         version: 1.12.0
@@ -9863,9 +9863,6 @@ packages:
 
   lodash.once@4.1.1:
     resolution: {integrity: sha512-Sb487aTOCr9drQVL8pIxOzVhafOjZN9UU54hiN8PU3uAiSV7lx1yYNpbNmex2PK6dSJoNTSJUUswT651yww3Mg==}
-
-  lodash@4.17.23:
-    resolution: {integrity: sha512-LgVTMpQtIopCi79SJeDiP0TfWi5CNEc/L/aRdTh3yIvmZXTnheWpKjSZhnvMl8iXbC1tFg9gdHHDMLoV7CnG+w==}
 
   lodash@4.18.1:
     resolution: {integrity: sha512-dMInicTPVE8d1e5otfwmmjlxkZoUpiVLwyeTdUsi/Caj/gfzzblBcCE5sRHV/AsjuCmxWrte2TNGSYuCeCq+0Q==}
@@ -19266,7 +19263,7 @@ snapshots:
       graceful-fs: 4.2.11
       is-stream: 2.0.1
       lazystream: 1.0.1
-      lodash: 4.17.23
+      lodash: 4.18.1
       normalize-path: 3.0.0
       readable-stream: 4.7.0
 
@@ -20943,7 +20940,7 @@ snapshots:
 
   express-validator@7.3.1:
     dependencies:
-      lodash: 4.17.23
+      lodash: 4.18.1
       validator: 13.15.26
 
   express@4.22.1:
@@ -23218,8 +23215,6 @@ snapshots:
 
   lodash.once@4.1.1: {}
 
-  lodash@4.17.23: {}
-
   lodash@4.18.1: {}
 
   log-symbols@4.1.0:
@@ -24841,7 +24836,7 @@ snapshots:
       classnames: 2.5.1
       diff-match-patch: 1.0.5
       gitdiff-parser: 0.3.1
-      lodash: 4.17.23
+      lodash: 4.18.1
       react: 18.3.1
       shallow-equal: 3.1.0
       warning: 4.0.3
@@ -25500,7 +25495,7 @@ snapshots:
       debug: 4.4.3(supports-color@5.5.0)
       dottie: 2.0.7
       inflection: 1.13.4
-      lodash: 4.17.23
+      lodash: 4.18.1
       moment: 2.30.1
       moment-timezone: 0.5.48
       pg-connection-string: 2.9.1
