@@ -79,9 +79,18 @@ async function proxyRequest(request: NextRequest, pathSegments: string[]) {
       }
     }
     
+    const responseHeaders = new Headers(response.headers);
+    // Prevent content-decoding errors when proxying: fetch() may already decode
+    // the backend payload, so forwarding original encoding/length can corrupt
+    // the browser decode pipeline.
+    responseHeaders.delete('content-encoding');
+    responseHeaders.delete('content-length');
+    responseHeaders.delete('transfer-encoding');
+    responseHeaders.delete('connection');
+
     return new NextResponse(data, {
       status: response.status,
-      headers: response.headers,
+      headers: responseHeaders,
     });
   } catch (error: any) {
     console.error('[SmartProxy] Connectivity Failure:', error.message);

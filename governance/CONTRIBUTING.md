@@ -156,7 +156,31 @@ Failure → rollback.
 
 ***
 
-## 4. Commit Certification
+### 🟢 Gate 6 — PR Semantic Audit (DRACO)
+
+All Pull Requests targeting `main` or `develop` must pass a semantic integrity audit.
+- **Trigger**: Automatic on push/synchronize.
+- **Output**: Structured Board Report in PR comments.
+- **Policy**: See [governance/PR-GOVERNANCE.md](file:///f:/Source/Repos/adpa/governance/PR-GOVERNANCE.md).
+
+Failure → Investigations and findings resolved before merger.
+
+***
+
+## 4. Database Migration Protocol (CSR Certified)
+
+All mutations to the Persistence Layer (PostgreSQL) must adhere to the following safety ritual:
+
+1.  **Mandatory Backup**: Perform a full database backup (`pg_dump` or equivalent) **before** applying any migration script.
+2.  **Rollback Test**: Verify that the migration script has a corresponding "down" or "rollback" script that restores the previous schema state without data loss.
+3.  **Atomic Schema/Code Sync**: Migrations must be committed as part of the logic change that requires them. "Naked" migrations (no code change) are prohibited unless identified as Hygiene Tasks.
+4.  **Verification Query**: Every migration script must include a verification query to prove success (e.g., checking `information_schema.columns`).
+
+Failure to provide a rollback path results in immediate **REJECT** at Gate 4.
+
+***
+
+## 5. Commit Certification
 
 Only after all gates pass:
 

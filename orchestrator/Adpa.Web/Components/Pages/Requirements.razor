@@ -107,7 +107,7 @@
             var client = HttpClientFactory.CreateClient("api");
             matrix = await client.GetFromJsonAsync<List<RtmRequirement>>("/api/ritual/ledger/rtm");
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             matrix = new List<RtmRequirement>();
         }

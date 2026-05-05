@@ -9,6 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/contexts/AuthContext"
 import { apiClient } from "@/lib/api"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   LayoutDashboard,
   Settings,
@@ -78,16 +79,38 @@ export function Sidebar({ className }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false)
   const [pendingCount, setPendingCount] = useState(0)
   const pathname = usePathname()
-  const { user, logout } = useAuth()
+  const { user, firebaseSession, token, isAuthenticated, logout } = useAuth()
+
+  const displayName = user?.name || firebaseSession?.displayName || null
+  const displayEmail = user?.email || firebaseSession?.email || null
+  const displayAvatarUrl = user?.avatar_url || firebaseSession?.photoURL || null
+
+  const userInitials =
+    displayName
+      ?.split(/\s+/)
+      .filter(Boolean)
+      .map((w) => w[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2) ||
+    (displayEmail
+      ? displayEmail
+          .split("@")[0]
+          .split(/[._-]/)
+          .filter(Boolean)
+          .slice(0, 2)
+          .map((p) => p[0])
+          .join("")
+          .toUpperCase()
+      : "") ||
+    "?"
 
   useEffect(() => {
-    if (user) {
-      fetchPendingApprovals()
-      // Refresh every 30 seconds
-      const interval = setInterval(fetchPendingApprovals, 30000)
-      return () => clearInterval(interval)
-    }
-  }, [user])
+    if (!token) return
+    void fetchPendingApprovals()
+    const interval = setInterval(fetchPendingApprovals, 30000)
+    return () => clearInterval(interval)
+  }, [token])
 
   const fetchPendingApprovals = async () => {
     try {
@@ -140,17 +163,14 @@ export function Sidebar({ className }: SidebarProps) {
       </div>
 
       {/* Navigation */}
-      <ScrollArea className="flex-1 px-3 py-6 custom-scrollbar">
+      <ScrollArea className="flex-1 min-h-0 px-3 py-6 custom-scrollbar">
         <nav className="space-y-2">
           {navigation
             .filter((item: NavItem) => {
-              // Hide admin-only items for non-admin/super-admin users
-              // Super admin has all admin privileges
-              const isAdminOrSuperAdmin = user?.role === "admin" || user?.role === "super_admin"
-              if (item.adminOnly && !isAdminOrSuperAdmin) {
-                return false
-              }
-              return true
+              if (!item.adminOnly) return true
+              // `adminOnly` marks routes that typically require elevated API access; we still show them when
+              // signed in so navigation matches the full product surface. The server enforces RBAC on each request.
+              return isAuthenticated
             })
             .map((item, index) => {
               const isActive = pathname === item.href
@@ -206,16 +226,21 @@ export function Sidebar({ className }: SidebarProps) {
       {/* User Profile */}
       <div className="p-4 border-t border-slate-200 dark:border-slate-700 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm">
         <div className={cn("flex items-center space-x-3 transition-all duration-200", collapsed && "justify-center")}>
-          <div className="w-10 h-10 bg-gradient-to-br from-emerald-400 to-blue-500 rounded-full flex items-center justify-center shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105">
-            <Users className="h-5 w-5 text-white" />
-          </div>
+          <Avatar className="h-10 w-10 shadow-lg ring-2 ring-white/30 dark:ring-slate-700/50">
+            {displayAvatarUrl ? (
+              <AvatarImage src={displayAvatarUrl} alt={displayName || displayEmail || "User"} />
+            ) : null}
+            <AvatarFallback className="bg-gradient-to-br from-emerald-400 to-blue-500 text-white font-semibold text-sm">
+              {userInitials === "?" ? <Users className="h-5 w-5" /> : userInitials}
+            </AvatarFallback>
+          </Avatar>
           {!collapsed && (
             <div className="flex-1 min-w-0 animate-slide-in-right">
               <p className="text-sm font-semibold truncate text-slate-700 dark:text-slate-200">
-                {user?.name || "User"}
+                {displayName || displayEmail?.split("@")[0] || "User"}
               </p>
               <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
-                {user?.email || "user@example.com"}
+                {displayEmail || "user@example.com"}
               </p>
             </div>
           )}

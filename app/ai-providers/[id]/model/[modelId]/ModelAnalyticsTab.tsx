@@ -74,13 +74,19 @@ export function ModelAnalyticsTab({ providerId, modelName }: ModelAnalyticsTabPr
     setLoadingAnalytics(true)
     setError(null)
     try {
-      const response = await apiClient.get<any>(`/ai-analytics/models/${providerId}/${modelName}?period=${period}`)
+      const response = await apiClient.get<any>(`/ai-analytics/models/${providerId}/${modelName}?period=${period}`, {
+        suppressNotFoundError: true,
+      })
       if (response.success) {
         setAnalytics(response)
       } else {
         setError("Failed to load analytics")
       }
     } catch (err: any) {
+      if (err?.status === 404 || err?.response?.status === 404) {
+        setError("Model analytics endpoint is not enabled in this deployment")
+        return
+      }
       console.error("Error loading model analytics:", err)
       setError(err.message || "Failed to load analytics")
     } finally {

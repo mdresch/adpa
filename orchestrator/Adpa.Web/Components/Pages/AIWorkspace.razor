@@ -1,0 +1,438 @@
+@page "/ai"
+@using Adpa.Orchestrator.Models.Rituals
+@using Adpa.Orchestrator.Controllers
+@inject IHttpClientFactory HttpClientFactory
+
+<PageTitle>AI Workspace | RPAS-CM Rituals</PageTitle>
+
+<div class="container mt-4 mb-5">
+    <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-2">
+        <div>
+            <h1 class="display-6"><i class="bi bi-cpu-fill me-2 text-primary"></i>AI Workspace</h1>
+            <p class="text-muted mb-0">Unified Governance surface for Phase 0 and Phase 4 rituals.</p>
+        </div>
+        <div class="text-end">
+            @if (msrfResult?.IsMsrfValidated ?? false)
+            {
+                <span class="badge bg-success me-2">MSRF: VALIDATED (Score: @msrfResult.OverallComplianceScore.ToString("F0"))</span>
+            }
+            <span class="badge bg-dark">RPAS-CM Authority: Active</span>
+        </div>
+    </div>
+
+    <!-- Ritual Tabs -->
+    <ul class="nav nav-pills mb-4" id="ritualTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link @(activeTab == "msrf" ? "active" : "")" @onclick='() => SetTab("msrf")'>
+                <i class="bi bi-shield-check me-2"></i>0. MSRF Grounding
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link @(activeTab == "ideation" ? "active" : "") @(msrfResult?.IsMsrfValidated ?? false ? "" : "disabled")" @onclick='() => SetTab("ideation")'>
+                <i class="bi bi-lightbulb me-2"></i>1. Ideation Ingestion
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link @(activeTab == "businesscase" ? "active" : "")" @onclick='() => SetTab("businesscase")'>
+                <i class="bi bi-briefcase me-2"></i>2. Business Case
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link @(activeTab == "research" ? "active" : "")" @onclick='() => SetTab("research")'>
+                <i class="bi bi-search me-2"></i>3. Research Advice
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content border rounded-3 p-4 bg-white shadow-sm">
+        
+        @if (activeTab == "msrf")
+        {
+            <div class="ritual-pane">
+                <div class="d-flex justify-content-between">
+                    <h5><span class="badge bg-info me-2">MSRF</span> Minimum Social Responsibility Grounding</h5>
+                    @if (msrfResult != null)
+                    {
+                        <span class="badge @(msrfResult.IsMsrfValidated ? "bg-success" : "bg-danger")">Stability Score: @msrfResult.StabilityScore.ToString("F0")</span>
+                    }
+                </div>
+                <p class="text-muted small mb-4">Evaluate project accountability against the 8 Pillars (Education, Infrastructure, Financial Integrity).</p>
+
+                <div class="row">
+                    <div class="col-md-5">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Target Project Title</label>
+                            <input type="text" class="form-control" @bind="ideationTitle" placeholder="e.g. Infrastructure_Expansion_2026" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Project Concept / Vision</label>
+                            <textarea class="form-control" @bind="ideationContent" rows="8" placeholder="Describe the project goal, funding model, and stakeholder impact..."></textarea>
+                        </div>
+                        <button class="btn btn-info w-100 text-white" @onclick="RunMsrfValidation" disabled="@isExecuting">
+                            @if (isExecuting) { <span class="spinner-border spinner-border-sm me-2"></span> }
+                            Execute MSRF Audit
+                        </button>
+                    </div>
+                    <div class="col-md-7">
+                        <label class="form-label fw-bold">MSRF Audit Result</label>
+                        <div class="bg-light p-3 border rounded small overflow-auto" style="height: 350px;">
+                            @if (msrfResult != null)
+                            {
+                                <div class="mb-3">
+                                    <div class="fw-bold mb-1">Status: <span class="text-@(msrfResult.Status == "UNLOCKED" ? "success" : "danger")">@msrfResult.Status</span></div>
+                                    <div class="progress mb-2" style="height: 10px;">
+                                        <div class="progress-bar bg-info" style="width: @(msrfResult.OverallComplianceScore)%"></div>
+                                    </div>
+                                    <div class="text-muted x-small">Overall Compliance: @msrfResult.OverallComplianceScore.ToString("F1")%</div>
+                                </div>
+
+                                <div class="accordion accordion-flush" id="pillarAccordion">
+                                    @foreach (var pillar in msrfResult.PillarScores)
+                                    {
+                                        <div class="accordion-item bg-transparent border-bottom">
+                                            <h2 class="accordion-header">
+                                                <button class="accordion-button collapsed py-2 x-small" type="button" data-bs-toggle="collapse" data-bs-target="#col-@pillar.PillarName">
+                                                    @pillar.PillarName - <span class="ms-2 badge @(pillar.Score >= 85 ? "bg-success" : "bg-warning text-dark")">@pillar.Score.ToString("F0")</span>
+                                                </button>
+                                            </h2>
+                                            <div id="col-@pillar.PillarName" class="accordion-collapse collapse">
+                                                <div class="accordion-body x-small py-2 text-muted">
+                                                    @foreach (var finding in pillar.Findings) { <div>• @finding</div> }
+                                                    @if (pillar.DetectedPatterns.Any()) {
+                                                        <div class="mt-1 text-danger fw-bold">Patterns Detected: @string.Join(", ", pillar.DetectedPatterns)</div>
+                                                    }
+                                                </div>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+
+                                @if (msrfResult.RemediationInstructions.Any())
+                                {
+                                    <div class="mt-3 p-2 bg-warning bg-opacity-10 border border-warning rounded">
+                                        <div class="fw-bold text-dark x-small">Remediation Required:</div>
+                                        <ul class="mb-0 x-small text-muted">
+                                            @foreach (var r in msrfResult.RemediationInstructions) { <li>@r</li> }
+                                        </ul>
+                                    </div>
+                                }
+                            }
+                            else if (isExecuting)
+                            {
+                                <div class="text-center mt-5">
+                                    <div class="spinner-border text-info"></div>
+                                    <p class="mt-2 text-muted">Auditing Institutional Stability...</p>
+                                </div>
+                            }
+                            else
+                            {
+                                <p class="text-muted text-center mt-5">Perform MSRF Grounding to unlock project ingestion.</p>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @if (activeTab == "ideation")
+        {
+            <div class="ritual-pane">
+                <h5><span class="badge bg-primary me-2">PHASE 0</span> Ingest New Ideation</h5>
+                <p class="text-muted small mb-4">Ingest a raw project concept into the Governance Ledger for initial AI summarization.</p>
+
+                <div class="row">
+                    <div class="col-md-5">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Project Title / Filename</label>
+                            <input type="text" class="form-control" @bind="ideationTitle" placeholder="e.g. Project_ARES_Charter" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Initial Concept / Raw Content</label>
+                            <textarea class="form-control" @bind="ideationContent" rows="8" placeholder="Enter high-level requirements or raw vision text..."></textarea>
+                        </div>
+                        <button class="btn btn-primary w-100" @onclick="RunIdeation" disabled="@isExecuting">
+                            @if (isExecuting) { <span class="spinner-border spinner-border-sm me-2"></span> }
+                            Execute Ingestion Ritual
+                        </button>
+                    </div>
+                    <div class="col-md-7">
+                        <label class="form-label fw-bold">Ritual Output (Ideation Summary)</label>
+                        <div class="bg-light p-3 border rounded font-monospace small overflow-auto" style="height: 300px;">
+                            @if (ideationResult != null)
+                            {
+                                <pre>@System.Text.Json.JsonSerializer.Serialize(ideationResult, new System.Text.Json.JsonSerializerOptions { WriteIndented = true })</pre>
+                            }
+                            else if (isExecuting)
+                            {
+                                <div class="text-center mt-5">
+                                    <div class="spinner-border text-primary"></div>
+                                    <p class="mt-2 text-muted">Orchestrating Intelligence...</p>
+                                </div>
+                            }
+                            else
+                            {
+                                <p class="text-muted text-center mt-5">Execute the ritual to see the summary.</p>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @if (activeTab == "businesscase")
+        {
+            <div class="ritual-pane">
+                <h5><span class="badge bg-primary me-2">PHASE 0</span> Generate Business Case</h5>
+                <p class="text-muted small mb-4">Refine an existing Ideation summary into a formal Business Case to enable RTM seeding.</p>
+
+                <div class="row">
+                    <div class="col-md-5">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Select Ideation Source</label>
+                            <select class="form-select" @bind="selectedIdeationTitle">
+                                <option value="">-- Choose from Ledger --</option>
+                                @if (ledgerSummaries != null)
+                                {
+                                    @foreach (var s in ledgerSummaries)
+                                    {
+                                        <option value="@s.Title">@s.Title (v@s.Version)</option>
+                                    }
+                                }
+                            </select>
+                        </div>
+                        <button class="btn btn-success w-100 mt-2" @onclick="RunBusinessCase" disabled="@(isExecuting || string.IsNullOrEmpty(selectedIdeationTitle))">
+                            @if (isExecuting) { <span class="spinner-border spinner-border-sm me-2"></span> }
+                            Execute Business Case Ritual
+                        </button>
+                        
+                        <div class="mt-3">
+                            <button class="btn btn-outline-secondary btn-sm w-100" @onclick="RefreshLedger">
+                                <i class="bi bi-arrow-clockwise me-1"></i>Refresh Ledger Sources
+                            </button>
+                        </div>
+                    </div>
+                    <div class="col-md-7">
+                        <label class="form-label fw-bold">Ritual Output (Business Case)</label>
+                        <div class="bg-light p-3 border rounded font-monospace small overflow-auto" style="height: 300px;">
+                            @if (bcResult != null)
+                            {
+                                <pre>@System.Text.Json.JsonSerializer.Serialize(bcResult, new System.Text.Json.JsonSerializerOptions { WriteIndented = true })</pre>
+                            }
+                            else if (isExecuting)
+                            {
+                                <div class="text-center mt-5">
+                                    <div class="spinner-border text-success"></div>
+                                    <p class="mt-2 text-muted">Building Business Case Architecture...</p>
+                                </div>
+                            }
+                            else
+                            {
+                                <p class="text-muted text-center mt-5">Select a summary and execute the ritual.</p>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @if (activeTab == "research")
+        {
+            <div class="ritual-pane">
+                <h5><span class="badge bg-secondary me-2">PHASE 4</span> AI Research Advice</h5>
+                <p class="text-muted small mb-4">Leverage the Full Historical Ledger to generate high-integrity auditing suggestions for RTM requirements.</p>
+
+                <div class="row">
+                    <div class="col-md-5">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Requirement ID (Target)</label>
+                            <input type="text" class="form-control" @bind="targetRequirementId" placeholder="e.g. b8c4d2..." />
+                        </div>
+                        <button class="btn btn-dark w-100" @onclick="RunResearch" disabled="@(isExecuting || string.IsNullOrEmpty(targetRequirementId))">
+                            @if (isExecuting) { <span class="spinner-border spinner-border-sm me-2"></span> }
+                            Consult AI Auditor
+                        </button>
+                        <p class="text-muted x-small mt-2">Note: This ritual performs historical context analysis across all recorded ledger states.</p>
+                    </div>
+                    <div class="col-md-7">
+                        <label class="form-label fw-bold">Ritual Output (Research Advice)</label>
+                        <div class="bg-light p-3 border rounded font-monospace small overflow-auto" style="height: 300px;">
+                            @if (adviceResult != null)
+                            {
+                                <pre>@System.Text.Json.JsonSerializer.Serialize(adviceResult, new System.Text.Json.JsonSerializerOptions { WriteIndented = true })</pre>
+                            }
+                            else if (isExecuting)
+                            {
+                                <div class="text-center mt-5">
+                                    <div class="spinner-border text-dark"></div>
+                                    <p class="mt-2 text-muted">Performing Cross-Ledger Semantic Analysis...</p>
+                                </div>
+                            }
+                            else
+                            {
+                                <p class="text-muted text-center mt-5">Execute research ritual to receive advice.</p>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+
+    </div>
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger mt-4 shadow-sm border-start border-danger border-4">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i><strong>Authority Error:</strong> @errorMessage
+        </div>
+    }
+</div>
+
+@code {
+    private string activeTab = "msrf";
+    private bool isExecuting = false;
+    private string? errorMessage;
+
+    // MSRF State
+    private MsrfEvaluation? msrfResult;
+
+    // Ideation State
+    private string ideationTitle = "";
+    private string ideationContent = "";
+    private IdeationSummary? ideationResult;
+
+    // Business Case State
+    private string selectedIdeationTitle = "";
+    private List<IdeationSummary>? ledgerSummaries;
+    private BusinessCase? bcResult;
+
+    // Research Advice State
+    private string targetRequirementId = "";
+    private object? adviceResult;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshLedger();
+    }
+
+    private void SetTab(string tab)
+    {
+        activeTab = tab;
+        errorMessage = null;
+    }
+
+    private async Task RefreshLedger()
+    {
+        try {
+            var client = HttpClientFactory.CreateClient("api");
+            ledgerSummaries = await client.GetFromJsonAsync<List<IdeationSummary>>("/api/ritual/ledger/ideation");
+        } catch (Exception) { /* Handled in UI */ }
+    }
+
+    private async Task RunIdeation()
+    {
+        if (string.IsNullOrEmpty(ideationTitle) || string.IsNullOrEmpty(ideationContent)) {
+            errorMessage = "Filename and Content are required for ideation ingestion.";
+            return;
+        }
+
+        isExecuting = true;
+        errorMessage = null;
+        ideationResult = null;
+
+        try {
+            var client = HttpClientFactory.CreateClient("api");
+            var payload = new { filename = ideationTitle, content = ideationContent };
+            var response = await client.PostAsJsonAsync("/api/ritual/phase0/ingest", payload);
+            
+            if (response.IsSuccessStatusCode) {
+                ideationResult = await response.Content.ReadFromJsonAsync<IdeationSummary>();
+                await RefreshLedger();
+            } else {
+                errorMessage = await response.Content.ReadAsStringAsync();
+            }
+        } catch (Exception ex) {
+            errorMessage = ex.Message;
+        } finally {
+            isExecuting = false;
+        }
+    }
+
+    private async Task RunBusinessCase()
+    {
+        isExecuting = true;
+        errorMessage = null;
+        bcResult = null;
+
+        try {
+            var client = HttpClientFactory.CreateClient("api");
+            var response = await client.PostAsJsonAsync("/api/ritual/phase0/business-case", selectedIdeationTitle);
+            
+            if (response.IsSuccessStatusCode) {
+                bcResult = await response.Content.ReadFromJsonAsync<BusinessCase>();
+            } else {
+                errorMessage = await response.Content.ReadAsStringAsync();
+            }
+        } catch (Exception ex) {
+            errorMessage = ex.Message;
+        } finally {
+            isExecuting = false;
+        }
+    }
+
+    private async Task RunResearch()
+    {
+        isExecuting = true;
+        errorMessage = null;
+        adviceResult = null;
+
+        try {
+            var client = HttpClientFactory.CreateClient("api");
+            var response = await client.PostAsync($"/api/ritual/rtm/research-advice/{targetRequirementId}", null);
+            
+            if (response.IsSuccessStatusCode) {
+                adviceResult = await response.Content.ReadFromJsonAsync<object>();
+            } else {
+                errorMessage = await response.Content.ReadAsStringAsync();
+            }
+        } catch (Exception ex) {
+            errorMessage = ex.Message;
+        } finally {
+            isExecuting = false;
+        }
+    }
+
+    private async Task RunMsrfValidation()
+    {
+        if (string.IsNullOrEmpty(ideationTitle) || string.IsNullOrEmpty(ideationContent)) {
+            errorMessage = "Project Title and Concept are required for MSRF auditing.";
+            return;
+        }
+
+        isExecuting = true;
+        errorMessage = null;
+        msrfResult = null;
+
+        try {
+            var client = HttpClientFactory.CreateClient("api");
+            var payload = new { 
+                projectId = Guid.NewGuid().ToString().Substring(0, 8), 
+                title = ideationTitle, 
+                concept = ideationContent 
+            };
+            var response = await client.PostAsJsonAsync("/api/ritual/msrf/validate", payload);
+            
+            if (response.IsSuccessStatusCode) {
+                msrfResult = await response.Content.ReadFromJsonAsync<MsrfEvaluation>();
+                if (msrfResult?.IsMsrfValidated ?? false) {
+                    // Auto-advance or at least show success
+                }
+            } else {
+                errorMessage = await response.Content.ReadAsStringAsync();
+            }
+        } catch (Exception ex) {
+            errorMessage = ex.Message;
+        } finally {
+            isExecuting = false;
+        }
+    }
+}

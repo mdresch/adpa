@@ -7,6 +7,11 @@
 
 import { generateText, streamText } from "ai"
 import { GoogleGenerativeAI } from "@google/generative-ai"
+import * as dotenv from 'dotenv'
+import path from 'path'
+
+// Load environment variables early
+dotenv.config({ path: path.join(process.cwd(), '.env') })
 import { createMistral } from "@ai-sdk/mistral"
 import { createOpenAI } from "@ai-sdk/openai"
 import { createXai } from "@ai-sdk/xai"
@@ -267,7 +272,8 @@ class AIService {
   }
 
   constructor() {
-    logger.info("AI Service initialized - will fetch AI Gateway key from database")
+    this.loadDefaultProviders()
+    logger.info("AI Service initialized - default providers loaded from environment")
   }
 
   /**
@@ -422,6 +428,9 @@ class AIService {
     if (process.env.ANTHROPIC_API_KEY) {
       this.providers.set('anthropic', { apiKey: process.env.ANTHROPIC_API_KEY })
     }
+    if (process.env.GOOGLE_AI_API_KEY) {
+      this.providers.set('google', { apiKey: process.env.GOOGLE_AI_API_KEY })
+    }
     logger.info(`[AI] Loaded ${this.providers.size} default providers from environment`)
   }
 
@@ -446,24 +455,13 @@ class AIService {
    * Check if provider is available (not in backoff period)
    */
   private isProviderAvailable(provider: string): boolean {
-    if (provider === LOCAL_FALLBACK_PROVIDER) {
+    // Optional override for certification or high-integrity rituals
+    if (process.env.DISABLE_AI_BACKOFF === 'true') {
       return true
     }
-
-    const backoffState = this.providerBackoff.get(provider)
-
-    if (!backoffState) {
-      return true // No backoff state, provider is available
-    }
-
-    const now = Date.now()
-    if (now < backoffState.nextRetryTime) {
-      const waitTime = Math.ceil((backoffState.nextRetryTime - now) / 1000)
-      logger.info(`⏸️ [AI-BACKOFF] Provider ${provider} in backoff, retry in ${waitTime}s`)
-      return false
-    }
-
-    return true
+    const state = this.providerBackoff.get(provider)
+    if (!state) return true
+    return Date.now() >= state.nextRetryTime
   }
 
   /**
@@ -504,10 +502,13 @@ class AIService {
    */
   private async getActiveProviders(): Promise<string[]> {
     try {
+      // Start with providers loaded from environment (loadDefaultProviders)
+      const envProviders = Array.from(this.providers.keys())
+      
       const dbPool = getPool()
       if (!dbPool) {
-        logger.warn('AI Service: Database pool not available, using local fallback provider')
-        return [LOCAL_FALLBACK_PROVIDER]
+        logger.warn('AI Service: Database pool not available, using environment + local fallback providers')
+        return Array.from(new Set([...envProviders, LOCAL_FALLBACK_PROVIDER]))
       }
 
       const result = await dbPool.query(
@@ -518,8 +519,8 @@ class AIService {
       )
 
       if (!result || !result.rows) {
-        logger.warn('AI Service: getActiveProviders query returned no result, using local fallback provider')
-        return [LOCAL_FALLBACK_PROVIDER]
+        logger.warn('AI Service: getActiveProviders query returned no result, using environment + local fallback provider')
+        return Array.from(new Set([...envProviders, LOCAL_FALLBACK_PROVIDER]))
       }
 
       const rows = (result.rows || []) as Array<ActiveProviderRow & { name: string }>
@@ -553,8 +554,9 @@ class AIService {
         return true
       })
 
-      // Include both types and names for flexible matching
+      // Include both types and names for flexible matching, plus environment providers
       const providers = Array.from(new Set([
+        ...envProviders,
         ...filteredRows.map(row => row.provider_type),
         ...filteredRows.map(row => row.name),
         LOCAL_FALLBACK_PROVIDER
@@ -563,8 +565,8 @@ class AIService {
       return providers
     } catch (error) {
       logger.error('Failed to get active providers:', error)
-      // Always keep local provider available even if DB query fails
-      return [LOCAL_FALLBACK_PROVIDER]
+      // Always keep local provider and env providers available even if DB query fails
+      return Array.from(new Set([...Array.from(this.providers.keys()), LOCAL_FALLBACK_PROVIDER]))
     }
   }
 
@@ -611,9 +613,9 @@ class AIService {
       providers = availableProviders
     }
 
-    // Filter out providers in backoff period
+    // Filter out providers in backoff period (but ALWAYS include the requested provider if it's active)
     const providersBeforeBackoff = providers.length
-    providers = providers.filter(p => this.isProviderAvailable(p))
+    providers = providers.filter(p => p === request.provider || this.isProviderAvailable(p))
 
     if (providers.length < providersBeforeBackoff) {
       const skipped = providersBeforeBackoff - providers.length
@@ -645,6 +647,7 @@ class AIService {
     }
 
     logger.info(`🔄 [AI-FALLBACK] Provider chain (active only): ${providers.join(' → ')}`)
+    logger.info(`📋 [AI-DEBUG] Request provider: ${request.provider}, Active list: ${activeProvidersFromDb.join(', ')}`)
 
     let lastError: Error | null = null
     let attemptsWithBackoff = 0
@@ -761,13 +764,18 @@ class AIService {
     })
 
     // Fetch AI Gateway API key from database (optional - will fallback to direct provider calls if not configured)
-    const { getAIGatewayKey } = await import("../routes/settings")
-    const gatewayApiKey = await getAIGatewayKey()
-
-    if (!gatewayApiKey) {
-      logger.info('[AI-SERVICE] No AI Gateway API key configured - will use direct provider APIs')
-    } else {
-      logger.debug('[AI-SERVICE] Gateway API key retrieved')
+    let gatewayApiKey: string | undefined = undefined
+    try {
+      const { getAIGatewayKey } = await import("../routes/settings")
+      const result = await getAIGatewayKey()
+      gatewayApiKey = result ?? undefined
+      if (!gatewayApiKey) {
+        logger.info('[AI-SERVICE] No AI Gateway API key configured - will use direct provider APIs')
+      } else {
+        logger.debug('[AI-SERVICE] Gateway API key retrieved')
+      }
+    } catch (e: any) {
+      logger.warn('[AI-SERVICE] Failed to retrieve or decrypt AI Gateway key (will use direct providers):', e.message)
     }
 
     // KISS: Build system and user messages separately
@@ -822,16 +830,28 @@ class AIService {
       }
 
       // Get provider type from database to build the model ID
-      logger.debug('[AI-SERVICE] Looking up provider type')
+      logger.debug('[AI-SERVICE] Looking up provider type for', request.provider)
       // Try to find provider by provider_type first (e.g., "mistral", "openai"), then by name
-      const providerResult = await dbPool.query(
+      let providerResult = await dbPool.query(
         "SELECT provider_type, api_key_encrypted, configuration FROM ai_providers WHERE (provider_type = $1 OR LOWER(name) = LOWER($1)) AND is_active = true LIMIT 1",
         [request.provider]
       )
 
-      if (!providerResult || !providerResult.rows) {
-        logger.error('❌ [AI-SERVICE] Provider lookup returned null result for', request.provider)
-        throw new Error(`Provider lookup failed for: ${request.provider}`)
+      let providerRow = providerResult.rows[0]
+      let providerType = providerRow?.provider_type || (request.provider === LOCAL_FALLBACK_PROVIDER ? LOCAL_FALLBACK_PROVIDER : null)
+      let providerConfiguration = providerRow?.configuration || {}
+      let providerApiKeyEncrypted = providerRow?.api_key_encrypted
+
+      // FALLBACK: If DB lookup fails but we have the provider in our env-loaded Map, use that
+      if (!providerType && this.providers.has(request.provider)) {
+        logger.info(`🔄 [AI-SERVICE] Provider ${request.provider} not found in DB, using environment-loaded configuration`)
+        providerType = request.provider
+        providerConfiguration = this.providers.get(request.provider) || {}
+      }
+
+      if (!providerType) {
+        logger.error('❌ [AI-SERVICE] Provider not found or inactive:', request.provider)
+        throw new Error(`Provider not found or inactive: ${request.provider}`)
       }
 
       langfuseTrace = isNativeLangfuseEnabled() ? langfuse.trace({
@@ -859,15 +879,6 @@ class AIService {
         });
       }
 
-      const providerRow = providerResult.rows[0]
-      const providerType = providerRow?.provider_type || (request.provider === LOCAL_FALLBACK_PROVIDER ? LOCAL_FALLBACK_PROVIDER : null)
-      if (!providerType) {
-        logger.error('❌ [AI-SERVICE] Provider not found:', request.provider)
-        throw new Error(`Provider not found or inactive: ${request.provider}`)
-      }
-
-      const providerConfiguration = providerRow?.configuration || {}
-      const providerApiKeyEncrypted = providerRow?.api_key_encrypted
       logger.debug('[AI-SERVICE] Provider type:', providerType)
 
       // OPTIMIZATION: Skip AI Gateway for providers not natively supported
@@ -1396,34 +1407,50 @@ class AIService {
           logger.info('🔄 [AI-SERVICE] Falling back to direct Google AI...')
 
           // Get direct API key from provider configuration
-          const directApiKey = providerResult.rows[0].configuration?.apiKey
+          const directApiKey = providerConfiguration?.apiKey
           if (!directApiKey) {
-            throw new Error('Direct Google AI API key not found in provider configuration')
+            throw new Error('Direct Google AI API key not found in provider configuration or environment')
           }
 
           logger.debug('[AI-SERVICE] Using direct Google AI')
           const genAI = new GoogleGenerativeAI(directApiKey)
 
           // Map deprecated/unavailable models to current working ones
-          // Note: gemini-1.5-flash-latest is stable and confirmed working with v1 API
-          // Map deprecated/unavailable models to current working ones
           const modelMap: Record<string, string> = {
-            'gemini-pro': 'gemini-2.5-flash',
-            'gemini-pro-vision': 'gemini-2.5-flash',
-            'gemini-1.0-pro': 'gemini-2.5-flash',
-            'gemini-1.5-flash': 'gemini-2.5-flash',
-            'gemini-1.5-pro': 'gemini-2.5-pro',
-            'gemini-flash-latest': 'gemini-2.5-flash',
-            'gemini-pro-latest': 'gemini-2.5-pro'
+            'gemini-pro': 'gemini-3.1-flash-live-preview',
+            'gemini-pro-vision': 'gemini-3.1-flash-live-preview',
+            'gemini-1.0-pro': 'gemini-3.1-flash-live-preview',
+            'gemini-1.5-flash': 'gemini-3.1-flash-live-preview',
+            'gemini-1.5-pro': 'gemini-3.1-flash-live-preview',
+            'gemini-flash-latest': 'gemini-3.1-flash-live-preview',
+            'gemini-pro-latest': 'gemini-3.1-flash-live-preview',
+            'gemini-2.5-flash': 'gemini-3.1-flash-live-preview',
+            'gemini-1.5-flash-latest': 'gemini-3.1-flash-live-preview',
+            'gemini-1.5-pro-latest': 'gemini-3.1-flash-live-preview'
           }
 
-          // Use mapped model or fallback to current default (gemini-2.5-flash)
-          const requestedModel = request.model || 'gemini-2.5-flash'
-          const modelName = modelMap[requestedModel] || requestedModel
+          // Use mapped model or fallback to current default
+          const requestedModel = request.model || 'gemini-1.5-flash-latest'
+          let modelName = modelMap[requestedModel] || requestedModel
+
+          if (modelName !== requestedModel) {
+            logger.info(`[AI-SERVICE] Resilient Map: ${requestedModel} -> ${modelName} (CSR-43 Governance)`)
+          }
+
+          // Environment-specific override (e.g. if 1.5 is 404/503)
+          if (process.env.GEMINI_MODEL_OVERRIDE) {
+            logger.warn(`[AI-SERVICE] Explicit Model Override active: ${process.env.GEMINI_MODEL_OVERRIDE}`)
+            modelName = process.env.GEMINI_MODEL_OVERRIDE
+          }
 
           // Validate model name (ensure it's a current model that works in v1 API)
-          const validModels = ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-1.5-flash-latest', 'gemini-flash-latest']
-          const finalModel = validModels.includes(modelName) ? modelName : 'gemini-2.5-flash'
+          const validModels = [
+            'gemini-1.5-flash-latest', 
+            'gemini-1.5-pro-latest', 
+            'gemini-2.5-flash', 
+            'gemini-3.1-flash-live-preview'
+          ]
+          const finalModel = validModels.includes(modelName) ? modelName : 'gemini-3.1-flash-live-preview'
 
           // Log model mapping for debugging
           if (requestedModel !== finalModel) {

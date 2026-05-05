@@ -17,6 +17,7 @@ router.post('/demo', AuthController.demo);
 
 // Protected routes
 router.get('/me', authenticateToken, AuthController.getMe);
+router.post('/bootstrap-elevation', authenticateToken, AuthController.claimBootstrapElevation);
 router.post('/logout', authenticateToken, AuthController.logout);
 router.post('/refresh', authenticateToken, AuthController.refresh);
 router.post('/change-password', authenticateToken, AuthController.changePassword);

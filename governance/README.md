@@ -17,10 +17,20 @@ To adopt these principles in a new repository:
 3.  Implement the **AEV (Atomic Execution & Validation)** gate logic in your verification pipeline.
 
 ## Structure
--   `AMD-*.md`: Amendment records documenting state transitions and hardening.
+-   `AMD-*.md`: Amendment records documenting state transitions, hardening, and optimizations.
 -   `RPAS-*.md`: Core methodology definitions (Authority, Integrity, Logic).
 -   `visuals/`: Graphical representations of governance flows and matrix logic.
 -   `security/archive/`: Historical remediation records and reference artifacts.
 
+## CI/CD & Operational Secrets (Mandatory)
+The following secrets must be configured in your environment (e.g., GitHub Secrets) to support the DRACO Review Board and G5 validation:
+
+| Secret Name | Purpose | Scope |
+| :--- | :--- | :--- |
+| `GOOGLE_AI_API_KEY` | Authority for Gemini Agents | Gate 5 (DRACO) |
+| `DATABASE_URL` | Access to Governance Ledger | Audit & Persistence |
+| `GITHUB_TOKEN` | Automated PR Reporting | Gate 6 (Workflow) |
+
 ---
-**Certification**: Certified for cross-project deployment (April 2026).
+**Certification**: Certified for cross-project deployment (April 2026).  
+*Latest Baseline*: RPAS-CM v2.4.1 (Optimized DRACO Semantic Governance).

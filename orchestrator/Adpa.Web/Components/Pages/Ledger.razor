@@ -34,7 +34,7 @@
                     <div class="card shadow-sm h-100 border-start border-primary border-4">
                         <div class="card-body">
                             <h5 class="card-title text-primary">@summary.Title</h5>
-                            <p class="card-text text-muted small">@summary.ExecutiveSummary</p>
+                            <p class="card-text text-muted small">@summary.ProblemStatement</p>
                             
                             <hr />
                             
@@ -68,7 +68,7 @@
             var client = HttpClientFactory.CreateClient("api");
             summaries = await client.GetFromJsonAsync<List<IdeationSummary>>("/api/ritual/ledger/ideation");
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             // Logging would happen via ILogger in a production scenario
             summaries = new List<IdeationSummary>();

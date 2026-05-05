@@ -91,6 +91,8 @@ These guardrails protect **authority**, **integrity**, **traceability**, **deter
 *   AI must never apply changes, approve changes, or bypass governance rituals.
 *   All state‑changing actions require **explicit human authorization**.
 *   The **Orchestrator (C# layer)** is the only execution authority.
+*   **Administrator as law‑governor, not super‑admin**: A human administrator is **not** entitled to bypass mechanical system requirements. The lawful posture treats the role as **governing laws** (propose, amend, and ratify rules through rituals)—not as a discretionary override of validators, ledgers, or orchestration checks. Enforcement must be **mechanically sound**: the same inputs and system state yield the same allow/deny outcome, so no one can **assume** a capability the encoded rules never granted.
+*   **Law change, validation, and authority tokens**: When law evolves or work must be performed under law, a **validation** path against the active rule set must succeed before **cryptographically bound authority tokens** are released. Tokens **scope** permitted execution; they do not restore omnipotent bypass.
 
 **Purpose**: Prevent unauthorized or implicit mutation of state.
 

@@ -7,12 +7,14 @@
     "dev": "next dev",
     "lint": "next lint",
     "start": "next start",
+    "firebase:auth": "npx -y firebase-tools@latest emulators:start --only auth",
     "migrate": "tsx server/scripts/run-migrations.ts",
     "migrate:reset": "tsx server/scripts/run-migrations.ts --reset",
     "migrate:dev": "npm run migrate:reset && tsx server/src/database/seed-all.ts",
     "migrate:baseline": "node server/scripts/generate-migration-from-db.js",
     "migrate:vercel": "tsx scripts/migrate-to-vercel.ts",
     "draco:preflight": "tsx scripts/draco-gate-5.ts",
+    "draco:audit": "tsx scripts/rpas-pr-reporter.ts",
     "seed:vercel": "tsx scripts/seed-vercel.ts",
     "test:mcp-sentry": "tsx scripts/test-mcp-sentry.ts",
     "rovo": "tsx scripts/rovo.ts",
@@ -157,8 +159,8 @@
     "jsonwebtoken": "latest",
     "jspdf": "^4.2.1",
     "langfuse": "^3.38.6",
-    "langsmith": "^0.5.18",
-    "lodash": "^4.18.1",
+    "langsmith": "^0.5.19",
+    "lodash": "^4.17.23",
     "lucide-react": "^0.575.0",
     "mammoth": "latest",
     "markdown-it": "^14.1.1",
@@ -211,7 +213,7 @@
     "unidiff": "^1.0.4",
     "use-debounce": "^10.1.0",
     "utf-8-validate": "^6.0.5",
-    "uuid": "^9.0.1",
+    "uuid": "^14.0.0",
     "vaul": "^0.9.0",
     "voyageai": "^0.1.0",
     "winston": "^3.19.0",
@@ -265,7 +267,7 @@
     "next": "16.2.3",
     "node-html-parser": "^7.0.2",
     "ollama-ai-provider-v2": "^3.3.1",
-    "postcss": "^8.4.47",
+    "postcss": "^8.5.10",
     "postgres": "^3.4.8",
     "react-textarea-autosize": "^8.5.9",
     "rehype-external-links": "^3.0.0",
@@ -302,6 +304,9 @@
     },
     "patchedDependencies": {
       "zod@3.24.1": "patches/zod@3.24.1.patch"
-    }
+    },
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }
