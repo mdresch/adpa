@@ -34,9 +34,9 @@ This document provides an objective, critical assessment of the features claimed
 * **BABOK v3 & DMBOK 2.0 compliance**
   * **Status:** 🟡 **Partially Implemented / WIP**
   * **Evidence:** While PMBOK has deep, dedicated logic and agent workflows, BABOK and DMBOK appear primarily as references in templates and string matching (e.g., `'BABOK Requirements Template'` in recommendation services), rather than having dedicated, specialized validation engines.
-* **Multiple output formats (Markdown, PDF, JSON)**
+* **Multiple output formats (Markdown, PDF, DOCX, HTML)**
   * **Status:** 🟢 **Fully Implemented**
-  * **Evidence:** Document generation supports these formats, backed by services like `adobePdfService.ts` and HTML-to-PDF templates (`pdf-base.html`).
+  * **Evidence:** Document generation supports these formats via the document generator's supported output types, with PDF generation backed by services like `adobePdfService.ts` and HTML-to-PDF templates (`pdf-base.html`).
 
 ---
 
