@@ -33,6 +33,9 @@ export function ToolSection({
     isFirst = false,
     isLast = false
 }: ToolSectionProps) {
+    const toolInput = (tool?.input ?? {}) as any
+    const toolOutput = (tool?.output ?? {}) as any
+
     if (tool.type === 'tool-askQuestion' || tool.type === 'tool-ask_question') {
         if (
             (tool.state === 'input-streaming' || tool.state === 'input-available') &&
@@ -125,10 +128,12 @@ export function ToolSection({
                     }
                 >
                     <div className="p-4 space-y-2">
-                        <div className="text-sm font-medium">Query: {(tool.input as any).query}</div>
+                        <div className="text-sm font-medium">
+                            Query: {toolInput?.query || toolInput?.searchQuery || '(no query provided)'}
+                        </div>
                         {tool.state === 'output-available' && (
                             <div className="text-sm text-muted-foreground italic">
-                                Found {(tool.output as any).results?.length || 0} relevant snippets.
+                                Found {toolOutput?.results?.length || 0} relevant snippets.
                             </div>
                         )}
                         {tool.state === 'output-error' && (
@@ -154,11 +159,11 @@ export function ToolSection({
                 >
                     <div className="p-4 space-y-2">
                         <div className="text-sm font-mono bg-muted p-2 rounded overflow-x-auto whitespace-pre">
-                            {(tool.input as any).sqlQuery}
+                            {toolInput?.sqlQuery || toolInput?.query || '(no SQL query provided)'}
                         </div>
                         {tool.state === 'output-available' && (
                             <div className="text-sm text-muted-foreground italic">
-                                Returned {(tool.output as any).rowCount || 0} rows.
+                                Returned {toolOutput?.rowCount || 0} rows.
                             </div>
                         )}
                         {tool.state === 'output-error' && (

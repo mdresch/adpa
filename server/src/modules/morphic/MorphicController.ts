@@ -175,6 +175,19 @@ export class MorphicController {
             } catch (e) {
                 // ignore
             }
+            // Graceful degradation: if the Morphic DB is temporarily unreachable,
+            // keep the AI Search UI usable by returning an empty history instead of 500.
+            const message = String(error?.message || '').toLowerCase();
+            if (
+                error?.code === 'ENOTFOUND' ||
+                error?.code === 'ECONNREFUSED' ||
+                error?.code === 'ETIMEDOUT' ||
+                message.includes('connection timeout') ||
+                message.includes('connection terminated') ||
+                message.includes('connection terminated unexpectedly')
+            ) {
+                return res.json({ chats: [], nextOffset: null, degraded: true });
+            }
             res.status(500).json({ error: 'Internal Server Error' });
         }
     }

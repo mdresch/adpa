@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useSearchParams } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -137,6 +138,7 @@ const getPriorityColor = (priority: string) => {
 }
 
 export default function JobMonitorPage() {
+  const searchParams = useSearchParams()
   const { user, hasPermission } = useAuth()
   const { isConnected } = useWebSocket()
   const jobUpdates = useJobUpdates()
@@ -153,6 +155,7 @@ export default function JobMonitorPage() {
   const [loading, setLoading] = React.useState(true)
   const [loadingQueues, setLoadingQueues] = React.useState(true)
   const [loadingWorkers, setLoadingWorkers] = React.useState(true)
+  const didScrollToQueryJobRef = React.useRef(false)
 
   // Fetch aggregate metrics
   React.useEffect(() => {
@@ -203,6 +206,29 @@ export default function JobMonitorPage() {
     const interval = setInterval(fetchJobs, 30000)
     return () => clearInterval(interval)
   }, [])
+
+  // Deep-link: /jobs?jobId=<uuid> (e.g. after queuing document generation)
+  React.useEffect(() => {
+    const id = searchParams.get("jobId")
+    if (!id) {
+      didScrollToQueryJobRef.current = false
+      return
+    }
+    setSelectedJob(id)
+    setStatusFilter("all")
+    setSearchTerm("")
+    didScrollToQueryJobRef.current = false
+  }, [searchParams])
+
+  React.useEffect(() => {
+    const id = searchParams.get("jobId")
+    if (!id || didScrollToQueryJobRef.current) return
+    if (!jobs.some(j => j.id === id)) return
+    didScrollToQueryJobRef.current = true
+    requestAnimationFrame(() => {
+      document.getElementById(`job-row-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" })
+    })
+  }, [searchParams, jobs])
 
   // Fetch worker statistics
   React.useEffect(() => {
@@ -643,7 +669,11 @@ return (
                         return (j.status === 'processing' || j.status === 'running') && j.progress >= 0 && !hasError && !isOld
                       })
                       .map(job => (
-                        <div key={job.id} className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 transition-all duration-300">
+                        <div
+                          key={job.id}
+                          id={`job-row-${job.id}`}
+                          className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 transition-all duration-300"
+                        >
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex-1">
                               <p className="font-semibold text-sm">{job.name}</p>
@@ -772,6 +802,7 @@ return (
                               return (
                                 <div
                                   key={job.id}
+                                  id={`job-row-${job.id}`}
                                   className={`p-4 rounded-lg border ${isVeryOld
                                       ? 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700'
                                       : isOld
@@ -855,7 +886,7 @@ return (
                             className="animate-fade-in-up"
                             animationDelay={index * 100}
                           >
-                            <Card className="border border-slate-200 dark:border-slate-700 hover-lift">
+                            <Card id={`job-row-${job.id}`} className="border border-slate-200 dark:border-slate-700 hover-lift scroll-mt-24">
                               <CardContent className="p-6">
                                 <div className="flex items-start justify-between">
                                   <div className="flex-1 space-y-3">

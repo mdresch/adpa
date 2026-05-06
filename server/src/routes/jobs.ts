@@ -280,15 +280,25 @@ router.post(
         projectId: Joi.string().required(),
         prompt: Joi.string().required(),
         provider: Joi.string().optional(),
-        model: Joi.string().optional(),
-        templateId: Joi.string().optional(),
-        maxTokens: Joi.number().optional(),
+        model: Joi.string().allow(null, "").optional(),
+        templateId: Joi.string().uuid().optional().allow(null),
+        maxTokens: Joi.number().integer().min(1).max(200000).optional(),
+        temperature: Joi.number().min(0).max(2).optional(),
+        documentName: Joi.string().max(500).allow("").optional(),
+        description: Joi.string().allow("").optional(),
+        variables: Joi.object().unknown(true).optional(),
+        useContext: Joi.boolean().optional(),
       })
 
       const { error, value } = schema.validate(req.body)
       if (error) return res.status(400).json({ error: error.message })
 
       const jobId = uuidv4()
+      const templateNameFromVars =
+        value.variables && typeof (value.variables as any).template_name === "string"
+          ? (value.variables as any).template_name
+          : undefined
+
       const jobPayload = {
         jobId,
         userId: req.user?.id || null,
@@ -296,8 +306,14 @@ router.post(
         prompt: value.prompt,
         provider: value.provider || "openai",
         model: value.model || null,
+        temperature: value.temperature,
         template_id: value.templateId || null,
-        max_tokens: value.maxTokens || 1024,
+        max_tokens: value.maxTokens ?? 32768,
+        name: value.documentName?.trim() || undefined,
+        description: value.description?.trim() || undefined,
+        variables: value.variables || undefined,
+        use_context: value.useContext !== false,
+        template_name: templateNameFromVars,
       }
 
       await addJob("ai-generate", jobPayload)
@@ -306,7 +322,8 @@ router.post(
     } catch (err) {
       const log = childLogger({ requestId: (req as any).requestId })
       log.error("Enqueue AI job error:", err)
-      res.status(500).json({ error: "Failed to enqueue job" })
+      const message = err instanceof Error ? err.message : "Failed to enqueue job"
+      res.status(500).json({ error: message })
     }
   }
 )
