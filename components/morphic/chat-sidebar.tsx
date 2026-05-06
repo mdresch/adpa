@@ -3,7 +3,7 @@
 import * as React from 'react'
 import { type ChangeEvent } from 'react'
 import Link from 'next/link'
-import { Plus, Search } from 'lucide-react'
+import { Plus, Search, Settings } from 'lucide-react'
 
 import { ChatHistory } from '@/components/morphic/chat-history'
 import {
@@ -44,8 +44,15 @@ export function ChatSidebar() {
             <SidebarContent>
                 <ChatHistory searchQuery={searchQuery} />
             </SidebarContent>
-            <SidebarFooter className="p-4">
-                {/* Footer content if needed */}
+            <SidebarFooter className="p-3 border-t">
+                <div className="flex items-center justify-end">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
+                        <Link href="/ai/morphic/settings" aria-label="Morphic Mission Control">
+                            <Settings className="h-4 w-4" />
+                            <span className="sr-only">Morphic Mission Control</span>
+                        </Link>
+                    </Button>
+                </div>
             </SidebarFooter>
         </Sidebar>
     )

@@ -19,6 +19,14 @@ export async function GET(request: NextRequest) {
         })
 
         if (!response.ok) {
+            // Graceful degradation: if the backend is temporarily unhealthy (5xx),
+            // keep the UI usable by returning an empty history rather than a 500.
+            if (response.status >= 500) {
+                return NextResponse.json(
+                    { chats: [], nextOffset: null, degraded: true, backendStatus: response.status },
+                    { status: 200 }
+                )
+            }
             const error = await response.json().catch(() => ({ error: 'Backend error' }))
             return NextResponse.json(error, { status: response.status })
         }
@@ -27,9 +35,12 @@ export async function GET(request: NextRequest) {
         return NextResponse.json(data)
     } catch (error: any) {
         console.error('[FRONTEND-PROXY] History error:', error)
+        // Return an empty-but-valid response so the sidebar degrades gracefully
+        // instead of triggering SWR error retries. The backend (Render) may be
+        // cold-starting; history will rehydrate on the next focus/revalidation.
         return NextResponse.json(
-            { chats: [], nextOffset: null, error: error.message },
-            { status: 500 }
+            { chats: [], nextOffset: null },
+            { status: 200 }
         )
     }
 }

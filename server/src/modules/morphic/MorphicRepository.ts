@@ -109,6 +109,17 @@ export class MorphicRepository {
                     "created_at" timestamp without time zone DEFAULT now() NOT NULL,
                     PRIMARY KEY (id)
                 );
+
+                CREATE TABLE IF NOT EXISTS public."morphic_feedback" (
+                    "id" character varying(191) NOT NULL,
+                    "user_id" character varying(255),
+                    "sentiment" character varying(256) NOT NULL,
+                    "message" text NOT NULL,
+                    "page_url" text NOT NULL,
+                    "user_agent" text,
+                    "created_at" timestamp without time zone DEFAULT now() NOT NULL,
+                    PRIMARY KEY (id)
+                );
             `;
 
             await pool.query(schemaSql);
@@ -554,5 +565,36 @@ export class MorphicRepository {
             this.log.error('Error upserting AI model config:', error);
             throw error;
         }
+    }
+
+    /**
+     * Insert feedback.
+     */
+    async insertFeedback(feedback: {
+        userId?: string
+        sentiment: 'positive' | 'neutral' | 'negative'
+        message: string
+        pageUrl: string
+        userAgent?: string
+    }) {
+        const id =
+            typeof (globalThis as any).crypto?.randomUUID === 'function'
+                ? (globalThis as any).crypto.randomUUID()
+                : `fb_${Date.now()}_${Math.random().toString(16).slice(2)}`
+
+        const rows = await this.query(
+            `INSERT INTO morphic_feedback (id, user_id, sentiment, message, page_url, user_agent, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, NOW())
+             RETURNING *`,
+            [
+                id,
+                feedback.userId || null,
+                feedback.sentiment,
+                feedback.message,
+                feedback.pageUrl,
+                feedback.userAgent || null
+            ]
+        )
+        return rows?.[0] || null
     }
 }

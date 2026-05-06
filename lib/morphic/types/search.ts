@@ -1,2 +1,2 @@
 // Search mode type definition
-export type SearchMode = 'quick' | 'adaptive' | 'utility' | 'planning'
+export type SearchMode = 'quick' | 'adaptive' | 'deep' | 'utility' | 'planning'

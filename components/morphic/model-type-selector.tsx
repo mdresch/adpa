@@ -80,7 +80,6 @@ export function ModelTypeSelector({
     }
 
     const selectedOption = MODEL_TYPE_OPTIONS.find(opt => opt.value === value)
-    const currentModelName = modelMapping[value]
 
     return (
         <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
@@ -92,11 +91,6 @@ export function ModelTypeSelector({
                 >
                     <span className="text-xs font-medium">
                         {selectedOption?.label}
-                        {currentModelName && (
-                            <span className="ml-1 opacity-60 hidden sm:inline">
-                                ({currentModelName})
-                            </span>
-                        )}
                     </span>
                     <ChevronDown
                         className={`h-3 w-3 ml-0.5 opacity-50 transition-transform duration-200 ${dropdownOpen ? 'rotate-180' : ''
@@ -111,7 +105,6 @@ export function ModelTypeSelector({
             >
                 {MODEL_TYPE_OPTIONS.map(option => {
                     const isSelected = value === option.value
-                    const modelName = modelMapping[option.value]
                     return (
                         <DropdownMenuItem
                             key={option.value}
@@ -124,11 +117,6 @@ export function ModelTypeSelector({
                                 </div>
                                 <span className="text-sm font-medium">{option.label}</span>
                             </div>
-                            {modelName && (
-                                <div className="pl-6 text-[10px] opacity-50 truncate w-full">
-                                    {modelName}
-                                </div>
-                            )}
                         </DropdownMenuItem>
                     )
                 })}

@@ -5,7 +5,7 @@ export interface SearchModeConfig {
     value: SearchMode
     label: string
     description: string
-    icon: 'search' | 'logo'
+    icon: 'search' | 'logo' | 'microscope'
     color: string
 }
 
@@ -23,6 +23,13 @@ export const SEARCH_MODE_CONFIGS: SearchModeConfig[] = [
         description: 'Adaptive agentic search with intelligent query understanding',
         icon: 'logo',
         color: 'text-violet-500'
+    },
+    {
+        value: 'deep',
+        label: 'Deep Research',
+        description: 'Multi-source synthesis with cross-provider parallel search and citation verification',
+        icon: 'microscope',
+        color: 'text-blue-600'
     }
 ]
 
