@@ -1,4 +1,5 @@
 import { db } from '@/lib/morphic/db'
+import { withRLS } from '@/lib/morphic/db/with-rls'
 import { tool } from 'ai'
 import { sql } from 'drizzle-orm'
 import { MongoClient } from 'mongodb'
@@ -161,7 +162,10 @@ export const createRagSearchTool = (userId: string) => tool({
             const textResults: RankedItem[] = textOutcome.status === 'fulfilled' ? textOutcome.value as RankedItem[] : []
 
             if (textOutcome.status === 'rejected') {
-                console.warn('[RAG] Full-text search unavailable (index may not exist), falling back to vector-only:', textOutcome.reason?.message)
+                const reasonMsg = textOutcome.reason instanceof Error
+                    ? textOutcome.reason.message
+                    : String(textOutcome.reason)
+                console.warn('[RAG] Full-text search unavailable (index may not exist), falling back to vector-only:', reasonMsg)
                 // Note: results are still returned from vector search; quality may be lower for exact-term queries
             }
 
@@ -311,33 +315,34 @@ export const createSearchPriorResearchTool = (userId: string) => tool({
         yield { state: 'searching' as const, query }
 
         try {
-            const results = await db.execute(
-                sql`
-                    SELECT
-                        c.title          AS chat_title,
-                        c.id             AS chat_id,
-                        p.text_text      AS content,
-                        m.created_at     AS message_date
-                    FROM morphic_parts p
-                    JOIN morphic_messages m ON m.id = p.message_id
-                    JOIN morphic_chats    c ON c.id = m.chat_id
-                    WHERE c.user_id  = ${userId}
-                      AND m.role     = 'assistant'
-                      AND p.type     = 'text'
-                      AND p.text_text IS NOT NULL
-                      AND to_tsvector('english', p.text_text) @@ plainto_tsquery('english', ${query})
-                    ORDER BY m.created_at DESC
-                    LIMIT ${limit}
-                `
-            )
-
-            const rows = (results.rows ?? []).filter(
-                (r): r is { chat_title: string; chat_id: string; content: string; message_date: Date } =>
-                    r !== null &&
-                    typeof r === 'object' &&
-                    typeof (r as any).chat_id === 'string' &&
-                    typeof (r as any).content === 'string'
-            )
+            const rows = await withRLS(userId, async tx => {
+                const results = await tx.execute(
+                    sql`
+                        SELECT
+                            c.title          AS chat_title,
+                            c.id             AS chat_id,
+                            p.text_text      AS content,
+                            m.created_at     AS message_date
+                        FROM morphic_parts p
+                        JOIN morphic_messages m ON m.id = p.message_id
+                        JOIN morphic_chats    c ON c.id = m.chat_id
+                        WHERE c.user_id  = ${userId}
+                          AND m.role     = 'assistant'
+                          AND p.type     = 'text'
+                          AND p.text_text IS NOT NULL
+                          AND to_tsvector('english', p.text_text) @@ plainto_tsquery('english', ${query})
+                        ORDER BY m.created_at DESC
+                        LIMIT ${limit}
+                    `
+                )
+                return (results.rows ?? []).filter(
+                    (r): r is { chat_title: string; chat_id: string; content: string; message_date: Date } =>
+                        r !== null &&
+                        typeof r === 'object' &&
+                        typeof (r as any).chat_id === 'string' &&
+                        typeof (r as any).content === 'string'
+                )
+            })
 
             yield {
                 state: 'complete' as const,

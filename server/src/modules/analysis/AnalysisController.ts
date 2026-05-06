@@ -414,4 +414,33 @@ export class AnalysisController {
       res.status(500).json({ error: 'Summary fetch failed' });
     }
   };
+
+  /**
+   * Full entity counts for extraction UI (same tables as summary, without domain rollups).
+   */
+  getExtractionResults = async (req: Request, res: Response) => {
+    try {
+      const { projectId } = req.params;
+      const tables = [
+        { key: 'stakeholders', name: 'stakeholders' },
+        { key: 'requirements', name: 'requirements' },
+        { key: 'risks', name: 'risks' },
+        { key: 'milestones', name: 'milestones' },
+        { key: 'activities', name: 'activities' },
+        { key: 'deliverables', name: 'deliverables' },
+        { key: 'constraints', name: 'constraints' },
+        { key: 'success_criteria', name: 'success_criteria' },
+        { key: 'best_practices', name: 'best_practices' },
+        { key: 'team_agreements', name: 'team_agreements' },
+        { key: 'development_approaches', name: 'development_approaches' },
+        { key: 'work_items', name: 'work_items' },
+        { key: 'performance_actuals', name: 'performance_actuals' },
+      ];
+      const entityCounts = await this.repository.getProjectEntityCounts(projectId, tables);
+      res.json({ success: true, projectId, entityCounts });
+    } catch (error) {
+      this.logger.error('Extraction results fetch failed', { error });
+      res.status(500).json({ error: 'Extraction results fetch failed' });
+    }
+  };
 }

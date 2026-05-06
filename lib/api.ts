@@ -1805,6 +1805,41 @@ export class ApiClient {
     return response
   }
 
+  /**
+   * Queue background AI document generation (worker creates document when complete).
+   * POST /api/jobs/ai-generate → 202 { jobId }
+   */
+  async enqueueAiGenerateJob(data: {
+    projectId: string
+    prompt: string
+    provider?: string
+    model?: string
+    templateId?: string
+    maxTokens?: number
+    temperature?: number
+    documentName?: string
+    description?: string
+    variables?: Record<string, unknown>
+    useContext?: boolean
+  }): Promise<{ jobId: string }> {
+    return this.request<{ jobId: string }>("/jobs/ai-generate", {
+      method: "POST",
+      body: JSON.stringify({
+        projectId: data.projectId,
+        prompt: data.prompt,
+        provider: data.provider,
+        model: data.model,
+        templateId: data.templateId,
+        maxTokens: data.maxTokens,
+        temperature: data.temperature,
+        documentName: data.documentName,
+        description: data.description,
+        variables: data.variables,
+        useContext: data.useContext,
+      }),
+    })
+  }
+
   // Document Generation with Smart Versioning (conflict detection)
   async generateDocument(data: {
     projectId: string

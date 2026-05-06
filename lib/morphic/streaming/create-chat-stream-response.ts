@@ -147,10 +147,44 @@ export async function createChatStreamResponse(
         }
     }
 
+<<<<<<< HEAD
     // Response-level caching is intentionally disabled:
     // - cached payloads were not guaranteed to match the UI SSE protocol
     // - cache-hit bypassed onFinish side effects (persistence/title/tracing)
     // Keep the full streaming pipeline authoritative until cache replay is redesigned.
+=======
+    // Cache check
+    const cacheKey = createHash('sha256')
+        .update(JSON.stringify({
+            message,
+            searchMode,
+            modelType,
+            knowledgeEnabled,
+            ragScope
+        }))
+        .digest('hex')
+
+    // Return cached response if available (only for authenticated users to avoid cross-user leakage)
+    // NOTE: The cache stores the completed UIMessage object. We cannot replay a UIMessage directly
+    // into a UIMessageStreamWriter because writer.write() expects typed stream parts, not a
+    // UIMessage. The cache hit path therefore returns a plain JSON Response instead of a stream.
+    // Clients must handle both response types from this endpoint:
+    //   - Cache miss (common): chunked text/event-stream SSE response from createUIMessageStreamResponse
+    //   - Cache hit (rare):    application/json containing the complete UIMessage object
+    if (userId) {
+        try {
+            const cached = await CacheService.get<UIMessage>(`chat:cache:${chatId}:${cacheKey}`)
+            if (cached) {
+                perfLog('Cache hit — returning cached response as JSON')
+                return new Response(JSON.stringify(cached), {
+                    headers: { 'Content-Type': 'application/json' }
+                })
+            }
+        } catch {
+            // Cache read failure is non-fatal — proceed to generate fresh response
+        }
+    }
+>>>>>>> 411348d4a05286777362580a48c247f4e589e683
 
     // Create stream context
     if (!model) {

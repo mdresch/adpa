@@ -26,12 +26,18 @@ export const aiGenerationJobDataSchema = baseJobDataSchema.keys({
   prompt: Joi.string().optional(),
   provider: Joi.string().optional(),
   model: Joi.string().allow(null).optional(),
+  temperature: Joi.number().min(0).max(2).optional(),
   fallback_provider: Joi.string().optional(),
   fallback_model: Joi.string().optional(),
   template_id: Joi.string().uuid().allow(null).optional(),
   max_tokens: Joi.number().integer().min(1).max(100000).optional(),
   variables: Joi.object().unknown(true).optional(),
   documentId: Joi.string().uuid().allow(null).optional(),
+  name: Joi.string().max(500).optional(),
+  description: Joi.string().allow('').optional(),
+  framework: Joi.string().optional(),
+  template_name: Joi.string().optional(),
+  use_context: Joi.boolean().optional(),
 })
 
 /**
