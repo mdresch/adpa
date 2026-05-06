@@ -331,4 +331,48 @@ export class MorphicController {
             res.status(500).json({ error: 'Internal Server Error' });
         }
     }
+
+    /**
+     * POST /api/v1/morphic/feedback
+     * Persist user feedback for a generation/trace.
+     */
+    static async submitFeedback(req: Request, res: Response) {
+        const userId = (req as any).user?.id;
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+
+        const { traceId, score, messageId } = req.body || {};
+        if (!traceId || typeof score !== 'number') {
+            return res.status(400).json({ error: 'traceId and numeric score are required' });
+        }
+
+        try {
+            const sentiment =
+                score > 0 ? 'positive' : score < 0 ? 'negative' : 'neutral';
+
+            const pageUrl =
+                (req.headers['referer'] as string) ||
+                (req.headers['x-forwarded-host']
+                    ? `https://${req.headers['x-forwarded-host']}`
+                    : '') ||
+                '';
+
+            const userAgent = String(req.headers['user-agent'] || '');
+
+            const payload = {
+                userId,
+                sentiment,
+                message: `traceId=${traceId}${messageId ? ` messageId=${messageId}` : ''}`,
+                pageUrl,
+                userAgent
+            };
+
+            const saved = await this.repository.insertFeedback(payload);
+            return res.json({ success: true, feedback: saved });
+        } catch (error: any) {
+            this.log.error('Error submitting feedback:', error);
+            return res.status(500).json({ error: 'Internal Server Error' });
+        }
+    }
 }

@@ -154,8 +154,10 @@ export function createResearcher({
                 }
                 // Enable File Search for ADPA knowledge base
                 activeToolsList.push('fileSearch')
-                // Only enable todo tools for quality model type
-                if (writer && 'todoWrite' in todoTools && modelType === 'quality') {
+                // Enable todo tools for adaptive mode regardless of model type.
+                // Some model/prompt combinations will invoke todoWrite in speed mode too;
+                // keeping it active avoids "Todo tool failed" due to inactive tool calls.
+                if (writer && 'todoWrite' in todoTools) {
                     activeToolsList.push('todoWrite')
                 }
                 maxSteps = getMaxStepsForMode('adaptive')

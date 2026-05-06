@@ -122,19 +122,51 @@ export async function loadChat(
     chatId: string,
     userId?: string
 ): Promise<UIMessage[]> {
-    return withOptionalRLS(userId || null, async (tx: any) => {
-        const result = await tx.query.messages.findMany({
-            where: eq(messages.chatId, chatId),
-            with: {
-                parts: {
-                    orderBy: [asc(parts.order)]
-                }
-            },
-            orderBy: [asc(messages.createdAt)]
-        })
+    try {
+        return await withOptionalRLS(userId || null, async (tx: any) => {
+            const result = await tx.query.messages.findMany({
+                where: eq(messages.chatId, chatId),
+                with: {
+                    parts: {
+                        orderBy: [asc(parts.order)]
+                    }
+                },
+                orderBy: [asc(messages.createdAt)]
+            })
 
-        return result.map((msg: any) => buildUIMessageFromDB(msg, msg.parts))
-    })
+            return result.map((msg: any) => buildUIMessageFromDB(msg, msg.parts))
+        })
+    } catch (error) {
+        console.error('[Morphic DB] loadChat failed; returning empty message list', {
+            chatId,
+            userId: userId ?? null,
+            error
+        })
+        return []
+    }
+}
+
+function isConnectionOrAuthFailure(error: any): boolean {
+    const code = error?.code || error?.cause?.code
+    if (typeof code === 'string') {
+        return [
+            'ECONNREFUSED',
+            'ECONNRESET',
+            'ENOTFOUND',
+            'ETIMEDOUT',
+            'ENETUNREACH',
+            '28P01'
+        ].includes(code)
+    }
+
+    const message = String(error?.message || '')
+    const causeMessage = String(error?.cause?.message || '')
+    const combined = `${message} ${causeMessage}`.toLowerCase()
+    return (
+        combined.includes('password authentication failed') ||
+        combined.includes('connection timeout') ||
+        combined.includes('failed query')
+    )
 }
 
 /**
@@ -147,37 +179,56 @@ export async function loadChatWithMessages(
     const count = incrementDbOperationCount()
     perfLog(`DB - loadChatWithMessages called - count: ${count}`)
 
-    return withOptionalRLS(userId || null, async (tx: any) => {
-        const chatResult = await tx
-            .select()
-            .from(chats)
-            .where(eq(chats.id, chatId))
-            .limit(1)
+    try {
+        return await withOptionalRLS(userId || null, async (tx: any) => {
+            const chatResult = await tx
+                .select()
+                .from(chats)
+                .where(eq(chats.id, chatId))
+                .limit(1)
 
-        const messagesResult = await tx.query.messages.findMany({
-            where: eq(messages.chatId, chatId),
-            with: {
-                parts: {
-                    orderBy: [asc(parts.order)]
-                }
-            },
-            orderBy: [asc(messages.createdAt)]
+            const messagesResult = await tx.query.messages.findMany({
+                where: eq(messages.chatId, chatId),
+                with: {
+                    parts: {
+                        orderBy: [asc(parts.order)]
+                    }
+                },
+                orderBy: [asc(messages.createdAt)]
+            })
+
+            const chat = chatResult[0]
+            if (!chat) {
+                return null
+            }
+
+            if (chat.visibility === 'private' && (!userId || chat.userId !== userId)) {
+                return null
+            }
+
+            const uiMessages = messagesResult.map((msg: any) =>
+                buildUIMessageFromDB(msg, msg.parts)
+            )
+            return { ...chat, messages: uiMessages }
         })
-
-        const chat = chatResult[0]
-        if (!chat) {
+    } catch (error) {
+        if (isConnectionOrAuthFailure(error)) {
+            console.error('[Morphic DB] loadChatWithMessages degraded due to DB connectivity/auth issue', {
+                chatId,
+                userId: userId ?? null,
+                code: error?.code || error?.cause?.code,
+                message: error?.message || error?.cause?.message || String(error)
+            })
             return null
         }
 
-        if (chat.visibility === 'private' && (!userId || chat.userId !== userId)) {
-            return null
-        }
-
-        const uiMessages = messagesResult.map((msg: any) =>
-            buildUIMessageFromDB(msg, msg.parts)
-        )
-        return { ...chat, messages: uiMessages }
-    })
+        console.error('[Morphic DB] loadChatWithMessages failed unexpectedly', {
+            chatId,
+            userId: userId ?? null,
+            error
+        })
+        return null
+    }
 }
 
 /**

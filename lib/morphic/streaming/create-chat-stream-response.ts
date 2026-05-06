@@ -29,8 +29,6 @@ import { persistStreamResults } from './helpers/persist-stream-results'
 import { prepareMessages } from './helpers/prepare-messages'
 import { streamRelatedQuestions } from './helpers/stream-related-questions'
 import { stripReasoningParts } from './helpers/strip-reasoning-parts'
-import { CacheService } from '@/lib/kv'
-import { createHash } from 'crypto'
 import type { StreamContext } from './helpers/types'
 import { BaseStreamConfig } from './types'
 import { getMaxStepsForMode } from '../utils/search-mode-steps'
@@ -149,39 +147,10 @@ export async function createChatStreamResponse(
         }
     }
 
-    // Cache check
-    const cacheKey = createHash('sha256')
-        .update(JSON.stringify({
-            message,
-            searchMode,
-            modelType,
-            knowledgeEnabled,
-            ragScope
-        }))
-        .digest('hex')
-
-    // Return cached response if available (only for authenticated users to avoid cross-user leakage)
-    if (userId) {
-        try {
-            const cached = await CacheService.get<UIMessage>(`chat:cache:${chatId}:${cacheKey}`)
-            if (cached) {
-                perfLog('Cache hit — returning cached response')
-                // Replay the cached UIMessage as a one-shot stream response.
-                // The AI SDK does not expose a direct UIMessage → UIMessageStreamPart converter.
-                // The cast through 'unknown' bridges the structural mismatch; a proper fix would
-                // require either storing raw SSE bytes in the cache or using an SDK utility once
-                // one is available in future SDK versions.
-                const cachedStream = createUIMessageStream<UIMessage>({
-                    execute: ({ writer: cacheWriter }) => {
-                        cacheWriter.write(cached as unknown as Parameters<typeof cacheWriter.write>[0])
-                    }
-                })
-                return createUIMessageStreamResponse({ stream: cachedStream, consumeSseStream: consumeStream })
-            }
-        } catch {
-            // Cache read failure is non-fatal — proceed to generate fresh response
-        }
-    }
+    // Response-level caching is intentionally disabled:
+    // - cached payloads were not guaranteed to match the UI SSE protocol
+    // - cache-hit bypassed onFinish side effects (persistence/title/tracing)
+    // Keep the full streaming pipeline authoritative until cache replay is redesigned.
 
     // Create stream context
     if (!model) {
@@ -484,11 +453,6 @@ export async function createChatStreamResponse(
                         // Non-critical — don't break persistence
                         console.error('[Langfuse] Error updating trace data onFinish:', e);
                     }
-                }
-
-                // Cache the finished response message
-                if (responseMessage.parts.length > 0) {
-                    await CacheService.set(`chat:cache:${chatId}:${cacheKey}`, responseMessage, 3600)
                 }
 
                 // Flush Langfuse traces

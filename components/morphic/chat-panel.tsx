@@ -90,7 +90,8 @@ export function ChatPanel({
         setIsInputFocused(false)
         inputRef.current?.blur()
         onNewChat?.()
-        router.push('/')
+        router.push('/ai-search')
+        router.refresh()
     }
 
     const handleAgentSubmit = async (goal: string) => {

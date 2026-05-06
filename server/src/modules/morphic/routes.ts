@@ -35,6 +35,9 @@ router.post('/admin/models', authenticateToken, (req, res) => MorphicController.
 router.get('/admin/config', authenticateToken, (req, res) => MorphicController.getAIModelConfigs(req, res));
 router.post('/admin/config', authenticateToken, (req, res) => MorphicController.upsertAIModelConfig(req, res));
 
+// Feedback
+router.post('/feedback', authenticateToken, (req, res) => MorphicController.submitFeedback(req, res));
+
 const routes: RouteConfig[] = [
     {
         path: '/morphic',
