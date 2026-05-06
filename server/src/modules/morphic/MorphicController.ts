@@ -119,6 +119,7 @@ export class MorphicController {
                 modelType: modelType as any,
                 knowledgeEnabled,
                 ragScope,
+                assistedContext,
                 correlationId: asyncLocalStorage.getStore(),
                 dbActions: {
                     loadChatWithMessages: (id, uid) => this.repository.loadChat(id, uid || userId),
