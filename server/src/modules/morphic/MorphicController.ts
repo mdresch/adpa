@@ -361,7 +361,7 @@ export class MorphicController {
         }
 
         try {
-            const sentiment =
+            const sentiment: 'positive' | 'neutral' | 'negative' =
                 score > 0 ? 'positive' : score < 0 ? 'negative' : 'neutral';
 
             const pageUrl =
