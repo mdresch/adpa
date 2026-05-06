@@ -30,7 +30,7 @@ This document provides an objective, critical assessment of the features claimed
 ### Features Evaluated
 * **PMBOK 7th Edition & PMBOK 6 compliant project management documents**
   * **Status:** 🟢 **Fully Implemented**
-  * **Evidence:** There are explicit modules like `server/src/modules/projectCharter/` and `server/src/modules/pmbok6/` (which implements a specific `PMBOKProcessAgent` with LangChain/LangGraph-like workflows). The `aiRecommendationsService.ts` validates outputs against PMBOK standards.
+  * **Evidence:** There are explicit modules like `server/src/modules/projectCharter/` and `server/src/modules/pmbok6/` (which implements a `PMBOKProcessAgent` TypeScript class extending `BaseAgent` with PMBOK-structured prompt construction, covering all PMBOK 6 process groups via a factory function). The `aiRecommendationsService.ts` references PMBOK standards in system prompts and template name mappings (e.g., "PMBOK Project Charter Template") to guide document generation; there is no separate programmatic validation layer against PMBOK rules.
 * **BABOK v3 & DMBOK 2.0 compliance**
   * **Status:** 🟡 **Partially Implemented / WIP**
   * **Evidence:** While PMBOK has deep, dedicated logic and agent workflows, BABOK and DMBOK appear primarily as references in templates and string matching (e.g., `'BABOK Requirements Template'` in recommendation services), rather than having dedicated, specialized validation engines.
