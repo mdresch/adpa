@@ -58,7 +58,7 @@ export function createParallelSearchTool() {
             const providers = getAvailableProviders()
 
             if (providers.length === 0) {
-                yield { state: 'output-error' as const, error: 'No search providers are configured. Set at least one of TAVILY_API_KEY, EXA_API_KEY, or BRAVE_SEARCH_API_KEY.' }
+                yield { state: 'output-error' as const, error: 'Web search is currently unavailable. Please contact your administrator.' }
                 return 'No results found: no search providers configured.'
             }
 

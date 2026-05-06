@@ -163,9 +163,10 @@ export async function createChatStreamResponse(
     // Return cached response if available (only for authenticated users to avoid cross-user leakage)
     // NOTE: The cache stores the completed UIMessage object. We cannot replay a UIMessage directly
     // into a UIMessageStreamWriter because writer.write() expects typed stream parts, not a
-    // UIMessage. Caching is therefore a read-ahead optimisation only: if a cached entry exists we
-    // skip generation and return the stored response via NextResponse.json so the client receives
-    // a fully-materialised message in a single JSON payload.
+    // UIMessage. The cache hit path therefore returns a plain JSON Response instead of a stream.
+    // Clients must handle both response types from this endpoint:
+    //   - Cache miss (common): chunked text/event-stream SSE response from createUIMessageStreamResponse
+    //   - Cache hit (rare):    application/json containing the complete UIMessage object
     if (userId) {
         try {
             const cached = await CacheService.get<UIMessage>(`chat:cache:${chatId}:${cacheKey}`)
