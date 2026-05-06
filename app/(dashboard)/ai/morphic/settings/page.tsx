@@ -941,15 +941,17 @@ export default function MorphicMissionControl() {
                           variant="outline"
                           className="rounded-full"
                           onClick={() => {
+                            const targetProviderId = editProvider.id
+                            setShowEditProviderModal(false)
+                            setAddMode('model')
                             setNewModel({
                               id: '',
-                              providerId: editProvider.id,
-                              name: 'Gemini 2.5 Flash',
-                              modelId: 'gemini-2.5-flash',
+                              providerId: targetProviderId,
+                              name: '',
+                              modelId: '',
                               isEnabled: true
                             })
-                            setShowEditProviderModal(false)
-                            openAddModel()
+                            setShowAddModal(true)
                           }}
                         >
                           Add model
