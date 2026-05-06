@@ -166,17 +166,60 @@ export function createResearcher({
                 break
         }
 
-        // Initialize knowledge tools if enabled and user is present
+        // Initialize knowledge tools. Always register tool names so the model never
+        // fails with an "unavailable tool" error — disabled tools return a clear message.
+        const unavailableRagSearchTool = tool({
+            description:
+                'Search the internal knowledge base (RAG). Returns unavailable when knowledge mode is disabled.',
+            inputSchema: z.object({
+                query: z.string(),
+                limit: z.number().optional().default(5)
+            }),
+            execute: async function* ({ query }) {
+                yield { state: 'output-error' as const, query, error: 'Knowledge base search is currently disabled for this chat.' }
+                return { error: 'Knowledge base search is currently disabled for this chat.' }
+            }
+        })
+
+        const unavailableDbQueryTool = tool({
+            description:
+                'Execute read-only SQL queries on system database. Returns unavailable when knowledge mode is disabled.',
+            inputSchema: z.object({
+                sqlQuery: z.string()
+            }),
+            execute: async function* ({ sqlQuery }) {
+                yield { state: 'output-error' as const, sqlQuery, error: 'System database query tool is currently disabled for this chat.' }
+                return { error: 'System database query tool is currently disabled for this chat.' }
+            }
+        })
+
+        const unavailableSearchPriorResearchTool = tool({
+            description:
+                "Search previous chat conversations for prior research. Returns unavailable when knowledge mode is disabled.",
+            inputSchema: z.object({
+                query: z.string(),
+                limit: z.number().optional().default(5)
+            }),
+            execute: async function* ({ query }) {
+                yield { state: 'output-error' as const, query, error: 'Prior research search is currently disabled for this chat.' }
+                return { error: 'Prior research search is currently disabled for this chat.' }
+            }
+        })
+
         // Deep Research mode always enables knowledge tools when userId is available
         const enableKnowledge = knowledgeEnabled || searchMode === 'deep'
-        let knowledgeTools = {}
-        if (enableKnowledge && userId) {
-            knowledgeTools = {
-                ragSearch: createRagSearchTool(userId),
-                dbQuery: createDbQueryTool(userId),
-                searchPriorResearch: createSearchPriorResearchTool(userId)
-            }
-        }
+        const knowledgeTools =
+            enableKnowledge && userId
+                ? {
+                      ragSearch: createRagSearchTool(userId),
+                      dbQuery: createDbQueryTool(userId),
+                      searchPriorResearch: createSearchPriorResearchTool(userId)
+                  }
+                : {
+                      ragSearch: unavailableRagSearchTool,
+                      dbQuery: unavailableDbQueryTool,
+                      searchPriorResearch: unavailableSearchPriorResearchTool
+                  }
 
         // Initialize File Search tool (always available if store exists)
         let fileSearchTools = {}
@@ -235,9 +278,11 @@ export function createResearcher({
             ? `\n\nADPA_ASSISTED_CONTEXT_START\n${assistedContext}\nADPA_ASSISTED_CONTEXT_END\nUse this assisted context as primary internal evidence for your response.`
             : ''
 
+        const allowedToolsInstruction = `\n\nTOOL AVAILABILITY (STRICT):\nYou may call ONLY these tools in this run: ${activeToolsList.join(', ')}.\nDo not call any tool that is not in this list. If a needed tool is unavailable, continue with available tools and explain the limitation briefly.`
+
         const agent = new ToolLoopAgent({
             model: getModel(model),
-            instructions: `${systemPrompt}\nCurrent date and time: ${currentDate}${assistedContextInstructions}`,
+            instructions: `${systemPrompt}\nCurrent date and time: ${currentDate}${assistedContextInstructions}${allowedToolsInstruction}`,
             tools: tools as any,
             activeTools: activeToolsList,
             stopWhen: stepCountIs(maxSteps),

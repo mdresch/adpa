@@ -26,8 +26,9 @@ function getAvailableProviders(): SearchProviderType[] {
     if (process.env.TAVILY_API_KEY) providers.push('tavily')
     if (process.env.EXA_API_KEY) providers.push('exa')
     if (process.env.BRAVE_SEARCH_API_KEY) providers.push('brave')
-    // Fall back to the default provider if nothing else is configured
-    if (providers.length === 0) providers.push('tavily')
+    // Do not add a fallback here: if no provider is configured, the tool
+    // surfaces a clear error rather than crashing with a missing-key error
+    // inside the Tavily provider constructor.
     return providers
 }
 
@@ -51,17 +52,24 @@ export function createParallelSearchTool() {
                 .default(10)
                 .describe('Maximum results to request from each individual provider.')
         }),
-        execute: async function* ({ query, max_results_per_provider }) {
+        execute: async function* ({ query, max_results_per_provider }, context) {
             yield { state: 'searching' as const, query }
 
             const providers = getAvailableProviders()
+
+            if (providers.length === 0) {
+                yield { state: 'output-error' as const, error: 'No search providers are configured. Set at least one of TAVILY_API_KEY, EXA_API_KEY, or BRAVE_SEARCH_API_KEY.' }
+                return 'No results found: no search providers configured.'
+            }
 
             const outcomes = await Promise.allSettled(
                 providers.map(providerType =>
                     createSearchProvider(providerType).search(
                         query,
                         max_results_per_provider,
-                        'advanced'
+                        'advanced',
+                        [],
+                        []
                     )
                 )
             )
@@ -101,6 +109,7 @@ export function createParallelSearchTool() {
                 images: allImages,
                 query,
                 number_of_results: dedupedResults.length,
+                toolCallId: context?.toolCallId,
                 citationMap
             }
 
