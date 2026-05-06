@@ -11,7 +11,7 @@ import { CacheService } from '../../../../lib/kv';
 import aiSearchRAGService from '../../services/aiSearchRAGService';
 import { getTextFromParts } from '../../../../lib/morphic/utils/message-utils';
 import { getModelsConfig } from '../../../../lib/morphic/config/load-models-config';
-import { checkAndEnforceOverallChatLimit, checkAndEnforceGuestLimit } from '../../../../lib/morphic/rate-limit/chat-limits';
+import { checkAndEnforceAllLimits } from '../../../../lib/morphic/rate-limit/chat-limits';
 
 /**
  * MorphicController
@@ -52,16 +52,18 @@ export class MorphicController {
         try {
             this.log.debug('Morphic chat request received', { chatId, userId, isNewChat });
 
-            // Enforce rate limits
-            if (userId === 'anonymous-user') {
-                const ip = req.ip || req.headers['x-forwarded-for']?.toString().split(',')[0].trim() || null;
-                await checkAndEnforceGuestLimit(ip);
-            } else {
-                await checkAndEnforceOverallChatLimit(userId);
-            }
-
             const searchMode = requestedSearchMode || 'adaptive';
+            const modelType = requestedModelType || 'speed';
             const knowledgeEnabled = !!requestedKnowledgeEnabled;
+
+            // Enforce all applicable limits (guest/overall/burst/model-type/deep research)
+            const ip = req.ip || req.headers['x-forwarded-for']?.toString().split(',')[0].trim() || null;
+            await checkAndEnforceAllLimits({
+                userId: userId === 'anonymous-user' ? undefined : userId,
+                ip: userId === 'anonymous-user' ? ip : undefined,
+                searchMode: searchMode as any,
+                modelType: modelType as any
+            });
 
             // Assemble context if needed
             let assistedContext: string | undefined;
@@ -102,9 +104,6 @@ export class MorphicController {
                 cookieStore: mockCookieStore,
                 searchMode
             });
-
-            // Model type resolution (forced to speed if not specified or for guest, but here we have userId)
-            const modelType = requestedModelType || 'speed';
 
             // Create stream response using the shared logic
             const streamResponse = await createChatStreamResponse({

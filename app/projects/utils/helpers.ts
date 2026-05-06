@@ -44,6 +44,18 @@ export function getPriorityColor(priority: string): string {
  * Returns percentage (0-100)
  */
 export function getProjectProgress(project: Project): number {
+  const complianceScoreRaw = project.document_quality_score
+  const complianceScore =
+    typeof complianceScoreRaw === "number"
+      ? complianceScoreRaw
+      : typeof complianceScoreRaw === "string"
+        ? Number(complianceScoreRaw)
+        : NaN
+
+  if (Number.isFinite(complianceScore)) {
+    return Math.max(0, Math.min(100, Math.round(complianceScore)))
+  }
+
   const startDate = new Date(project.start_date || Date.now())
   const endDate = new Date(project.end_date || Date.now())
   const now = new Date()

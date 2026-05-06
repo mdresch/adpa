@@ -1220,10 +1220,24 @@ export class ApiClient {
       })
     }
 
-    const response = await this.request<{ projects: Project[]; pagination: any }>(
+    const response = await this.request<{ projects?: Project[]; pagination?: any; page?: number; limit?: number; total?: number }>(
       `/projects?${queryParams}`
     )
-    return response
+    const projects = response.projects || []
+    const page = Number(response.pagination?.page ?? response.page ?? params?.page ?? 1)
+    const limit = Number(response.pagination?.limit ?? response.limit ?? params?.limit ?? 10)
+    const total = Number(response.pagination?.total ?? response.total ?? projects.length)
+    const pages = Number(response.pagination?.pages ?? Math.ceil(total / Math.max(limit, 1)) ?? 0)
+
+    return {
+      projects,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages
+      }
+    }
   }
 
   async getProject(id: string): Promise<Project> {

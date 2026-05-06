@@ -48,7 +48,9 @@ export class ProjectsController {
     const log = childLogger({ requestId: (req as any).requestId });
     try {
       const { page = 1, limit = 10, status, framework, search } = req.query;
-      const offset = (Number(page) - 1) * Number(limit);
+      const currentPage = Math.max(1, Number(page) || 1);
+      const pageSize = Math.max(1, Number(limit) || 10);
+      const offset = (currentPage - 1) * pageSize;
       const userId = (req as any).user?.id;
       const userRole = (req as any).user?.role;
       const isSuperAdmin = userRole === "super_admin";
@@ -68,7 +70,7 @@ export class ProjectsController {
       }
 
       const result = await ProjectsController.projectRepository.findAll({
-        limit: Number(limit),
+        limit: pageSize,
         offset,
         userId,
         isSuperAdmin,
@@ -78,12 +80,34 @@ export class ProjectsController {
         search
       });
 
+      let total = Number(result.rows?.[0]?.total_count || 0);
+      if (total === 0 && currentPage > 1) {
+        const firstPageProbe = await ProjectsController.projectRepository.findAll({
+          limit: 1,
+          offset: 0,
+          userId,
+          isSuperAdmin,
+          userCompanyId,
+          status,
+          framework,
+          search
+        });
+        total = Number(firstPageProbe.rows?.[0]?.total_count || 0);
+      }
+      const pages = Math.ceil(total / pageSize) || 0;
+
       res.json({
         success: true,
         projects: result.rows,
-        page: Number(page),
-        limit: Number(limit),
-        total: result.rowCount
+        page: currentPage,
+        limit: pageSize,
+        total,
+        pagination: {
+          page: currentPage,
+          limit: pageSize,
+          total,
+          pages
+        }
       });
     } catch (error) {
       log.error("GetAll Projects error:", error);

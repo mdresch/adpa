@@ -137,7 +137,6 @@ export async function loadChat(
             return result.map((msg: any) => buildUIMessageFromDB(msg, msg.parts))
         })
     } catch (error) {
-<<<<<<< HEAD
         console.error('[Morphic DB] loadChat failed; returning empty message list', {
             chatId,
             userId: userId ?? null,
@@ -168,11 +167,6 @@ function isConnectionOrAuthFailure(error: any): boolean {
         combined.includes('connection timeout') ||
         combined.includes('failed query')
     )
-=======
-        console.error(`[DB:loadChat] Failed to load chat ${chatId}:`, error)
-        return []
-    }
->>>>>>> 411348d4a05286777362580a48c247f4e589e683
 }
 
 /**
@@ -218,13 +212,20 @@ export async function loadChatWithMessages(
             return { ...chat, messages: uiMessages }
         })
     } catch (error) {
-<<<<<<< HEAD
         if (isConnectionOrAuthFailure(error)) {
+            const err = error as {
+                code?: string
+                message?: string
+                cause?: {
+                    code?: string
+                    message?: string
+                }
+            }
             console.error('[Morphic DB] loadChatWithMessages degraded due to DB connectivity/auth issue', {
                 chatId,
                 userId: userId ?? null,
-                code: error?.code || error?.cause?.code,
-                message: error?.message || error?.cause?.message || String(error)
+                code: err.code || err.cause?.code,
+                message: err.message || err.cause?.message || String(error)
             })
             return null
         }
@@ -234,9 +235,6 @@ export async function loadChatWithMessages(
             userId: userId ?? null,
             error
         })
-=======
-        console.error(`[DB:loadChatWithMessages] Failed to load chat ${chatId}:`, error)
->>>>>>> 411348d4a05286777362580a48c247f4e589e683
         return null
     }
 }

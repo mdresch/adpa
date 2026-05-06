@@ -7,11 +7,11 @@ import { SearchMode } from '@/lib/morphic/types/search'
 import { isProviderEnabled } from '@/lib/morphic/utils/registry'
 
 const DEFAULT_MODEL: Model = {
-    id: 'gemini-2.5-flash',
-    name: 'Gemini 2.5 Flash',
+    id: 'gemini-3.1-flash-lite',
+    name: 'Gemini 3.1 Flash Lite',
     provider: 'google',
     providerId: 'google',
-    modelId: 'gemini-2.5-flash',
+    modelId: 'gemini-3.1-flash-lite',
     isEnabled: true
 }
 

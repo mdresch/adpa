@@ -35,7 +35,8 @@ import { Label } from '@/components/ui/label'
 // --- Constants ---
 const SEARCH_MODES = [
   { id: 'quick', name: 'Quick Search', icon: Zap },
-  { id: 'adaptive', name: 'Adaptive Research', icon: Activity }
+  { id: 'adaptive', name: 'Adaptive Research', icon: Activity },
+  { id: 'deep', name: 'Deep Research', icon: Database }
 ]
 
 const MODEL_TYPES = [
