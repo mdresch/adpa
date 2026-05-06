@@ -122,19 +122,24 @@ export async function loadChat(
     chatId: string,
     userId?: string
 ): Promise<UIMessage[]> {
-    return withOptionalRLS(userId || null, async (tx: any) => {
-        const result = await tx.query.messages.findMany({
-            where: eq(messages.chatId, chatId),
-            with: {
-                parts: {
-                    orderBy: [asc(parts.order)]
-                }
-            },
-            orderBy: [asc(messages.createdAt)]
-        })
+    try {
+        return await withOptionalRLS(userId || null, async (tx: any) => {
+            const result = await tx.query.messages.findMany({
+                where: eq(messages.chatId, chatId),
+                with: {
+                    parts: {
+                        orderBy: [asc(parts.order)]
+                    }
+                },
+                orderBy: [asc(messages.createdAt)]
+            })
 
-        return result.map((msg: any) => buildUIMessageFromDB(msg, msg.parts))
-    })
+            return result.map((msg: any) => buildUIMessageFromDB(msg, msg.parts))
+        })
+    } catch (error) {
+        console.error(`[DB:loadChat] Failed to load chat ${chatId}:`, error)
+        return []
+    }
 }
 
 /**
@@ -147,37 +152,42 @@ export async function loadChatWithMessages(
     const count = incrementDbOperationCount()
     perfLog(`DB - loadChatWithMessages called - count: ${count}`)
 
-    return withOptionalRLS(userId || null, async (tx: any) => {
-        const chatResult = await tx
-            .select()
-            .from(chats)
-            .where(eq(chats.id, chatId))
-            .limit(1)
+    try {
+        return await withOptionalRLS(userId || null, async (tx: any) => {
+            const chatResult = await tx
+                .select()
+                .from(chats)
+                .where(eq(chats.id, chatId))
+                .limit(1)
 
-        const messagesResult = await tx.query.messages.findMany({
-            where: eq(messages.chatId, chatId),
-            with: {
-                parts: {
-                    orderBy: [asc(parts.order)]
-                }
-            },
-            orderBy: [asc(messages.createdAt)]
+            const messagesResult = await tx.query.messages.findMany({
+                where: eq(messages.chatId, chatId),
+                with: {
+                    parts: {
+                        orderBy: [asc(parts.order)]
+                    }
+                },
+                orderBy: [asc(messages.createdAt)]
+            })
+
+            const chat = chatResult[0]
+            if (!chat) {
+                return null
+            }
+
+            if (chat.visibility === 'private' && (!userId || chat.userId !== userId)) {
+                return null
+            }
+
+            const uiMessages = messagesResult.map((msg: any) =>
+                buildUIMessageFromDB(msg, msg.parts)
+            )
+            return { ...chat, messages: uiMessages }
         })
-
-        const chat = chatResult[0]
-        if (!chat) {
-            return null
-        }
-
-        if (chat.visibility === 'private' && (!userId || chat.userId !== userId)) {
-            return null
-        }
-
-        const uiMessages = messagesResult.map((msg: any) =>
-            buildUIMessageFromDB(msg, msg.parts)
-        )
-        return { ...chat, messages: uiMessages }
-    })
+    } catch (error) {
+        console.error(`[DB:loadChatWithMessages] Failed to load chat ${chatId}:`, error)
+        return null
+    }
 }
 
 /**

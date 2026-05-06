@@ -149,9 +149,7 @@ export function createResearcher({
                 systemPrompt = ADAPTIVE_MODE_PROMPT
                 activeToolsList = ['search', 'fetch', 'runProjectAgent', 'askQuestion']
 
-                if (knowledgeEnabled) {
-                    activeToolsList.push('ragSearch', 'dbQuery')
-                }
+                activeToolsList.push('ragSearch', 'dbQuery')
                 // Enable File Search for ADPA knowledge base
                 activeToolsList.push('fileSearch')
                 // Only enable todo tools for quality model type

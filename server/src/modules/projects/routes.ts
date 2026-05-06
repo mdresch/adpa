@@ -1,5 +1,9 @@
 import { Router } from 'express';
 import { ProjectsController } from './ProjectsController';
+import {
+  ProjectContextItemsController,
+  projectContextItemsUploadMiddleware,
+} from './ProjectContextItemsController';
 import { RouteConfig } from '../../routes/registry';
 import { authenticateToken } from '../../middleware/auth';
 
@@ -14,6 +18,26 @@ const router = Router();
 
 // Test endpoint: GET /api/v1/projects/modular-test
 router.get('/modular-test', ProjectsController.testModular);
+
+// Project context items (must be before /:id)
+router.get('/:id/context-items/analytics', authenticateToken, ProjectContextItemsController.analytics);
+router.get('/:id/context-items/recommendations', authenticateToken, ProjectContextItemsController.recommendations);
+router.get('/:id/context-items/integration-pages', authenticateToken, ProjectContextItemsController.integrationPages);
+router.post('/:id/context-items/fetch-url', authenticateToken, ProjectContextItemsController.fetchUrl);
+router.post(
+  '/:id/context-items/:itemId/log-usage',
+  authenticateToken,
+  ProjectContextItemsController.logUsage
+);
+router.put('/:id/context-items/:itemId', authenticateToken, ProjectContextItemsController.update);
+router.delete('/:id/context-items/:itemId', authenticateToken, ProjectContextItemsController.remove);
+router.get('/:id/context-items', authenticateToken, ProjectContextItemsController.list);
+router.post(
+  '/:id/context-items',
+  authenticateToken,
+  projectContextItemsUploadMiddleware,
+  ProjectContextItemsController.create
+);
 
 // Core CRUD Operations
 router.get('/', authenticateToken, ProjectsController.getAll);

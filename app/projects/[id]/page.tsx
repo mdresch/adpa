@@ -991,108 +991,77 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
         return
       }
 
-      // Enqueue AI generation job via jobs API
-      let jobId: string | undefined
+      const template = templates.find(t => t.id === selectedTemplate)
 
-      try {
-        console.log('🔄 [7/10] Attempting to enqueue job...')
-        console.log('📊 Request payload validation:', {
-          promptLength: aiPrompt.length,
-          provider: selectedProvider,
-          model: selectedModel,
-          temperature: aiTemperature,
-          templateId: selectedTemplate,
-          hasProjectId: !!projectId
-        })
-
-        const { getApiUrl } = await import('@/lib/api-url')
-        const apiUrl = getApiUrl('/ai/generate')
-        console.log('📡 API URL:', apiUrl)
-
-        const requestBody = {
-          prompt: aiPrompt,
-          provider: selectedProvider,
-          model: selectedModel || undefined, // Only include if set
-          temperature: aiTemperature,
-          template_id: selectedTemplate || undefined, // Only include if set (valid UUID)
-          variables: {
-            project_id: projectId,
-            project_name: project?.name || 'Unknown Project',
-            template_name: templates.find(t => t.id === selectedTemplate)?.name || 'Unknown Template',
-            framework: project?.framework || 'General'
-          },
-          project_id: projectId,
-          project_name: project?.name || 'Unknown Project',
-        }
-
-        // Remove undefined values to avoid sending them
-        Object.keys(requestBody).forEach(key => {
-          if (requestBody[key as keyof typeof requestBody] === undefined) {
-            delete requestBody[key as keyof typeof requestBody]
-          }
-        })
-
-        const resp = await fetch(apiUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-          },
-          body: JSON.stringify(requestBody),
-        })
-
-        if (resp.ok) {
-          const body = await resp.json()
-          jobId = body.jobId
-          console.log('✅ Job queued successfully:', jobId)
-          toast.success(`Document generation started! Job ID: ${jobId}`)
-
-          // SUCCESS: Close dialog and let background worker create the document
-          console.log('✅ Job queued, closing dialog')
-          setDocumentName("")
-          setDocumentDescription("")
-          setSelectedTemplate("")
-          setCreateDialogOpen(false)
-          setCreatingDocument(false)
-
-          // Refresh documents list after a short delay (worker needs time to process)
-          setTimeout(async () => {
-            await fetchDocuments()
-          }, 3000)
-
-          return // EXIT - document will be created by background worker
-        } else {
-          const errorBody = await resp.json().catch(() => ({}))
-          console.error('❌ Failed to enqueue job (status ' + resp.status + ')', errorBody)
-          const errorMsg = errorBody.error || `Job queue returned ${resp.status}`
-          const details = errorBody.details ? `: ${JSON.stringify(errorBody.details)}` : ''
-          throw new Error(errorMsg + details)
-        }
-      } catch (err: any) {
-        console.error('❌ Failed to enqueue job:', err)
-        const errorMessage = err.message || 'Failed to start document generation. Please try again.'
-        toast.error(errorMessage)
-        setCreatingDocument(false)
-        return // EXIT on error
-      }
-
-      console.log('🔄 [8/10] Job queue unavailable, proceeding with direct generation...')
-
-      // Fallback: synchronous generation via AI Gateway
-      // Step 2: Generating content with AI
+      // Primary path: background job (POST /api/jobs/ai-generate). Worker runs AI + creates document.
       setGenerationProgress({
         step: 2,
         totalSteps: 4,
-        message: `Generating content with ${selectedProvider}...`,
+        message: 'Queueing document generation…',
+        percentage: 35,
+      })
+
+      try {
+        const queueResult = await apiClient.enqueueAiGenerateJob({
+          projectId,
+          prompt: aiPrompt,
+          provider: selectedProvider,
+          model: selectedModel,
+          templateId: selectedTemplate,
+          maxTokens: 32768,
+          temperature: aiTemperature,
+          documentName: documentName.trim(),
+          description: documentDescription?.trim() || undefined,
+          variables: {
+            project_id: projectId,
+            project_name: project?.name || 'Unknown Project',
+            template_name: template?.name || 'Unknown Template',
+            framework: project?.framework || template?.framework || 'General',
+          },
+          useContext: true,
+        })
+
+        if (queueResult?.jobId) {
+          console.log('✅ [7/10] AI generation job queued:', queueResult.jobId)
+          const jid = queueResult.jobId
+          setDocumentName('')
+          setDocumentDescription('')
+          setSelectedTemplate('')
+          setCreateDialogOpen(false)
+          setGenerationProgress({ step: 0, totalSteps: 4, message: '', percentage: 0 })
+          setCreatingDocument(false)
+          toast.success('Document generation queued', {
+            description: 'Opening the job monitor so you can track progress.',
+          })
+          router.push(`/jobs?jobId=${encodeURIComponent(jid)}`)
+          setTimeout(() => {
+            void fetchDocuments()
+          }, 2500)
+          return
+        }
+      } catch (queueErr: unknown) {
+        console.warn(
+          '⚠️ [7/10] Job queue unavailable, falling back to inline generation:',
+          queueErr instanceof Error ? queueErr.message : queueErr
+        )
+        toast.info('Running generation in this session', {
+          description: 'The job queue was not available; completing generation inline instead.',
+        })
+      }
+
+      // Fallback: synchronous AI + save (e.g. local dev without RabbitMQ workers)
+      setGenerationProgress({
+        step: 2,
+        totalSteps: 4,
+        message: `Generating content with ${selectedProvider}…`,
         percentage: 50,
       })
-      console.log('✅ [9/10] Progress indicator set to Step 2 (50%) - Starting AI generation')
+      console.log('🔄 [8/10] Inline AI generation (fallback)…')
 
       let generatedText: string | undefined
       let genResult: any = null  // Declare outside try block for metadata access later
 
       try {
-        const template = templates.find(t => t.id === selectedTemplate)
         console.log('🤖 [AI-1/5] Starting AI generation...')
         console.log('📊 Provider:', selectedProvider, '| Model:', selectedModel, '| Temp:', aiTemperature)
         console.log('📋 Template:', template?.name || 'Unknown')
@@ -1105,7 +1074,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
           model: selectedModel,
           temperature: aiTemperature,
           template_id: selectedTemplate,
-          // Additional context for metadata tracking
+          projectId,
           variables: {
             project_id: projectId,
             project_name: project?.name || 'Unknown Project',
@@ -1144,9 +1113,15 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
           message: 'Content generated! Saving document...',
           percentage: 75,
         })
-      } catch (aiError) {
+      } catch (aiError: unknown) {
         console.error('❌ [AI-ERROR] AI generation failed:', aiError)
-        toast.error('AI generation failed. Please try again.')
+        const msg =
+          aiError instanceof Error
+            ? aiError.message
+            : typeof aiError === 'object' && aiError !== null && 'message' in aiError
+              ? String((aiError as { message: unknown }).message)
+              : 'Please try again.'
+        toast.error(`AI generation failed: ${msg}`)
         setCreatingDocument(false)
         setGenerationProgress({ step: 0, totalSteps: 4, message: '', percentage: 0 })
         return

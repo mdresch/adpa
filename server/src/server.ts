@@ -354,28 +354,73 @@ io.on("connection", (socket) => {
       if (projectMatch) {
         const token = socket.handshake?.auth?.token
         if (!token) { socket.emit('join:error', { room, message: 'Authentication required' }); return; }
-        let decoded: any
-        try {
-          if (token.length > 500) {
-            const firebaseUser = await admin.auth().verifyIdToken(token)
-            decoded = { userId: firebaseUser.uid, email: firebaseUser.email, firebase: true }
-          } else {
-            decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key')
-          }
-        } catch (jwtError: any) {
-          socket.emit('join:error', { room, message: 'Invalid token', code: 'AUTH_INVALID' })
-          socket.disconnect(true); return;
+        const jwtParts = token.split('.')
+        if (jwtParts.length !== 3) {
+          socket.emit('join:error', { room, message: 'Invalid token format', code: 'AUTH_INVALID' })
+          return
         }
-        const finalUserId = decoded?.firebase ? decoded.userId : decoded?.userId;
-        const userRes = await safeQuery(pool, 'SELECT id, name, role FROM users WHERE id = $1', [finalUserId])
-        if (!userRes || userRes.rows.length === 0) { socket.emit('join:error', { room, message: 'User not found' }); return; }
+        // Match authenticateToken: Firebase ID token first, then legacy JWT (internal user UUID).
+        let firebaseEmail: string | null = null
+        let legacyUserId: string | null = null
+        try {
+          const firebaseUser = await admin.auth().verifyIdToken(token)
+          firebaseEmail = firebaseUser.email ? String(firebaseUser.email).trim() : null
+        } catch {
+          try {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as { userId?: string }
+            legacyUserId = decoded?.userId || null
+          } catch {
+            socket.emit('join:error', { room, message: 'Invalid token', code: 'AUTH_INVALID' })
+            socket.disconnect(true)
+            return
+          }
+        }
+        let userRes
+        if (firebaseEmail) {
+          userRes = await safeQuery(
+            pool,
+            'SELECT id, name, role FROM users WHERE LOWER(TRIM(email)) = LOWER(TRIM($1))',
+            [firebaseEmail]
+          )
+        } else if (legacyUserId) {
+          userRes = await safeQuery(pool, 'SELECT id, name, role FROM users WHERE id = $1', [legacyUserId])
+        } else {
+          socket.emit('join:error', { room, message: 'Invalid token', code: 'AUTH_INVALID' })
+          socket.disconnect(true)
+          return
+        }
+        if (!userRes || userRes.rows.length === 0) {
+          socket.emit('join:error', { room, message: 'User not found' })
+          return
+        }
         const user = userRes.rows[0]
-        const projRes = await safeQuery(pool, 'SELECT id, owner_id, created_by, team_members FROM projects WHERE id = $1', [projectMatch[1]])
-        if (!projRes || projRes.rows.length === 0) { socket.emit('join:error', { room, message: 'Project not found' }); return; }
-        const project = projRes.rows[0]
-        const hasAccess = project.owner_id === finalUserId || project.created_by === finalUserId || user.role === 'admin'
-        if (hasAccess) { socket.join(room); socket.emit('join:ok', { room }); }
-        else { socket.emit('join:error', { room, message: 'Access denied' }); }
+        const internalUserId = user.id as string
+
+        const roleLower = String(user.role || '').toLowerCase()
+        const isElevated = roleLower === 'admin' || roleLower === 'super_admin'
+        const projRes = await safeQuery(
+          pool,
+          `SELECT id FROM projects
+           WHERE id = $1
+             AND (
+               $2::boolean
+               OR owner_id = $3
+               OR created_by = $3
+               OR team_members ? $3::text
+             )`,
+          [projectMatch[1], isElevated, internalUserId]
+        )
+        if (!projRes || projRes.rows.length === 0) {
+          const exists = await safeQuery(pool, 'SELECT 1 FROM projects WHERE id = $1 LIMIT 1', [projectMatch[1]])
+          if (!exists || exists.rows.length === 0) {
+            socket.emit('join:error', { room, message: 'Project not found' })
+          } else {
+            socket.emit('join:error', { room, message: 'Access denied' })
+          }
+          return
+        }
+        socket.join(room)
+        socket.emit('join:ok', { room })
       } else {
         socket.join(room); socket.emit('join:ok', { room });
       }

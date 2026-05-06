@@ -22,6 +22,7 @@ router.get("/history", authenticateToken, controller.getHistory);
 router.post("/extract", authenticateToken, requirePermission("ai.generate"), controller.extract);
 router.get("/status/:jobId", authenticateToken, controller.getJobStatus);
 router.get("/summary/:projectId", authenticateToken, controller.getSummary);
+router.get("/results/:projectId", authenticateToken, controller.getExtractionResults);
 router.post("/trigger-baseline", authenticateToken, controller.triggerBaseline);
 
 const analysisRoutes: RouteConfig[] = [

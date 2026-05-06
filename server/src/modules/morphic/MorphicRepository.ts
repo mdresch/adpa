@@ -8,6 +8,7 @@ import { childLogger } from "../../utils/logger"
  */
 export class MorphicRepository {
     private static _pool: Pool | null = null;
+    private static _preferMainFallback = false;
     private log = childLogger({ module: 'MorphicRepository' });
 
     /**
@@ -143,7 +144,7 @@ export class MorphicRepository {
         let morphicUrl = process.env.MORPHIC_DATABASE_URL || process.env.MORPHIC_DB_URL;
         const mainUrl = process.env.DATABASE_URL;
 
-        if (morphicUrl) {
+        if (morphicUrl && !MorphicRepository._preferMainFallback) {
             // Trim quotes
             morphicUrl = morphicUrl.replace(/^["']|["']$/g, '');
             
@@ -191,16 +192,39 @@ export class MorphicRepository {
             const result = await pool.query(text, params);
             return result.rows;
         } catch (error: any) {
-            // Check for connection related errors
-            const isConnectionError = error.message.includes('terminated') || 
-                                     error.message.includes('ECONNRESET') || 
-                                     error.message.includes('ECONNREFUSED') ||
-                                     error.message.includes('expired');
+            const errorCode = String(error?.code || '').toUpperCase();
+            const errorMessage = String(error?.message || '');
+            const causeCode = String(error?.cause?.code || '').toUpperCase();
+            const causeMessage = String(error?.cause?.message || '');
+
+            // Check for connection related errors (including nested Drizzle/pg causes).
+            const isConnectionError =
+                errorMessage.includes('terminated') ||
+                errorMessage.includes('ECONNRESET') ||
+                errorMessage.includes('ECONNREFUSED') ||
+                errorMessage.includes('expired') ||
+                errorMessage.includes('ETIMEDOUT') ||
+                errorMessage.includes('ENOTFOUND') ||
+                causeMessage.includes('terminated') ||
+                causeMessage.includes('ECONNRESET') ||
+                causeMessage.includes('ECONNREFUSED') ||
+                causeMessage.includes('ETIMEDOUT') ||
+                causeMessage.includes('ENOTFOUND') ||
+                errorCode === 'ECONNRESET' ||
+                errorCode === 'ECONNREFUSED' ||
+                errorCode === 'ETIMEDOUT' ||
+                errorCode === 'ENOTFOUND' ||
+                causeCode === 'ECONNRESET' ||
+                causeCode === 'ECONNREFUSED' ||
+                causeCode === 'ETIMEDOUT' ||
+                causeCode === 'ENOTFOUND';
 
             if (isConnectionError && process.env.MORPHIC_DATABASE_URL) {
                 this.log.warn('Morphic DB connection failed, attempting fallback to main DB...', error.message);
                 
-                // Reset pool and try one more time with main DB fallback
+                // Reset pool and force main DB fallback for this process lifetime.
+                // Otherwise getPool() would keep reselecting MORPHIC_DATABASE_URL and loop-failing.
+                MorphicRepository._preferMainFallback = true;
                 MorphicRepository._pool = null;
                 const pool = await this.getPool();
                 const result = await pool.query(text, params);
