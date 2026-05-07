@@ -45,7 +45,11 @@ export function ChatHistory({ searchQuery = '' }: { searchQuery?: string }) {
         '/api/morphic/chats',
         fetcher,
         {
-            fallbackData: { chats: [] }
+            fallbackData: { chats: [] },
+            // Don't hammer the server when it's temporarily unavailable
+            // (e.g. backend cold-starting on Render). History revalidates
+            // automatically on focus / window re-activation.
+            shouldRetryOnError: false
         }
     )
 

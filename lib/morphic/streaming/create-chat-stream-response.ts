@@ -29,10 +29,9 @@ import { persistStreamResults } from './helpers/persist-stream-results'
 import { prepareMessages } from './helpers/prepare-messages'
 import { streamRelatedQuestions } from './helpers/stream-related-questions'
 import { stripReasoningParts } from './helpers/strip-reasoning-parts'
-import { CacheService } from '@/lib/kv'
-import { createHash } from 'crypto'
 import type { StreamContext } from './helpers/types'
 import { BaseStreamConfig } from './types'
+import { getMaxStepsForMode } from '../utils/search-mode-steps'
 
 // ... existing code ...
 
@@ -148,16 +147,10 @@ export async function createChatStreamResponse(
         }
     }
 
-    // Cache check
-    const cacheKey = createHash('sha256')
-        .update(JSON.stringify({
-            message,
-            searchMode,
-            modelType,
-            knowledgeEnabled,
-            ragScope
-        }))
-        .digest('hex')
+    // Response-level caching is intentionally disabled:
+    // - cached payloads were not guaranteed to match the UI SSE protocol
+    // - cache-hit bypassed onFinish side effects (persistence/title/tracing)
+    // Keep the full streaming pipeline authoritative until cache replay is redesigned.
 
     // Create stream context
     if (!model) {
@@ -311,10 +304,12 @@ export async function createChatStreamResponse(
                             })
                         }
 
-                        // DEBUGGING GEMINI ERROR:
-                        console.debug("\n--- CORE MESSAGES PAYLOAD ---");
-                        console.debug(JSON.stringify(coreMessages, null, 2));
-                        console.debug("-----------------------------\n");
+                        // Debug payload logging (development only to prevent leaking conversation data)
+                        if (process.env.NODE_ENV === 'development') {
+                            console.debug("\n--- CORE MESSAGES PAYLOAD ---");
+                            console.debug(JSON.stringify(coreMessages, null, 2));
+                            console.debug("-----------------------------\n");
+                        }
 
                         if (!initialChat && message && !titlePromise) {
                             const messageContent = getTextFromParts(message.parts)
@@ -350,7 +345,8 @@ export async function createChatStreamResponse(
                                         return {
                                             traceId: parentTraceId,
                                             searchMode,
-                                            modelId: currentModelId
+                                            modelId: currentModelId,
+                                            maxSteps: getMaxStepsForMode(searchMode)
                                         }
                                     }
                                 }
@@ -457,11 +453,6 @@ export async function createChatStreamResponse(
                         // Non-critical — don't break persistence
                         console.error('[Langfuse] Error updating trace data onFinish:', e);
                     }
-                }
-
-                // Cache the finished response message
-                if (responseMessage.parts.length > 0) {
-                    await CacheService.set(`chat:cache:${chatId}:${cacheKey}`, responseMessage, 3600)
                 }
 
                 // Flush Langfuse traces

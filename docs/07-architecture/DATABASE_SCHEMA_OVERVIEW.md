@@ -37,6 +37,19 @@ API Request Logs:    61,179 rows (31 MB)
 - ✅ `project_priority_scores` - 0 rows (project scoring data) (9 columns)
 - ✅ `project_priority_rankings` - View (computed rankings) (8 columns)
 
+#### **Portfolio Prioritization (Materialized Rankings)** ⭐ **NEW** (SC-78):
+- ✅ `portfolio_criteria` - Scoring criteria (weight multiplier, min/max scale)
+- ✅ `portfolio_scores` - Per-project scores per criterion (unique: project+criterion)
+- ✅ `portfolio_rankings` - Materialized View (precomputed ranking + totals)
+- ✅ `refresh_portfolio_rankings()` - DB function to refresh the materialized view
+
+#### **Strategic Alignment / OKRs** ⭐ **NEW** (SC-84):
+- ✅ `strategic_goals` - Strategic goals (category, status, priority, target_date)
+- ✅ `project_strategic_goals` - Project ↔ goal linkage (contribution_level, alignment_score)
+- ✅ `strategic_key_results` - OKR-style measurable key results per goal
+- ✅ `project_strategic_alignment` - View (project alignment analytics)
+- ✅ `strategic_goals_progress` - View (goal progress analytics)
+
 #### **Users & Authentication**:
 - ✅ `users` - 5 rows, 240 KB (11 columns)
 - ✅ `audit_logs` - 286 rows, 400 KB (10 columns)

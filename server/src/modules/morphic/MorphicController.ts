@@ -11,7 +11,7 @@ import { CacheService } from '../../../../lib/kv';
 import aiSearchRAGService from '../../services/aiSearchRAGService';
 import { getTextFromParts } from '../../../../lib/morphic/utils/message-utils';
 import { getModelsConfig } from '../../../../lib/morphic/config/load-models-config';
-import { checkAndEnforceOverallChatLimit, checkAndEnforceGuestLimit } from '../../../../lib/morphic/rate-limit/chat-limits';
+import { checkAndEnforceAllLimits } from '../../../../lib/morphic/rate-limit/chat-limits';
 
 /**
  * MorphicController
@@ -52,16 +52,18 @@ export class MorphicController {
         try {
             this.log.debug('Morphic chat request received', { chatId, userId, isNewChat });
 
-            // Enforce rate limits
-            if (userId === 'anonymous-user') {
-                const ip = req.ip || req.headers['x-forwarded-for']?.toString().split(',')[0].trim() || null;
-                await checkAndEnforceGuestLimit(ip);
-            } else {
-                await checkAndEnforceOverallChatLimit(userId);
-            }
-
             const searchMode = requestedSearchMode || 'adaptive';
+            const modelType = requestedModelType || 'speed';
             const knowledgeEnabled = !!requestedKnowledgeEnabled;
+
+            // Enforce all applicable limits (guest/overall/burst/model-type/deep research)
+            const ip = req.ip || req.headers['x-forwarded-for']?.toString().split(',')[0].trim() || null;
+            await checkAndEnforceAllLimits({
+                userId: userId === 'anonymous-user' ? undefined : userId,
+                ip: userId === 'anonymous-user' ? ip : undefined,
+                searchMode: searchMode as any,
+                modelType: modelType as any
+            });
 
             // Assemble context if needed
             let assistedContext: string | undefined;
@@ -103,9 +105,6 @@ export class MorphicController {
                 searchMode
             });
 
-            // Model type resolution (forced to speed if not specified or for guest, but here we have userId)
-            const modelType = requestedModelType || 'speed';
-
             // Create stream response using the shared logic
             const streamResponse = await createChatStreamResponse({
                 message,
@@ -120,6 +119,7 @@ export class MorphicController {
                 modelType: modelType as any,
                 knowledgeEnabled,
                 ragScope,
+                assistedContext,
                 correlationId: asyncLocalStorage.getStore(),
                 dbActions: {
                     loadChatWithMessages: (id, uid) => this.repository.loadChat(id, uid || userId),
@@ -342,6 +342,50 @@ export class MorphicController {
         } catch (error: any) {
             this.log.error('Error upserting AI model config:', error);
             res.status(500).json({ error: 'Internal Server Error' });
+        }
+    }
+
+    /**
+     * POST /api/v1/morphic/feedback
+     * Persist user feedback for a generation/trace.
+     */
+    static async submitFeedback(req: Request, res: Response) {
+        const userId = (req as any).user?.id;
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+
+        const { traceId, score, messageId } = req.body || {};
+        if (!traceId || typeof score !== 'number') {
+            return res.status(400).json({ error: 'traceId and numeric score are required' });
+        }
+
+        try {
+            const sentiment: 'positive' | 'neutral' | 'negative' =
+                score > 0 ? 'positive' : score < 0 ? 'negative' : 'neutral';
+
+            const pageUrl =
+                (req.headers['referer'] as string) ||
+                (req.headers['x-forwarded-host']
+                    ? `https://${req.headers['x-forwarded-host']}`
+                    : '') ||
+                '';
+
+            const userAgent = String(req.headers['user-agent'] || '');
+
+            const payload = {
+                userId,
+                sentiment,
+                message: `traceId=${traceId}${messageId ? ` messageId=${messageId}` : ''}`,
+                pageUrl,
+                userAgent
+            };
+
+            const saved = await this.repository.insertFeedback(payload);
+            return res.json({ success: true, feedback: saved });
+        } catch (error: any) {
+            this.log.error('Error submitting feedback:', error);
+            return res.status(500).json({ error: 'Internal Server Error' });
         }
     }
 }

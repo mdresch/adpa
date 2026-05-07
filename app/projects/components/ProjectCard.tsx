@@ -94,7 +94,7 @@ export function ProjectCard({
           {/* Progress Bar */}
           <div>
             <div className="flex justify-between text-sm mb-2">
-              <span className="font-medium text-slate-700 dark:text-slate-200">Progress</span>
+              <span className="font-medium text-slate-700 dark:text-slate-200">Compliance Score</span>
               <span className="font-bold text-blue-600 dark:text-blue-400">
                 {progress}%
               </span>

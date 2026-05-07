@@ -6,13 +6,34 @@ import { db } from '@/lib/morphic/db'
 import { aiProviders } from '@/lib/morphic/db/schema'
 import { eq } from 'drizzle-orm'
 
+function normalizeMorphicModelId(modelId?: string): string | undefined {
+    if (!modelId) return modelId
+    if (modelId === 'gemini-2.5-flash') {
+        return 'gemini-3.1-flash-lite'
+    }
+    return modelId
+}
+
 // Retrieve the model assigned to a specific search mode and model type combination.
 export function getModelForModeAndType(
     mode: SearchMode,
     type: ModelType
 ): Model | undefined {
     const cfg = getModelsConfig()
-    return cfg.models.byMode?.[mode]?.[type]
+    const model = cfg.models.byMode?.[mode]?.[type]
+    if (!model) return undefined
+
+    const normalizedModelId = normalizeMorphicModelId(model.id)
+    if (normalizedModelId === model.id) {
+        return model
+    }
+
+    return {
+        ...model,
+        id: normalizedModelId!,
+        modelId: normalizedModelId!,
+        name: normalizedModelId === 'gemini-3.1-flash-lite' ? 'Gemini 3.1 Flash Lite' : model.name
+    }
 }
 
 /**
@@ -55,14 +76,17 @@ export async function getModelsForSlot(
                 const model = cfg.aiModel
                 const provider = model?.aiProvider
                 if (model && provider && provider.isEnabled === 1 && model.isEnabled === 1) {
-                    const fullId = `${provider.id}:${model.modelId}`
+                    const normalizedModelId = normalizeMorphicModelId(model.modelId) || model.modelId
+                    const fullId = `${provider.id}:${normalizedModelId}`
                     if (!addedModelIds.has(fullId)) {
                         candidates.push({
-                            id: model.modelId,
-                            name: `${provider.name}: ${model.name}`,
+                            id: normalizedModelId!,
+                            name: normalizedModelId === 'gemini-3.1-flash-lite'
+                                ? `${provider.name}: Gemini 3.1 Flash Lite`
+                                : `${provider.name}: ${model.name}`,
                             provider: provider.name,
                             providerId: provider.id,
-                            modelId: model.modelId
+                            modelId: normalizedModelId
                         })
                         addedModelIds.add(fullId)
                     }
@@ -88,14 +112,17 @@ export async function getModelsForSlot(
         for (const provider of sortedProviders) {
             // A. If the provider has a default_model, prioritize it
             if (provider.defaultModel) {
-                const modelId = `${provider.id}:${provider.defaultModel}`
+                const normalizedDefaultModel = normalizeMorphicModelId(provider.defaultModel) || provider.defaultModel
+                const modelId = `${provider.id}:${normalizedDefaultModel}`
                 if (!addedModelIds.has(modelId)) {
                     candidates.push({
-                        id: provider.defaultModel,
-                        name: `${provider.name} (Default: ${provider.defaultModel})`,
+                        id: normalizedDefaultModel!,
+                        name: normalizedDefaultModel === 'gemini-3.1-flash-lite'
+                            ? `${provider.name} (Default: Gemini 3.1 Flash Lite)`
+                            : `${provider.name} (Default: ${normalizedDefaultModel})`,
                         provider: provider.name,
                         providerId: provider.id,
-                        modelId: provider.defaultModel
+                        modelId: normalizedDefaultModel
                     })
                     addedModelIds.add(modelId)
                 }
@@ -120,16 +147,19 @@ export async function getModelsForSlot(
             if (provider.availableModels && Array.isArray(provider.availableModels)) {
                 provider.availableModels.slice(0, 3).forEach((m: any) => {
                     const mId = typeof m === 'string' ? m : (m.id || m.name)
-                    const mName = typeof m === 'string' ? m : (m.name || m.id)
-                    const fullId = `${provider.id}:${mId}`
+                    const normalizedModelId = normalizeMorphicModelId(mId) || mId
+                    const mName = normalizedModelId === 'gemini-3.1-flash-lite'
+                        ? 'Gemini 3.1 Flash Lite'
+                        : (typeof m === 'string' ? normalizedModelId : (m.name || m.id))
+                    const fullId = `${provider.id}:${normalizedModelId}`
                     
                     if (!addedModelIds.has(fullId)) {
                         candidates.push({
-                            id: mId,
+                            id: normalizedModelId!,
                             name: `${provider.name}: ${mName}`,
                             provider: provider.name,
                             providerId: provider.id,
-                            modelId: mId
+                            modelId: normalizedModelId
                         })
                         addedModelIds.add(fullId)
                     }

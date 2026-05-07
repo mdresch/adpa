@@ -167,6 +167,16 @@ export default function Projects() {
   const [templates, setTemplates] = React.useState<Template[]>([])
   const [loadingTemplates, setLoadingTemplates] = React.useState(false)
 
+  const handleSearchChange = React.useCallback((term: string) => {
+    setSearchTerm(term)
+    setPagination(prev => ({ ...prev, page: 1 }))
+  }, [])
+
+  const handleStatusFilterChange = React.useCallback((status: string) => {
+    setStatusFilter(status)
+    setPagination(prev => ({ ...prev, page: 1 }))
+  }, [])
+
   // Fetch projects from API
   const fetchProjects = async () => {
     try {
@@ -186,7 +196,7 @@ export default function Projects() {
 
       const response = await apiClient.getProjects(params)
       setProjects(response.projects || [])
-      setPagination(response.pagination || pagination)
+      setPagination(response.pagination || { page: 1, limit: pagination.limit, total: 0, pages: 0 })
     } catch (error) {
       console.error("Failed to fetch projects:", error)
       toast.error("Failed to load projects")
@@ -884,24 +894,8 @@ export default function Projects() {
     }
   }
 
-  const filteredProjects = projects.filter((project) => {
-    const matchesSearch =
-      project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (project.description?.toLowerCase().includes(searchTerm.toLowerCase()) || false)
-    const matchesStatus = statusFilter === "all" || project.status === statusFilter
-
-    // Track filter usage when filters are applied
-    if (statusFilter !== "all" || searchTerm) {
-      const filterType = statusFilter !== "all" ? 'status' : 'search'
-      const filterValue = statusFilter !== "all" ? statusFilter : searchTerm
-      trackFilterUsage(filterType, filterValue, projects.length)
-    }
-
-    return matchesSearch && matchesStatus
-  })
-
   // Sort by most recently updated first
-  const sortedProjects = [...filteredProjects].sort((a, b) => {
+  const sortedProjects = [...projects].sort((a, b) => {
     // Sort by last_activity (most recent document or project update)
     const aTime = a.last_activity ? new Date(a.last_activity).getTime() :
       a.updated_at ? new Date(a.updated_at).getTime() : 0
@@ -917,6 +911,15 @@ export default function Projects() {
       fetchProjects()
     }
   }, [isAuthenticated, statusFilter, searchTerm, pagination.page])
+
+  React.useEffect(() => {
+    if (statusFilter !== "all") {
+      trackFilterUsage('status', statusFilter, pagination.total)
+    }
+    if (searchTerm.trim()) {
+      trackFilterUsage('search', searchTerm, pagination.total)
+    }
+  }, [statusFilter, searchTerm, pagination.total])
 
   // Track page engagement for projects page
   React.useEffect(() => {
@@ -1159,9 +1162,9 @@ export default function Projects() {
               {/* Hero Header with Search and Filter */}
               <ProjectsHeader
                 searchTerm={searchTerm}
-                onSearchChange={setSearchTerm}
+                onSearchChange={handleSearchChange}
                 statusFilter={statusFilter}
-                onStatusFilterChange={setStatusFilter}
+                onStatusFilterChange={handleStatusFilterChange}
                 onCreateClick={() => setDialogOpen(true)}
                 projectsCount={loading ? "..." : pagination.total}
               />

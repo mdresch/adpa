@@ -137,9 +137,36 @@ export async function loadChat(
             return result.map((msg: any) => buildUIMessageFromDB(msg, msg.parts))
         })
     } catch (error) {
-        console.error(`[DB:loadChat] Failed to load chat ${chatId}:`, error)
+        console.error('[Morphic DB] loadChat failed; returning empty message list', {
+            chatId,
+            userId: userId ?? null,
+            error
+        })
         return []
     }
+}
+
+function isConnectionOrAuthFailure(error: any): boolean {
+    const code = error?.code || error?.cause?.code
+    if (typeof code === 'string') {
+        return [
+            'ECONNREFUSED',
+            'ECONNRESET',
+            'ENOTFOUND',
+            'ETIMEDOUT',
+            'ENETUNREACH',
+            '28P01'
+        ].includes(code)
+    }
+
+    const message = String(error?.message || '')
+    const causeMessage = String(error?.cause?.message || '')
+    const combined = `${message} ${causeMessage}`.toLowerCase()
+    return (
+        combined.includes('password authentication failed') ||
+        combined.includes('connection timeout') ||
+        combined.includes('failed query')
+    )
 }
 
 /**
@@ -185,7 +212,29 @@ export async function loadChatWithMessages(
             return { ...chat, messages: uiMessages }
         })
     } catch (error) {
-        console.error(`[DB:loadChatWithMessages] Failed to load chat ${chatId}:`, error)
+        if (isConnectionOrAuthFailure(error)) {
+            const err = error as {
+                code?: string
+                message?: string
+                cause?: {
+                    code?: string
+                    message?: string
+                }
+            }
+            console.error('[Morphic DB] loadChatWithMessages degraded due to DB connectivity/auth issue', {
+                chatId,
+                userId: userId ?? null,
+                code: err.code || err.cause?.code,
+                message: err.message || err.cause?.message || String(error)
+            })
+            return null
+        }
+
+        console.error('[Morphic DB] loadChatWithMessages failed unexpectedly', {
+            chatId,
+            userId: userId ?? null,
+            error
+        })
         return null
     }
 }

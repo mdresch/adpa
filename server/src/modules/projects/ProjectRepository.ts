@@ -86,8 +86,10 @@ export class ProjectRepository {
     let query = `
       SELECT p.*, u.name as owner_name, u.email as owner_email,
              COUNT(d.id) as document_count,
+             ROUND(AVG(d.quality_score) FILTER (WHERE d.quality_score IS NOT NULL), 0) as document_quality_score,
              MAX(d.updated_at) as last_document_activity,
-             GREATEST(p.updated_at, MAX(d.updated_at)) as last_activity
+             GREATEST(p.updated_at, MAX(d.updated_at)) as last_activity,
+             COUNT(*) OVER()::int as total_count
       FROM projects p
       LEFT JOIN users u ON p.owner_id = u.id
       LEFT JOIN documents d ON p.id = d.project_id AND d.parent_document_id IS NULL
@@ -143,8 +145,10 @@ export class ProjectRepository {
         let fallbackQuery = `
           SELECT p.*, u.name as owner_name, u.email as owner_email,
                  COUNT(d.id) as document_count,
+                 ROUND(AVG(d.quality_score) FILTER (WHERE d.quality_score IS NOT NULL), 0) as document_quality_score,
                  MAX(d.updated_at) as last_document_activity,
-                 GREATEST(p.updated_at, MAX(d.updated_at)) as last_activity
+                 GREATEST(p.updated_at, MAX(d.updated_at)) as last_activity,
+                 COUNT(*) OVER()::int as total_count
           FROM projects p
           LEFT JOIN users u ON p.owner_id = u.id
           LEFT JOIN documents d ON p.id = d.project_id AND d.parent_document_id IS NULL

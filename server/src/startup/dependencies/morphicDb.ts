@@ -33,11 +33,17 @@ export const morphicDbDependency: Dependency = {
     try {
       // Re-verify the most critical table exists
       const success = await morphicRepo.ensureSchema()
-      return success
+      if (!success) {
+        // Morphic DB is optional; do not fail overall startup validation.
+        updateDependencyHealth("Morphic DB", "unhealthy", 0, "Validation returned false")
+        return true
+      }
+      return true
     } catch (error) {
       logger.error("Morphic DB validation failed:", error)
       updateDependencyHealth("Morphic DB", "unhealthy", 0, String(error))
-      return false
+      // Morphic DB is optional; do not fail overall startup validation.
+      return true
     }
   },
   shutdown: async () => {

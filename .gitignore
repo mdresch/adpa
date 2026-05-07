@@ -162,6 +162,7 @@ server/src/utils/error.ts
 /backups/
 *.sql
 !server/migrations/*.sql
+!supabase/migrations/*.sql
 *.bak
 *.backup
 acli.exe

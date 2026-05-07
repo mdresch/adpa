@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Check, ChevronDown, Search } from 'lucide-react'
+import { Check, ChevronDown, Microscope, Search } from 'lucide-react'
 import { IconLogoOutline } from './ui/icons'
 import { SEARCH_MODE_CONFIGS } from '@/lib/morphic/config/search-modes'
 import { SearchMode } from '@/lib/morphic/types/search'
@@ -18,7 +18,8 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from './ui/hover-card'
 
 const ICON_MAP = {
     search: Search,
-    logo: IconLogoOutline
+    logo: IconLogoOutline,
+    microscope: Microscope
 }
 
 export function SearchModeSelector() {
@@ -31,7 +32,7 @@ export function SearchModeSelector() {
 
     useEffect(() => {
         const savedMode = getCookie('searchMode')
-        if (savedMode && ['quick', 'adaptive'].includes(savedMode)) {
+        if (savedMode && ['quick', 'adaptive', 'deep'].includes(savedMode)) {
             setValue(savedMode as SearchMode)
         } else if (savedMode) {
             setCookie('searchMode', 'quick')
