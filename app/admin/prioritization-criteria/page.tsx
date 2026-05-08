@@ -48,7 +48,7 @@ import {
 interface Criterion {
   id: string
   name: string
-  weight: number
+  weight: number | string
   description?: string
   scale_min: number
   scale_max: number
@@ -202,11 +202,14 @@ export default function PrioritizationCriteriaPage() {
   const calculateTotalWeight = () => {
     return criteria
       .filter(c => c.is_active)
-      .reduce((sum, c) => sum + c.weight, 0)
+      .reduce((sum, c) => {
+        const w = typeof c.weight === 'number' ? c.weight : Number(c.weight)
+        return sum + (Number.isFinite(w) ? w : 0)
+      }, 0)
   }
 
   const totalWeight = calculateTotalWeight()
-  const weightWarning = totalWeight !== 100
+  const weightWarning = Math.abs(totalWeight - 100) > 0.0001
 
   if (loading) {
     return (
@@ -251,7 +254,7 @@ export default function PrioritizationCriteriaPage() {
                     <TriangleAlert className="h-5 w-5 text-yellow-600" />
                     <div>
                       <p className="font-medium text-yellow-900">
-                        Total weight is {totalWeight}% (should be 100%)
+                        Total weight is {totalWeight.toFixed(2)}% (should be 100%)
                       </p>
                       <p className="text-sm text-yellow-700">
                         Adjust criterion weights so they sum to exactly 100%
