@@ -34,6 +34,7 @@ import { ProjectIssuesTab } from "@/components/project/ProjectIssuesTab"
 import { ComplianceSecurityTab } from "./components/ComplianceSecurityTab"
 import { IntegrationsTab } from "./components/IntegrationsTab"
 import { DigitalTwinAnalyticsTab } from "./components/DigitalTwinAnalyticsTab"
+import { StrategicAlignmentDashboard } from "@/components/portfolio/StrategicAlignmentDashboard"
 import { TemplateConflictDialog } from "@/components/document/TemplateConflictDialog"
 import { apiClient, Project, Template, ExtendedProject, Document, Stakeholder } from "@/lib/api"
 import { getApiBaseUrl } from "@/lib/api-url"
@@ -3610,6 +3611,10 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                   <Activity className="h-4 w-4 mr-2" />
                   Performance
                 </TabsTrigger>
+                <TabsTrigger value="strategic-alignment">
+                  <Target className="h-4 w-4 mr-2" />
+                  OKRs & alignment
+                </TabsTrigger>
                 <TabsTrigger value="stakeholders">Stakeholders</TabsTrigger>
                 <TabsTrigger value="team-agreements">
                   <Users2 className="h-4 w-4 mr-2" />
@@ -3699,6 +3704,10 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
               <TabsContent value="performance" className="space-y-4">
                 {/* Performance Dashboard - PMBOK 8 Measurement Domain */}
                 <PerformanceDashboard projectId={projectId} />
+              </TabsContent>
+
+              <TabsContent value="strategic-alignment" className="space-y-4">
+                <StrategicAlignmentDashboard projectId={projectId} />
               </TabsContent>
 
               <TabsContent value="stakeholders" className="space-y-4">
