@@ -14,6 +14,7 @@ import { ArrowUpRight, Search, Plus, FileText, BarChart3 } from "lucide-react"
 import { Target } from "@/components/ui/icons-shim"
 import { toast } from '@/lib/notify'
 import { apiClient } from "@/lib/api"
+import { ExportRankingsButton } from "@/components/portfolio/ExportRankingsButton"
 import {
   PieChart,
   Pie,
@@ -261,6 +262,7 @@ export default function PortfolioDashboard() {
                     <FileText className="h-4 w-4 mr-2" />
                     Export Report
                   </Button>
+                  <ExportRankingsButton />
                   <Button onClick={() => router.push('/programs?action=new')}>
                     <Plus className="h-4 w-4 mr-2" />
                     New Program

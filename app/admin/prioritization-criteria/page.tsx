@@ -109,7 +109,7 @@ export default function PrioritizationCriteriaPage() {
       setEditingCriterion(criterion)
       setFormData({
         name: criterion.name,
-        weight: criterion.weight,
+        weight: typeof criterion.weight === 'number' ? criterion.weight : Number(criterion.weight) || 0,
         description: criterion.description || '',
         scale_min: criterion.scale_min,
         scale_max: criterion.scale_max,
