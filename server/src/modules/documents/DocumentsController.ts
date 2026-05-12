@@ -149,11 +149,17 @@ export class DocumentsController {
 
             const wordCount = contentString.trim().split(/\s+/).filter(Boolean).length;
             const characterCount = contentString.length;
-            const correlationId = asyncLocalStorage.getStore();
-const result = await DocumentsController.documentRepository.create({
-    project_id: projectId, name, content: contentString, template_id, status,
-    created_by: req.user?.id, word_count: wordCount, character_count: characterCount, generation_metadata, correlation_id: correlationId
-});
+            const result = await DocumentsController.documentRepository.create({
+                project_id: projectId,
+                name,
+                content: contentString,
+                template_id,
+                status,
+                created_by: req.user?.id,
+                word_count: wordCount,
+                character_count: characterCount,
+                generation_metadata
+            });
 
             const document = result.rows[0];
             await DocumentsController.documentRepository.saveVersion({
@@ -186,8 +192,7 @@ const result = await DocumentsController.documentRepository.create({
             const hasAccess = await DocumentsController.checkProjectAccess(req, doc.project_id, true);
             if (!hasAccess) return res.status(403).json({ error: "Access denied" });
 
-            const correlationId = asyncLocalStorage.getStore();
-            let updateData: any = { name, content, status, correlation_id: correlationId };
+            let updateData: any = { name, content, status };
             if (metadata) updateData.metadata = { ...(doc.metadata || {}), ...metadata };
 
             if (content) {

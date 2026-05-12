@@ -48,11 +48,8 @@ import { useDriftDetection } from "@/hooks/use-drift-detection"
 import { DriftAlertBanner } from "@/components/drift/DriftAlertBanner"
 import { DriftResolutionDialog } from "@/components/drift/DriftResolutionDialog"
 import { GenerateUXDocumentationDialog } from "@/app/documents/components/GenerateUXDocumentationDialog"
+import { MarkdownRenderer } from "@/components/documents/MarkdownRenderer"
 import NovelEditor from "@/components/editor/novel-editor"
-// @ts-ignore
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
-// @ts-ignore
-import { vscDarkPlus } from "react-syntax-highlighter/dist/cjs/styles/prism"
 import { jsPDF } from "jspdf"
 import { Document, Packer, Paragraph, TextRun } from "docx"
 // @ts-ignore
@@ -928,54 +925,7 @@ ${doc.content}
                         } ${lineHeight === 'tight' ? 'prose-tight' :
                           lineHeight === 'relaxed' ? 'prose-relaxed' : ''
                         }`}>
-                        <ReactMarkdown
-                          components={{
-                            code({ node, inline, className, children, ...props }: any) {
-                              const match = /language-(\w+)/.exec(className || '');
-                              return !inline && match ? (
-                                <SyntaxHighlighter
-                                  style={vscDarkPlus}
-                                  language={match[1]}
-                                  PreTag="div"
-                                  showLineNumbers={true}
-                                  customStyle={{ margin: '1rem 0', borderRadius: '8px' }}
-                                  {...props}
-                                >
-                                  {String(children).replace(/\n$/, '')}
-                                </SyntaxHighlighter>
-                              ) : (
-                                <code className={className} {...props}>
-                                  {children}
-                                </code>
-                              );
-                            },
-                            table({ children }: any) {
-                              return (
-                                <div className="overflow-x-auto">
-                                  <table className="min-w-full border-collapse border border-gray-300">
-                                    {children}
-                                  </table>
-                                </div>
-                              );
-                            },
-                            th({ children }: any) {
-                              return (
-                                <th className="border border-gray-300 px-4 py-2 bg-gray-50 font-semibold">
-                                  {children}
-                                </th>
-                              );
-                            },
-                            td({ children }: any) {
-                              return (
-                                <td className="border border-gray-300 px-4 py-2">
-                                  {children}
-                                </td>
-                              );
-                            },
-                          }}
-                        >
-                          {document.content}
-                        </ReactMarkdown>
+                        <MarkdownRenderer content={document.content} />
                       </div>
                     </div>
                   </div>

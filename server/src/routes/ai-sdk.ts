@@ -8,6 +8,7 @@ import express from 'express'
 import { logger, childLogger } from '../utils/logger'
 import { pool } from '../database/connection'
 import { v4 as uuidv4 } from 'uuid'
+import { GOOGLE_ROUTE_DEFAULT_MODEL } from './googleDefaultModel'
 
 const router = express.Router()
 
@@ -396,7 +397,7 @@ router.get('/health', async (req, res) => {
 function getDefaultModel(providerType: string): string {
   switch (providerType) {
     case 'openai': return 'gpt-3.5-turbo'
-    case 'google': return 'gemini-pro'
+    case 'google': return GOOGLE_ROUTE_DEFAULT_MODEL
     case 'azure': return 'gpt-35-turbo'
     case 'anthropic': return 'claude-3-sonnet'
     case 'cohere': return 'command'

@@ -14,14 +14,14 @@ import {
   handleImageDrop,
   handleImagePaste,
 } from "novel";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { useDebouncedCallback } from "use-debounce";
 import { defaultExtensions } from "./extensions";
 import { uploadFn } from "./image-upload";
 import { createSlashCommand } from "./slash-command";
-import MarkdownIt from "markdown-it";
-
-const md = new MarkdownIt({ html: true, breaks: true });
+import { renderEditorMarkdown } from "@/lib/editor/markdown";
+import { renderMermaidToSvg } from "@/lib/documents/mermaid-client";
+import { isMermaidLanguage, looksLikeMermaidCode, normalizeMermaidMarkdown } from "@/lib/documents/mermaid";
 
 const cleanMarkdown = (content: string): string => {
   if (!content) return "";
@@ -52,12 +52,14 @@ interface NovelEditorProps {
   onChange?: (value: JSONContent, html: string, markdown: string) => void;
   storageKey?: string;
   onFeedback?: () => void;
+  enableInlineMermaid?: boolean;
 }
 
-const NovelEditor = ({ initialValue, onChange, storageKey, onFeedback }: NovelEditorProps) => {
+const NovelEditor = ({ initialValue, onChange, storageKey, onFeedback, enableInlineMermaid = true }: NovelEditorProps) => {
   const [initialContent, setInitialContent] = useState<null | JSONContent | string>(null);
   const [saveStatus, setSaveStatus] = useState("Saved");
   const [charsCount, setCharsCount] = useState<number | undefined>();
+  const containerRef = useRef<HTMLDivElement | null>(null);
 
   const extensions = useMemo(() => {
     return [...defaultExtensions, createSlashCommand(onFeedback)];
@@ -92,8 +94,8 @@ const NovelEditor = ({ initialValue, onChange, storageKey, onFeedback }: NovelEd
             setInitialContent(JSON.parse(initialValue));
           } else {
             // Assume markdown -> clean and parse to HTML
-            const cleanedMarkdown = cleanMarkdown(initialValue);
-            const parsedHtml = md.render(cleanedMarkdown);
+            const cleanedMarkdown = normalizeMermaidMarkdown(cleanMarkdown(initialValue));
+            const parsedHtml = renderEditorMarkdown(cleanedMarkdown);
             setInitialContent(parsedHtml);
           }
         } catch (e) {
@@ -114,10 +116,97 @@ const NovelEditor = ({ initialValue, onChange, storageKey, onFeedback }: NovelEd
     }
   }, [initialValue, storageKey]);
 
+  useEffect(() => {
+    if (!enableInlineMermaid) {
+      return
+    }
+
+    let cancelled = false
+
+    const renderInlineMermaid = async () => {
+      const container = containerRef.current
+      if (!container) {
+        return
+      }
+
+      const mermaidNodes = container.querySelectorAll<HTMLElement>("pre code")
+
+      await Promise.all(Array.from(mermaidNodes).map(async (node, index) => {
+        const pre = node.closest('pre')
+        if (!pre || pre.dataset.mermaidRendered === "true" || pre.dataset.mermaidRendering === "true") {
+          return
+        }
+
+        const code = node.textContent?.trim()
+        const className = `${node.className || ''} ${pre.className || ''}`.trim()
+        if (!code || (!isMermaidLanguage(className) && !looksLikeMermaidCode(code))) {
+          return
+        }
+
+        try {
+          pre.dataset.mermaidRendering = "true"
+          const svg = await renderMermaidToSvg(code, `novel-mermaid-${index}-${Math.random().toString(36).slice(2, 8)}`)
+          if (cancelled) {
+            return
+          }
+
+          let preview = pre.previousElementSibling as HTMLElement | null
+          if (!preview || preview.dataset.mermaidPreview !== 'true') {
+            preview = document.createElement('div')
+            preview.dataset.mermaidPreview = 'true'
+            preview.contentEditable = 'false'
+            preview.className = 'adpa-mermaid-preview my-4 overflow-x-auto rounded-lg border border-border bg-background p-4'
+            pre.parentElement?.insertBefore(preview, pre)
+          }
+
+          preview.innerHTML = svg
+          pre.style.display = 'none'
+          pre.dataset.mermaidRendered = "true"
+          delete pre.dataset.mermaidRendering
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Failed to render Mermaid diagram"
+          pre.style.display = ''
+          pre.dataset.mermaidRendered = "error"
+          pre.title = message
+          delete pre.dataset.mermaidRendering
+        }
+      }))
+    }
+
+    if (!initialContent) {
+      return
+    }
+
+    const container = containerRef.current
+    if (!container) {
+      return
+    }
+
+    const rafId = window.requestAnimationFrame(() => {
+      void renderInlineMermaid()
+    })
+
+    const observer = new MutationObserver(() => {
+      void renderInlineMermaid()
+    })
+
+    observer.observe(container, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    })
+
+    return () => {
+      cancelled = true
+      window.cancelAnimationFrame(rafId)
+      observer.disconnect()
+    }
+  }, [enableInlineMermaid, initialContent]);
+
   if (!initialContent) return null;
 
   return (
-    <div className="relative w-full max-w-screen-lg">
+    <div ref={containerRef} className="relative w-full max-w-screen-lg">
       <div className="flex absolute right-5 top-5 z-10 mb-5 gap-2">
         <div className="rounded-lg bg-accent px-2 py-1 text-sm text-muted-foreground">{saveStatus}</div>
         <div className={charsCount ? "rounded-lg bg-accent px-2 py-1 text-sm text-muted-foreground" : "hidden"}>

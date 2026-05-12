@@ -46,6 +46,7 @@ import {
 } from "@/components/ui/icons-shim"
 import { toast } from '@/lib/notify'
 import { apiClient } from "@/lib/api"
+import { getProjectSourceDocumentPath } from "@/lib/documents/document-routes"
 
 interface DriftDetection {
   id: string
@@ -761,7 +762,7 @@ export default function DriftManagementPage() {
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => router.push(`/projects/${projectId}/documents/${drift.source_document_id}/view`)}
+                              onClick={() => router.push(getProjectSourceDocumentPath(projectId, drift.source_document_id))}
                               className="border-orange-300 text-orange-700 hover:bg-orange-50"
                             >
                               <FileText className="h-4 w-4 mr-2" />
@@ -858,7 +859,7 @@ export default function DriftManagementPage() {
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => router.push(`/projects/${projectId}/documents/${drift.source_document_id}/view`)}
+                              onClick={() => router.push(getProjectSourceDocumentPath(projectId, drift.source_document_id))}
                               className="border-orange-300 text-orange-700 hover:bg-orange-50"
                             >
                               <FileText className="h-4 w-4 mr-2" />
@@ -916,7 +917,7 @@ export default function DriftManagementPage() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => router.push(`/projects/${projectId}/documents/${drift.source_document_id}/view`)}
+                                onClick={() => router.push(getProjectSourceDocumentPath(projectId, drift.source_document_id))}
                                 className="border-orange-300 text-orange-700 hover:bg-orange-50"
                               >
                                 <FileText className="h-4 w-4 mr-2" />
@@ -977,7 +978,7 @@ export default function DriftManagementPage() {
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => router.push(`/projects/${projectId}/documents/${drift.source_document_id}/view`)}
+                              onClick={() => router.push(getProjectSourceDocumentPath(projectId, drift.source_document_id))}
                               className="border-orange-300 text-orange-700 hover:bg-orange-50"
                             >
                               <FileText className="h-4 w-4 mr-2" />

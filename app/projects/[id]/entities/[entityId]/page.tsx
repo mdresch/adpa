@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dialog"
 import { Loader2, ArrowLeft, CheckCircle2, XCircle, Database, FileText, Calendar, User, AlertTriangle } from "lucide-react"
 import { apiClient } from "@/lib/api"
+import { getProjectSourceDocumentPath } from "@/lib/documents/document-routes"
 import { useAuth } from "@/contexts/AuthContext"
 import { toast } from '@/lib/notify'
 
@@ -301,7 +302,7 @@ export default function EntityDetailPage() {
                           <Button
                             variant="link"
                             className="p-0 h-auto"
-                            onClick={() => router.push(`/projects/${projectId}/documents/${entity.source_document_id}`)}
+                            onClick={() => router.push(getProjectSourceDocumentPath(projectId, entity.source_document_id))}
                           >
                             <FileText className="h-4 w-4 mr-1" />
                             View Document

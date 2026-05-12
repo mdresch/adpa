@@ -127,6 +127,12 @@ import {
 import { useAuth } from "@/contexts/AuthContext"
 import { apiClient, Project, Template } from "@/lib/api"
 import { toast } from '@/lib/notify'
+import {
+  getDocumentSignPath,
+  getProjectDocumentEntitiesPath,
+  getProjectDocumentsPath,
+  getProjectDocumentViewPath,
+} from '@/lib/documents/document-routes'
 import { RegenerateVersionModal } from "@/components/documents/RegenerateVersionModal"
 import { RegenerationProgress } from "@/components/documents/RegenerationProgress"
 import { useDocumentRegeneration } from "@/hooks/use-document-regeneration"
@@ -966,7 +972,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => router.push(`/projects/${projectId}/documentDatas`)}
+                        onClick={() => router.push(getProjectDocumentsPath(projectId))}
                       >
                         <ArrowLeft className="h-4 w-4 mr-2" />
                         Back to Documents
@@ -983,7 +989,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                             </BreadcrumbItem>
                             <BreadcrumbSeparator />
                             <BreadcrumbItem>
-                              <BreadcrumbLink href={`/projects/${projectId}/documentDatas`}>Documents</BreadcrumbLink>
+                              <BreadcrumbLink href={getProjectDocumentsPath(projectId)}>Documents</BreadcrumbLink>
                             </BreadcrumbItem>
                             <BreadcrumbSeparator />
                             <BreadcrumbItem>
@@ -1000,14 +1006,14 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                     <div className="flex items-center space-x-2">
                       <Button
                         variant="outline"
-                        onClick={() => router.push(`/projects/${projectId}/documentDatas/${docId}/view`)}
+                        onClick={() => router.push(getProjectDocumentViewPath(projectId, docId))}
                       >
                         <Eye className="h-4 w-4 mr-2" />
                         View Document
                       </Button>
                       <Button
                         variant="outline"
-                        onClick={() => router.push(`/projects/${projectId}/documentDatas/${docId}/entities`)}
+                        onClick={() => router.push(getProjectDocumentEntitiesPath(projectId, docId))}
                       >
                         <Database className="h-4 w-4 mr-2" />
                         View Entities
@@ -1193,7 +1199,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                       <Button
                         variant="outline"
                         className="w-full justify-start"
-                        onClick={() => router.push(`/documentDatas/${docId}/sign`)}
+                        onClick={() => router.push(getDocumentSignPath(docId))}
                       >
                         <FileSignature className="h-4 w-4 mr-2" />
                         Sign Document
@@ -2621,7 +2627,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                                 const isProjectContext = source.is_project_context || (source.id && source.id.startsWith('project_context:'))
                                 const linkUrl = isProjectContext
                                   ? `/projects/${projectId}` // Link to project page for project context
-                                  : `/projects/${projectId}/documentDatas/${source.id}/view` // Link to documentData for regular documentDatas
+                                  : getProjectDocumentViewPath(projectId, source.id) // Link to document for regular source documents
 
                                 return (
                                   <Link

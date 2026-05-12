@@ -16,6 +16,7 @@ import { useAuth } from "@/contexts/AuthContext"
 import { useWebSocket } from "@/contexts/WebSocketContext"
 import { apiClient } from "@/lib/api"
 import { getApiUrl } from "@/lib/api-url"
+import { getProjectSourceDocumentPath } from "@/lib/documents/document-routes"
 import { toast } from '@/lib/notify'
 import {
   AlertTriangle,
@@ -622,7 +623,7 @@ export default function RisksPage() {
                                           className="h-auto p-1 text-xs text-blue-600 hover:text-blue-700"
                                           onClick={() => {
                                             if (risk.project_id && risk.source_document_id) {
-                                              router.push(`/projects/${risk.project_id}/documents/${risk.source_document_id}`);
+                                              router.push(getProjectSourceDocumentPath(risk.project_id, risk.source_document_id));
                                             }
                                           }}
                                           title={`View source document: ${risk.source_document_name || 'Document'}`}

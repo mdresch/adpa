@@ -61,6 +61,8 @@ const promptSamples: Record<string, string[]> = {
     ]
 }
 
+const dateFormatTodoNote = "TODO: Today's News and 'Summarize this week's business news' are being translated to a date format like 05-12-2026 or 5 december 2026 instead of the 12th of may 2026."
+
 interface ActionButtonsProps {
     onSelectPrompt: (prompt: string) => void
     onCategoryClick: (category: string) => void
@@ -178,6 +180,11 @@ export function ActionButtons({
                         !activeCategory ? 'opacity-0 pointer-events-none' : 'opacity-100'
                     )}
                 >
+                    {activeCategory && ['latest', 'summarize'].includes(activeCategory) && (
+                        <div className="px-3 py-2 rounded-md border border-amber-300/40 bg-amber-500/10 text-xs text-amber-900 dark:text-amber-200">
+                            {dateFormatTodoNote}
+                        </div>
+                    )}
                     {activeCategory &&
                         promptSamples[activeCategory]?.map((prompt, index) => (
                             <button

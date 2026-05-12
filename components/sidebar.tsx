@@ -78,7 +78,7 @@ export function Sidebar({ className }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false)
   const [pendingCount, setPendingCount] = useState(0)
   const pathname = usePathname()
-  const { user, firebaseSession, token, isAuthenticated, logout } = useAuth()
+  const { user, firebaseSession, token, isAuthenticated, loading: authLoading, logout } = useAuth()
 
   const displayName = user?.name || firebaseSession?.displayName || null
   const displayEmail = user?.email || firebaseSession?.email || null
@@ -105,21 +105,26 @@ export function Sidebar({ className }: SidebarProps) {
     "?"
 
   useEffect(() => {
-    if (!token) return
+    if (authLoading || !isAuthenticated || !token) {
+      setPendingCount(0)
+      return
+    }
+
     void fetchPendingApprovals()
     const interval = setInterval(fetchPendingApprovals, 30000)
     return () => clearInterval(interval)
-  }, [token])
+  }, [authLoading, isAuthenticated, token])
 
   const fetchPendingApprovals = async () => {
     try {
-      const response = await apiClient.get<any>('/approvals/stats/user')
+      const response = await apiClient.get<any>('/approvals/stats/user', {
+        suppressNotFoundError: true,
+      })
       // API returns { success: true, stats: {...} } or direct stats object
       const stats = response.stats || response
       setPendingCount(stats?.pending || 0)
-    } catch (error) {
+    } catch {
       // Silently fail - don't show errors in sidebar
-      console.error('Failed to fetch pending approvals:', error)
       setPendingCount(0)
     }
   }

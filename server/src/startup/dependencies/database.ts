@@ -1,5 +1,5 @@
 import { Dependency } from "../dependencyGraph"
-import { connectDatabase, pool } from "../../database/connection"
+import { connectDatabase, getDatabasePoolSafe } from "../../database/connection"
 import { logger } from "../../utils/logger"
 import { updateDependencyHealth } from "../../routes/health"
 
@@ -21,6 +21,7 @@ export const databaseDependency: Dependency = {
   },
   validate: async () => {
     try {
+      const pool = getDatabasePoolSafe()
       if (!pool) {
         updateDependencyHealth("Database", "unhealthy", 0, "Pool not initialized")
         return false
@@ -34,8 +35,12 @@ export const databaseDependency: Dependency = {
     }
   },
   shutdown: async () => {
-    if (pool) {
+    const pool = getDatabasePoolSafe()
+    if (!pool) return
+    try {
       await pool.end()
+    } catch (e) {
+      logger.warn("Database shutdown failed (ignored)", { message: (e as any)?.message })
     }
   },
 }

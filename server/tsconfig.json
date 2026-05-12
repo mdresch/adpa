@@ -32,6 +32,7 @@
     "allowUnusedLabels": true,
     "allowUnreachableCode": true,
     "noEmitOnError": false,
+    "ignoreDeprecations": "5.0",
     "moduleResolution": "node",
     "baseUrl": "./src",
     "paths": {
@@ -77,8 +78,7 @@
       "./node_modules/@types"
     ],
     "types": [
-      "node",
-      "jest"
+      "node"
     ]
   },
   "include": [
@@ -101,6 +101,9 @@
     "src/modules/**/examples/**",
     "src/modules/**/__tests__/**",
     "src/modules/**/tests/**",
+    "../lib/**/__tests__/**",
+    "../lib/**/*.test.ts",
+    "../lib/**/*.spec.ts",
     "../lib/analytics"
   ],
   "ts-node": {

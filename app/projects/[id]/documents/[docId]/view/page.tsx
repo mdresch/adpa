@@ -62,10 +62,11 @@ import {
 } from "@/components/ui/icons-shim"
 import { useAuth } from "@/contexts/AuthContext"
 import { apiClient } from "@/lib/api"
+import { getDocumentApiPath } from "@/lib/documents/document-api-routes"
+import { getProjectContextPath, getProjectSourceDocumentPath, isProjectContextDocumentId } from "@/lib/documents/document-routes"
+import { normalizeMermaidMarkdown } from "@/lib/documents/mermaid"
 import { useWebSocket } from "@/contexts/WebSocketContext"
 import { toast } from '@/lib/notify'
-import ReactMarkdown from "react-markdown"
-import remarkGfm from "remark-gfm"
 import { saveAs } from "file-saver"
 import { RegenerateVersionModal } from "@/components/documents/RegenerateVersionModal"
 import { RegenerationProgress } from "@/components/documents/RegenerationProgress"
@@ -83,7 +84,7 @@ import {
 export default function ProjectDocumentViewer() {
   const params = useParams()
   const router = useRouter()
-  const { user } = useAuth()
+  const { user, loading: authLoading, isAuthenticated, token } = useAuth()
 
   const projectId = params.id as string
   const documentId = params.docId as string
@@ -267,6 +268,8 @@ export default function ProjectDocumentViewer() {
                         JSON.stringify(rawContent, null, 2)
       }
 
+      contentString = normalizeMermaidMarkdown(contentString)
+
       // Template name handling
       if (fetchedDoc.template_name) {
         setTemplateName(fetchedDoc.template_name)
@@ -318,7 +321,22 @@ export default function ProjectDocumentViewer() {
   // Initial load and engagement tracking
   useEffect(() => {
     if (typeof window === 'undefined') return
-    fetchDocument()
+
+    if (isProjectContextDocumentId(documentId)) {
+      router.replace(getProjectContextPath(projectId))
+      return
+    }
+
+    if (authLoading) {
+      return
+    }
+
+    if (!isAuthenticated || !token) {
+      setIsLoading(false)
+      return
+    }
+
+    void fetchDocument()
 
     const startTime = Date.now()
     let interactionCount = 0
@@ -333,7 +351,7 @@ export default function ProjectDocumentViewer() {
       window.document.removeEventListener('click', handleInteraction)
       window.document.removeEventListener('scroll', handleInteraction)
     }
-  }, [projectId, documentId])
+  }, [projectId, documentId, router, authLoading, isAuthenticated, token])
 
   // WebSocket effect
   useEffect(() => {
@@ -439,8 +457,8 @@ export default function ProjectDocumentViewer() {
     trackCollaboration('edit', documentData.id, 1)
 
     try {
-      await apiClient.put(`/projects/${projectId}/documents/${documentId}`, {
-        content: editedContent,
+      await apiClient.put(getDocumentApiPath(documentId), {
+        content: normalizeMermaidMarkdown(editedContent),
         title: documentData.title || documentData.name,
         tags: documentData.tags || []
       })
@@ -664,6 +682,7 @@ export default function ProjectDocumentViewer() {
                             debouncedAutosave()
                           }}
                           storageKey={`novel-doc-${documentId}`}
+                          enableInlineMermaid={false}
                         />
                       </CardContent>
                     </AnimatedCard>
@@ -761,7 +780,7 @@ export default function ProjectDocumentViewer() {
                               <p className="text-[10px] text-muted-foreground">{doc.type}</p>
                             </div>
                             <Button variant="ghost" size="sm" asChild>
-                              <Link href={`/projects/${projectId}/documents/${doc.id}/view`}><Eye className="h-3 w-3" /></Link>
+                              <Link href={getProjectSourceDocumentPath(projectId, doc.id)}><Eye className="h-3 w-3" /></Link>
                             </Button>
                           </div>
                         </CardHeader>
