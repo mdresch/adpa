@@ -47,6 +47,18 @@ export interface UrlFetchOptions {
   followRedirects?: boolean
 }
 
+function getHeaderValue(header: unknown, fallback: string): string {
+  if (typeof header === 'string') {
+    return header
+  }
+
+  if (Array.isArray(header)) {
+    return header.join(', ')
+  }
+
+  return fallback
+}
+
 /**
  * Validates URL to ensure it's safe to fetch
  */
@@ -178,7 +190,7 @@ export class UrlContentFetcherService {
         throw new Error(`Content size (${response.data.length} bytes) exceeds maximum (${maxContentSize} bytes)`)
       }
       
-      const contentType = response.headers['content-type'] || 'text/html'
+      const contentType = getHeaderValue(response.headers['content-type'], 'text/html')
       
       // Check if content is HTML
       if (!contentType.includes('text/html') && !contentType.includes('application/xhtml')) {
