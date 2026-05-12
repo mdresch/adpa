@@ -22,6 +22,8 @@ import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
 // Only log OpenTelemetry errors (suppress info/warn/debug noise)
 diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.ERROR)
 
+const DEFAULT_LANGFUSE_OTLP_ENDPOINT = 'https://cloud.langfuse.com/api/public/otel/v1/traces'
+
 /**
  * Custom SpanProcessor to inject correlationId from AsyncLocalStorage into all spans.
  */
@@ -41,9 +43,46 @@ class CorrelationIdProcessor implements SpanProcessor {
 const ENABLE_LANGFUSE_OTLP = process.env.ENABLE_LANGFUSE_TRACING === 'true'
 const LANGFUSE_PUBLIC_KEY = process.env.LANGFUSE_PUBLIC_KEY
 const LANGFUSE_SECRET_KEY = process.env.LANGFUSE_SECRET_KEY
+const LANGFUSE_BASE_URL = process.env.LANGFUSE_BASE_URL
+const LANGFUSE_OTLP_AUTH_HEADER = process.env.LANGFUSE_OTLP_AUTH_HEADER
+
+export function buildLangfuseOtlpEndpoint(options: {
+  langfuseOtlpEndpoint?: string
+  langfuseBaseUrl?: string
+}): string {
+  if (options.langfuseOtlpEndpoint) {
+    return options.langfuseOtlpEndpoint
+  }
+
+  if (options.langfuseBaseUrl) {
+    const normalizedBaseUrl = options.langfuseBaseUrl.replace(/\/+$/, '')
+    return `${normalizedBaseUrl}/api/public/otel/v1/traces`
+  }
+
+  return DEFAULT_LANGFUSE_OTLP_ENDPOINT
+}
+
+export function buildLangfuseOtlpAuthHeader(options: {
+  otlpAuthHeader?: string
+  publicKey?: string
+  secretKey?: string
+}): string | undefined {
+  if (options.otlpAuthHeader) {
+    return options.otlpAuthHeader
+  }
+
+  if (options.publicKey && options.secretKey) {
+    return `Basic ${Buffer.from(`${options.publicKey}:${options.secretKey}`).toString('base64')}`
+  }
+
+  return undefined
+}
 
 const OTLP_ENDPOINT = ENABLE_LANGFUSE_OTLP
-  ? (process.env.LANGFUSE_OTLP_ENDPOINT || 'https://cloud.langfuse.com/api/public/otel/v1/traces')
+  ? buildLangfuseOtlpEndpoint({
+      langfuseOtlpEndpoint: process.env.LANGFUSE_OTLP_ENDPOINT,
+      langfuseBaseUrl: LANGFUSE_BASE_URL,
+    })
   : (process.env.OTLP_ENDPOINT || 'http://localhost:4318/v1/traces')
 
 const SERVICE_NAME = process.env.SERVICE_NAME || 'adpa-backend'
@@ -86,15 +125,19 @@ export function initTracing(): void {
     // Create span processors
     const spanProcessors: SpanProcessor[] = [new CorrelationIdProcessor()]
     if (ENABLE_LANGFUSE_OTLP) {
-      if (!LANGFUSE_PUBLIC_KEY || !LANGFUSE_SECRET_KEY) {
-        console.warn('⚠️ Langfuse credentials missing, skipping tracing')
+      const authHeader = buildLangfuseOtlpAuthHeader({
+        otlpAuthHeader: LANGFUSE_OTLP_AUTH_HEADER,
+        publicKey: LANGFUSE_PUBLIC_KEY,
+        secretKey: LANGFUSE_SECRET_KEY,
+      })
+
+      if (!authHeader) {
+        console.warn('⚠️ Langfuse OTLP auth missing, skipping tracing export')
       } else {
-        const maskedKey = `${LANGFUSE_PUBLIC_KEY.substring(0, 6)}...`
+        const maskedKey = LANGFUSE_PUBLIC_KEY ? `${LANGFUSE_PUBLIC_KEY.substring(0, 6)}...` : 'override-header'
         console.log(`[Tracing] 📡 Configuring Langfuse OTLP export:`)
         console.log(`[Tracing]    Endpoint: ${OTLP_ENDPOINT}`)
         console.log(`[Tracing]    Public Key: ${maskedKey}`)
-
-        const authHeader = `Basic ${Buffer.from(`${LANGFUSE_PUBLIC_KEY}:${LANGFUSE_SECRET_KEY}`).toString('base64')}`
 
         // Use BatchSpanProcessor for OTLP to improve efficiency and reduce concurrency errors
         // (SimpleSpanProcessor sends spans immediately, which can hit limits during high load)

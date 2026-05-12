@@ -1,5 +1,5 @@
 import { Dependency } from "../dependencyGraph"
-import { isTracingEnabled, initTracing } from "../../tracing"
+import { buildLangfuseOtlpAuthHeader, isTracingEnabled, initTracing } from "../../tracing"
 import { logger } from "../../utils/logger"
 import { updateDependencyHealth } from "../../routes/health"
 
@@ -22,15 +22,19 @@ export const langfuseDependency: Dependency = {
   validate: async () => {
     // Langfuse is "healthy" if tracing is enabled and credentials are present
     const enabled = isTracingEnabled()
-    const hasKeys = !!(process.env.LANGFUSE_PUBLIC_KEY && process.env.LANGFUSE_SECRET_KEY)
+    const hasAuth = !!buildLangfuseOtlpAuthHeader({
+      otlpAuthHeader: process.env.LANGFUSE_OTLP_AUTH_HEADER,
+      publicKey: process.env.LANGFUSE_PUBLIC_KEY,
+      secretKey: process.env.LANGFUSE_SECRET_KEY,
+    })
     
-    if (enabled && !hasKeys) {
+    if (enabled && !hasAuth) {
       logger.warn("Langfuse tracing enabled but credentials missing")
       updateDependencyHealth("Langfuse", "unhealthy", 0, "Tracing enabled but credentials missing")
       return false
     }
     
     updateDependencyHealth("Langfuse", "healthy")
-    return enabled ? hasKeys : true // If disabled, we consider it "ready" (skipped)
+    return enabled ? hasAuth : true // If disabled, we consider it "ready" (skipped)
   },
 }

@@ -367,6 +367,8 @@ LANGFUSE_BASE_URL=https://cloud.langfuse.com
 
 Note: `ENABLE_LANGFUSE_TRACING` controls OTLP tracing export. Keep it `false` to disable OTLP telemetry/reporting while `ENABLE_LANGFUSE_NATIVE_SDK=true` keeps native Langfuse SDK tracing enabled. Set `LANGFUSE_DEBUG_TRACING=true` temporarily when you need per-request trace/flush diagnostics.
 
+If you do enable OTLP export, the server derives the exporter URL from `LANGFUSE_OTLP_ENDPOINT` first, then `LANGFUSE_BASE_URL`, and supports `LANGFUSE_OTLP_AUTH_HEADER` as an override when Basic auth with `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` is not accepted by the collector.
+
 ### Integration Setup
 
 #### Confluence Integration
