@@ -68,6 +68,9 @@ export async function processSemanticDocument(
       if (procState.state === 'converted') {
         await semanticProcessingService.queueForExtraction(documentId, String(job.id));
         procState = await semanticProcessingService.getDocumentStatus(documentId);
+        if (!procState) {
+          throw new Error(`Semantic processing record disappeared for document: ${documentId}`);
+        }
       }
 
       if (procState.state === 'queued_extraction') {
@@ -108,6 +111,9 @@ export async function processSemanticDocument(
         if (docState.state === 'extracted') {
           await semanticProcessingService.queueForGkgSync(documentId, String(job.id));
           docState = await semanticProcessingService.getDocumentStatus(documentId);
+          if (!docState) {
+            throw new Error(`Semantic processing record disappeared for document: ${documentId}`);
+          }
         }
 
         if (docState.state === 'queued_gkg_sync') {
@@ -138,6 +144,9 @@ export async function processSemanticDocument(
         if (docState.state === 'extracted') {
           await semanticProcessingService.queueForGkgSync(documentId, String(job.id));
           docState = await semanticProcessingService.getDocumentStatus(documentId);
+          if (!docState) {
+            throw new Error(`Semantic processing record disappeared for document: ${documentId}`);
+          }
         }
         if (docState.state !== 'queued_gkg_sync') {
           throw new Error(

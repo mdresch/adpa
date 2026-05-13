@@ -370,7 +370,18 @@ export function SemanticProcessingStatus({
 
   const isComplete = batchStatus.overallState === 'complete';
   const hasFailed = batchStatus.documentsFailed > 0;
-  const isProcessing = !isComplete && !hasFailed;
+  const isProcessing = batchStatus.overallState === 'processing';
+
+  const progressPercent =
+    typeof batchStatus.progress === 'number' && !Number.isNaN(batchStatus.progress)
+      ? batchStatus.progress
+      : batchStatus.totalDocuments > 0
+        ? Math.round(
+            ((batchStatus.documentsSynced + batchStatus.documentsFailed) /
+              batchStatus.totalDocuments) *
+              100
+          )
+        : 0;
 
   return (
     <Card className="border-l-4 border-l-primary">
@@ -396,9 +407,9 @@ export function SemanticProcessingStatus({
         <div className="space-y-2">
           <div className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">Overall Progress</span>
-            <span className="font-medium">{batchStatus.progress}%</span>
+            <span className="font-medium">{progressPercent}%</span>
           </div>
-          <Progress value={batchStatus.progress} className="h-2" />
+          <Progress value={progressPercent} className="h-2" />
         </div>
 
         {/* Stats Grid */}

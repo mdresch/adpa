@@ -80,6 +80,8 @@ export interface BatchProcessingStatus {
   documentsSynced: number;
   documentsFailed: number;
   overallState: string;
+  /** 0–100: share of documents in terminal success or failure */
+  progress: number;
   startedAt: Date;
   completedAt: Date | null;
   totalEntitiesExtracted: number;
@@ -491,16 +493,25 @@ class SemanticProcessingService {
     const docsResult = await pool.query(docsQuery, [batchId]);
     const documents = docsResult.rows.map(row => this.mapRowToStatus(row));
 
+    const totalDocuments = batch.total_documents as number;
+    const documentsSynced = batch.documents_synced as number;
+    const documentsFailed = batch.documents_failed as number;
+    const progress =
+      totalDocuments > 0
+        ? Math.round(((documentsSynced + documentsFailed) / totalDocuments) * 100)
+        : 0;
+
     return {
       id: batch.id,
       batchId: batch.batch_id,
       projectId: batch.project_id,
-      totalDocuments: batch.total_documents,
+      totalDocuments,
       documentsConverted: batch.documents_converted,
       documentsExtracted: batch.documents_extracted,
-      documentsSynced: batch.documents_synced,
-      documentsFailed: batch.documents_failed,
+      documentsSynced,
+      documentsFailed,
       overallState: batch.overall_state,
+      progress,
       startedAt: batch.started_at,
       completedAt: batch.completed_at,
       totalEntitiesExtracted: batch.total_entities_extracted,
@@ -676,6 +687,7 @@ class SemanticProcessingService {
         documentsExtracted: batch.documentsExtracted,
         documentsSynced: batch.documentsSynced,
         documentsFailed: batch.documentsFailed,
+        progress: batch.progress,
         timestamp: new Date().toISOString()
       });
     }
