@@ -168,6 +168,31 @@ class SemanticProcessingService {
   }
 
   /**
+   * Mark a batch as failed when orchestration or queue setup fails (documents would otherwise stay "processing" forever).
+   */
+  async markBatchOrchestrationFailed(batchId: string, reason: string): Promise<void> {
+    try {
+      const result = await pool.query(
+        `UPDATE semantic_processing_batches
+         SET overall_state = 'failed',
+             completed_at = COALESCE(completed_at, NOW()),
+             updated_at = NOW()
+         WHERE batch_id = $1`,
+        [batchId]
+      );
+      if (result.rowCount === 0) {
+        logger.warn(`${this.LOG_TAG} No semantic_processing_batches row to mark failed`, { batchId, reason });
+      } else {
+        logger.error(`${this.LOG_TAG} Batch orchestration marked failed`, { batchId, reason });
+      }
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error(`${this.LOG_TAG} Failed to persist batch failure state`, { batchId, message });
+      throw new Error(`Failed to update batch failure state: ${message}`);
+    }
+  }
+
+  /**
    * Initialize batch-level tracking
    */
   async initializeBatchProcessing(batchId: string, projectId: string, totalDocuments: number): Promise<void> {

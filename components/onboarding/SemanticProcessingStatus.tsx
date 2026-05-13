@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -205,43 +205,97 @@ export function SemanticProcessingStatus({
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(showDetails);
   const [retrying, setRetrying] = useState<string | null>(null);
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
 
-  const fetchStatus = useCallback(async () => {
+  const fetchStatus = useCallback(async (): Promise<BatchProcessingStatusData | null> => {
     try {
       const response = await apiClient.get(`/api/semantic-processing/batch/${batchId}`);
-      
-      if (response.data?.success) {
-        setBatchStatus(response.data.data);
-        setError(null);
 
-        // Check if complete
-        if (response.data.data.overallState === 'complete' && onComplete) {
-          onComplete();
-        }
+      if (response.data?.success) {
+        const data = response.data.data as BatchProcessingStatusData;
+        setBatchStatus(data);
+        setError(null);
+        return data;
       }
+      return null;
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to fetch status';
-      // Only set error if this is the first load or a real error (not 404 for new batches)
-      if (!batchStatus) {
-        setError(message);
-      }
+      setBatchStatus((prev) => {
+        if (!prev) {
+          setError(message);
+        }
+        return prev;
+      });
+      return null;
     } finally {
       setLoading(false);
     }
-  }, [batchId, onComplete, batchStatus]);
+  }, [batchId]);
 
   useEffect(() => {
-    fetchStatus();
+    let cancelled = false;
+    let intervalId: ReturnType<typeof setInterval> | undefined;
+    let pollingStopped = false;
 
-    // Poll while processing
-    const interval = setInterval(() => {
-      if (batchStatus?.overallState !== 'complete') {
-        fetchStatus();
+    const tick = async () => {
+      if (cancelled || pollingStopped) return;
+
+      setLoading(true);
+      try {
+        const response = await apiClient.get(`/api/semantic-processing/batch/${batchId}`);
+        if (cancelled) return;
+
+        if (response.data?.success) {
+          const data = response.data.data as BatchProcessingStatusData;
+          setBatchStatus(data);
+          setError(null);
+
+          if (data.overallState === 'complete') {
+            onCompleteRef.current?.();
+          }
+
+          const terminal =
+            data.overallState === 'complete' ||
+            data.overallState === 'failed' ||
+            data.overallState === 'partial_failure';
+
+          if (terminal) {
+            pollingStopped = true;
+            if (intervalId !== undefined) {
+              clearInterval(intervalId);
+            }
+          }
+        }
+      } catch (err: unknown) {
+        if (cancelled) return;
+        const message = err instanceof Error ? err.message : 'Failed to fetch status';
+        setBatchStatus((prev) => {
+          if (!prev) {
+            setError(message);
+          }
+          return prev;
+        });
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
+    };
+
+    void tick();
+    intervalId = setInterval(() => {
+      void tick();
     }, pollInterval);
 
-    return () => clearInterval(interval);
-  }, [fetchStatus, pollInterval, batchStatus?.overallState]);
+    return () => {
+      cancelled = true;
+      pollingStopped = true;
+      if (intervalId !== undefined) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [batchId, pollInterval]);
 
   const handleRetryDocument = async (documentId: string) => {
     setRetrying(documentId);
@@ -250,7 +304,7 @@ export function SemanticProcessingStatus({
       
       if (response.data?.success) {
         toast.success('Retry initiated successfully');
-        fetchStatus();
+        await fetchStatus();
       } else {
         toast.error(response.data?.error || 'Failed to retry');
       }
@@ -268,7 +322,7 @@ export function SemanticProcessingStatus({
       
       if (response.data?.success) {
         toast.success(`Retry initiated for ${response.data.data.successful} documents`);
-        fetchStatus();
+        await fetchStatus();
       } else {
         toast.error(response.data?.error || 'Failed to retry');
       }

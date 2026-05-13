@@ -12,8 +12,49 @@ import { authenticateToken as authenticate } from '../middleware/auth';
 import { semanticProcessingService } from '../services/semanticProcessingService';
 import { semanticProcessingQueue } from '../services/queueService';
 import { logger } from '../utils/logger';
+import { pool } from '../database/connection';
+import { userHasProjectAccess } from '../lib/project-access';
+import type { AuthenticatedUser } from '../../../lib/auth-utils';
 
 const router = Router();
+
+function userFromReq(req: Request): AuthenticatedUser | null {
+  const u = (req as any).user;
+  if (!u?.id) return null;
+  return {
+    id: u.id,
+    email: u.email || '',
+    role: String(u.role || ''),
+    permissions: u.permissions ?? {},
+  };
+}
+
+async function requireSemanticProjectAccess(
+  req: Request,
+  res: Response,
+  projectId: string
+): Promise<boolean> {
+  const user = userFromReq(req);
+  if (!user) {
+    res.status(401).json({ success: false, error: 'Unauthorized' });
+    return false;
+  }
+  try {
+    const ok = await userHasProjectAccess(pool, user, projectId);
+    if (!ok) {
+      res.status(403).json({ success: false, error: 'Access denied' });
+      return false;
+    }
+    return true;
+  } catch (error: unknown) {
+    logger.error('Semantic route: project access check failed', {
+      projectId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    res.status(500).json({ success: false, error: 'Access check failed' });
+    return false;
+  }
+}
 
 // ============================================================================
 // DOCUMENT STATUS ENDPOINTS
@@ -37,6 +78,10 @@ router.get(
           success: false,
           error: 'No semantic processing record found for this document'
         });
+      }
+
+      if (!(await requireSemanticProjectAccess(req, res, status.projectId))) {
+        return;
       }
 
       return res.json({
@@ -78,6 +123,10 @@ router.get(
         });
       }
 
+      if (!(await requireSemanticProjectAccess(req, res, status.projectId))) {
+        return;
+      }
+
       return res.json({
         success: true,
         data: status
@@ -111,6 +160,10 @@ router.get(
           success: false,
           error: 'No semantic processing record found for this batch'
         });
+      }
+
+      if (!(await requireSemanticProjectAccess(req, res, status.projectId))) {
+        return;
       }
 
       // Return lightweight summary without full document details
@@ -160,6 +213,10 @@ router.get(
     try {
       const { projectId } = req.params;
 
+      if (!(await requireSemanticProjectAccess(req, res, projectId))) {
+        return;
+      }
+
       const statuses = await semanticProcessingService.getProjectStatus(projectId);
 
       return res.json({
@@ -207,6 +264,10 @@ router.post(
           success: false,
           error: 'No semantic processing record found for this document'
         });
+      }
+
+      if (!(await requireSemanticProjectAccess(req, res, currentStatus.projectId))) {
+        return;
       }
 
       if (currentStatus.state !== 'failed') {
@@ -293,6 +354,10 @@ router.post(
         });
       }
 
+      if (!(await requireSemanticProjectAccess(req, res, batchStatus.projectId))) {
+        return;
+      }
+
       // Find failed documents that can be retried
       const failedDocs = batchStatus.documents.filter(
         doc => doc.state === 'failed' && doc.retryCount < doc.maxRetries
@@ -372,6 +437,17 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { projectId } = req.query as { projectId?: string };
+
+      if (!projectId || typeof projectId !== 'string') {
+        return res.status(400).json({
+          success: false,
+          error: 'projectId query parameter is required',
+        });
+      }
+
+      if (!(await requireSemanticProjectAccess(req, res, projectId))) {
+        return;
+      }
 
       const documents = await semanticProcessingService.getRetryableDocuments(projectId);
 

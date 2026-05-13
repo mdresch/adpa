@@ -1352,6 +1352,18 @@ async function triggerSemanticProcessing(
       error: error.message,
       stack: error.stack
     });
+    try {
+      const { semanticProcessingService } = await import('./semanticProcessingService');
+      await semanticProcessingService.markBatchOrchestrationFailed(
+        batchId,
+        error instanceof Error ? error.message : String(error)
+      );
+    } catch (markErr: unknown) {
+      logger.error('❌ [SEMANTIC] Failed to mark batch as failed after trigger error', {
+        batchId,
+        error: markErr instanceof Error ? markErr.message : String(markErr)
+      });
+    }
     // Don't rethrow - semantic processing failure shouldn't fail the upload
   }
 }

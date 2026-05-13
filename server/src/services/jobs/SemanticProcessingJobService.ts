@@ -163,59 +163,76 @@ export async function processSemanticBatch(
   let processed = 0;
   let failed = 0;
 
-  for (let i = 0; i < documentIds.length; i++) {
-    const documentId = documentIds[i];
-    const progress = Math.round(((i + 1) / documentIds.length) * 100);
+  try {
+    for (let i = 0; i < documentIds.length; i++) {
+      const documentId = documentIds[i];
+      const progress = Math.round(((i + 1) / documentIds.length) * 100);
 
-    try {
-      // Create a synthetic job for the document processor
-      const docJob: IQueueJob<SemanticProcessDocumentJobData> = {
-        id: `${job.id}-doc-${i}`,
-        data: {
-          documentId,
-          projectId,
+      try {
+        // Create a synthetic job for the document processor
+        const docJob: IQueueJob<SemanticProcessDocumentJobData> = {
+          id: `${job.id}-doc-${i}`,
+          data: {
+            documentId,
+            projectId,
+            batchId,
+            userId
+          },
+          progress: async () => {},
+          log: async () => {},
+          update: async () => {},
+          remove: async () => {},
+          retry: async () => {},
+          getState: async () => 'active',
+          finished: async () => {},
+          failed: async () => {},
+          toJSON: () => ({})
+        };
+
+        const result = await processSemanticDocument(docJob);
+
+        if (result.success) {
+          processed++;
+        } else {
+          failed++;
+        }
+      } catch (error) {
+        logger.error(`${LOG_TAG} Document processing failed in batch`, {
           batchId,
-          userId
-        },
-        progress: async () => {},
-        log: async () => {},
-        update: async () => {},
-        remove: async () => {},
-        retry: async () => {},
-        getState: async () => 'active',
-        finished: async () => {},
-        failed: async () => {},
-        toJSON: () => ({})
-      };
-
-      const result = await processSemanticDocument(docJob);
-      
-      if (result.success) {
-        processed++;
-      } else {
+          documentId,
+          error: error instanceof Error ? error.message : String(error)
+        });
         failed++;
       }
 
-    } catch (error) {
-      logger.error(`${LOG_TAG} Document processing failed in batch`, {
-        batchId,
-        documentId,
-        error: error instanceof Error ? error.message : String(error)
-      });
-      failed++;
+      await job.progress(progress);
     }
 
-    await job.progress(progress);
+    logger.info(`${LOG_TAG} Batch semantic processing complete`, {
+      batchId,
+      processed,
+      failed,
+      total: documentIds.length
+    });
+
+    return { success: failed === 0, processed, failed };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error(`${LOG_TAG} Batch semantic processing aborted`, {
+      batchId,
+      error: message,
+      stack: error instanceof Error ? error.stack : undefined
+    });
+    try {
+      await semanticProcessingService.markBatchOrchestrationFailed(batchId, message);
+    } catch (markErr: unknown) {
+      logger.error(`${LOG_TAG} Could not mark batch failed after batch job error`, {
+        batchId,
+        error: markErr instanceof Error ? markErr.message : String(markErr)
+      });
+    }
+    throw error;
   }
-
-  logger.info(`${LOG_TAG} Batch semantic processing complete`, {
-    batchId,
-    processed,
-    failed,
-    total: documentIds.length
-  });
-
-  return { success: failed === 0, processed, failed };
 }
 
 // ============================================================================
