@@ -68,6 +68,55 @@ const dashboardQuerySchema = Joi.object({
   limit: Joi.number().integer().min(1).max(100).default(20),
 });
 
+const COMPLIANCE_AUDIT_EVENT_TYPES = [
+  'VALIDATION_STARTED', 'VALIDATION_COMPLETED', 'VALIDATION_FAILED',
+  'FINDING_CREATED', 'FINDING_RESOLVED',
+  'RECOMMENDATION_CREATED', 'RECOMMENDATION_APPLIED',
+  'STATUS_CHANGED', 'SCORE_CHANGED',
+  'RULE_ADDED', 'RULE_MODIFIED',
+  'PACK_ACTIVATED', 'PACK_DEACTIVATED',
+] as const;
+
+const auditTrailQuerySchema = Joi.object({
+  documentId: Joi.string().uuid().optional(),
+  projectId: Joi.string().uuid().optional(),
+  eventType: Joi.string().valid(...COMPLIANCE_AUDIT_EVENT_TYPES).optional(),
+  limit: Joi.number().integer().min(1).max(100).default(50),
+  offset: Joi.number().integer().min(0).default(0),
+});
+
+/** Static WHERE: all filter values bound as $1…$4 only (no user-derived SQL fragments). */
+const DASHBOARD_CVR_WHERE = `WHERE ($1::uuid IS NULL OR cvr.project_id = $1)
+  AND (
+    $2::standards_pack_type[] IS NULL
+    OR COALESCE(array_length($2::standards_pack_type[], 1), 0) = 0
+    OR cvr.pack_type = ANY ($2::standards_pack_type[])
+  )
+  AND ($3::timestamptz IS NULL OR cvr.validated_at >= $3)
+  AND ($4::timestamptz IS NULL OR cvr.validated_at <= $4)`;
+
+const AUDIT_TRAIL_WHERE = `WHERE ($1::uuid IS NULL OR cat.document_id = $1)
+  AND ($2::uuid IS NULL OR cat.project_id = $2)
+  AND ($3::compliance_audit_event_type IS NULL OR cat.event_type = $3)`;
+
+function dashboardCvrFilterParams(q: {
+  projectId?: string;
+  packTypes?: string | string[];
+  dateFrom?: Date | string;
+  dateTo?: Date | string;
+}): [string | null, string[] | null, Date | null, Date | null] {
+  const packs = q.packTypes
+    ? (Array.isArray(q.packTypes) ? q.packTypes : [q.packTypes])
+    : null;
+  const packParam = packs && packs.length > 0 ? packs : null;
+  return [
+    q.projectId ?? null,
+    packParam,
+    q.dateFrom ? new Date(q.dateFrom) : null,
+    q.dateTo ? new Date(q.dateTo) : null,
+  ];
+}
+
 
 // ============================================================================
 // COMPLIANCE VALIDATION ENDPOINTS (SC-118)
@@ -376,32 +425,15 @@ router.get('/dashboard',
   validateQuery(dashboardQuerySchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { projectId, packTypes, dateFrom, dateTo, limit } = req.query as any;
+      const { projectId, packTypes, dateFrom, dateTo, limit: limitInput } = req.query as Record<string, unknown>;
 
-      // Build query filters
-      let whereClause = 'WHERE 1=1';
-      const params: any[] = [];
-
-      if (projectId) {
-        params.push(projectId);
-        whereClause += ` AND cvr.project_id = $${params.length}`;
-      }
-
-      if (packTypes) {
-        const types = Array.isArray(packTypes) ? packTypes : [packTypes];
-        params.push(types);
-        whereClause += ` AND cvr.pack_type = ANY($${params.length})`;
-      }
-
-      if (dateFrom) {
-        params.push(dateFrom);
-        whereClause += ` AND cvr.validated_at >= $${params.length}`;
-      }
-
-      if (dateTo) {
-        params.push(dateTo);
-        whereClause += ` AND cvr.validated_at <= $${params.length}`;
-      }
+      const baseParams = dashboardCvrFilterParams({
+        projectId: projectId as string | undefined,
+        packTypes: packTypes as string | string[] | undefined,
+        dateFrom: dateFrom as Date | string | undefined,
+        dateTo: dateTo as Date | string | undefined,
+      });
+      const limitSafe = Math.min(100, Math.max(1, Number(limitInput) || 20));
 
       // Get summary statistics
       const summaryResult = await pool.query(
@@ -417,8 +449,8 @@ router.get('/dashboard',
           COUNT(CASE WHEN cvr.overall_status = 'NON_COMPLIANT' THEN 1 END) as non_compliant_count,
           COUNT(CASE WHEN cvr.overall_status = 'PARTIAL' THEN 1 END) as partial_count
          FROM compliance_validation_results cvr
-         ${whereClause}`,
-        params
+         ${DASHBOARD_CVR_WHERE}`,
+        baseParams
       );
 
       // Get recent validations
@@ -427,10 +459,10 @@ router.get('/dashboard',
          FROM compliance_validation_results cvr
          JOIN standards_packs sp ON cvr.pack_id = sp.id
          JOIN documents d ON cvr.document_id = d.id
-         ${whereClause}
+         ${DASHBOARD_CVR_WHERE}
          ORDER BY cvr.validated_at DESC
-         LIMIT $${params.length + 1}`,
-        [...params, limit || 10]
+         LIMIT $5`,
+        [...baseParams, limitSafe]
       );
 
       // Get trend data (last 30 days)
@@ -442,11 +474,11 @@ router.get('/dashboard',
           COUNT(DISTINCT document_id) as document_count,
           SUM(critical_findings) as critical_findings
          FROM compliance_validation_results cvr
-         ${whereClause}
+         ${DASHBOARD_CVR_WHERE}
          AND cvr.validated_at >= CURRENT_DATE - INTERVAL '30 days'
          GROUP BY DATE(validated_at)
          ORDER BY date`,
-        params
+        baseParams
       );
 
       // Get pack breakdown
@@ -459,10 +491,10 @@ router.get('/dashboard',
           ROUND(AVG(cvr.compliance_percentage)::numeric, 2) as compliance_rate
          FROM compliance_validation_results cvr
          JOIN standards_packs sp ON cvr.pack_id = sp.id
-         ${whereClause}
+         ${DASHBOARD_CVR_WHERE}
          GROUP BY cvr.pack_type, sp.name
          ORDER BY validation_count DESC`,
-        params
+        baseParams
       );
 
       // Get top recommendations
@@ -471,7 +503,7 @@ router.get('/dashboard',
          FROM compliance_recommendations cr
          JOIN compliance_validation_results cvr ON cr.validation_result_id = cvr.id
          JOIN documents d ON cvr.document_id = d.id
-         ${whereClause.replace(/cvr\./g, 'cvr.')}
+         ${DASHBOARD_CVR_WHERE}
          AND cr.status = 'PENDING'
          ORDER BY 
            CASE cr.priority 
@@ -482,7 +514,7 @@ router.get('/dashboard',
            END,
            cr.potential_score_improvement DESC
          LIMIT 10`,
-        params
+        baseParams
       );
 
       res.json({
@@ -562,45 +594,35 @@ router.get('/dashboard/trends',
  */
 router.get('/audit-trail',
   authenticate,
+  validateQuery(auditTrailQuerySchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { documentId, projectId, eventType, limit, offset } = req.query;
+      const { documentId, projectId, eventType, limit: limitInput, offset: offsetInput } =
+        req.query as Record<string, unknown>;
 
-      let whereClause = 'WHERE 1=1';
-      const params: any[] = [];
+      const auditBaseParams: (string | null)[] = [
+        (documentId as string | undefined) ?? null,
+        (projectId as string | undefined) ?? null,
+        (eventType as string | undefined) ?? null,
+      ];
 
-      if (documentId) {
-        params.push(documentId);
-        whereClause += ` AND cat.document_id = $${params.length}`;
-      }
-
-      if (projectId) {
-        params.push(projectId);
-        whereClause += ` AND cat.project_id = $${params.length}`;
-      }
-
-      if (eventType) {
-        params.push(eventType);
-        whereClause += ` AND cat.event_type = $${params.length}`;
-      }
-
-      const limitVal = parseInt(limit as string) || 50;
-      const offsetVal = parseInt(offset as string) || 0;
+      const limitVal = Math.min(100, Math.max(1, Number(limitInput) || 50));
+      const offsetVal = Math.max(0, Number(offsetInput) || 0);
 
       const result = await pool.query(
         `SELECT cat.*, u.name as user_name, u.email as user_email
          FROM compliance_audit_trail cat
          LEFT JOIN users u ON cat.user_id = u.id
-         ${whereClause}
+         ${AUDIT_TRAIL_WHERE}
          ORDER BY cat.timestamp DESC
-         LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
-        [...params, limitVal, offsetVal]
+         LIMIT $4 OFFSET $5`,
+        [...auditBaseParams, limitVal, offsetVal]
       );
 
       // Get total count
       const countResult = await pool.query(
-        `SELECT COUNT(*) as total FROM compliance_audit_trail cat ${whereClause}`,
-        params
+        `SELECT COUNT(*) as total FROM compliance_audit_trail cat ${AUDIT_TRAIL_WHERE}`,
+        auditBaseParams
       );
 
       res.json({

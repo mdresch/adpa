@@ -584,6 +584,30 @@ class ComplianceValidationEngine implements IComplianceValidationEngine {
     return { score: Math.min(100, Math.max(0, score)), findings, evidence };
   }
 
+  /**
+   * Count whole-word occurrences of wordLower in haystackLower without constructing
+   * RegExp from rule-supplied text (avoids ReDoS / static-analysis flags).
+   */
+  private countWholeWordOccurrences(haystackLower: string, wordLower: string): number {
+    if (!wordLower.length) return 0;
+    const isWordChar = (c: string) => /[0-9a-z_]/i.test(c);
+    let from = 0;
+    let count = 0;
+    while (from <= haystackLower.length) {
+      const idx = haystackLower.indexOf(wordLower, from);
+      if (idx === -1) break;
+      const before = idx === 0 ? '\0' : haystackLower.charAt(idx - 1);
+      const after = idx + wordLower.length >= haystackLower.length ? '\0' : haystackLower.charAt(idx + wordLower.length);
+      if (!isWordChar(before) && !isWordChar(after)) {
+        count++;
+        from = idx + wordLower.length;
+      } else {
+        from = idx + 1;
+      }
+    }
+    return count;
+  }
+
   private validateTerminology(content: string, rule: ComplianceRule): {
     score: number;
     findings: ComplianceFinding[];
@@ -600,18 +624,18 @@ class ComplianceValidationEngine implements IComplianceValidationEngine {
     let matchCount = 0;
     const foundTerms: string[] = [];
     const missingTerms: string[] = [];
+    const haystackLower = content.toLowerCase();
 
     for (const term of keywords) {
       const termLower = term.toLowerCase();
-      const regex = new RegExp(`\\b${termLower}\\b`, 'gi');
-      const matches = content.match(regex);
-      
-      if (matches && matches.length > 0) {
+      const occurrences = this.countWholeWordOccurrences(haystackLower, termLower);
+
+      if (occurrences > 0) {
         matchCount++;
         foundTerms.push(term);
         evidence.push({
           type: 'KEYWORD_MATCH',
-          description: `Found standard terminology: "${term}" (${matches.length} occurrences)`,
+          description: `Found standard terminology: "${term}" (${occurrences} occurrences)`,
           confidence: 1.0,
         });
       } else {

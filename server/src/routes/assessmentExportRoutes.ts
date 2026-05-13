@@ -5,13 +5,23 @@
  */
 
 import express, { Request, Response, NextFunction } from 'express';
+import Joi from 'joi';
 import { logger } from '../utils/logger';
 import { authenticateToken as authenticate } from '../middleware/auth';
+import { validateParams, validateQuery } from '../middleware/validation';
 import { pool } from '../database/connection';
 import * as assessmentReportService from '../services/assessmentReportService';
 import { portfolioAssessmentService } from '../services/portfolioAssessmentService';
 
 const router = express.Router();
+
+const assessmentExportParamsSchema = Joi.object({
+  assessmentId: Joi.string().uuid().required(),
+});
+
+const assessmentExportQuerySchema = Joi.object({
+  format: Joi.string().lowercase().valid('pdf', 'html', 'docx', 'csv', 'json').default('pdf'),
+});
 
 /**
  * Authentication is now required for all assessment routes.
@@ -623,10 +633,15 @@ router.get('/:assessmentId', authenticate, async (req: Request, res: Response, n
 // Export assessment report
 // ============================================================================
 
-router.get('/:assessmentId/export', authenticate, async (req: Request, res: Response, next: NextFunction) => {
+router.get(
+  '/:assessmentId/export',
+  authenticate,
+  validateParams(assessmentExportParamsSchema),
+  validateQuery(assessmentExportQuerySchema),
+  async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { assessmentId } = req.params;
-    const { format = 'pdf' } = req.query;
+    const { format } = req.query as { format: 'pdf' | 'html' | 'docx' | 'csv' | 'json' };
     const userId = (req as any).user.id;
 
     logger.info('Exporting assessment', {
@@ -708,7 +723,8 @@ router.get('/:assessmentId/export', authenticate, async (req: Request, res: Resp
     });
     next(error);
   }
-});
+  }
+);
 
 // ============================================================================
 // POST /api/assessment/:assessmentId/regenerate
