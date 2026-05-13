@@ -8,7 +8,7 @@ import documentRoutes from '../../modules/documents/routes';
 // Mock authentication middleware
 jest.mock('../../middleware/auth', () => ({
     authenticateToken: (req: any, res: any, next: any) => {
-        req.user = { id: 'test-user-id', role: 'admin' };
+        req.user = { id: 'test-user-id', role: 'super_admin' };
         next();
     },
     requirePermission: () => (req: any, res: any, next: any) => next(),
@@ -84,12 +84,14 @@ describe('Document Export API', () => {
                     name: 'First Document',
                     content: '# First markdown',
                     metadata: { project: 'Test Project' },
+                    project_id: 'proj-1',
                 },
                 {
                     id: 'doc-2',
                     name: 'Second Document',
                     content: '## Second markdown',
                     metadata: { project: 'Test Project' },
+                    project_id: 'proj-1',
                 }
             ],
             rowCount: 2,
@@ -109,7 +111,8 @@ describe('Document Export API', () => {
         expect(DocxService.generateDocx).toHaveBeenCalledWith(
             expect.stringContaining('# First Document'),
             expect.any(String),
-            expect.objectContaining({ document_count: 2 })
+            expect.objectContaining({ document_count: 2 }),
+            undefined
         );
         expect(response.body).toBeDefined();
     });

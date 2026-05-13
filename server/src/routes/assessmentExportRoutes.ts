@@ -635,22 +635,23 @@ router.get('/:assessmentId/export', authenticate, async (req: Request, res: Resp
       userId
     });
 
-    // Get assessment data
-    const assessment = await portfolioAssessmentService.getAssessment(assessmentId, userId);
+    const row = await portfolioAssessmentService.getAssessmentForExport(assessmentId, userId);
 
-    if (!assessment) {
+    if (!row) {
       return res.status(404).json({
         success: false,
         error: 'Assessment not found'
       });
     }
 
+    const reportData = assessmentReportService.mapAssessmentRowToReportData(row);
+
     // Export based on format
     switch (format) {
       case 'pdf':
       case 'html': {
         const result = await assessmentReportService.generateAssessmentReport(
-          assessment,
+          reportData,
           {
             format: format as 'pdf' | 'html',
             includeCharts: true,
@@ -660,23 +661,34 @@ router.get('/:assessmentId/export', authenticate, async (req: Request, res: Resp
         );
 
         res.setHeader('Content-Type', result.mimeType);
-        res.setHeader('Content-Disposition', `attachment; filename="assessment-${assessmentId}.${format}"`);
+        res.setHeader('Content-Disposition', `attachment; filename="assessment-${row.id}.${format}"`);
         res.send(result.buffer);
         break;
       }
 
+      case 'docx': {
+        const buf = await assessmentReportService.generateAssessmentReportDocx(reportData);
+        res.setHeader(
+          'Content-Type',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        );
+        res.setHeader('Content-Disposition', `attachment; filename="assessment-${row.id}.docx"`);
+        res.send(buf);
+        break;
+      }
+
       case 'csv': {
-        const csv = assessmentReportService.exportAssessmentCSV(assessment);
+        const csv = assessmentReportService.exportAssessmentCSV(reportData);
         res.setHeader('Content-Type', 'text/csv');
-        res.setHeader('Content-Disposition', `attachment; filename="assessment-${assessmentId}.csv"`);
+        res.setHeader('Content-Disposition', `attachment; filename="assessment-${row.id}.csv"`);
         res.send(csv);
         break;
       }
 
       case 'json': {
-        const json = assessmentReportService.exportAssessmentJSON(assessment);
+        const json = assessmentReportService.exportAssessmentJSON(reportData);
         res.setHeader('Content-Type', 'application/json');
-        res.setHeader('Content-Disposition', `attachment; filename="assessment-${assessmentId}.json"`);
+        res.setHeader('Content-Disposition', `attachment; filename="assessment-${row.id}.json"`);
         res.send(json);
         break;
       }
@@ -684,7 +696,7 @@ router.get('/:assessmentId/export', authenticate, async (req: Request, res: Resp
       default:
         return res.status(400).json({
           success: false,
-          error: 'Invalid format. Supported: pdf, html, csv, json'
+          error: 'Invalid format. Supported: pdf, html, docx, csv, json'
         });
     }
 

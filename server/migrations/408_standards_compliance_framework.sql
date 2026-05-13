@@ -1,5 +1,5 @@
--- Applied by server/scripts/run-src-db-migrations.ts (src_schema_migrations).
--- Duplicate for root `pnpm migrate`: server/migrations/408_standards_compliance_framework.sql — keep both in sync when editing.
+-- Keep in sync with: server/src/database/migrations/408_standards_compliance_framework.sql
+-- This copy is applied by server/scripts/run-migrations.ts (schema_migrations) and root `pnpm migrate`.
 
 -- Standards Compliance & Governance Framework Foundation
 -- SC-28: Database schema for standards-inspired validation across multiple standards packs

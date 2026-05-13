@@ -9,6 +9,7 @@
     "start": "next start",
     "firebase:auth": "npx -y firebase-tools@latest emulators:start --only auth",
     "migrate": "tsx server/scripts/run-migrations.ts",
+    "migrate:src": "tsx server/scripts/run-src-db-migrations.ts",
     "migrate:reset": "tsx server/scripts/run-migrations.ts --reset",
     "migrate:dev": "npm run migrate:reset && tsx server/src/database/seed-all.ts",
     "migrate:baseline": "node server/scripts/generate-migration-from-db.js",

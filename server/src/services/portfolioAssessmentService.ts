@@ -895,6 +895,32 @@ async function getAssessmentByBatchId(batchId: string, userId: string): Promise<
 }
 
 /**
+ * Load a single assessment row by primary key OR upload batch id, enforcing project/batch access.
+ * Used by report export so onboarding URLs keyed by batch_id resolve correctly.
+ */
+async function getAssessmentForExport(assessmentOrBatchUuid: string, userId: string): Promise<any | null> {
+  const query = `
+    SELECT
+      a.*,
+      p.name AS project_name,
+      COALESCE(ub.batch_metadata->>'organizationName', p.name) AS organization_display_name
+    FROM assessments a
+    JOIN projects p ON a.project_id = p.id
+    LEFT JOIN upload_batches ub ON ub.id = a.batch_id
+    WHERE (a.id = $1::uuid OR a.batch_id = $1::uuid)
+      AND (
+        p.owner_id = $2::uuid
+        OR p.created_by = $2::uuid
+        OR (ub.uploaded_by IS NOT NULL AND ub.uploaded_by = $2::uuid)
+      )
+    ORDER BY a.created_at DESC
+    LIMIT 1
+  `;
+  const result = await db.query(query, [assessmentOrBatchUuid, userId]);
+  return result.rows[0] || null;
+}
+
+/**
  * Generate new assessment
  */
 async function generateAssessment(projectId: string, userId: string): Promise<any> {
@@ -912,6 +938,7 @@ export const portfolioAssessmentService = {
   getMaturityLabel,
   getAssessment,
   getAssessmentByBatchId,
+  getAssessmentForExport,
   generateAssessment
 };
 

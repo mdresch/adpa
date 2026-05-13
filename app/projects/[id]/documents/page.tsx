@@ -60,6 +60,8 @@ import { useAuth } from "@/contexts/AuthContext"
 import { apiClient, Project, Template } from "@/lib/api"
 import { getApiUrl, getApiBaseUrl } from "@/lib/api-url"
 import { resolveBulkExportDownloadName } from "@/lib/documents/bulk-export"
+import type { WordBulkExportDialogValues } from "@/lib/documents/word-export"
+import { ExportWordDialog } from "@/components/documents/ExportWordDialog"
 import { toast } from '@/lib/notify'
 import { QualityAuditBadge } from "@/components/quality"
 
@@ -861,8 +863,71 @@ export default function ProjectDocuments() {
 
   const isSomeSelected = selectedDocuments.size > 0 && !isAllDocumentsSelected
 
+  const [exportWordDialogOpen, setExportWordDialogOpen] = useState(false)
+
+  const handleBulkWordExportFromDialog = async (values: WordBulkExportDialogValues) => {
+    if (selectedDocuments.size === 0) {
+      toast.error("Please select at least one document")
+      return
+    }
+
+    try {
+      setExporting(true)
+      const documentIds = Array.from(selectedDocuments)
+      const authToken = localStorage.getItem('auth_token')
+      if (!authToken) {
+        toast.error("Please log in to export documents")
+        return
+      }
+
+      const response = await fetch(getApiUrl(`/documents/bulk-export/docx`), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          document_ids: documentIds,
+          mode: values.mode,
+          branding: values.branding,
+          layout: values.layout,
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: response.statusText }))
+        throw new Error(errorData.error || `Export failed: ${response.statusText}`)
+      }
+
+      const fileName = resolveBulkExportDownloadName(response, 'docx')
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = fileName
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+
+      toast.success(
+        values.mode === 'per_document_zip'
+          ? `Downloaded ZIP with ${documentIds.length} Word file(s)`
+          : `Exported ${documentIds.length} document(s) into one Word file`
+      )
+      setExportWordDialogOpen(false)
+      clearSelection()
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Export failed'
+      console.error('Failed to export as Word:', error)
+      toast.error(message)
+    } finally {
+      setExporting(false)
+    }
+  }
+
   // Bulk export functions
-  const handleBulkExport = async (format: 'pdf' | 'docx' | 'markdown') => {
+  const handleBulkExport = async (format: 'pdf' | 'markdown') => {
     if (selectedDocuments.size === 0) {
       toast.error("Please select at least one document")
       return
@@ -1092,6 +1157,7 @@ export default function ProjectDocuments() {
   }
 
   return (
+    <>
     <div className="h-screen bg-background flex overflow-hidden">
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -1251,7 +1317,7 @@ export default function ProjectDocuments() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleBulkExport('docx')}
+                        onClick={() => setExportWordDialogOpen(true)}
                         disabled={exporting}
                       >
                         {exporting ? (
@@ -1259,7 +1325,7 @@ export default function ProjectDocuments() {
                         ) : (
                           <FileDown className="h-4 w-4 mr-2" />
                         )}
-                        Export as Word
+                        Export to Word…
                       </Button>
                       <Button
                         variant="outline"
@@ -2131,5 +2197,14 @@ export default function ProjectDocuments() {
         </main>
       </div>
     </div>
+    <ExportWordDialog
+      open={exportWordDialogOpen}
+      onOpenChange={setExportWordDialogOpen}
+      selectedCount={selectedDocuments.size}
+      defaultCompanyName={project?.name ?? ''}
+      onExport={handleBulkWordExportFromDialog}
+      exporting={exporting}
+    />
+    </>
   )
 }

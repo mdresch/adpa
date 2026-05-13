@@ -5,7 +5,7 @@
  * Run this script to populate the compliance framework with standards-aligned rules.
  */
 
-import { pool } from '../../database/connection';
+import { pool, connectDatabase, getDatabasePool, getDatabasePoolSafe } from '../../database/connection';
 import { logger } from '../../utils/logger';
 import {
   getPMBOKPackDefinition,
@@ -159,6 +159,7 @@ async function seedStandardsPack(
  * Seed all standards packs
  */
 export async function seedAllRulesets(): Promise<void> {
+  await connectDatabase();
   logger.info('[SEED-RULESETS] Starting compliance rulesets seeding...');
 
   try {
@@ -210,12 +211,18 @@ export async function seedAllRulesets(): Promise<void> {
  */
 if (require.main === module) {
   seedAllRulesets()
-    .then(() => {
+    .then(async () => {
       console.log('Rulesets seeded successfully!');
+      await getDatabasePool()
+        .end()
+        .catch(() => {});
       process.exit(0);
     })
-    .catch((error) => {
+    .catch(async (error) => {
       console.error('Failed to seed rulesets:', error);
+      await getDatabasePoolSafe()
+        ?.end()
+        .catch(() => {});
       process.exit(1);
     });
 }

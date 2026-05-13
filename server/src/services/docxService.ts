@@ -13,66 +13,350 @@ import {
     TableRow,
     TableCell,
     ShadingType,
-    WidthType
+    WidthType,
+    TableOfContents,
+    BorderStyle,
 } from 'docx';
 import { marked } from 'marked';
 import axios from 'axios';
 
+export type CoverTemplateId = 'minimal' | 'corporate' | 'bold';
+
+export type GenerateDocxOptions = {
+    /** Half-points (e.g. 22 = 11pt, 24 = 12pt) */
+    bodyFontHalfPt?: number;
+    fontFamily?: string;
+    coverTemplate?: CoverTemplateId;
+    /** RRGGBB without leading # */
+    primaryColorHex?: string;
+    secondaryColorHex?: string;
+    logoDataUrl?: string;
+    includeTableOfContents?: boolean;
+};
+
 export class DocxService {
+    private static normalizeWordColorHex(input?: string, fallback = '2563EB'): string {
+        if (!input || typeof input !== 'string') return fallback;
+        const s = input.trim().replace(/^#/, '');
+        if (!/^[0-9A-Fa-f]{6}$/.test(s)) return fallback;
+        return s.toUpperCase();
+    }
+
+    private static decodeDataUrlImage(
+        dataUrl: string
+    ): { data: Buffer; type: 'png' | 'jpeg' | 'gif' } | null {
+        const m = dataUrl.match(/^data:(image\/(png|jpeg|jpg|gif));base64,(.+)$/i);
+        if (!m) return null;
+        try {
+            const buf = Buffer.from(m[3], 'base64');
+            if (buf.length > 2_500_000) return null;
+            const t = m[2].toLowerCase();
+            const type = (t === 'jpg' ? 'jpeg' : t) as 'png' | 'jpeg' | 'gif';
+            return { data: buf, type };
+        } catch {
+            return null;
+        }
+    }
+
+    private static pageBreakParagraph(): Paragraph {
+        return new Paragraph({
+            pageBreakBefore: true,
+            children: [],
+        });
+    }
+
+    private static async tryLogoParagraph(
+        logoDataUrl: string | undefined,
+        alignment: (typeof AlignmentType)[keyof typeof AlignmentType]
+    ): Promise<Paragraph | null> {
+        if (!logoDataUrl) return null;
+        const decoded = this.decodeDataUrlImage(logoDataUrl);
+        if (!decoded) return null;
+        return new Paragraph({
+            alignment,
+            spacing: { after: 200 },
+            children: [
+                new ImageRun({
+                    data: decoded.data,
+                    transformation: { width: 180, height: 180 },
+                    type: decoded.type,
+                } as any),
+            ],
+        });
+    }
+
+    /**
+     * Branded cover blocks (before TOC / body). Does not include trailing page break.
+     */
+    private static async buildCoverBlocks(args: {
+        template: CoverTemplateId;
+        title: string;
+        organization?: string;
+        tagline?: string;
+        primary: string;
+        secondary: string;
+        logoDataUrl?: string;
+        metadata?: Record<string, any>;
+    }): Promise<(Paragraph | Table)[]> {
+        const { template, title, organization, tagline, primary, secondary, logoDataUrl, metadata } = args;
+        const headline = (organization && organization.trim()) || title;
+        const out: (Paragraph | Table)[] = [];
+
+        if (template === 'minimal') {
+            const logo = await this.tryLogoParagraph(logoDataUrl, AlignmentType.CENTER);
+            if (logo) out.push(logo);
+            out.push(
+                new Paragraph({
+                    alignment: AlignmentType.CENTER,
+                    spacing: { after: 120 },
+                    children: [
+                        new TextRun({
+                            text: headline,
+                            bold: true,
+                            size: 56,
+                            color: primary,
+                        }),
+                    ],
+                })
+            );
+            if (tagline?.trim()) {
+                out.push(
+                    new Paragraph({
+                        alignment: AlignmentType.CENTER,
+                        spacing: { after: 200 },
+                        children: [
+                            new TextRun({
+                                text: tagline.trim(),
+                                size: 28,
+                                color: secondary,
+                                italics: true,
+                            }),
+                        ],
+                    })
+                );
+            }
+            out.push(
+                new Paragraph({
+                    alignment: AlignmentType.CENTER,
+                    border: {
+                        bottom: { color: primary, style: BorderStyle.SINGLE, size: 12 },
+                    },
+                    spacing: { after: 400 },
+                    children: [new TextRun({ text: '\u00a0', size: 8 })],
+                })
+            );
+        } else if (template === 'corporate') {
+            const logo = await this.tryLogoParagraph(logoDataUrl, AlignmentType.LEFT);
+            const rightChildren: Paragraph[] = [];
+            if (logo) {
+                const logoPara = logo;
+                rightChildren.push(logoPara);
+            }
+            rightChildren.push(
+                new Paragraph({
+                    spacing: { after: 120 },
+                    children: [
+                        new TextRun({
+                            text: headline,
+                            bold: true,
+                            size: 52,
+                            color: primary,
+                        }),
+                    ],
+                })
+            );
+            if (tagline?.trim()) {
+                rightChildren.push(
+                    new Paragraph({
+                        spacing: { after: 160 },
+                        children: [
+                            new TextRun({
+                                text: tagline.trim(),
+                                size: 24,
+                                color: secondary,
+                            }),
+                        ],
+                    })
+                );
+            }
+            if (metadata) {
+                const lines: TextRun[] = [];
+                for (const [key, value] of Object.entries(metadata)) {
+                    lines.push(
+                        new TextRun({ text: `${key}: `, bold: true, size: 20, color: secondary }),
+                        new TextRun({ text: String(value), size: 20 }),
+                        new TextRun({ text: '\n' })
+                    );
+                }
+                if (lines.length) {
+                    rightChildren.push(new Paragraph({ children: lines, spacing: { after: 200 } }));
+                }
+            }
+
+            out.push(
+                new Table({
+                    width: { size: 100, type: WidthType.PERCENTAGE },
+                    rows: [
+                        new TableRow({
+                            children: [
+                                new TableCell({
+                                    width: { size: 1800, type: WidthType.DXA },
+                                    shading: { fill: primary, type: ShadingType.CLEAR },
+                                    margins: { top: 200, bottom: 200, left: 200, right: 200 },
+                                    children: [new Paragraph({ text: '' })],
+                                }),
+                                new TableCell({
+                                    children: rightChildren,
+                                    margins: { top: 200, bottom: 200, left: 360, right: 200 },
+                                }),
+                            ],
+                        }),
+                    ],
+                })
+            );
+        } else {
+            /* bold */
+            const logo = await this.tryLogoParagraph(logoDataUrl, AlignmentType.LEFT);
+            if (logo) out.push(logo);
+            out.push(
+                new Paragraph({
+                    spacing: { before: 120, after: 200 },
+                    border: {
+                        left: { color: primary, style: BorderStyle.THICK, size: 24, space: 8 },
+                    },
+                    indent: { left: convertInchesToTwip(0.12) },
+                    children: [
+                        new TextRun({
+                            text: headline,
+                            bold: true,
+                            size: 56,
+                            color: primary,
+                        }),
+                    ],
+                })
+            );
+            if (tagline?.trim()) {
+                out.push(
+                    new Paragraph({
+                        spacing: { after: 240 },
+                        indent: { left: convertInchesToTwip(0.12) },
+                        children: [
+                            new TextRun({
+                                text: tagline.trim(),
+                                size: 28,
+                                color: secondary,
+                            }),
+                        ],
+                    })
+                );
+            }
+        }
+
+        return out;
+    }
+
     /**
      * Generates a DOCX buffer from Markdown content.
      */
     static async generateDocx(
         markdownContent: string,
         title: string,
-        metadata?: Record<string, any>
+        metadata?: Record<string, any>,
+        options?: GenerateDocxOptions
     ): Promise<Buffer> {
         const normalizedMarkdownContent = this.normalizeMarkdownForDocx(markdownContent);
-
-        // 1. Parse Markdown into tokens
         const tokens = marked.lexer(normalizedMarkdownContent);
 
-        // 2. Create Document sections
-        const children: (Paragraph | Table)[] = [];
+        const bodyHalfPt = options?.bodyFontHalfPt ?? 24;
+        const bodyFont = options?.fontFamily || 'Calibri';
+        const primary = this.normalizeWordColorHex(options?.primaryColorHex, '2563EB');
+        const secondary = this.normalizeWordColorHex(options?.secondaryColorHex, '64748B');
+        const coverTemplate = options?.coverTemplate;
+        const useCover = coverTemplate === 'minimal' || coverTemplate === 'corporate' || coverTemplate === 'bold';
+        const includeToc = options?.includeTableOfContents === true;
 
-        // Add Title
-        children.push(
-            new Paragraph({
-                text: title,
-                heading: HeadingLevel.TITLE,
-                alignment: AlignmentType.CENTER,
-                spacing: {
-                    after: 400, // 20pt
-                },
-            })
-        );
+        const children: (Paragraph | Table | TableOfContents)[] = [];
 
-        // Add Metadata if present
-        if (metadata) {
-            const metaLines: TextRun[] = [];
-            for (const [key, value] of Object.entries(metadata)) {
-                metaLines.push(
-                    new TextRun({
-                        text: `${key}: ${value}`,
-                        bold: true,
-                        size: 20, // 10pt
-                    }),
-                    new TextRun({
-                        text: '\n',
-                    })
-                );
-            }
-            if (metaLines.length > 0) {
-                children.push(new Paragraph({
-                    children: metaLines,
-                    spacing: {
-                        after: 400,
-                    }
-                }));
+        if (useCover) {
+            const org = metadata && typeof metadata.Organization === 'string' ? metadata.Organization : undefined;
+            const tag = metadata && typeof metadata.Tagline === 'string' ? metadata.Tagline : undefined;
+            children.push(
+                ...(await this.buildCoverBlocks({
+                    template: coverTemplate,
+                    title,
+                    organization: org,
+                    tagline: tag,
+                    primary,
+                    secondary,
+                    logoDataUrl: options?.logoDataUrl,
+                    metadata,
+                }))
+            );
+            children.push(this.pageBreakParagraph());
+        } else {
+            children.push(
+                new Paragraph({
+                    text: title,
+                    heading: HeadingLevel.TITLE,
+                    alignment: AlignmentType.CENTER,
+                    spacing: { after: 400 },
+                })
+            );
+            if (metadata) {
+                const metaLines: TextRun[] = [];
+                for (const [key, value] of Object.entries(metadata)) {
+                    metaLines.push(
+                        new TextRun({ text: `${key}: ${value}`, bold: true, size: 20 }),
+                        new TextRun({ text: '\n' })
+                    );
+                }
+                if (metaLines.length > 0) {
+                    children.push(
+                        new Paragraph({
+                            children: metaLines,
+                            spacing: { after: 400 },
+                        })
+                    );
+                }
             }
         }
 
-        // 3. Process Tokens
+        if (includeToc) {
+            children.push(
+                new Paragraph({
+                    spacing: { after: 200 },
+                    children: [
+                        new TextRun({
+                            text: 'Table of contents',
+                            bold: true,
+                            size: 32,
+                            color: primary,
+                        }),
+                    ],
+                })
+            );
+            children.push(
+                new TableOfContents('TOC', {
+                    hyperlink: true,
+                    headingStyleRange: '1-4',
+                })
+            );
+            children.push(
+                new Paragraph({
+                    spacing: { after: 200 },
+                    children: [
+                        new TextRun({
+                            text: 'In Word: select the TOC and choose Update Table, or press Alt+F9 to toggle fields then F9 to update.',
+                            italics: true,
+                            size: 18,
+                            color: '666666',
+                        }),
+                    ],
+                })
+            );
+            children.push(this.pageBreakParagraph());
+        }
+
         for (const token of tokens) {
             const paragraph = await this.processTokenSafely(token);
             if (paragraph) {
@@ -84,25 +368,44 @@ export class DocxService {
             }
         }
 
-        // 4. Create Document
+        const useStyledHeadings =
+            !!options &&
+            (useCover ||
+                includeToc ||
+                !!options.primaryColorHex ||
+                !!options.secondaryColorHex ||
+                !!options.logoDataUrl);
+
         const doc = new Document({
-            sections: [{
-                properties: {},
-                children: children,
-            }],
+            features: includeToc ? { updateFields: true } : undefined,
+            sections: [
+                {
+                    properties: {},
+                    children,
+                },
+            ],
             styles: {
+                ...(useStyledHeadings
+                    ? {
+                          default: {
+                              heading1: { run: { color: primary, bold: true, size: 32 } },
+                              heading2: { run: { color: secondary, bold: true, size: 28 } },
+                              heading3: { run: { color: secondary, size: 26 } },
+                          },
+                      }
+                    : {}),
                 paragraphStyles: [
                     {
                         id: 'Normal',
                         name: 'Normal',
                         run: {
-                            font: 'Calibri',
-                            size: 24, // 12pt
+                            font: bodyFont,
+                            size: bodyHalfPt,
                         },
                         paragraph: {
                             spacing: {
-                                line: 276, // 1.15 spacing
-                                after: 200, // 10pt
+                                line: 276,
+                                after: 200,
                             },
                         },
                     },
@@ -110,7 +413,6 @@ export class DocxService {
             },
         });
 
-        // 5. Generate Buffer
         return await Packer.toBuffer(doc);
     }
 
@@ -159,6 +461,17 @@ export class DocxService {
                     alignment: AlignmentType.CENTER,
                     spacing: { before: 200, after: 200 }
                 });
+
+            case 'html': {
+                const htmlRaw = String((token as any).raw ?? (token as any).text ?? '');
+                if (/<!--\s*docx-pagebreak\s*-->/i.test(htmlRaw)) {
+                    return new Paragraph({
+                        pageBreakBefore: true,
+                        children: [],
+                    });
+                }
+                return null;
+            }
 
             case 'table':
                 const tableRows: TableRow[] = [];
