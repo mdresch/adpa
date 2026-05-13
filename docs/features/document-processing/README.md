@@ -25,9 +25,12 @@ the legacy `/api/documents` path and the modular `/api/v1/documents` route map.
 | Bulk DOCX | `POST /api/documents/bulk-export/docx` | One combined DOCX file | `DocumentsController.bulkExportDocx`, `buildCombinedDocxExport` |
 
 All routes in `server/src/modules/documents/routes.ts` require
-`authenticateToken`. Each handler also checks project access before exporting
-single documents; bulk DOCX validates every submitted ID as a UUID before
-querying the database.
+`authenticateToken`. Single-document exports call `checkProjectAccess` before
+generating a file. Bulk exports currently rely on route authentication and the
+submitted document IDs; bulk DOCX validates every submitted ID as a UUID before
+querying the database, while bulk PDF does not yet perform that UUID validation.
+Neither bulk export handler performs a per-document project access check in the
+current controller implementation.
 
 ### Bulk DOCX request
 
@@ -73,7 +76,6 @@ sections with a Markdown horizontal rule before DOCX generation.
 ## Verification anchors
 
 - Backend export tests:
-  - `server/src/__tests__/integration/documentExport.test.ts`
   - `server/src/__tests__/modules/documents/bulkDocxExport.test.ts`
   - `server/src/__tests__/unit/docxService.test.ts`
 - Frontend filename helper tests:
