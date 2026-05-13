@@ -590,6 +590,10 @@ class SemanticProcessingService {
           ) = total_documents THEN 'failed'
           WHEN (
             SELECT COUNT(*) FROM semantic_processing_status
+            WHERE batch_id = $1 AND state IN ('synced', 'failed')
+          ) = total_documents
+          AND (
+            SELECT COUNT(*) FROM semantic_processing_status
             WHERE batch_id = $1 AND state = 'failed'
           ) > 0 THEN 'partial_failure'
           ELSE 'processing'
