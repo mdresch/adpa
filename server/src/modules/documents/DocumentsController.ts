@@ -30,6 +30,7 @@ import { extractionQueue } from '../../services/queueService';
 import { DocxService } from '../../services/docxService';
 import { pool } from '../../database/connection';
 import { storageArchivalService } from '../../services/storageArchivalService';
+import { buildCombinedDocxExport } from './bulkDocxExport';
 
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -436,18 +437,42 @@ export class DocumentsController {
         const log = childLogger({ requestId: (req as any).requestId });
         try {
             const { document_ids } = req.body;
-            const result = await pool.query(`SELECT id, name, content, metadata FROM documents WHERE id = ANY($1)`, [document_ids]);
-            const zip = archiver("zip", { zlib: { level: 9 } });
-            res.setHeader("Content-Type", "application/zip");
-            res.setHeader("Content-Disposition", `attachment; filename="bulk-docx-${Date.now()}.zip"`);
-            zip.pipe(res);
-            for (const doc of result.rows) {
-                let content = doc.content;
-                if (typeof content === 'object') content = content.text || content.markdown || JSON.stringify(content);
-                const docxBuffer = await DocxService.generateDocx(content, doc.name || 'document', doc.metadata);
-                zip.append(docxBuffer, { name: `${doc.name?.replace(/[^a-z0-9]/gi, '_')}.docx` });
+            if (!Array.isArray(document_ids) || document_ids.length === 0) {
+                return res.status(400).json({ error: "No documents selected for export" });
             }
-            await zip.finalize();
+
+            if (!document_ids.every((id: unknown) => typeof id === 'string' && UUID_RE.test(id))) {
+                return res.status(400).json({ error: "One or more document IDs are invalid" });
+            }
+
+            const result = await pool.query(
+                `SELECT id, name, content, metadata
+                 FROM documents
+                 WHERE id = ANY($1::uuid[])`,
+                [document_ids]
+            );
+
+            if (result.rows.length === 0) {
+                return res.status(404).json({ error: "Documents not found" });
+            }
+
+            const documentOrder = new Map(document_ids.map((id: string, index: number) => [id, index]));
+            const orderedDocuments = [...result.rows].sort((left, right) => {
+                const leftIndex = documentOrder.get(left.id) ?? Number.MAX_SAFE_INTEGER;
+                const rightIndex = documentOrder.get(right.id) ?? Number.MAX_SAFE_INTEGER;
+                return leftIndex - rightIndex;
+            });
+
+            const combinedExport = buildCombinedDocxExport(orderedDocuments);
+            const docxBuffer = await DocxService.generateDocx(
+                combinedExport.markdownContent,
+                combinedExport.title,
+                combinedExport.metadata,
+            );
+
+            res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+            res.setHeader("Content-Disposition", `attachment; filename="${combinedExport.fileName}"`);
+            res.send(docxBuffer);
         } catch (error) {
             log.error("Bulk DOCX export error:", error);
             res.status(500).json({ error: "Internal server error" });

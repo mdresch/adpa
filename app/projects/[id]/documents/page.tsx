@@ -59,6 +59,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { useAuth } from "@/contexts/AuthContext"
 import { apiClient, Project, Template } from "@/lib/api"
 import { getApiUrl, getApiBaseUrl } from "@/lib/api-url"
+import { resolveBulkExportDownloadName } from "@/lib/documents/bulk-export"
 import { toast } from '@/lib/notify'
 import { QualityAuditBadge } from "@/components/quality"
 
@@ -893,11 +894,7 @@ export default function ProjectDocuments() {
         throw new Error(errorData.error || `Export failed: ${response.statusText}`)
       }
 
-      // Determine file name based on format
-      // DOCX exports are single combined files, PDF/Markdown exports are ZIP archives
-      const fileName = format === 'docx'
-        ? `combined-documents-${Date.now()}.docx`
-        : `documents-export-${Date.now()}.zip`
+      const fileName = resolveBulkExportDownloadName(response, format)
 
       // Download file
       const blob = await response.blob()
