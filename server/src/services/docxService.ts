@@ -210,8 +210,8 @@ export class DocxService {
                                         width: 500,
                                         height: 300,
                                     },
-                                    type: 'png', // Default to png to satisfy typing, actual format is determined by buffer usually
-                                }),
+                                    type: 'png',
+                                } as any),
                             ],
                         });
                     }
@@ -302,7 +302,7 @@ export class DocxService {
                                         height: 200,
                                     },
                                     type: 'png',
-                                })
+                                } as any)
                             );
                         } else {
                             runs.push(new TextRun({ text: `[Image: ${token.text}]` }));

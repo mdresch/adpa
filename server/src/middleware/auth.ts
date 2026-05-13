@@ -254,5 +254,93 @@ export const requirePermission = (permission: string) => {
   }
 }
 
-// Backwards-compatible alias used across the codebase and tests
+// Backwards-compatible aliases used across the codebase and tests
 export const authMiddleware = authenticateToken
+export const authenticate = authenticateToken
+
+/**
+ * Optional authentication middleware
+ * Sets req.user if valid token is provided, but allows unauthenticated requests to proceed
+ */
+export const optionalAuth = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  const authHeader = req.headers["authorization"]
+
+  let token: string | undefined
+
+  // Check header first
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    token = authHeader.split(" ")[1]?.trim()
+  }
+
+  // Fallback to query param (useful for downloads/WebSockets)
+  if (!token && req.query && typeof req.query.token === 'string') {
+    token = req.query.token
+  }
+
+  // If no token provided, just continue without authentication
+  if (!token || token.length === 0) {
+    return next()
+  }
+
+  // Basic JWT format validation
+  const jwtParts = token.split(".")
+  if (jwtParts.length !== 3) {
+    // Invalid format - continue without authentication
+    return next()
+  }
+
+  try {
+    let decoded: any
+    
+    // Attempt Firebase verification first
+    try {
+      const admin = await getAdmin();
+      const firebaseUser = await admin.auth().verifyIdToken(token)
+      decoded = { 
+        fromFirebase: true, 
+        email: firebaseUser.email, 
+        firebaseUid: firebaseUser.uid 
+      }
+    } catch {
+      // Fallback to legacy JWT
+      try {
+        decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key") as any
+      } catch {
+        // Token invalid - continue without authentication
+        return next()
+      }
+    }
+
+    // Database lookup
+    let query: string
+    let params: any[]
+
+    if (decoded.fromFirebase) {
+      query = "SELECT id, email, role, permissions, is_active FROM users WHERE email = $1"
+      params = [decoded.email]
+    } else {
+      query = "SELECT id, email, role, permissions, is_active FROM users WHERE id = $1"
+      params = [decoded.userId]
+    }
+
+    const result = await pool.query(query, params)
+
+    if (result && result.rows && result.rows.length > 0) {
+      const user = result.rows[0]
+      if (user.is_active) {
+        req.user = {
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          permissions: user.permissions,
+        }
+      }
+    }
+
+    next()
+  } catch (error) {
+    // Any error - just continue without authentication
+    logger.debug('Optional auth failed:', error)
+    next()
+  }
+}

@@ -133,6 +133,7 @@ import okrRoutes from "./routes/okrRoutes"
 import promptAssistantRoutes from "./routes/promptAssistantRoutes"
 import signatureRoutes from "./routes/signatures"
 import searchRoutes from "./routes/search"
+import complianceRoutes from "./routes/complianceRoutes"
 import gkgEnrichedSearchRoutes from "./routes/gkgEnrichedSearch"
 import mitigationPlanRoutes from "./routes/mitigationPlanRoutes"
 import pmbok6Routes from "./routes/pmbok6Routes"
@@ -306,6 +307,7 @@ app.use("/api/entities", entityBaselineRoutes)
 app.use("/api/emergency-meetings", emergencyMeetingsRoutes)
 app.use("/api/escalation", escalationRoutes)
 app.use("/api/quality-audits", qualityAuditRoutes)
+app.use("/api/compliance", complianceRoutes)
 app.use("/api/admin", adminRoutes)
 app.use("/api/onboarding", documentUploadRoutes)
 app.use("/api/executive-dashboard", executiveDashboardRoutes)
