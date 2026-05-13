@@ -12,7 +12,6 @@
 
 import { pool } from '@/database/connection';
 import { logger } from '@/utils/logger';
-import { v4 as uuidv4 } from 'uuid';
 import type { IQueueJob } from './queue/IQueue';
 import { semanticProcessingService, type ExtractionSummary, type GkgSyncSummary } from '../semanticProcessingService';
 
@@ -59,19 +58,36 @@ export async function processSemanticDocument(
   });
 
   try {
-    // Mark extraction started
+    // Extraction: state machine requires converted → queued_extraction → extracting
     if (!skipExtraction) {
-      await semanticProcessingService.markExtractionStarted(documentId);
+      let procState = await semanticProcessingService.getDocumentStatus(documentId);
+      if (!procState) {
+        throw new Error(`No semantic processing record found for document: ${documentId}`);
+      }
+
+      if (procState.state === 'converted') {
+        await semanticProcessingService.queueForExtraction(documentId, String(job.id));
+        procState = await semanticProcessingService.getDocumentStatus(documentId);
+      }
+
+      if (procState.state === 'queued_extraction') {
+        await semanticProcessingService.markExtractionStarted(documentId);
+      } else if (procState.state === 'extracting') {
+        logger.info(`${LOG_TAG} Resuming extraction`, { documentId });
+      } else {
+        throw new Error(
+          `Cannot start extraction: document ${documentId} is in state ${procState.state}`
+        );
+      }
+
       await job.progress(10);
 
-      // Run entity extraction using existing framework
       const extractionResult = await runEntityExtraction(documentId, projectId, userId);
-      
+
       await job.progress(50);
 
-      // Mark extraction completed
       await semanticProcessingService.markExtractionCompleted(documentId, extractionResult);
-      
+
       logger.info(`${LOG_TAG} Extraction completed`, {
         documentId,
         totalEntities: extractionResult.totalEntities,
@@ -79,24 +95,38 @@ export async function processSemanticDocument(
       });
     }
 
-    // Queue for GKG sync if not skipped and Neo4j is configured
+    // GKG sync: extracted → queued_gkg_sync → syncing → synced (do not re-queue if already queued_gkg_sync)
     if (!skipGkgSync) {
       const { isNeo4jConfigured } = await import('../../utils/neo4j');
-      
-      if (isNeo4jConfigured()) {
-        await semanticProcessingService.transitionState(documentId, 'queued_gkg_sync');
-        await job.progress(60);
 
-        // Mark GKG sync started
-        await semanticProcessingService.markGkgSyncStarted(documentId);
+      let docState = await semanticProcessingService.getDocumentStatus(documentId);
+      if (!docState) {
+        throw new Error(`No semantic processing record found for document: ${documentId}`);
+      }
+
+      if (isNeo4jConfigured()) {
+        if (docState.state === 'extracted') {
+          await semanticProcessingService.queueForGkgSync(documentId, String(job.id));
+          docState = await semanticProcessingService.getDocumentStatus(documentId);
+        }
+
+        if (docState.state === 'queued_gkg_sync') {
+          await semanticProcessingService.markGkgSyncStarted(documentId);
+        } else if (docState.state === 'syncing') {
+          logger.info(`${LOG_TAG} Resuming GKG sync`, { documentId });
+        } else {
+          throw new Error(
+            `Cannot run GKG sync: document ${documentId} is in state ${docState.state}`
+          );
+        }
+
+        await job.progress(60);
         await job.progress(70);
 
-        // Run GKG sync
         const gkgResult = await runGkgSync(documentId, projectId);
-        
+
         await job.progress(95);
 
-        // Mark GKG sync completed
         await semanticProcessingService.markGkgSyncCompleted(documentId, gkgResult);
 
         logger.info(`${LOG_TAG} GKG sync completed`, {
@@ -104,9 +134,17 @@ export async function processSemanticDocument(
           nodesCreated: gkgResult.nodesCreated
         });
       } else {
-        // Skip GKG sync if not configured, mark as synced anyway
         logger.info(`${LOG_TAG} Neo4j not configured, skipping GKG sync`, { documentId });
-        await semanticProcessingService.transitionState(documentId, 'queued_gkg_sync');
+        if (docState.state === 'extracted') {
+          await semanticProcessingService.queueForGkgSync(documentId, String(job.id));
+          docState = await semanticProcessingService.getDocumentStatus(documentId);
+        }
+        if (docState.state !== 'queued_gkg_sync') {
+          throw new Error(
+            `Neo4j skip path: expected queued_gkg_sync before marking synced, got ${docState.state}`
+          );
+        }
+        await semanticProcessingService.markGkgSyncStarted(documentId);
         await semanticProcessingService.markGkgSyncCompleted(documentId, {
           nodesCreated: 0,
           nodesUpdated: 0,
@@ -340,14 +378,7 @@ Return JSON in this format:
       documentId,
       error: error instanceof Error ? error.message : String(error)
     });
-
-    // Return empty result rather than failing
-    return {
-      entityCounts: {},
-      domainsProcessed: [],
-      totalEntities: 0,
-      processingTimeMs: Date.now() - startTime
-    };
+    throw error;
   }
 }
 

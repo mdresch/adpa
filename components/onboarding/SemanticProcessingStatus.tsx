@@ -101,66 +101,77 @@ interface SemanticProcessingStatusProps {
 const STATE_CONFIG: Record<SemanticProcessingState, {
   label: string;
   color: string;
+  badgeClass: string;
   icon: typeof CheckCircle;
   description: string;
 }> = {
   uploaded: {
     label: 'Uploaded',
     color: 'bg-blue-500',
+    badgeClass: 'bg-blue-100',
     icon: FileText,
     description: 'Document uploaded successfully'
   },
   converted: {
     label: 'Converted',
     color: 'bg-blue-600',
+    badgeClass: 'bg-blue-100',
     icon: FileText,
     description: 'Converted to Markdown'
   },
   queued_extraction: {
     label: 'Queued for Extraction',
     color: 'bg-yellow-500',
+    badgeClass: 'bg-yellow-100',
     icon: Clock,
     description: 'Waiting for entity extraction'
   },
   extracting: {
     label: 'Extracting',
     color: 'bg-yellow-600',
+    badgeClass: 'bg-yellow-100',
     icon: Loader2,
     description: 'Extracting entities from document'
   },
   extracted: {
     label: 'Extracted',
     color: 'bg-green-500',
+    badgeClass: 'bg-green-100',
     icon: Database,
     description: 'Entity extraction complete'
   },
   queued_gkg_sync: {
     label: 'Queued for GKG Sync',
     color: 'bg-purple-500',
+    badgeClass: 'bg-purple-100',
     icon: Clock,
     description: 'Waiting for knowledge graph sync'
   },
   syncing: {
     label: 'Syncing to GKG',
     color: 'bg-purple-600',
+    badgeClass: 'bg-purple-100',
     icon: Network,
     description: 'Syncing to Governance Knowledge Graph'
   },
   synced: {
     label: 'Complete',
     color: 'bg-green-600',
+    badgeClass: 'bg-green-100',
     icon: CheckCircle,
     description: 'Fully processed and synced'
   },
   failed: {
     label: 'Failed',
     color: 'bg-red-500',
+    badgeClass: 'bg-red-100',
     icon: AlertCircle,
     description: 'Processing failed'
   },
   retrying: {
     label: 'Retrying',
     color: 'bg-orange-500',
+    badgeClass: 'bg-orange-100',
     icon: RotateCcw,
     description: 'Retrying after failure'
   }
@@ -509,7 +520,7 @@ function DocumentStatusRow({ document, onRetry, isRetrying }: DocumentStatusRowP
                 <TooltipTrigger asChild>
                   <Badge
                     variant="outline"
-                    className={cn('text-xs', config.color && `bg-${config.color.split('-')[1]}-100`)}
+                    className={cn('text-xs', config.badgeClass)}
                   >
                     {config.label}
                   </Badge>
