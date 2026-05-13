@@ -30,7 +30,8 @@ export async function userHasProjectAccess(
   user: AuthenticatedUser,
   projectId: string
 ): Promise<boolean> {
-  if (user.role === "admin" || user.role === "super_admin") return true
+  const role = String(user.role || "").toLowerCase()
+  if (role === "admin" || role === "super_admin") return true
 
   const r = await pool.query<{ owner_id: string | null; team_members: unknown }>(
     "SELECT owner_id, team_members FROM public.projects WHERE id = $1",

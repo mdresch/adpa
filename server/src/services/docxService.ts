@@ -27,8 +27,10 @@ export class DocxService {
         title: string,
         metadata?: Record<string, any>
     ): Promise<Buffer> {
+        const normalizedMarkdownContent = this.normalizeMarkdownForDocx(markdownContent);
+
         // 1. Parse Markdown into tokens
-        const tokens = marked.lexer(markdownContent);
+        const tokens = marked.lexer(normalizedMarkdownContent);
 
         // 2. Create Document sections
         const children: (Paragraph | Table)[] = [];
@@ -72,7 +74,7 @@ export class DocxService {
 
         // 3. Process Tokens
         for (const token of tokens) {
-            const paragraph = await this.processToken(token);
+            const paragraph = await this.processTokenSafely(token);
             if (paragraph) {
                 if (Array.isArray(paragraph)) {
                     children.push(...paragraph);
@@ -112,11 +114,27 @@ export class DocxService {
         return await Packer.toBuffer(doc);
     }
 
+    private static async processTokenSafely(token: any): Promise<Paragraph | Paragraph[] | Table | null> {
+        try {
+            return await this.processToken(token);
+        } catch (error) {
+            const fallbackText = this.getTokenText(token);
+
+            if (!fallbackText) {
+                return null;
+            }
+
+            return new Paragraph({
+                children: [new TextRun({ text: fallbackText })],
+            });
+        }
+    }
+
     private static async processToken(token: any): Promise<Paragraph | Paragraph[] | Table | null> {
         switch (token.type) {
             case 'heading':
                 return new Paragraph({
-                    text: token.text,
+                    children: await this.parseInlineText(this.getInlineTokens(token)),
                     heading: this.getHeadingLevel(token.depth),
                     spacing: {
                         before: 240,
@@ -126,22 +144,11 @@ export class DocxService {
 
             case 'paragraph':
                 return new Paragraph({
-                    children: await this.parseInlineText(token.tokens || []),
+                    children: await this.parseInlineText(this.getInlineTokens(token)),
                 });
 
             case 'list':
-                const listItems: Paragraph[] = [];
-                for (const item of token.items) {
-                    listItems.push(
-                        new Paragraph({
-                            children: await this.parseInlineText(item.tokens || []),
-                            bullet: {
-                                level: 0,
-                            },
-                        })
-                    );
-                }
-                return listItems;
+                return this.processList(token, 0);
 
             case 'space':
                 return null;
@@ -155,14 +162,17 @@ export class DocxService {
 
             case 'table':
                 const tableRows: TableRow[] = [];
+                const headerCellsSource = Array.isArray(token.header) ? token.header : [];
+                const headerTokenSource = Array.isArray(token.tokens?.header) ? token.tokens.header : [];
                 
                 // Header row
                 const headerCells: TableCell[] = [];
-                for (let i = 0; i < token.header.length; i++) {
+                for (let i = 0; i < headerCellsSource.length; i++) {
+                    const headerTokens = this.getTableCellInlineTokens(headerCellsSource[i], headerTokenSource[i]);
                     headerCells.push(
                         new TableCell({
                             children: [new Paragraph({
-                                children: await this.parseInlineText(token.tokens.header[i] || [])
+                                children: await this.parseInlineText(headerTokens, { forceBold: true })
                             })],
                             shading: {
                                 fill: "F2F2F2",
@@ -174,13 +184,18 @@ export class DocxService {
                 tableRows.push(new TableRow({ children: headerCells }));
 
                 // Body rows
-                for (let i = 0; i < token.rows.length; i++) {
+                const bodyRowsSource = Array.isArray(token.rows) ? token.rows : [];
+                const bodyTokenSource = Array.isArray(token.tokens?.rows) ? token.tokens.rows : [];
+                for (let i = 0; i < bodyRowsSource.length; i++) {
                     const bodyCells: TableCell[] = [];
-                    for (let j = 0; j < token.rows[i].length; j++) {
+                    const row = Array.isArray(bodyRowsSource[i]) ? bodyRowsSource[i] : [];
+                    const rowTokens = Array.isArray(bodyTokenSource[i]) ? bodyTokenSource[i] : [];
+                    for (let j = 0; j < row.length; j++) {
+                        const cellTokens = this.getTableCellInlineTokens(row[j], rowTokens[j]);
                         bodyCells.push(
                             new TableCell({
                                 children: [new Paragraph({
-                                    children: await this.parseInlineText(token.tokens.rows[i][j] || [])
+                                    children: await this.parseInlineText(cellTokens)
                                 })],
                             })
                         );
@@ -222,9 +237,9 @@ export class DocxService {
 
             default:
                 // Fallback for unsupported tokens: just render text if available
-                if (token.text) {
+                if (this.getTokenText(token)) {
                     return new Paragraph({
-                        children: [new TextRun(token.text)],
+                        children: [new TextRun(this.getTokenText(token))],
                     });
                 }
                 return null;
@@ -242,7 +257,89 @@ export class DocxService {
         }
     }
 
-    private static async parseInlineText(tokens: any[]): Promise<(TextRun | ImageRun)[]> {
+    private static async processList(token: any, level: number): Promise<Paragraph[]> {
+        const listItems: Paragraph[] = [];
+
+        for (const item of token.items ?? []) {
+            const itemTokens = Array.isArray(item?.tokens) ? item.tokens : this.getInlineTokens(item);
+            const inlineTokens = itemTokens.filter((child: any) => child?.type !== 'list');
+            const nestedLists = itemTokens.filter((child: any) => child?.type === 'list');
+
+            if (inlineTokens.length > 0) {
+                listItems.push(
+                    new Paragraph({
+                        children: await this.parseInlineText(inlineTokens),
+                        bullet: {
+                            level,
+                        },
+                    })
+                );
+            }
+
+            for (const nestedList of nestedLists) {
+                listItems.push(...await this.processList(nestedList, level + 1));
+            }
+        }
+
+        return listItems;
+    }
+
+    private static normalizeMarkdownForDocx(markdownContent: string): string {
+        const normalizedLines = markdownContent
+            .replace(/\/&lt;/gi, '<')
+            .replace(/\/&gt;/gi, '>')
+            .replace(/\/&quot;/gi, '"')
+            .replace(/\/&#39;|\/&apos;/gi, "'")
+            .replace(/\/&\/lt;/gi, '<')
+            .replace(/\/&\/gt;/gi, '>')
+            .replace(/\/&quot;/gi, '"')
+            .replace(/\/&#39;|\/&apos;/gi, "'")
+            .replace(/&quot;/gi, '"')
+            .replace(/&#39;|&apos;/gi, "'")
+            .replace(/&amp;/gi, '&')
+            .replace(/&lt;/gi, '<')
+            .replace(/&gt;/gi, '>')
+            .replace(/\\\*\\\*(?=\S)([\s\S]*?\S)\\\*\\\*/g, '**$1**')
+            .replace(/(^|[^*])\\\*(?=\S)([^\n]*?\S)\\\*(?!\*)/g, '$1*$2*')
+            .replace(/\\\[/g, '[')
+            .replace(/\\\]/g, ']')
+            .replace(/\r\n/g, '\n')
+            .split('\n')
+            .flatMap((line) => this.normalizeMarkdownLine(line));
+
+        return normalizedLines.join('\n');
+    }
+
+    private static normalizeMarkdownLine(line: string): string[] {
+        const normalizedBulletLine = line
+            .replace(/^\s*[●•]\s*/u, '* ')
+            .replace(/:\s+[✅✔☑]\s+/gu, ':\n* ')
+            .replace(/\s+[✅✔☑]\s+/gu, '\n* ');
+
+        const pseudoNestedListMatch = normalizedBulletLine.match(/^(\*\s+[^:\n]+):\s*-\s+(.+)$/);
+
+        if (!pseudoNestedListMatch) {
+            return [normalizedBulletLine];
+        }
+
+        const [, label, nestedContent] = pseudoNestedListMatch;
+        const nestedItems = nestedContent
+            .split(/\s+-\s+(?=(?:\*\*)?[A-Z0-9\[])/)
+            .map((item) => item.trim())
+            .filter(Boolean)
+            .map((item) => `  - ${item}`);
+
+        if (nestedItems.length === 0) {
+            return [`${label}:`];
+        }
+
+        return [`${label}:`, ...nestedItems];
+    }
+
+    private static async parseInlineText(
+        tokens: any[],
+        options?: { forceBold?: boolean }
+    ): Promise<(TextRun | ImageRun)[]> {
         const runs: (TextRun | ImageRun)[] = [];
 
         if (!tokens) return runs;
@@ -251,43 +348,65 @@ export class DocxService {
             switch (token.type) {
                 case 'text':
                 case 'escape':
-                    runs.push(new TextRun({
-                        text: token.text,
-                    }));
+                    if (Array.isArray(token.tokens) && token.tokens.length > 0) {
+                        runs.push(...await this.parseInlineText(token.tokens, options));
+                    } else {
+                        runs.push(new TextRun({
+                            text: this.getTokenText(token),
+                            bold: options?.forceBold,
+                        }));
+                    }
                     break;
 
                 case 'strong':
                     runs.push(new TextRun({
-                        text: token.text,
+                        text: this.getTokenText(token),
                         bold: true,
                     }));
                     break;
 
                 case 'em':
                     runs.push(new TextRun({
-                        text: token.text,
+                        text: this.getTokenText(token),
                         italics: true,
+                        bold: options?.forceBold,
                     }));
                     break;
 
                 case 'codespan':
                     runs.push(new TextRun({
-                        text: token.text,
+                        text: this.getTokenText(token),
                         font: 'Courier New',
                         color: '333333',
                         highlight: 'lightGray', // Use valid color
+                        bold: options?.forceBold,
                     }));
                     break;
 
                 case 'link':
                     runs.push(new TextRun({
-                        text: token.text,
+                        text: this.getTokenText(token),
                         underline: {
                             type: UnderlineType.SINGLE,
                             color: '0563C1'
                         },
-                        color: '0563C1'
+                        color: '0563C1',
+                        bold: options?.forceBold,
                     }));
+                    break;
+
+                case 'html':
+                    if (/^<br\s*\/?>(?:\s*)$/i.test(this.getTokenText(token).trim())) {
+                        runs.push(new TextRun({
+                            break: 1,
+                            bold: options?.forceBold,
+                        }));
+                    } else if (this.getTokenText(token)) {
+                        runs.push(new TextRun({
+                            text: this.getTokenText(token),
+                            bold: options?.forceBold,
+                        }));
+                    }
                     break;
 
                 case 'image':
@@ -305,23 +424,68 @@ export class DocxService {
                                 } as any)
                             );
                         } else {
-                            runs.push(new TextRun({ text: `[Image: ${token.text}]` }));
+                            runs.push(new TextRun({ text: `[Image: ${this.getTokenText(token)}]` }));
                         }
                     } catch (e) {
-                        runs.push(new TextRun({ text: `[Image: ${token.text}]` }));
+                        runs.push(new TextRun({ text: `[Image: ${this.getTokenText(token)}]` }));
                     }
                     break;
 
                 default:
-                    if (token.text) {
+                    if (Array.isArray(token.tokens) && token.tokens.length > 0) {
+                        runs.push(...await this.parseInlineText(token.tokens, options));
+                    } else if (this.getTokenText(token)) {
                         runs.push(new TextRun({
-                            text: token.text,
+                            text: this.getTokenText(token),
+                            bold: options?.forceBold,
                         }));
                     }
                     break;
             }
         }
         return runs;
+    }
+
+    private static getInlineTokens(token: any): any[] {
+        if (Array.isArray(token?.tokens)) {
+            return token.tokens;
+        }
+
+        return this.textToInlineTokens(this.getTokenText(token));
+    }
+
+    private static getTableCellInlineTokens(cell: any, fallbackTokens?: any): any[] {
+        if (Array.isArray(fallbackTokens)) {
+            return fallbackTokens;
+        }
+
+        if (Array.isArray(cell?.tokens)) {
+            return cell.tokens;
+        }
+
+        return this.textToInlineTokens(this.getTokenText(cell));
+    }
+
+    private static textToInlineTokens(value: unknown): Array<{ type: 'text'; text: string }> {
+        const text = this.getTokenText(value);
+
+        return text ? [{ type: 'text', text }] : [];
+    }
+
+    private static getTokenText(token: any): string {
+        if (typeof token === 'string') {
+            return token;
+        }
+
+        if (typeof token?.text === 'string') {
+            return token.text;
+        }
+
+        if (typeof token?.raw === 'string') {
+            return token.raw;
+        }
+
+        return '';
     }
 
     private static async fetchImage(url: string): Promise<Buffer | null> {

@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { MaturityCard } from '@/components/onboarding/MaturityCard';
 import { MaturityScore } from '@/components/onboarding/MaturityScore';
 import { MaturityJourneyPlanner } from '@/components/onboarding/MaturityJourneyPlanner';
+import { SemanticProcessingStatus } from '@/components/onboarding/SemanticProcessingStatus';
 import { maturityTheme } from '@/lib/theme/maturity-portal-theme';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -1181,6 +1182,14 @@ export default function AssessmentResultsPage() {
             Overview
           </TabsTrigger>
           <TabsTrigger 
+            value="processing"
+            style={{ 
+              color: maturityTheme.colors.text.primary,
+            }}
+          >
+            Processing
+          </TabsTrigger>
+          <TabsTrigger 
             value="journey"
             style={{ 
               color: maturityTheme.colors.text.primary,
@@ -1710,6 +1719,27 @@ export default function AssessmentResultsPage() {
               </div>
             );
           })()}
+        </TabsContent>
+
+        {/* Semantic Processing Tab */}
+        <TabsContent value="processing" className="space-y-4">
+          <MaturityCard variant="elevated">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Target className="w-5 h-5" />
+                Semantic Processing Pipeline
+              </CardTitle>
+              <CardDescription>
+                Monitor the automatic extraction of entities and synchronization to the Governance Knowledge Graph
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <SemanticProcessingStatus 
+                batchId={batchId}
+                showDetails={true}
+              />
+            </CardContent>
+          </MaturityCard>
         </TabsContent>
 
         {/* Your Journey Tab */}
