@@ -47,13 +47,12 @@ Enterprise Architecture Documentation Platform API Server built with Node.js, Ex
 ### Installation
 
 1. **Clone and install dependencies**
-\`\`\`bash
+```bash
 cd server
 npm install
-\`\`\`
+```
 
 2. **Environment Setup**
-\`\`\`bash
 ```bash
 cp .env.example .env
 # Edit .env with your configuration
@@ -63,7 +62,7 @@ cp .env.example .env
 
 The server uses Jest for testing. We have implemented a stabilized test harness that isolates top-level side effects.
 
-- **[Testing Guide](file:///d:/Source/adpa/server/docs/TESTING_GUIDE.md)**: Detailed documentation on architecture, mocks, and guards.
+- **[Testing Guide](docs/TESTING_GUIDE.md)**: Detailed documentation on architecture, mocks, and guards.
 - **Health Check**: Run `.\scripts\verify-test-env.ps1` to verify your test environment.
 
 ```bash
@@ -100,13 +99,25 @@ After seeding, you can use these accounts:
 
 ## API Documentation
 
+### Route Map
+
+The examples below are not a complete OpenAPI specification. The live route
+surface is assembled from:
+
+- explicit `app.use("/api/...", ...)` registrations in `src/server.ts`
+- modular route discovery in `src/routes/registry.ts`, which mounts
+  `src/modules/*/routes.ts` under `/api/v{version}`
+
+When adding or troubleshooting an endpoint, verify both the explicit legacy
+mount and the modular `/api/v1` mount before updating client code or docs.
+
 ### Authentication
 All protected endpoints require a Bearer token in the Authorization header:
-\`\`\`
+```
 Authorization: Bearer <jwt_token>
-\`\`\`
+```
 
-### Core Endpoints
+### Core Endpoint Examples
 
 #### Authentication
 - `POST /api/auth/register` - Register new user
@@ -127,6 +138,22 @@ Authorization: Bearer <jwt_token>
 - `GET /api/documents/:id` - Get document
 - `PUT /api/documents/:id` - Update document
 - `DELETE /api/documents/:id` - Delete document
+- `GET /api/documents/:id/export/pdf` - Export one document as PDF
+- `GET /api/documents/:id/export/docx` - Export one document as DOCX
+- `POST /api/documents/bulk-export/pdf` - Export selected documents as a ZIP of PDFs
+- `POST /api/documents/bulk-export/docx` - Export selected documents as one combined DOCX file
+
+Document export source paths:
+
+- `src/modules/documents/routes.ts` - authenticated document route definitions
+- `src/modules/documents/DocumentsController.ts` - PDF and DOCX export handlers
+- `src/modules/documents/bulkDocxExport.ts` - combined DOCX Markdown assembly
+- `src/services/docxService.ts` - Markdown-to-DOCX rendering
+
+Bulk DOCX accepts a JSON body with `document_ids: string[]`, validates UUIDs,
+keeps the submitted order, and returns
+`application/vnd.openxmlformats-officedocument.wordprocessingml.document` with
+`combined-project-documents.docx` as the default attachment filename.
 
 #### AI Processing
 - `POST /api/ai/generate` - Generate content
@@ -229,7 +256,7 @@ The database includes these main tables:
 - `npm test` - Run tests
 
 ### Project Structure
-\`\`\`
+```
 src/
 ├── database/           # Database connection and migrations
 ├── middleware/         # Express middleware
@@ -237,7 +264,7 @@ src/
 ├── services/          # Business logic services
 ├── utils/             # Utility functions
 └── server.ts          # Main server file
-\`\`\`
+```
 
 ### Adding New Features
 
@@ -250,13 +277,13 @@ src/
 ## Production Deployment
 
 ### Docker
-\`\`\`bash
+```bash
 # Build image
 docker build -t adpa-backend .
 
 # Run container
 docker run -p 5000:5000 --env-file .env adpa-backend
-\`\`\`
+```
 
 ### Environment Setup
 1. Set `NODE_ENV=production`
