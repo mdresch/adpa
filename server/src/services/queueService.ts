@@ -58,6 +58,7 @@ export const confluenceQueue = createRabbitQueue("confluence-publishing", 3, 200
 export const digitalTwinEventQueue = createRabbitQueue("digital-twin-events", 3, 2000)
 export const digitalTwinTriggerQueue = createRabbitQueue("digital-twin-triggers", 3, 3000)
 export const gkgSyncQueue = createRabbitQueue("gkg-sync", 2, 5000)
+export const semanticProcessingQueue = createRabbitQueue("semantic-processing", 3, 5000)
 
 // Trace attachment (lightweight)
 const tracer = trace.getTracer("adpa-queue-service")
@@ -115,6 +116,7 @@ const queues = [
   { name: "digital-twin-events", queue: digitalTwinEventQueue },
   { name: "digital-twin-triggers", queue: digitalTwinTriggerQueue },
   { name: "gkg-sync", queue: gkgSyncQueue },
+  { name: "semantic-processing", queue: semanticProcessingQueue },
 ]
 queues.forEach(({ name, queue }) => attachTracing(queue, name))
 
@@ -751,6 +753,43 @@ import("./digitalTwinTriggerService").then(({ processDocumentTrigger }) => {
     }
   })()
   }
+
+// Semantic Processing Queue Processors
+if (process.env.NODE_ENV !== 'test') {
+  ;(async () => {
+    try {
+      console.log("[SEMANTIC] Registering semantic processing processors...")
+      const { processSemanticDocument, processSemanticBatch } = await import("./jobs/SemanticProcessingJobService")
+
+      semanticProcessingQueue.process("semantic-process-document", QUEUE_PREFETCH, async (job) => {
+        logger.info(`[WORKER] semantic-processing worker ${WORKER_ID} picked up document job: ${job.id}`)
+        try {
+          return await processSemanticDocument(job as any)
+        } catch (err) {
+          logger.error(err, "[WORKER] semantic-processing document error")
+          throw err
+        }
+      })
+
+      semanticProcessingQueue.process("semantic-process-batch", QUEUE_PREFETCH, async (job) => {
+        logger.info(`[WORKER] semantic-processing worker ${WORKER_ID} picked up batch job: ${job.id}`)
+        try {
+          return await processSemanticBatch(job as any)
+        } catch (err) {
+          logger.error(err, "[WORKER] semantic-processing batch error")
+          throw err
+        }
+      })
+
+      logger.info(`[QUEUE] Registered semantic processing processors on semanticProcessingQueue (Rabbit)`)
+      console.log("✅ Semantic processing processors registered for queue: semantic-processing")
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      logger.error({ error: msg }, "[SEMANTIC] Failed to register semantic processing processors")
+      console.error("[SEMANTIC] Failed to register semantic processing processors:", msg)
+    }
+  })()
+}
 
 // Export Redis client for legacy consumers
 export { redisClient }

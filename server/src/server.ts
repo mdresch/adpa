@@ -143,6 +143,7 @@ import developmentApproachModuleRoutes from "./modules/developmentApproach/route
 import contextOrchestratorRoutes from "./routes/contextOrchestrator"
 import morphicModuleRoutes from "./modules/morphic/routes"
 import uxDocumentationRoutes from "./routes/uxDocumentationRoutes"
+import semanticProcessingRoutes from "./routes/semanticProcessingRoutes"
 import digitalTwinAssetsRoutes from "./routes/digital-twin-assets"
 import digitalTwinEventsRoutes from "./routes/digital-twin-events"
 import digitalTwinTriggersRoutes from "./routes/digital-twin-triggers"
@@ -308,6 +309,7 @@ app.use("/api/escalation", escalationRoutes)
 app.use("/api/quality-audits", qualityAuditRoutes)
 app.use("/api/admin", adminRoutes)
 app.use("/api/onboarding", documentUploadRoutes)
+app.use("/api/semantic-processing", semanticProcessingRoutes)
 app.use("/api/executive-dashboard", executiveDashboardRoutes)
 app.use("/api/rag", ragRoutes)
 app.use("/api/projects", projectSimilarityRoutes)
