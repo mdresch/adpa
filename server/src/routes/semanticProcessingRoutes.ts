@@ -287,30 +287,58 @@ router.post(
       // Initiate retry
       const newStatus = await semanticProcessingService.retry(documentId);
 
-      // Enqueue processing job
-      if (newStatus && newStatus.state === 'queued_extraction') {
-        await semanticProcessingQueue.add('semantic-process-document', {
-          documentId,
-          projectId: currentStatus.projectId,
-          batchId: currentStatus.batchId,
-          userId,
-          skipExtraction: false,
-          skipGkgSync: false
-        }, {
-          jobId: `semantic-retry-${documentId}-${Date.now()}`,
-          priority: 3 // Higher priority for retries
+      if (!newStatus) {
+        return res.status(500).json({
+          success: false,
+          error: 'Retry did not return a status; cannot queue job'
         });
-      } else if (newStatus && newStatus.state === 'queued_gkg_sync') {
-        await semanticProcessingQueue.add('semantic-process-document', {
-          documentId,
-          projectId: currentStatus.projectId,
-          batchId: currentStatus.batchId,
-          userId,
-          skipExtraction: true,
-          skipGkgSync: false
-        }, {
-          jobId: `semantic-retry-gkg-${documentId}-${Date.now()}`,
-          priority: 3
+      }
+
+      try {
+        if (newStatus && newStatus.state === 'queued_extraction') {
+          await semanticProcessingQueue.add('semantic-process-document', {
+            documentId,
+            projectId: currentStatus.projectId,
+            batchId: currentStatus.batchId,
+            userId,
+            skipExtraction: false,
+            skipGkgSync: false
+          }, {
+            jobId: `semantic-retry-${documentId}-${Date.now()}`,
+            priority: 3 // Higher priority for retries
+          });
+        } else if (newStatus && newStatus.state === 'queued_gkg_sync') {
+          await semanticProcessingQueue.add('semantic-process-document', {
+            documentId,
+            projectId: currentStatus.projectId,
+            batchId: currentStatus.batchId,
+            userId,
+            skipExtraction: true,
+            skipGkgSync: false
+          }, {
+            jobId: `semantic-retry-gkg-${documentId}-${Date.now()}`,
+            priority: 3
+          });
+        }
+      } catch (enqueueErr: unknown) {
+        const msg = enqueueErr instanceof Error ? enqueueErr.message : String(enqueueErr);
+        logger.error('Semantic retry queue enqueue failed', { documentId, error: msg });
+        try {
+          await semanticProcessingService.markFailed(
+            documentId,
+            `Queue enqueue failed: ${msg}`,
+            { enqueueFailed: true }
+          );
+        } catch (rollbackErr: unknown) {
+          logger.error('Failed to roll document back to failed after enqueue error', {
+            documentId,
+            error: rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr)
+          });
+        }
+        return res.status(503).json({
+          success: false,
+          error: 'Failed to queue retry job; document marked failed so you can retry again.',
+          details: msg
         });
       }
 
@@ -376,7 +404,7 @@ router.post(
       for (const doc of failedDocs) {
         try {
           await semanticProcessingService.retry(doc.documentId);
-          
+
           await semanticProcessingQueue.add('semantic-process-document', {
             documentId: doc.documentId,
             projectId: doc.projectId,
@@ -391,10 +419,23 @@ router.post(
 
           results.push({ documentId: doc.documentId, success: true });
         } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          try {
+            await semanticProcessingService.markFailed(
+              doc.documentId,
+              `Queue enqueue failed: ${msg}`,
+              { enqueueFailed: true, batchRetry: true }
+            );
+          } catch (rollbackErr: unknown) {
+            logger.error('Failed to roll document back to failed after batch retry enqueue error', {
+              documentId: doc.documentId,
+              error: rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr)
+            });
+          }
           results.push({
             documentId: doc.documentId,
             success: false,
-            error: error instanceof Error ? error.message : String(error)
+            error: msg
           });
         }
       }
@@ -429,7 +470,7 @@ router.post(
 
 /**
  * GET /api/semantic-processing/retryable
- * Get all documents eligible for retry (failed with retry count < max)
+ * List documents eligible for retry within a project (requires projectId for access control).
  */
 router.get(
   '/retryable',

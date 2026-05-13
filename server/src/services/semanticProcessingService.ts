@@ -143,6 +143,7 @@ class SemanticProcessingService {
         error_message = NULL,
         error_details = NULL,
         updated_at = NOW()
+      WHERE semantic_processing_status.state <> 'synced'
       RETURNING *
     `;
 
@@ -155,7 +156,19 @@ class SemanticProcessingService {
       alreadyConverted ? new Date() : null
     ]);
 
-    const status = this.mapRowToStatus(result.rows[0]);
+    let row = result.rows[0];
+    if (!row) {
+      const existing = await pool.query(
+        'SELECT * FROM semantic_processing_status WHERE document_id = $1',
+        [documentId]
+      );
+      row = existing.rows[0];
+    }
+    if (!row) {
+      throw new Error(`Failed to initialize semantic processing for document: ${documentId}`);
+    }
+
+    const status = this.mapRowToStatus(row);
 
     // Update document reference
     await pool.query(
@@ -206,7 +219,11 @@ class SemanticProcessingService {
       ) VALUES ($1, $2, $3, $4, 'processing')
       ON CONFLICT (batch_id) DO UPDATE SET
         total_documents = GREATEST(semantic_processing_batches.total_documents, EXCLUDED.total_documents),
-        overall_state = 'processing',
+        overall_state = CASE
+          WHEN semantic_processing_batches.overall_state IN ('complete', 'failed', 'partial_failure')
+            THEN semantic_processing_batches.overall_state
+          ELSE 'processing'
+        END,
         updated_at = NOW()
     `;
 

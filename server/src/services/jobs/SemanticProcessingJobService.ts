@@ -13,7 +13,7 @@
 import { pool } from '@/database/connection';
 import { logger } from '@/utils/logger';
 import type { IQueueJob } from './queue/IQueue';
-import { semanticProcessingService, type ExtractionSummary, type GkgSyncSummary } from '../semanticProcessingService';
+import { semanticProcessingService, type ExtractionSummary, type GkgSyncSummary, type SemanticProcessingState } from '../semanticProcessingService';
 
 // ============================================================================
 // TYPES
@@ -58,12 +58,27 @@ export async function processSemanticDocument(
   });
 
   try {
-    // Extraction: state machine requires converted → queued_extraction → extracting
-    if (!skipExtraction) {
-      let procState = await semanticProcessingService.getDocumentStatus(documentId);
-      if (!procState) {
-        throw new Error(`No semantic processing record found for document: ${documentId}`);
-      }
+    let snap = await semanticProcessingService.getDocumentStatus(documentId);
+    if (!snap) {
+      throw new Error(`No semantic processing record found for document: ${documentId}`);
+    }
+
+    if (snap.state === 'synced') {
+      logger.info(`${LOG_TAG} Document already synced, skipping job`, { documentId, jobId: job.id });
+      await job.progress(100);
+      return { success: true, documentId };
+    }
+
+    const postExtractionStates: SemanticProcessingState[] = [
+      'extracted',
+      'queued_gkg_sync',
+      'syncing',
+      'synced'
+    ];
+    const needsExtraction = !skipExtraction && !postExtractionStates.includes(snap.state);
+
+    if (needsExtraction) {
+      let procState = snap;
 
       if (procState.state === 'converted') {
         await semanticProcessingService.queueForExtraction(documentId, String(job.id));
@@ -96,15 +111,26 @@ export async function processSemanticDocument(
         totalEntities: extractionResult.totalEntities,
         domains: extractionResult.domainsProcessed
       });
+    } else if (!skipExtraction) {
+      logger.info(`${LOG_TAG} Skipping extraction (document already past extraction stage)`, {
+        documentId,
+        state: snap.state
+      });
+      await job.progress(50);
     }
 
-    // GKG sync: extracted → queued_gkg_sync → syncing → synced (do not re-queue if already queued_gkg_sync)
     if (!skipGkgSync) {
       const { isNeo4jConfigured } = await import('../../utils/neo4j');
 
       let docState = await semanticProcessingService.getDocumentStatus(documentId);
       if (!docState) {
         throw new Error(`No semantic processing record found for document: ${documentId}`);
+      }
+
+      if (docState.state === 'synced') {
+        logger.info(`${LOG_TAG} Document already synced before GKG stage, skipping`, { documentId });
+        await job.progress(100);
+        return { success: true, documentId };
       }
 
       if (isNeo4jConfigured()) {
@@ -286,6 +312,27 @@ export async function processSemanticBatch(
 // ENTITY EXTRACTION (using existing framework)
 // ============================================================================
 
+function coerceEntityCounts(raw: unknown): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return out;
+  }
+  for (const [key, val] of Object.entries(raw as Record<string, unknown>)) {
+    let n: number;
+    if (typeof val === 'number' && Number.isFinite(val)) {
+      n = val;
+    } else if (typeof val === 'string') {
+      n = parseFloat(val);
+    } else {
+      n = Number(val);
+    }
+    if (Number.isFinite(n)) {
+      out[key] = n;
+    }
+  }
+  return out;
+}
+
 /**
  * Run entity extraction using AI-based lightweight extraction
  * Extracts basic entities directly from document content
@@ -366,7 +413,8 @@ Return JSON in this format:
     
     if (jsonMatch) {
       try {
-        entityCounts = JSON.parse(jsonMatch[0]);
+        const parsed = JSON.parse(jsonMatch[0]) as unknown;
+        entityCounts = coerceEntityCounts(parsed);
       } catch {
         logger.warn(`${LOG_TAG} Failed to parse extraction result`, { documentId });
       }
@@ -396,7 +444,9 @@ Return JSON in this format:
 // ============================================================================
 
 /**
- * Run GKG sync using the existing GKG sync infrastructure
+ * Run GKG sync using the existing GKG sync infrastructure.
+ * Note: runSyncProject reconciles the whole project; batch jobs invoke this once per document today.
+ * Consider a single project-level sync per batch if Neo4j load becomes an issue.
  */
 async function runGkgSync(
   documentId: string,

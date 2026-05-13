@@ -1097,15 +1097,6 @@ async function updateBatchProgress(
                 });
               }
 
-              // Trigger async semantic processing pipeline (non-blocking)
-              triggerSemanticProcessing(batchId, projectId, uploadedBy).catch(err => {
-                logger.error('Failed to trigger semantic processing', {
-                  batchId,
-                  projectId,
-                  error: err.message
-                });
-              });
-
             } catch (assessmentError: any) {
               // Log error but don't fail the batch completion
               logger.error('Failed to generate assessment after batch completion', {
@@ -1123,6 +1114,15 @@ async function updateBatchProgress(
                 WHERE batch_id = $1
               `, [batchId]);
             }
+
+            // Semantic pipeline runs independently of assessment generation success
+            triggerSemanticProcessing(batchId, projectId, uploadedBy).catch((err: Error) => {
+              logger.error('Failed to trigger semantic processing', {
+                batchId,
+                projectId,
+                error: err.message
+              });
+            });
           } else if (status === 'failed') {
             // Update assessment status to 'failed' if batch failed
             await db.query(`
