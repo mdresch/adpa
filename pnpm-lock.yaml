@@ -439,8 +439,8 @@ importers:
         specifier: ^3.38.6
         version: 3.38.6
       langsmith:
-        specifier: ^0.5.19
-        version: 0.5.19(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.217.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@1.26.0(@opentelemetry/api@1.9.0))(openai@6.21.0(ws@8.19.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.1(patch_hash=99447639c57a97aecf6e33f715d29c14e2e6503bd04dd97ce56ab473d578dc52)))(ws@8.19.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))
+        specifier: ^0.6.0
+        version: 0.6.0(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.217.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@1.26.0(@opentelemetry/api@1.9.0))(openai@6.21.0(ws@8.19.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.1(patch_hash=99447639c57a97aecf6e33f715d29c14e2e6503bd04dd97ce56ab473d578dc52)))(ws@8.19.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))
       lodash:
         specifier: ^4.18.1
         version: 4.18.1
@@ -10469,8 +10469,8 @@ packages:
     resolution: {integrity: sha512-mtwfsNGIYvObRh+NYNGlJQJDiBN+Wr3Hnr++wN25mxuOpSTdXX+JQqVCyAqGL5GD2TAXRZ7COsN42Vmp9krYmg==}
     engines: {node: '>=18'}
 
-  langsmith@0.5.19:
-    resolution: {integrity: sha512-5tFoETuFMvGkbPGsINNlIE4Ab86CsPhdPOQZCGwNt/NX0h5NDKQLKOWS/G2XcRUBOQl4mCNbrayUvUTWaIRsCg==}
+  langsmith@0.6.0:
+    resolution: {integrity: sha512-GGaj5IMRfLv2HXXFzGk9diISMYLTpSTh6fzCZGKxWYW/NqEztIFtnXLq6G/RVhzFRmCykLap1fuC67LVKoQLcg==}
     peerDependencies:
       '@opentelemetry/api': '*'
       '@opentelemetry/exporter-trace-otlp-proto': '*'
@@ -25092,10 +25092,9 @@ snapshots:
     dependencies:
       langfuse-core: 3.38.6
 
-  langsmith@0.5.19(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.217.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@1.26.0(@opentelemetry/api@1.9.0))(openai@6.21.0(ws@8.19.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.1(patch_hash=99447639c57a97aecf6e33f715d29c14e2e6503bd04dd97ce56ab473d578dc52)))(ws@8.19.0(bufferutil@4.0.9)(utf-8-validate@6.0.5)):
+  langsmith@0.6.0(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.217.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@1.26.0(@opentelemetry/api@1.9.0))(openai@6.21.0(ws@8.19.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.1(patch_hash=99447639c57a97aecf6e33f715d29c14e2e6503bd04dd97ce56ab473d578dc52)))(ws@8.19.0(bufferutil@4.0.9)(utf-8-validate@6.0.5)):
     dependencies:
       p-queue: 6.6.2
-      uuid: 10.0.0
     optionalDependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/exporter-trace-otlp-proto': 0.217.0(@opentelemetry/api@1.9.0)
