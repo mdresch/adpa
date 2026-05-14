@@ -27,7 +27,7 @@ import AuditService from '../../services/auditService';
 import { unifiedPdfService } from '../../services/pdfService';
 import { documentConversionService } from '../../services/documentConversionService';
 import { extractionQueue } from '../../services/queueService';
-import { DocxService } from '../../services/docxService';
+import { DocxService, type GenerateDocxOptions } from '../../services/docxService';
 import { pool } from '../../database/connection';
 import { storageArchivalService } from '../../services/storageArchivalService';
 import { buildCombinedDocxExport } from './bulkDocxExport';
@@ -432,11 +432,12 @@ export class DocumentsController {
 
     /**
      * POST /api/v1/documents/bulk-export/docx
+     * Body: { document_ids: string[], mode?: 'combined' | 'per_document_zip', branding?: {...}, layout?: {...} }
      */
     public static async bulkExportDocx(req: Request, res: Response) {
         const log = childLogger({ requestId: (req as any).requestId });
         try {
-            const { document_ids } = req.body;
+            const { document_ids, mode, branding, layout } = req.body || {};
             if (!Array.isArray(document_ids) || document_ids.length === 0) {
                 return res.status(400).json({ error: "No documents selected for export" });
             }
@@ -445,8 +446,48 @@ export class DocumentsController {
                 return res.status(400).json({ error: "One or more document IDs are invalid" });
             }
 
+            const exportMode = mode === 'per_document_zip' ? 'per_document_zip' : 'combined';
+
+            const brandingSafe =
+                branding && typeof branding === 'object'
+                    ? {
+                          companyName:
+                              typeof branding.companyName === 'string' ? branding.companyName.slice(0, 200) : undefined,
+                          tagline: typeof branding.tagline === 'string' ? branding.tagline.slice(0, 500) : undefined,
+                          logoDataUrl:
+                              typeof branding.logoDataUrl === 'string' && branding.logoDataUrl.length <= 2_800_000
+                                  ? branding.logoDataUrl
+                                  : undefined,
+                      }
+                    : {};
+
+            const layoutRaw = layout && typeof layout === 'object' ? layout : {};
+            const sep = layoutRaw.documentSeparator === 'page_break' ? 'page_break' : 'horizontal_rule';
+            const bodyFontPt =
+                layoutRaw.bodyFontPt === 11 || layoutRaw.bodyFontPt === '11'
+                    ? 11
+                    : layoutRaw.bodyFontPt === 12 || layoutRaw.bodyFontPt === '12'
+                      ? 12
+                      : undefined;
+
+            const sanitizeHex = (v: unknown): string | undefined => {
+                if (typeof v !== 'string') return undefined;
+                const t = v.trim();
+                if (!/^#?[0-9a-fA-F]{6}$/.test(t)) return undefined;
+                return t.replace(/^#/, '').toUpperCase();
+            };
+
+            const coverTemplRaw = layoutRaw.coverTemplate;
+            const coverTemplate =
+                coverTemplRaw === 'minimal' || coverTemplRaw === 'corporate' || coverTemplRaw === 'bold'
+                    ? coverTemplRaw
+                    : undefined;
+            const primaryHex = sanitizeHex(layoutRaw.primaryColor);
+            const secondaryHex = sanitizeHex(layoutRaw.secondaryColor);
+            const includeToc = layoutRaw.includeTableOfContents === true;
+
             const result = await pool.query(
-                `SELECT id, name, content, metadata
+                `SELECT id, name, content, metadata, project_id
                  FROM documents
                  WHERE id = ANY($1::uuid[])`,
                 [document_ids]
@@ -456,6 +497,13 @@ export class DocumentsController {
                 return res.status(404).json({ error: "Documents not found" });
             }
 
+            for (const doc of result.rows) {
+                const ok = await DocumentsController.checkProjectAccess(req, doc.project_id);
+                if (!ok) {
+                    return res.status(403).json({ error: "Access denied for one or more documents" });
+                }
+            }
+
             const documentOrder = new Map(document_ids.map((id: string, index: number) => [id, index]));
             const orderedDocuments = [...result.rows].sort((left, right) => {
                 const leftIndex = documentOrder.get(left.id) ?? Number.MAX_SAFE_INTEGER;
@@ -463,11 +511,57 @@ export class DocumentsController {
                 return leftIndex - rightIndex;
             });
 
-            const combinedExport = buildCombinedDocxExport(orderedDocuments);
+            const docxGenOptions: GenerateDocxOptions = {
+                ...(bodyFontPt === 11 ? { bodyFontHalfPt: 22 as const } : bodyFontPt === 12 ? { bodyFontHalfPt: 24 as const } : {}),
+                ...(coverTemplate ? { coverTemplate } : {}),
+                ...(primaryHex ? { primaryColorHex: primaryHex } : {}),
+                ...(secondaryHex ? { secondaryColorHex: secondaryHex } : {}),
+                ...(brandingSafe.logoDataUrl ? { logoDataUrl: brandingSafe.logoDataUrl } : {}),
+                ...(includeToc ? { includeTableOfContents: true as const } : {}),
+            };
+
+            if (exportMode === 'per_document_zip') {
+                const zip = archiver('zip', { zlib: { level: 9 } });
+                res.setHeader('Content-Type', 'application/zip');
+                res.setHeader('Content-Disposition', `attachment; filename="documents-word-${Date.now()}.zip"`);
+                zip.pipe(res);
+
+                for (const doc of orderedDocuments) {
+                    let content = doc.content;
+                    if (typeof content === 'object' && content !== null) {
+                        content = (content as any).text || (content as any).markdown || JSON.stringify(content);
+                    }
+                    const title = doc.name?.trim() || 'document';
+                    const meta: Record<string, unknown> = {
+                        ...(brandingSafe.companyName ? { Organization: brandingSafe.companyName } : {}),
+                        ...(brandingSafe.tagline ? { Tagline: brandingSafe.tagline } : {}),
+                        source_document_id: doc.id,
+                    };
+                    const buf = await DocxService.generateDocx(
+                        String(content ?? ''),
+                        title,
+                        meta,
+                        docxGenOptions
+                    );
+                    const safeName = String(doc.name || 'document')
+                        .replace(/[^a-z0-9._-]+/gi, '_')
+                        .replace(/_+/g, '_')
+                        .slice(0, 120);
+                    zip.append(buf, { name: `${safeName || 'document'}_${String(doc.id).slice(0, 8)}.docx` });
+                }
+                await zip.finalize();
+                return;
+            }
+
+            const combinedExport = buildCombinedDocxExport(orderedDocuments, {
+                branding: brandingSafe,
+                layout: { documentSeparator: sep, bodyFontPt },
+            });
             const docxBuffer = await DocxService.generateDocx(
                 combinedExport.markdownContent,
                 combinedExport.title,
                 combinedExport.metadata,
+                docxGenOptions
             );
 
             res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");

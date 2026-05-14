@@ -5,13 +5,33 @@
  */
 
 import express, { Request, Response, NextFunction } from 'express';
+import Joi from 'joi';
 import { logger } from '../utils/logger';
 import { authenticateToken as authenticate } from '../middleware/auth';
+import { validateParams, validateQuery } from '../middleware/validation';
 import { pool } from '../database/connection';
 import * as assessmentReportService from '../services/assessmentReportService';
 import { portfolioAssessmentService } from '../services/portfolioAssessmentService';
 
 const router = express.Router();
+
+const assessmentExportParamsSchema = Joi.object({
+  assessmentId: Joi.string().uuid().required(),
+});
+
+const assessmentExportQuerySchema = Joi.object({
+  format: Joi.string().lowercase().valid('pdf', 'html', 'docx', 'csv', 'json').default('pdf'),
+});
+
+/** UUID v4 only — used so Content-Disposition never reflects unvalidated row identifiers. */
+const ASSESSMENT_ROW_ID_FOR_FILENAME =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function assessmentExportFilename(rowId: unknown, ext: string): string {
+  const id = rowId == null ? '' : String(rowId);
+  const base = ASSESSMENT_ROW_ID_FOR_FILENAME.test(id) ? `assessment-${id}` : 'assessment';
+  return `${base}.${ext}`;
+}
 
 /**
  * Authentication is now required for all assessment routes.
@@ -623,10 +643,15 @@ router.get('/:assessmentId', authenticate, async (req: Request, res: Response, n
 // Export assessment report
 // ============================================================================
 
-router.get('/:assessmentId/export', authenticate, async (req: Request, res: Response, next: NextFunction) => {
+router.get(
+  '/:assessmentId/export',
+  authenticate,
+  validateParams(assessmentExportParamsSchema),
+  validateQuery(assessmentExportQuerySchema),
+  async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { assessmentId } = req.params;
-    const { format = 'pdf' } = req.query;
+    const { format } = req.query as { format: 'pdf' | 'html' | 'docx' | 'csv' | 'json' };
     const userId = (req as any).user.id;
 
     logger.info('Exporting assessment', {
@@ -635,22 +660,23 @@ router.get('/:assessmentId/export', authenticate, async (req: Request, res: Resp
       userId
     });
 
-    // Get assessment data
-    const assessment = await portfolioAssessmentService.getAssessment(assessmentId, userId);
+    const row = await portfolioAssessmentService.getAssessmentForExport(assessmentId, userId);
 
-    if (!assessment) {
+    if (!row) {
       return res.status(404).json({
         success: false,
         error: 'Assessment not found'
       });
     }
 
+    const reportData = assessmentReportService.mapAssessmentRowToReportData(row);
+
     // Export based on format
     switch (format) {
       case 'pdf':
       case 'html': {
         const result = await assessmentReportService.generateAssessmentReport(
-          assessment,
+          reportData,
           {
             format: format as 'pdf' | 'html',
             includeCharts: true,
@@ -660,23 +686,40 @@ router.get('/:assessmentId/export', authenticate, async (req: Request, res: Resp
         );
 
         res.setHeader('Content-Type', result.mimeType);
-        res.setHeader('Content-Disposition', `attachment; filename="assessment-${assessmentId}.${format}"`);
+        res.setHeader('Content-Disposition', `attachment; filename="${assessmentExportFilename(row.id, format)}"`);
         res.send(result.buffer);
         break;
       }
 
+      case 'docx': {
+        const docxBuffer = await assessmentReportService.generateAssessmentReportDocx(reportData);
+        if (!Buffer.isBuffer(docxBuffer)) {
+          return res.status(500).json({
+            success: false,
+            error: 'Document export failed',
+          });
+        }
+        res.setHeader(
+          'Content-Type',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        );
+        res.setHeader('Content-Disposition', `attachment; filename="${assessmentExportFilename(row.id, 'docx')}"`);
+        res.send(docxBuffer);
+        break;
+      }
+
       case 'csv': {
-        const csv = assessmentReportService.exportAssessmentCSV(assessment);
+        const csv = assessmentReportService.exportAssessmentCSV(reportData);
         res.setHeader('Content-Type', 'text/csv');
-        res.setHeader('Content-Disposition', `attachment; filename="assessment-${assessmentId}.csv"`);
+        res.setHeader('Content-Disposition', `attachment; filename="${assessmentExportFilename(row.id, 'csv')}"`);
         res.send(csv);
         break;
       }
 
       case 'json': {
-        const json = assessmentReportService.exportAssessmentJSON(assessment);
+        const json = assessmentReportService.exportAssessmentJSON(reportData);
         res.setHeader('Content-Type', 'application/json');
-        res.setHeader('Content-Disposition', `attachment; filename="assessment-${assessmentId}.json"`);
+        res.setHeader('Content-Disposition', `attachment; filename="${assessmentExportFilename(row.id, 'json')}"`);
         res.send(json);
         break;
       }
@@ -684,7 +727,7 @@ router.get('/:assessmentId/export', authenticate, async (req: Request, res: Resp
       default:
         return res.status(400).json({
           success: false,
-          error: 'Invalid format. Supported: pdf, html, csv, json'
+          error: 'Invalid format. Supported: pdf, html, docx, csv, json'
         });
     }
 
@@ -696,7 +739,8 @@ router.get('/:assessmentId/export', authenticate, async (req: Request, res: Resp
     });
     next(error);
   }
-});
+  }
+);
 
 // ============================================================================
 // POST /api/assessment/:assessmentId/regenerate

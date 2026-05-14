@@ -25,4 +25,28 @@ describe('buildCombinedDocxExport', () => {
         expect(result.markdownContent).toContain('# Alpha')
         expect(result.markdownContent).toContain('## Beta')
     })
+
+    it('applies branding and page-break separators when requested', () => {
+        const result = buildCombinedDocxExport(
+            [
+                { id: 'a', name: 'A', content: 'one' },
+                { id: 'b', name: 'B', content: 'two' },
+            ],
+            {
+                branding: { companyName: 'Contoso', tagline: 'Quality first' },
+                layout: { documentSeparator: 'page_break' },
+            }
+        )
+
+        expect(result.title).toBe('Contoso — Documents')
+        expect(result.fileName).toBe('Contoso.docx')
+        expect(result.metadata).toEqual(
+            expect.objectContaining({
+                Organization: 'Contoso',
+                Tagline: 'Quality first',
+                document_count: 2,
+            })
+        )
+        expect(result.markdownContent).toContain('<!--docx-pagebreak-->')
+    })
 })
