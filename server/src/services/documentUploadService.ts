@@ -1114,6 +1114,15 @@ async function updateBatchProgress(
                 WHERE batch_id = $1
               `, [batchId]);
             }
+
+            // Semantic pipeline runs independently of assessment generation success
+            triggerSemanticProcessing(batchId, projectId, uploadedBy).catch((err: Error) => {
+              logger.error('Failed to trigger semantic processing', {
+                batchId,
+                projectId,
+                error: err.message
+              });
+            });
           } else if (status === 'failed') {
             // Update assessment status to 'failed' if batch failed
             await db.query(`
@@ -1256,6 +1265,110 @@ function emitFileProgress(
 }
 
 // ============================================================================
+// SEMANTIC PROCESSING TRIGGER
+// ============================================================================
+
+/**
+ * Trigger async semantic processing for all documents in a completed batch
+ * This runs in the background and does not block the upload completion
+ */
+async function triggerSemanticProcessing(
+  batchId: string,
+  projectId: string,
+  uploadedBy: string
+): Promise<void> {
+  logger.info('🚀 [SEMANTIC] Triggering semantic processing for batch', {
+    batchId,
+    projectId
+  });
+
+  try {
+    // Import semantic processing service and queue
+    const { semanticProcessingService } = await import('./semanticProcessingService');
+    const { semanticProcessingQueue } = await import('./queueService');
+
+    // Get all successfully processed documents from this batch
+    const docsQuery = `
+      SELECT d.id, d.project_id
+      FROM documents d
+      WHERE (d.metadata->>'upload_batch_id')::uuid = $1
+        AND d.content IS NOT NULL
+        AND d.content != ''
+    `;
+
+    const docsResult = await db.query(docsQuery, [batchId]);
+    const documentIds = docsResult.rows.map((row: { id: string }) => row.id);
+
+    if (documentIds.length === 0) {
+      logger.info('[SEMANTIC] No documents to process in batch', { batchId });
+      return;
+    }
+
+    logger.info('[SEMANTIC] Found documents for semantic processing', {
+      batchId,
+      documentCount: documentIds.length
+    });
+
+    // Initialize batch-level tracking
+    await semanticProcessingService.initializeBatchProcessing(
+      batchId,
+      projectId,
+      documentIds.length
+    );
+
+    // Initialize processing status for each document
+    for (const documentId of documentIds) {
+      await semanticProcessingService.initializeProcessing({
+        documentId,
+        batchId,
+        projectId,
+        alreadyConverted: true // Documents are already converted to Markdown
+      });
+    }
+
+    // Enqueue batch processing job
+    const jobId = `semantic-batch-${batchId}`;
+    await semanticProcessingQueue.add('semantic-process-batch', {
+      batchId,
+      projectId,
+      userId: uploadedBy,
+      documentIds
+    }, {
+      jobId,
+      priority: 5 // Medium priority
+    });
+
+    logger.info('✅ [SEMANTIC] Batch semantic processing job enqueued', {
+      batchId,
+      projectId,
+      jobId,
+      documentCount: documentIds.length
+    });
+
+  } catch (error: any) {
+    logger.error('❌ [SEMANTIC] Failed to trigger semantic processing', {
+      batchId,
+      projectId,
+      error: error.message,
+      stack: error.stack
+    });
+    try {
+      const { semanticProcessingService } = await import('./semanticProcessingService');
+      await semanticProcessingService.markBatchOrchestrationFailed(
+        batchId,
+        error instanceof Error ? error.message : String(error)
+      );
+    } catch (markErr: unknown) {
+      logger.error('❌ [SEMANTIC] Failed to mark batch as failed after trigger error', {
+        batchId,
+        error: markErr instanceof Error ? markErr.message : String(markErr)
+      });
+    }
+    // Don't rethrow - semantic processing failure shouldn't fail the upload
+  }
+}
+
+// ============================================================================
 // EXPORTS
 // ============================================================================
 
@@ -1264,5 +1377,6 @@ export const documentUploadService = {
   addDocumentsToExistingBatch,
   processUploadedFile,
   getBatchStatus,
-  getUploadedDocuments
+  getUploadedDocuments,
+  triggerSemanticProcessing
 };

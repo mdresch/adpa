@@ -1,9 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-// @ts-expect-error - useParams is available in Next.js 14
-import { useParams } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/lib/notify';
 import { motion } from 'framer-motion';
@@ -11,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { MaturityCard } from '@/components/onboarding/MaturityCard';
 import { MaturityScore } from '@/components/onboarding/MaturityScore';
 import { MaturityJourneyPlanner } from '@/components/onboarding/MaturityJourneyPlanner';
+import { SemanticProcessingStatus } from '@/components/onboarding/SemanticProcessingStatus';
 import { maturityTheme } from '@/lib/theme/maturity-portal-theme';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -322,10 +321,10 @@ type Gap = AssessmentData['gaps'][number];
 export default function AssessmentResultsPage() {
   const router = useRouter();
   const { isAuthenticated, loading: authLoading } = useAuth();
-  const params = React.use(useParams() as any);
-  
+  const params = useParams() as { batchId?: string };
+
   // Get batchId from route params
-  const batchId = params?.batchId || '';
+  const batchId = typeof params?.batchId === 'string' ? params.batchId : '';
   
   // Require authentication - redirect to login if not authenticated
   useEffect(() => {
@@ -641,7 +640,7 @@ export default function AssessmentResultsPage() {
     }
   };
 
-  const exportReport = async (format: 'pdf' | 'csv' | 'json') => {
+  const exportReport = async (format: 'pdf' | 'csv' | 'json' | 'docx') => {
     if (!isAuthenticated) {
       toast.error('Authentication required. Please log in.');
       router.push(`/auth/login?redirect=${encodeURIComponent(window.location.pathname)}`);
@@ -1051,6 +1050,19 @@ export default function AssessmentResultsPage() {
             JSON
           </Button>
           <Button
+            variant="outline"
+            onClick={() => exportReport('docx')}
+            disabled={exporting}
+            style={{
+              borderColor: maturityTheme.colors.border.default,
+              color: maturityTheme.colors.text.primary,
+              backgroundColor: maturityTheme.colors.background.tertiary,
+            }}
+          >
+            <Download className="mr-2 h-4 w-4" />
+            Word
+          </Button>
+          <Button
             onClick={() => exportReport('pdf')}
             disabled={exporting}
             style={{
@@ -1179,6 +1191,14 @@ export default function AssessmentResultsPage() {
             }}
           >
             Overview
+          </TabsTrigger>
+          <TabsTrigger 
+            value="processing"
+            style={{ 
+              color: maturityTheme.colors.text.primary,
+            }}
+          >
+            Processing
           </TabsTrigger>
           <TabsTrigger 
             value="journey"
@@ -1710,6 +1730,27 @@ export default function AssessmentResultsPage() {
               </div>
             );
           })()}
+        </TabsContent>
+
+        {/* Semantic Processing Tab */}
+        <TabsContent value="processing" className="space-y-4">
+          <MaturityCard variant="elevated">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Target className="w-5 h-5" />
+                Semantic Processing Pipeline
+              </CardTitle>
+              <CardDescription>
+                Monitor the automatic extraction of entities and synchronization to the Governance Knowledge Graph
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <SemanticProcessingStatus 
+                batchId={batchId}
+                showDetails={true}
+              />
+            </CardContent>
+          </MaturityCard>
         </TabsContent>
 
         {/* Your Journey Tab */}
