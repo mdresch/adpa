@@ -1047,18 +1047,21 @@ class ComplianceValidationEngine implements IComplianceValidationEngine {
   }
 
   private async getApplicablePacks(request: ValidateComplianceRequest): Promise<StandardsPack[]> {
-    let query = 'SELECT * FROM standards_packs WHERE is_active = true';
-    const params: any[] = [];
-
+    let result;
     if (request.packIds && request.packIds.length > 0) {
-      query += ` AND id = ANY($${params.length + 1})`;
-      params.push(request.packIds);
+      result = await pool.query(
+        'SELECT * FROM standards_packs WHERE is_active = true AND id = ANY($1::uuid[])',
+        [request.packIds]
+      );
     } else if (request.packTypes && request.packTypes.length > 0) {
-      query += ` AND pack_type = ANY($${params.length + 1})`;
-      params.push(request.packTypes);
+      result = await pool.query(
+        'SELECT * FROM standards_packs WHERE is_active = true AND pack_type = ANY($1::standards_pack_type[])',
+        [request.packTypes]
+      );
+    } else {
+      result = await pool.query('SELECT * FROM standards_packs WHERE is_active = true', []);
     }
 
-    const result = await pool.query(query, params);
     return result.rows.map(row => ({
       id: row.id,
       packType: row.pack_type as StandardsPackType,
