@@ -13,14 +13,15 @@ Quick start guides, login credentials, and user permissions documentation.
 - `LOGIN_CREDENTIALS.md` - Login information and credentials
 - `USER_PERMISSIONS.md` - User roles and permissions overview
 - `user-rules-preferences.md` - User rules and preferences system
+- `KNOWN_GOOD_LOCAL_RUNBOOK.md` - Current local development runbook and service checks
 
 ### 02. Setup & Configuration
 **Path:** `02-setup-configuration/`
 
-Database setup, Redis configuration, Azure services, and domain configuration.
+Supabase PostgreSQL setup, Redis configuration, Azure services, and domain configuration.
 
 - **Database Setup:**
-  - `NEON_DATABASE_SETUP.md` - Neon PostgreSQL setup guide
+  - `SUPABASE_DATABASE_SETUP.md` - Supabase PostgreSQL setup guide
   - `VERCEL_POSTGRES_SETUP.md` - Vercel Postgres configuration
   - `vercel-postgres-setup.md` - Alternative Vercel Postgres guide
   
@@ -37,7 +38,7 @@ Database setup, Redis configuration, Azure services, and domain configuration.
 ### 03. Development
 **Path:** `03-development/`
 
-Local development setup, Docker configuration, and migration guides.
+Local development setup, optional Docker configuration, and migration guides.
 
 - **Docker:**
   - `DOCKER_DEVELOPMENT_GUIDE.md` - Docker development workflow
@@ -111,7 +112,7 @@ Third-party service integrations including AI providers, document services, and 
   - `github.md` - GitHub integration
 
 ### 06. Features
-**Path:** `06-features/`
+**Path:** `features/legacy-06-features/` (legacy index retained at `06-features/`)
 
 Feature implementation documentation, enhancements, and technical specifications.
 
@@ -139,10 +140,10 @@ Feature implementation documentation, enhancements, and technical specifications
   - `MODEL_PAGE_CLEANUP.md` - Model page cleanup
   
 - **Document Processing:**
-  - `DOCUMENT_STORAGE_FORMAT.md` - Document storage specifications
-  - `DOCUMENT_TEMPLATE_ENHANCEMENT_PLAN.md` - Template enhancements
-  - `TEMPLATE_ENHANCEMENT_SUMMARY.md` - Template improvement summary
-  - `TEMPLATE_METADATA_TRACKING_SUMMARY.md` - Template metadata tracking
+  - `document-processing/README.md` - Document ingestion, processing, and export workflows
+  - `legacy-06-features/DOCUMENT_TEMPLATE_ENHANCEMENT_PLAN.md` - Template enhancements
+  - `legacy-06-features/TEMPLATE_ENHANCEMENT_SUMMARY.md` - Template improvement summary
+  - `legacy-06-features/TEMPLATE_METADATA_TRACKING_SUMMARY.md` - Template metadata tracking
   
 - **Process Flow:**
   - `PROCESS_FLOW_COMPLETE_FIX.md` - Process flow fixes
@@ -317,8 +318,9 @@ Deprecated, duplicate, or superseded documentation files.
 - Login info: `01-getting-started/LOGIN_CREDENTIALS.md`
 
 **Set up my development environment:**
-- Docker setup: `03-development/DOCKER_DEVELOPMENT_GUIDE.md`
-- Database setup: `02-setup-configuration/NEON_DATABASE_SETUP.md`
+- Known-good local runbook: `01-getting-started/KNOWN_GOOD_LOCAL_RUNBOOK.md`
+- Database setup: `02-setup-configuration/SUPABASE_DATABASE_SETUP.md`
+- Docker setup (optional): `03-development/DOCKER_DEVELOPMENT_GUIDE.md`
 - Quick restart: `03-development/QUICK_RESTART_GUIDE.md`
 - Configure templates: `03-development/TEMPLATE_CONFIGURATION_GUIDE.md`
 
@@ -333,7 +335,7 @@ Deprecated, duplicate, or superseded documentation files.
 - Adobe PDF: `05-integrations/adobe-pdf-integration.md`
 
 **Understand the architecture:**
-- Process flow: `06-features/PROCESS_FLOW_TECHNICAL_SPECS.md`
+- Process flow: `features/legacy-06-features/PROCESS_FLOW_TECHNICAL_SPECS.md`
 - Backend integration: `07-architecture/FRONTEND_BACKEND_INTEGRATION_COMPLETE.md`
 - Multi-stage processor: `07-architecture/MULTI_STAGE_DOCUMENT_PROCESSOR_IMPLEMENTATION_SUMMARY.md`
 
