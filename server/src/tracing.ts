@@ -11,7 +11,7 @@ import dotenv from 'dotenv'
 dotenv.config()
 
 import { NodeSDK } from '@opentelemetry/sdk-node'
-import { Resource } from '@opentelemetry/resources'
+import { resourceFromAttributes } from '@opentelemetry/resources'
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node'
 import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions'
 import { diag, DiagConsoleLogger, DiagLogLevel } from '@opentelemetry/api'
@@ -165,7 +165,7 @@ export function initTracing(): void {
     }
 
     // Create resource with service information
-    const resource = new Resource({
+    const resource = resourceFromAttributes({
       [ATTR_SERVICE_NAME]: SERVICE_NAME,
       [ATTR_SERVICE_VERSION]: SERVICE_VERSION,
       'deployment.environment': NODE_ENV,
