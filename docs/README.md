@@ -112,7 +112,7 @@ Third-party service integrations including AI providers, document services, and 
   - `github.md` - GitHub integration
 
 ### 06. Features
-**Path:** `features/` (legacy index retained at `06-features/`)
+**Path:** `features/legacy-06-features/` (legacy index retained at `06-features/`)
 
 Feature implementation documentation, enhancements, and technical specifications.
 
