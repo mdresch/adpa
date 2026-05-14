@@ -85,6 +85,17 @@ const auditTrailQuerySchema = Joi.object({
   offset: Joi.number().integer().min(0).default(0),
 });
 
+const dashboardTrendsQuerySchema = Joi.object({
+  projectId: Joi.string().uuid().optional(),
+  packType: Joi.string().valid('PMBOK', 'BABOK', 'DMBOK', 'CUSTOM').optional(),
+  days: Joi.number().integer().min(1).max(366).default(30),
+});
+
+/** Static WHERE for compliance_trends: $1 = day window (integer days), $2/$3 optional filters. */
+const COMPLIANCE_TRENDS_WHERE = `WHERE ct.trend_date >= CURRENT_DATE - ($1::integer * INTERVAL '1 day')
+  AND ($2::uuid IS NULL OR ct.project_id = $2)
+  AND ($3::standards_pack_type IS NULL OR ct.pack_type = $3)`;
+
 /** Static WHERE: all filter values bound as $1…$4 only (no user-derived SQL fragments). */
 const DASHBOARD_CVR_WHERE = `WHERE ($1::uuid IS NULL OR cvr.project_id = $1)
   AND (
@@ -539,23 +550,11 @@ router.get('/dashboard',
  */
 router.get('/dashboard/trends',
   authenticate,
+  validateQuery(dashboardTrendsQuerySchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { projectId, packType, days } = req.query;
-      const dayCount = parseInt(days as string) || 30;
-
-      let whereClause = 'WHERE ct.trend_date >= CURRENT_DATE - $1::interval';
-      const params: any[] = [`${dayCount} days`];
-
-      if (projectId) {
-        params.push(projectId);
-        whereClause += ` AND ct.project_id = $${params.length}`;
-      }
-
-      if (packType) {
-        params.push(packType);
-        whereClause += ` AND ct.pack_type = $${params.length}`;
-      }
+      const { projectId, packType, days: daysInput } = req.query as Record<string, unknown>;
+      const dayCount = Math.min(366, Math.max(1, Number(daysInput) || 30));
 
       const result = await pool.query(
         `SELECT 
@@ -569,9 +568,13 @@ router.get('/dashboard/trends',
           ct.major_findings,
           ct.resolved_findings
          FROM compliance_trends ct
-         ${whereClause}
+         ${COMPLIANCE_TRENDS_WHERE}
          ORDER BY ct.trend_date, ct.pack_type`,
-        params
+        [
+          dayCount,
+          (projectId as string | undefined) ?? null,
+          (packType as string | undefined) ?? null,
+        ]
       );
 
       res.json({

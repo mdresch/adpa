@@ -23,6 +23,16 @@ const assessmentExportQuerySchema = Joi.object({
   format: Joi.string().lowercase().valid('pdf', 'html', 'docx', 'csv', 'json').default('pdf'),
 });
 
+/** UUID v4 only — used so Content-Disposition never reflects unvalidated row identifiers. */
+const ASSESSMENT_ROW_ID_FOR_FILENAME =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function assessmentExportFilename(rowId: unknown, ext: string): string {
+  const id = rowId == null ? '' : String(rowId);
+  const base = ASSESSMENT_ROW_ID_FOR_FILENAME.test(id) ? `assessment-${id}` : 'assessment';
+  return `${base}.${ext}`;
+}
+
 /**
  * Authentication is now required for all assessment routes.
  * Users must register and authenticate before accessing assessments.
@@ -676,26 +686,32 @@ router.get(
         );
 
         res.setHeader('Content-Type', result.mimeType);
-        res.setHeader('Content-Disposition', `attachment; filename="assessment-${row.id}.${format}"`);
+        res.setHeader('Content-Disposition', `attachment; filename="${assessmentExportFilename(row.id, format)}"`);
         res.send(result.buffer);
         break;
       }
 
       case 'docx': {
-        const buf = await assessmentReportService.generateAssessmentReportDocx(reportData);
+        const docxBuffer = await assessmentReportService.generateAssessmentReportDocx(reportData);
+        if (!Buffer.isBuffer(docxBuffer)) {
+          return res.status(500).json({
+            success: false,
+            error: 'Document export failed',
+          });
+        }
         res.setHeader(
           'Content-Type',
           'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
         );
-        res.setHeader('Content-Disposition', `attachment; filename="assessment-${row.id}.docx"`);
-        res.send(buf);
+        res.setHeader('Content-Disposition', `attachment; filename="${assessmentExportFilename(row.id, 'docx')}"`);
+        res.send(docxBuffer);
         break;
       }
 
       case 'csv': {
         const csv = assessmentReportService.exportAssessmentCSV(reportData);
         res.setHeader('Content-Type', 'text/csv');
-        res.setHeader('Content-Disposition', `attachment; filename="assessment-${row.id}.csv"`);
+        res.setHeader('Content-Disposition', `attachment; filename="${assessmentExportFilename(row.id, 'csv')}"`);
         res.send(csv);
         break;
       }
@@ -703,7 +719,7 @@ router.get(
       case 'json': {
         const json = assessmentReportService.exportAssessmentJSON(reportData);
         res.setHeader('Content-Type', 'application/json');
-        res.setHeader('Content-Disposition', `attachment; filename="assessment-${row.id}.json"`);
+        res.setHeader('Content-Disposition', `attachment; filename="${assessmentExportFilename(row.id, 'json')}"`);
         res.send(json);
         break;
       }
