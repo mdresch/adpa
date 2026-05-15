@@ -6,7 +6,7 @@ The Execution Truth System (ETS) is a deterministic, append-only, cryptographica
 ## 2. Core Architecture & Zero-Trust Flow
 ETS enforces a 5-step zero-trust signing flow:
 1. **Payload Generation**: Actor creates the payload and specifies the schema version.
-2. **Canonical Serialization**: Enforces UTF-8 normalization, sorted JSON keys, and IEEE 754 float normalization to guarantee determinism.
+2. **Canonical Serialization**: Uses RFC 8785 JSON Canonicalization Scheme (JCS) to guarantee deterministic bytes before hashing (UTF-8 output, lexicographic key ordering across nested objects, deterministic string escaping, and normalized JSON number rendering). Non-finite numeric values (`NaN`, `Infinity`, `-Infinity`) are invalid and must be rejected before signing.
 3. **Hash & Sign**: SHA-256 hash of the canonical payload + previous hash, signed via Ed25519.
 4. **API Submission**: Payload, signature, and public key are submitted.
 5. **Server Verification**: The server independently verifies the signature, schema, and authority before appending.
@@ -21,6 +21,8 @@ model LedgerEvent {
   event_id      String   @id // UUID v7
   payload       Json
   schema_version String
+  key_id        String   // stable key fingerprint / registry reference
+  public_key    String   // signer public key used to verify `signature`
   previous_hash String
   current_hash  String
   signature     String
@@ -33,8 +35,12 @@ model LedgerEvent {
 ## 4. Merkle Forest Implementation
 Instead of a single Merkle tree, ETS uses a domain-isolated Merkle Forest (e.g., Decisions, Agents, Context, Audit) to allow parallel computation and domain isolation.
 
-**Meta-Root Definition**: All domain roots are hashed into a single global root:
-`MetaRoot = SHA256(domain_roots + timestamp + version)`
+**Meta-Root Definition**: All domain roots are hashed into a single global root using a deterministic checkpoint tuple:
+`MetaRoot = SHA256(encode(version) || encode(checkpoint_event_id) || encode(ordered_domain_roots))`
+Where:
+- `checkpoint_event_id` is the `event_id` of the last included ledger event.
+- `ordered_domain_roots` are sorted by domain name ascending before encoding.
+- `encode(...)` is length-prefixed UTF-8 byte encoding for strings and fixed-width big-endian byte encoding for numeric values.
 This global root is used for external anchoring and formalizes cross-domain trust.
 
 ## 5. Semantic Validation Layer
@@ -53,7 +59,7 @@ This global root is used for external anchoring and formalizes cross-domain trus
 
 ## 8. API Contracts
 - `POST /api/ledger/event`: Append new event.
-- `GET /api/ledger/event/:id`: Retrieve event.
+- `GET /api/ledger/event/:event_id`: Retrieve event.
 - `POST /api/ledger/verify`: Verify event integrity.
 - `GET /api/merkle/proof/:event_id`: Generate cryptographic proof.
 - `GET /api/ledger/replay`: Deterministic state reconstruction.
