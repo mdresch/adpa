@@ -6,7 +6,7 @@ The Execution Truth System (ETS) is a deterministic, append-only, cryptographica
 ## 2. Core Architecture & Zero-Trust Flow
 ETS enforces a 5-step zero-trust signing flow:
 1. **Payload Generation**: Actor creates the payload and specifies the schema version.
-2. **Canonical Serialization**: Uses RFC 8785 JSON Canonicalization Scheme (JCS) to guarantee deterministic bytes before hashing (UTF-8 output, lexicographic key ordering across nested objects, deterministic string escaping, and normalized JSON number rendering). Non-finite numeric values (`NaN`, `Infinity`, `-Infinity`) are invalid and must be rejected before signing.
+2. **Canonical Serialization**: Uses RFC 8785 JSON Canonicalization Scheme (JCS) to guarantee deterministic bytes before hashing. JCS requirements applied here are UTF-8 output, lexicographic key ordering across nested objects, deterministic string escaping, and normalized JSON number rendering. Non-finite numeric values (`NaN`, `Infinity`, `-Infinity`) are invalid and must be rejected before signing.
 3. **Hash & Sign**: SHA-256 hash of the canonical payload + previous hash, signed via Ed25519.
 4. **API Submission**: Payload, signature, and public key are submitted.
 5. **Server Verification**: The server independently verifies the signature, schema, and authority before appending.
@@ -40,7 +40,7 @@ Instead of a single Merkle tree, ETS uses a domain-isolated Merkle Forest (e.g.,
 Where:
 - `checkpoint_event_id` is the `event_id` of the last included ledger event.
 - `ordered_domain_roots` are sorted by domain name ascending before encoding.
-- `encode(...)` is length-prefixed UTF-8 byte encoding for strings and fixed-width big-endian byte encoding for numeric values.
+- `encode(...)` uses a 4-byte unsigned big-endian length prefix followed by UTF-8 bytes for strings and byte arrays. Numeric values use fixed-width big-endian encodings (`uint64` for counters/heights, `uint32` for domain count).
 This global root is used for external anchoring and formalizes cross-domain trust.
 
 ## 5. Semantic Validation Layer
