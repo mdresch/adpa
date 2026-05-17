@@ -4,7 +4,7 @@
  */
 
 // Component types - what the LLM can suggest
-export type ComponentType = 
+export type ComponentType =
   | "Table"
   | "Chart"
   | "Form"
@@ -33,7 +33,6 @@ export type OpenUIChatJson =
   | OpenUIChatJson[]
   | { [key: string]: OpenUIChatJson }
 
-// Thread metadata
 export type OpenUIThreadSummary = {
   id: string
   userId: string
@@ -43,7 +42,6 @@ export type OpenUIThreadSummary = {
   updatedAt: string
 }
 
-// Message in a thread
 export type OpenUIMessage = {
   id: string
   threadId: string
@@ -53,12 +51,10 @@ export type OpenUIMessage = {
   createdAt: string
 }
 
-// Full thread with messages
 export type OpenUIThread = OpenUIThreadSummary & {
   messages: OpenUIMessage[]
 }
 
-// Project info
 export type OpenUIProject = {
   id: string
   name: string
@@ -104,6 +100,8 @@ export function isTextPayload(payload: OpenUIAssistantPayload): payload is TextP
   return typeof payload === "object" && payload !== null && !Array.isArray(payload)
     && "type" in payload && payload.type === "text"
 }
+    && "type" in payload && payload.type === "text"
+}
 
 // Extract readable text from any payload
 export function extractMessageText(content: OpenUIChatJson): string {
@@ -135,12 +133,40 @@ export function extractMessageText(content: OpenUIChatJson): string {
     }
 
     return Object.values(payload).map(extractMessageText).filter(Boolean).join(" ")
+=======
+export type OpenUIAssistantPayload = OpenUIChatJson
+
+export function extractMessageText(content: OpenUIChatJson): string {
+  if (typeof content === "string") {
+    return content.trim()
+  }
+
+  if (Array.isArray(content)) {
+    return content
+      .map((value) => extractMessageText(value))
+      .filter(Boolean)
+      .join(" ")
+      .trim()
+  }
+
+  if (content && typeof content === "object") {
+    const record = content as Record<string, OpenUIChatJson>
+    if (typeof record.text === "string") {
+      return record.text.trim()
+    }
+    if (typeof record.content === "string") {
+      return record.content.trim()
+    }
+>>>>>>> adpa-project-charter
   }
 
   return ""
 }
 
+<<<<<<< HEAD
 // Parse SSE payload from response
+=======
+>>>>>>> adpa-project-charter
 export function parseAssistantPayload(raw: string): OpenUIAssistantPayload | null {
   const dataLine = raw
     .split("\n")
@@ -160,12 +186,16 @@ export function parseAssistantPayload(raw: string): OpenUIAssistantPayload | nul
   }
 }
 
+<<<<<<< HEAD
 // Infer thread ID from payload
+=======
+>>>>>>> adpa-project-charter
 export function inferThreadId(payload: OpenUIAssistantPayload | null): string | null {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     return null
   }
 
+<<<<<<< HEAD
   const record = payload as Record<string, OpenUIChatJson>
 
   // Check component payload structure
@@ -177,6 +207,9 @@ export function inferThreadId(payload: OpenUIAssistantPayload | null): string | 
 
   // Fallback for legacy structure
   const props = record.props
+=======
+  const props = (payload as Record<string, OpenUIChatJson>).props
+>>>>>>> adpa-project-charter
   if (!props || typeof props !== "object" || Array.isArray(props)) {
     return null
   }
@@ -185,6 +218,7 @@ export function inferThreadId(payload: OpenUIAssistantPayload | null): string | 
   return typeof threadId === "string" && threadId.length > 0 ? threadId : null
 }
 
+<<<<<<< HEAD
 // Format timestamp for display
 export function formatMessageTimestamp(value?: string): string {
   if (!value) return ""
@@ -203,3 +237,38 @@ export function buildThreadPreview(content: OpenUIChatJson): string {
   const maxLength = 200
   return text.length > maxLength ? text.slice(0, maxLength) + "..." : text
 }
+=======
+export function formatMessageTimestamp(value?: string): string {
+  if (!value) {
+    return "Just now"
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return "Just now"
+  }
+
+  return new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date)
+}
+
+export function buildThreadPreview(content: OpenUIChatJson): string {
+  const text = extractMessageText(content)
+  if (text) {
+    return text
+  }
+
+  if (content && typeof content === "object" && !Array.isArray(content)) {
+    const type = (content as Record<string, OpenUIChatJson>).type
+    if (type === "report") {
+      return "Report response"
+    }
+  }
+
+  return "Structured response"
+}
+>>>>>>> adpa-project-charter

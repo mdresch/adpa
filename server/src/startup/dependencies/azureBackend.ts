@@ -9,11 +9,16 @@ import axios from "axios"
  */
 export const azureBackendDependency: Dependency = {
   name: "Azure Backend Availability",
-  critical: true,
+  critical: false,
   timeout: 10000,
   init: async () => {
     const isProduction = process.env.NODE_ENV === "production"
-    const backendUrl = process.env.BACKEND_URL || "https://adpa-backend.agreeablegrass-418bd4ba.westeurope.azurecontainerapps.io"
+    const backendUrl = process.env.BACKEND_URL?.trim()
+
+    if (!backendUrl) {
+      logger.info("⏭️ Azure Backend availability check skipped (BACKEND_URL not configured)")
+      return
+    }
     
     logger.info(`🌐 Validating Azure Backend configuration (${backendUrl})...`)
 
@@ -34,11 +39,13 @@ export const azureBackendDependency: Dependency = {
     try {
       // Basic self-check: verify we can reach the health endpoint (best effort)
       // We skip this if it's localhost to avoid circular loops during dev
-      if (backendUrl && !backendUrl.includes('localhost')) {
+      if (!backendUrl.includes('localhost')) {
         const response = await axios.get(`${backendUrl}/health`, { timeout: 5000 });
         if (response.status === 200) {
           logger.info("✅ Azure Backend public endpoint is reachable.")
         }
+      } else {
+        logger.info("⏭️ Azure Backend self-check skipped for localhost BACKEND_URL")
       }
     } catch (error: any) {
       logger.warn(`⚠️ Azure Backend self-check ping failed: ${error.message}. This might be expected if the container is still booting or behind a tight firewall.`)

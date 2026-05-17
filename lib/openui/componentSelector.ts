@@ -1,38 +1,38 @@
-/**
- * Component Selection System
- * Intelligently determines which UI component type best represents the response
- */
-
-import type { ComponentType } from "./library"
-
-export type ComponentSelectionContext = {
-  prompt: string
-  threadHistory?: string
-  dataPoints?: number
-  domainContext?: string
-}
-
-// Keywords for each component type
-const COMPONENT_KEYWORDS: Record<ComponentType, RegExp[]> = {
-  Table: [
-    /\b(list|show|display|enumerate|table|items|records|entries)\b/i,
-    /\b(stakeholder|risk|issue|milestone|constraint|assumption)\b/i,
-    /\b(team|member|resource|person|contact)\b/i,
-  ],
-  Chart: [
-    /\b(chart|graph|diagram|trend|visual|compare|percentage|metric|statistic|how much|how many)\b/i,
-    /\b(timeline|schedule|roadmap|phase|stage|progression)\b/i,
-    /\b(budget|cost|spend|allocation|distribution)\b/i,
-  ],
-  Form: [
-    /\b(create|build|generate|draft|add|new|input|fill|enter|setup|configure)\b/i,
-    /\b(request|propose|submit|register|update|edit|modify)\b/i,
-  ],
-  Card: [
-    /\b(status|summary|overview|snapshot|brief|highlight|key)\b/i,
-    /\b(project|initiative|objective|goal|outcome)\b/i,
-  ],
-  Timeline: [
+    Carousel: [
+      /\b(carousel|gallery|slideshow|slide|rotate|image|album|portfolio)/i,
+      /\b(before and after|comparison|alternative|option|choose)/i,
+    ],
+    Alert: [
+      /\b(alert|warning|error|critical|caution|important|notice|attention|success)/i,
+      /\b(watch out|be aware|note|remember|info|information)/i,
+    ],
+    Steps: [
+      /\b(step|steps|process|workflow|sequence|guide|instruction|how to|procedure)/i,
+      /\b(progress|stage|phase|milestone|checkpoint)/i,
+    ],
+    Breadcrumb: [
+      /\b(breadcrumb|navigation|path|location|hierarchy|navigate back|where am i)/i,
+      /\b(route|trail|origin|destination)/i,
+    ],
+    Sidebar: [
+      /\b(sidebar|panel|filter|option|menu|navigation|search|refine|category)/i,
+      /\b(filter by|narrow down|organize)/i,
+    ],
+    Comparison: [
+      /\b(compare|comparison|versus|vs|difference|similar|opposite|alternative|pros cons|advantage)/i,
+      /\b(which|better|choose between|side by side)/i,
+    ],
+    Calendar: [
+      /\b(calendar|schedule|availability|booking|appointment|event|when|deadline|due date|sprint|iteration)/i,
+      /\b(date|dates|scheduled|upcoming|this week|this month|milestone|recurring)/i,
+    ],
+    Team: [
+      /\b(team|member|people|participant|who|assignee|contributor|staff|crew|roster|person|personnel)/i,
+      /\b(assigned to|owner|responsible|stakeholder|contact|directory|profile|avatar)/i,
+    ],
+    Text: [
+      /\b(explain|describe|tell|write|answer|question|help|summary|overview)/i,
+    ],
     /\b(timeline|schedule|gantt|sequence|order|when|dates|deadline|milestone|phase)\b/i,
     /\b(roadmap|plan|progression|workflow|process)\b/i,
   ],

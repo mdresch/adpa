@@ -4,9 +4,9 @@
  */
 
 import { Pool, PoolClient, QueryResult } from 'pg';
-import { pool } from '../../database/connection';
+import { pool } from '../database/connection';
 import { v4 as uuidv4 } from 'uuid';
-import { logger } from '../../utils/logger';
+import { logger } from '../utils/logger';
 import { ParsedDocument, DocumentSection } from './documentParserService';
 
 export interface DocumentRecord {

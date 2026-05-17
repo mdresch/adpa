@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getAuthenticatedUser, unauthorizedResponse } from '@/lib/auth-utils';
-import { pool, connectDatabase } from '@/server/src/database/connection';
-import { logger } from '@/server/src/utils/logger';
+
+// Removed: This route imported backend-only code and cannot run in the Next.js API context.
+// Please POST directly to the backend Express API for projects.
 
 export async function GET(req: Request) {
     const user = await getAuthenticatedUser(req);

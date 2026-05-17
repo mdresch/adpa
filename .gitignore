@@ -50,6 +50,7 @@ next-env.d.ts
 .cursor/
 .vscode/
 .idea/
+.worktrees/
 
 # Playwright
 test-results/

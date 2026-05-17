@@ -1,15 +1,10 @@
+<<<<<<< HEAD
 /**
  * OpenUI Chat Controller
  * HTTP endpoints for chat functionality
  */
 
-import type { AuthenticatedUser } from "@/lib/auth-utils"
-import type { Request, Response } from "express"
-
-import { pool } from "../../database/connection"
-import { userHasProjectAccess } from "../../lib/project-access"
-import { pipeWebResponseToExpress } from "../../utils/stream"
-
+=======
 import {
   OpenUIChatService,
   extractMessageText,
@@ -20,128 +15,146 @@ import {
 export class OpenUIChatController {
   static service = new OpenUIChatService()
 
+<<<<<<< HEAD
   /**
    * POST /api/v1/openui-chat/chat
    * Send a message and get an intelligent component-based response
    */
   static async chat(req: Request, res: Response) {
     const user = (req as any).user as AuthenticatedUser
-    const { projectId, threadId, messages } = req.body
-
-    if (!projectId || !messages || !Array.isArray(messages)) {
-      return res.status(400).json({ error: "projectId and messages array are required" })
+  static async chat(req: Request, res: Response) {
+    const user = req.user as AuthenticatedUser | undefined
+    if (!user?.id) {
+      return res.status(401).json({ error: "Unauthorized" })
     }
 
-    // Get the latest user message
-    const submittedMessage = getSubmittedUserMessage(messages)
-    if (!submittedMessage) {
-      return res.status(400).json({ error: "The latest message must be a user message" })
+    const { projectId, threadId, messages } = req.body as {
+      projectId?: string
+      threadId?: string
+      messages?: OpenUIChatRequestMessage[]
     }
 
-    const messageText = extractMessageText(submittedMessage.content)
+    if (!projectId) {
+      return res.status(400).json({ error: "projectId is required" })
+    }
+
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return res.status(400).json({ error: "messages are required" })
+    }
     if (!messageText) {
       return res.status(400).json({ error: "message content is required" })
     }
 
     // Check access
-    const hasAccess = await userHasProjectAccess(pool, user, projectId)
-    if (!hasAccess) {
-      return res.status(403).json({ error: "Access denied" })
+=======
+    if (!extractMessageText(submittedMessage.content)) {
+      return res.status(400).json({ error: "message content is required" })
     }
-
-    try {
-      const streamResponse = await this.service.streamReply({
         user,
         projectId,
         threadId,
         message: submittedMessage,
       })
 
-      await pipeWebResponseToExpress(streamResponse, res)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      const statusCode = message.includes("not found") ? 404 : 500
+    const reportMode = determineReportMode(submittedMessage)
+    const streamResponse = await this.service.streamReply({
+      user,
+      projectId,
+      threadId,
+      message: submittedMessage,
+      reportMode,
+    })
 
-      return res.status(statusCode).json({
-        error: message,
-      })
-    }
+    await pipeWebResponseToExpress(streamResponse, res)
   }
 
-  /**
-   * GET /api/v1/openui-chat/threads
-   * List all threads for a project
-   */
   static async listThreads(req: Request, res: Response) {
-    const user = (req as any).user as AuthenticatedUser
-    const { projectId } = req.query
+    const user = req.user as AuthenticatedUser | undefined
+    if (!user?.id) {
+      return res.status(401).json({ error: "Unauthorized" })
+    }
 
-    if (!projectId || typeof projectId !== "string") {
+    const projectId = String(req.query.projectId || "").trim()
+    if (!projectId) {
       return res.status(400).json({ error: "projectId is required" })
     }
-
-    // Check access
-    const hasAccess = await userHasProjectAccess(pool, user, projectId)
-    if (!hasAccess) {
-      return res.status(403).json({ error: "Access denied" })
-    }
-
-    try {
-      const threads = await this.service.listThreads(user.id, projectId)
-      return res.json({ threads })
     } catch (error) {
       return res.status(500).json({
         error: error instanceof Error ? error.message : "Failed to list threads",
       })
     }
   }
+    const threads = await this.service.listThreads(user.id, projectId)
+    return res.json({ threads })
+  }
 
-  /**
-   * GET /api/v1/openui-chat/threads/:threadId
-   * Get a specific thread with all messages
-   */
   static async getThread(req: Request, res: Response) {
-    const user = (req as any).user as AuthenticatedUser
-    const { threadId } = req.params
-    const { projectId } = req.query
+    const user = req.user as AuthenticatedUser | undefined
+    if (!user?.id) {
+      return res.status(401).json({ error: "Unauthorized" })
+    }
 
-    if (!projectId || typeof projectId !== "string") {
+    const projectId = String(req.query.projectId || "").trim()
+    const threadId = String(req.params.id || "").trim()
+
+    if (!projectId) {
       return res.status(400).json({ error: "projectId is required" })
     }
 
-    // Check access
-    const hasAccess = await userHasProjectAccess(pool, user, projectId)
-    if (!hasAccess) {
-      return res.status(403).json({ error: "Access denied" })
+    if (!threadId) {
+      return res.status(400).json({ error: "threadId is required" })
     }
-
-    try {
-      const thread = await this.service.getThread(user.id, projectId, threadId)
-      if (!thread) {
-        return res.status(404).json({ error: "Thread not found" })
       }
       return res.json(thread)
     } catch (error) {
       return res.status(500).json({
         error: error instanceof Error ? error.message : "Failed to get thread",
       })
+    const thread = await this.service.getThread(user.id, projectId, threadId)
+    if (!thread) {
+      return res.status(404).json({ error: "Thread not found" })
     }
+
+    return res.json({ thread })
   }
 }
-
-/**
- * Helper: Extract the latest user message from the conversation
- */
+  if (content && typeof content === "object" && !Array.isArray(content)) {
+    const flags = content as Record<string, unknown>
 function getSubmittedUserMessage(messages: OpenUIChatRequestMessage[]): OpenUIChatUserMessage | null {
   if (!Array.isArray(messages) || messages.length === 0) {
     return null
   }
-
-  const latest = messages[messages.length - 1]
-
-  if (!latest || typeof latest !== "object" || latest.role !== "user") {
+  const submittedMessage = messages[messages.length - 1]
+  if (!submittedMessage || submittedMessage.role !== "user") {
     return null
   }
+  return submittedMessage as OpenUIChatUserMessage
+}
 
-  return latest as OpenUIChatUserMessage
+function determineReportMode(message: OpenUIChatUserMessage): boolean {
+  const content = message.content
+  if (content && typeof content === "object" && !Array.isArray(content)) {
+    const flags = content as Record<string, unknown>
+    if (flags.reportMode === true) {
+      return true
+    }
+    if (typeof flags.intent === "string" && /^(report|charter)$/i.test(flags.intent)) {
+      return true
+    }
+  }
+  const haystack = extractMessageText(message.content).toLowerCase()
+  return /\b(charter|report)\b/i.test(haystack)
+}
+    if (flags.reportMode === true) {
+      return true
+    }
+
+    if (typeof flags.intent === "string" && /^(report|charter)$/i.test(flags.intent)) {
+      return true
+    }
+  }
+
+  const haystack = extractMessageText(message.content).toLowerCase()
+  return /\b(charter|report)\b/i.test(haystack)
+>>>>>>> adpa-project-charter
 }
