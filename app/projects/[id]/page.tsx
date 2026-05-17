@@ -1657,7 +1657,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
           fileSize: uploadForm.file.size
         })
 
-        // Use the upload endpoint that converts PDFs/DOCX to Markdown
+        // Use the backend Express API endpoint for document upload
         const formData = new FormData()
         formData.append('files', uploadForm.file as Blob)
         formData.append('projectId', projectId)
@@ -1670,7 +1670,8 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
         }
 
         try {
-          const response = await fetch(`${getApiBaseUrl()}/onboarding/upload`, {
+          // POST directly to backend Express API (not Next.js API route)
+          const response = await fetch(`${getApiBaseUrl()}/api/v1/documents/upload`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${token}`

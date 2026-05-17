@@ -1,4 +1,15 @@
+<<<<<<< HEAD
+/**
+ * OpenUI Chat Service
+ * Handles chat logic with intelligent component selection
+ */
+
 import type { AuthenticatedUser } from "@/lib/auth-utils"
+import { selectComponentType, type ComponentSelectionContext } from "@/lib/openui/componentSelector"
+import type { ComponentPayload, OpenUIChatJson } from "@/lib/openui/library"
+=======
+import type { AuthenticatedUser } from "@/lib/auth-utils"
+>>>>>>> adpa-project-charter
 
 import { pool } from "../../database/connection"
 import { NotFoundError, ValidationError } from "../../middleware/errorHandler"
@@ -7,10 +18,13 @@ import { logger } from "../../utils/logger"
 
 import {
   OpenUIChatRepository,
+<<<<<<< HEAD
+=======
   type OpenUIChatJson,
-  type OpenUIChatThread,
-  type OpenUIChatThreadSummary,
-} from "./OpenUIChatRepository"
+>>>>>>> adpa-project-charter
+import type { AuthenticatedUser } from "../../lib/auth-utils"
+import { selectComponentType, type ComponentSelectionContext } from "../../lib/openui/componentSelector"
+import type { ComponentPayload, OpenUIChatJson } from "../../lib/openui/library"
 
 export type OpenUIChatRequestMessage = {
   role: string
@@ -35,6 +49,13 @@ type ProjectContextFallback = {
   framework: string | null
 }
 
+<<<<<<< HEAD
+/**
+ * OpenUIChat Service
+ * Manages conversation threads and intelligent component selection
+ */
+=======
+>>>>>>> adpa-project-charter
 export class OpenUIChatService {
   constructor(
     private readonly repository: OpenUIChatRepository = new OpenUIChatRepository(),
@@ -42,22 +63,48 @@ export class OpenUIChatService {
       defaultProjectContextFallbackLoader
   ) {}
 
+<<<<<<< HEAD
+  /**
+   * List all threads for a user in a project
+   */
+=======
+>>>>>>> adpa-project-charter
   async listThreads(userId: string, projectId: string): Promise<OpenUIChatThreadSummary[]> {
     return this.repository.listThreads(userId, projectId)
   }
 
+<<<<<<< HEAD
+  /**
+   * Get a specific thread
+   */
+  async getThread(userId: string, projectId: string, threadId: string): Promise<OpenUIChatThread | null> {
+    const thread = await this.repository.getThread(threadId, userId, projectId)
+    return thread || null
+  }
+
+  /**
+   * Stream a reply with intelligent component selection
+   */
+=======
   async getThread(userId: string, projectId: string, threadId: string): Promise<OpenUIChatThread | null> {
     return this.repository.getThread(threadId, userId, projectId)
   }
 
+>>>>>>> adpa-project-charter
   async streamReply(input: StreamReplyInput): Promise<Response> {
     const latestText = extractMessageText(input.message.content)
     if (!latestText) {
       throw new ValidationError("message content is required")
     }
 
+<<<<<<< HEAD
+    const title = buildThreadTitle(latestText)
+
+    // Validate existing thread access
+=======
     const title = buildThreadTitle(latestText, input.reportMode)
 
+>>>>>>> adpa-project-charter
     if (input.threadId) {
       const existingThread = await this.repository.getThread(input.threadId, input.user.id, input.projectId)
       if (!existingThread) {
@@ -65,34 +112,59 @@ export class OpenUIChatService {
       }
     }
 
+<<<<<<< HEAD
+    // Persist user message
+    const userEntry = await this.repository.appendMessage({
+=======
     const userEntry = await this.appendMessageOrThrowNotFound({
+>>>>>>> adpa-project-charter
       threadId: input.threadId,
       userId: input.user.id,
       projectId: input.projectId,
       title,
+<<<<<<< HEAD
+      role: "user",
+      content: input.message.content,
+    })
+
+    // Assemble RAG context for structured insights
+=======
       role: input.message.role,
       content: input.message.content,
     })
 
+>>>>>>> adpa-project-charter
     let context = null
     if (latestText) {
       try {
         context = await aiSearchRAGService.assembleContext(
           {
             query: latestText,
+<<<<<<< HEAD
+            limit: 10,
+=======
             limit: input.reportMode ? 12 : 10,
+>>>>>>> adpa-project-charter
             offset: 0,
             sortBy: "relevance",
             includeRelationships: true,
             relationshipDepth: 2,
             includeKnowledgeBase: true,
+<<<<<<< HEAD
+            maxContextItems: 8,
+=======
             maxContextItems: input.reportMode ? 10 : 8,
+>>>>>>> adpa-project-charter
             projectIds: [input.projectId],
           },
           input.user.id
         )
       } catch (error) {
+<<<<<<< HEAD
+        logger.warn("[OPENUI-CHAT] Context assembly failed", {
+=======
         logger.warn("[OPENUI-CHAT] Assisted context assembly failed", {
+>>>>>>> adpa-project-charter
           projectId: input.projectId,
           userId: input.user.id,
           threadId: input.threadId,
@@ -101,22 +173,50 @@ export class OpenUIChatService {
       }
     }
 
+<<<<<<< HEAD
+    // Load fallback context if RAG returned nothing
+    const fallbackProjectContext =
+      !context || context.sources.length === 0
+        ? await this.loadProjectContextFallback(input.projectId)
+        : null
+
+    // Determine best component type for this context
+    const selectionContext: ComponentSelectionContext = {
+      prompt: latestText,
+      dataPoints: context?.sources.length || 0,
+      domainContext: fallbackProjectContext?.framework || undefined,
+    }
+
+    const componentType = selectComponentType(selectionContext)
+
+    // Build structured payload
+=======
     const fallbackProjectContext =
       input.reportMode && (!context || context.sources.length === 0)
         ? await this.loadProjectContextFallback(input.projectId)
         : null
 
+>>>>>>> adpa-project-charter
     const assistantPayload = buildAssistantPayload({
       projectId: input.projectId,
       threadId: userEntry?.thread.id ?? input.threadId ?? null,
       prompt: latestText,
+<<<<<<< HEAD
+      componentType,
+=======
       reportMode: input.reportMode,
+>>>>>>> adpa-project-charter
       contextPrompt: context?.contextPrompt,
       sourceCount: context?.sources.length ?? 0,
       fallbackProjectContext,
     })
 
+<<<<<<< HEAD
+    // Persist assistant message
+    await this.repository.appendMessage({
+=======
     await this.appendMessageOrThrowNotFound({
+>>>>>>> adpa-project-charter
       threadId: userEntry?.thread.id ?? input.threadId,
       userId: input.user.id,
       projectId: input.projectId,
@@ -134,6 +234,13 @@ export class OpenUIChatService {
       },
     })
   }
+<<<<<<< HEAD
+}
+
+/**
+ * Helper: Extract text from message content
+ */
+=======
 
   private async appendMessageOrThrowNotFound(
     input: Parameters<OpenUIChatRepository["appendMessage"]>[0]
@@ -150,11 +257,18 @@ export class OpenUIChatService {
   }
 }
 
+>>>>>>> adpa-project-charter
 export function extractMessageText(content: OpenUIChatJson): string {
   if (typeof content === "string") {
     return content.trim()
   }
 
+<<<<<<< HEAD
+  if (typeof content === "object" && content !== null && !Array.isArray(content)) {
+    const obj = content as Record<string, OpenUIChatJson>
+    if (obj.text && typeof obj.text === "string") {
+      return obj.text.trim()
+=======
   if (Array.isArray(content)) {
     return content
       .map((part) => extractMessageText(part))
@@ -172,12 +286,25 @@ export function extractMessageText(content: OpenUIChatJson): string {
     const maybeContent = (content as Record<string, OpenUIChatJson>).content
     if (typeof maybeContent === "string") {
       return maybeContent.trim()
+>>>>>>> adpa-project-charter
     }
   }
 
   return ""
 }
 
+<<<<<<< HEAD
+/**
+ * Helper: Build thread title from prompt
+ */
+function buildThreadTitle(prompt: string): string {
+  return prompt.split("\n")[0].slice(0, 100) || "Untitled"
+}
+
+/**
+ * Helper: Create SSE-formatted payload
+ */
+=======
 function buildThreadTitle(prompt: string, reportMode: boolean): string {
   const normalized = prompt.replace(/\s+/g, " ").trim()
   if (!normalized) {
@@ -229,10 +356,17 @@ function buildAssistantPayload(input: {
   }
 }
 
+>>>>>>> adpa-project-charter
 function createSsePayload(payload: OpenUIChatJson): string {
   return `event: message\ndata: ${JSON.stringify(payload)}\n\n`
 }
 
+<<<<<<< HEAD
+/**
+ * Helper: Build fallback synopsis when RAG context is unavailable
+ */
+=======
+>>>>>>> adpa-project-charter
 function buildFallbackSynopsis(
   fallbackProjectContext: ProjectContextFallback | null | undefined,
   prompt: string
@@ -248,6 +382,25 @@ function buildFallbackSynopsis(
     `Project: ${fallbackProjectContext.name}`,
     `Framework: ${framework}`,
     `Description: ${description}`,
+<<<<<<< HEAD
+    `Requested: ${prompt}`,
+  ].join("\n")
+}
+
+/**
+ * Helper: Load project context fallback
+ */
+async function defaultProjectContextFallbackLoader(projectId: string): Promise<ProjectContextFallback | null> {
+  try {
+    const result = await pool.query(
+      `SELECT name, description, framework FROM projects WHERE id = $1`,
+      [projectId]
+    )
+    if (result.rows.length === 0) {
+      return null
+    }
+    const row = result.rows[0]
+=======
     `Requested report: ${prompt}`,
   ].join("\n")
 }
@@ -272,16 +425,63 @@ async function defaultProjectContextFallbackLoader(projectId: string): Promise<P
       return null
     }
 
+>>>>>>> adpa-project-charter
     return {
       name: row.name,
       description: row.description,
       framework: row.framework,
     }
   } catch (error) {
+<<<<<<< HEAD
+    logger.error("[OPENUI-CHAT] Failed to load project context fallback", {
+=======
     logger.warn("[OPENUI-CHAT] Project context fallback lookup failed", {
+>>>>>>> adpa-project-charter
       projectId,
       error: error instanceof Error ? error.message : String(error),
     })
     return null
   }
 }
+<<<<<<< HEAD
+
+/**
+ * Helper: Build intelligent assistant payload
+ */
+function buildAssistantPayload(input: {
+  projectId: string
+  threadId: string | null
+  prompt: string
+  componentType: string
+  contextPrompt?: string
+  sourceCount: number
+  fallbackProjectContext?: ProjectContextFallback | null
+}): OpenUIChatJson {
+  const synopsis =
+    input.contextPrompt && !input.contextPrompt.startsWith("No internal ADPA search context was found")
+      ? input.contextPrompt.slice(0, 500)
+      : buildFallbackSynopsis(input.fallbackProjectContext, input.prompt)
+
+  // Build component-based payload
+  const payload: ComponentPayload = {
+    type: "component",
+    component: input.componentType as any,
+    props: {
+      title: `${input.componentType} view`,
+      projectId: input.projectId,
+      threadId: input.threadId,
+      prompt: input.prompt,
+      supportingEvidence: input.sourceCount,
+      synopsis,
+    },
+    metadata: {
+      supportingEvidence: input.sourceCount,
+      prompt: input.prompt,
+      synopsis,
+    },
+  }
+
+  return payload
+}
+=======
+>>>>>>> adpa-project-charter

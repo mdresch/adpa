@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server"
 import { getAuthenticatedUser, unauthorizedResponse } from "@/lib/auth-utils"
-import { connectDatabase, pool } from "@/server/src/database/connection"
-import { logger } from "@/server/src/utils/logger"
+
+// Removed: This route imported backend-only code and cannot run in the Next.js API context.
+// Please POST directly to the backend Express API for portfolio rankings.
 
 export async function GET(req: Request) {
   const user = await getAuthenticatedUser(req)
   if (!user) return unauthorizedResponse()
 
-  await connectDatabase()
+
+  // Removed: connectDatabase call as it is no longer needed.
 
   try {
     const { searchParams } = new URL(req.url)

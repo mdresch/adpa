@@ -158,6 +158,7 @@ import aiProvidersRoutes from "./routes/ai-providers"
 import aiModelsRoutes from "./routes/ai-models"
 import documentModuleRoutes from "./modules/documents/routes"
 import analysisModuleRoutes from "./modules/analysis/routes"
+import openuiChatModuleRoutes from "./modules/openuiChat/routes"
 import { registerRoutes } from "./routes/registry"
 
 const app = express()
@@ -272,6 +273,7 @@ if (analysisModuleRoutes && analysisModuleRoutes[0]) {
 }
 
 app.use("/api/document-generation", documentGenerationRoutes)
+if (openuiChatModuleRoutes && openuiChatModuleRoutes[0]) app.use("/api/v1/openui-chat", openuiChatModuleRoutes[0].router)
 app.use("/api/jobs", jobRoutes)
 app.use("/api/jobs/diagnostics", jobsDiagnosticsRoutes)
 app.use("/api/queue-stats", queueStatsRoutes)

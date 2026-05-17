@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { templateImprovementService } from '@/server/src/services/templateImprovementService';
-import { connectDatabase } from '@/server/src/database/connection';
-import { logger } from '@/server/src/utils/logger';
+
+// Removed: This route imported backend-only code and cannot run in the Next.js API context.
+// Please POST directly to the backend Express API for template analysis.
 
 export const runtime = 'nodejs'; // Node.js runtime required for pg and complex logic
 export const dynamic = 'force-dynamic';
