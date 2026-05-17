@@ -8,11 +8,11 @@ import { OpenUIChatController } from "./OpenUIChatController"
 const router = express.Router()
 
 // Chat — SSE streaming response
-router.post("/chat", authenticateToken, OpenUIChatController.chat)
+router.post("/chat", authenticateToken, OpenUIChatController.chat.bind(OpenUIChatController))
 
 // Thread history
-router.get("/threads", authenticateToken, OpenUIChatController.getThreads)
-router.get("/threads/:threadId", authenticateToken, OpenUIChatController.getThread)
+router.get("/threads", authenticateToken, OpenUIChatController.listThreads.bind(OpenUIChatController))
+router.get("/threads/:threadId", authenticateToken, OpenUIChatController.getThread.bind(OpenUIChatController))
 
 const openuiChatRoutes: RouteConfig[] = [
   {

@@ -64,33 +64,33 @@ const COMPONENT_KEYWORDS: Record<ComponentType, RegExp[]> = {
     /\b(step|steps|process|workflow|sequence|guide|instruction|how to|procedure)/i,
     /\b(progress|stage|phase|milestone|checkpoint)/i,
   ],
+  Carousel: [
+    /\b(carousel|gallery|slideshow|slide|rotate|image|album|portfolio)/i,
+    /\b(before and after|comparison|alternative|option|choose)/i,
+  ],
+  Alert: [
+    /\b(alert|warning|error|critical|caution|important|notice|attention|success)/i,
+    /\b(watch out|be aware|note|remember|info|information)/i,
+  ],
+  Steps: [
+    /\b(step|steps|process|workflow|sequence|guide|instruction|how to|procedure)/i,
+    /\b(progress|stage|phase|milestone|checkpoint)/i,
+  ],
   Breadcrumb: [
-    /\b(breadcrumb|navigation|path|location|hierarchy|navigate back|where am i)/i,
-    /\b(route|trail|origin|destination)/i,
+    /\b(breadcrumb|navigation|path|location|hierarchy|navigate back|where am i)/i,
+    /\b(route|trail|origin|destination)/i,
   ],
   Sidebar: [
-    /\b(sidebar|panel|filter|option|menu|navigation|search|refine|category)/i,
-    /\b(filter by|narrow down|organize)/i,
+    /\b(sidebar|panel|filter|option|menu|navigation|search|refine|category)/i,
+    /\b(filter by|narrow down|organize)/i,
   ],
   Comparison: [
-    /\b(compare|comparison|versus|vs|difference|similar|opposite|alternative|pros cons|advantage)/i,
-    /\b(which|better|choose between|side by side)/i,
-  ],  Calendar: [
-    /\b(calendar|schedule|availability|booking|appointment|event|when|deadline|due date|sprint|iteration)/i,
-    /\b(date|dates|scheduled|upcoming|this week|this month|milestone|recurring)/i,
+    /\b(compare|comparison|versus|vs|difference|similar|opposite|alternative|pros cons|advantage)/i,
+    /\b(which|better|choose between|side by side)/i,
   ],
-  Team: [
-    /\b(team|member|people|participant|who|assignee|contributor|staff|crew|roster|person|personnel)/i,
-    /\b(assigned to|owner|responsible|stakeholder|contact|directory|profile|avatar)/i,
-  ],  Text: [
-    /\b(explain|describe|tell|write|answer|question|help|summary|overview)/i,
+  Text: [
+    /\b(explain|describe|tell|write|answer|question|help|summary|overview)/i,
   ],
-}
-
-/**
- * Score how well a component type matches the context
- * Higher score = better match
- */
 function scoreComponent(componentType: ComponentType, context: ComponentSelectionContext): number {
   let score = 0
 
@@ -192,6 +192,61 @@ export function suggestFollowUps(componentType: ComponentType, prompt: string): 
       "Show dependencies",
       "Add priority indicators",
     ],
+    Accordion: [
+      "Expand all sections",
+      "Show summary view",
+      "Add search functionality",
+    ],
+    Carousel: [
+      "Show all items at once",
+      "Add navigation controls",
+      "Enable auto-play",
+    ],
+    Alert: [
+      "Show more details",
+      "Create an action plan",
+      "Set up notifications",
+    ],
+    Steps: [
+      "Show progress percentage",
+      "Add time estimates",
+      "Mark completed steps",
+    ],
+    Breadcrumb: [
+      "Show full hierarchy",
+      "Add quick navigation",
+      "Show related paths",
+    ],
+    Sidebar: [
+      "Apply all filters",
+      "Save filter preset",
+      "Reset filters",
+    ],
+    Comparison: [
+      "Add more options",
+      "Show detailed breakdown",
+      "Create recommendation",
+    ],
+    Calendar: [
+      "Show conflicts",
+      "Export to calendar",
+      "Set reminders",
+    ],
+    Team: [
+      "Show availability",
+      "Assign tasks",
+      "View workload",
+    ],
+    Bullets: [
+      "Convert to checklist",
+      "Expand with details",
+      "Prioritize items",
+    ],
+    Tabs: [
+      "Merge all tabs",
+      "Export all sections",
+      "Add new tab",
+    ],
     Text: [
       "Summarize into bullets",
       "Create a visual timeline",
@@ -199,6 +254,5 @@ export function suggestFollowUps(componentType: ComponentType, prompt: string): 
       "Generate a table",
     ],
   }
-
-  return suggestions[componentType].slice(0, 3)
+  return suggestions[componentType]?.slice(0, 3) || []
 }

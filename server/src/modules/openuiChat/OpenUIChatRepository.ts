@@ -118,16 +118,15 @@ export class OpenUIChatRepository {
     role: string
     content: OpenUIChatJson
   }): Promise<{ thread: OpenUIChatThread; message: OpenUIChatMessage }> {
-    const c = pool
-
+    const client = await pool.connect()
     try {
-      await c.query("BEGIN")
+      await client.query("BEGIN")
 
       let threadId = input.threadId
 
       if (!threadId) {
         // Create new thread
-        const threadResult = await c.query(
+        const threadResult = await client.query(
           `
           INSERT INTO openui_chat_threads (user_id, project_id, title)
           VALUES ($1, $2, $3)
@@ -138,14 +137,14 @@ export class OpenUIChatRepository {
         threadId = threadResult.rows[0].id
       } else {
         // Update thread timestamp
-        await c.query(
+        await client.query(
           `UPDATE openui_chat_threads SET updated_at = NOW() WHERE id = $1`,
           [threadId]
         )
       }
 
       // Append message
-      const messageResult = await c.query(
+      const messageResult = await client.query(
         `
         INSERT INTO openui_chat_messages (thread_id, user_id, role, content)
         VALUES ($1, $2, $3, $4)
@@ -157,7 +156,7 @@ export class OpenUIChatRepository {
       const messageRow = messageResult.rows[0]
 
       // Get updated thread
-      const threadResult = await c.query(
+      const threadResult = await client.query(
         `
         SELECT id, user_id, project_id, title, created_at, updated_at
         FROM openui_chat_threads
@@ -166,7 +165,7 @@ export class OpenUIChatRepository {
         [threadId]
       )
 
-      await c.query("COMMIT")
+      await client.query("COMMIT")
 
       const threadRow = threadResult.rows[0]
       return {
@@ -188,8 +187,10 @@ export class OpenUIChatRepository {
         },
       }
     } catch (error) {
-      await c.query("ROLLBACK")
+      await client.query("ROLLBACK")
       throw error
+    } finally {
+      client.release()
     }
   }
 }

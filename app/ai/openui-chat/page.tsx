@@ -45,8 +45,8 @@ export default function OpenUIChatPage() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
 
-  const sendMessage = useCallback(async () => {
-    const text = input.trim()
+  const sendMessage = useCallback(async (overrideText?: string) => {
+    const text = (overrideText ?? input).trim()
     if (!text || streaming) return
 
     const userMsg: UserMessage = { id: crypto.randomUUID(), role: "user", text }
@@ -68,7 +68,7 @@ export default function OpenUIChatPage() {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
-          projectId: null,
+          projectId: user?.defaultProjectId || "default",
           threadId,
           messages: [...history, { role: "user", content: text }],
         }),
@@ -175,7 +175,10 @@ export default function OpenUIChatPage() {
             {/* Messages */}
             <ScrollArea className="flex-1 px-4 py-4 md:px-8">
               {messages.length === 0 ? (
-                <EmptyState onSend={(text) => { setInput(text); setTimeout(sendMessage, 0) }} />
+                <EmptyState onSend={(text) => {
+                  setInput(text)
+                  setTimeout(() => sendMessage(text), 0)
+                }} />
               ) : (
                 <div className="mx-auto max-w-4xl space-y-6">
                   {messages.map((msg) =>
