@@ -27,6 +27,7 @@ export interface AssistedSearchRequest extends GKGEnrichedSearchRequest {
   systemPrompt?: string
   includeStale?: boolean
   maxPromptTokens?: number
+  projectIds?: string[]
 }
 
 export interface AssistedSearchSource {
@@ -109,6 +110,26 @@ class AISearchRAGService {
       'template',
       'user'
     ]
+  }
+
+  private filterResultsToProjects(results: SearchResult[], projectIds?: string[]): SearchResult[] {
+    if (!projectIds || projectIds.length === 0) {
+      return results
+    }
+
+    const allowedProjectIds = new Set(projectIds)
+
+    return results.filter((result) => {
+      if (result.project_id) {
+        return allowedProjectIds.has(result.project_id)
+      }
+
+      if (result.type === 'project') {
+        return allowedProjectIds.has(result.id)
+      }
+
+      return false
+    })
   }
 
   private async runBaseSearch(
@@ -455,6 +476,8 @@ class AISearchRAGService {
     userId: string
   ): Promise<ContextAssemblyResponse> {
     const startedAt = Date.now()
+    const limit = Math.min(request.limit || 20, 50)
+    const offset = request.offset || 0
     const baseRequest: UniversalSearchRequest = {
       query: request.query,
       types: request.types,
@@ -462,15 +485,18 @@ class AISearchRAGService {
       authors: request.authors,
       tags: request.tags,
       dateRange: request.dateRange,
-      limit: Math.min(request.limit || 20, 50),
-      offset: request.offset || 0,
+      limit: Math.min(limit + offset, 50),
+      offset: 0,
       sortBy: request.sortBy || 'relevance',
       useSemanticSearch: true,
       searchMode: 'hybrid'
     }
 
     const retrievalStartedAt = Date.now()
-    const rawResults = await this.runBaseSearch(baseRequest, userId)
+    const rawResults = this.filterResultsToProjects(
+      await this.runBaseSearch(baseRequest, userId),
+      request.projectIds
+    )
     const retrievalLatencyMs = Date.now() - retrievalStartedAt
 
     const enrichmentStartedAt = Date.now()
@@ -493,15 +519,22 @@ class AISearchRAGService {
     )
 
     const sorted = this.sortResults(scoredResults, request.sortBy || 'relevance')
-    const limit = request.limit || 20
-    const offset = request.offset || 0
     const paginated = sorted.slice(offset, offset + limit)
     const maxContextItems = Math.min(request.maxContextItems || DEFAULT_MAX_CONTEXT_ITEMS, MAX_CONTEXT_ITEMS)
     const maxPromptTokens = Math.min(request.maxPromptTokens || DEFAULT_MAX_PROMPT_TOKENS, MAX_PROMPT_TOKENS)
 
     const promptData = this.buildContextPrompt(paginated, request.query, maxContextItems, maxPromptTokens)
     const sources = promptData.selectedResults.map(result => this.toSource(result))
-    const followUpSuggestions = await this.buildFollowUpSuggestions(paginated, request.query)
+    let followUpSuggestions: string[] = []
+    try {
+      followUpSuggestions = await this.buildFollowUpSuggestions(paginated, request.query)
+    } catch (error: any) {
+      logger.warn('[AI-SEARCH-RAG] Follow-up suggestion generation failed', {
+        query: request.query,
+        userId,
+        error: error?.message || String(error)
+      })
+    }
     const totalLatencyMs = Date.now() - startedAt
 
     const metrics: ContextAssemblyMetrics = {
