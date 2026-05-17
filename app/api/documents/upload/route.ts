@@ -4,11 +4,9 @@
  * Handles multipart document uploads and initiates parsing pipeline
  */
 
+
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedUser, unauthorizedResponse } from '@/lib/auth-utils';
-import { documentParserService } from '@/server/src/services/documentParserService';
-import { documentIngestionRepository } from '@/server/src/services/documentIngestionRepository';
-import { logger } from '@/server/src/utils/logger';
 import { toast } from '@/lib/notify';
 
 interface UploadResponse {
@@ -32,6 +30,11 @@ const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 const MAX_FILES_PER_REQUEST = 5;
 
 export async function POST(req: NextRequest): Promise<NextResponse<UploadResponse>> {
+  // Dynamically import backend dependencies at runtime
+  const { documentParserService } = await import('@/server/src/services/documentParserService');
+  const { documentIngestionRepository } = await import('@/server/src/services/documentIngestionRepository');
+  const { logger } = await import('@/server/src/utils/logger');
+
   try {
     // Authenticate user
     const user = await getAuthenticatedUser(req);
