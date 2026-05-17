@@ -1,6 +1,9 @@
     Carousel: [
       /\b(carousel|gallery|slideshow|slide|rotate|image|album|portfolio)/i,
       /\b(before and after|comparison|alternative|option|choose)/i,
+    Carousel: [
+      /\b(carousel|gallery|slideshow|slide|rotate|image|album|portfolio)/i,
+      /\b(before and after|comparison|alternative|option|choose)/i,
     ],
     Alert: [
       /\b(alert|warning|error|critical|caution|important|notice|attention|success)/i,
@@ -33,9 +36,6 @@
     Text: [
       /\b(explain|describe|tell|write|answer|question|help|summary|overview)/i,
     ],
-    /\b(timeline|schedule|gantt|sequence|order|when|dates|deadline|milestone|phase)\b/i,
-    /\b(roadmap|plan|progression|workflow|process)\b/i,
-  ],
   Kanban: [
     /\b(kanban|board|column|status|stage|workflow|pipeline|progress)\b/i,
     /\b(todo|doing|done|backlog|queue)\b/i,

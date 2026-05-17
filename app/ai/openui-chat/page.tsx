@@ -98,6 +98,7 @@ export default function OpenUIChatPage() {
             try {
               const json = JSON.parse(line.slice(6))
               if (json.threadId) newThreadId = json.threadId
+              else if (json.props?.threadId) newThreadId = json.props.threadId
               if (json.component) {
                 assistantPayload = json as ComponentPayload
               }
