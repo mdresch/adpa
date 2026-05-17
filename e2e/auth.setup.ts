@@ -13,6 +13,20 @@ const authFile = path.join(__dirname, '../.auth/user.json');
 setup('authenticate', async ({ page }) => {
   // Navigate to login page
   await page.goto('/auth/login');
+
+  const demoLoginButton = page.locator('button', { hasText: 'Demo Login' })
+  const hasDemoLogin = await demoLoginButton.waitFor({ state: 'visible', timeout: 5000 }).then(
+    () => true,
+    () => false
+  )
+
+  if (hasDemoLogin) {
+    await demoLoginButton.click()
+    await page.waitForURL(/\/$/, { timeout: 20000 })
+    console.log('✅ Demo login successful! Saving authentication state...')
+    await page.context().storageState({ path: authFile })
+    return
+  }
   
   // Get credentials from environment variables (fallback to defaults for local dev)
   const email = process.env.TEST_USER_EMAIL || 'admin@adpa.com';

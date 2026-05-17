@@ -19,7 +19,7 @@ export const testConfig = {
   // 1. Login to http://localhost:3001
   // 2. Navigate to a project
   // 3. Copy the ID from the URL: /projects/{THIS-IS-THE-ID}
-  testProjectId: process.env.TEST_PROJECT_ID || 'test-project-123',
+  testProjectId: process.env.TEST_PROJECT_ID || '45083436-7e90-4ecf-aa42-e4a73c4b64b7',
   
   // Base URL
   baseUrl: process.env.BASE_URL || 'http://localhost:3001',
