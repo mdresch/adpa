@@ -55,6 +55,9 @@ interface AuthProviderProps {
   children: ReactNode
 }
 
+const FIREBASE_AUTH_NOT_CONFIGURED_MESSAGE =
+  "Firebase auth is not configured in this local environment. Use Demo Login or set NEXT_PUBLIC_FIREBASE_* variables."
+
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null)
   const [firebaseSession, setFirebaseSession] = useState<FirebaseSessionProfile | null>(null)
@@ -74,8 +77,36 @@ export function AuthProvider({ children }: AuthProviderProps) {
     })
   }
 
-  // True when ADPA profile is loaded, or Firebase session + API token exist (profile may still be loading / retrying).
-  const isAuthenticated = !!user || (!loading && !!token && !!firebaseSession)
+  // True when ADPA profile is loaded, or a valid API token is present while profile restoration is in flight.
+  const isAuthenticated = !!user || (!loading && !!token)
+
+  const restoreStoredSession = useCallback(async () => {
+    if (typeof window === 'undefined') {
+      return false
+    }
+
+    const storedToken = localStorage.getItem('auth_token')
+    if (!storedToken || !isValidTokenFormat(storedToken)) {
+      return false
+    }
+
+    try {
+      apiClient.setToken(storedToken)
+      setToken(storedToken)
+      setCookie('auth_token', storedToken, 1)
+      const currentUser = await apiClient.getCurrentUser()
+      setUser(currentUser)
+      apiClient.connectWebSocket()
+      return true
+    } catch (error) {
+      console.warn('[Auth] Stored token restoration failed, clearing local auth state.')
+      apiClient.clearToken()
+      removeCookie('auth_token')
+      setToken(null)
+      setUser(null)
+      return false
+    }
+  }, [])
 
   // Align with server `requirePermission`: admins implicitly have all permissions (UI only; API still enforces).
   const hasPermission = useCallback((permission: string): boolean => {
@@ -106,7 +137,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     // Safety check for build-time or missing Firebase config
     if (!auth || !auth.app) {
       console.warn("🔐 AuthProvider: Skipping registration (invalid Auth object).");
-      setLoading(false);
+      void restoreStoredSession().finally(() => setLoading(false))
       return;
     }
 
@@ -157,12 +188,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
           console.error("Failed to get Firebase ID token:", tokenError)
         }
       } else {
-        // User is signed out
-        setUser(null)
         syncFirebaseSessionProfile(null)
-        setToken(null)
-        apiClient.clearToken()
-        removeCookie('auth_token')
+
+        const restored = await restoreStoredSession()
+        if (!restored) {
+          setUser(null)
+          setToken(null)
+          apiClient.clearToken()
+          removeCookie('auth_token')
+        }
       }
       
       setLoading(false)
@@ -170,7 +204,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     // Cleanup subscription
     return () => unsubscribe()
-  }, [])
+  }, [restoreStoredSession])
 
   // If Firebase + API token exist but `/auth/me` failed transiently, retry so role/permissions populate (sidebar, analytics).
   useEffect(() => {
@@ -225,6 +259,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const login = async (email: string, password: string, redirect?: string) => {
     try {
       setLoading(true)
+
+      if (!auth || !auth.app) {
+        throw new Error(FIREBASE_AUTH_NOT_CONFIGURED_MESSAGE)
+      }
       
       // 1. Sign in with Firebase
       const userCredential = await signInWithEmailAndPassword(auth, email, password)
@@ -263,6 +301,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const loginWithGoogle = async (redirect?: string) => {
     try {
       setLoading(true)
+
+      if (!auth || !auth.app) {
+        throw new Error(FIREBASE_AUTH_NOT_CONFIGURED_MESSAGE)
+      }
+
       const provider = new GoogleAuthProvider()
       
       // 1. Sign in with Google Popup
@@ -295,6 +338,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const register = async (userData: { email: string; password: string; name: string; role?: string; companyName?: string }, options?: { redirect?: string | false }) => {
     try {
       setLoading(true)
+
+      if (!auth || !auth.app) {
+        throw new Error(FIREBASE_AUTH_NOT_CONFIGURED_MESSAGE)
+      }
       
       // 1. Create user in Firebase
       const userCredential = await createUserWithEmailAndPassword(auth, userData.email, userData.password)
@@ -336,8 +383,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // Logout function utilizing Firebase
   const logout = async () => {
     try {
-      // Sign out from Firebase
-      await signOut(auth)
+      if (auth?.app) {
+        await signOut(auth)
+      }
       
       // Local state cleanup (also handled by onAuthStateChanged, but good to be explicit)
       setUser(null)
@@ -379,8 +427,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       setLoading(true)
       const { user: loggedInUser, token } = await apiClient.demoLogin()
+      apiClient.setToken(token)
       setUser(loggedInUser)
       setToken(token)
+      setCookie('auth_token', token, 1)
       apiClient.connectWebSocket()
       toast.success("Demo login successful")
       router.push("/")
