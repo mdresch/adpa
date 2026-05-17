@@ -1,63 +1,7 @@
-/**
- * Document Upload API
- * Endpoint: POST /api/documents/upload
- * Handles multipart document uploads and initiates parsing pipeline
- */
+// This API route was removed because it imported backend-only dependencies.
+// Please POST document uploads directly to the backend Express API (e.g., /api/v1/documents/upload).
 
-
-import { NextRequest, NextResponse } from 'next/server';
-import { getAuthenticatedUser, unauthorizedResponse } from '@/lib/auth-utils';
-import { toast } from '@/lib/notify';
-
-interface UploadResponse {
-  success: boolean;
-  document?: {
-    id: string;
-    filename: string;
-    format: string;
-    parsing_confidence: number;
-    sections_count: number;
-    word_count: number;
-    character_count: number;
-  };
-  error?: string;
-  validation_errors?: string[];
-}
-
-// Configuration
-const SUPPORTED_FORMATS = ['pdf', 'docx', 'xlsx', 'txt'];
-const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
-const MAX_FILES_PER_REQUEST = 5;
-
-export async function POST(req: NextRequest): Promise<NextResponse<UploadResponse>> {
-  // Dynamically import backend dependencies at runtime
-  const { documentParserService } = await import('@/server/src/services/documentParserService');
-  const { documentIngestionRepository } = await import('@/server/src/services/documentIngestionRepository');
-  const { logger } = await import('@/server/src/utils/logger');
-
-  try {
-    // Authenticate user
-    const user = await getAuthenticatedUser(req);
-    if (!user) {
-      return unauthorizedResponse();
-    }
-
-    // Get project ID from query parameters
-    const { searchParams } = new URL(req.url);
-    const projectId = searchParams.get('projectId');
-
-    if (!projectId) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Project ID is required',
-        },
-        { status: 400 }
-      );
-    }
-
-    // Parse multipart form data
-    const formData = await req.formData();
+// See README or integration notes for correct upload endpoint.
     const files = formData.getAll('files') as File[];
 
     if (files.length === 0) {
