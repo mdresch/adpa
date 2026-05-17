@@ -28,6 +28,8 @@ export interface User {
   updated_at: string
   metadata?: Record<string, any> | string // JSONB column, can be object or JSON string
   company_id?: string // Optional company association for multi-tenancy
+  /** Default project for chat and context features */
+  defaultProjectId?: string
 }
 
 export interface Project {
