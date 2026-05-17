@@ -100,7 +100,6 @@ export function isTextPayload(payload: OpenUIAssistantPayload): payload is TextP
   return typeof payload === "object" && payload !== null && !Array.isArray(payload)
     && "type" in payload && payload.type === "text"
 }
-    && "type" in payload && payload.type === "text"
 }
 
 // Extract readable text from any payload
