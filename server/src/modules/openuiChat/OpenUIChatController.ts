@@ -1,10 +1,10 @@
-import type { AuthenticatedUser } from "@/lib/auth-utils"
-import type { Request, Response } from "express"
+<<<<<<< HEAD
+/**
+ * OpenUI Chat Controller
+ * HTTP endpoints for chat functionality
+ */
 
-import { pool } from "../../database/connection"
-import { userHasProjectAccess } from "../../lib/project-access"
-import { pipeWebResponseToExpress } from "../../utils/stream"
-
+=======
 import {
   OpenUIChatService,
   extractMessageText,
@@ -15,6 +15,13 @@ import {
 export class OpenUIChatController {
   static service = new OpenUIChatService()
 
+<<<<<<< HEAD
+  /**
+   * POST /api/v1/openui-chat/chat
+   * Send a message and get an intelligent component-based response
+   */
+  static async chat(req: Request, res: Response) {
+    const user = (req as any).user as AuthenticatedUser
   static async chat(req: Request, res: Response) {
     const user = req.user as AuthenticatedUser | undefined
     if (!user?.id) {
@@ -34,20 +41,20 @@ export class OpenUIChatController {
     if (!Array.isArray(messages) || messages.length === 0) {
       return res.status(400).json({ error: "messages are required" })
     }
-
-    const submittedMessage = getSubmittedUserMessage(messages)
-    if (!submittedMessage) {
-      return res.status(400).json({ error: "The latest message must be a user message" })
-    }
-
-    if (!extractMessageText(submittedMessage.content)) {
+    if (!messageText) {
       return res.status(400).json({ error: "message content is required" })
     }
 
-    const hasAccess = await userHasProjectAccess(pool, user, projectId)
-    if (!hasAccess) {
-      return res.status(403).json({ error: "Access denied" })
+    // Check access
+=======
+    if (!extractMessageText(submittedMessage.content)) {
+      return res.status(400).json({ error: "message content is required" })
     }
+        user,
+        projectId,
+        threadId,
+        message: submittedMessage,
+      })
 
     const reportMode = determineReportMode(submittedMessage)
     const streamResponse = await this.service.streamReply({
@@ -71,12 +78,12 @@ export class OpenUIChatController {
     if (!projectId) {
       return res.status(400).json({ error: "projectId is required" })
     }
-
-    const hasAccess = await userHasProjectAccess(pool, user, projectId)
-    if (!hasAccess) {
-      return res.status(403).json({ error: "Access denied" })
+    } catch (error) {
+      return res.status(500).json({
+        error: error instanceof Error ? error.message : "Failed to list threads",
+      })
     }
-
+  }
     const threads = await this.service.listThreads(user.id, projectId)
     return res.json({ threads })
   }
@@ -97,12 +104,12 @@ export class OpenUIChatController {
     if (!threadId) {
       return res.status(400).json({ error: "threadId is required" })
     }
-
-    const hasAccess = await userHasProjectAccess(pool, user, projectId)
-    if (!hasAccess) {
-      return res.status(403).json({ error: "Access denied" })
-    }
-
+      }
+      return res.json(thread)
+    } catch (error) {
+      return res.status(500).json({
+        error: error instanceof Error ? error.message : "Failed to get thread",
+      })
     const thread = await this.service.getThread(user.id, projectId, threadId)
     if (!thread) {
       return res.status(404).json({ error: "Thread not found" })
@@ -111,13 +118,16 @@ export class OpenUIChatController {
     return res.json({ thread })
   }
 }
-
+  if (content && typeof content === "object" && !Array.isArray(content)) {
+    const flags = content as Record<string, unknown>
 function getSubmittedUserMessage(messages: OpenUIChatRequestMessage[]): OpenUIChatUserMessage | null {
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return null
+  }
   const submittedMessage = messages[messages.length - 1]
   if (!submittedMessage || submittedMessage.role !== "user") {
     return null
   }
-
   return submittedMessage as OpenUIChatUserMessage
 }
 
@@ -125,6 +135,16 @@ function determineReportMode(message: OpenUIChatUserMessage): boolean {
   const content = message.content
   if (content && typeof content === "object" && !Array.isArray(content)) {
     const flags = content as Record<string, unknown>
+    if (flags.reportMode === true) {
+      return true
+    }
+    if (typeof flags.intent === "string" && /^(report|charter)$/i.test(flags.intent)) {
+      return true
+    }
+  }
+  const haystack = extractMessageText(message.content).toLowerCase()
+  return /\b(charter|report)\b/i.test(haystack)
+}
     if (flags.reportMode === true) {
       return true
     }
@@ -136,4 +156,5 @@ function determineReportMode(message: OpenUIChatUserMessage): boolean {
 
   const haystack = extractMessageText(message.content).toLowerCase()
   return /\b(charter|report)\b/i.test(haystack)
+>>>>>>> adpa-project-charter
 }

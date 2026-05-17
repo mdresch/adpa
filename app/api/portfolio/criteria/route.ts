@@ -1,15 +1,8 @@
+
 import { NextResponse } from "next/server"
 import { getAuthenticatedUser, forbiddenResponse, unauthorizedResponse } from "@/lib/auth-utils"
-import { connectDatabase, pool } from "@/server/src/database/connection"
-import { logger } from "@/server/src/utils/logger"
-
-type CreateCriterionBody = {
-  name?: string
-  description?: string | null
-  weight?: number
-  min_score?: number
-  max_score?: number
-}
+// Removed: This route imported backend-only code and cannot run in the Next.js API context.
+// Please POST directly to the backend Express API for portfolio criteria.
 
 export async function GET(req: Request) {
   const user = await getAuthenticatedUser(req)

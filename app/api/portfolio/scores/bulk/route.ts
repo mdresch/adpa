@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server"
 import { getAuthenticatedUser, unauthorizedResponse } from "@/lib/auth-utils"
-import { connectDatabase, pool } from "@/server/src/database/connection"
-import { refreshPortfolioRankings } from "@/server/src/database/refresh-portfolio-rankings"
-import { logger } from "@/server/src/utils/logger"
+// Removed: This route imported backend-only code and cannot run in the Next.js API context.
+// Please POST directly to the backend Express API for bulk portfolio scores.
 
 type BulkScoreItem = {
   criterion_id: string

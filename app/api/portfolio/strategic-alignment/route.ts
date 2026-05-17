@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server"
 import { getAuthenticatedUser, forbiddenResponse, unauthorizedResponse } from "@/lib/auth-utils"
-import { connectDatabase, pool } from "@/server/src/database/connection"
-import { userHasProjectAccess } from "@/server/src/lib/project-access"
-import { logger } from "@/server/src/utils/logger"
-import { validate as isUuid } from "uuid"
+// Removed: This route imported backend-only code and cannot run in the Next.js API context.
+// Please POST directly to the backend Express API for strategic alignment.
 
 const CONTRIBUTION_LEVELS = new Set(["critical", "high", "medium", "low"])
 
