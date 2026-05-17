@@ -1,30 +1,12 @@
-<<<<<<< HEAD
-/**
- * OpenUI Chat Service
- * Handles chat logic with intelligent component selection
- */
 
 import type { AuthenticatedUser } from "@/lib/auth-utils"
 import { selectComponentType, type ComponentSelectionContext } from "@/lib/openui/componentSelector"
 import type { ComponentPayload, OpenUIChatJson } from "@/lib/openui/library"
-=======
-import type { AuthenticatedUser } from "@/lib/auth-utils"
->>>>>>> adpa-project-charter
-
 import { pool } from "../../database/connection"
 import { NotFoundError, ValidationError } from "../../middleware/errorHandler"
 import aiSearchRAGService from "../../services/aiSearchRAGService"
 import { logger } from "../../utils/logger"
-
-import {
-  OpenUIChatRepository,
-<<<<<<< HEAD
-=======
-  type OpenUIChatJson,
->>>>>>> adpa-project-charter
-import type { AuthenticatedUser } from "../../lib/auth-utils"
-import { selectComponentType, type ComponentSelectionContext } from "../../lib/openui/componentSelector"
-import type { ComponentPayload, OpenUIChatJson } from "../../lib/openui/library"
+import { OpenUIChatRepository, type OpenUIChatJson } from "./OpenUIChatRepository"
 
 export type OpenUIChatRequestMessage = {
   role: string
@@ -49,62 +31,52 @@ type ProjectContextFallback = {
   framework: string | null
 }
 
-<<<<<<< HEAD
-/**
- * OpenUIChat Service
- * Manages conversation threads and intelligent component selection
- */
-=======
->>>>>>> adpa-project-charter
-export class OpenUIChatService {
+export type OpenUIChatRequestMessage = {
+  role: string
+  content: OpenUIChatJson
+}
+
+export type OpenUIChatUserMessage = OpenUIChatRequestMessage & {
+  role: "user"
+}
+
+export type StreamReplyInput = {
+  user: AuthenticatedUser
+  projectId: string
+  threadId?: string
+  message: OpenUIChatUserMessage
+  reportMode: boolean
+}
+
+type ProjectContextFallback = {
+  name: string
+  description: string | null
+  framework: string | null
+}
+
+//
   constructor(
     private readonly repository: OpenUIChatRepository = new OpenUIChatRepository(),
     private readonly loadProjectContextFallback: (projectId: string) => Promise<ProjectContextFallback | null> =
       defaultProjectContextFallbackLoader
   ) {}
 
-<<<<<<< HEAD
-  /**
-   * List all threads for a user in a project
-   */
-=======
->>>>>>> adpa-project-charter
   async listThreads(userId: string, projectId: string): Promise<OpenUIChatThreadSummary[]> {
     return this.repository.listThreads(userId, projectId)
   }
 
-<<<<<<< HEAD
-  /**
-   * Get a specific thread
-   */
-  async getThread(userId: string, projectId: string, threadId: string): Promise<OpenUIChatThread | null> {
-    const thread = await this.repository.getThread(threadId, userId, projectId)
-    return thread || null
-  }
-
-  /**
-   * Stream a reply with intelligent component selection
-   */
-=======
   async getThread(userId: string, projectId: string, threadId: string): Promise<OpenUIChatThread | null> {
     return this.repository.getThread(threadId, userId, projectId)
   }
 
->>>>>>> adpa-project-charter
   async streamReply(input: StreamReplyInput): Promise<Response> {
     const latestText = extractMessageText(input.message.content)
     if (!latestText) {
       throw new ValidationError("message content is required")
     }
 
-<<<<<<< HEAD
-    const title = buildThreadTitle(latestText)
-
-    // Validate existing thread access
-=======
     const title = buildThreadTitle(latestText, input.reportMode)
 
->>>>>>> adpa-project-charter
     if (input.threadId) {
       const existingThread = await this.repository.getThread(input.threadId, input.user.id, input.projectId)
       if (!existingThread) {
@@ -112,59 +84,34 @@ export class OpenUIChatService {
       }
     }
 
-<<<<<<< HEAD
-    // Persist user message
-    const userEntry = await this.repository.appendMessage({
-=======
     const userEntry = await this.appendMessageOrThrowNotFound({
->>>>>>> adpa-project-charter
       threadId: input.threadId,
       userId: input.user.id,
       projectId: input.projectId,
       title,
-<<<<<<< HEAD
-      role: "user",
-      content: input.message.content,
-    })
-
-    // Assemble RAG context for structured insights
-=======
       role: input.message.role,
       content: input.message.content,
     })
 
->>>>>>> adpa-project-charter
     let context = null
     if (latestText) {
       try {
         context = await aiSearchRAGService.assembleContext(
           {
             query: latestText,
-<<<<<<< HEAD
-            limit: 10,
-=======
             limit: input.reportMode ? 12 : 10,
->>>>>>> adpa-project-charter
             offset: 0,
             sortBy: "relevance",
             includeRelationships: true,
             relationshipDepth: 2,
             includeKnowledgeBase: true,
-<<<<<<< HEAD
-            maxContextItems: 8,
-=======
             maxContextItems: input.reportMode ? 10 : 8,
->>>>>>> adpa-project-charter
             projectIds: [input.projectId],
           },
           input.user.id
         )
       } catch (error) {
-<<<<<<< HEAD
-        logger.warn("[OPENUI-CHAT] Context assembly failed", {
-=======
         logger.warn("[OPENUI-CHAT] Assisted context assembly failed", {
->>>>>>> adpa-project-charter
           projectId: input.projectId,
           userId: input.user.id,
           threadId: input.threadId,
@@ -173,7 +120,6 @@ export class OpenUIChatService {
       }
     }
 
-<<<<<<< HEAD
     // Load fallback context if RAG returned nothing
     const fallbackProjectContext =
       !context || context.sources.length === 0
