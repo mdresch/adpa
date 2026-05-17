@@ -96,10 +96,10 @@ export function isComponentPayload(payload: OpenUIAssistantPayload): payload is 
 }
 
 // Helper to check if payload is text
+
 export function isTextPayload(payload: OpenUIAssistantPayload): payload is TextPayload {
   return typeof payload === "object" && payload !== null && !Array.isArray(payload)
     && "type" in payload && payload.type === "text"
-}
 }
 
 // Extract readable text from any payload
