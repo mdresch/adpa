@@ -147,4 +147,119 @@ describe('aiSearchRAGService', () => {
     expect(response.contextPrompt).toContain('Fresh Project')
     expect(response.contextPrompt).not.toContain('Stale Project')
   })
+
+  it('limits assembled context to the selected project scope when projectIds are provided', async () => {
+    const allowedProject = buildResult({
+      id: 'project-1',
+      type: 'project',
+      title: 'Allowed Project',
+      description: 'Allowed project description',
+      content_preview: 'Allowed preview',
+      relevance_score: 0.9
+    })
+
+    const allowedDocument = buildResult({
+      id: 'document-1',
+      type: 'document',
+      title: 'Allowed Document',
+      description: 'Allowed document description',
+      content_preview: 'Allowed document preview',
+      project_id: 'project-1',
+      project_name: 'Allowed Project',
+      relevance_score: 0.85
+    })
+
+    const foreignDocument = buildResult({
+      id: 'document-2',
+      type: 'document',
+      title: 'Foreign Document',
+      description: 'Foreign document description',
+      content_preview: 'Foreign document preview',
+      project_id: 'project-2',
+      project_name: 'Foreign Project',
+      relevance_score: 0.99
+    })
+
+    const userResult = buildResult({
+      id: 'user-2',
+      type: 'user',
+      title: 'Other User',
+      description: 'This should be excluded under project scoping.',
+      content_preview: 'Other user preview',
+      relevance_score: 0.95
+    })
+
+    mockedSearchProjects.mockResolvedValue([allowedProject])
+    mockedSearchDocuments.mockResolvedValue([allowedDocument, foreignDocument])
+    mockedSearchUsers.mockResolvedValue([userResult])
+
+    const response = await aiSearchRAGService.assembleContext({
+      query: 'project evidence',
+      projectIds: ['project-1'],
+      includeStale: true,
+      limit: 10,
+      maxContextItems: 5
+    }, 'user-1')
+
+    expect(response.results.map(result => result.id)).toEqual(['project-1', 'document-1'])
+    expect(response.sources.map(source => source.id)).toEqual(['project-1', 'document-1'])
+    expect(response.contextPrompt).toContain('Allowed Project')
+    expect(response.contextPrompt).toContain('Allowed Document')
+    expect(response.contextPrompt).not.toContain('Foreign Document')
+    expect(response.contextPrompt).not.toContain('Other User')
+  })
+
+  it('applies pagination only once after scoring and sorting', async () => {
+    const allResults = [
+      buildResult({ id: 'project-a', title: 'Alpha Project' }),
+      buildResult({ id: 'project-b', title: 'Beta Project' }),
+      buildResult({ id: 'project-c', title: 'Gamma Project' }),
+      buildResult({ id: 'project-d', title: 'Omega Project' })
+    ]
+
+    mockedSearchProjects.mockImplementation(async request => {
+      const start = request.offset || 0
+      const end = start + (request.limit || allResults.length)
+      return allResults.slice(start, end)
+    })
+
+    const response = await aiSearchRAGService.assembleContext({
+      query: 'project',
+      types: ['project'],
+      sortBy: 'title',
+      includeStale: true,
+      limit: 2,
+      offset: 1,
+      maxContextItems: 2
+    }, 'user-1')
+
+    expect(response.results.map(result => result.id)).toEqual(['project-b', 'project-c'])
+    expect(response.sources.map(source => source.id)).toEqual(['project-b', 'project-c'])
+    expect(response.contextPrompt).toContain('Beta Project')
+    expect(response.contextPrompt).toContain('Gamma Project')
+    expect(response.contextPrompt).not.toContain('Alpha Project')
+  })
+
+  it('preserves assembled context when follow-up suggestion generation fails', async () => {
+    const result = buildResult({
+      id: 'project-1',
+      title: 'Project With Context',
+      description: 'Retrieved project evidence',
+      content_preview: 'Retrieved context preview'
+    })
+
+    mockedSearchProjects.mockResolvedValue([result])
+    mockedGkgService.getSuggestedFollowUps.mockRejectedValue(new Error('follow-up failure'))
+
+    const response = await aiSearchRAGService.assembleContext({
+      query: 'project with context',
+      types: ['project'],
+      includeStale: true,
+      limit: 5
+    }, 'user-1')
+
+    expect(response.results.map(item => item.id)).toEqual(['project-1'])
+    expect(response.contextPrompt).toContain('Project With Context')
+    expect(response.followUpSuggestions).toEqual([])
+  })
 })

@@ -9,6 +9,8 @@ dotenv.config({ path: ".env.test", override: true })
 process.env.NODE_ENV = "test"
 process.env.JWT_SECRET = "test-jwt-secret"
 
+const shouldSkipDatabaseBootstrap = process.env.ADPA_SKIP_TEST_DB_BOOTSTRAP === "1"
+
 /**
  * PRE-EMPTIVE POOL INITIALIZATION
  */
@@ -107,6 +109,11 @@ let testPool: Pool
 let currentClient: PoolClient | null = null
 
 beforeAll(async () => {
+  if (shouldSkipDatabaseBootstrap) {
+    jest.setTimeout(30000)
+    return
+  }
+
   const connectionString = 
     process.env.DATABASE_URL || 
     `postgresql://${process.env.DB_USER || 'test_user'}:${process.env.DB_PASSWORD || 'test_pass'}@${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || '5432'}/${process.env.DB_NAME || 'adpa_test_db'}`
@@ -134,13 +141,18 @@ beforeAll(async () => {
 })
 
 beforeEach(async () => {
-  if (!testPool) return
+  if (shouldSkipDatabaseBootstrap || !testPool) return
   currentClient = await testPool.connect()
   await currentClient.query("BEGIN")
   setInternalPool(currentClient)
 })
 
 afterEach(async () => {
+  if (shouldSkipDatabaseBootstrap) {
+    currentClient = null
+    return
+  }
+
   if (currentClient) {
     try {
       await currentClient.query("ROLLBACK")
@@ -155,6 +167,10 @@ afterEach(async () => {
 })
 
 afterAll(async () => {
+  if (shouldSkipDatabaseBootstrap) {
+    return
+  }
+
   if (testPool) {
     setInternalPool(null as any)
     await testPool.end()

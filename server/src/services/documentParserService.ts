@@ -6,10 +6,19 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import pdfParse from 'pdf-parse';
 import * as XLSX from 'xlsx';
 import { Document, Packer } from 'docx';
 import { logger } from '../utils/logger';
+
+const pdfParse = require('pdf-parse') as (buffer: Buffer) => Promise<{
+  text?: string;
+  numpages?: number;
+  info?: {
+    Author?: string;
+    CreationDate?: string;
+    ModDate?: string;
+  };
+}>;
 
 export interface ParsedDocument {
   id: string;
