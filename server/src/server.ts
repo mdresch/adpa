@@ -475,7 +475,12 @@ if (process.argv[1] && (process.argv[1].endsWith('server.ts') || process.argv[1]
   startServer().catch(err => { console.error("❌ Error during server startup:", err); });
 } else if (!process.argv[1] || process.argv[1].includes('server')) {
   console.log("🚀 Starting server context (fallback)...");
-  startServer().catch(err => { console.error("❌ Fatal error during server startup:", err); process.exit(1); });
+  startServer().catch(err => {
+    // Do NOT process.exit(1) here — if the port was already bound, the server is still
+    // alive and should keep running (background DB retry will open the readiness gate).
+    // Only exit if the port was never bound (server hasn't started at all).
+    console.error("❌ Error during server startup (non-fatal, server may still be listening):", err);
+  });
 }
 
 export { app }

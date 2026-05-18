@@ -1,9 +1,6 @@
 import { StartupManager } from "./startupManager"
 import { logger } from "../utils/logger"
-import { safeQuery } from '../services/jobs/dbGuards'
 import { pool } from "../database/connection"
-import { SystemMonitoring } from "../utils/systemMonitoring"
-import { mongoVectorStore } from "../services/mongoVectorStore"
 import { initializeDependencyHealthTracking } from "../routes/health"
 import { connectDatabase } from "../database/connection"
 
