@@ -24,10 +24,15 @@ import { logger } from "../utils/logger"
  */
 export class StartupManager {
   private graph: DependencyGraph
+  private isInitialized: boolean = false
 
   constructor() {
     this.graph = new DependencyGraph()
     this.registerDependencies()
+  }
+
+  isReady(): boolean {
+    return this.isInitialized
   }
 
   private registerDependencies(): void {
@@ -68,6 +73,7 @@ export class StartupManager {
         )
       }
 
+      this.isInitialized = true
       logger.info("✅ All dependencies initialized successfully")
     } catch (error) {
       logger.error("❌ Startup initialization failed:", error)

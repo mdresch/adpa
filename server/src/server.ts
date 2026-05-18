@@ -242,6 +242,20 @@ app.get("/api/debug-env", (req, res) => {
   })
 })
 
+// Block API requests until all dependencies (like the database) are fully initialized.
+// This prevents 500 errors and unhandled exceptions caused by accessing uninitialized pools.
+import { startupManager } from "./startup/serverBootstrap";
+app.use((req, res, next) => {
+  if (startupManager && !startupManager.isReady()) {
+    res.setHeader('Retry-After', '5'); // Hint to clients (and frontend proxy) to retry
+    return res.status(503).json({
+      error: 'Service Unavailable',
+      message: 'Server is currently initializing dependencies (e.g. database connection). Please try again in a few seconds.'
+    });
+  }
+  next();
+});
+
 console.log("🔧 Registering API routes...")
 
 if (morphicModuleRoutes && morphicModuleRoutes[0]) {
