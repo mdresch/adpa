@@ -1,7 +1,10 @@
+<<<<<<< Updated upstream
 /**
  * OpenUI Chat Controller
  * HTTP endpoints for chat functionality
  */
+=======
+>>>>>>> Stashed changes
 import {
   OpenUIChatService,
   extractMessageText,

@@ -30,7 +30,11 @@ type ProjectContextFallback = {
   framework: string | null
 }
 
+<<<<<<< Updated upstream
 export class OpenUIChatService {
+=======
+
+>>>>>>> Stashed changes
   constructor(
     private readonly repository: OpenUIChatRepository = new OpenUIChatRepository(),
     private readonly loadProjectContextFallback: (projectId: string) => Promise<ProjectContextFallback | null> =
