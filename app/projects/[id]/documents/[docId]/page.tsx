@@ -130,6 +130,7 @@ import { toast } from '@/lib/notify'
 import {
   getDocumentSignPath,
   getProjectDocumentEntitiesPath,
+  getProjectDocumentGenUIPath,
   getProjectDocumentsPath,
   getProjectDocumentViewPath,
 } from '@/lib/documents/document-routes'
@@ -1017,6 +1018,13 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                       >
                         <Database className="h-4 w-4 mr-2" />
                         View Entities
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => router.push(getProjectDocumentGenUIPath(projectId, docId))}
+                      >
+                        <Sparkles className="h-4 w-4 mr-2" />
+                        GenUI Workspace
                       </Button>
                       <Button
                         variant="outline"

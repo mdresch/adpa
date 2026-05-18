@@ -63,7 +63,12 @@ import {
 import { useAuth } from "@/contexts/AuthContext"
 import { apiClient } from "@/lib/api"
 import { getDocumentApiPath } from "@/lib/documents/document-api-routes"
-import { getProjectContextPath, getProjectSourceDocumentPath, isProjectContextDocumentId } from "@/lib/documents/document-routes"
+import {
+  getProjectContextPath,
+  getProjectDocumentGenUIPath,
+  getProjectSourceDocumentPath,
+  isProjectContextDocumentId,
+} from "@/lib/documents/document-routes"
 import { normalizeMermaidMarkdown } from "@/lib/documents/mermaid"
 import { useWebSocket } from "@/contexts/WebSocketContext"
 import { toast } from '@/lib/notify'
@@ -652,6 +657,12 @@ export default function ProjectDocumentViewer() {
                     <Button variant="outline" size="sm" onClick={() => setShowRegenerateModal(true)}>
                       <Sparkles className="h-4 w-4 mr-2" />
                       Regenerate
+                    </Button>
+                    <Button variant="outline" size="sm" asChild>
+                      <Link href={getProjectDocumentGenUIPath(projectId, documentId)}>
+                        <Sparkles className="h-4 w-4 mr-2" />
+                        GenUI Workspace
+                      </Link>
                     </Button>
                     <Button variant="outline" size="sm" asChild>
                       <Link href={`/projects/${projectId}/documents/${documentId}`}>

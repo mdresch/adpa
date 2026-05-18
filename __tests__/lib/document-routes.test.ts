@@ -2,6 +2,7 @@ import {
   getProjectDocumentsPath,
   getProjectDocumentViewPath,
   getProjectDocumentEntitiesPath,
+  getProjectDocumentGenUIPath,
   getProjectSourceDocumentPath,
   getDocumentSignPath,
 } from '../../lib/documents/document-routes'
@@ -20,6 +21,10 @@ describe('document routes', () => {
 
   it('builds the project document entities route', () => {
     expect(getProjectDocumentEntitiesPath(projectId, documentId)).toBe('/projects/project-123/documents/document-456/entities')
+  })
+
+  it('builds the project document GenUI workspace route', () => {
+    expect(getProjectDocumentGenUIPath(projectId, documentId)).toBe('/projects/project-123/documents/document-456/genui')
   })
 
   it('builds the document sign route', () => {
