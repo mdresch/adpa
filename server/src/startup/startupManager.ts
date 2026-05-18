@@ -35,6 +35,16 @@ export class StartupManager {
     return this.isInitialized
   }
 
+  /**
+   * Forcefully marks the server as ready to accept traffic.
+   * Used by the background DB-retry loop when the database connects
+   * after the initial startup attempt failed (e.g. Supabase cold-start).
+   */
+  forceReady(): void {
+    this.isInitialized = true
+    logger.info('✅ [StartupManager] forceReady() called — server marked as ready')
+  }
+
   private registerDependencies(): void {
     // Register all dependencies in order of criticality
     this.graph.register(securityValidationDependency) // Security check MUST be first
