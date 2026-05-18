@@ -126,10 +126,12 @@ After the health check passes, the smallest meaningful ADPA workflow is:
 - Multi-format document generation for Markdown, PDF, DOCX, and HTML.
 - Two context systems: a lightweight injector and a newer orchestrator with access-control, freshness, and metrics.
 - Multi-provider AI support spanning OpenAI, Google AI, and local Ollama, plus a generic fallback executor.
+- Project-scoped OpenUI chat threads that return structured UI payloads over SSE.
 - Knowledge-base workflows for storing reusable improvements, reviews, and application outcomes.
 
 <Cards>
   <Card title="Architecture" href="/docs/architecture">How the frontend, API, modules, data stores, and integrations fit together.</Card>
   <Card title="Core Concepts" href="/docs/document-templates">Start with the abstractions that shape every request: templates, context, providers, and knowledge reuse.</Card>
+  <Card title="OpenUI Chat" href="/docs/openui-chat">Project-scoped chat routes, storage, auth modes, and operational constraints.</Card>
   <Card title="API Reference" href="/docs/api-reference/document-template-service">Method signatures, route surfaces, constructor options, and source-file pointers.</Card>
 </Cards>
