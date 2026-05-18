@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
-const BACKEND_URL = process.env.BACKEND_URL || 'https://adpa-backend.agreeablegrass-418bd4ba.westeurope.azurecontainerapps.io';
+const BACKEND_URL = process.env.BACKEND_URL || 'https://adpa.onrender.com';
 
 export async function GET(request: NextRequest, { params }: { params: { path: string[] } }) {
   const resolvedParams = await params;
