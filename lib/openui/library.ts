@@ -23,6 +23,8 @@ export type ComponentType =
   | "Calendar"
   | "Team"
   | "Text"
+  | "Prose"
+  | "TableOfContents"
 
 // Structured JSON type for chat messages
 export type OpenUIChatJson =
@@ -102,10 +104,12 @@ export function isLegacyComponentPayload(
   return isComponentPayload(payload as OpenUIAssistantPayload)
 }
 
-/** Heuristic: assistant content looks like OpenUI Lang XML */
+/** Heuristic: assistant content looks like OpenUI Lang (statement syntax, not XML) */
 export function looksLikeOpenUILang(text: string): boolean {
   const trimmed = text.trim()
-  return trimmed.startsWith("<") && /<[A-Z][a-zA-Z]*/.test(trimmed)
+  if (/^root\s*=/m.test(trimmed)) return true
+  if (trimmed.startsWith("<") && /<[A-Z][a-zA-Z]*/.test(trimmed)) return false
+  return /^[A-Za-z][\w]*\s*=/.test(trimmed)
 }
 
 // Helper to check if payload is text

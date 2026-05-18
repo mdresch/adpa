@@ -8,14 +8,19 @@ import { createLibrary, defineComponent } from "@openuidev/react-lang"
 import { z } from "zod/v4"
 import type { ReactNode } from "react"
 
+/** Zod 4 requires key + value schemas; single-arg z.record() breaks OpenUI's schema walker. */
+const stringRecord = z.record(z.string(), z.string())
+const looseRecord = z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()]))
+
 // ─── Table ────────────────────────────────────────────────────────────────────
 const TableDef = defineComponent({
   name: "Table",
-  description: "Renders tabular data with column headers and rows. Use for registers, lists of stakeholders, deliverables, risks, or any matrix-style data.",
+  description:
+    "Tabular data with column headers and rows. Use ONLY when the section is clearly a table/matrix AND every row from the source is included. Otherwise use Prose.",
   props: z.object({
     title: z.string().optional().describe("Section heading for the table"),
     columns: z.array(z.string()).optional().describe("Column headers (inferred from row keys if omitted)"),
-    rows: z.array(z.record(z.any())).describe("Array of row objects, keys match column headers"),
+    rows: z.array(looseRecord).describe("Array of row objects, keys match column headers"),
     striped: z.boolean().optional().default(false).describe("Alternate row shading"),
   }),
   component: ({ props }) => {
@@ -82,12 +87,12 @@ const TimelineDef = defineComponent({
 // ─── Card ─────────────────────────────────────────────────────────────────────
 const CardDef = defineComponent({
   name: "Card",
-  description: "Renders a structured info card with key-value fields. Use for project overview, authorization details, or single-entity summaries.",
+  description:
+    "Key-value fields. Use ONLY for small sets where every field from the source is included. Otherwise use Prose.",
   props: z.object({
     title: z.string().optional().describe("Card heading"),
     subtitle: z.string().optional().describe("Card subheading or section label"),
-    fields: z.record(z.string()).optional().describe("Key-value pairs to display in the card body"),
-    children: z.any().optional().describe("Nested OpenUI components inside this card"),
+    fields: stringRecord.optional().describe("Key-value pairs to display in the card body"),
   }),
   component: ({ props, renderNode }) => {
     const { CardComponent } = require("@/components/openui-chat/components/CardComponent")
@@ -104,7 +109,8 @@ const CardDef = defineComponent({
 // ─── Team ─────────────────────────────────────────────────────────────────────
 const TeamDef = defineComponent({
   name: "Team",
-  description: "Renders a team roster with member cards showing name, role, department, email, and responsibilities. Use for governance boards, stakeholder registers, or project teams.",
+  description:
+    "Team roster. Use ONLY when every person from the source is listed with their attributes. Otherwise use Prose or Table.",
   props: z.object({
     title: z.string().optional().describe("Team section heading"),
     members: z.array(z.object({
@@ -126,10 +132,27 @@ const TeamDef = defineComponent({
   },
 })
 
+// ─── Prose ────────────────────────────────────────────────────────────────────
+const ProseDef = defineComponent({
+  name: "Prose",
+  description:
+    "Default section body: full narrative content from the source document. Use when text cannot be fully captured in Table/Card/Bullets without loss. Include every paragraph and list item — never summarize.",
+  props: z.object({
+    title: z.string().optional().describe("Optional subheading inside the section (usually omit; Section already has the heading)"),
+    paragraphs: z.array(z.string()).optional().describe("Each paragraph or list block from the source, copied verbatim"),
+    body: z.string().optional().describe("Full section markdown when a single block is easier than paragraphs array"),
+  }),
+  component: ({ props }) => {
+    const { ProseComponent } = require("@/components/openui-chat/components/ProseComponent")
+    return <ProseComponent props={props as Record<string, unknown>} data={[]} />
+  },
+})
+
 // ─── Bullets ──────────────────────────────────────────────────────────────────
 const BulletsDef = defineComponent({
   name: "Bullets",
-  description: "Renders a bulleted or numbered list. Use for objectives, requirements, assumptions, lessons learned, or any list of items.",
+  description:
+    "Bulleted or numbered list. Use ONLY when the section is a list AND every item from the source is included. Otherwise use Prose.",
   props: z.object({
     title: z.string().optional().describe("List heading"),
     style: z.enum(["bullet", "numbered", "checklist"]).optional().default("bullet"),
@@ -182,7 +205,7 @@ const AccordionDef = defineComponent({
     title: z.string().optional().describe("Accordion heading"),
     sections: z.array(z.object({
       heading: z.string().describe("Section title (clickable to expand)"),
-      content: z.record(z.string()).optional().describe("Key-value details inside the section"),
+      content: stringRecord.optional().describe("Key-value details inside the section"),
       body: z.string().optional().describe("Free text body if key-value not applicable"),
     })).describe("Accordion sections"),
   }),
@@ -210,7 +233,7 @@ const ComparisonDef = defineComponent({
     sides: z.array(z.object({
       name: z.string().describe("Column heading, e.g. 'In-Scope'"),
       highlighted: z.boolean().optional().default(false),
-      attributes: z.record(z.string()).describe("Attribute name → value pairs"),
+      attributes: stringRecord.describe("Attribute name → value pairs"),
     })).describe("Comparison columns"),
   }),
   component: ({ props }) => {
@@ -250,8 +273,28 @@ const StepsDef = defineComponent({
   },
 })
 
-// Panel components that can appear inside Tabs (defined after all panel types exist)
-const TabPanelRef = z.union([
+// ─── Table of Contents ────────────────────────────────────────────────────────
+const TableOfContentsDef = defineComponent({
+  name: "TableOfContents",
+  description:
+    "Navigation list of report sections. Use as the first Section body when the document has 4+ major sections. List every section title in order — do not invent entries.",
+  props: z.object({
+    title: z.string().optional().describe("Usually 'Table of Contents'"),
+    entries: z.array(z.object({
+      title: z.string().describe("Section title as it appears in the report"),
+      level: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional().describe("1 = major, 2 = subsection"),
+    })).describe("All section headings in document order"),
+  }),
+  component: ({ props }) => {
+    const { TableOfContentsComponent } = require("@/components/openui-chat/components/TableOfContentsComponent")
+    return <TableOfContentsComponent props={props as Record<string, unknown>} data={[]} />
+  },
+})
+
+// Content blocks used inside Report sections or Tabs panels
+const ContentBlockRef = z.union([
+  ProseDef.ref,
+  TableOfContentsDef.ref,
   CardDef.ref,
   TeamDef.ref,
   TableDef.ref,
@@ -264,14 +307,62 @@ const TabPanelRef = z.union([
   StepsDef.ref,
 ])
 
+// ─── Section ──────────────────────────────────────────────────────────────────
+const SectionDef = defineComponent({
+  name: "Section",
+  description:
+    "One section from the source document (match each # / ## heading). Body is Prose (full text) OR a structured block only when it can hold ALL information from that section.",
+  props: z.object({
+    heading: z.string().describe("Section title matching the source heading"),
+    intro: z.string().optional().describe("Omit when using Prose with full body; only for a one-line lead-in before a Table/Team block"),
+    level: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional().default(1).describe("Heading depth: 1 = major section, 2 = subsection"),
+    content: ContentBlockRef.describe("Prose (default) or Table/Bullets/Card/Team only when nothing is omitted"),
+  }),
+  component: ({ props, renderNode }) => {
+    const { SectionComponent } = require("@/components/openui-chat/components/SectionComponent")
+    const body = props.content ? renderNode(props.content) : null
+    return (
+      <SectionComponent
+        props={{ heading: props.heading, intro: props.intro, level: props.level ?? 1 } as any}
+        data={[]}
+        content={body}
+      />
+    )
+  },
+})
+
+// ─── Report ───────────────────────────────────────────────────────────────────
+const ReportDef = defineComponent({
+  name: "Report",
+  description:
+    "Complete document report: header plus every source section in order. Must include ALL content from the document — no summaries or skipped sections.",
+  props: z.object({
+    title: z.string().describe("Document title"),
+    subtitle: z.string().optional().describe("Document type or template name"),
+    meta: stringRecord.optional().describe("Header metadata: Status, Version, Author, Date, etc."),
+    sections: z.array(SectionDef.ref).describe("Ordered report sections — one Section per major document part"),
+  }),
+  component: ({ props, renderNode }) => {
+    const { ReportComponent } = require("@/components/openui-chat/components/ReportComponent")
+    const sections = ((props.sections as unknown[]) ?? []).map((section) => renderNode(section))
+    return (
+      <ReportComponent
+        props={{ title: props.title, subtitle: props.subtitle, meta: props.meta } as any}
+        data={[]}
+        sectionContent={sections}
+      />
+    )
+  },
+})
+
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 const TabsDef = defineComponent({
   name: "Tabs",
-  description: "Renders switchable tab panels. Use as the top-level wrapper for multi-section documents like project charters, plans, or reports. Nest one child component per tab.",
+  description: "Switchable tab panels — use ONLY when the user explicitly asks for a tabbed or dashboard layout. Prefer Report for document views.",
   props: z.object({
     title: z.string().optional().describe("Dashboard or document title shown above the tabs"),
     tabs: z.array(z.string()).optional().describe("Tab labels (one per nested child panel)"),
-    panels: z.array(TabPanelRef).optional().describe("Tab panel content — one nested component per tab"),
+    panels: z.array(ContentBlockRef).optional().describe("Tab panel content — one nested component per tab"),
   }),
   component: ({ props, renderNode }) => {
     const { TabsComponent } = require("@/components/openui-chat/components/TabsComponent")
@@ -289,20 +380,48 @@ const TabsDef = defineComponent({
 
 // ─── Library ──────────────────────────────────────────────────────────────────
 export const adpaLibrary = createLibrary({
+  root: "Report",
   components: [
+    ReportDef,
+    SectionDef,
+    ProseDef,
+    TableOfContentsDef,
+    TabsDef,
+    CardDef,
+    TeamDef,
     TableDef,
     ChartDef,
     TimelineDef,
-    CardDef,
-    TeamDef,
     BulletsDef,
     AlertDef,
     AccordionDef,
     ComparisonDef,
     StepsDef,
-    TabsDef,
   ],
-  root: "Tabs",
+  componentGroups: [
+    {
+      name: "Report layout",
+      components: ["Report", "Section"],
+      notes: [
+        "Every response MUST start with: root = Report(title, subtitle, meta, [sectionRef1, sectionRef2, ...])",
+        "Create one Section per heading in the source document — do not merge or skip sections.",
+        "FIDELITY: Include every paragraph, list item, table row, and field from the source. Never summarize, sample, or use placeholder text.",
+        "Default content block is Prose with all section text. Use Table/Bullets/Card/Team ONLY when they can contain the same information without omission.",
+        "Each section: sectionRef = Section(heading, introOrNull, level, contentRef); define contentRef on a separate line below.",
+        "Do NOT use Tabs unless the user explicitly requests a tabbed dashboard.",
+      ],
+    },
+    {
+      name: "Content",
+      components: ["Prose", "TableOfContents", "Card", "Team", "Table", "Timeline", "Bullets", "Alert", "Accordion", "Comparison", "Steps", "Chart"],
+      notes: ["Prefer Prose when in doubt. Charts only for numeric data already in the source."],
+    },
+    {
+      name: "Optional dashboard",
+      components: ["Tabs"],
+      notes: ["Tabbed layout only on explicit user request."],
+    },
+  ],
 })
 
 export type { Library } from "@openuidev/react-lang"

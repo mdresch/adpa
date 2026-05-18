@@ -4,11 +4,9 @@ import { useState, useRef, useEffect, useCallback } from "react"
 import { useParams, useSearchParams, useRouter } from "next/navigation"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
-import { PageTransition } from "@/components/page-transition"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { DynamicComponentRenderer } from "@/components/openui-chat/DynamicComponentRenderer"
 import { parseOpenUILangSSEBuffer } from "@/lib/openui/streaming"
 import { useAuth } from "@/contexts/AuthContext"
@@ -27,9 +25,11 @@ import {
   MessageSquare,
   Plus,
   ArrowLeft,
+  Eye,
   FileText,
   ChevronLeft,
   ChevronRight,
+  Printer,
 } from "lucide-react"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -78,9 +78,9 @@ const DOCUMENT_PROMPTS: { keywords: string[]; prompts: string[] }[] = [
   {
     keywords: ["charter", "project"],
     prompts: [
-      "Summarize the project objectives",
-      "Show project timeline",
-      "List key deliverables",
+      "Render full charter as a numbered report",
+      "Add a milestones timeline section",
+      "Expand the scope section with a table",
       "Who is the project sponsor?",
     ],
   },
@@ -112,11 +112,11 @@ function getDocumentPrompts(docName: string, templateName?: string): string[] {
     }
   }
   return [
-    "Summarize this document",
-    "Show key data as a table",
-    "What are the main findings?",
-    "Create a visual overview",
-    "List action items",
+    "Render the full document with every section",
+    "Use tables only where all rows are shown",
+    "Show narrative sections as complete prose",
+    "List every action item from the source",
+    "Expand section 3 with all original text",
   ]
 }
 
@@ -281,12 +281,14 @@ export default function ProjectDocumentUIPage() {
       const docLabel = doc ? `"${doc.name}"` : "this document"
       
       setTimeout(() => {
-        sendMessage(`Visualize ${docLabel} as a comprehensive dashboard with appropriate tables, lists, and status indicators.`)
+        sendMessage(
+          `Transform ${docLabel} from markdown into a professional presentation-ready report (root = Report). Preserve all content and meaning. One Section per source heading; Prose for full narrative; Table/Bullets/Card only when every item fits. Add Table of Contents if 4+ sections. No summaries. No tabs.`
+        )
       }, 100)
     }
   }, [docsLoading, selectedDocId, streaming, documents, messages.length, sendMessage])
 
-  const refreshDashboard = () => {
+  const refreshReport = () => {
     if (!selectedDocId || streaming) return
     setLangResponse(null)
     setMessages([])
@@ -299,12 +301,9 @@ export default function ProjectDocumentUIPage() {
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
       <Sidebar />
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <Header />
-        <PageTransition>
-          <div className="flex flex-1 flex-col overflow-hidden">
-            {/* Toolbar */}
-            <div className="flex flex-col gap-3 border-b border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <div className="flex shrink-0 flex-col gap-3 border-b border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 print:hidden">
               <div className="flex items-center gap-3 min-w-0">
                 {/* Back to documents */}
                 <Button
@@ -321,9 +320,9 @@ export default function ProjectDocumentUIPage() {
                 {/* Page identity */}
                 <div className="flex items-center gap-2 shrink-0">
                   <Sparkles className="h-5 w-5 text-indigo-600" />
-                  <span className="font-semibold text-slate-900">Document Dashboard</span>
-                  <Badge variant="secondary" className="bg-indigo-100 text-indigo-800 text-[10px] uppercase font-bold tracking-wider px-2 py-0.5">
-                    Live UI
+                  <span className="font-semibold text-slate-900">Document Report</span>
+                  <Badge variant="secondary" className="bg-slate-100 text-slate-700 text-[10px] uppercase font-bold tracking-wider px-2 py-0.5">
+                    Live
                   </Badge>
                 </div>
                 <div className="h-4 w-px bg-slate-200 shrink-0" />
@@ -361,64 +360,99 @@ export default function ProjectDocumentUIPage() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-2 shrink-0 print:hidden">
+                {selectedDocId ? (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 gap-1.5 text-xs"
+                      onClick={() =>
+                        router.push(`/projects/${projectId}/documents/${selectedDocId}/view`)
+                      }
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                      View
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 gap-1.5 text-xs"
+                      onClick={() =>
+                        router.push(`/projects/${projectId}/documents/source?docId=${selectedDocId}`)
+                      }
+                    >
+                      <FileText className="h-3.5 w-3.5" />
+                      Source
+                    </Button>
+                  </>
+                ) : null}
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={refreshDashboard}
+                  onClick={() => window.print()}
+                  disabled={!langResponse}
+                  className="h-8 gap-1.5 text-xs text-slate-600 border-slate-200 hover:bg-slate-50 shrink-0"
+                >
+                  <Printer className="h-3.5 w-3.5" />
+                  Print
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={refreshReport}
                   disabled={streaming || !selectedDocId}
                   className="h-8 gap-1.5 text-xs text-indigo-600 border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 transition-all shrink-0"
                 >
                   <Sparkles className="h-3.5 w-3.5" />
-                  Re-visualize
+                  Regenerate report
                 </Button>
               </div>
-            </div>
+        </div>
 
-            {/* Main Pane */}
-            <div className="flex-1 overflow-hidden">
-              <ScrollArea className="h-full w-full">
+        <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar">
                 {docsLoading ? (
-                  <DashboardLoader docName="documents" />
+                  <ReportLoader docName="documents" />
                 ) : streaming && !langResponse ? (
-                  <DashboardLoader docName={selectedDoc?.name} />
+                  <ReportLoader docName={selectedDoc?.name} />
                 ) : !selectedDocId ? (
-                  <EmptyDashboardState />
+                  <EmptyReportState />
                 ) : langResponse ? (
-                  <div className="mx-auto max-w-7xl w-full p-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                  <div className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                     {streaming && (
-                      <div className="mb-4 flex items-center justify-between rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-2.5 text-xs text-indigo-700 shadow-sm animate-pulse">
+                      <div className="mb-6 flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-xs text-slate-600">
                         <div className="flex items-center gap-2">
                           <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          <span>Compiling live dashboard edits...</span>
+                          <span>Building report sections…</span>
                         </div>
-                        <span className="font-semibold uppercase tracking-wider text-[10px] text-indigo-500">Streaming</span>
+                        <span className="font-medium uppercase tracking-wider text-[10px] text-slate-400">
+                          Streaming
+                        </span>
                       </div>
                     )}
-                    <DynamicComponentRenderer response={langResponse} isStreaming={streaming} />
+                    <div className="rounded-lg border border-slate-200 bg-white px-6 py-10 shadow-sm sm:px-10 sm:py-12 print:shadow-none">
+                      <DynamicComponentRenderer response={langResponse} isStreaming={streaming} />
+                    </div>
                   </div>
                 ) : (
                   <div className="flex h-full min-h-[70vh] flex-col items-center justify-center gap-4 p-8 text-center">
-                    <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 shadow-sm border border-indigo-100">
-                      <Sparkles className="h-8 w-8 text-indigo-500" />
+                    <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100 text-slate-600 shadow-sm border border-slate-200">
+                      <FileText className="h-8 w-8 text-slate-500" />
                     </div>
-                    <h2 className="text-lg font-semibold text-slate-800">Generate Dashboard</h2>
+                    <h2 className="text-lg font-semibold text-slate-800">Generate Report</h2>
                     <p className="text-sm text-slate-500 max-w-sm leading-relaxed">
-                      Click the button below to compile a gorgeous, interactive interface from "{selectedDoc?.name}".
+                      Build a structured report from &ldquo;{selectedDoc?.name}&rdquo; with numbered sections and tables.
                     </p>
                     <Button
-                      onClick={refreshDashboard}
-                      className="mt-2 bg-indigo-600 hover:bg-indigo-700 text-white gap-2"
+                      onClick={refreshReport}
+                      className="mt-2 gap-2 bg-slate-900 hover:bg-slate-800 text-white"
                     >
-                      <Sparkles className="h-4 w-4" />
-                      Compile UI Dashboard
+                      <FileText className="h-4 w-4" />
+                      Generate Report
                     </Button>
                   </div>
                 )}
-              </ScrollArea>
-            </div>
-          </div>
-        </PageTransition>
+        </main>
       </div>
     </div>
   )
@@ -426,21 +460,21 @@ export default function ProjectDocumentUIPage() {
 
 // ─── Simplified Sub-components ──────────────────────────────────────────────────
 
-function DashboardLoader({ docName }: { docName?: string }) {
+function ReportLoader({ docName }: { docName?: string }) {
   return (
     <div className="flex h-full min-h-[75vh] flex-col items-center justify-center gap-4 p-8 text-center animate-pulse">
-      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 shadow-sm border border-indigo-100">
-        <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100 text-slate-600 shadow-sm border border-slate-200">
+        <Loader2 className="h-8 w-8 animate-spin text-slate-500" />
       </div>
-      <h2 className="text-lg font-semibold text-slate-800">Compiling Generative UI Dashboard</h2>
+      <h2 className="text-lg font-semibold text-slate-800">Generating Document Report</h2>
       <p className="text-sm text-slate-500 max-w-sm leading-relaxed">
-        Parsing {docName ? `"${docName}"` : "document content"} and building high-integrity visual structures...
+        Structuring {docName ? `"${docName}"` : "document content"} into numbered sections…
       </p>
     </div>
   )
 }
 
-function EmptyDashboardState() {
+function EmptyReportState() {
   return (
     <div className="flex h-full min-h-[75vh] flex-col items-center justify-center gap-4 p-8 text-center">
       <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
@@ -448,7 +482,7 @@ function EmptyDashboardState() {
       </div>
       <h2 className="text-lg font-semibold text-slate-800">No Document Selected</h2>
       <p className="text-sm text-slate-500 max-w-sm leading-relaxed">
-        Choose a document from the selector in the toolbar above to generate its dashboard.
+        Choose a document from the selector above to generate its report view.
       </p>
     </div>
   )

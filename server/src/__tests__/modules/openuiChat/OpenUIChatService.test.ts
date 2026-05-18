@@ -21,7 +21,7 @@ jest.mock("ai", () => ({
 }))
 
 jest.mock("@ai-sdk/google", () => ({
-  google: jest.fn(() => "mock-google-model"),
+  createGoogleGenerativeAI: jest.fn(() => jest.fn(() => "mock-google-model")),
 }))
 
 jest.mock("@/lib/openui/systemPrompt", () => ({

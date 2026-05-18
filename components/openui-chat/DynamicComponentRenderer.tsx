@@ -51,12 +51,30 @@ export function DynamicComponentRenderer({
     response ??
     (typeof payload === "string" && looksLikeOpenUILang(payload) ? payload : null)
 
-  if (langText) {
+  const trimmed = langText?.trim() ?? ""
+  const hasRoot = /^root\s*=/m.test(trimmed)
+
+  if (isStreaming && trimmed && !hasRoot) {
+    return (
+      <Card className="border-indigo-100 bg-indigo-50/50 shadow-sm">
+        <CardContent className="py-8 text-center text-sm text-indigo-700">
+          Generating visualization…
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (hasRoot) {
     return (
       <Renderer
         library={adpaLibrary}
-        response={langText}
+        response={trimmed}
         isStreaming={isStreaming}
+        onError={(errors) => {
+          if (errors.length > 0) {
+            console.warn("[OpenUI Renderer]", errors)
+          }
+        }}
       />
     )
   }

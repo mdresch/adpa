@@ -5,8 +5,9 @@ import { NotFoundError, ValidationError } from "../../middleware/errorHandler"
 import aiSearchRAGService from "../../services/aiSearchRAGService"
 import { logger } from "../../utils/logger"
 import { OpenUIChatRepository, type OpenUIChatJson, type OpenUIChatThreadSummary, type OpenUIChatThread } from "./OpenUIChatRepository"
-import { google } from "@ai-sdk/google"
+import { createGoogleGenerativeAI } from "@ai-sdk/google"
 import { streamText } from "ai"
+import { GOOGLE_PRIMARY_MODEL, normalizeGoogleModelId } from "../../utils/googleModelConfig"
 
 export type OpenUIChatRequestMessage = {
   role: string
@@ -147,10 +148,10 @@ export class OpenUIChatService {
 
     try {
       const result = await streamText({
-        model: google("gemini-2.0-flash"),
+        model: resolveOpenUIGoogleModel(),
         system: systemPrompt,
         messages: [{ role: "user", content: userMessage }],
-        maxTokens: 8192,
+        maxOutputTokens: 16384,
         temperature: 0.1,
       })
 
@@ -261,6 +262,19 @@ export function extractMessageText(content: OpenUIChatJson): string {
   return ""
 }
 
+function resolveOpenUIGoogleModel() {
+  const apiKey =
+    process.env.GOOGLE_AI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY
+  if (!apiKey) {
+    throw new Error("GOOGLE_AI_API_KEY is not configured")
+  }
+
+  const requestedModel = process.env.GEMINI_MODEL_OVERRIDE ?? GOOGLE_PRIMARY_MODEL
+  const modelId = normalizeGoogleModelId(requestedModel)
+  const google = createGoogleGenerativeAI({ apiKey })
+  return google(modelId)
+}
+
 function buildThreadTitle(prompt: string): string {
   const normalized = prompt.replace(/\s+/g, " ").trim()
   if (!normalized) return "New thread"
@@ -302,8 +316,8 @@ async function loadDocumentContext(documentId: string, projectId: string): Promi
         ? JSON.stringify(rawContent)
         : ""
 
-    // Allow up to 24,000 chars (~6,000 tokens) — enough for a full charter
-    const TRUNCATE_AT = 24_000
+    // Large input budget so reports can include full document text (model output capped separately)
+    const TRUNCATE_AT = 48_000
     const truncated = text.length > TRUNCATE_AT
       ? text.slice(0, TRUNCATE_AT) + "\n\n[...content truncated for context window...]"
       : text
