@@ -1,11 +1,7 @@
-<<<<<<< HEAD
 /**
  * OpenUI Chat Controller
  * HTTP endpoints for chat functionality
  */
-
-=======
-
 import {
   OpenUIChatService,
   extractMessageText,
@@ -15,12 +11,11 @@ import {
 
 import type { Request, Response } from "express"
 import type { AuthenticatedUser } from "../../lib/auth-utils"
-import { pipeWebResponseToExpress } from "../../utils/streaming"
+import { pipeWebResponseToExpress } from "../../utils/stream"
 
 export class OpenUIChatController {
   static service = new OpenUIChatService()
 
-<<<<<<< HEAD
   /**
    * POST /api/v1/openui-chat/chat
    * Send a message and get an intelligent component-based response
@@ -62,28 +57,6 @@ export class OpenUIChatController {
 
     await pipeWebResponseToExpress(streamResponse, res)
   }
-=======
-    if (!extractMessageText(submittedMessage.content)) {
-      return res.status(400).json({ error: "message content is required" })
-    }
-        user,
-        projectId,
-        threadId,
-        message: submittedMessage,
-      })
-
-    const reportMode = determineReportMode(submittedMessage)
-    const streamResponse = await this.service.streamReply({
-      user,
-      projectId,
-      threadId,
-      message: submittedMessage,
-      reportMode,
-    })
-
-    await pipeWebResponseToExpress(streamResponse, res)
-  }
-
 
   static async listThreads(req: Request, res: Response) {
     const user = req.user as AuthenticatedUser | undefined
@@ -130,8 +103,7 @@ export class OpenUIChatController {
     }
   }
 }
-  if (content && typeof content === "object" && !Array.isArray(content)) {
-    const flags = content as Record<string, unknown>
+
 function getSubmittedUserMessage(messages: OpenUIChatRequestMessage[]): OpenUIChatUserMessage | null {
   if (!Array.isArray(messages) || messages.length === 0) {
     return null
@@ -156,17 +128,4 @@ function determineReportMode(message: OpenUIChatUserMessage): boolean {
   }
   const haystack = extractMessageText(message.content).toLowerCase()
   return /\b(charter|report)\b/i.test(haystack)
-}
-    if (flags.reportMode === true) {
-      return true
-    }
-
-    if (typeof flags.intent === "string" && /^(report|charter)$/i.test(flags.intent)) {
-      return true
-    }
-  }
-
-  const haystack = extractMessageText(message.content).toLowerCase()
-  return /\b(charter|report)\b/i.test(haystack)
->>>>>>> adpa-project-charter
 }

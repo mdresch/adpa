@@ -1,41 +1,51 @@
-    Carousel: [
-      /\b(carousel|gallery|slideshow|slide|rotate|image|album|portfolio)/i,
-      /\b(before and after|comparison|alternative|option|choose)/i,
-    Carousel: [
-      /\b(carousel|gallery|slideshow|slide|rotate|image|album|portfolio)/i,
-      /\b(before and after|comparison|alternative|option|choose)/i,
-    ],
-    Alert: [
-      /\b(alert|warning|error|critical|caution|important|notice|attention|success)/i,
-      /\b(watch out|be aware|note|remember|info|information)/i,
-    ],
-    Steps: [
-      /\b(step|steps|process|workflow|sequence|guide|instruction|how to|procedure)/i,
-      /\b(progress|stage|phase|milestone|checkpoint)/i,
-    ],
-    Breadcrumb: [
-      /\b(breadcrumb|navigation|path|location|hierarchy|navigate back|where am i)/i,
-      /\b(route|trail|origin|destination)/i,
-    ],
-    Sidebar: [
-      /\b(sidebar|panel|filter|option|menu|navigation|search|refine|category)/i,
-      /\b(filter by|narrow down|organize)/i,
-    ],
-    Comparison: [
-      /\b(compare|comparison|versus|vs|difference|similar|opposite|alternative|pros cons|advantage)/i,
-      /\b(which|better|choose between|side by side)/i,
-    ],
-    Calendar: [
-      /\b(calendar|schedule|availability|booking|appointment|event|when|deadline|due date|sprint|iteration)/i,
-      /\b(date|dates|scheduled|upcoming|this week|this month|milestone|recurring)/i,
-    ],
-    Team: [
-      /\b(team|member|people|participant|who|assignee|contributor|staff|crew|roster|person|personnel)/i,
-      /\b(assigned to|owner|responsible|stakeholder|contact|directory|profile|avatar)/i,
-    ],
-    Text: [
-      /\b(explain|describe|tell|write|answer|question|help|summary|overview)/i,
-    ],
+export type ComponentType =
+  | "Table"
+  | "Chart"
+  | "Form"
+  | "Card"
+  | "Timeline"
+  | "Kanban"
+  | "Bullets"
+  | "Tabs"
+  | "Accordion"
+  | "Carousel"
+  | "Alert"
+  | "Steps"
+  | "Breadcrumb"
+  | "Sidebar"
+  | "Comparison"
+  | "Calendar"
+  | "Team"
+  | "Text"
+
+export interface ComponentSelectionContext {
+  prompt: string
+  dataPoints?: number
+  domainContext?: string
+  threadHistory?: string
+}
+
+const COMPONENT_KEYWORDS: Record<ComponentType, RegExp[]> = {
+  Table: [
+    /\b(table|grid|spreadsheet|matrix|columns|rows|data set|dataset)/i,
+    /\b(list|show|display|all|every)\b.*\b(user|project|item|record)/i,
+  ],
+  Chart: [
+    /\b(chart|graph|plot|trend|visualize|metrics|analytics|dashboard)/i,
+    /\b(bar|pie|line|scatter|diagram)\b/i,
+  ],
+  Form: [
+    /\b(form|input|create|add|new|update|edit|submit|fill|survey)/i,
+    /\b(application|registration|settings|configuration)/i,
+  ],
+  Card: [
+    /\b(card|profile|detail|overview|summary|snapshot|highlight)/i,
+    /\b(information about|details for|quick look)/i,
+  ],
+  Timeline: [
+    /\b(timeline|schedule|history|chronological|roadmap|gantt|sequence)/i,
+    /\b(when|dates|milestones|phases|sprint|quarter)/i,
+  ],
   Kanban: [
     /\b(kanban|board|column|status|stage|workflow|pipeline|progress)\b/i,
     /\b(todo|doing|done|backlog|queue)\b/i,
@@ -51,18 +61,6 @@
   Accordion: [
     /\b(accordion|expandable|collapse|collapsible|detail|toggle|faq|question|answer)\b/i,
     /\b(expand|hide|reveal|section|more information)\b/i,
-  ],
-  Carousel: [
-    /\b(carousel|gallery|slideshow|slide|rotate|image|album|portfolio)/i,
-    /\b(before and after|comparison|alternative|option|choose)/i,
-  ],
-  Alert: [
-    /\b(alert|warning|error|critical|caution|important|notice|attention|success)/i,
-    /\b(watch out|be aware|note|remember|info|information)/i,
-  ],
-  Steps: [
-    /\b(step|steps|process|workflow|sequence|guide|instruction|how to|procedure)/i,
-    /\b(progress|stage|phase|milestone|checkpoint)/i,
   ],
   Carousel: [
     /\b(carousel|gallery|slideshow|slide|rotate|image|album|portfolio)/i,
@@ -88,9 +86,19 @@
     /\b(compare|comparison|versus|vs|difference|similar|opposite|alternative|pros cons|advantage)/i,
     /\b(which|better|choose between|side by side)/i,
   ],
+  Calendar: [
+    /\b(calendar|schedule|availability|booking|appointment|event|when|deadline|due date|sprint|iteration)/i,
+    /\b(date|dates|scheduled|upcoming|this week|this month|milestone|recurring)/i,
+  ],
+  Team: [
+    /\b(team|member|people|participant|who|assignee|contributor|staff|crew|roster|person|personnel)/i,
+    /\b(assigned to|owner|responsible|stakeholder|contact|directory|profile|avatar)/i,
+  ],
   Text: [
     /\b(explain|describe|tell|write|answer|question|help|summary|overview)/i,
   ],
+}
+
 function scoreComponent(componentType: ComponentType, context: ComponentSelectionContext): number {
   let score = 0
 
