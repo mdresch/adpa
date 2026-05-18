@@ -10,7 +10,7 @@ import {
 } from "./OpenUIChatService"
 
 import type { Request, Response } from "express"
-import type { AuthenticatedUser } from "../../lib/auth-utils"
+import type { AuthenticatedUser } from "@/lib/auth-utils"
 import { pipeWebResponseToExpress } from "../../utils/stream"
 
 export class OpenUIChatController {
