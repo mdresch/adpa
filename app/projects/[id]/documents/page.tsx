@@ -1739,6 +1739,15 @@ export default function ProjectDocuments() {
                                 <Button
                                   variant="outline"
                                   size="sm"
+                                  className="text-indigo-600 border-indigo-200 bg-indigo-50/50 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-300"
+                                  onClick={() => router.push(`/projects/${projectId}/documents/ui?docId=${document.id}`)}
+                                >
+                                  <Wand2 className="h-4 w-4 mr-2 text-indigo-500" />
+                                  UI Chat
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
                                   onClick={() => router.push(`/projects/${projectId}/documents/${document.id}/view`)}
                                 >
                                   <Eye className="h-4 w-4 mr-2" />

@@ -95,6 +95,19 @@ export function isComponentPayload(payload: OpenUIAssistantPayload): payload is 
     && "type" in payload && payload.type === "component"
 }
 
+/** Legacy JSON component payload (pre–OpenUI Lang threads) */
+export function isLegacyComponentPayload(
+  payload: OpenUIChatJson
+): payload is ComponentPayload {
+  return isComponentPayload(payload as OpenUIAssistantPayload)
+}
+
+/** Heuristic: assistant content looks like OpenUI Lang XML */
+export function looksLikeOpenUILang(text: string): boolean {
+  const trimmed = text.trim()
+  return trimmed.startsWith("<") && /<[A-Z][a-zA-Z]*/.test(trimmed)
+}
+
 // Helper to check if payload is text
 
 export function isTextPayload(payload: OpenUIAssistantPayload): payload is TextPayload {

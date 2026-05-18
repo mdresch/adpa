@@ -16,6 +16,36 @@ jest.mock("../../../services/aiSearchRAGService", () => ({
   },
 }))
 
+jest.mock("ai", () => ({
+  streamText: jest.fn(),
+}))
+
+jest.mock("@ai-sdk/google", () => ({
+  google: jest.fn(() => "mock-google-model"),
+}))
+
+jest.mock("@/lib/openui/systemPrompt", () => ({
+  buildOpenUISystemPrompt: jest.fn(() => "mock openui system prompt"),
+  buildOpenUIUserMessage: jest.fn((options: { prompt: string; ragContext?: string; projectName?: string }) => {
+    const parts = [options.ragContext, options.projectName ? `Project: ${options.projectName}` : "", options.prompt]
+    return parts.filter(Boolean).join("\n")
+  }),
+}))
+
+import { streamText } from "ai"
+
+const mockedStreamText = jest.mocked(streamText)
+
+function mockLangStream(chunks: string[]) {
+  mockedStreamText.mockResolvedValue({
+    textStream: (async function* () {
+      for (const chunk of chunks) {
+        yield chunk
+      }
+    })(),
+  } as Awaited<ReturnType<typeof streamText>>)
+}
+
 describe("OpenUIChatService", () => {
   const mockedAiSearchRAGService = jest.mocked(aiSearchRAGService)
 
@@ -36,6 +66,7 @@ describe("OpenUIChatService", () => {
 
   beforeEach(() => {
     jest.clearAllMocks()
+    mockLangStream(["<Tabs title=\"Test\" />"])
   })
 
   test("passes the selected project into assisted context assembly", async () => {
@@ -98,7 +129,16 @@ describe("OpenUIChatService", () => {
       }),
       "user-1"
     )
-    await expect(response.text()).resolves.toContain("Scoped project evidence")
+    expect(mockedStreamText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: [
+          expect.objectContaining({
+            content: expect.stringContaining("Scoped project evidence"),
+          }),
+        ],
+      })
+    )
+    await expect(response.text()).resolves.toContain("event: text")
   })
 
   test("rejects blank user content before persisting the thread", async () => {
@@ -168,8 +208,16 @@ describe("OpenUIChatService", () => {
       reportMode: false,
     })
 
-    expect(repository.appendMessage).toHaveBeenCalledTimes(2)
-    await expect(response.text()).resolves.toContain("Project project-1: Fallback prompt")
+    expect(repository.appendMessage).toHaveBeenCalledTimes(1)
+    expect(mockedStreamText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: [
+          expect.objectContaining({
+            content: expect.stringContaining("Fallback prompt"),
+          }),
+        ],
+      })
+    )
   })
 
   test("uses basic project context when report mode has no assisted sources", async () => {
@@ -236,9 +284,17 @@ describe("OpenUIChatService", () => {
     })
 
     expect(projectFallbackLoader).toHaveBeenCalledWith("project-1")
+    expect(mockedStreamText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: [
+          expect.objectContaining({
+            content: expect.stringContaining("Project: Apollo"),
+          }),
+        ],
+      })
+    )
     const payload = await response.text()
-    expect(payload).toContain("Project: Apollo")
-    expect(payload).toContain("Framework: PMBOK 7")
+    expect(payload).toContain("event: text")
     expect(payload).not.toContain("No internal ADPA search context was found")
   })
 
