@@ -12,6 +12,14 @@ import { DynamicComponentRenderer } from "@/components/openui-chat/DynamicCompon
 import type { ComponentPayload } from "@/lib/openui/library"
 import { useAuth } from "@/contexts/AuthContext"
 import { Send, Loader2, Sparkles, MessageSquare, Plus } from "lucide-react"
+import { apiClient, type Project } from "@/lib/api"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -39,6 +47,25 @@ export default function OpenUIChatPage() {
   const [threadId, setThreadId] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  const [projects, setProjects] = useState<Project[]>([])
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("")
+
+  // Fetch projects on mount
+  useEffect(() => {
+    const fetchProjects = async () => {
+      try {
+        const response = await apiClient.getProjects({ limit: 100 })
+        if (response.projects && response.projects.length > 0) {
+          setProjects(response.projects)
+          setSelectedProjectId(user?.defaultProjectId || response.projects[0].id)
+        }
+      } catch (err) {
+        console.error("Failed to fetch projects for chat context", err)
+      }
+    }
+    if (user) fetchProjects()
+  }, [user])
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -68,7 +95,7 @@ export default function OpenUIChatPage() {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
-          projectId: user?.defaultProjectId || "default",
+          projectId: selectedProjectId || "default",
           threadId,
           messages: [...history, { role: "user", content: text }],
         }),
@@ -159,15 +186,35 @@ export default function OpenUIChatPage() {
         <PageTransition>
           <div className="flex flex-1 flex-col overflow-hidden">
             {/* Toolbar */}
-            <div className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-3">
-              <div className="flex items-center gap-2">
-                <Sparkles className="h-5 w-5 text-indigo-600" />
-                <span className="font-semibold text-slate-900">OpenUI Chat</span>
-                <Badge variant="secondary" className="bg-indigo-100 text-indigo-800 text-xs">
-                  Beta
-                </Badge>
+            <div className="flex flex-col gap-3 border-b border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-5 w-5 text-indigo-600" />
+                  <span className="font-semibold text-slate-900">OpenUI Chat</span>
+                  <Badge variant="secondary" className="bg-indigo-100 text-indigo-800 text-xs">
+                    Beta
+                  </Badge>
+                </div>
+                
+                {/* Project Context Selector */}
+                {projects.length > 0 && (
+                  <div className="flex items-center gap-2 border-l border-slate-200 pl-4">
+                    <Select value={selectedProjectId} onValueChange={setSelectedProjectId} disabled={streaming}>
+                      <SelectTrigger className="h-8 w-[200px] border-slate-200 bg-slate-50 text-xs focus:ring-indigo-500">
+                        <SelectValue placeholder="Select project context..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {projects.map((p) => (
+                          <SelectItem key={p.id} value={p.id} className="text-xs">
+                            {p.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
-              <Button variant="outline" size="sm" onClick={startNew} className="gap-1.5">
+              <Button variant="outline" size="sm" onClick={startNew} className="h-8 gap-1.5 text-xs">
                 <Plus className="h-3.5 w-3.5" />
                 New conversation
               </Button>
