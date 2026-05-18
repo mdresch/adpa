@@ -356,6 +356,13 @@ async function connectDatabaseInternal(): Promise<void> {
       // This can happen when multiple connection attempts are made
       testPool.setMaxListeners(20)
 
+      // CRITICAL: attach error handler BEFORE connecting to prevent
+      // 'Connection terminated unexpectedly' from becoming an uncaught
+      // exception that crashes the process (Supabase wake-up scenario).
+      testPool.on('error', (err) => {
+        console.warn('[DB] testPool connection error (during startup probe):', err?.message)
+      })
+
       try {
         console.log(`📡 Connecting to ${poolConfig.host || poolConfig.connectionString} as ${poolConfig.user}...`)
         const client = await Promise.race([
@@ -364,11 +371,16 @@ async function connectDatabaseInternal(): Promise<void> {
             setTimeout(() => reject(new Error('Database connection timeout')), DEFAULT_DB_CONN_TIMEOUT_MS)
           )
         ])
-        
+
+        // Use a generous timeout for the probe query: Supabase free-tier projects pause
+        // after inactivity and the first query after waking can take 20-30+ seconds.
+        // We use nearly the full connection timeout here so the server doesn't crash-loop
+        // while Supabase is resuming.
+        const probeTimeout = Math.max(DEFAULT_DB_CONN_TIMEOUT_MS - 5000, 30000)
         await Promise.race([
           client.query("SELECT NOW()"),
           new Promise<never>((_, reject) => 
-            setTimeout(() => reject(new Error('Database query timeout')), DEFAULT_DB_QUERY_TIMEOUT_MS)
+            setTimeout(() => reject(new Error('Database query timeout')), probeTimeout)
           )
         ])
         client.release()
