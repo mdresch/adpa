@@ -50,7 +50,7 @@ const nextConfig = {
       beforeFiles: [
         {
           source: '/api/:path((?!morphic|auth|chat|openui-chat).*)',
-          destination: `${process.env.BACKEND_URL || 'https://adpa-backend.agreeablegrass-418bd4ba.westeurope.azurecontainerapps.io'}/api/:path*`,
+          destination: `${process.env.BACKEND_URL || 'https://adpa.onrender.com'}/api/:path*`,
         },
       ],
     };

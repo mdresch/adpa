@@ -1,14 +1,5 @@
 import type { Pool, PoolClient } from "pg"
-<<<<<<< Updated upstream
 import { pool } from "../../database/connection"
-=======
-import { getInternalPool, pool } from "../../database/connection"
-
-type Queryable = Pick<Pool, "query"> | Pick<PoolClient, "query">
-type ClientQueryable = Pick<PoolClient, "query" | "release">
-type TransactionCapable = Pick<Pool, "query" | "connect"> | ClientQueryable
-type TransactionMode = "transaction" | "savepoint"
->>>>>>> Stashed changes
 
 export type OpenUIChatJson =
   | null
@@ -38,12 +29,6 @@ type MessageRow = {
 
 export type OpenUIChatThreadSummary = {
   id: string
-<<<<<<< Updated upstream
-  userId: string
-  projectId: string
-  title: string
-=======
-  threadId: string
   userId: string
   projectId: string
   title: string
@@ -60,31 +45,6 @@ export type OpenUIChatMessage = {
   createdAt: Date
 }
 
-export class OpenUIChatRepository {
-  // ... (rest of the class implementation remains, ensure no conflict markers remain)
-}
-<<<<<<< HEAD
-  createdAt: string
-  updatedAt: string
-}
-
-export type OpenUIChatThreadSummary = OpenUIChatThread
-
-    createdAt: Date
-=======
->>>>>>> Stashed changes
-  createdAt: Date
-  updatedAt: Date
-}
-
-export type OpenUIChatMessage = {
-  id: string
-  threadId: string
-  userId: string
-  role: string
-  content: OpenUIChatJson
-  createdAt: Date
-}
 
 export type OpenUIChatThread = OpenUIChatThreadSummary & {
   messages: OpenUIChatMessage[]

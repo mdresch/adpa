@@ -1,4 +1,4 @@
-<<<<<<< Updated upstream
+
 export type ComponentType =
   | "Table"
   | "Chart"
@@ -47,43 +47,7 @@ const COMPONENT_KEYWORDS: Record<ComponentType, RegExp[]> = {
     /\b(timeline|schedule|history|chronological|roadmap|gantt|sequence)/i,
     /\b(when|dates|milestones|phases|sprint|quarter)/i,
   ],
-=======
-    Carousel: [
-      /\b(carousel|gallery|slideshow|slide|rotate|image|album|portfolio)/i,
-      /\b(before and after|comparison|alternative|option|choose)/i,
-    ],
-    Alert: [
-      /\b(alert|warning|error|critical|caution|important|notice|attention|success)/i,
-      /\b(watch out|be aware|note|remember|info|information)/i,
-    ],
-    Steps: [
-      /\b(step|steps|process|workflow|sequence|guide|instruction|how to|procedure)/i,
-      /\b(progress|stage|phase|milestone|checkpoint)/i,
-    ],
-    Breadcrumb: [
-      /\b(breadcrumb|navigation|path|location|hierarchy|navigate back|where am i)/i,
-      /\b(route|trail|origin|destination)/i,
-    ],
-    Sidebar: [
-      /\b(sidebar|panel|filter|option|menu|navigation|search|refine|category)/i,
-      /\b(filter by|narrow down|organize)/i,
-    ],
-    Comparison: [
-      /\b(compare|comparison|versus|vs|difference|similar|opposite|alternative|pros cons|advantage)/i,
-      /\b(which|better|choose between|side by side)/i,
-    ],
-    Calendar: [
-      /\b(calendar|schedule|availability|booking|appointment|event|when|deadline|due date|sprint|iteration)/i,
-      /\b(date|dates|scheduled|upcoming|this week|this month|milestone|recurring)/i,
-    ],
-    Team: [
-      /\b(team|member|people|participant|who|assignee|contributor|staff|crew|roster|person|personnel)/i,
-      /\b(assigned to|owner|responsible|stakeholder|contact|directory|profile|avatar)/i,
-    ],
-    Text: [
-      /\b(explain|describe|tell|write|answer|question|help|summary|overview)/i,
-    ],
->>>>>>> Stashed changes
+
   Kanban: [
     /\b(kanban|board|column|status|stage|workflow|pipeline|progress)\b/i,
     /\b(todo|doing|done|backlog|queue)\b/i,
