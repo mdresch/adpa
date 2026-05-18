@@ -20,6 +20,11 @@ jest.mock("../../../lib/project-access", () => ({
   userHasProjectAccess: jest.fn(),
 }))
 
+jest.mock("@/lib/openui/systemPrompt", () => ({
+  buildOpenUISystemPrompt: jest.fn(() => "mock openui system prompt"),
+  buildOpenUIUserMessage: jest.fn((options: { prompt: string }) => options.prompt),
+}))
+
 describe("OpenUIChatController routes", () => {
   const mockedUserHasProjectAccess = jest.mocked(userHasProjectAccess)
 
