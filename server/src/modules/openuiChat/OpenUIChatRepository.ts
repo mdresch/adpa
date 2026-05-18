@@ -159,17 +159,29 @@ export class OpenUIChatRepository {
     const client = await pool.connect()
     try {
       await client.query("BEGIN")
-      
       let threadId = input.threadId
       let threadRow: ThreadRow
-      
+      let projectId = input.projectId
+
+      // Workaround for global chat passing "default" which violates UUID syntax and foreign key
+      if (projectId === "default" || projectId === "test") {
+        try {
+          const projResult = await client.query<{ id: string }>('SELECT id FROM projects LIMIT 1')
+          if (projResult.rowCount && projResult.rowCount > 0) {
+            projectId = projResult.rows[0].id
+          }
+        } catch (err) {
+          console.warn("[OpenUIChatRepository] Failed to fetch fallback project ID:", err)
+        }
+      }
+
       if (threadId) {
         const threadResult = await client.query<ThreadRow>(
           `UPDATE openui_chat_threads
            SET updated_at = NOW()
            WHERE id = $1 AND user_id = $2 AND project_id = $3
            RETURNING *`,
-          [threadId, input.userId, input.projectId]
+          [threadId, input.userId, projectId]
         )
         if (threadResult.rows.length === 0) {
           throw new Error("OpenUI chat thread not found")
@@ -180,7 +192,7 @@ export class OpenUIChatRepository {
           `INSERT INTO openui_chat_threads (user_id, project_id, title)
            VALUES ($1, $2, $3)
            RETURNING *`,
-          [input.userId, input.projectId, input.title]
+          [input.userId, projectId, input.title]
         )
         threadRow = threadResult.rows[0]
         threadId = threadRow.id
