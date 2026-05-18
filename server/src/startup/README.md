@@ -1,14 +1,16 @@
-# Startup Dependency Graph & Fail-Fast Mode
+# Startup Dependency Graph & Readiness Gate
 
 ## Overview
 
-The Startup Dependency Graph is a deterministic initialization system for server startup that prevents race conditions and provides clear visibility into which dependencies are ready.
+The Startup Dependency Graph is a deterministic initialization system for server startup that prevents race conditions and provides clear visibility into which dependencies are ready. The production bootstrap binds the HTTP port before dependency initialization so platform health checks can reach the process while the database and other services are still connecting.
 
 ### Key Features
 
 - **Parallel Initialization**: All dependencies initialize in parallel for faster startup
 - **Timeout Protection**: Each dependency has a configurable timeout
 - **Fail-Fast Mode**: Optional mode that stops startup on first critical failure
+- **Readiness Gate**: API routes after `/health` return `503` with `Retry-After: 5` until `StartupManager.isReady()` is true
+- **Background DB Retry**: If initial dependency startup fails, the server stays alive and retries the database connection before calling `forceReady()`
 - **Health Checks**: Built-in validation for each dependency
 - **Graceful Shutdown**: Proper cleanup of all dependencies on server stop
 - **Startup Summary**: Formatted console output showing initialization status
@@ -34,14 +36,22 @@ export interface Dependency {
 
 #### StartupManager (`server/src/startup/startupManager.ts`)
 
-Orchestrates the complete startup sequence using the dependency graph. Registers all 6 dependencies in order of criticality:
+Orchestrates the complete startup sequence using the dependency graph. It registers dependencies in this order:
 
-1. **Database** (critical: true) - 30s timeout
-2. **Redis** (critical: false) - 10s timeout
-3. **Neo4j** (critical: false) - 10s timeout
-4. **RabbitMQ** (critical: false) - 10s timeout (placeholder)
-5. **AI Providers** (critical: false) - 20s timeout
-6. **Workers** (critical: false) - 15s timeout
+1. **Security Configuration Validation** (critical: true) - 5s timeout
+2. **Database** (critical: true) - 65s timeout
+3. **Azure Backend Availability** (critical: false) - 10s timeout
+4. **Firebase Auth Provider** (critical outside development) - 10s timeout
+5. **Primary Redis** (critical: false) - 10s timeout
+6. **Neo4j** (critical: false) - 30s timeout
+7. **RabbitMQ** (critical: false) - 30s timeout
+8. **AI Providers** (critical: false) - 20s timeout
+9. **Workers** (critical: false) - 15s timeout
+10. **MongoDB Atlas** (critical: false) - 15s timeout
+11. **Pinecone** (critical: false) - 10s timeout
+12. **Langfuse** (critical: false) - 5s timeout
+13. **Upstash Redis** (critical: false) - 10s timeout
+14. **Morphic DB** (critical: false) - 30s timeout
 
 ## Configuration
 
@@ -53,10 +63,10 @@ Enable via environment variable:
 FAIL_FAST_MODE=true npm run dev
 ```
 
-In fail-fast mode, the server refuses to boot if ANY critical dependency fails. This is useful for:
-- Production deployments where all dependencies must be available
+In fail-fast mode, the dependency graph throws as soon as critical initialization fails. In the current production bootstrap, `serverBootstrap.ts` catches that failure after the port is bound, keeps the process alive for liveness checks, and leaves the readiness gate closed while the background database retry loop runs. This is useful for:
+- Surfacing critical dependency failures clearly in logs
 - Debugging deployment issues
-- CI/CD pipelines
+- CI/CD or local runs that exercise the dependency graph directly
 
 ### Individual Dependency Timeouts
 
@@ -64,40 +74,59 @@ Edit the timeout in each dependency file:
 
 ```typescript
 // server/src/startup/dependencies/database.ts
-timeout: 30000, // 30 seconds
+timeout: 65000, // 65 seconds
 ```
 
 ## Usage
 
-### In server.ts
+### Runtime Flow in serverBootstrap.ts
 
-Import and use the StartupManager:
+`server/src/server.ts` delegates boot to `initializeServerWithDependencyGraph` in `server/src/startup/serverBootstrap.ts`. The current flow is:
 
 ```typescript
-import { StartupManager } from "./startup/startupManager"
-
-async function startServer() {
+export async function initializeServerWithDependencyGraph(server, io, PORT) {
   const startupManager = new StartupManager()
-  
+
+  initializeDependencyHealthTracking(startupManager.getDependencyNames())
+  registerShutdownHandlers(startupManager)
+
+  // Bind HTTP first so Render/Fly-style port checks see a live process.
+  await listen(server, PORT)
+
   try {
     await startupManager.initialize()
-    // All dependencies ready - continue with server setup
-    
-    server.listen(PORT, () => {
-      console.log("✅ Server running")
-    })
-    
-    // Graceful shutdown
-    process.on('SIGTERM', async () => {
-      await startupManager.shutdown()
-      process.exit(0)
-    })
   } catch (error) {
-    console.error("❌ Startup failed:", error)
-    process.exit(1)
+    // Do not exit after the port is bound. Keep /health reachable and retry DB.
+    startBackgroundDbRetry(startupManager)
+    return
   }
+
+  startScheduledJobs()
+  startStuckJobMonitor()
 }
 ```
+
+The readiness gate lives in `server/src/server.ts`, after `/health` and `/api/health` are mounted. While `startupManager` is missing or not ready, downstream API routes return:
+
+```json
+{
+  "error": "Service Unavailable",
+  "message": "Server is currently initializing dependencies (e.g. database connection). Please try again in a few seconds."
+}
+```
+
+The response includes `Retry-After: 5`.
+
+### Cold-Start Recovery
+
+If dependency initialization fails during a database cold start, `serverBootstrap.ts` starts a background retry loop:
+
+1. Waits 30 seconds by default.
+2. Calls `connectDatabase()`.
+3. On failure, logs and schedules another attempt.
+4. On success, calls `startupManager.forceReady()` to open the readiness gate.
+
+This path keeps the process alive for platform liveness checks while preventing normal API traffic from reaching routes that need the database.
 
 ## Startup Output Example
 
@@ -105,14 +134,14 @@ async function startServer() {
 ╔════════════════════════════════════════════════════════════════╗
 ║                 STARTUP DEPENDENCY SUMMARY                     ║
 ╠════════════════════════════════════════════════════════════════╣
-║ ✅ Database                    [CRITICAL]  245   ms ║
-║ ✅ Redis                       [OPTIONAL]  125   ms ║
-║ ✅ Neo4j                       [OPTIONAL]  87    ms ║
-║ ⏳ RabbitMQ                    [OPTIONAL]  0     ms ║
-║ ✅ AI Providers                [OPTIONAL]  1250  ms ║
-║ ✅ Workers                     [OPTIONAL]  340   ms ║
+║ ✅ Security Configuration Validation [CRITICAL]  12    ms ║
+║ ✅ Database                          [CRITICAL]  245   ms ║
+║ ✅ Primary Redis                     [OPTIONAL]  125   ms ║
+║ ✅ Neo4j                             [OPTIONAL]  87    ms ║
+║ ⏳ RabbitMQ                          [OPTIONAL]  0     ms ║
+║ ✅ AI Providers                      [OPTIONAL]  1250  ms ║
 ╠════════════════════════════════════════════════════════════════╣
-║ Ready: 5/6 | Failed: 1 | Total: 2047ms                         ║
+║ Ready: 5/6 | Failed: 1 | Total: 2047ms                       ║
 ╚════════════════════════════════════════════════════════════════╝
 ```
 
@@ -182,10 +211,12 @@ Comprehensive health check endpoints provide real-time monitoring of server and 
 
 ### Available Endpoints
 
+`/health` and `/api/health` are registered before the readiness gate, so they are reachable even while dependency initialization is still running. Use `/health` for basic process liveness. Use `/health/ready` when a caller needs the stricter probe implemented in `server/src/routes/health.ts`; it is not the same check as the API readiness gate.
+
 #### 1. Basic Liveness Check
 **Endpoint:** \GET /health\ or \GET /api/health\
 
-Used by load balancers for basic "is the server up?" checks.
+Used by load balancers and keep-alive pings for basic "is the server up?" checks. It returns 200 if the process can respond; it does not prove the database is ready.
 
 **Response (200 OK):**
 \\\json
@@ -199,7 +230,7 @@ Used by load balancers for basic "is the server up?" checks.
 #### 2. Kubernetes Readiness Probe
 **Endpoint:** \GET /health/ready\ or \GET /api/health/ready\
 
-Returns 200 only if server is ready to receive traffic. Checks critical dependencies (database, redis).
+Returns 200 only if the explicit readiness probe passes. The implementation checks tracked entries named `Database`, `Redis`, and `Neo4j`, then runs a quick `SELECT 1` query. This probe can be stricter or differently named than the `StartupManager.isReady()` gate used by normal API routes.
 
 **Response (200 OK - Ready):**
 \\\json
@@ -218,7 +249,12 @@ Returns 200 only if server is ready to receive traffic. Checks critical dependen
   "timestamp": "2025-01-26T10:00:00.000Z",
   "uptime": 3600,
   "message": "Server is not ready",
-  "failedDependencies": ["database"]
+  "failedDependencies": [
+    {
+      "name": "database-query",
+      "error": "Still initializing/connecting..."
+    }
+  ]
 }
 \\\
 
@@ -366,16 +402,24 @@ Each dependency reports health status during initialization:
 
 | Dependency | Critical | Timeout | Monitored |
 |-----------|----------|---------|-----------|
-| Database | Yes | 30s | ? Ping query |
-| Redis | No | 10s | ? PING command |
-| Neo4j | No | 10s | ? Query execution |
-| RabbitMQ | No | 10s | ? Partial |
-| AI Providers | No | 20s | ? Partial |
-| Workers | No | 15s | ? Partial |
+| Security Configuration Validation | Yes | 5s | Production TLS safety check |
+| Database | Yes | 65s | Connection and query probe |
+| Azure Backend Availability | No | 10s | `/health` HTTP request |
+| Firebase Auth Provider | Production only | 10s | Provider handshake |
+| Primary Redis | No | 10s | PING command |
+| Neo4j | No | 30s | Query execution |
+| RabbitMQ | No | 30s | Connection placeholder |
+| AI Providers | No | 20s | Provider availability |
+| Workers | No | 15s | Worker availability |
+| MongoDB Atlas | No | 15s | Connection probe |
+| Pinecone | No | 10s | Client availability |
+| Langfuse | No | 5s | Client availability |
+| Upstash Redis | No | 10s | HTTP/client availability |
+| Morphic DB | No | 30s | Connection probe |
 
 #### Status Codes
 
-- **200 OK**: Service is healthy and ready
+- **200 OK**: The requested health check passed. For `/health`, this means process liveness; for `/health/ready`, this means readiness checks passed.
 - **503 Service Unavailable**: Service is degraded or not ready
 - **500 Internal Server Error**: Health check itself failed
 
@@ -394,7 +438,7 @@ Each dependency reports health status during initialization:
 1. Check logs for which dependency failed
 2. Verify environment variables are set (DATABASE_URL, REDIS_URL, etc.)
 3. Check external service connectivity
-4. Disable fail-fast mode to allow partial startup: `FAIL_FAST_MODE=false`
+4. If the port is already bound, rely on the readiness gate and background database retry rather than sending traffic to normal API routes.
 
 ### Slow startup (long duration in summary)
 
@@ -403,9 +447,9 @@ Each dependency reports health status during initialization:
 3. Check if service is responsive (ping it manually)
 4. Consider moving to another machine/region
 
-### "npm run dev completes without 'waiting...' logs"
+### "The port is open, but API routes return 503"
 
-This is the goal! The dependency graph prevents the old "waiting for services" logs by ensuring deterministic initialization order. All services should be initialized before the server starts listening.
+This is expected while the readiness gate is closed. Check `/health/ready` for dependency details, then inspect startup logs for the dependency that is still connecting. For database cold starts, the background retry loop logs each attempt and opens the gate with `forceReady()` after a successful `connectDatabase()` call.
 
 ## Security Validation
 
@@ -466,7 +510,7 @@ NODE_ENV=development NODE_TLS_REJECT_UNAUTHORIZED=0 npm run dev
 - [ ] Dependency ordering constraints (A depends on B)
 - [ ] Metrics collection and reporting
 - [ ] Health check intervals during operation
-- [ ] Automatic retry logic with exponential backoff
+- [ ] General retry logic for non-database dependencies
 - [ ] Integration with Kubernetes readiness/liveness probes
 
 
