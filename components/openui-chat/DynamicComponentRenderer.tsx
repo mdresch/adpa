@@ -1,16 +1,20 @@
 /**
  * Dynamic Component Renderer
- * Renders different UI components based on type (Table, Chart, Form, Card, Timeline, Kanban)
+ * Renders OpenUI Lang streams via @openuidev/react-lang <Renderer>,
+ * with a legacy JSON payload fallback for older thread messages.
  */
 
 "use client"
 
+import { Renderer } from "@openuidev/react-lang"
 import { Sparkles, Telescope } from "lucide-react"
-import { MarkdownRenderer } from "@/components/documents/MarkdownRenderer"
 
+import { MarkdownRenderer } from "@/components/documents/MarkdownRenderer"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { adpaLibrary } from "@/lib/openui/adpaLibrary"
 import type { ComponentPayload, OpenUIChatJson } from "@/lib/openui/library"
+import { isLegacyComponentPayload, looksLikeOpenUILang } from "@/lib/openui/library"
 
 import { TableComponent } from "./components/TableComponent"
 import { ChartComponent } from "./components/ChartComponent"
@@ -30,93 +34,107 @@ import { ComparisonComponent } from "./components/ComparisonComponent"
 import { CalendarComponent } from "./components/CalendarComponent"
 import { TeamComponent } from "./components/TeamComponent"
 
-interface DynamicComponentRendererProps {
-  payload: ComponentPayload | OpenUIChatJson
+export interface DynamicComponentRendererProps {
+  /** Accumulated OpenUI Lang text from the LLM stream */
+  response?: string | null
+  /** @deprecated Legacy JSON component payload from pre–react-lang threads */
+  payload?: ComponentPayload | OpenUIChatJson
+  isStreaming?: boolean
 }
 
-/**
- * Main dynamic renderer that dispatches to the appropriate component
- */
-export function DynamicComponentRenderer({ payload }: DynamicComponentRendererProps) {
-  // Validate payload structure
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-    return <FallbackRenderer content={payload} />
+export function DynamicComponentRenderer({
+  response,
+  payload,
+  isStreaming = false,
+}: DynamicComponentRendererProps) {
+  const langText =
+    response ??
+    (typeof payload === "string" && looksLikeOpenUILang(payload) ? payload : null)
+
+  const trimmed = langText?.trim() ?? ""
+  const hasRoot = /^root\s*=/m.test(trimmed)
+
+  if (isStreaming && trimmed && !hasRoot) {
+    return (
+      <Card className="border-indigo-100 bg-indigo-50/50 shadow-sm">
+        <CardContent className="py-8 text-center text-sm text-indigo-700">
+          Generating visualization…
+        </CardContent>
+      </Card>
+    )
   }
 
+  if (hasRoot) {
+    return (
+      <Renderer
+        library={adpaLibrary}
+        response={trimmed}
+        isStreaming={isStreaming}
+        onError={(errors) => {
+          if (errors.length > 0) {
+            console.warn("[OpenUI Renderer]", errors)
+          }
+        }}
+      />
+    )
+  }
+
+  if (payload && isLegacyComponentPayload(payload)) {
+    return <LegacyComponentRenderer payload={payload} />
+  }
+
+  return <FallbackRenderer content={payload ?? response} />
+}
+
+/** Legacy JSON dispatch for messages stored before OpenUI Lang migration */
+function LegacyComponentRenderer({ payload }: { payload: ComponentPayload }) {
   const record = payload as Record<string, OpenUIChatJson>
-
-  // Check if it's a component payload
-  if (record.type !== "component") {
-    return <FallbackRenderer content={payload} />
-  }
-
-  const componentType = record.component as string
+  const componentType = (record.component || "") as string
   const props = (record.props || {}) as Record<string, OpenUIChatJson>
   const data = (record.data || []) as Array<Record<string, OpenUIChatJson>>
   const metadata = (record.metadata || {}) as Record<string, OpenUIChatJson>
 
-  // Render based on component type
   switch (componentType) {
     case "Table":
       return <TableComponent props={props} data={data} />
-
     case "Chart":
       return <ChartComponent props={props} data={data} />
-
     case "Form":
       return <FormComponent props={props} schema={record.schema as any} />
-
     case "Card":
       return <CardComponent props={props} data={data} />
-
     case "Timeline":
       return <TimelineComponent props={props} data={data} />
-
     case "Kanban":
       return <KanbanComponent props={props} data={data} />
-
     case "Bullets":
       return <BulletsComponent props={props} data={data} />
-
     case "Tabs":
       return <TabsComponent props={props} data={data} />
-
     case "Accordion":
       return <AccordionComponent props={props} data={data} />
-
     case "Carousel":
       return <CarouselComponent props={props} data={data} />
-
     case "Alert":
       return <AlertComponent props={props} data={data} />
-
     case "Steps":
       return <StepsComponent props={props} data={data} />
-
     case "Breadcrumb":
       return <BreadcrumbComponent props={props} data={data} />
-
     case "Sidebar":
       return <SidebarComponent props={props} data={data} />
-
     case "Comparison":
       return <ComparisonComponent props={props} data={data} />
-
     case "Calendar":
       return <CalendarComponent props={props} data={data} />
-
     case "Team":
       return <TeamComponent props={props} data={data} />
-
     default:
       return <TextFallbackRenderer props={props} data={data} metadata={metadata} />
   }
 }
 
-/**
- * Fallback for unstructured content
- */
-function FallbackRenderer({ content }: { content: OpenUIChatJson }) {
+function FallbackRenderer({ content }: { content: OpenUIChatJson | string | null | undefined }) {
   return (
     <Card className="border-slate-200 bg-white/90 shadow-sm">
       <CardContent className="pt-6 text-sm text-slate-600">
@@ -126,9 +144,6 @@ function FallbackRenderer({ content }: { content: OpenUIChatJson }) {
   )
 }
 
-/**
- * Fallback text renderer with metadata
- */
 function TextFallbackRenderer({
   props,
   data,
@@ -141,12 +156,14 @@ function TextFallbackRenderer({
   const title = (props.title as string) || undefined
   const supportingEvidence = (metadata.supportingEvidence as number) || 0
 
-  // Resolve body content: prefer explicit content fields, then data items
   const bodyContent =
     (props.content as string) ||
     (props.text as string) ||
     (props.body as string) ||
     (props.markdown as string) ||
+    (props.synopsis as string) ||
+    (props.description as string) ||
+    (typeof metadata.synopsis === "string" ? metadata.synopsis : null) ||
     (data.length > 0
       ? data
           .map(
@@ -158,8 +175,7 @@ function TextFallbackRenderer({
           )
           .filter(Boolean)
           .join("\n\n")
-      : null) ||
-    (typeof metadata.synopsis === "string" ? metadata.synopsis : null)
+      : null)
 
   return (
     <Card className="overflow-hidden border-emerald-200 bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.18),_rgba(255,255,255,0.92)_45%)] shadow-lg shadow-emerald-100/60">
