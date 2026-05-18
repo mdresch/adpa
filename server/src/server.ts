@@ -457,7 +457,18 @@ async function startServer() {
 }
 
 process.on('unhandledRejection', (reason, promise) => { logger.error({ promise, reason }, 'Unhandled Rejection'); });
-process.on('uncaughtException', (error) => { logger.error(error, 'Uncaught Exception'); process.exit(1); });
+process.on('uncaughtException', (error) => {
+  // pg emits 'Connection terminated unexpectedly' from a Connection object AFTER
+  // testPool.end() removes the pool's own error listeners during the DB startup probe.
+  // This is a cleanup artifact (e.g. Supabase waking from pause drops the socket),
+  // not a real application crash. Log it as a warning and continue.
+  if (error.message === 'Connection terminated unexpectedly') {
+    logger.warn({ err: error }, '[pg] Non-fatal: Connection terminated unexpectedly (startup DB probe cleanup)');
+    return;
+  }
+  logger.error(error, 'Uncaught Exception');
+  process.exit(1);
+});
 
 if (process.argv[1] && (process.argv[1].endsWith('server.ts') || process.argv[1].includes('src/server.ts'))) {
   console.log("🚀 Starting server context...");
