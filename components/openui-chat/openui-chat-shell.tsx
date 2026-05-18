@@ -22,14 +22,16 @@ import {
   buildThreadPreview,
   extractMessageText,
   formatMessageTimestamp,
-  inferThreadId,
-  parseAssistantPayload,
+  isLegacyComponentPayload,
+  looksLikeOpenUILang,
   type OpenUIAssistantPayload,
   type OpenUIMessage,
   type OpenUIProjectsResponse,
   type OpenUIThread,
   type OpenUIThreadSummary,
 } from "@/lib/openui/library"
+import { parseOpenUILangSSEBuffer } from "@/lib/openui/streaming"
+import { DynamicComponentRenderer } from "./DynamicComponentRenderer"
 import { openUIStarterPrompts, type OpenUIStarterPrompt } from "@/lib/openui/system-prompt"
 
 import { ProjectSelector } from "./project-selector"
@@ -59,6 +61,7 @@ export function OpenUIChatShell() {
   const [messagesLoading, setMessagesLoading] = useState(false)
   const [draft, setDraft] = useState("")
   const [isSending, setIsSending] = useState(false)
+  const [streamingResponse, setStreamingResponse] = useState<string | null>(null)
   const [runtimeError, setRuntimeError] = useState<string | null>(null)
 
   const selectedProject = useMemo(
@@ -171,6 +174,8 @@ export function OpenUIChatShell() {
     setMessages((current) => [...current, optimisticUserMessage])
     setDraft("")
 
+    setStreamingResponse("")
+
     try {
       const response = await fetch("/api/v1/openui-chat/chat", {
         method: "POST",
@@ -185,40 +190,69 @@ export function OpenUIChatShell() {
         }),
       })
 
-      const raw = await response.text()
       if (!response.ok) {
+        const raw = await response.text()
         throw new Error(raw || "Unable to send chat message")
       }
 
-      const assistantPayload = parseAssistantPayload(raw)
-      if (!assistantPayload) {
+      const reader = response.body?.getReader()
+      if (!reader) {
+        throw new Error("Response has no body")
+      }
+
+      const decoder = new TextDecoder()
+      let buffer = ""
+      let accumulated = ""
+      let resolvedThreadId = response.headers.get("x-thread-id") || activeThreadId
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const { events, remainder } = parseOpenUILangSSEBuffer(buffer)
+        buffer = remainder
+
+        for (const event of events) {
+          if (event.type === "text") {
+            accumulated += event.text
+            if (event.threadId) resolvedThreadId = event.threadId
+            setStreamingResponse(accumulated)
+          } else if (event.type === "done" && event.threadId) {
+            resolvedThreadId = event.threadId
+          } else if (event.type === "error") {
+            throw new Error(event.message)
+          }
+        }
+      }
+
+      if (!accumulated) {
         throw new Error("Assistant response was empty")
       }
 
       const assistantMessage: LocalMessage = {
         id: `local-assistant-${Date.now()}`,
-        threadId: activeThreadId,
+        threadId: resolvedThreadId || activeThreadId,
         userId: "assistant",
         role: "assistant",
-        content: assistantPayload,
+        content: accumulated,
         createdAt: new Date().toISOString(),
       }
 
-      const inferredThreadId = inferThreadId(assistantPayload)
-      setMessages((current) => current.map((message) => (
-        message.id === optimisticUserMessage.id ? { ...message, pending: false } : message
-      )).concat(assistantMessage))
+      setMessages((current) =>
+        current
+          .map((message) => (message.id === optimisticUserMessage.id ? { ...message, pending: false } : message))
+          .concat(assistantMessage)
+      )
+      setStreamingResponse(null)
 
-      await loadThreads(selectedProjectId, inferredThreadId || activeThreadId)
+      await loadThreads(selectedProjectId, resolvedThreadId || activeThreadId)
 
-      if (!activeThreadId) {
-        const resolvedThreadId = inferredThreadId || threads[0]?.id
-        if (resolvedThreadId) {
-          setActiveThreadId(resolvedThreadId)
-        }
+      if (!activeThreadId && resolvedThreadId) {
+        setActiveThreadId(resolvedThreadId)
       }
     } catch (error) {
       setMessages((current) => current.filter((message) => message.id !== optimisticUserMessage.id))
+      setStreamingResponse(null)
       setRuntimeError(error instanceof Error ? error.message : "Unable to send chat message")
     } finally {
       setIsSending(false)
@@ -422,6 +456,14 @@ export function OpenUIChatShell() {
                   </div>
                 ) : null}
 
+                {isSending && streamingResponse ? (
+                  <div className="flex justify-start">
+                    <div className="max-w-[88%] w-full rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
+                      <DynamicComponentRenderer response={streamingResponse} isStreaming />
+                    </div>
+                  </div>
+                ) : null}
+
                 {messages.map((message) => {
                   const isAssistant = message.role === "assistant"
                   const isReport = isAssistant && isStructuredReport(message.content)
@@ -434,6 +476,13 @@ export function OpenUIChatShell() {
                         </div>
                         {isReport ? (
                           <ReportComponents payload={message.content} />
+                        ) : isAssistant && shouldRenderOpenUI(message.content) ? (
+                          <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
+                            <DynamicComponentRenderer
+                              response={getOpenUILangResponse(message.content)}
+                              payload={isLegacyComponentPayload(message.content) ? message.content : undefined}
+                            />
+                          </div>
                         ) : (
                           <div className={`rounded-[24px] px-5 py-4 text-sm leading-7 shadow-sm ${
                             isAssistant
@@ -524,4 +573,19 @@ function ShellFrame({
 
 function isStructuredReport(payload: OpenUIAssistantPayload): boolean {
   return Boolean(payload && typeof payload === "object" && !Array.isArray(payload) && (payload as Record<string, unknown>).type === "report")
+}
+
+function shouldRenderOpenUI(content: OpenUIAssistantPayload): boolean {
+  if (typeof content === "string") {
+    return looksLikeOpenUILang(content)
+  }
+  return isLegacyComponentPayload(content)
+}
+
+function getOpenUILangResponse(content: OpenUIAssistantPayload): string | undefined {
+  if (typeof content === "string" && looksLikeOpenUILang(content)) {
+    return content
+  }
+  const text = extractMessageText(content)
+  return looksLikeOpenUILang(text) ? text : undefined
 }

@@ -9,7 +9,9 @@ import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { DynamicComponentRenderer } from "@/components/openui-chat/DynamicComponentRenderer"
+import { looksLikeOpenUILang } from "@/lib/openui/library"
 import type { ComponentPayload } from "@/lib/openui/library"
+import { parseOpenUILangSSEBuffer } from "@/lib/openui/streaming"
 import { useAuth } from "@/contexts/AuthContext"
 import { Send, Loader2, Sparkles, MessageSquare, Plus } from "lucide-react"
 import { apiClient, type Project } from "@/lib/api"
@@ -32,7 +34,9 @@ interface UserMessage {
 interface AssistantMessage {
   id: string
   role: "assistant"
-  payload: ComponentPayload
+  response: string
+  /** Legacy JSON payload for older messages */
+  legacyPayload?: ComponentPayload
 }
 
 type ChatMessage = UserMessage | AssistantMessage
@@ -93,7 +97,7 @@ export default function OpenUIChatPage() {
       const history = messages.map((m) =>
         m.role === "user"
           ? { role: "user", content: m.text }
-          : { role: "assistant", content: JSON.stringify((m as AssistantMessage).payload) }
+          : { role: "assistant", content: (m as AssistantMessage).response }
       )
 
       const res = await fetch("/api/v1/openui-chat/chat", {
@@ -113,59 +117,55 @@ export default function OpenUIChatPage() {
         throw new Error(`Server error ${res.status}`)
       }
 
-      // Parse SSE stream
       const reader = res.body!.getReader()
       const decoder = new TextDecoder()
       let buffer = ""
-      let assistantPayload: ComponentPayload | null = null
-      let newThreadId: string | null = null
+      let accumulated = ""
+      let newThreadId: string | null = res.headers.get("x-thread-id")
+      let streamingMsgId: string | null = null
 
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
         buffer += decoder.decode(value, { stream: true })
+        const { events, remainder } = parseOpenUILangSSEBuffer(buffer)
+        buffer = remainder
 
-        const lines = buffer.split("\n")
-        buffer = lines.pop() ?? ""
-
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            try {
-              const json = JSON.parse(line.slice(6))
-              if (json.threadId) newThreadId = json.threadId
-              else if (json.props?.threadId) newThreadId = json.props.threadId
-              if (json.component) {
-                assistantPayload = json as ComponentPayload
-              }
-            } catch {
-              // incomplete chunk, skip
+        for (const event of events) {
+          if (event.type === "text") {
+            accumulated += event.text
+            if (event.threadId) newThreadId = event.threadId
+            if (!streamingMsgId) {
+              streamingMsgId = crypto.randomUUID()
+              setMessages((prev) => [
+                ...prev,
+                { id: streamingMsgId!, role: "assistant", response: accumulated },
+              ])
+            } else {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === streamingMsgId ? { ...m, role: "assistant" as const, response: accumulated } : m
+                )
+              )
             }
+          } else if (event.type === "done" && event.threadId) {
+            newThreadId = event.threadId
+          } else if (event.type === "error") {
+            throw new Error(event.message)
           }
         }
       }
 
       if (newThreadId) setThreadId(newThreadId)
-
-      if (assistantPayload) {
-        const assistantMsg: AssistantMessage = {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          payload: assistantPayload,
-        }
-        setMessages((prev) => [...prev, assistantMsg])
-      }
     } catch (err) {
-      const errorPayload: ComponentPayload = {
-        type: "component",
-        component: "Text",
-        props: { title: "Error" },
-        data: [],
-        metadata: {},
-        content: `Request failed: ${err instanceof Error ? err.message : String(err)}`,
-      } as unknown as ComponentPayload
+      const msg = (err instanceof Error ? err.message : String(err)).replace(/"/g, "'")
       setMessages((prev) => [
         ...prev,
-        { id: crypto.randomUUID(), role: "assistant", payload: errorPayload },
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          response: `<Alert severity="error" alerts={[{"category": "Error", "impact": "${msg}", "mitigation": "Try again."}]} />`,
+        },
       ])
     } finally {
       setStreaming(false)
@@ -255,7 +255,7 @@ export default function OpenUIChatPage() {
                     msg.role === "user" ? (
                       <UserBubble key={msg.id} text={msg.text} />
                     ) : (
-                      <AssistantBubble key={msg.id} payload={(msg as AssistantMessage).payload} />
+                      <AssistantBubble key={msg.id} message={msg as AssistantMessage} isStreaming={streaming} />
                     )
                   )}
                   {streaming && <StreamingIndicator />}
@@ -320,7 +320,13 @@ function UserBubble({ text }: { text: string }) {
   )
 }
 
-function AssistantBubble({ payload }: { payload: ComponentPayload }) {
+function AssistantBubble({
+  message,
+  isStreaming,
+}: {
+  message: AssistantMessage
+  isStreaming: boolean
+}) {
   return (
     <div className="flex justify-start">
       <div className="w-full max-w-4xl">
@@ -328,7 +334,11 @@ function AssistantBubble({ payload }: { payload: ComponentPayload }) {
           <Sparkles className="h-3 w-3 text-indigo-400" />
           OpenUI
         </div>
-        <DynamicComponentRenderer payload={payload} />
+        <DynamicComponentRenderer
+          response={looksLikeOpenUILang(message.response) ? message.response : undefined}
+          payload={message.legacyPayload}
+          isStreaming={isStreaming}
+        />
       </div>
     </div>
   )

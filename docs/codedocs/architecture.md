@@ -36,7 +36,9 @@ graph TD
 
 ### 1. The frontend proxies to the backend instead of duplicating business logic
 
-`next.config.mjs` rewrites most `/api/*` requests to the backend, while allowing some local App Router endpoints such as `morphic`, `auth`, `chat`, and `openui-chat` to remain in the Next.js app. That decision keeps the server as the main domain boundary while still letting the frontend host special-case routes close to UI concerns. The effect is visible in the rewrite rule and in the broad `app.use(...)` registration list inside `server/src/server.ts`.
+`next.config.mjs` rewrites most `/api/*` requests to the backend, while allowing paths that begin with `morphic`, `auth`, `chat`, and `openui-chat` after `/api/` to remain in the Next.js app. That distinction matters: `/api/openui-chat/threads` is handled by a local Next.js proxy route, but `/api/v1/openui-chat/threads` begins with the `v1` segment and is rewritten to the Express backend. The effect is visible in the rewrite rule and in the broad `app.use(...)` registration list inside `server/src/server.ts`.
+
+The OpenUI chat feature intentionally uses both sides of that boundary. The primary shell in `components/openui-chat/openui-chat-shell.tsx` calls `/api/v1/openui-chat/...` with a bearer token, while `app/api/chat/route.ts` and `app/api/openui-chat/threads/*` provide cookie-backed server-side proxies for clients that should not construct the backend authorization header directly. See [OpenUI Chat](/docs/openui-chat) for the route and payload contract.
 
 ### 2. Most backend features are module-shaped, not feature-flag spaghetti
 

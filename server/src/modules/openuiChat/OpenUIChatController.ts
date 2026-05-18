@@ -26,8 +26,9 @@ export class OpenUIChatController {
       return res.status(401).json({ error: "Unauthorized" })
     }
 
-    const { projectId, threadId, messages } = req.body as {
+    const { projectId, documentId, threadId, messages } = req.body as {
       projectId?: string
+      documentId?: string
       threadId?: string
       messages?: OpenUIChatRequestMessage[]
     }
@@ -50,6 +51,7 @@ export class OpenUIChatController {
     const streamResponse = await this.service.streamReply({
       user,
       projectId,
+      documentId,
       threadId,
       message: submittedMessage,
       reportMode,

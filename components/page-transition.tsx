@@ -65,7 +65,7 @@ export function PageTransition({ children }: PageTransitionProps) {
         exit="out"
         variants={pageVariants}
         transition={pageTransition}
-        className="w-full h-full"
+        className="flex h-full min-h-0 w-full flex-col"
       >
         {children}
       </motion.div>
@@ -85,7 +85,7 @@ export function SlideTransition({ children }: PageTransitionProps) {
         exit="out"
         variants={slideVariants}
         transition={slideTransition}
-        className="w-full h-full"
+        className="flex h-full min-h-0 w-full flex-col"
       >
         {children}
       </motion.div>
@@ -104,7 +104,7 @@ export function FadeTransition({ children }: PageTransitionProps) {
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.3, ease: "easeInOut" }}
-        className="w-full h-full"
+        className="flex h-full min-h-0 w-full flex-col"
       >
         {children}
       </motion.div>
