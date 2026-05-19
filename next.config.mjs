@@ -49,7 +49,7 @@ const nextConfig = {
     return {
       beforeFiles: [
         {
-          source: '/api/:path((?!morphic|auth|chat|openui-chat).*)',
+          source: '/api/:path((?!morphic|auth|chat|openui-chat|keepalive).*)',
           destination: `${process.env.BACKEND_URL || 'https://adpa.onrender.com'}/api/:path*`,
         },
       ],
