@@ -63,7 +63,7 @@ cp .env.example .env
 The server uses Jest for testing. We have implemented a stabilized test harness that isolates top-level side effects.
 
 - **[Testing Guide](docs/TESTING_GUIDE.md)**: Detailed documentation on architecture, mocks, and guards.
-- **Health Check**: Run `.\scripts\verify-test-env.ps1` to verify your test environment.
+- **Health Check**: Run `./scripts/verify-test-env.ps1` to verify your test environment.
 
 ```bash
 # Run all tests
