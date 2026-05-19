@@ -19,8 +19,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
-import { PageTransition } from "@/components/page-transition"
 import { AnimatedLayout, AnimatedCard } from "@/components/animated-layout"
+import {
+  DocumentPageToolbar,
+  type DocumentSummary,
+} from "@/components/documents/DocumentPageToolbar"
 import NovelEditor from "@/components/editor/novel-editor"
 import { motion } from "framer-motion"
 import {
@@ -128,6 +131,8 @@ export default function ProjectDocumentViewer() {
   } | null>(null)
   const [isExportingPdf, setIsExportingPdf] = useState(false)
   const [isExportingWord, setIsExportingWord] = useState(false)
+  const [projectDocuments, setProjectDocuments] = useState<DocumentSummary[]>([])
+  const [docsListLoading, setDocsListLoading] = useState(true)
 
   // Feedback state
   const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false)
@@ -357,6 +362,29 @@ export default function ProjectDocumentViewer() {
       window.document.removeEventListener('scroll', handleInteraction)
     }
   }, [projectId, documentId, router, authLoading, isAuthenticated, token])
+
+  useEffect(() => {
+    if (!projectId || !isAuthenticated) return
+    const fetchProjectDocuments = async () => {
+      setDocsListLoading(true)
+      try {
+        const res = await apiClient.get<{ documents: DocumentSummary[] }>(
+          `/documents/project/${projectId}?limit=100`
+        )
+        setProjectDocuments(res.documents ?? [])
+      } catch (err) {
+        console.error("Failed to fetch project documents", err)
+        setProjectDocuments([])
+      } finally {
+        setDocsListLoading(false)
+      }
+    }
+    void fetchProjectDocuments()
+  }, [projectId, isAuthenticated])
+
+  const handleDocChange = (newDocId: string) => {
+    router.push(`/projects/${projectId}/documents/${newDocId}/view`)
+  }
 
   // WebSocket effect
   useEffect(() => {
@@ -594,86 +622,115 @@ export default function ProjectDocumentViewer() {
     }
   }
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-background flex">
-        <Sidebar />
-        <div className="flex-1 flex flex-col">
-          <Header title="Loading..." />
-          <main className="flex-1 flex items-center justify-center">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          </main>
-        </div>
+  const pageShell = (content: React.ReactNode, toolbarDocId = documentId) => (
+    <div className="flex h-screen overflow-hidden bg-slate-50">
+      <Sidebar />
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <Header />
+        <DocumentPageToolbar
+          projectId={projectId}
+          mode="view"
+          documents={projectDocuments}
+          docsLoading={docsListLoading}
+          selectedDocId={toolbarDocId}
+          onDocChange={handleDocChange}
+        />
+        {content}
       </div>
+    </div>
+  )
+
+  if (isLoading) {
+    return pageShell(
+      <main className="flex min-h-0 flex-1 items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+      </main>
     )
   }
 
   if (!documentData) {
-    return (
-      <div className="min-h-screen bg-background flex">
-        <Sidebar />
-        <div className="flex-1 flex flex-col">
-          <Header title="Document Not Found" />
-          <main className="flex-1 flex flex-col items-center justify-center">
-            <AlertCircle className="h-12 w-12 text-destructive mb-4" />
-            <h2 className="text-2xl font-bold">Document Not Found</h2>
-            <Button className="mt-4" onClick={() => router.push(`/projects/${projectId}/documents`)}>
-              Back to Documents
-            </Button>
-          </main>
-        </div>
-      </div>
+    return pageShell(
+      <main className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-6">
+        <AlertCircle className="h-12 w-12 text-destructive" />
+        <h2 className="text-xl font-semibold text-slate-900">Document not found</h2>
+        <Button onClick={() => router.push(`/projects/${projectId}/documents`)}>
+          Back to documents
+        </Button>
+      </main>
     )
   }
 
   return (
-    <div className="h-screen bg-background flex overflow-hidden">
+    <div className="flex h-screen overflow-hidden bg-slate-50">
       <Sidebar />
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <Header title={documentData.title || documentData.name || "Document View"} />
-        <main className="flex-1 overflow-y-auto p-6">
-          <PageTransition>
-            <AnimatedLayout>
-              <div className="max-w-7xl mx-auto">
-                {/* Header Section */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-                  <div>
-                    <div className="flex items-center space-x-2 text-sm text-muted-foreground mb-1">
-                      <Folder className="h-4 w-4" />
-                      <span>{documentData.project_name || 'Project'}</span>
-                    </div>
-                    <h1 className="text-3xl font-bold">{documentData.title || documentData.name}</h1>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="secondary">{documentData.status}</Badge>
-                    <Button variant="outline" size="sm" onClick={() => setShowVersionsDialog(true)}>
-                      <History className="h-4 w-4 mr-2" />
-                      v{documentData.loaded_version || documentData.version}
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => setShowComments(!showComments)}>
-                      <MessageSquare className="h-4 w-4 mr-2" />
-                      {documentData.comments?.length || 0}
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => setShowRegenerateModal(true)}>
-                      <Sparkles className="h-4 w-4 mr-2" />
-                      Regenerate
-                    </Button>
-                    <Button variant="outline" size="sm" asChild>
-                      <Link href={getProjectDocumentGenUIPath(projectId, documentId)}>
-                        <Sparkles className="h-4 w-4 mr-2" />
-                        GenUI Workspace
-                      </Link>
-                    </Button>
-                    <Button variant="outline" size="sm" asChild>
-                      <Link href={`/projects/${projectId}/documents/${documentId}`}>
-                        <Settings className="h-4 w-4 mr-2" />
-                        Metadata
-                      </Link>
-                    </Button>
-                  </div>
-                </div>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <Header />
+        <DocumentPageToolbar
+          projectId={projectId}
+          mode="view"
+          documents={projectDocuments}
+          docsLoading={docsListLoading}
+          selectedDocId={documentId}
+          onDocChange={handleDocChange}
+          docSelectorDisabled={isSaving}
+        >
+          <Badge variant="secondary" className="text-[10px] uppercase">
+            {documentData.status}
+          </Badge>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5 text-xs"
+            onClick={() => setShowVersionsDialog(true)}
+          >
+            <History className="h-3.5 w-3.5" />
+            v{documentData.loaded_version || documentData.version}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5 text-xs"
+            onClick={() => setShowComments(!showComments)}
+          >
+            <MessageSquare className="h-3.5 w-3.5" />
+            {documentData.comments?.length || 0}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5 text-xs"
+            onClick={() => setShowRegenerateModal(true)}
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            Regenerate
+          </Button>
+          <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" asChild>
+            <Link href={`/projects/${projectId}/documents/${documentId}`}>
+              <Settings className="h-3.5 w-3.5" />
+              Metadata
+            </Link>
+          </Button>
+        </DocumentPageToolbar>
+        <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar">
+          <AnimatedLayout>
+            <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-8">
+              <div className="mb-6">
+                <p className="mb-1 flex items-center gap-2 text-xs text-slate-500">
+                  <Folder className="h-3.5 w-3.5" />
+                  {documentData.project_name || "Project"}
+                  {templateName ? (
+                    <>
+                      <span className="text-slate-300">·</span>
+                      {templateName}
+                    </>
+                  ) : null}
+                </p>
+                <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">
+                  {documentData.title || documentData.name}
+                </h1>
+              </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                   {/* Editor Column */}
                   <div className="lg:col-span-3">
                     <AnimatedCard>
@@ -831,9 +888,8 @@ export default function ProjectDocumentViewer() {
                     </div>
                   </div>
                 )}
-              </div>
-            </AnimatedLayout>
-          </PageTransition>
+            </div>
+          </AnimatedLayout>
         </main>
       </div>
 

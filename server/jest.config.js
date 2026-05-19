@@ -20,13 +20,15 @@ module.exports = {
     }
   },
   moduleNameMapper: {
+    '^@/lib/(.*)$': '<rootDir>/../lib/$1',
+    '^@/types/(.*)$': '<rootDir>/../types/$1',
     '^@/(.*)$': '<rootDir>/src/$1',
   },
   transformIgnorePatterns: [
     'node_modules/(?!uuid)',
   ],
   transform: {
-    '^.+\\.ts$': ['ts-jest', {
+    '^.+\\.(ts|tsx)$': ['ts-jest', {
       tsconfig: {
         esModuleInterop: true,
         allowSyntheticDefaultImports: true,
