@@ -14,6 +14,9 @@ const nextConfig = {
 
   // Explicitly expose server-side environment variables that are missing the NEXT_PUBLIC_ prefix
   transpilePackages: [
+    '@openuidev/react-headless',
+    '@openuidev/react-lang',
+    '@openuidev/react-ui',
     'lucide-react',
     '@itwin/viewer-react',
     '@itwin/itwinui-react',
