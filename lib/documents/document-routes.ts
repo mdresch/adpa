@@ -11,7 +11,8 @@ export function getProjectContextPath(projectId: string): string {
 }
 
 export function getProjectDocumentViewPath(projectId: string, documentId: string): string {
-  return `/projects/${projectId}/documents/${documentId}/view`
+  const query = new URLSearchParams({ docId: documentId })
+  return `/projects/${projectId}/documents/view?${query.toString()}`
 }
 
 export function getProjectSourceDocumentPath(projectId: string, documentId: string): string {
@@ -27,7 +28,8 @@ export function getProjectDocumentEntitiesPath(projectId: string, documentId: st
 }
 
 export function getProjectDocumentGenUIPath(projectId: string, documentId: string): string {
-  return `/projects/${projectId}/documents/${documentId}/genui`
+  const query = new URLSearchParams({ docId: documentId })
+  return `/projects/${projectId}/documents/genui?${query.toString()}`
 }
 
 export function getDocumentSignPath(documentId: string): string {

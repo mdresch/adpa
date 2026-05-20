@@ -52,6 +52,14 @@ const nextConfig = {
     return {
       beforeFiles: [
         {
+          source: '/projects/:id/documents/:docId/genui',
+          destination: '/projects/:id/documents/genui?docId=:docId',
+        },
+        {
+          source: '/projects/:id/documents/:docId/view',
+          destination: '/projects/:id/documents/view?docId=:docId',
+        },
+        {
           source: '/api/:path((?!morphic|auth|chat|openui-chat|keepalive).*)',
           destination: `${process.env.BACKEND_URL || 'https://adpa.onrender.com'}/api/:path*`,
         },

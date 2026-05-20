@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { FullScreen } from "@openuidev/react-ui";
 import { openAIMessageFormat, openAIReadableStreamAdapter } from "@openuidev/react-headless";
@@ -10,15 +10,15 @@ import { openuiLibrary, openuiPromptOptions } from "@openuidev/react-ui/genui-li
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
 import { PageTransition } from "@/components/page-transition";
-import { AnimatedLayout } from "@/components/animated-layout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { Loader2, ArrowLeft, FileText, AlertCircle, RefreshCw } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiClient } from "@/lib/api";
 import { toast } from "@/lib/notify";
 import { CustomAssistantMessage } from "@/components/Chat/AssistantMessage";
+import { getProjectDocumentViewPath } from "@/lib/documents/document-routes";
+import { useProjectDocumentRouteIds } from "@/lib/documents/use-project-document-route-ids";
 
 interface DocumentData {
   id: string;
@@ -33,19 +33,21 @@ interface DocumentData {
 }
 
 export default function DocumentGenUIWorkspace() {
-  const params = useParams();
   const router = useRouter();
   const { isAuthenticated, loading: authLoading } = useAuth();
-
-  const projectId = params.id as string;
-  const documentId = params.docId as string;
+  const { projectId, documentId } = useProjectDocumentRouteIds();
 
   const [doc, setDoc] = useState<DocumentData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch document details using ADPA's apiClient
+  useEffect(() => {
+    if (!projectId || documentId) return;
+    router.replace(`/projects/${projectId}/documents`);
+  }, [projectId, documentId, router]);
+
   const fetchDoc = async () => {
+    if (!documentId) return;
     setLoading(true);
     setError(null);
     try {
@@ -85,7 +87,7 @@ export default function DocumentGenUIWorkspace() {
   };
 
   useEffect(() => {
-    if (authLoading) return;
+    if (authLoading || !documentId) return;
     if (!isAuthenticated) return;
 
     void fetchDoc();
@@ -138,7 +140,6 @@ export default function DocumentGenUIWorkspace() {
     );
   }
 
-  // Compile system instructions with the dynamic document context embedded
   const baseSystemPrompt = openuiLibrary.prompt(openuiPromptOptions);
   const systemPrompt = `
 ${baseSystemPrompt}
@@ -162,12 +163,10 @@ When generating layout, charts, or tables, use the exact metrics detailed above.
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header title={`${doc.title} — Generative UI Workspace`} />
-        
+
         <main className="flex-1 flex overflow-hidden">
           <PageTransition className="flex flex-1 overflow-hidden w-full h-full">
             <div className="flex w-full h-full divide-x divide-slate-800">
-              
-              {/* LEFT PANE: Dynamic Document Viewer */}
               <div className="w-1/2 flex flex-col h-full bg-slate-900/10 dark:bg-slate-950/40">
                 <div className="p-6 border-b border-border/60 bg-background/50 backdrop-blur flex justify-between items-center">
                   <div>
@@ -189,7 +188,6 @@ When generating layout, charts, or tables, use the exact metrics detailed above.
                 </div>
 
                 <div className="flex-1 p-6 overflow-y-auto space-y-6">
-                  {/* Info block */}
                   <div className="grid grid-cols-3 gap-4">
                     <div className="p-4 rounded-2xl bg-background border border-border/80 shadow-sm">
                       <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Word Count</div>
@@ -209,7 +207,6 @@ When generating layout, charts, or tables, use the exact metrics detailed above.
                     </div>
                   </div>
 
-                  {/* Content viewer block */}
                   <div className="flex flex-col flex-1 bg-background border border-border/80 rounded-3xl shadow-sm overflow-hidden min-h-[300px]">
                     <div className="px-5 py-3.5 border-b border-border/60 bg-muted/20 flex items-center gap-2">
                       <FileText size={16} className="text-primary" />
@@ -223,13 +220,15 @@ When generating layout, charts, or tables, use the exact metrics detailed above.
 
                 <div className="p-4 border-t border-border/60 bg-background/50 flex justify-between items-center text-[10px] text-muted-foreground font-mono">
                   <span>Project ID: {projectId}</span>
-                  <Link href={`/projects/${projectId}/documents/${documentId}/view`} className="text-primary hover:underline flex items-center gap-1 font-semibold">
+                  <Link
+                    href={getProjectDocumentViewPath(projectId, documentId)}
+                    className="text-primary hover:underline flex items-center gap-1 font-semibold"
+                  >
                     Open Rich Editor &rarr;
                   </Link>
                 </div>
               </div>
 
-              {/* RIGHT PANE: OpenUI Interactive Generation Interface */}
               <div className="w-1/2 h-full flex flex-col relative bg-slate-950">
                 <FullScreen
                   processMessage={async ({ messages, abortController }) => {
@@ -249,7 +248,6 @@ When generating layout, charts, or tables, use the exact metrics detailed above.
                   assistantMessage={CustomAssistantMessage}
                 />
               </div>
-
             </div>
           </PageTransition>
         </main>
