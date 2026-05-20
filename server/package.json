@@ -5,6 +5,7 @@
   "main": "src/server.ts",
   "scripts": {
     "start": "node -r tsconfig-paths/register dist/server/src/server.js",
+    "predev": "node ../scripts/ensure-zod-v4-exports.mjs",
     "dev": "nodemon --exec tsx src/server.ts",
     "lint": "eslint .",
     "build": "node scripts/build-production.mjs && tsc-alias -p tsconfig.json",
@@ -137,7 +138,7 @@
     "winston": "^3.11.0",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "xml2js": "^0.6.2",
-    "zod": "^3.24.1"
+    "zod": "^4.1.8"
   },
   "devDependencies": {
     "@faker-js/faker": "^10.3.0",

@@ -26,6 +26,10 @@ export function getProjectDocumentEntitiesPath(projectId: string, documentId: st
   return `/projects/${projectId}/documents/${documentId}/entities`
 }
 
+export function getProjectDocumentGenUIPath(projectId: string, documentId: string): string {
+  return `/projects/${projectId}/documents/${documentId}/genui`
+}
+
 export function getDocumentSignPath(documentId: string): string {
   return `/documents/${documentId}/sign`
 }

@@ -20,4 +20,10 @@ describe('deployment build configuration', () => {
     )
     expect(serverPackage.devDependencies.esbuild).toBeDefined()
   })
+
+  it('includes server context providers in the production build allowlist', () => {
+    const buildScript = readWorkspaceFile('server/scripts/build-production.mjs')
+
+    expect(buildScript).not.toMatch(/server\/src\/contexts\//)
+  })
 })

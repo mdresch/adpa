@@ -24,7 +24,8 @@
     "sync:watch": "npx tsx scripts/sync-scheduler.ts",
     "test:gemini-langsmith": "tsx scripts/test-gemini-langsmith.ts",
     "test:vercel-ai-langsmith": "tsx scripts/test-vercel-ai-langsmith.ts",
-    "chunk:documents": "tsx scripts/chunk-documents.ts"
+    "chunk:documents": "tsx scripts/chunk-documents.ts",
+    "postinstall": "node scripts/ensure-zod-v4-exports.mjs"
   },
   "dependencies": {
     "@adobe/pdfservices-node-sdk": "4.0.1",
@@ -182,7 +183,7 @@
     "node-stream-zip": "latest",
     "nodemailer": "^8.0.5",
     "novel": "^1.0.2",
-    "openai": "^6.21.0",
+    "openai": "^6.22.0",
     "p-limit": "latest",
     "p-map": "latest",
     "p-retry": "latest",

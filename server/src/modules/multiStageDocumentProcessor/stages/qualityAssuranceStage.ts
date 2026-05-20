@@ -2155,7 +2155,7 @@ export class QualityAssuranceStage {
         category: 'data_governance',
         mandatory: false, // Not mandatory for minimal-risk systems, but recommended
         description: 'Data processing must be documented (EU AI Act Article 10)',
-        validation_function: 'validateDataGovernance',
+        validation_function: 'validateEUAIActDataGovernance',
         severity: 'medium'
       },
       {
@@ -2348,7 +2348,7 @@ export class QualityAssuranceStage {
           ? '' 
           : 'Verify AI-generated content accuracy. Implement error handling and validation mechanisms.'
         break
-      case 'validateDataGovernance':
+      case 'validateEUAIActDataGovernance':
         passed = this.validateEUAIActDataGovernance(contextualizedDocument, validationContext)
         description = passed 
           ? 'Data governance documented' 

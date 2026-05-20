@@ -66,7 +66,12 @@ import {
 import { useAuth } from "@/contexts/AuthContext"
 import { apiClient } from "@/lib/api"
 import { getDocumentApiPath } from "@/lib/documents/document-api-routes"
-import { getProjectContextPath, getProjectSourceDocumentPath, isProjectContextDocumentId } from "@/lib/documents/document-routes"
+import {
+  getProjectContextPath,
+  getProjectDocumentGenUIPath,
+  getProjectSourceDocumentPath,
+  isProjectContextDocumentId,
+} from "@/lib/documents/document-routes"
 import { normalizeMermaidMarkdown } from "@/lib/documents/mermaid"
 import { useWebSocket } from "@/contexts/WebSocketContext"
 import { toast } from '@/lib/notify'

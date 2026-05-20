@@ -34,7 +34,6 @@ const ignoredFilePatterns = [
 const ignoredWorkspacePrefixes = [
   'lib/analytics/',
   'server/src/components/',
-  'server/src/contexts/',
   'server/src/hooks/',
   'server/src/pages/',
 ]
