@@ -5,6 +5,8 @@ description: "Project-scoped chat threads, structured assistant payloads, and th
 
 OpenUI chat is a project-scoped assistant surface that stores chat history in PostgreSQL and returns structured UI payloads over Server-Sent Events (SSE). It is implemented by the Express module in `server/src/modules/openuiChat` and consumed by the Next.js pages under `app/openui-chat` and `app/ai/openui-chat`.
 
+For the **document GenUI workspace** (split-pane document + advisor at `/projects/{id}/documents/genui`), see [Document GenUI Workspace](/docs/genui-workspace). That surface uses `POST /api/chat` with a document-embedded system prompt and Mistral streaming—not the `/api/v1/openui-chat` thread APIs described below.
+
 ## Source Map
 
 | Concern | Source files |

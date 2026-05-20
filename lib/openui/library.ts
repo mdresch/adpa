@@ -104,9 +104,21 @@ export function isLegacyComponentPayload(
   return isComponentPayload(payload as OpenUIAssistantPayload)
 }
 
+/** Strip markdown code fences the model sometimes wraps around OpenUI Lang */
+export function extractOpenUILangText(text: string): string {
+  const trimmed = text.trim()
+  const closedFence = trimmed.match(/^```(?:openui-lang|openui)\s*\n([\s\S]*?)\n```$/i)
+  if (closedFence) return closedFence[1].trim()
+
+  const openFence = trimmed.match(/^```(?:openui-lang|openui)\s*\n([\s\S]*)$/i)
+  if (openFence) return openFence[1].trim()
+
+  return trimmed
+}
+
 /** Heuristic: assistant content looks like OpenUI Lang (statement syntax, not XML) */
 export function looksLikeOpenUILang(text: string): boolean {
-  const trimmed = text.trim()
+  const trimmed = extractOpenUILangText(text)
   if (/^root\s*=/m.test(trimmed)) return true
   if (trimmed.startsWith("<") && /<[A-Z][a-zA-Z]*/.test(trimmed)) return false
   return /^[A-Za-z][\w]*\s*=/.test(trimmed)

@@ -72,3 +72,18 @@ The Next.js frontend proxies `/api/*` requests to the backend via `next.config.m
 ### Build Scripts Approval
 
 The `pnpm.onlyBuiltDependencies` field in root `package.json` controls which packages can run postinstall scripts. Key packages that need it: `puppeteer`, `sharp`, `esbuild`.
+
+### Document GenUI workspace
+
+Split-pane page for governance documents: source text (left) + OpenUI advisor (right) at `/projects/{projectId}/documents/genui?docId={documentId}`.
+
+| Topic | Detail |
+| --- | --- |
+| **Agent skill (maintain/extend)** | `.agents/skills/adpa-genui-workspace/SKILL.md` — architecture, file map, env vars, rendering pitfalls, checklist |
+| **Human codedoc** | `docs/codedocs/genui-workspace.md` (linked from `docs/codedocs/index.md` as `/docs/genui-workspace`) |
+| **Not the same as** | Project OpenUI Chat (`/openui-chat`, `server/src/modules/openuiChat`) — different API and persistence |
+| **Step 2 LLM** | `POST /api/chat` with `systemPrompt` → Mistral (`MISTRAL_API_KEY`, `MISTRAL_MODEL` in `.env.local`) |
+| **Rendering** | OpenUI Lang via `CustomAssistantMessage` + `openuiLibrary` (`@openuidev/react-ui/genui-lib`); see skill for `assistantMessage` override pitfall |
+| **Key files** | `app/projects/[id]/documents/genui/page.tsx`, `genui-workspace.css`, `app/api/chat/route.ts`, `components/openui-chat/AssistantMessage.tsx` |
+
+Load the skill before changing GenUI layout, prompts, chat proxy, or structured UI output.
