@@ -136,14 +136,14 @@ export default function PortfolioGovernancePage() {
   useEffect(() => {
     const loadCompanies = async () => {
       try {
-        const data = await apiClient.get<{ success: boolean; data: Array<{ id: string; name: string }> }>(
-          '/companies'
-        )
-        if (data.success && data.data) {
-          setCompanies(data.data)
-          if (data.data.length > 0) {
-            setSelectedCompany(data.data[0].id)
-          }
+        const data = await apiClient.getCompanies({ page: 1, limit: 500 })
+        const list = (data.companies || []).map((c: { id: string; name: string }) => ({
+          id: c.id,
+          name: c.name,
+        }))
+        setCompanies(list)
+        if (list.length > 0) {
+          setSelectedCompany(list[0].id)
         }
       } catch (error) {
         toast.error('Failed to load companies')
