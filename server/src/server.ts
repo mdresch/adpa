@@ -266,6 +266,8 @@ if (morphicModuleRoutes && morphicModuleRoutes[0]) {
 }
 if (projectsModuleRoutes && projectsModuleRoutes[0]) app.use("/api/projects", projectsModuleRoutes[0].router)
 if (authModuleRoutes && authModuleRoutes[0]) app.use("/api/auth", authModuleRoutes[0].router)
+// Identity router defines /companies and /users; mount at /api for frontend apiClient paths
+if (identityModuleRoutes && identityModuleRoutes[0]) app.use("/api", identityModuleRoutes[0].router)
 if (morphicModuleRoutes && morphicModuleRoutes[0]) {
   app.use("/api/v1/morphic", morphicModuleRoutes[0].router)
   app.use("/api/morphic", morphicModuleRoutes[0].router)
