@@ -1540,29 +1540,31 @@ export class ApiClient {
     if (params?.search) queryParams.append('search', params.search)
     if (params?.is_active !== undefined) queryParams.append('is_active', params.is_active.toString())
     const query = queryParams.toString()
-    return this.request<{ companies: any[]; pagination: any }>(`/companies${query ? `?${query}` : ''}`)
+    return this.request<{ companies: any[]; pagination: any }>(
+      `/v1/identity/companies${query ? `?${query}` : ""}`
+    )
   }
 
   async getCompany(id: string) {
-    return this.request<{ company: any }>(`/companies/${id}`)
+    return this.request<{ company: any }>(`/v1/identity/companies/${id}`)
   }
 
   async createCompany(companyData: { name: string; domain?: string; metadata?: any }) {
-    return this.request<{ message: string; company: any }>("/companies", {
+    return this.request<{ message: string; company: any }>("/v1/identity/companies", {
       method: "POST",
       body: JSON.stringify(companyData),
     })
   }
 
   async updateCompany(id: string, companyData: { name?: string; domain?: string; metadata?: any; is_active?: boolean }) {
-    return this.request<{ message: string; company: any }>(`/companies/${id}`, {
+    return this.request<{ message: string; company: any }>(`/v1/identity/companies/${id}`, {
       method: "PUT",
       body: JSON.stringify(companyData),
     })
   }
 
   async deleteCompany(id: string) {
-    return this.request<{ message: string; company: any }>(`/companies/${id}`, {
+    return this.request<{ message: string; company: any }>(`/v1/identity/companies/${id}`, {
       method: "DELETE",
     })
   }
