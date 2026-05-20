@@ -19,9 +19,12 @@ import {
   Wand2,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
-import { getProjectDocumentViewPath } from "@/lib/documents/document-routes"
+import {
+  getProjectDocumentGenUIPath,
+  getProjectDocumentViewPath,
+} from "@/lib/documents/document-routes"
 
-export type DocumentPageMode = "view" | "source" | "report"
+export type DocumentPageMode = "view" | "source" | "report" | "genui"
 
 export interface DocumentSummary {
   id: string
@@ -41,6 +44,12 @@ const MODE_CONFIG: Record<
     title: "Document Report",
     badge: "Live",
     iconClassName: "text-indigo-600",
+  },
+  genui: {
+    icon: Wand2,
+    title: "GenUI Workspace",
+    badge: "AI",
+    iconClassName: "text-violet-600",
   },
 }
 
@@ -170,6 +179,23 @@ export function DocumentPageToolbar({
               >
                 <Wand2 className="h-3.5 w-3.5" />
                 Report
+              </Button>
+            ) : null}
+            {mode !== "genui" ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className={`h-8 gap-1.5 text-xs ${
+                  mode === "report"
+                    ? "border-violet-200 text-violet-600"
+                    : ""
+                }`}
+                onClick={() =>
+                  router.push(getProjectDocumentGenUIPath(projectId, selectedDocId))
+                }
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                GenUI
               </Button>
             ) : null}
           </>

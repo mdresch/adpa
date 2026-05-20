@@ -1,0 +1,99 @@
+/* GenUI workspace: OpenUI chat expects a light surface; isolate from app dark theme tokens. */
+.genui-workspace {
+  background-color: rgb(248 250 252);
+  color: rgb(15 23 42);
+}
+
+.genui-workspace .genui-source-pane {
+  background-color: #fff;
+  color: rgb(15 23 42);
+}
+
+.genui-workspace .genui-muted {
+  color: rgb(71 85 105);
+}
+
+.genui-workspace .genui-body-text {
+  color: rgb(30 41 59);
+}
+
+.genui-openui-root {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color-scheme: light;
+  background-color: #fff;
+  color: rgb(15 23 42);
+}
+
+/* FullScreen defaults to full viewport; constrain to Step 2 panel */
+.genui-openui-root .openui-shell-container {
+  position: absolute !important;
+  inset: 0;
+  height: 100% !important;
+  width: 100% !important;
+  max-height: 100%;
+  max-width: 100%;
+}
+
+/* Hide thread sidebar in embedded document workspace so chat centers in the pane */
+.genui-openui-root .openui-shell-sidebar-container,
+.genui-openui-root .openui-shell-sidebar-container__overlay {
+  display: none !important;
+}
+
+.genui-openui-root .openui-shell-thread-wrapper,
+.genui-openui-root .openui-shell-thread-container {
+  width: 100%;
+  height: 100%;
+}
+
+.genui-openui-root .openui-shell-thread-chat-panel {
+  flex: 1 1 auto !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100%;
+}
+
+.genui-openui-root .openui-shell-welcome-screen,
+.genui-openui-root .openui-shell-thread-messages,
+.genui-openui-root .openui-shell-conversation-starter,
+.genui-openui-root .openui-shell-thread-composer {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.genui-openui-root .openui-shell-welcome-screen__desktop-starters
+  .openui-shell-conversation-starter--long {
+  align-items: stretch;
+}
+
+/* GenUI Lang layout: use full panel width, center content block */
+.genui-openui-root .genui-lang-render,
+.genui-openui-root .openui-shell-thread-messages {
+  width: 100%;
+  max-width: 100%;
+}
+
+.genui-openui-root .openui-shell-thread-scroll-area {
+  padding-left: var(--openui-space-m);
+  padding-right: var(--openui-space-m);
+}
+
+.dark .genui-workspace,
+.dark .genui-workspace .genui-source-pane,
+.dark .genui-workspace .genui-openui-root {
+  color: rgb(15 23 42);
+}
+
+.dark .genui-workspace .genui-muted {
+  color: rgb(71 85 105);
+}
+
+.dark .genui-workspace .genui-body-text {
+  color: rgb(30 41 59);
+}
