@@ -16,7 +16,9 @@ describe('document routes', () => {
   })
 
   it('builds the project document view route', () => {
-    expect(getProjectDocumentViewPath(projectId, documentId)).toBe('/projects/project-123/documents/document-456/view')
+    expect(getProjectDocumentViewPath(projectId, documentId)).toBe(
+      '/projects/project-123/documents/view?docId=document-456'
+    )
   })
 
   it('builds the project document entities route', () => {
@@ -24,7 +26,9 @@ describe('document routes', () => {
   })
 
   it('builds the project document GenUI workspace route', () => {
-    expect(getProjectDocumentGenUIPath(projectId, documentId)).toBe('/projects/project-123/documents/document-456/genui')
+    expect(getProjectDocumentGenUIPath(projectId, documentId)).toBe(
+      '/projects/project-123/documents/genui?docId=document-456'
+    )
   })
 
   it('builds the document sign route', () => {
@@ -36,6 +40,8 @@ describe('document routes', () => {
   })
 
   it('routes normal source documents to the document view page', () => {
-    expect(getProjectSourceDocumentPath(projectId, documentId)).toBe('/projects/project-123/documents/document-456/view')
+    expect(getProjectSourceDocumentPath(projectId, documentId)).toBe(
+      '/projects/project-123/documents/view?docId=document-456'
+    )
   })
 })
