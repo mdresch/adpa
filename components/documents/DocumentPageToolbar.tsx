@@ -19,6 +19,7 @@ import {
   Wand2,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
+import { getProjectDocumentViewPath } from "@/lib/documents/document-routes"
 
 export type DocumentPageMode = "view" | "source" | "report"
 
@@ -134,7 +135,7 @@ export function DocumentPageToolbar({
                 size="sm"
                 className="h-8 gap-1.5 text-xs"
                 onClick={() =>
-                  router.push(`/projects/${projectId}/documents/${selectedDocId}/view`)
+                  router.push(getProjectDocumentViewPath(projectId, selectedDocId))
                 }
               >
                 <Eye className="h-3.5 w-3.5" />
