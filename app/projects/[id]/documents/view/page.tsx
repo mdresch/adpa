@@ -5,7 +5,6 @@ import { useDebouncedCallback } from "use-debounce"
 
 
 import { useRouter } from "next/navigation"
-import { useParams } from "next/navigation"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -69,9 +68,11 @@ import { getDocumentApiPath } from "@/lib/documents/document-api-routes"
 import {
   getProjectContextPath,
   getProjectDocumentGenUIPath,
+  getProjectDocumentViewPath,
   getProjectSourceDocumentPath,
   isProjectContextDocumentId,
 } from "@/lib/documents/document-routes"
+import { useProjectDocumentRouteIds } from "@/lib/documents/use-project-document-route-ids"
 import { normalizeMermaidMarkdown } from "@/lib/documents/mermaid"
 import { useWebSocket } from "@/contexts/WebSocketContext"
 import { toast } from '@/lib/notify'
@@ -90,12 +91,9 @@ import {
 } from "@/types/adpa"
 
 export default function ProjectDocumentViewer() {
-  const params = useParams()
   const router = useRouter()
   const { user, loading: authLoading, isAuthenticated, token } = useAuth()
-
-  const projectId = params.id as string
-  const documentId = params.docId as string
+  const { projectId, documentId } = useProjectDocumentRouteIds()
 
   const [documentData, setDocumentData] = useState<ADPADoc | null>(null)
   const [versions, setVersions] = useState<DocVersion[]>([])
@@ -332,6 +330,11 @@ export default function ProjectDocumentViewer() {
   useEffect(() => {
     if (typeof window === 'undefined') return
 
+    if (!documentId && projectId) {
+      router.replace(`/projects/${projectId}/documents`)
+      return
+    }
+
     if (isProjectContextDocumentId(documentId)) {
       router.replace(getProjectContextPath(projectId))
       return
@@ -383,7 +386,7 @@ export default function ProjectDocumentViewer() {
   }, [projectId, isAuthenticated])
 
   const handleDocChange = (newDocId: string) => {
-    router.push(`/projects/${projectId}/documents/${newDocId}/view`)
+    router.push(getProjectDocumentViewPath(projectId, newDocId))
   }
 
   // WebSocket effect
