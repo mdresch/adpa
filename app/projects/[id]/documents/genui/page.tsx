@@ -8,6 +8,7 @@ import "./genui-workspace.css";
 import { FullScreen } from "@openuidev/react-ui";
 import { openAIMessageFormat, openAIReadableStreamAdapter } from "@openuidev/react-headless";
 import { projectOpenUILibrary } from "@/lib/openui/projectOpenUILibrary";
+import { trimTextForGenuiPrompt } from "@/lib/llm/genuiPromptBudget";
 import { buildOpenUIGenuiLibraryPrompt, enrichOpenUIApiMessages } from "@/lib/openui/systemPrompt";
 import { wantsAiCoverSummary, wantsGenuiReportDarkTheme } from "@/lib/openui/layoutPlan";
 import { buildCoverBlurbFromSources } from "@/lib/openui/coverSummary";
@@ -225,21 +226,27 @@ export default function DocumentGenUIWorkspace() {
     documentType: doc.template_name ?? doc.document_type,
     projectName: doc.project_name,
   });
+  const { text: documentExcerpt, truncated: documentTruncated } = trimTextForGenuiPrompt(
+    doc.content ?? ""
+  );
+  const truncationNote = documentTruncated
+    ? "\n[System prompt shows the first portion of the document only (API size limits). The latest user message includes a REQUIRED LAYOUT PLAN with section excerpts — use those for full section text.]\n"
+    : "";
   const systemPrompt = `
 ${baseSystemPrompt}
 
 CRITICAL CONTEXT:
 You are assisting the user inside their workspace for the document "${doc.title}".
-You MUST ground your answers, charts, forms, and tables in the document's real data:
+Ground answers in the document below and in section sourceText from the REQUIRED LAYOUT PLAN on each user turn.
 ---
-DOCUMENT CONTENT:
-${doc.content}
-
+DOCUMENT CONTENT (excerpt):
+${documentExcerpt}
+${truncationNote}
 METADATA:
 ${JSON.stringify(doc.metadata, null, 2)}
 ---
 
-When generating layout, charts, or tables, use the exact metrics detailed above.
+When generating layout, charts, or tables, use metrics from the excerpt and layout-plan sourceText.
 `;
 
   return (

@@ -5,17 +5,7 @@
  * All ritual state and transformations are handled by the Orchestrator.
  */
 
-import { getApiBaseUrl } from './api-url';
-import { assertRelativeApiPath, assertSafePathSegment } from './safe-http-path';
-
-/** Direct orchestrator base (browser). When unset, use same-origin /api/Ritual (Next rewrite → ORCHESTRATOR_URL). */
-function getOrchestratorRitualBase(): string {
-  const explicit = process.env.NEXT_PUBLIC_ORCHESTRATOR_URL?.trim()
-  if (explicit) {
-    return `${explicit.replace(/\/$/, '')}/api/Ritual`
-  }
-  return `${getApiBaseUrl()}/Ritual`
-}
+import { assertSafePathSegment, fetchRitualApi } from './safe-http-path';
 
 export function isRitualOrchestratorConfigured(): boolean {
   return Boolean(
@@ -25,7 +15,7 @@ export function isRitualOrchestratorConfigured(): boolean {
 }
 
 function ritualFetch(path: string, init?: RequestInit): Promise<Response> {
-  return fetch(`${getOrchestratorRitualBase()}${path}`, init)
+  return fetchRitualApi(path, init)
 }
 
 /** True when Express returned HTML 404 for a missing ritual route (orchestrator not proxied / not running). */

@@ -16,6 +16,7 @@ import type {
   SegmentMapping,
   TextSegment,
 } from "@/lib/openui/layoutPlanTypes"
+import { compactLayoutPlanForExecutor } from "@/lib/llm/genuiPromptBudget"
 import {
   buildCoverBlurbFromSources,
   COVER_SUMMARY_MAX_CHARS,
@@ -530,7 +531,7 @@ function buildSubsectionBlock(seg: TextSegment): LayoutPlanNode {
     id: `sub-${seg.id}`,
     component: "Stack",
     mapping: "widget",
-    sourceText: seg.body,
+    sourceText: title,
     label: title,
     hints: { note: "subsection inside chapter Card — not a separate top-level Card" },
     children: [
@@ -570,14 +571,14 @@ function buildChapterCardNode(chapter: ReportChapter, prompt: string): LayoutPla
         id: `acc-wrap-${sub.id}`,
         component: "Accordion",
         mapping: "widget",
-        sourceText: sub.body,
+        sourceText: normalizeTitle(sub.title ?? sub.id),
         label: sub.title,
         children: [
           {
             id: `acc-${sub.id}`,
             component: "AccordionItem",
             mapping: "widget",
-            sourceText: sub.body,
+            sourceText: normalizeTitle(sub.title ?? sub.id),
             label: normalizeTitle(sub.title ?? sub.id),
             children: [inner],
           },
@@ -588,18 +589,11 @@ function buildChapterCardNode(chapter: ReportChapter, prompt: string): LayoutPla
     }
   }
 
-  const sourceText = [
-    chapter.leadSegment?.body,
-    ...chapter.subsections.map((s) => s.body),
-  ]
-    .filter(Boolean)
-    .join("\n\n")
-
   return {
     id: `card-${chapter.id}`,
     component: "Card",
     mapping: "widget",
-    sourceText,
+    sourceText: chapter.title,
     label: chapter.title,
     hints: {
       note: "primary report chapter (H1 or numbered ##) — single rounded Card; subsections nested inside",
@@ -618,14 +612,14 @@ function buildSectionCardNode(seg: TextSegment, prompt: string): LayoutPlanNode 
       id: `acc-wrap-${seg.id}`,
       component: "Accordion",
       mapping: "widget",
-      sourceText: seg.body,
+      sourceText: title,
       label: title,
       children: [
         {
           id: `acc-${seg.id}`,
           component: "AccordionItem",
           mapping: "widget",
-          sourceText: seg.body,
+          sourceText: title,
           label: title,
           children: [inner],
         },
@@ -637,7 +631,7 @@ function buildSectionCardNode(seg: TextSegment, prompt: string): LayoutPlanNode 
     id: `card-${seg.id}`,
     component: "Card",
     mapping: "widget",
-    sourceText: seg.body,
+    sourceText: title,
     label: title,
     hints: { note: "report section Card with CardHeader + body widget" },
     children: [
@@ -890,7 +884,7 @@ function buildShellNodes(
         id: "intro-text",
         component: "TextContent",
         mapping: "typography-fallback",
-        sourceText: summarySource,
+        sourceText: summarySource.slice(0, 1200),
         fallbackReason: "executive summary lead",
         hints: { variant: "default" },
       },
@@ -925,7 +919,7 @@ function buildShellNodes(
     if (tableSeg) {
       return [frontCard, buildNodeFromSegment(tableSeg)]
     }
-    const merged = sectionSegments.map((s) => s.body).join("\n\n")
+    const merged = sectionSegments.map((s) => s.body).join("\n\n").slice(0, 12_000)
     return [
       frontCard,
       {
@@ -950,7 +944,7 @@ function buildShellNodes(
             id: "primary-timeline",
             component: "Timeline",
             mapping: "widget",
-            sourceText: sectionSegments.map((s) => s.body).join("\n"),
+            sourceText: sectionSegments.map((s) => s.body).join("\n").slice(0, 12_000),
           },
     ]
   }
@@ -1090,6 +1084,7 @@ export function formatLayoutPlanForExecutor(
   plan: LayoutPlan,
   options?: { reportDarkTheme?: boolean }
 ): string {
+  const cappedPlan = compactLayoutPlanForExecutor(plan)
   const shellHints: Record<LayoutShellId, string> = {
     charter:
       "root = Stack([TableOfContents?, intro Card, one Card per major chapter; ### subsections nested inside chapter Card])",
@@ -1106,11 +1101,11 @@ export function formatLayoutPlanForExecutor(
 
   return [
     "=== REQUIRED LAYOUT PLAN (strict — do not change structure) ===",
-    `shell: ${plan.shell}`,
-    `root: ${plan.root}`,
-    `intentPrimary: ${plan.intentPrimary}`,
-    `confidence: ${plan.confidence.toFixed(2)}`,
-    `suggestedRootPattern: ${shellHints[plan.shell]}`,
+    `shell: ${cappedPlan.shell}`,
+    `root: ${cappedPlan.root}`,
+    `intentPrimary: ${cappedPlan.intentPrimary}`,
+    `confidence: ${cappedPlan.confidence.toFixed(2)}`,
+    `suggestedRootPattern: ${shellHints[cappedPlan.shell]}`,
     "",
     "EXECUTOR RULES:",
     "- Output valid OpenUI Lang only (first line: root = …).",
@@ -1142,7 +1137,7 @@ export function formatLayoutPlanForExecutor(
       : []),
     "",
     "NODES:",
-    ...flattenNodes(plan.nodes),
+    ...flattenNodes(cappedPlan.nodes),
     "=== END LAYOUT PLAN ===",
   ].join("\n")
 }
