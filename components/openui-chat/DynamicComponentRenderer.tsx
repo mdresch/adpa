@@ -12,13 +12,14 @@ import { Sparkles, Telescope } from "lucide-react"
 import { MarkdownRenderer } from "@/components/documents/MarkdownRenderer"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { adpaLibrary } from "@/lib/openui/adpaLibrary"
+import { resolveOpenUIRenderLibrary } from "@/lib/openui/resolveRenderLibrary"
 import type { ComponentPayload, OpenUIChatJson } from "@/lib/openui/library"
 import {
   extractOpenUILangText,
   isLegacyComponentPayload,
   looksLikeOpenUILang,
 } from "@/lib/openui/library"
+import { validateExecutorLang } from "@/lib/openui/langValidation"
 
 import { TableComponent } from "./components/TableComponent"
 import { ChartComponent } from "./components/ChartComponent"
@@ -44,7 +45,7 @@ export interface DynamicComponentRendererProps {
   /** @deprecated Legacy JSON component payload from pre–react-lang threads */
   payload?: ComponentPayload | OpenUIChatJson
   isStreaming?: boolean
-  /** Defaults to ADPA library; pass openuiLibrary from @openuidev/react-ui/genui-lib for GenUI workspace */
+  /** Optional override; otherwise Report roots use adpaLibrary, GenUI Stack/Card roots use projectOpenUILibrary */
   library?: Library
 }
 
@@ -52,7 +53,7 @@ export function DynamicComponentRenderer({
   response,
   payload,
   isStreaming = false,
-  library = adpaLibrary,
+  library: libraryOverride,
 }: DynamicComponentRendererProps) {
   const raw =
     response ??
@@ -74,14 +75,23 @@ export function DynamicComponentRenderer({
   }
 
   if (hasRoot) {
+    const renderLibrary =
+      libraryOverride ?? resolveOpenUIRenderLibrary(trimmed)
+
     return (
       <Renderer
-        library={library}
+        library={renderLibrary}
         response={trimmed}
         isStreaming={isStreaming}
         onError={(errors) => {
           if (errors.length > 0) {
             console.warn("[OpenUI Renderer]", errors)
+          }
+          if (!isStreaming && trimmed) {
+            const validation = validateExecutorLang(trimmed)
+            if (!validation.ok) {
+              console.warn("[OpenUI Lang validation]", validation.issues)
+            }
           }
         }}
       />

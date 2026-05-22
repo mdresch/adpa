@@ -23,6 +23,16 @@ interface Neo4jStats {
     source?: 'integration' | 'gkg';
 }
 
+type GkgSummaryPayload = {
+    status?: string;
+    error?: string;
+    totalPrograms?: number;
+    totalProjects?: number;
+    totalDocuments?: number;
+    totalTasks?: number;
+    totalUnits?: number;
+}
+
 interface Neo4jDashboardProps {
     integrationId: string | null;
 }
@@ -30,9 +40,11 @@ interface Neo4jDashboardProps {
 export function Neo4jDashboard({ integrationId }: Neo4jDashboardProps) {
     const [stats, setStats] = useState<Neo4jStats | null>(null)
     const [loading, setLoading] = useState(false)
+    const [unavailableMessage, setUnavailableMessage] = useState<string | null>(null)
 
     const fetchStats = async () => {
         setLoading(true)
+        setUnavailableMessage(null)
         try {
             const token = localStorage.getItem('auth_token') || localStorage.getItem('token')
             const headers = { 'Authorization': `Bearer ${token}` }
@@ -52,11 +64,38 @@ export function Neo4jDashboard({ integrationId }: Neo4jDashboardProps) {
 
             // Fallback: use GKG summary even when no integration row exists.
             const gkgResponse = await fetch(`/api/gkg/summary`, { headers })
-            if (!gkgResponse.ok) {
-                throw new Error("Failed to fetch Neo4j statistics")
+            let gkg: GkgSummaryPayload = {}
+            try {
+                gkg = (await gkgResponse.json()) as GkgSummaryPayload
+            } catch {
+                gkg = {}
             }
 
-            const gkg = await gkgResponse.json()
+            if (
+                !gkgResponse.ok &&
+                gkgResponse.status === 503 &&
+                gkg.status === "unavailable"
+            ) {
+                setStats({
+                    totalNodes: 0,
+                    totalRelationships: 0,
+                    status: "unavailable",
+                    database: "neo4j",
+                    source: "gkg",
+                })
+                setUnavailableMessage(
+                    gkg.error ??
+                        "Neo4j is not configured. Set NEO4J_URI in server/.env to enable graph statistics."
+                )
+                return
+            }
+
+            if (!gkgResponse.ok) {
+                throw new Error(
+                    gkg.error ?? `Failed to fetch Neo4j statistics (${gkgResponse.status})`
+                )
+            }
+
             const totalNodes =
                 Number(gkg.totalPrograms || 0) +
                 Number(gkg.totalProjects || 0) +
@@ -67,9 +106,9 @@ export function Neo4jDashboard({ integrationId }: Neo4jDashboardProps) {
             setStats({
                 totalNodes,
                 totalRelationships: 0,
-                status: 'active',
-                database: 'neo4j',
-                source: 'gkg',
+                status: "active",
+                database: "neo4j",
+                source: "gkg",
             })
 
         } catch (error) {
@@ -77,10 +116,13 @@ export function Neo4jDashboard({ integrationId }: Neo4jDashboardProps) {
             setStats({
                 totalNodes: 0,
                 totalRelationships: 0,
-                status: 'unavailable',
-                database: 'neo4j',
-                source: 'gkg',
+                status: "unavailable",
+                database: "neo4j",
+                source: "gkg",
             })
+            setUnavailableMessage(
+                error instanceof Error ? error.message : "Failed to load Neo4j statistics"
+            )
             toast.error("Failed to load Neo4j statistics")
         } finally {
             setLoading(false)
@@ -166,6 +208,15 @@ export function Neo4jDashboard({ integrationId }: Neo4jDashboardProps) {
                 </Card>
             </div>
 
+            {stats?.status === "unavailable" && unavailableMessage ? (
+                <Card className="border-dashed border-amber-500/40 bg-amber-500/5">
+                    <CardContent className="py-4 text-sm text-muted-foreground">
+                        <p className="font-medium text-foreground">Neo4j not connected</p>
+                        <p className="mt-1">{unavailableMessage}</p>
+                    </CardContent>
+                </Card>
+            ) : null}
+
             <Card className="bg-muted/30">
                 <CardHeader>
                     <CardTitle className="text-lg">Deployment Details</CardTitle>
@@ -175,6 +226,12 @@ export function Neo4jDashboard({ integrationId }: Neo4jDashboardProps) {
                         <span className="text-muted-foreground">Database Name:</span>
                         <span className="font-mono">{stats?.database ?? 'neo4j'}</span>
                     </div>
+                    {stats?.source ? (
+                        <div className="flex justify-between">
+                            <span className="text-muted-foreground">Data source:</span>
+                            <span className="font-mono">{stats.source}</span>
+                        </div>
+                    ) : null}
                 </CardContent>
             </Card>
 

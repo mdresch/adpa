@@ -3,7 +3,6 @@
 import React, { useMemo, useState } from "react";
 import { AssistantMessage } from "@openuidev/react-headless";
 import { MarkDownRenderer } from "@openuidev/react-ui";
-import { openuiLibrary } from "@openuidev/react-ui/genui-lib";
 import { Copy, FileText, Code, Volume2, ThumbsUp, ThumbsDown, Check } from "lucide-react";
 
 import { DynamicComponentRenderer } from "./DynamicComponentRenderer";
@@ -124,7 +123,7 @@ export const CustomAssistantMessage: React.FC<AssistantMessageProps> = ({
   };
 
   return (
-    <div className="flex gap-3 px-4 py-4 border-b border-slate-100 bg-white">
+    <div className="genui-advisor-message flex gap-3 px-4 py-4 border-b border-slate-100 bg-white">
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-100 text-violet-700 text-sm font-semibold">
         AI
       </div>
@@ -143,7 +142,6 @@ export const CustomAssistantMessage: React.FC<AssistantMessageProps> = ({
             <DynamicComponentRenderer
               response={langText}
               isStreaming={isStreaming}
-              library={openuiLibrary}
             />
           </div>
         ) : rawContent ? (

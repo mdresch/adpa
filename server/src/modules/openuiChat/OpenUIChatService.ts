@@ -126,6 +126,8 @@ export class OpenUIChatService {
     const systemPrompt = buildOpenUISystemPrompt({
       documentName: documentContext?.name,
       documentType: documentContext?.templateName ?? undefined,
+      projectName: fallbackProjectContext?.name,
+      framework: fallbackProjectContext?.framework ?? undefined,
     })
 
     const userMessage = buildOpenUIUserMessage({

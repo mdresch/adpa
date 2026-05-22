@@ -282,7 +282,7 @@ export default function ProjectDocumentUIPage() {
       
       setTimeout(() => {
         sendMessage(
-          `Transform ${docLabel} from markdown into a professional presentation-ready report (root = Report). Preserve all content and meaning. One Section per source heading; Prose for full narrative; Table/Bullets/Card only when every item fits. Add Table of Contents if 4+ sections. No summaries. No tabs.`
+          `Transform ${docLabel} from markdown into a presentation-ready layout (root = Stack). Preserve all content. Intro Card with CardHeader + summary; one Card or Accordion section per major heading; Bullets for lists; Table for matrices. Add TableOfContents if 4+ sections. No Report/Prose/Section legacy components. No tabs.`
         )
       }, 100)
     }

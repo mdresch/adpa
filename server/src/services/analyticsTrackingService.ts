@@ -6,7 +6,6 @@
  */
 
 import { safeQuery } from '../database/helpers';
-import InfluxDBService from './influxdbService';
 
 // Helper to execute queries
 const query = async (text: string, params?: any[]) => {
@@ -333,17 +332,6 @@ export class AnalyticsTrackingService {
           status,
           data.tags ? JSON.stringify(data.tags) : null,
         ]
-      );
-
-      // Record to InfluxDB for time-series analysis
-      await InfluxDBService.writePoint(
-        'system_metrics',
-        { value: data.value },
-        {
-          metric_name: data.metricName,
-          metric_category: data.metricCategory,
-          status: status
-        }
       );
     } catch (error) {
       console.error('Failed to record system metric:', error);

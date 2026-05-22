@@ -4,7 +4,6 @@
  */
 
 import { logger } from './logger'
-import InfluxDBService from '@/services/influxdbService'
 
 interface AnalyticsEvent {
   event: string
@@ -145,18 +144,6 @@ class AnalyticsService {
       userId,
       projectId,
     })
-
-    // Log to InfluxDB
-    await InfluxDBService.recordEntityOperation(
-      entityType,
-      'extract',
-      count,
-      {
-        project_id: projectId,
-        user_id: userId,
-        success: String(success)
-      }
-    )
   }
 
   /**
@@ -181,18 +168,6 @@ class AnalyticsService {
       userId,
       projectId,
     })
-
-    // Log to InfluxDB
-    await InfluxDBService.recordEntityOperation(
-      entityType,
-      operation,
-      count,
-      {
-        project_id: projectId,
-        user_id: userId,
-        ...metadata
-      }
-    )
   }
 
   /**
@@ -213,17 +188,6 @@ class AnalyticsService {
       userId,
       projectId,
     })
-
-    // Log to InfluxDB
-    await InfluxDBService.recordEntityOperation(
-      entityType,
-      'view',
-      count,
-      {
-        project_id: projectId,
-        user_id: userId
-      }
-    )
   }
 
   /**

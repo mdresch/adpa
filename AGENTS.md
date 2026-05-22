@@ -14,11 +14,22 @@ ADPA is a monorepo with two services:
 # Backend (in server/ directory)
 cd server && npm run dev
 
-# Frontend (in root directory, MUST specify port)
-pnpm dev --port 3000
+# Frontend (in root directory; package.json pins port 3000)
+pnpm dev
 ```
 
-**Important**: Next.js 16 defaults to port 5000 (not 3000) if `PORT` env var is set. Always pass `--port 3000` to avoid conflicting with the backend.
+**Important**: Next.js 16 defaults to port 5000 (not 3000) if `PORT` env var is set. The `dev` script passes `--port 3000` to avoid conflicting with the backend.
+
+**Slow first page load (Windows / F: drive)**: `✓ Ready` only means the dev server is listening. The **first browser request** still compiles instrumentation and the route (often several minutes on a slow filesystem). Until the terminal shows `GET /… 200`, the tab may spin. Proxied API checks can work earlier: `http://localhost:3000/api/health` → backend.
+
+**Faster Turbopack cache on Windows** (do not put `C:\...` in `NEXT_DIST_DIR` — Next treats `distDir` as relative and will error). One-time setup, then use `dev:cache`:
+
+```powershell
+Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue
+pnpm dev:cache
+```
+
+This creates a junction `.next` → `%LOCALAPPDATA%\adpa-next-cache`. Plain `pnpm dev` is fine if you keep the default `.next` on F:.
 
 ### Database & Redis
 
@@ -36,7 +47,7 @@ pnpm dev --port 3000
 ### Startup Dependency System
 
 The backend uses a dependency graph for startup. In development:
-- **Critical** (must succeed): Security Config, Database, Azure Backend (just a ping that warns on failure)
+- **Critical** (must succeed): Security Config, Database
 - **Optional** (server works without them): Redis, Neo4j, RabbitMQ, MongoDB, Pinecone, Langfuse, Upstash, Morphic DB, Firebase Auth
 
 ### Running Tests
@@ -79,11 +90,26 @@ Split-pane page for governance documents: source text (left) + OpenUI advisor (r
 
 | Topic | Detail |
 | --- | --- |
-| **Agent skill (maintain/extend)** | `.agents/skills/adpa-genui-workspace/SKILL.md` — architecture, file map, env vars, rendering pitfalls, checklist |
-| **Human codedoc** | `docs/codedocs/genui-workspace.md` (linked from `docs/codedocs/index.md` as `/docs/genui-workspace`) |
-| **Not the same as** | Project OpenUI Chat (`/openui-chat`, `server/src/modules/openuiChat`) — different API and persistence |
-| **Step 2 LLM** | `POST /api/chat` with `systemPrompt` → Mistral (`MISTRAL_API_KEY`, `MISTRAL_MODEL` in `.env.local`) |
-| **Rendering** | OpenUI Lang via `CustomAssistantMessage` + `openuiLibrary` (`@openuidev/react-ui/genui-lib`); see skill for `assistantMessage` override pitfall |
-| **Key files** | `app/projects/[id]/documents/genui/page.tsx`, `genui-workspace.css`, `app/api/chat/route.ts`, `components/openui-chat/AssistantMessage.tsx` |
+| **Agent skill (maintain/extend)** | `.agents/skills/adpa-genui-workspace/SKILL.md` — document split-pane; `.agents/skills/adpa-openui-chat/SKILL.md` — `/openui-chat` + Gemini threads |
+| **Human codedoc** | `docs/codedocs/genui-workspace.md`, `docs/codedocs/openui-chat.md` |
+| **Not the same as** | Project OpenUI Chat (`/openui-chat`, `server/src/modules/openuiChat`, `GOOGLE_AI_API_KEY` in `server/.env`) |
+| **Step 2 LLM (document)** | `POST /api/chat` with `systemPrompt` → Mistral or Google Gemini (`GENUI_LLM_PROVIDER`, `MISTRAL_*` or `GOOGLE_AI_API_KEY` in `.env.local`) |
+| **Rendering (both surfaces)** | `projectOpenUILibrary` = full `@openuidev/react-ui/genui-lib` catalog + **Bullets** (`lib/openui/projectOpenUILibrary.ts`); same on `FullScreen` + `Renderer`; prompts via `buildOpenUISystemPrompt()` |
+| **Key files** | `app/projects/[id]/documents/genui/page.tsx`, `app/openui-chat/`, `lib/openui/systemPrompt.ts`, `components/openui-chat/AssistantMessage.tsx` |
 
-Load the skill before changing GenUI layout, prompts, chat proxy, or structured UI output.
+Load the matching skill before changing GenUI layout, OpenUI chat, prompts, or structured UI output. Do not use bare `openuiLibrary` when prompts mention Bullets.
+
+### Product features (canonical routes)
+
+After infra startup succeeds, verify **user-facing features** still load—not only Postgres/Redis. The backend dependency graph does not cover these.
+
+| Feature | Route | Smoke check |
+| --- | --- | --- |
+| OpenUI Chat (canonical advisor) | `/openui-chat` | Page loads; `GET /api/v1/openui-chat/threads` returns 200 when signed in |
+| AI template generation | `/ai` | Thin route shell loads; workspace fetches `/api/ai-providers`, `/api/templates`, `/api/projects` (needs `ai.generate`) |
+| Document GenUI | `/projects/{id}/documents/genui?docId=…` | See genui skill |
+| Legacy OpenUI URL | `/ai/openui-chat` | **Redirect** to `/openui-chat` via `next.config.mjs` (restart dev after config change) |
+
+**`/ai` implementation:** `app/ai/page.tsx` dynamically imports `app/ai/ai-workspace.tsx` so first navigation does not block on a ~1k-line compile. Workspace waits for auth before API calls and uses 20s per-request timeouts.
+
+**Planned:** feature boot/health panel (post-login) listing route + API probe pass/fail alongside optional deps (Neo4j, Mongo, etc.).

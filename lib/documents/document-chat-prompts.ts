@@ -20,10 +20,10 @@ const DOCUMENT_PROMPTS: { keywords: string[]; prompts: string[] }[] = [
   {
     keywords: ["charter", "project"],
     prompts: [
-      "Render full charter as a numbered report",
-      "Add a milestones timeline section",
-      "Expand the scope section with a table",
-      "Who is the project sponsor?",
+      "Charter as Card + Accordion with Bullets in each section",
+      "Add a milestones section as Steps or Bullets inside the Accordion",
+      "Expand scope and deliverables in a Table from this document",
+      "Who is the project sponsor? Use a Callout if not stated in the document",
     ],
   },
   {
@@ -55,10 +55,11 @@ export function getDocumentChatPrompts(docName: string, templateName?: string): 
     }
   }
   return [
+    "Render the full document: cover page, table of contents, then one Card per numbered chapter (### subsections inside chapters). Dark report theme — black background, gray sunk cards. Use Bullets for lists; Team only for named rosters.",
     "Summarize this document in a short executive overview",
     "Show the main sections as a structured table",
     "List every action item and owner mentioned",
     "What are the top risks or gaps in this document?",
-    "Render the full document as an interactive report",
+    "Transform this document: root = Stack with intro Card + Accordion or section Cards (no Report component)",
   ]
 }

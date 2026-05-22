@@ -1,48 +1,139 @@
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
+import {
+  getGenuiOpenAIClientConfig,
+  resolveGenuiLlmProvider,
+  type GenuiLlmProvider,
+} from '@/lib/llm/genuiLlmProvider'
+import { estimateGenuiChatPayloadChars } from '@/lib/llm/genuiPromptBudget'
 
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:5000'
+function backendUrl(): string {
+  return process.env.BACKEND_URL || 'http://localhost:5000'
+}
 
 export const maxDuration = 300
 
-const mistralClient = () =>
-  new OpenAI({
-    apiKey: process.env.MISTRAL_API_KEY,
-    baseURL: 'https://api.mistral.ai/v1',
-  })
-
 type ChatMessage = { role: string; content: string }
 
-async function streamMistralChat(systemPrompt: string, messages: ChatMessage[]) {
-  if (!process.env.MISTRAL_API_KEY) {
+function sseHeaders(provider: GenuiLlmProvider, model: string): HeadersInit {
+  return {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-GenUI-Provider': provider,
+    'X-GenUI-Model': model,
+  }
+}
+
+function providerDisplayName(provider: GenuiLlmProvider): string {
+  return provider === 'google' ? 'Google Gemini' : 'Mistral'
+}
+
+function httpStatusFromLlmError(error: unknown): number | undefined {
+  if (error && typeof error === 'object' && 'status' in error) {
+    const status = (error as { status: unknown }).status
+    if (typeof status === 'number' && status >= 400 && status < 600) {
+      return status
+    }
+  }
+  return undefined
+}
+
+function genuiProviderErrorResponse(
+  error: unknown,
+  provider: GenuiLlmProvider
+): NextResponse {
+  const status = httpStatusFromLlmError(error) ?? 502
+  const label = providerDisplayName(provider)
+  const detail = error instanceof Error ? error.message : 'Unknown provider error'
+
+  if (status === 429) {
+    const hint =
+      provider === 'google'
+        ? `${label} quota or rate limit (RPM/TPM). Wait 60–90s and retry. GenUI sends large prompts (full document + layout plan). Enable billing in Google AI Studio, use gemini-2.5-flash-lite, or shorten the source document.`
+        : `${label} rate limit reached. Wait a minute and retry, or set GENUI_LLM_PROVIDER=google in .env.local.`
     return NextResponse.json(
-      { error: 'MISTRAL_API_KEY is not configured' },
-      { status: 503 }
+      {
+        error: hint,
+        code: 'rate_limit_exceeded',
+        provider,
+        details: detail,
+      },
+      { status: 429 }
     )
   }
 
-  const client = mistralClient()
-  const response = await client.chat.completions.create({
-    model: process.env.MISTRAL_MODEL || 'mistral-large-latest',
-    messages: [{ role: 'system', content: systemPrompt }, ...messages],
-    stream: true,
+  if (status === 401 || status === 403) {
+    return NextResponse.json(
+      {
+        error: `${label} rejected the API key. Check your provider API key in .env.local.`,
+        code: 'provider_auth_error',
+        provider,
+        details: detail,
+      },
+      { status }
+    )
+  }
+
+  return NextResponse.json(
+    {
+      error: `${label} request failed.`,
+      code: 'provider_error',
+      provider,
+      details: detail,
+    },
+    { status }
+  )
+}
+
+async function streamGenuiChat(
+  provider: GenuiLlmProvider,
+  systemPrompt: string,
+  messages: ChatMessage[]
+) {
+  const config = getGenuiOpenAIClientConfig(provider)
+  if ('error' in config) {
+    return NextResponse.json({ error: config.error }, { status: 503 })
+  }
+
+  const client = new OpenAI({
+    apiKey: config.apiKey,
+    baseURL: config.baseURL,
   })
 
-  return new NextResponse(response.toReadableStream(), {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache, no-transform',
-      Connection: 'keep-alive',
-    },
-  })
+  if (process.env.NODE_ENV === 'development') {
+    const approxChars = estimateGenuiChatPayloadChars(systemPrompt, messages)
+    console.info('[GenUI /api/chat] payload size', {
+      provider,
+      model: config.model,
+      approxChars,
+      systemChars: systemPrompt.length,
+      messageCount: messages.length,
+    })
+  }
+
+  try {
+    const response = await client.chat.completions.create({
+      model: config.model,
+      messages: [{ role: 'system', content: systemPrompt }, ...messages],
+      stream: true,
+    })
+
+    return new NextResponse(response.toReadableStream(), {
+      headers: sseHeaders(provider, config.model),
+    })
+  } catch (error) {
+    console.error(`[GenUI /api/chat] ${providerDisplayName(provider)} error:`, error)
+    return genuiProviderErrorResponse(error, provider)
+  }
 }
 
 async function proxyOpenUIChat(body: Record<string, unknown>) {
   const cookieStore = await cookies()
   const token = cookieStore.get('auth_token')?.value
 
-  const response = await fetch(`${BACKEND_URL}/api/v1/openui-chat/chat`, {
+  const response = await fetch(`${backendUrl()}/api/v1/openui-chat/chat`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -75,7 +166,7 @@ export async function POST(req: NextRequest) {
       threadId?: string
     }
 
-    // GenUI document workspace: Mistral via OpenAI-compatible API (server-side key only)
+    // GenUI document workspace: OpenAI-compatible stream (Mistral or Google Gemini)
     if (typeof systemPrompt === 'string' && systemPrompt.length > 0) {
       const cookieStore = await cookies()
       const token = cookieStore.get('auth_token')?.value
@@ -87,7 +178,8 @@ export async function POST(req: NextRequest) {
         ? messages.filter((m) => m.role !== 'system')
         : []
 
-      return streamMistralChat(systemPrompt, apiMessages)
+      const provider = resolveGenuiLlmProvider()
+      return await streamGenuiChat(provider, systemPrompt, apiMessages)
     }
 
     return proxyOpenUIChat({ projectId, threadId, messages })

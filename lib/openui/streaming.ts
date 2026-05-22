@@ -2,6 +2,8 @@
  * SSE helpers for OpenUI Lang text streaming from /api/v1/openui-chat/chat
  */
 
+import { EventType, type StreamProtocolAdapter } from "@openuidev/react-headless"
+
 export type OpenUILangStreamEvent =
   | { type: "text"; text: string; threadId?: string | null }
   | { type: "done"; threadId: string | null; length?: number }
@@ -82,6 +84,125 @@ function parseSSEBlock(block: string): OpenUILangStreamEvent | null {
   }
 
   return null
+}
+
+export type AdpaOpenUIChatStreamAdapterOptions = {
+  /**
+   * Called when the server sends `event: done` (after all text chunks).
+   * Use this to sync sidebar thread id — do NOT resolve the thread from response
+   * headers mid-stream (that triggers selectThread and aborts the stream).
+   */
+  onStreamDone?: (threadId: string | null) => void
+}
+
+function* yieldOpenUILangEvents(
+  events: OpenUILangStreamEvent[],
+  messageId: string,
+  messageStarted: boolean,
+  streamDoneState: { notified: boolean },
+  onStreamDone?: (threadId: string | null) => void
+): Generator<
+  | { type: typeof EventType.TEXT_MESSAGE_START; messageId: string; role: "assistant" }
+  | { type: typeof EventType.TEXT_MESSAGE_CONTENT; messageId: string; delta: string }
+  | { type: typeof EventType.RUN_ERROR; message: string },
+  boolean
+> {
+  let started = messageStarted
+
+  for (const event of events) {
+    if (event.type === "text") {
+      if (!started) {
+        yield {
+          type: EventType.TEXT_MESSAGE_START,
+          messageId,
+          role: "assistant",
+        }
+        started = true
+      }
+      yield {
+        type: EventType.TEXT_MESSAGE_CONTENT,
+        messageId,
+        delta: event.text,
+      }
+    } else if (event.type === "done") {
+      if (!streamDoneState.notified) {
+        streamDoneState.notified = true
+        onStreamDone?.(event.threadId)
+      }
+    } else if (event.type === "error") {
+      yield {
+        type: EventType.RUN_ERROR,
+        message: event.message,
+      }
+    }
+  }
+
+  return started
+}
+
+/**
+ * Bridge ADPA OpenUI Chat SSE (`event: text` / `done` / `error`) to AG-UI stream events
+ * consumed by @openuidev/react-headless `processStreamedMessage`.
+ */
+export function adpaOpenUIChatStreamAdapter(
+  options: AdpaOpenUIChatStreamAdapterOptions = {}
+): StreamProtocolAdapter {
+  const { onStreamDone } = options
+
+  return {
+    async *parse(response: Response) {
+      const reader = response.body?.getReader()
+      if (!reader) {
+        throw new Error("Response has no body")
+      }
+
+      const decoder = new TextDecoder()
+      let buffer = ""
+      const messageId = crypto.randomUUID()
+      let messageStarted = false
+      const headerThreadId = response.headers.get("x-thread-id")
+      const streamDoneState = { notified: false }
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const { events, remainder } = parseOpenUILangSSEBuffer(buffer)
+        buffer = remainder
+
+        messageStarted = yield* yieldOpenUILangEvents(
+          events,
+          messageId,
+          messageStarted,
+          streamDoneState,
+          onStreamDone
+        )
+      }
+
+      if (buffer.trim()) {
+        const { events } = parseOpenUILangSSEBuffer(`${buffer}\n\n`)
+        messageStarted = yield* yieldOpenUILangEvents(
+          events,
+          messageId,
+          messageStarted,
+          streamDoneState,
+          onStreamDone
+        )
+      }
+
+      if (messageStarted) {
+        yield {
+          type: EventType.TEXT_MESSAGE_END,
+          messageId,
+        }
+      }
+
+      if (!streamDoneState.notified && headerThreadId) {
+        onStreamDone?.(headerThreadId)
+      }
+    },
+  }
 }
 
 /**

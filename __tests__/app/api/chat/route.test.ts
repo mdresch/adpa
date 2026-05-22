@@ -1,4 +1,5 @@
 import { cookies } from 'next/headers'
+import { POST } from '@/app/api/chat/route'
 
 jest.mock('next/headers', () => ({
   cookies: jest.fn(),
@@ -18,9 +19,9 @@ jest.mock('openai', () => {
 
 describe('app/api/chat route', () => {
   beforeEach(() => {
-    jest.resetModules()
     jest.clearAllMocks()
     process.env.BACKEND_URL = 'http://backend.test'
+    delete process.env.GENUI_LLM_PROVIDER
     global.fetch = jest.fn()
     jest.mocked(cookies).mockResolvedValue({
       get: jest.fn().mockReturnValue({ value: 'token-123' }),
@@ -31,6 +32,7 @@ describe('app/api/chat route', () => {
     delete process.env.BACKEND_URL
     delete process.env.MISTRAL_API_KEY
     delete process.env.MISTRAL_MODEL
+    delete process.env.GENUI_LLM_PROVIDER
   })
 
   test('forwards auth, projectId, threadId, and messages to the backend', async () => {
@@ -48,7 +50,6 @@ describe('app/api/chat route', () => {
       })
     )
 
-    const { POST } = await import('@/app/api/chat/route')
     const request = new Request('http://localhost/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -94,7 +95,6 @@ describe('app/api/chat route', () => {
       toReadableStream: () => stream,
     })
 
-    const { POST } = await import('@/app/api/chat/route')
     const request = new Request('http://localhost/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -118,8 +118,32 @@ describe('app/api/chat route', () => {
     expect(global.fetch).not.toHaveBeenCalled()
   })
 
+  test('returns 429 when Mistral rate-limits the request', async () => {
+    process.env.MISTRAL_API_KEY = 'mistral-test-key'
+
+    const rateLimitError = Object.assign(new Error('429 status code (no body)'), {
+      status: 429,
+    })
+    mockCreate.mockRejectedValue(rateLimitError)
+
+    const request = new Request('http://localhost/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        systemPrompt: 'You are a document advisor.',
+        messages: [{ role: 'user', content: 'Hello' }],
+      }),
+    })
+
+    const response = await POST(request as any)
+    const payload = await response.json()
+
+    expect(response.status).toBe(429)
+    expect(payload.code).toBe('rate_limit_exceeded')
+    expect(payload.error).toMatch(/rate limit/i)
+  })
+
   test('returns 503 when Mistral is requested without an API key', async () => {
-    const { POST } = await import('@/app/api/chat/route')
     const request = new Request('http://localhost/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

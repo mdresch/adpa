@@ -64,24 +64,32 @@ flowchart LR
 
 ### Request path (critical)
 
-1. `page.tsx` builds `systemPrompt` from `openuiLibrary.prompt(openuiPromptOptions)` plus **full document body** and metadata.
-2. `FullScreen` calls `POST /api/chat` with `{ systemPrompt, messages }` only (no `projectId` in current implementation).
-3. `app/api/chat/route.ts`: if `systemPrompt` is a non-empty string → **Mistral** streaming (`MISTRAL_API_KEY`, `MISTRAL_MODEL`). Otherwise → proxy to backend `openui-chat`.
+1. `page.tsx` builds `systemPrompt` from `buildOpenUIGenuiLibraryPrompt()` plus **full document body** and metadata.
+2. `FullScreen` calls `POST /api/chat` with messages enriched by `enrichOpenUIApiMessages()` — each user turn gets a **REQUIRED LAYOUT PLAN** from `buildLayoutPlan({ prompt, sourceText: doc.content })` (`lib/openui/layoutPlan.ts`). Document text stays in system prompt; plan uses the same content for segment → component mapping.
+3. `app/api/chat/route.ts`: if `systemPrompt` is set → **Mistral** streaming; executor must implement the layout plan; typography only for `typography-fallback` nodes.
 4. Assistant replies should be **OpenUI Lang** (e.g. `root = Stack([...])`), optionally wrapped in ` ```openui-lang ` fences.
 
 ### Rendering path (critical)
 
 | Piece | Role |
 |-------|------|
-| `componentLibrary={openuiLibrary}` on `FullScreen` | OpenUI package components (`@openuidev/react-ui/genui-lib`) |
+| `componentLibrary={projectOpenUILibrary}` on `FullScreen` | GenUI catalog + ADPA **Bullets, Timeline, Team, Comparison, TableOfContents** |
 | `assistantMessage={CustomAssistantMessage}` | **Overrides** default assistant UI — must render Lang itself |
-| `components/openui-chat/AssistantMessage.tsx` | Detects Lang → `DynamicComponentRenderer` with **`openuiLibrary`** |
-| `components/openui-chat/DynamicComponentRenderer.tsx` | `Renderer` from `@openuidev/react-lang`; optional `library` prop (default `adpaLibrary` elsewhere) |
+| `components/openui-chat/AssistantMessage.tsx` | Detects Lang → `DynamicComponentRenderer` with **`projectOpenUILibrary`** |
+| `components/openui-chat/DynamicComponentRenderer.tsx` | `Renderer` from `@openuidev/react-lang`; default `library` is `projectOpenUILibrary` |
 | `lib/openui/library.ts` | `extractOpenUILangText()`, `looksLikeOpenUILang()` |
+| `lib/openui/systemPrompt.ts` | `buildOpenUIGenuiLibraryPrompt()`, `buildOpenUIUserMessage()`, `enrichOpenUIApiMessages()` |
+| `lib/openui/layoutPlan.ts` | Text → UI plan (strict executor); see `adpa-openui-chat` skill |
 
-**Pitfall:** If `CustomAssistantMessage` only uses `MarkDownRenderer`, users see a fenced code block instead of Cards/Tables/Charts. Always route OpenUI Lang through `Renderer` + `openuiLibrary`.
+**Long prose (≈360+ chars):** planner emits a row `Stack` with two `TextContent` columns via `splitProseIntoTwoColumns` (paragraph break first, else nearest sentence boundary — skips `Dr.`, `Ed.`, `3.1`-style decimals); hints `twoColumn` + `REQUIRED_LANG` carry pre-split left/right text. Executor must use `Stack([col1, col2], "row", "m", "stretch", "start", true)` and must not re-split mid-sentence.
 
-**Pitfall:** Using `adpaLibrary` in the document workspace renders wrong or empty components. Use `openuiLibrary` from `@openuidev/react-ui/genui-lib`.
+**Pitfall:** If `CustomAssistantMessage` only uses `MarkDownRenderer`, users see a fenced code block instead of Cards/Tables/Charts. Always route OpenUI Lang through `Renderer` + **`projectOpenUILibrary`**.
+
+**Pitfall:** Bare `openuiLibrary` without merge → `unknown-component` for **Bullets**. **`adpaLibrary`** → wrong Report-era widgets.
+
+**Pitfall:** Assistant shows only Bullets — usually **model output**, not a missing library. Verify with `getProjectOpenUIComponentNames()`; strengthen prompts in `systemPrompt.ts` / starters.
+
+**Related skill:** Project OpenUI Chat at `/openui-chat` (Gemini, threads) — `.agents/skills/adpa-openui-chat/SKILL.md`.
 
 ## Source map
 
@@ -91,6 +99,7 @@ flowchart LR
 | Workspace theme / OpenUI shell CSS | `app/projects/[id]/documents/genui/genui-workspace.css` |
 | Error boundary | `app/projects/[id]/documents/genui/error.tsx` |
 | Chat API (Mistral branch) | `app/api/chat/route.ts` |
+| Canonical library + prompt | `lib/openui/projectOpenUILibrary.ts`, `lib/openui/adpaGenuiExtensionDefs.ts`, `lib/openui/systemPrompt.ts` |
 | Re-export for imports | `components/Chat/AssistantMessage.tsx` → `openui-chat/AssistantMessage.tsx` |
 | Lang utilities | `lib/openui/library.ts` |
 | Conversation starters | `lib/documents/document-chat-prompts.ts` |
@@ -101,9 +110,9 @@ flowchart LR
 
 | Concern | Files |
 |---------|--------|
-| Project OpenUI chat page | `app/openui-chat/`, `components/openui-chat/openui-chat-shell.tsx` |
-| Backend threads + RAG chat | `server/src/modules/openuiChat/` |
-| ADPA-specific legacy components | `lib/openui/` (e.g. `adpaLibrary` in renderer) |
+| Project OpenUI chat | `.agents/skills/adpa-openui-chat/SKILL.md`, `app/openui-chat/`, `components/openui-chat/` |
+| Backend threads + Gemini Lang SSE | `server/src/modules/openuiChat/` |
+| Legacy Report components | `lib/openui/adpaLibrary.tsx` (not default for GenUI or `/openui-chat`) |
 
 ## Environment variables
 
@@ -111,10 +120,16 @@ Set in **`.env.local`** (see `.env.local.example`):
 
 | Variable | Required for Step 2 | Notes |
 |----------|---------------------|--------|
-| `MISTRAL_API_KEY` | Yes | Without it, `/api/chat` returns 503 for GenUI |
+| `GENUI_LLM_PROVIDER` | No | `mistral` (default) or `google` / `gemini` for Gemini (AI Studio–compatible logs) |
+| `MISTRAL_API_KEY` | When provider is `mistral` | Without it, `/api/chat` returns 503 |
 | `MISTRAL_MODEL` | No | Defaults to `mistral-large-latest` |
+| `GOOGLE_AI_API_KEY` | When provider is `google` | Also accepts `GOOGLE_GENERATIVE_AI_API_KEY` |
+| `GENUI_GOOGLE_MODEL` / `GEMINI_MODEL_OVERRIDE` | No | Default `gemini-2.5-flash` (see `lib/llm/googleModelConfig.ts`) |
+| `NEXT_PUBLIC_GENUI_LLM_PROVIDER` | No | Optional badge in Step 2 UI; should match `GENUI_LLM_PROVIDER` |
 | `BACKEND_URL` | Step 1 + auth | Document fetch uses Express API via Next proxy |
 | Firebase / `auth_token` cookie | Yes | Page requires authenticated user |
+
+Response headers on GenUI streams: `X-GenUI-Provider`, `X-GenUI-Model` (inspect in DevTools → Network → `/api/chat`).
 
 GenUI workspace does **not** currently persist threads to `openui_chat_threads`. **New chat** remounts `FullScreen` via `chatSessionKey` (client-only reset).
 
@@ -135,13 +150,14 @@ Edit `lib/documents/document-chat-prompts.ts` — keyword buckets on document na
 
 ### Change system instructions
 
-Edit the `systemPrompt` template in `page.tsx` after `openuiLibrary.prompt(openuiPromptOptions)`. Keep document body injection; do not move secrets to the client.
+Edit `buildOpenUISystemPrompt()` in `lib/openui/systemPrompt.ts` (uses `projectOpenUILibrary.prompt()`). Keep document body injection in `page.tsx`; do not move secrets to the client.
 
 ### Add new OpenUI components
 
-1. Prefer components already in `@openuidev/react-ui/genui-lib` / OpenUI Lang syntax (`Card`, `Table`, `BarChart`, `Tabs`, `Steps`, etc.).
-2. For ADPA-only widgets, extend `lib/openui` and pass a custom `library` into `DynamicComponentRenderer` — only if product requires ADPA components on **this** page.
+1. Prefer components already in `projectOpenUILibrary` / `@openuidev/react-ui/genui-lib` (`Card`, `Table`, `BarChart`, `Tabs`, `Steps`, etc.).
+2. For ADPA-only widgets: add a `defineComponent` (see `bulletsDef.tsx`), append to `components` in `projectOpenUILibrary.ts` — **never** replace the full `Object.values(openuiLibrary.components)` spread.
 3. Consult OpenUI / `@openuidev` docs (context7 MCP) for Lang grammar — do not invent syntax.
+4. Run `__tests__/lib/projectOpenUILibrary.test.ts` after library changes.
 
 ### Persist chat threads (future)
 
@@ -175,9 +191,11 @@ After any GenUI workspace change:
 
 | Symptom | Likely cause | Fix |
 |---------|----------------|-----|
-| Raw OpenUI Lang code block | `CustomAssistantMessage` markdown-only path | Ensure `looksLikeOpenUILang` + `DynamicComponentRenderer` + `openuiLibrary` |
-| Empty or broken widgets | Wrong library (`adpaLibrary`) | Pass `openuiLibrary` to renderer |
-| 503 on chat | Missing `MISTRAL_API_KEY` | Set in `.env.local`, restart Next |
+| Raw OpenUI Lang code block | `CustomAssistantMessage` markdown-only path | Ensure `looksLikeOpenUILang` + `DynamicComponentRenderer` + `projectOpenUILibrary` |
+| Empty or broken widgets | Wrong library (`adpaLibrary` or bare `openuiLibrary`) | Pass `projectOpenUILibrary` to FullScreen + renderer |
+| `unknown-component` Bullets | Renderer missing BulletsDef | Use `projectOpenUILibrary` |
+| Only Bullets in UI | Model chose minimal layout | Prompt rules in `systemPrompt.ts`; ask for Card + Table layout |
+| 503 on chat | Missing key for active provider | `MISTRAL_API_KEY` or `GOOGLE_AI_API_KEY`; set `GENUI_LLM_PROVIDER`, restart Next |
 | 401 on chat | No auth cookie | Log in via Firebase/demo |
 | Step 1 empty | Document API / permissions | Check `GET` document by project + id |
 | Chat off-center / sidebar bleed | CSS overrides | `genui-workspace.css` `.genui-openui-root` rules |

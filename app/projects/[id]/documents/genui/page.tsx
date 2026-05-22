@@ -7,7 +7,12 @@ import "@openuidev/react-ui/components.css";
 import "./genui-workspace.css";
 import { FullScreen } from "@openuidev/react-ui";
 import { openAIMessageFormat, openAIReadableStreamAdapter } from "@openuidev/react-headless";
-import { openuiLibrary, openuiPromptOptions } from "@openuidev/react-ui/genui-lib";
+import { projectOpenUILibrary } from "@/lib/openui/projectOpenUILibrary";
+import { trimTextForGenuiPrompt } from "@/lib/llm/genuiPromptBudget";
+import { buildOpenUIGenuiLibraryPrompt, enrichOpenUIApiMessages } from "@/lib/openui/systemPrompt";
+import { wantsAiCoverSummary, wantsGenuiReportDarkTheme } from "@/lib/openui/layoutPlan";
+import { buildCoverBlurbFromSources } from "@/lib/openui/coverSummary";
+import { buildLayoutPlan } from "@/lib/openui/layoutPlan";
 
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
@@ -61,6 +66,7 @@ export default function DocumentGenUIWorkspace() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [chatSessionKey, setChatSessionKey] = useState(0);
+  const [reportDarkTheme, setReportDarkTheme] = useState(false);
 
   useEffect(() => {
     setChatSessionKey(0);
@@ -215,22 +221,32 @@ export default function DocumentGenUIWorkspace() {
     );
   }
 
-  const baseSystemPrompt = openuiLibrary.prompt(openuiPromptOptions);
+  const baseSystemPrompt = buildOpenUIGenuiLibraryPrompt({
+    documentName: doc.title,
+    documentType: doc.template_name ?? doc.document_type,
+    projectName: doc.project_name,
+  });
+  const { text: documentExcerpt, truncated: documentTruncated } = trimTextForGenuiPrompt(
+    doc.content ?? ""
+  );
+  const truncationNote = documentTruncated
+    ? "\n[System prompt shows the first portion of the document only (API size limits). The latest user message includes a REQUIRED LAYOUT PLAN with section excerpts — use those for full section text.]\n"
+    : "";
   const systemPrompt = `
 ${baseSystemPrompt}
 
 CRITICAL CONTEXT:
 You are assisting the user inside their workspace for the document "${doc.title}".
-You MUST ground your answers, charts, forms, and tables in the document's real data:
+Ground answers in the document below and in section sourceText from the REQUIRED LAYOUT PLAN on each user turn.
 ---
-DOCUMENT CONTENT:
-${doc.content}
-
+DOCUMENT CONTENT (excerpt):
+${documentExcerpt}
+${truncationNote}
 METADATA:
 ${JSON.stringify(doc.metadata, null, 2)}
 ---
 
-When generating layout, charts, or tables, use the exact metrics detailed above.
+When generating layout, charts, or tables, use metrics from the excerpt and layout-plan sourceText.
 `;
 
   return (
@@ -342,6 +358,13 @@ When generating layout, charts, or tables, use the exact metrics detailed above.
                         <p className="genui-muted text-xs mt-1 leading-relaxed">
                           Pick a suggested question below or type in the chat box at the bottom. Responses can include tables, charts, and structured summaries grounded in the document on the left.
                         </p>
+                        {process.env.NEXT_PUBLIC_GENUI_LLM_PROVIDER ? (
+                          <p className="text-[10px] text-slate-500 mt-1.5 font-mono">
+                            LLM: {process.env.NEXT_PUBLIC_GENUI_LLM_PROVIDER}
+                            {" "}
+                            (check Network → /api/chat for X-GenUI-Model)
+                          </p>
+                        ) : null}
                       </div>
                     </div>
                     <Button
@@ -357,22 +380,73 @@ When generating layout, charts, or tables, use the exact metrics detailed above.
                     </Button>
                   </div>
                 </div>
-                <div className="genui-openui-root flex-1 min-h-0 w-full">
+                <div
+                  className={`genui-openui-root flex-1 min-h-0 w-full${reportDarkTheme ? " genui-report-dark" : ""}`}
+                >
                   <FullScreen
                     key={`${documentId}-${chatSessionKey}`}
                     processMessage={async ({ messages, abortController }) => {
+                      const rawApiMessages = openAIMessageFormat.toApi(messages);
+                      const lastUser = [...rawApiMessages].reverse().find((m) => m.role === "user");
+                      const lastPrompt =
+                        typeof lastUser?.content === "string"
+                          ? lastUser.content
+                          : String(lastUser?.content ?? "");
+                      setReportDarkTheme(wantsGenuiReportDarkTheme(lastPrompt));
+
+                      let coverSummary: string | undefined
+                      if (wantsAiCoverSummary(lastPrompt)) {
+                        const heuristicPlan = buildLayoutPlan({
+                          prompt: lastPrompt,
+                          sourceText: doc.content,
+                          documentId: documentId ?? undefined,
+                        })
+                        const coverNode = heuristicPlan.nodes.find((n) => n.id === "doc-cover")
+                        const fallbackBlurb =
+                          coverNode?.children?.find((c) => c.id === "cover-summary")?.sourceText ??
+                          buildCoverBlurbFromSources({ fullSummary: doc.content.slice(0, 1200) })
+                        try {
+                          const coverRes = await fetch("/api/genui/cover-summary", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              documentTitle: doc.title,
+                              content: doc.content,
+                              fallbackBlurb,
+                            }),
+                            signal: abortController.signal,
+                          })
+                          if (coverRes.ok) {
+                            const data = (await coverRes.json()) as { summary?: string }
+                            if (data.summary?.trim()) {
+                              coverSummary = data.summary.trim()
+                            }
+                          }
+                        } catch {
+                          /* use heuristic blurb from layout plan */
+                        }
+                      }
+
+                      const apiMessages = enrichOpenUIApiMessages(rawApiMessages, {
+                        layoutSourceText: doc.content,
+                        includeSourceInUserMessage: false,
+                        documentName: doc.title,
+                        projectName: doc.project_name ?? undefined,
+                        documentId: documentId ?? undefined,
+                        coverSummary,
+                      });
                       return fetch("/api/chat", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({
                           systemPrompt,
-                          messages: openAIMessageFormat.toApi(messages),
+                          messages: apiMessages,
                         }),
                         signal: abortController.signal,
                       });
                     }}
                     streamProtocol={openAIReadableStreamAdapter()}
-                    componentLibrary={openuiLibrary}
+                    componentLibrary={projectOpenUILibrary}
                     agentName={`${doc.title} advisor`}
                     welcomeMessage={{
                       title: `Explore “${doc.title}”`,

@@ -36,6 +36,7 @@ import {
   FileDown,
   MessageSquare,
   Brain,
+  Sparkles,
 } from "lucide-react"
 
 interface NavItem {
@@ -56,6 +57,7 @@ const navigation: NavItem[] = [
   { name: "AI Model Settings", href: "/settings/ai-models", icon: Brain, adminOnly: true },
   { name: "AI Analytics", href: "/ai-analytics", icon: TrendingUp },
   { name: "AI Search", href: "/ai-search", icon: MessageSquare },
+  { name: "OpenUI Chat", href: "/openui-chat", icon: Sparkles },
   { name: "Integrations", href: "/integrations", icon: LinkIcon, adminOnly: true },
   { name: "Templates", href: "/templates", icon: FileText },
 

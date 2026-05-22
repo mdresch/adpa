@@ -1,6 +1,7 @@
 // IMPORTANT: Tracing and Environment must be initialized FIRST
+import path from "path"
 import dotenv from "dotenv"
-dotenv.config()
+dotenv.config({ path: path.join(__dirname, "../.env") })
 
 // 1. Initialize Firebase Admin immediately to ensure credentials are set before any other module imports it
 import * as admin from 'firebase-admin'
