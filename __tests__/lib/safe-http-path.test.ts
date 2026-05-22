@@ -2,6 +2,7 @@ import {
   assertRelativeApiPath,
   assertRitualApiPath,
   assertSafePathSegment,
+  resolveRelativeApiFetchTarget,
   resolveRitualRequestUrl,
 } from "@/lib/safe-http-path"
 
@@ -19,6 +20,30 @@ describe("assertRelativeApiPath", () => {
 
   it("rejects parent traversal", () => {
     expect(() => assertRelativeApiPath("/api/../admin")).toThrow()
+  })
+
+  it("rejects paths outside /api allowlist shape", () => {
+    expect(() => assertRelativeApiPath("/evil/v1")).toThrow()
+    expect(() => assertRelativeApiPath("/api/v1/../../admin")).toThrow()
+  })
+})
+
+describe("resolveRelativeApiFetchTarget", () => {
+  const prevApi = process.env.NEXT_PUBLIC_API_URL
+
+  afterEach(() => {
+    if (prevApi === undefined) {
+      delete process.env.NEXT_PUBLIC_API_URL
+    } else {
+      process.env.NEXT_PUBLIC_API_URL = prevApi
+    }
+  })
+
+  it("returns same-origin path when API base is relative", () => {
+    process.env.NEXT_PUBLIC_API_URL = "/api"
+    expect(resolveRelativeApiFetchTarget("/api/v1/documents/abc")).toBe(
+      "/api/v1/documents/abc"
+    )
   })
 })
 

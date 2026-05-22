@@ -1,10 +1,13 @@
-import { getApiBaseUrl } from "./api-url"
+import { getApiBaseUrl, getApiUrl } from "./api-url"
 
 /**
  * Guards against SSRF when building fetch targets from strings that may originate from callers.
  * Only same-origin relative paths are allowed (no protocol, no host, no traversal).
  * Use `fetchRelativeApi` / `fetchRitualApi` instead of calling `fetch` with dynamic URLs.
  */
+
+/** After structural checks, path must match this allowlist before any HTTP client use. */
+const RELATIVE_API_PATH_RE = /^\/api\/[A-Za-z0-9._/-]+$/
 
 export function assertRelativeApiPath(path: string): string {
   const p = path.trim()
@@ -17,7 +20,35 @@ export function assertRelativeApiPath(path: string): string {
   if (p.includes("..")) {
     throw new Error("Request path must not contain parent path segments")
   }
+  if (!RELATIVE_API_PATH_RE.test(p)) {
+    throw new Error("Request path must be under /api/ with safe characters only")
+  }
   return p
+}
+
+/**
+ * Resolve a validated relative API path to the fetch target (browser: same-origin path;
+ * server: URL built only from NEXT_PUBLIC_API_URL, never from caller-supplied hosts).
+ */
+export function resolveRelativeApiFetchTarget(path: string): string {
+  const safePath = assertRelativeApiPath(path)
+  const apiBase = getApiBaseUrl()
+  if (apiBase === "/api" || apiBase.startsWith("/")) {
+    return safePath
+  }
+  const suffix = safePath.startsWith("/api") ? safePath.slice(4) : safePath
+  const endpoint = suffix.startsWith("/") ? suffix : `/${suffix}`
+  return getApiUrl(endpoint)
+}
+
+function assertFetchOriginMatchesConfig(url: string): void {
+  const configured = getApiBaseUrl()
+  if (!configured.startsWith("http")) return
+  const allowedOrigin = new URL(configured.replace(/\/api\/?$/, "") || configured).origin
+  const actualOrigin = new URL(url).origin
+  if (actualOrigin !== allowedOrigin) {
+    throw new Error("API URL origin mismatch")
+  }
 }
 
 /** Single URL path segment (ids, slugs) — blocks injection into ritual/API paths. */
@@ -85,9 +116,11 @@ export function resolveRitualRequestUrl(pathSuffix: string): string {
  * `fetch` for same-origin relative API paths only (validated, not user-controlled hosts).
  */
 export async function fetchRelativeApi(path: string, init?: RequestInit): Promise<Response> {
-  const safeUrl = assertRelativeApiPath(path)
-  // codacy-disable-next-line SecurityRisk.SSRF -- path validated by assertRelativeApiPath (relative, no scheme)
-  return fetch(safeUrl, init)
+  const requestTarget = resolveRelativeApiFetchTarget(path)
+  if (!requestTarget.startsWith("/")) {
+    assertFetchOriginMatchesConfig(requestTarget)
+  }
+  return fetch(requestTarget, init) // codacy-disable-line SecurityRisk -- allowlisted /api path via resolveRelativeApiFetchTarget
 }
 
 /**
@@ -104,6 +137,5 @@ export async function fetchRitualApi(pathSuffix: string, init?: RequestInit): Pr
   if (!safeUrl.startsWith(`${allowedOrigin}/`)) {
     throw new Error("Ritual URL origin mismatch")
   }
-  // codacy-disable-next-line SecurityRisk.SSRF -- URL built only from env origin + assertRitualApiPath allowlist
-  return fetch(safeUrl, init)
+  return fetch(safeUrl, init) // codacy-disable-line SecurityRisk -- env origin + assertRitualApiPath allowlist
 }
