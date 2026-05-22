@@ -1,3 +1,5 @@
+import { assertRelativeApiPath } from "@/lib/safe-http-path"
+
 /** Status codes returned when Next.js cannot reach BACKEND_URL (proxy failure). */
 const RETRYABLE_STATUS = new Set([502, 503, 504])
 
@@ -40,6 +42,7 @@ export async function fetchBackendJson<T = Record<string, unknown>>(
   init?: RequestInit,
   options?: FetchBackendJsonOptions
 ): Promise<{ response: Response; data: T }> {
+  const safeUrl = assertRelativeApiPath(url)
   const maxAttempts = options?.maxAttempts ?? 12
   const delayMs = options?.delayMs ?? 2000
   let lastError: unknown
@@ -50,7 +53,7 @@ export async function fetchBackendJson<T = Record<string, unknown>>(
     }
 
     try {
-      const response = await fetch(url, { ...init, signal: options?.signal })
+      const response = await fetch(safeUrl, { ...init, signal: options?.signal })
       let data: T
       try {
         data = (await response.json()) as T

@@ -6,6 +6,7 @@
  */
 
 import { getApiBaseUrl } from './api-url';
+import { assertRelativeApiPath, assertSafePathSegment } from './safe-http-path';
 
 /** Direct orchestrator base (browser). When unset, use same-origin /api/Ritual (Next rewrite → ORCHESTRATOR_URL). */
 function getOrchestratorRitualBase(): string {
@@ -157,7 +158,8 @@ export async function approveBusinessCase(businessCaseId: string, approval?: Tas
  * RTM: Fetch Research Advice for a requirement.
  */
 export async function getResearchAdvice(targetId: string) {
-  const response = await ritualFetch(`/rtm/research-advice/${targetId}`, {
+  const safeId = assertSafePathSegment(targetId, 'target requirement id')
+  const response = await ritualFetch(`/rtm/research-advice/${safeId}`, {
     method: 'POST'
   });
 

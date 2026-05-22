@@ -30,6 +30,13 @@ const TABLE: ComponentSanitizeSpec = {
   namedKeys: ["columns"],
 }
 
+/** Precompiled patterns (Codacy: avoid `new RegExp` with dynamic component names). */
+const COMPONENT_CALL_RE: Record<string, RegExp> = {
+  CardHeader: /\bCardHeader\s*\(/g,
+  TextContent: /\bTextContent\s*\(/g,
+  Table: /\bTable\s*\(/g,
+}
+
 function isDefaultSizeArg(arg: string): boolean {
   const t = arg.trim()
   return t === "default" || t === '"default"' || t === "'default'"
@@ -121,7 +128,9 @@ function normalizeArgs(spec: ComponentSanitizeSpec, rawArgs: string[]): string[]
 }
 
 function sanitizeComponentCalls(lang: string, spec: ComponentSanitizeSpec): string {
-  const re = new RegExp(`\\b${spec.name}\\s*\\(`, "g")
+  const re = COMPONENT_CALL_RE[spec.name]
+  if (!re) return lang
+  re.lastIndex = 0
   let result = ""
   let lastIndex = 0
   let match: RegExpExecArray | null
