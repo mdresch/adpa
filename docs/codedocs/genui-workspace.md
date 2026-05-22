@@ -38,6 +38,7 @@ Styling lives in `app/projects/[id]/documents/genui/genui-workspace.css` (light 
 | Chat proxy (Mistral) | `app/api/chat/route.ts` |
 | Assistant rendering | `components/openui-chat/AssistantMessage.tsx` (re-exported from `components/Chat/AssistantMessage.tsx`) |
 | Lang → components | `components/openui-chat/DynamicComponentRenderer.tsx` |
+| Canonical library | `lib/openui/projectOpenUILibrary.ts`, `lib/openui/bulletsDef.tsx`, `lib/openui/systemPrompt.ts` |
 | Fence stripping / detection | `lib/openui/library.ts` — `extractOpenUILangText()`, `looksLikeOpenUILang()` |
 | Conversation starters | `lib/documents/document-chat-prompts.ts` |
 | Route IDs | `lib/documents/use-project-document-route-ids.ts` |
@@ -46,11 +47,11 @@ Styling lives in `app/projects/[id]/documents/genui/genui-workspace.css` (light 
 ## Request and rendering flow
 
 1. The page loads the document via the authenticated documents API (`projectId` + `documentId`).
-2. It builds a **system prompt** from `openuiLibrary.prompt(openuiPromptOptions)` plus the full document body and metadata.
+2. It builds a **system prompt** from `buildOpenUISystemPrompt()` (`projectOpenUILibrary.prompt()` + layout rules in `lib/openui/systemPrompt.ts`) plus the full document body and metadata.
 3. `FullScreen` posts to `POST /api/chat` with `{ systemPrompt, messages }`.
-4. When `systemPrompt` is present, `app/api/chat/route.ts` streams from **Mistral** (`MISTRAL_API_KEY`, optional `MISTRAL_MODEL`). Without `systemPrompt`, the same route proxies to backend OpenUI chat.
+4. When `systemPrompt` is present, `app/api/chat/route.ts` streams from **Mistral** or **Google Gemini** (`GENUI_LLM_PROVIDER`: `mistral` default, `google` for Gemini via OpenAI-compatible API). Without `systemPrompt`, the same route proxies to backend OpenUI chat (Gemini in `server`).
 5. The model should reply in **OpenUI Lang** (e.g. `root = Stack([...])`), sometimes wrapped in ` ```openui-lang ` fences.
-6. `CustomAssistantMessage` detects Lang, strips fences, and renders with `@openuidev/react-lang` `Renderer` and **`openuiLibrary`** from `@openuidev/react-ui/genui-lib`.
+6. `CustomAssistantMessage` detects Lang, strips fences, and renders with `@openuidev/react-lang` `Renderer` and **`projectOpenUILibrary`** (full GenUI catalog + Bullets).
 
 ```mermaid
 flowchart LR
@@ -58,15 +59,16 @@ flowchart LR
   Step1 --> Prompt[systemPrompt + doc content]
   Prompt --> FullScreen[FullScreen]
   FullScreen --> ApiChat["POST /api/chat"]
-  ApiChat --> Mistral[Mistral stream]
-  Mistral --> Assistant[CustomAssistantMessage]
-  Assistant --> Renderer[Renderer + openuiLibrary]
+  ApiChat --> Llm[Mistral or Gemini stream]
+  Llm --> Assistant[CustomAssistantMessage]
+  Assistant --> Renderer[Renderer + projectOpenUILibrary]
 ```
 
 ### Rendering pitfalls
 
 - **`assistantMessage={CustomAssistantMessage}` overrides** the default `FullScreen` assistant renderer. If the custom component only shows markdown, users see raw Lang in a code block.
-- Use **`openuiLibrary`** for this page, not `adpaLibrary` (used elsewhere in `DynamicComponentRenderer`).
+- Use **`projectOpenUILibrary`** for this page (not bare `openuiLibrary` — Bullets will fail; not `adpaLibrary` — legacy Report grammar).
+- Prompts should request **Card / Stack / Accordion / Table** layouts, not a single top-level `Bullets` (see `systemPrompt.ts`).
 - Always run model output through **`extractOpenUILangText()`** before `looksLikeOpenUILang()` / `Renderer`.
 
 ## Environment variables
@@ -120,9 +122,11 @@ Future PM dashboards are described in `docs/superpowers/specs/2026-05-18-genui-p
 
 | Symptom | Likely cause |
 | --- | --- |
-| Raw `openui-lang` code block | Assistant path not using `Renderer` + `openuiLibrary` |
-| Broken or empty widgets | Wrong library (`adpaLibrary` instead of `openuiLibrary`) |
-| 503 on send | `MISTRAL_API_KEY` not set |
+| Raw `openui-lang` code block | Assistant path not using `Renderer` + `projectOpenUILibrary` |
+| Broken or empty widgets | Wrong library (`adpaLibrary` or bare `openuiLibrary`) |
+| `unknown-component` Bullets | Use `projectOpenUILibrary` on renderer |
+| Only Bullets in UI | Model chose minimal layout; adjust prompt or user request |
+| 503 on send | API key missing for `GENUI_LLM_PROVIDER` |
 | 401 on send | Not logged in |
 | Empty Step 1 | Document API or missing `doc.content` |
 | Chat layout broken | `genui-workspace.css` overrides under `.genui-openui-root` |

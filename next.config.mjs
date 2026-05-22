@@ -1,6 +1,30 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { withSentryConfig } from '@sentry/nextjs';
+
+const projectRoot = path.dirname(fileURLToPath(import.meta.url));
+
+/** Next.js distDir must be relative to the project root (no absolute C:\ paths in .env). */
+function distDirFromEnv() {
+  const raw = process.env.NEXT_DIST_DIR?.trim();
+  if (!raw) return {};
+  if (path.isAbsolute(raw)) {
+    console.warn(
+      '[next.config] NEXT_DIST_DIR must be relative (e.g. .next-local), not an absolute path. ' +
+        'On Windows use: pnpm dev:cache (junction to %LOCALAPPDATA%\\adpa-next-cache).',
+    );
+    return {};
+  }
+  return { distDir: raw };
+}
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  ...distDirFromEnv(),
+  // Keep module/CSS resolution on F:\ repo when .next is a junction to %LOCALAPPDATA% (pnpm dev:cache)
+  turbopack: {
+    root: projectRoot,
+  },
   typescript: {
     // Temporarily ignore TypeScript build errors during Vercel build.
     // TODO: revert after fixing type errors and adding stricter checks back.
@@ -47,6 +71,17 @@ const nextConfig = {
     'sequelize'
   ],
 
+  // Legacy URL — canonical OpenUI advisor lives at /openui-chat (query string preserved)
+  async redirects() {
+    return [
+      {
+        source: '/ai/openui-chat',
+        destination: '/openui-chat',
+        permanent: false,
+      },
+    ];
+  },
+
   // API Proxy: Forward all /api/* requests to Express backend
   async rewrites() {
     return {
@@ -59,8 +94,16 @@ const nextConfig = {
           source: '/projects/:id/documents/:docId/view',
           destination: '/projects/:id/documents/view?docId=:docId',
         },
+        ...(orchestratorUrl
+          ? [
+              {
+                source: '/api/Ritual/:path*',
+                destination: `${orchestratorUrl}/api/Ritual/:path*`,
+              },
+            ]
+          : []),
         {
-          source: '/api/:path((?!morphic|auth|chat|openui-chat|keepalive).*)',
+          source: '/api/:path((?!morphic|auth|chat|openui-chat|keepalive|Ritual).*)',
           destination: `${process.env.BACKEND_URL || 'https://adpa.onrender.com'}/api/:path*`,
         },
       ],
@@ -107,6 +150,9 @@ const sentryConfig = {
 };
 
 const isCI = process.env.CI === 'true' || process.env.CI === '1';
+
+/** C# Adpa.Orchestrator (RPAS rituals). Set when running Aspire or orchestrator alone. */
+const orchestratorUrl = process.env.ORCHESTRATOR_URL?.replace(/\/$/, '');
 
 export default isCI
   ? withSentryConfig(nextConfig, sentryConfig)

@@ -49,21 +49,6 @@ jest.mock('../../src/services/jobs/queue/RabbitQueueAdapter', () => {
   };
 });
 
-// Mock InfluxDB to avoid connection errors
-jest.mock('../../src/services/influxdbService', () => ({
-  __esModule: true,
-  default: {
-    writePoint: jest.fn().mockResolvedValue(undefined),
-    query: jest.fn().mockResolvedValue([]),
-    close: jest.fn().mockResolvedValue(undefined)
-  },
-  InfluxDBService: {
-    writePoint: jest.fn().mockResolvedValue(undefined),
-    query: jest.fn().mockResolvedValue([]),
-    close: jest.fn().mockResolvedValue(undefined)
-  }
-}));
-
 // Mock Redis to prevent real connections
 jest.mock('ioredis', () => {
   const MockRedis = jest.fn().mockImplementation(() => ({

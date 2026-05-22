@@ -7,7 +7,7 @@ export async function register() {
     await import('./lib/instrumentation');
   }
 
-  if (process.env.NEXT_RUNTIME === 'edge') {
+  if (process.env.NEXT_RUNTIME === 'edge' && process.env.NODE_ENV === 'production') {
     await import('./sentry.edge.config');
   }
 }

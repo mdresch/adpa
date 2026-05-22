@@ -7,10 +7,34 @@
 
 import { getApiBaseUrl } from './api-url';
 
-// Use dedicated orchestrator URL or fallback to standard API base
-const ORCHESTRATOR_URL = process.env.NEXT_PUBLIC_ORCHESTRATOR_URL 
-  ? `${process.env.NEXT_PUBLIC_ORCHESTRATOR_URL.replace(/\/$/, '')}/api/Ritual`
-  : `${getApiBaseUrl()}/Ritual`;
+/** Direct orchestrator base (browser). When unset, use same-origin /api/Ritual (Next rewrite → ORCHESTRATOR_URL). */
+function getOrchestratorRitualBase(): string {
+  const explicit = process.env.NEXT_PUBLIC_ORCHESTRATOR_URL?.trim()
+  if (explicit) {
+    return `${explicit.replace(/\/$/, '')}/api/Ritual`
+  }
+  return `${getApiBaseUrl()}/Ritual`
+}
+
+export function isRitualOrchestratorConfigured(): boolean {
+  return Boolean(
+    process.env.NEXT_PUBLIC_ORCHESTRATOR_URL?.trim() ||
+      (typeof window !== 'undefined' && process.env.NEXT_PUBLIC_ORCHESTRATOR_PROXY === 'true'),
+  )
+}
+
+function ritualFetch(path: string, init?: RequestInit): Promise<Response> {
+  return fetch(`${getOrchestratorRitualBase()}${path}`, init)
+}
+
+/** True when Express returned HTML 404 for a missing ritual route (orchestrator not proxied / not running). */
+export function isRitualOrchestratorUnavailableError(message: string): boolean {
+  return (
+    message.includes('Cannot POST /api/Ritual') ||
+    message.includes('status: 404') ||
+    (message.includes('Orchestration Ritual Failure') && message.includes('<!DOCTYPE html>'))
+  )
+}
 
 export interface IngestionRequest {
   filename: string;
@@ -63,7 +87,7 @@ export interface TaskApprovalAttestation {
  * Phase 0: Ingest raw ideation data.
  */
 export async function ingestIdeation(payload: IngestionRequest): Promise<IdeationSummary> {
-  const response = await fetch(`${ORCHESTRATOR_URL}/phase0/ingest`, {
+  const response = await ritualFetch('/phase0/ingest', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
@@ -81,7 +105,7 @@ export async function ingestIdeation(payload: IngestionRequest): Promise<Ideatio
  * Phase 0: Generate Business Case from summary.
  */
 export async function generateBusinessCase(ideationTitle: string): Promise<BusinessCase> {
-  const response = await fetch(`${ORCHESTRATOR_URL}/phase0/business-case`, {
+  const response = await ritualFetch('/phase0/business-case', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(ideationTitle)
@@ -115,7 +139,7 @@ export async function approveBusinessCase(businessCaseId: string, approval?: Tas
         })
       : JSON.stringify(businessCaseId);
 
-  const response = await fetch(`${ORCHESTRATOR_URL}/phase0/approve`, {
+  const response = await ritualFetch('/phase0/approve', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body,
@@ -133,7 +157,7 @@ export async function approveBusinessCase(businessCaseId: string, approval?: Tas
  * RTM: Fetch Research Advice for a requirement.
  */
 export async function getResearchAdvice(targetId: string) {
-  const response = await fetch(`${ORCHESTRATOR_URL}/rtm/research-advice/${targetId}`, {
+  const response = await ritualFetch(`/rtm/research-advice/${targetId}`, {
     method: 'POST'
   });
 
@@ -156,7 +180,7 @@ export async function proposeAmendment(payload: {
   amendment_type?: string;
   amendment_sub_type?: string;
 }) {
-  const response = await fetch(`${ORCHESTRATOR_URL}/rtm/propose-amendment`, {
+  const response = await ritualFetch('/rtm/propose-amendment', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
@@ -179,7 +203,7 @@ export async function decideAmendment(payload: {
   decided_by: string;
   decision_notes?: string;
 }) {
-  const response = await fetch(`${ORCHESTRATOR_URL}/rtm/decide-amendment`, {
+  const response = await ritualFetch('/rtm/decide-amendment', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
@@ -202,7 +226,7 @@ export async function applyAmendment(payload: {
   /** Required when Governance:ApprovalsEnforced (scope `rtm.apply_amendment`, task_id = amendment_id). */
   approval?: TaskApprovalAttestation;
 }) {
-  const response = await fetch(`${ORCHESTRATOR_URL}/rtm/apply-amendment`, {
+  const response = await ritualFetch('/rtm/apply-amendment', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
@@ -220,7 +244,7 @@ export async function applyAmendment(payload: {
  * Ledger: Fetch Ideation Ledger.
  */
 export async function getIdeationLedger() {
-  const response = await fetch(`${ORCHESTRATOR_URL}/ledger/ideation`);
+  const response = await ritualFetch('/ledger/ideation');
   if (!response.ok) throw new Error("Ledger Access Failure: Ideation");
   return response.json();
 }
@@ -229,7 +253,7 @@ export async function getIdeationLedger() {
  * Ledger: Fetch RTM Ledger.
  */
 export async function getRtmLedger() {
-  const response = await fetch(`${ORCHESTRATOR_URL}/ledger/rtm`);
+  const response = await ritualFetch('/ledger/rtm');
   if (!response.ok) throw new Error("Ledger Access Failure: RTM");
   return response.json();
 }

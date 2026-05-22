@@ -1,5 +1,4 @@
 export { securityValidationDependency } from "./validateConfig"
-export { azureBackendDependency } from "./azureBackend"
 export { firebaseAuthDependency } from "./firebaseAuth"
 export { databaseDependency } from "./database"
 export { redisDependency } from "./redis"

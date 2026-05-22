@@ -16,8 +16,8 @@ export function TableOfContentsComponent({ props }: TableOfContentsComponentProp
     []
 
   return (
-    <nav className="report-toc rounded-lg border border-slate-200 bg-slate-50/80 px-5 py-4 print:break-after-page">
-      <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-slate-600">
+    <nav className="report-toc rounded-lg border px-5 py-4 print:break-after-page">
+      <h2 className="genui-report-toc-heading mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide">
         <List className="h-4 w-4" aria-hidden />
         {title}
       </h2>
@@ -27,7 +27,7 @@ export function TableOfContentsComponent({ props }: TableOfContentsComponentProp
           const indent = level === 1 ? "" : level === 2 ? "ml-4" : "ml-8"
           return (
             <li key={idx} className={indent}>
-              <span className="text-slate-800">{entry.title}</span>
+              <span className="genui-report-prose">{entry.title}</span>
             </li>
           )
         })}

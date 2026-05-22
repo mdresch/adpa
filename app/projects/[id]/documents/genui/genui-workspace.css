@@ -97,3 +97,230 @@
 .dark .genui-workspace .genui-body-text {
   color: rgb(30 41 59);
 }
+
+/* Optional report theme when user asks for black background + gray shades (host CSS only). */
+.genui-openui-root.genui-report-dark {
+  color-scheme: dark;
+  background-color: #0a0a0a;
+  color: rgb(229 231 235);
+}
+
+.genui-openui-root.genui-report-dark .openui-shell-thread-scroll-area {
+  background-color: #0a0a0a;
+}
+
+.genui-openui-root.genui-report-dark [data-slot="card"],
+.genui-openui-root.genui-report-dark .rounded-lg.border {
+  background-color: rgb(38 38 38) !important;
+  border-color: rgb(64 64 64) !important;
+  color: rgb(229 231 235);
+}
+
+.genui-openui-root.genui-report-dark [data-slot="card"] h1,
+.genui-openui-root.genui-report-dark [data-slot="card"] h2,
+.genui-openui-root.genui-report-dark [data-slot="card"] h3,
+.genui-openui-root.genui-report-dark [data-slot="card"] p,
+.genui-openui-root.genui-report-dark [data-slot="card"] li,
+.genui-openui-root.genui-report-dark [data-slot="card"] td,
+.genui-openui-root.genui-report-dark [data-slot="card"] th {
+  color: rgb(212 212 212);
+}
+
+.genui-openui-root.genui-report-dark [data-slot="card"] th {
+  background-color: rgb(23 23 23);
+}
+
+.genui-openui-root.genui-report-dark .text-muted-foreground {
+  color: rgb(163 163 163) !important;
+}
+
+/* Cover card: first report block (title + summary) */
+.genui-openui-root .genui-lang-render > div > div:first-child [data-slot="card"],
+.genui-openui-root .genui-lang-render [data-slot="card"]:first-of-type {
+  margin-bottom: 1.25rem;
+}
+
+.genui-openui-root.genui-report-dark .genui-lang-render > div > div:first-child [data-slot="card"],
+.genui-openui-root.genui-report-dark .genui-lang-render [data-slot="card"]:first-of-type {
+  background-color: rgb(32 32 32) !important;
+  border-color: rgb(82 82 82) !important;
+}
+
+.genui-openui-root.genui-report-dark .genui-lang-render > div > div:first-child [data-slot="card"] h1,
+.genui-openui-root.genui-report-dark .genui-lang-render > div > div:first-child [data-slot="card"] h2,
+.genui-openui-root.genui-report-dark .genui-lang-render [data-slot="card"]:first-of-type h1,
+.genui-openui-root.genui-report-dark .genui-lang-render [data-slot="card"]:first-of-type h2 {
+  color: rgb(245 245 245);
+  font-size: 1.35rem;
+  line-height: 1.3;
+}
+
+.genui-openui-root .report-cover-hero {
+  margin: -0.25rem -0.25rem 0;
+}
+
+.genui-openui-root.genui-report-dark .report-cover-hero {
+  border-bottom-color: rgb(64 64 64);
+}
+
+.genui-openui-root.genui-report-dark .report-cover-hero img {
+  opacity: 0.94;
+}
+
+/* Shared prose tokens (light default; overridden in report-dark). */
+.genui-report-prose {
+  color: rgb(51 65 85);
+}
+
+.genui-report-muted {
+  color: rgb(100 116 139);
+}
+
+.genui-report-toc-heading {
+  color: rgb(71 85 105);
+}
+
+.genui-openui-root.genui-report-dark .report-toc {
+  background-color: rgb(38 38 38) !important;
+  border-color: rgb(64 64 64) !important;
+}
+
+/* OpenUI stock components use --openui-* tokens (not shadcn data-slot). */
+.genui-openui-root.genui-report-dark {
+  --openui-background: #0a0a0a;
+  --openui-foreground: #262626;
+  --openui-popover-background: #262626;
+  --openui-sunk-light: #1a1a1a;
+  --openui-sunk: #262626;
+  --openui-sunk-deep: #1f1f1f;
+  --openui-elevated-light: #2a2a2a;
+  --openui-elevated: #333333;
+  --openui-elevated-strong: #404040;
+  --openui-highlight-subtle: rgb(255 255 255 / 0.03);
+  --openui-highlight: rgb(255 255 255 / 0.06);
+  --openui-highlight-strong: rgb(255 255 255 / 0.1);
+  --openui-text-neutral-primary: rgb(229 231 235);
+  --openui-text-neutral-secondary: rgb(163 163 163);
+  --openui-text-neutral-tertiary: rgb(115 115 115);
+  --openui-text-neutral-link: rgb(212 212 212);
+  --openui-border-default: rgb(64 64 64 / 0.9);
+  --openui-border-interactive: rgb(82 82 82 / 1);
+  --openui-border-interactive-emphasis: rgb(115 115 115 / 1);
+  --openui-chat-user-response-bg: rgb(38 38 38);
+  --openui-chat-user-response-text: rgb(229 231 235);
+}
+
+.genui-openui-root.genui-report-dark .genui-lang-render .openui-card,
+.genui-openui-root.genui-report-dark .genui-lang-render .openui-card-card,
+.genui-openui-root.genui-report-dark .genui-lang-render .openui-card-sunk {
+  background-color: rgb(38 38 38) !important;
+  border-color: rgb(64 64 64) !important;
+  color: rgb(229 231 235);
+}
+
+.genui-openui-root.genui-report-dark .genui-lang-render .openui-markdown-renderer,
+.genui-openui-root.genui-report-dark .genui-lang-render .openui-markdown-renderer p,
+.genui-openui-root.genui-report-dark .genui-lang-render .openui-markdown-renderer li,
+.genui-openui-root.genui-report-dark .genui-lang-render .openui-markdown-renderer h1,
+.genui-openui-root.genui-report-dark .genui-lang-render .openui-markdown-renderer h2,
+.genui-openui-root.genui-report-dark .genui-lang-render .openui-markdown-renderer h3,
+.genui-openui-root.genui-report-dark .genui-lang-render .openui-markdown-renderer h4,
+.genui-openui-root.genui-report-dark .genui-lang-render .openui-markdown-renderer strong,
+.genui-openui-root.genui-report-dark .genui-lang-render .openui-markdown-renderer td,
+.genui-openui-root.genui-report-dark .genui-lang-render .openui-markdown-renderer th {
+  color: rgb(212 212 212);
+}
+
+.genui-openui-root.genui-report-dark .genui-lang-render .openui-markdown-renderer th {
+  background-color: rgb(23 23 23);
+}
+
+.genui-openui-root.genui-report-dark .genui-lang-render .openui-callout {
+  border-color: rgb(64 64 64);
+}
+
+.genui-openui-root.genui-report-dark .genui-report-prose,
+.genui-openui-root.genui-report-dark .genui-lang-render .text-slate-700,
+.genui-openui-root.genui-report-dark .genui-lang-render .text-slate-800,
+.genui-openui-root.genui-report-dark .genui-lang-render .text-slate-600,
+.genui-openui-root.genui-report-dark .genui-lang-render .text-slate-500,
+.genui-openui-root.genui-report-dark .genui-lang-render .prose-slate {
+  color: rgb(212 212 212) !important;
+}
+
+.genui-openui-root.genui-report-dark .genui-report-muted,
+.genui-openui-root.genui-report-dark .genui-report-toc-heading {
+  color: rgb(163 163 163) !important;
+}
+
+.genui-openui-root.genui-report-dark .genui-advisor-message {
+  background-color: transparent !important;
+  border-color: rgb(38 38 38) !important;
+  color: rgb(229 231 235);
+}
+
+.genui-openui-root.genui-report-dark .genui-advisor-message > span {
+  color: rgb(163 163 163);
+}
+
+.genui-openui-root.genui-report-dark .genui-advisor-message pre {
+  background-color: rgb(23 23 23) !important;
+  border-color: rgb(64 64 64) !important;
+  color: rgb(212 212 212) !important;
+}
+
+.genui-openui-root.genui-report-dark .genui-advisor-message button {
+  background-color: rgb(38 38 38);
+  border-color: rgb(64 64 64);
+  color: rgb(212 212 212);
+}
+
+.genui-openui-root.genui-report-dark .genui-advisor-message button:hover {
+  background-color: rgb(48 48 48);
+}
+
+/* ADPA widgets: hardcoded slate/white utilities inside Lang output */
+.genui-openui-root.genui-report-dark .genui-lang-render .text-slate-900,
+.genui-openui-root.genui-report-dark .genui-lang-render .text-slate-800,
+.genui-openui-root.genui-report-dark .genui-lang-render .text-slate-700 {
+  color: rgb(229 231 235) !important;
+}
+
+.genui-openui-root.genui-report-dark .genui-lang-render .text-slate-600,
+.genui-openui-root.genui-report-dark .genui-lang-render .text-slate-500,
+.genui-openui-root.genui-report-dark .genui-lang-render .text-slate-400 {
+  color: rgb(163 163 163) !important;
+}
+
+.genui-openui-root.genui-report-dark .genui-lang-render .bg-white,
+.genui-openui-root.genui-report-dark .genui-lang-render .bg-slate-50,
+.genui-openui-root.genui-report-dark .genui-lang-render .bg-slate-100 {
+  background-color: rgb(38 38 38) !important;
+}
+
+.genui-openui-root.genui-report-dark .genui-lang-render .border-slate-200,
+.genui-openui-root.genui-report-dark .genui-lang-render .border-slate-100 {
+  border-color: rgb(64 64 64) !important;
+}
+
+.genui-openui-root.genui-report-dark .genui-lang-render .text-indigo-600,
+.genui-openui-root.genui-report-dark .genui-lang-render a.text-indigo-600 {
+  color: rgb(165 180 252) !important;
+}
+
+.genui-openui-root.genui-report-dark .genui-lang-render code.bg-slate-100 {
+  background-color: rgb(23 23 23) !important;
+  color: rgb(212 212 212) !important;
+}
+
+/* OpenUI Steps / Accordion / scrollable table chrome */
+.genui-openui-root.genui-report-dark .genui-lang-render .openui-steps,
+.genui-openui-root.genui-report-dark .genui-lang-render .openui-accordion,
+.genui-openui-root.genui-report-dark .genui-lang-render [class*="openui-table"] {
+  color: rgb(212 212 212);
+}
+
+.genui-openui-root.genui-report-dark .openui-shell-welcome-screen,
+.genui-openui-root.genui-report-dark .openui-shell-thread-composer {
+  color: rgb(229 231 235);
+}

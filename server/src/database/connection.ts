@@ -57,6 +57,49 @@ function stripLibpqSslQueryParams(connectionUrl: URL): string {
   return u.toString()
 }
 
+/** Redact password from a Postgres URL before logging. */
+export function maskDatabaseUrl(url: string): string {
+  try {
+    const u = new URL(url)
+    if (u.password) {
+      u.password = "***"
+    }
+    return u.toString()
+  } catch {
+    return url.replace(/:\/\/([^:@/]+):([^@/]+)@/, "://$1:***@")
+  }
+}
+
+function databaseUrlEndpointLabel(url: string): string {
+  try {
+    const u = new URL(url)
+    const port = u.port ? `:${u.port}` : ""
+    const db = u.pathname && u.pathname !== "/" ? u.pathname : ""
+    return `${u.hostname}${port}${db}`
+  } catch {
+    return maskDatabaseUrl(url)
+  }
+}
+
+function formatConnectionLogTarget(poolConfig: {
+  host?: string
+  port?: number
+  database?: string
+  user?: string
+  connectionString?: string
+}): string {
+  if (poolConfig.host) {
+    const port = poolConfig.port ? `:${poolConfig.port}` : ""
+    const db = poolConfig.database ? `/${poolConfig.database}` : ""
+    const user = poolConfig.user ? ` as ${poolConfig.user}` : ""
+    return `${poolConfig.host}${port}${db}${user}`
+  }
+  if (poolConfig.connectionString) {
+    return maskDatabaseUrl(poolConfig.connectionString)
+  }
+  return "database"
+}
+
 export function buildSslConfig(target?: string) {
   if (isTrustedPoolingProvider(target)) {
     // Supabase/Azure with PgBouncer: certificate chain cannot be validated in dev environments
@@ -261,7 +304,9 @@ async function connectDatabaseInternal(): Promise<void> {
   const retryDelay = 3000 // 3 seconds
 
   const currentDbUrl = getDatabaseUrl()
-  console.log(`🔍 DATABASE_URL check: ${currentDbUrl ? `Found (${currentDbUrl.substring(0, 30)}...)` : 'Not found'}`)
+  console.log(
+    `🔍 DATABASE_URL check: ${currentDbUrl ? `Found (${databaseUrlEndpointLabel(currentDbUrl)})` : "Not found"}`
+  )
   console.log(`🔍 NODE_ENV: ${process.env.NODE_ENV || 'undefined (defaulting to development)'}`)
   console.log(`🔧 DB config: connect timeout=${DEFAULT_DB_CONN_TIMEOUT_MS}ms, query timeout=${DEFAULT_DB_QUERY_TIMEOUT_MS}ms, max retries per method=${maxRetriesPerMethod}`)
 
@@ -364,7 +409,7 @@ async function connectDatabaseInternal(): Promise<void> {
       })
 
       try {
-        console.log(`📡 Connecting to ${poolConfig.host || poolConfig.connectionString} as ${poolConfig.user}...`)
+        console.log(`📡 Connecting to ${formatConnectionLogTarget(poolConfig)}...`)
         const client = await Promise.race([
           testPool.connect(),
           new Promise<never>((_, reject) => 

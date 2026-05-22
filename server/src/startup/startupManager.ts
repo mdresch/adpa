@@ -12,7 +12,6 @@ import {
   securityValidationDependency,
   upstashDependency,
   morphicDbDependency,
-  azureBackendDependency,
   firebaseAuthDependency,
 } from "./dependencies"
 import { logger } from "../utils/logger"
@@ -49,7 +48,6 @@ export class StartupManager {
     // Register all dependencies in order of criticality
     this.graph.register(securityValidationDependency) // Security check MUST be first
     this.graph.register(databaseDependency)
-    this.graph.register(azureBackendDependency)      // Azure availability check
     this.graph.register(firebaseAuthDependency)      // Firebase handshake check
     this.graph.register(redisDependency)
     this.graph.register(neo4jDependency)

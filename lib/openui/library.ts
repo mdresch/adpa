@@ -3,6 +3,8 @@
  * Type definitions and utilities for structured component rendering
  */
 
+import { sanitizeOpenUILang } from "@/lib/openui/sanitizeOpenUILang"
+
 // Component types - what the LLM can suggest
 export type ComponentType =
   | "Table"
@@ -25,6 +27,7 @@ export type ComponentType =
   | "Text"
   | "Prose"
   | "TableOfContents"
+  | "ReportCoverHero"
 
 // Structured JSON type for chat messages
 export type OpenUIChatJson =
@@ -108,12 +111,12 @@ export function isLegacyComponentPayload(
 export function extractOpenUILangText(text: string): string {
   const trimmed = text.trim()
   const closedFence = trimmed.match(/^```(?:openui-lang|openui)\s*\n([\s\S]*?)\n```$/i)
-  if (closedFence) return closedFence[1].trim()
+  if (closedFence) return sanitizeOpenUILang(closedFence[1].trim())
 
   const openFence = trimmed.match(/^```(?:openui-lang|openui)\s*\n([\s\S]*)$/i)
-  if (openFence) return openFence[1].trim()
+  if (openFence) return sanitizeOpenUILang(openFence[1].trim())
 
-  return trimmed
+  return sanitizeOpenUILang(trimmed)
 }
 
 /** Heuristic: assistant content looks like OpenUI Lang (statement syntax, not XML) */

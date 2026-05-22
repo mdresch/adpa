@@ -8,9 +8,12 @@ import { createLibrary, defineComponent } from "@openuidev/react-lang"
 import { z } from "zod/v4"
 import type { ReactNode } from "react"
 
-/** Zod 4 requires key + value schemas; single-arg z.record() breaks OpenUI's schema walker. */
-const stringRecord = z.record(z.string(), z.string())
-const looseRecord = z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()]))
+import { BulletsDef } from "./bulletsDef"
+import { ComparisonDef } from "./comparisonDef"
+import { TableOfContentsDef } from "./tableOfContentsDef"
+import { TeamDef } from "./teamDef"
+import { TimelineDef } from "./timelineDef"
+import { looseRecord, stringRecord } from "./zodRecords"
 
 // ─── Table ────────────────────────────────────────────────────────────────────
 const TableDef = defineComponent({
@@ -60,30 +63,6 @@ const ChartDef = defineComponent({
   },
 })
 
-// ─── Timeline ─────────────────────────────────────────────────────────────────
-const TimelineDef = defineComponent({
-  name: "Timeline",
-  description: "Renders a chronological sequence of milestones or phases. Use for project schedules, roadmaps, or phase gates.",
-  props: z.object({
-    title: z.string().optional().describe("Timeline heading"),
-    milestones: z.array(z.object({
-      date: z.string().describe("Date or phase label, e.g. '2025-10-01' or 'Phase 1'"),
-      title: z.string().describe("Milestone name"),
-      description: z.string().optional().describe("Additional context"),
-      status: z.enum(["completed", "in-progress", "upcoming"]).optional(),
-    })).describe("Ordered list of milestones"),
-  }),
-  component: ({ props }) => {
-    const { TimelineComponent } = require("@/components/openui-chat/components/TimelineComponent")
-    return (
-      <TimelineComponent
-        props={{ title: props.title } as any}
-        data={(props.milestones as any[]) ?? []}
-      />
-    )
-  },
-})
-
 // ─── Card ─────────────────────────────────────────────────────────────────────
 const CardDef = defineComponent({
   name: "Card",
@@ -106,32 +85,6 @@ const CardDef = defineComponent({
   },
 })
 
-// ─── Team ─────────────────────────────────────────────────────────────────────
-const TeamDef = defineComponent({
-  name: "Team",
-  description:
-    "Team roster. Use ONLY when every person from the source is listed with their attributes. Otherwise use Prose or Table.",
-  props: z.object({
-    title: z.string().optional().describe("Team section heading"),
-    members: z.array(z.object({
-      name: z.string().describe("Full name"),
-      role: z.string().describe("Project role or title"),
-      department: z.string().optional().describe("Organizational unit"),
-      email: z.string().optional().describe("Contact email"),
-      responsibility: z.string().optional().describe("Key responsibilities"),
-    })).describe("Team members"),
-  }),
-  component: ({ props }) => {
-    const { TeamComponent } = require("@/components/openui-chat/components/TeamComponent")
-    return (
-      <TeamComponent
-        props={{ title: props.title } as any}
-        data={(props.members as any[]) ?? []}
-      />
-    )
-  },
-})
-
 // ─── Prose ────────────────────────────────────────────────────────────────────
 const ProseDef = defineComponent({
   name: "Prose",
@@ -145,27 +98,6 @@ const ProseDef = defineComponent({
   component: ({ props }) => {
     const { ProseComponent } = require("@/components/openui-chat/components/ProseComponent")
     return <ProseComponent props={props as Record<string, unknown>} data={[]} />
-  },
-})
-
-// ─── Bullets ──────────────────────────────────────────────────────────────────
-const BulletsDef = defineComponent({
-  name: "Bullets",
-  description:
-    "Bulleted or numbered list. Use ONLY when the section is a list AND every item from the source is included. Otherwise use Prose.",
-  props: z.object({
-    title: z.string().optional().describe("List heading"),
-    style: z.enum(["bullet", "numbered", "checklist"]).optional().default("bullet"),
-    items: z.array(z.string()).describe("List items"),
-  }),
-  component: ({ props }) => {
-    const { BulletsComponent } = require("@/components/openui-chat/components/BulletsComponent")
-    return (
-      <BulletsComponent
-        props={{ title: props.title, style: props.style ?? "bullet" } as any}
-        data={((props.items as string[]) ?? []).map(text => ({ text }))}
-      />
-    )
   },
 })
 
@@ -224,33 +156,6 @@ const AccordionDef = defineComponent({
   },
 })
 
-// ─── Comparison ───────────────────────────────────────────────────────────────
-const ComparisonDef = defineComponent({
-  name: "Comparison",
-  description: "Renders a side-by-side comparison table. Use for in-scope vs out-of-scope, options analysis, or feature comparisons.",
-  props: z.object({
-    title: z.string().optional().describe("Comparison heading"),
-    sides: z.array(z.object({
-      name: z.string().describe("Column heading, e.g. 'In-Scope'"),
-      highlighted: z.boolean().optional().default(false),
-      attributes: stringRecord.describe("Attribute name → value pairs"),
-    })).describe("Comparison columns"),
-  }),
-  component: ({ props }) => {
-    const { ComparisonComponent } = require("@/components/openui-chat/components/ComparisonComponent")
-    return (
-      <ComparisonComponent
-        props={{ title: props.title } as any}
-        data={((props.sides as any[]) ?? []).map(s => ({
-          name: s.name,
-          highlighted: s.highlighted ?? false,
-          ...s.attributes,
-        }))}
-      />
-    )
-  },
-})
-
 // ─── Steps ────────────────────────────────────────────────────────────────────
 const StepsDef = defineComponent({
   name: "Steps",
@@ -270,24 +175,6 @@ const StepsDef = defineComponent({
         data={((props.steps as any[]) ?? []).map(s => ({ title: s.label, description: s.description ?? "" }))}
       />
     )
-  },
-})
-
-// ─── Table of Contents ────────────────────────────────────────────────────────
-const TableOfContentsDef = defineComponent({
-  name: "TableOfContents",
-  description:
-    "Navigation list of report sections. Use as the first Section body when the document has 4+ major sections. List every section title in order — do not invent entries.",
-  props: z.object({
-    title: z.string().optional().describe("Usually 'Table of Contents'"),
-    entries: z.array(z.object({
-      title: z.string().describe("Section title as it appears in the report"),
-      level: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional().describe("1 = major, 2 = subsection"),
-    })).describe("All section headings in document order"),
-  }),
-  component: ({ props }) => {
-    const { TableOfContentsComponent } = require("@/components/openui-chat/components/TableOfContentsComponent")
-    return <TableOfContentsComponent props={props as Record<string, unknown>} data={[]} />
   },
 })
 

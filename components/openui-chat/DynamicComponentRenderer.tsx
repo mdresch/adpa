@@ -13,12 +13,14 @@ import { MarkdownRenderer } from "@/components/documents/MarkdownRenderer"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { adpaLibrary } from "@/lib/openui/adpaLibrary"
+import { projectOpenUILibrary } from "@/lib/openui/projectOpenUILibrary"
 import type { ComponentPayload, OpenUIChatJson } from "@/lib/openui/library"
 import {
   extractOpenUILangText,
   isLegacyComponentPayload,
   looksLikeOpenUILang,
 } from "@/lib/openui/library"
+import { validateExecutorLang } from "@/lib/openui/langValidation"
 
 import { TableComponent } from "./components/TableComponent"
 import { ChartComponent } from "./components/ChartComponent"
@@ -44,7 +46,7 @@ export interface DynamicComponentRendererProps {
   /** @deprecated Legacy JSON component payload from pre–react-lang threads */
   payload?: ComponentPayload | OpenUIChatJson
   isStreaming?: boolean
-  /** Defaults to ADPA library; pass openuiLibrary from @openuidev/react-ui/genui-lib for GenUI workspace */
+  /** Defaults to project GenUI library (openui + Bullets); pass adpaLibrary for legacy Report threads */
   library?: Library
 }
 
@@ -52,7 +54,7 @@ export function DynamicComponentRenderer({
   response,
   payload,
   isStreaming = false,
-  library = adpaLibrary,
+  library = projectOpenUILibrary,
 }: DynamicComponentRendererProps) {
   const raw =
     response ??
@@ -82,6 +84,12 @@ export function DynamicComponentRenderer({
         onError={(errors) => {
           if (errors.length > 0) {
             console.warn("[OpenUI Renderer]", errors)
+          }
+          if (!isStreaming && trimmed) {
+            const validation = validateExecutorLang(trimmed)
+            if (!validation.ok) {
+              console.warn("[OpenUI Lang validation]", validation.issues)
+            }
           }
         }}
       />

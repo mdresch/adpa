@@ -7,8 +7,9 @@
  * IMPORTANT: This file must be imported BEFORE any other imports in server.ts
  */
 
+import path from 'path'
 import dotenv from 'dotenv'
-dotenv.config()
+dotenv.config({ path: path.join(__dirname, '../.env') })
 
 import { NodeSDK } from '@opentelemetry/sdk-node'
 import { resourceFromAttributes } from '@opentelemetry/resources'

@@ -2,12 +2,11 @@
 import * as dotenv from 'dotenv';
 import path from 'path';
 
-// Load env
+// Load env before any service import (static imports are hoisted above this line)
 dotenv.config({ path: path.join(__dirname, '../../.env') });
 
-import { mongoVectorStore } from '../services/mongoVectorStore';
-
 async function verifyMongoSearch() {
+    const { mongoVectorStore } = await import('../services/mongoVectorStore');
     console.log('Verifying MongoDB Vector Search Configurability...');
 
     try {

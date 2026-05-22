@@ -8,6 +8,7 @@ export const GOOGLE_SUPPORTED_MODELS = [
   'gemini-1.5-pro-latest',
   'gemini-2.0-flash-exp',
   'gemini-3-flash-preview',
+  'gemini-3.5-flash',
   'gemini-3.1-flash-live-preview'
 ]
 
@@ -25,6 +26,8 @@ const GOOGLE_MODEL_ALIASES: Record<string, string> = {
   'gemini-3.1-flash-lite': GOOGLE_LOW_COST_MODEL,
   'gemini-2.5-flash-lite': 'gemini-2.5-flash-lite',
   'gemini-3-flash-preview': 'gemini-3-flash-preview',
+  'gemini-3.5-flash': 'gemini-3.5-flash',
+  'gemini-3-flash': 'gemini-3-flash-preview',
   'gemini-3.1-flash-live-preview': 'gemini-3.1-flash-live-preview'
 }
 

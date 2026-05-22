@@ -3,12 +3,17 @@ import { MongoClient, Db, Collection } from 'mongodb';
 import { logger } from '../utils/logger';
 import { RAGDocument, DocumentChunk } from '../types/rag';
 
-// Config should ideally come from process.env or a config module
-const MONGODB_URI = process.env.MONGODB_URI;
-const MONGODB_DB_NAME = process.env.MONGODB_DB_NAME || 'adpa_rag';
 const DOCUMENTS_COLLECTION = 'documents';
 const CHUNKS_COLLECTION = 'chunks';
 
+/** Read at runtime — module may load before server dotenv.config(). */
+function getMongoUri(): string | undefined {
+    return process.env.MONGODB_URI;
+}
+
+function getMongoDbName(): string {
+    return process.env.MONGODB_DB_NAME || 'adpa_rag';
+}
 export class MongoVectorStore {
     private client: MongoClient | null = null;
     private _db!: Db;
@@ -19,26 +24,22 @@ export class MongoVectorStore {
         return this._db;
     }
 
-    constructor() {
-        if (!MONGODB_URI) {
-            logger.warn('MONGODB_URI not set. MongoVectorStore will not function until initialized with valid URI.');
-        }
-    }
-
     async connect(): Promise<void> {
         if (this.isConnected) return;
-        if (!MONGODB_URI) {
+        const uri = getMongoUri();
+        const dbName = getMongoDbName();
+        if (!uri) {
             throw new Error('MONGODB_URI not defined');
         }
 
         try {
-            this.client = new MongoClient(MONGODB_URI);
+            this.client = new MongoClient(uri);
             await this.client.connect();
-            this._db = this.client.db(MONGODB_DB_NAME);
+            this._db = this.client.db(dbName);
             this.isConnected = true;
 
             logger.info('Connected to MongoDB Atlas for Vector Store', {
-                database: MONGODB_DB_NAME
+                database: dbName
             });
         } catch (error) {
             logger.error('Failed to connect to MongoDB Atlas', {
@@ -228,7 +229,7 @@ export class MongoVectorStore {
             embeddedChunks: embeddedChunkCount,
             embeddingPercentage: chunkCount > 0 ? Math.round((embeddedChunkCount / chunkCount) * 100) : 0,
             indexStatus,
-            database: MONGODB_DB_NAME
+            database: getMongoDbName()
         };
     }
 
@@ -236,7 +237,7 @@ export class MongoVectorStore {
         try {
             this.ensureConnected();
             if (!this.client) return false;
-            await this.client.db(MONGODB_DB_NAME).command({ ping: 1 });
+            await this.client.db(getMongoDbName()).command({ ping: 1 });
             return true;
         } catch (error) {
             logger.error('MongoDB ping failed', { error: (error as Error).message });

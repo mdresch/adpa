@@ -10,6 +10,8 @@ import type { OpenUIChatJson } from "@/lib/openui/library"
 import { CheckCircle2, Circle, List } from "lucide-react"
 import { useState } from "react"
 
+import { InlineMarkdown } from "@/components/openui-chat/InlineMarkdown"
+
 interface BulletsComponentProps {
   props: Record<string, OpenUIChatJson>
   data: Array<Record<string, OpenUIChatJson>>
@@ -77,7 +79,7 @@ export function BulletsComponent({ props, data }: BulletsComponentProps) {
                   style === "checklist" && checkedItems.has(idx) ? "line-through text-slate-400" : "text-slate-700"
                 }`}
               >
-                {item.text}
+                <InlineMarkdown content={item.text} />
               </span>
             </li>
           ))}

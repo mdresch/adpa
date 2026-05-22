@@ -1,40 +1,51 @@
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
+import {
+  getGenuiOpenAIClientConfig,
+  resolveGenuiLlmProvider,
+  type GenuiLlmProvider,
+} from '@/lib/llm/genuiLlmProvider'
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:5000'
 
 export const maxDuration = 300
 
-const mistralClient = () =>
-  new OpenAI({
-    apiKey: process.env.MISTRAL_API_KEY,
-    baseURL: 'https://api.mistral.ai/v1',
-  })
-
 type ChatMessage = { role: string; content: string }
 
-async function streamMistralChat(systemPrompt: string, messages: ChatMessage[]) {
-  if (!process.env.MISTRAL_API_KEY) {
-    return NextResponse.json(
-      { error: 'MISTRAL_API_KEY is not configured' },
-      { status: 503 }
-    )
+function sseHeaders(provider: GenuiLlmProvider, model: string): HeadersInit {
+  return {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-GenUI-Provider': provider,
+    'X-GenUI-Model': model,
+  }
+}
+
+async function streamGenuiChat(
+  provider: GenuiLlmProvider,
+  systemPrompt: string,
+  messages: ChatMessage[]
+) {
+  const config = getGenuiOpenAIClientConfig(provider)
+  if ('error' in config) {
+    return NextResponse.json({ error: config.error }, { status: 503 })
   }
 
-  const client = mistralClient()
+  const client = new OpenAI({
+    apiKey: config.apiKey,
+    baseURL: config.baseURL,
+  })
+
   const response = await client.chat.completions.create({
-    model: process.env.MISTRAL_MODEL || 'mistral-large-latest',
+    model: config.model,
     messages: [{ role: 'system', content: systemPrompt }, ...messages],
     stream: true,
   })
 
   return new NextResponse(response.toReadableStream(), {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache, no-transform',
-      Connection: 'keep-alive',
-    },
+    headers: sseHeaders(provider, config.model),
   })
 }
 
@@ -75,7 +86,7 @@ export async function POST(req: NextRequest) {
       threadId?: string
     }
 
-    // GenUI document workspace: Mistral via OpenAI-compatible API (server-side key only)
+    // GenUI document workspace: OpenAI-compatible stream (Mistral or Google Gemini)
     if (typeof systemPrompt === 'string' && systemPrompt.length > 0) {
       const cookieStore = await cookies()
       const token = cookieStore.get('auth_token')?.value
@@ -87,7 +98,8 @@ export async function POST(req: NextRequest) {
         ? messages.filter((m) => m.role !== 'system')
         : []
 
-      return streamMistralChat(systemPrompt, apiMessages)
+      const provider = resolveGenuiLlmProvider()
+      return streamGenuiChat(provider, systemPrompt, apiMessages)
     }
 
     return proxyOpenUIChat({ projectId, threadId, messages })
