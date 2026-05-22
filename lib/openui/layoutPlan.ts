@@ -223,9 +223,76 @@ function shouldUseTwoColumnProse(body: string): boolean {
   return trimmed.length >= TWO_COLUMN_MIN_CHARS
 }
 
-/** Split long prose for side-by-side TextContent columns (paragraph boundary preferred). */
+const SENTENCE_BOUNDARY_RE = /[.!?](?:["')\]]{0,3})?(?:\s+|\n+)/g
+
+const ABBREV_BEFORE_PERIOD_RE =
+  /\b(?:Dr|Mr|Mrs|Ms|Prof|Sr|Jr|Inc|Ltd|vs|eg|ie|Fig|Vol|Ed|Sec|Ch|St|Dept|Corp|Co|Approx|Est|Avg|Min|Max)\.$/i
+
+/** Period is part of a decimal or section number (e.g. 3.1), not end of sentence. */
+function isDecimalOrOutlinePeriod(text: string, periodIndex: number): boolean {
+  const before = text[periodIndex - 1] ?? ""
+  const after = text[periodIndex + 1] ?? ""
+  if (/\d/.test(before) && /\d/.test(after)) return true
+  return false
+}
+
+/** Common abbreviations and citations — do not treat as sentence end. */
+function isAbbreviationPeriod(text: string, periodIndex: number): boolean {
+  if (isDecimalOrOutlinePeriod(text, periodIndex)) return true
+  const ctx = text.slice(Math.max(0, periodIndex - 20), periodIndex + 1)
+  return ABBREV_BEFORE_PERIOD_RE.test(ctx)
+}
+
+/**
+ * Index after punctuation where the right column should start (whitespace trimmed).
+ * Returns null when no suitable sentence boundary exists in range.
+ */
+export function findSentenceBoundarySplitIndex(
+  text: string,
+  targetRatio = 0.5,
+  minColumnChars = 40
+): number | null {
+  const len = text.length
+  if (len < minColumnChars * 2) return null
+
+  const target = Math.floor(len * targetRatio)
+  const minIdx = Math.max(minColumnChars, Math.floor(len * 0.22))
+  const maxIdx = Math.min(len - minColumnChars, Math.floor(len * 0.78))
+
+  const candidates: number[] = []
+  let match: RegExpExecArray | null
+  SENTENCE_BOUNDARY_RE.lastIndex = 0
+  while ((match = SENTENCE_BOUNDARY_RE.exec(text)) !== null) {
+    const periodIndex = match.index
+    if (isAbbreviationPeriod(text, periodIndex)) continue
+    const endIdx = periodIndex + match[0].length
+    if (endIdx < minIdx || endIdx > maxIdx) continue
+    candidates.push(endIdx)
+  }
+
+  if (candidates.length === 0) return null
+
+  let best = candidates[0]
+  let bestDist = Math.abs(best - target)
+  for (const idx of candidates) {
+    const dist = Math.abs(idx - target)
+    if (dist < bestDist) {
+      bestDist = dist
+      best = idx
+    }
+  }
+
+  const leftLen = best
+  const rightLen = len - best
+  if (leftLen < minColumnChars || rightLen < minColumnChars) return null
+  return best
+}
+
+/** Split long prose for side-by-side TextContent columns (paragraph, then sentence boundaries). */
 export function splitProseIntoTwoColumns(body: string): [string, string] {
   const trimmed = body.trim()
+  if (!trimmed) return ["", ""]
+
   const paragraphs = trimmed.split(/\n\n+/).filter((p) => p.trim())
   if (paragraphs.length >= 2) {
     const mid = Math.ceil(paragraphs.length / 2)
@@ -234,24 +301,26 @@ export function splitProseIntoTwoColumns(body: string): [string, string] {
     if (col1.length >= 60 && col2.length >= 60) return [col1, col2]
   }
 
-  const target = Math.floor(trimmed.length * 0.52)
-  const windowStart = Math.floor(trimmed.length * 0.35)
-  const windowEnd = Math.floor(trimmed.length * 0.65)
-  const slice = trimmed.slice(windowStart, windowEnd)
-  const relBreak = slice.search(/[.!?]["']?\s+/)
-  if (relBreak >= 0) {
-    const punct = slice.slice(relBreak).match(/^[.!?]["']?/)?.[0] ?? "."
-    const idx = windowStart + relBreak + punct.length
-    const rest = trimmed.slice(idx).search(/\S/)
-    const splitAt = rest >= 0 ? idx + rest : idx
-    const left = trimmed.slice(0, splitAt).trim()
-    const right = trimmed.slice(splitAt).trim()
+  if (paragraphs.length === 1 && trimmed.includes("\n")) {
+    const lines = trimmed.split("\n").map((l) => l.trim()).filter(Boolean)
+    if (lines.length >= 2) {
+      const mid = Math.ceil(lines.length / 2)
+      const col1 = lines.slice(0, mid).join("\n").trim()
+      const col2 = lines.slice(mid).join("\n").trim()
+      if (col1.length >= 60 && col2.length >= 60) return [col1, col2]
+    }
+  }
+
+  const sentenceIdx = findSentenceBoundarySplitIndex(trimmed, 0.5, 40)
+  if (sentenceIdx !== null) {
+    const left = trimmed.slice(0, sentenceIdx).trim()
+    const right = trimmed.slice(sentenceIdx).trim()
     if (left.length >= 40 && right.length >= 40) return [left, right]
   }
 
   const mid = Math.floor(trimmed.length / 2)
   const space = trimmed.lastIndexOf(" ", mid)
-  const at = space > mid - 100 ? space : mid
+  const at = space > mid - 120 ? space : mid
   return [trimmed.slice(0, at).trim(), trimmed.slice(at).trim()]
 }
 
@@ -481,7 +550,7 @@ function buildTwoColumnTextNode(
     hints: {
       ...classified.hints,
       twoColumn: "true",
-      note: "row Stack with two TextContent columns — split sourceText, do not duplicate",
+      note: "row Stack with two TextContent columns — pre-split at sentence boundaries in sourceText; do not duplicate",
     },
     children: [
       {
@@ -1121,7 +1190,7 @@ export function formatLayoutPlanForExecutor(
     "- Subsections (### or 1.1, 1.2) go INSIDE the chapter Card as Stack blocks with subsection CardHeader — never a separate top-level Card per ###.",
     "- Skip empty heading-only nodes; do not emit TextContent that only repeats the section title — use CardHeader for the title instead.",
     "- Narrative prose → TextContent. Bullet/numbered lists → Bullets. Markdown tables → Table([Col(\"Header\", [cells...]), ...]) with ONE argument only — never Table(..., \"caption\").",
-    "- Long narrative blocks (hints.twoColumn or sourceTextChars ≥ ~360): split into TWO columns — Stack([col1, col2], \"row\", \"m\", \"stretch\", \"start\", true) with two TextContent(\"...\", \"default\") children. Use each column's sourceText from the plan (left/right); never paste the full paragraph into both columns.",
+    "- Long narrative blocks (hints.twoColumn or sourceTextChars ≥ ~360): Stack([col1, col2], \"row\", \"m\", \"stretch\", \"start\", true) with two TextContent children. left/right sourceText in the plan is already split at paragraph or sentence boundaries — copy exactly; never merge columns or break mid-sentence.",
     "- Apply two-column row Stacks for chapter lead paragraphs and long subsection intros (e.g. Executive Summary, §2.1 Purpose, §3.1) when the plan marks twoColumn or REQUIRED_LANG on a Stack node.",
     "- Use Accordion only when the user prompt explicitly requests accordion/collapsible/FAQ AND Bullets is not a better fit.",
     "- Do not invent metrics, dates, or names not supported by source text.",

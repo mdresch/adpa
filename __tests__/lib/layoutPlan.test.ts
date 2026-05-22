@@ -356,6 +356,59 @@ describe("splitProseIntoTwoColumns", () => {
     expect(left).not.toBe(right)
     expect(left.length + right.length).toBeLessThan(body.repeat(3).length + 20)
   })
+
+  test("single-block prose breaks at sentence boundary near the middle", () => {
+    const sentence =
+      "The integration addresses current search limitations and improves analyst productivity across the portfolio."
+    const body = [sentence, sentence, sentence, sentence, sentence].join(" ")
+    const [left, right] = splitProseIntoTwoColumns(body)
+    expect(left).toMatch(/[.!?]["')\]]?\s*$/)
+    expect(right).toMatch(/^[A-Z]/)
+    expect(left + " " + right).toContain(body.slice(0, 40))
+    expect(left).not.toMatch(/\bthe\s*$/i)
+    expect(right).not.toMatch(/^\s*integration\b/i)
+  })
+
+  test("does not split after Dr. or decimal section numbers", () => {
+    const sentences = [
+      "Dr. Smith leads the architecture workstream.",
+      "The program follows PMBOK 7th Ed. guidance for governance.",
+      "Stakeholders expect measurable outcomes within the first release cycle.",
+      "Section 3.1 outlines the high-level scope and constraints for delivery teams.",
+      "Weekly steering reviews track scope, budget, and risk escalation paths.",
+      "Sponsors receive a concise status narrative before each gate decision.",
+    ]
+    const body = sentences.join(" ").repeat(3)
+    const [left, right] = splitProseIntoTwoColumns(body)
+    expect(left).toMatch(/[.!?]["')\]]?\s*$/)
+    expect(right).toMatch(/^[A-Z]/)
+    expect(right).not.toMatch(/^\s*Smith\b/)
+    expect(`${left} ${right}`).toContain("Section 3.1 outlines")
+    expect(left).not.toMatch(/Section 3\.\s*$/)
+    expect(right).not.toMatch(/^\s*1 outlines/)
+  })
+
+  test("chapter intro two-column children end and start on sentence boundaries", () => {
+    const para1 =
+      "The ADPA - Morphic AI Integration project aims to enhance the ADPA platform with state-of-the-art AI-powered search capabilities by integrating Morphic AI's technology. This integration addresses the current limitations of ADPA's search functionality, which impacts user productivity and decision-making."
+    const para2 =
+      "Key benefits include improved search accuracy, faster information retrieval, and a more intuitive user experience. The preferred recommendation is a phased integration approach, mitigating risks through comprehensive testing and stakeholder engagement."
+    const source = `## 1. Executive Summary\n\n${para1}\n\n${para2}`
+
+    const plan = buildLayoutPlan({
+      prompt: "Render the full document",
+      sourceText: source,
+    })
+    const allNodes = plan.nodes.flatMap(function collect(n): LayoutPlanNode[] {
+      return [n, ...(n.children ?? []).flatMap(collect)]
+    })
+    const twoCol = allNodes.find((n) => n.hints?.twoColumn === "true")
+    const [c1, c2] = twoCol?.children ?? []
+    expect(c1?.sourceText).toBe(para1)
+    expect(c2?.sourceText).toBe(para2)
+    expect(c1?.sourceText).toMatch(/\.\s*$/)
+    expect(c2?.sourceText).toMatch(/^Key benefits/)
+  })
 })
 
 describe("validateExecutorLang", () => {

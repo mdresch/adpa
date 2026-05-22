@@ -3,7 +3,6 @@
 import React, { useMemo, useState } from "react";
 import { AssistantMessage } from "@openuidev/react-headless";
 import { MarkDownRenderer } from "@openuidev/react-ui";
-import { projectOpenUILibrary } from "@/lib/openui/projectOpenUILibrary";
 import { Copy, FileText, Code, Volume2, ThumbsUp, ThumbsDown, Check } from "lucide-react";
 
 import { DynamicComponentRenderer } from "./DynamicComponentRenderer";
@@ -143,7 +142,6 @@ export const CustomAssistantMessage: React.FC<AssistantMessageProps> = ({
             <DynamicComponentRenderer
               response={langText}
               isStreaming={isStreaming}
-              library={projectOpenUILibrary}
             />
           </div>
         ) : rawContent ? (

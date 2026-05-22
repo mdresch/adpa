@@ -12,8 +12,7 @@ import { Sparkles, Telescope } from "lucide-react"
 import { MarkdownRenderer } from "@/components/documents/MarkdownRenderer"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { adpaLibrary } from "@/lib/openui/adpaLibrary"
-import { projectOpenUILibrary } from "@/lib/openui/projectOpenUILibrary"
+import { resolveOpenUIRenderLibrary } from "@/lib/openui/resolveRenderLibrary"
 import type { ComponentPayload, OpenUIChatJson } from "@/lib/openui/library"
 import {
   extractOpenUILangText,
@@ -46,7 +45,7 @@ export interface DynamicComponentRendererProps {
   /** @deprecated Legacy JSON component payload from pre–react-lang threads */
   payload?: ComponentPayload | OpenUIChatJson
   isStreaming?: boolean
-  /** Defaults to project GenUI library (openui + Bullets); pass adpaLibrary for legacy Report threads */
+  /** Optional override; otherwise Report roots use adpaLibrary, GenUI Stack/Card roots use projectOpenUILibrary */
   library?: Library
 }
 
@@ -54,7 +53,7 @@ export function DynamicComponentRenderer({
   response,
   payload,
   isStreaming = false,
-  library = projectOpenUILibrary,
+  library: libraryOverride,
 }: DynamicComponentRendererProps) {
   const raw =
     response ??
@@ -76,9 +75,12 @@ export function DynamicComponentRenderer({
   }
 
   if (hasRoot) {
+    const renderLibrary =
+      libraryOverride ?? resolveOpenUIRenderLibrary(trimmed)
+
     return (
       <Renderer
-        library={library}
+        library={renderLibrary}
         response={trimmed}
         isStreaming={isStreaming}
         onError={(errors) => {

@@ -81,7 +81,7 @@ flowchart LR
 | `lib/openui/systemPrompt.ts` | `buildOpenUIGenuiLibraryPrompt()`, `buildOpenUIUserMessage()`, `enrichOpenUIApiMessages()` |
 | `lib/openui/layoutPlan.ts` | Text → UI plan (strict executor); see `adpa-openui-chat` skill |
 
-**Long prose (≈360+ chars):** planner emits a row `Stack` with two `TextContent` columns (`splitProseIntoTwoColumns`, hints `twoColumn`); executor must use `Stack([col1, col2], "row", "m", "stretch", "start", true)` — same pattern as chapter intros in full governance reports.
+**Long prose (≈360+ chars):** planner emits a row `Stack` with two `TextContent` columns via `splitProseIntoTwoColumns` (paragraph break first, else nearest sentence boundary — skips `Dr.`, `Ed.`, `3.1`-style decimals); hints `twoColumn` + `REQUIRED_LANG` carry pre-split left/right text. Executor must use `Stack([col1, col2], "row", "m", "stretch", "start", true)` and must not re-split mid-sentence.
 
 **Pitfall:** If `CustomAssistantMessage` only uses `MarkDownRenderer`, users see a fenced code block instead of Cards/Tables/Charts. Always route OpenUI Lang through `Renderer` + **`projectOpenUILibrary`**.
 

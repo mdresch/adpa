@@ -127,6 +127,12 @@ export function looksLikeOpenUILang(text: string): boolean {
   return /^[A-Za-z][\w]*\s*=/.test(trimmed)
 }
 
+/** Legacy OpenUI Chat threads render with root = Report(...) (adpaLibrary, not genui-lib). */
+export function isLegacyReportRootLang(raw: string): boolean {
+  const lang = extractOpenUILangText(raw).trim()
+  return /^root\s*=\s*Report\s*\(/im.test(lang)
+}
+
 // Helper to check if payload is text
 
 export function isTextPayload(payload: OpenUIAssistantPayload): payload is TextPayload {
