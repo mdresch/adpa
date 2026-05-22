@@ -2,7 +2,9 @@ import {
   buildLayoutPlan,
   formatLayoutPlanForExecutor,
   segmentSourceText,
+  splitBodyIntoContentBlocks,
   splitProseIntoTwoColumns,
+  stripProseDividers,
   wantsGenuiReportDarkTheme,
 } from "@/lib/openui/layoutPlan"
 import type { LayoutPlanNode } from "@/lib/openui/layoutPlanTypes"
@@ -284,6 +286,93 @@ Architecture details.`
     expect(plan.nodes.length).toBeGreaterThan(3)
   })
 
+  test("SMP §1.1 two-column plan does not list duplicate col children to executor", () => {
+    const para1 =
+      "The purpose of this Scope Management Plan (SMP) is to establish a comprehensive framework for defining, documenting, validating, and controlling the project scope for the ADPA - Implementation of OpenUI and Auto UI Generation project."
+    const para2 =
+      "This document serves as a subsidiary plan to the Project Management Plan (PMP) and provides detailed guidance on scope-related processes, roles, responsibilities, and deliverables."
+    const source = `## 1. Introduction and Scope Management Approach
+
+### 1.1 Overview of the Scope Management Plan
+${para1}
+
+${para2}
+
+---
+
+### 1.2 Project Scope Management Approach
+Intro paragraph before the table.
+
+| Phase | Approach |
+| --- | --- |
+| Initiation | Predictive |
+| Execution | Adaptive |
+
+**Justification for Hybrid Approach:**
+The hybrid model balances governance with agility.`
+
+    const plan = buildLayoutPlan({
+      prompt: "Render the full document to a interactive UI Component Report",
+      sourceText: source,
+    })
+
+    const allNodes = plan.nodes.flatMap(function collect(n): LayoutPlanNode[] {
+      return [n, ...(n.children ?? []).flatMap(collect)]
+    })
+    const twoCol = allNodes.find((n) => n.id.includes("1-1") && n.hints?.twoColumn === "true")
+    expect(twoCol?.component).toBe("Stack")
+    const block = formatLayoutPlanForExecutor(plan)
+    expect(block).toMatch(/inlined in REQUIRED_LANG/)
+    expect(block).not.toMatch(/section-1-1-overview[^"]*"\s*\n\s*children:\s*\n\s*- id: section-1-1-overview-col1/s)
+
+    const section12Nodes = allNodes.filter((n) => n.id.includes("1-2"))
+    expect(section12Nodes.some((n) => n.component === "Table" && n.sourceText.includes("Initiation"))).toBe(
+      true
+    )
+    expect(
+      section12Nodes.some((n) => n.sourceText.includes("Justification for Hybrid Approach"))
+    ).toBe(true)
+    expect(section12Nodes.some((n) => n.sourceText.includes("Intro paragraph"))).toBe(true)
+  })
+
+  test("scope management metadata headings do not become top-level chapter cards", () => {
+    const source = `# Scope Management Plan
+
+## Project: ADPA - Implementation of OpenUI and Auto UI Generation
+## Date: May 15, 2026
+## Version: 1.0
+
+---
+
+## 1. Introduction and Scope Management Approach
+
+### 1.1 Purpose of the Document
+The purpose of this Scope Management Plan (SMP) is to establish a comprehensive framework.
+
+## 2. Scope Definition and Documentation
+
+### 2.1 Project Scope Statement
+The Project Scope Statement defines boundaries.`
+
+    const plan = buildLayoutPlan({
+      prompt: "Render the full document to a interactive UI Component Report",
+      sourceText: source,
+    })
+
+    const topLevelCards = plan.nodes.filter(
+      (n) => n.component === "Card" && n.id.startsWith("card-chapter")
+    )
+    expect(topLevelCards.map((n) => n.label)).toEqual([
+      "1. Introduction and Scope Management Approach",
+      "2. Scope Definition and Documentation",
+    ])
+    const cover = plan.nodes.find((n) => n.id === "doc-cover")
+    const coverSummary = cover?.children?.find((c) => c.id === "cover-summary")
+    expect(coverSummary?.sourceText).toMatch(/ADPA/)
+    expect(coverSummary?.sourceText).toMatch(/May 15, 2026/)
+    expect(coverSummary?.sourceText).toMatch(/Version: 1\.0/)
+  })
+
   test("hierarchical report puts cover before TOC and chapters", () => {
     const source = `# OpenUI Integration with ADPA Systems
 Strategic Framework Enhancement
@@ -347,7 +436,40 @@ ROI discussion.`
   })
 })
 
-describe("splitProseIntoTwoColumns", () => {
+describe("splitBodyIntoContentBlocks", () => {
+  test("splits prose, table, and justification tail for §1.2-style sections", () => {
+    const body = `Intro paragraph before the table.
+
+| Phase | Approach |
+| --- | --- |
+| Initiation | Predictive |
+
+**Justification for Hybrid Approach:**
+The hybrid model balances governance with agility.`
+    const blocks = splitBodyIntoContentBlocks(body)
+    expect(blocks.length).toBe(3)
+    expect(blocks[0]?.kind).toBe("prose")
+    expect(blocks[0]?.text).toMatch(/Intro paragraph/)
+    expect(blocks[1]?.kind).toBe("table")
+    expect(blocks[2]?.text).toMatch(/Justification for Hybrid Approach/)
+  })
+})
+
+describe("stripProseDividers and splitProseIntoTwoColumns", () => {
+  test("horizontal rule between paragraphs is not a third column", () => {
+    const body = `First paragraph with enough characters to qualify for two column layout in the report.
+
+Second paragraph also has enough characters to qualify for two column layout in the report.
+
+---`
+    const stripped = stripProseDividers(body)
+    const [left, right] = splitProseIntoTwoColumns(stripped)
+    expect(left).toMatch(/First paragraph/)
+    expect(right).toMatch(/Second paragraph/)
+    expect(left).not.toContain("---")
+    expect(right).not.toContain("---")
+  })
+
   test("splits on paragraph boundaries when possible", () => {
     const body = "First paragraph with enough text to matter.\n\nSecond paragraph also has substantive content for the right column."
     const [left, right] = splitProseIntoTwoColumns(body.repeat(3))

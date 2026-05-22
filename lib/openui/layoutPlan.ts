@@ -214,7 +214,7 @@ function isStructuredTabularLines(text: string): boolean {
 const TWO_COLUMN_MIN_CHARS = 360
 
 function shouldUseTwoColumnProse(body: string): boolean {
-  const trimmed = body.trim()
+  const trimmed = stripProseDividers(body)
   if (trimmed.length < TWO_COLUMN_MIN_CHARS) return false
   if (isMarkdownTableBlock(trimmed) || isBulletListBlock(trimmed)) return false
   if (isNumberedSectionOutlineList(trimmed)) return false
@@ -288,9 +288,80 @@ export function findSentenceBoundarySplitIndex(
   return best
 }
 
+/** Remove horizontal rules and other non-prose dividers before column split. */
+export function stripProseDividers(body: string): string {
+  return body
+    .replace(/^---+$/gm, "")
+    .replace(/^\s*[*_]{3,}\s*$/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+}
+
+type SectionContentBlock = { kind: "prose" | "table"; text: string }
+
+/** Split subsection body into prose blocks and markdown tables (keeps intro + table + tail prose). */
+export function splitBodyIntoContentBlocks(body: string): SectionContentBlock[] {
+  const text = body.trim()
+  if (!text) return []
+
+  const lines = text.split("\n")
+  const blocks: SectionContentBlock[] = []
+  let proseBuf: string[] = []
+  let tableBuf: string[] = []
+  let inTable = false
+
+  const flushProse = () => {
+    const chunk = proseBuf.join("\n").trim()
+    proseBuf = []
+    if (!chunk) return
+    const subChunks = chunk.split(/\n(?=\*\*[^*\n]+\*\*:?\s*(?:\n|$))/).map((c) => c.trim()).filter(Boolean)
+    for (const sub of subChunks.length > 0 ? subChunks : [chunk]) {
+      blocks.push({ kind: "prose", text: sub })
+    }
+  }
+
+  const flushTable = () => {
+    const chunk = tableBuf.join("\n").trim()
+    tableBuf = []
+    inTable = false
+    if (chunk && isMarkdownTableBlock(chunk)) {
+      blocks.push({ kind: "table", text: chunk })
+    } else if (chunk) {
+      proseBuf.push(chunk)
+    }
+  }
+
+  for (const line of lines) {
+    const trimmedLine = line.trim()
+    const isPipeRow = /^\|.+\|/.test(trimmedLine)
+    const isTableSep = /^\|[\s:|-]+\|/.test(trimmedLine)
+    if (isPipeRow) {
+      if (!inTable) {
+        flushProse()
+        inTable = true
+      }
+      tableBuf.push(line)
+      continue
+    }
+    if (inTable && isTableSep) {
+      tableBuf.push(line)
+      continue
+    }
+    if (inTable) flushTable()
+    proseBuf.push(line)
+  }
+  if (inTable) flushTable()
+  else flushProse()
+
+  if (blocks.length === 0) {
+    return [{ kind: "prose", text }]
+  }
+  return blocks
+}
+
 /** Split long prose for side-by-side TextContent columns (paragraph, then sentence boundaries). */
 export function splitProseIntoTwoColumns(body: string): [string, string] {
-  const trimmed = body.trim()
+  const trimmed = stripProseDividers(body)
   if (!trimmed) return ["", ""]
 
   const paragraphs = trimmed.split(/\n\n+/).filter((p) => p.trim())
@@ -346,7 +417,21 @@ function classifySegmentBody(
   }
 
   if (isMarkdownTableBlock(trimmed) || isStructuredTabularLines(trimmed)) {
-    return { component: "Table", mapping: "widget", hints: { note: "derive columns and rows from source" } }
+    const pipeRows = trimmed.split("\n").filter((l) => /^\|/.test(l.trim())).length
+    const wbsLike =
+      /\bwbs\s+dictionary\b/i.test(`${title ?? ""}\n${trimmed}`) ||
+      (/\blevel\s*1\b/i.test(trimmed) && /\blevel\s*2\b/i.test(trimmed))
+    return {
+      component: "Table",
+      mapping: "widget",
+      hints: {
+        note: wbsLike
+          ? "WBS Dictionary — preserve all hierarchy columns and rows from source (Level 1–4); use Table widget"
+          : "derive columns and rows from source",
+        ...(wbsLike ? { wbsDictionary: "true" } : {}),
+        ...(pipeRows >= 8 ? { wideTable: "true", rowCount: String(pipeRows) } : {}),
+      },
+    }
   }
   if (isTimelineBlock(trimmed)) {
     return { component: "Timeline", mapping: "widget", hints: { note: "milestones from dated lines" } }
@@ -409,14 +494,25 @@ function isHeadingOnlySegment(seg: TextSegment): boolean {
   return false
 }
 
-/** Major report chapter (H1 or numbered ##) — not every ### subsection. */
+/** Document metadata lines (Project:/Date:/Version:) — not chapter boundaries. */
+function isReportMetadataHeading(seg: TextSegment): boolean {
+  const level = seg.headingLevel ?? 2
+  const title = normalizeTitle(seg.title ?? "")
+  if (level !== 2) return false
+  if (/^\d+\.\s/.test(title)) return false
+  return /^(Project|Date|Version|Author|Document|Prepared\s+by|Status):/i.test(title)
+}
+
+/** Major report chapter (H1 or numbered ## like "1. Introduction") — not metadata or ###. */
 function isChapterBoundary(seg: TextSegment): boolean {
   const level = seg.headingLevel ?? 2
   const title = seg.title ?? ""
+  if (isReportMetadataHeading(seg)) return false
   if (level === 1) return true
   if (level === 2) {
     if (/^\d+\.\d+/.test(title)) return false
-    return true
+    if (/^\d+\.\s/.test(title)) return true
+    return false
   }
   return false
 }
@@ -445,12 +541,33 @@ type ReportChapter = {
   subsections: TextSegment[]
 }
 
+function formatReportMetadataBlurb(metadata: TextSegment[]): string {
+  const parts: string[] = []
+  for (const seg of metadata) {
+    const title = normalizeTitle(seg.title ?? "")
+    if (!title) continue
+    const body = seg.body.trim()
+    if (!body || isHeadingOnlySegment(seg)) {
+      parts.push(title)
+      continue
+    }
+    const oneLine = body.replace(/\s+/g, " ").trim()
+    if (oneLine.length <= 140) {
+      parts.push(`${title} — ${oneLine}`)
+    } else {
+      parts.push(title)
+    }
+  }
+  return parts.join("\n").slice(0, COVER_SUMMARY_MAX_CHARS)
+}
+
 function groupSegmentsIntoChapters(sectionSegments: TextSegment[]): ReportChapter[] {
   const contentSegments = sectionSegments.filter((s) => !isDocumentTitleSegment(s, sectionSegments))
+  const bodySegments = contentSegments.filter((s) => !isReportMetadataHeading(s))
   const chapters: ReportChapter[] = []
   let current: ReportChapter | null = null
 
-  for (const seg of contentSegments) {
+  for (const seg of bodySegments) {
     if (isChapterBoundary(seg) && !isSubsectionBoundary(seg)) {
       if (current) chapters.push(current)
       current = {
@@ -535,6 +652,48 @@ function slugId(s: string): string {
     .slice(0, 40) || "untitled"
 }
 
+function buildLeafNodeFromBody(
+  seg: TextSegment,
+  body: string,
+  idSuffix = ""
+): LayoutPlanNode {
+  const subSeg: TextSegment = { ...seg, id: `${seg.id}${idSuffix}`, body }
+  const classified = classifySegmentBody(body, seg.title)
+  if (
+    classified.component === "TextContent" &&
+    classified.mapping === "typography-fallback" &&
+    shouldUseTwoColumnProse(body)
+  ) {
+    return buildTwoColumnTextNode(subSeg, classified)
+  }
+  return {
+    id: subSeg.id,
+    component: classified.component,
+    mapping: classified.mapping,
+    sourceText: body,
+    label: seg.title,
+    fallbackReason: classified.fallbackReason,
+    hints: classified.hints,
+  }
+}
+
+function buildCompositeSegmentNode(seg: TextSegment, blocks: SectionContentBlock[]): LayoutPlanNode {
+  const children = blocks.map((block, i) =>
+    buildLeafNodeFromBody(seg, block.text, `-part-${i}`)
+  )
+  return {
+    id: seg.id,
+    component: "Stack",
+    mapping: "widget",
+    sourceText: seg.body,
+    label: seg.title,
+    hints: {
+      note: "subsection with multiple blocks (prose and/or tables) — emit in order; do not merge or drop blocks",
+    },
+    children,
+  }
+}
+
 function buildTwoColumnTextNode(
   seg: TextSegment,
   classified: ReturnType<typeof classifySegmentBody>
@@ -574,23 +733,12 @@ function buildTwoColumnTextNode(
 }
 
 function buildNodeFromSegment(seg: TextSegment): LayoutPlanNode {
-  const classified = classifySegmentBody(seg.body, seg.title)
-  if (
-    classified.component === "TextContent" &&
-    classified.mapping === "typography-fallback" &&
-    shouldUseTwoColumnProse(seg.body)
-  ) {
-    return buildTwoColumnTextNode(seg, classified)
+  const blocks = splitBodyIntoContentBlocks(seg.body)
+  if (blocks.length > 1) {
+    return buildCompositeSegmentNode(seg, blocks)
   }
-  return {
-    id: seg.id,
-    component: classified.component,
-    mapping: classified.mapping,
-    sourceText: seg.body,
-    label: seg.title,
-    fallbackReason: classified.fallbackReason,
-    hints: classified.hints,
-  }
+  const body = blocks[0]?.text ?? seg.body
+  return buildLeafNodeFromBody(seg, body)
 }
 
 function buildSubsectionBlock(seg: TextSegment): LayoutPlanNode {
@@ -917,13 +1065,20 @@ function buildShellNodes(
     preambleSeg?.body,
     docTitle
   )
-  const coverBlurb =
+  const metadataBlurb = formatReportMetadataBlurb(
+    sectionSegments.filter(isReportMetadataHeading)
+  )
+  let coverBlurb =
     coverSummaryOverride?.trim() ||
     buildCoverBlurbFromSources({
       fullSummary: summarySource,
       preambleBody: preambleSeg?.body,
       executiveSummaryBody: executiveSummaryBodyFromChapters(chapters),
     })
+  if (metadataBlurb) {
+    const combined = [metadataBlurb, coverBlurb].filter(Boolean).join("\n\n").trim()
+    coverBlurb = combined.slice(0, COVER_SUMMARY_MAX_CHARS)
+  }
   const coverImage = useCover
     ? pickReportCoverImage({
         seed: documentId,
@@ -1141,8 +1296,14 @@ function flattenNodes(nodes: LayoutPlanNode[], depth = 0): string[] {
       `${pad}  """`
     )
     if (n.children?.length) {
-      lines.push(`${pad}  children:`)
-      lines.push(...flattenNodes(n.children, depth + 2))
+      if (twoColLang) {
+        lines.push(
+          `${pad}  children: (inlined in REQUIRED_LANG above — emit exactly two TextContent in one row Stack; do NOT add a third TextContent for the full sourceText)`
+        )
+      } else {
+        lines.push(`${pad}  children:`)
+        lines.push(...flattenNodes(n.children, depth + 2))
+      }
     }
   }
   return lines.filter(Boolean)
@@ -1190,7 +1351,10 @@ export function formatLayoutPlanForExecutor(
     "- Subsections (### or 1.1, 1.2) go INSIDE the chapter Card as Stack blocks with subsection CardHeader — never a separate top-level Card per ###.",
     "- Skip empty heading-only nodes; do not emit TextContent that only repeats the section title — use CardHeader for the title instead.",
     "- Narrative prose → TextContent. Bullet/numbered lists → Bullets. Markdown tables → Table([Col(\"Header\", [cells...]), ...]) with ONE argument only — never Table(..., \"caption\").",
-    "- Long narrative blocks (hints.twoColumn or sourceTextChars ≥ ~360): Stack([col1, col2], \"row\", \"m\", \"stretch\", \"start\", true) with two TextContent children. left/right sourceText in the plan is already split at paragraph or sentence boundaries — copy exactly; never merge columns or break mid-sentence.",
+    "- Long narrative blocks (hints.twoColumn or REQUIRED_LANG row Stack): exactly ONE row Stack with exactly TWO TextContent children — never three stacked paragraphs for a two-column subsection.",
+    "- When REQUIRED_LANG shows a two-column Stack, do not emit separate TextContent nodes for col1/col2 ids; use only the REQUIRED_LANG Stack.",
+    "- Subsections with multiple blocks (Stack children in plan): render every child in order — intro prose, then Table, then trailing prose (e.g. Justification for Hybrid Approach).",
+    "- WBS Dictionary and wide markdown tables: use Table with all pipe rows from sourceText; hints.wbsDictionary means preserve Level 1–4 columns.",
     "- Apply two-column row Stacks for chapter lead paragraphs and long subsection intros (e.g. Executive Summary, §2.1 Purpose, §3.1) when the plan marks twoColumn or REQUIRED_LANG on a Stack node.",
     "- Use Accordion only when the user prompt explicitly requests accordion/collapsible/FAQ AND Bullets is not a better fit.",
     "- Do not invent metrics, dates, or names not supported by source text.",
