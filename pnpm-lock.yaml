@@ -73,9 +73,6 @@ importers:
       '@hookform/resolvers':
         specifier: ^5.2.2
         version: 5.2.2(react-hook-form@7.76.0(react@18.3.1))
-      '@influxdata/influxdb3-client':
-        specifier: ^2.0.0
-        version: 2.0.0
       '@itwin/core-common':
         specifier: ^5.5.2
         version: 5.5.2(@itwin/core-bentley@5.5.2)(@itwin/core-geometry@5.5.2)
@@ -854,9 +851,6 @@ importers:
       '@google/generative-ai':
         specifier: ^0.24.1
         version: 0.24.1
-      '@influxdata/influxdb3-client':
-        specifier: ^2.0.0
-        version: 2.0.0
       '@langfuse/openai':
         specifier: ^4.6.1
         version: 4.6.1(@opentelemetry/api@1.9.0)
@@ -890,6 +884,9 @@ importers:
       '@openuidev/react-lang':
         specifier: ^0.2.5
         version: 0.2.5(@modelcontextprotocol/sdk@1.26.0(zod@4.1.8))(react@18.3.1)(zod@4.1.8)
+      '@openuidev/react-ui':
+        specifier: ^0.11.6
+        version: 0.11.6(@openuidev/react-headless@0.8.1(react@18.3.1)(zustand@4.5.7(@types/react@18.3.26)(immer@10.2.0)(react@18.3.1)))(@openuidev/react-lang@0.2.5(@modelcontextprotocol/sdk@1.26.0(zod@4.1.8))(react@18.3.1)(zod@4.1.8))(@types/react-dom@18.3.7(@types/react@18.3.26))(@types/react@18.3.26)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.1.8)(zustand@4.5.7(@types/react@18.3.26)(immer@10.2.0)(react@18.3.1))
       '@paralleldrive/cuid2':
         specifier: ^3.3.0
         version: 3.3.0
@@ -3016,10 +3013,6 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@influxdata/influxdb3-client@2.0.0':
-    resolution: {integrity: sha512-ZS+6CeHsCZ1mJjvryNvCcivY3FVqYMDiohYZzk4H/0Vvk/nCNBZ6DOT2GCOG5KsC3NXs1JcL27lJnDSwadpPEQ==}
-    engines: {node: '>=20'}
-
   '@inquirer/external-editor@1.0.2':
     resolution: {integrity: sha512-yy9cOoBnx58TlsPrIxauKIFQTiyH+0MK4e97y4sV9ERbI+zDxw7i2hxHLCIEGIE/8PPvDxGhgzIOTSOWcs6/MQ==}
     engines: {node: '>=18'}
@@ -4553,20 +4546,6 @@ packages:
 
   '@probe.gl/stats@4.1.0':
     resolution: {integrity: sha512-EI413MkWKBDVNIfLdqbeNSJTs7ToBz/KVGkwi3D+dQrSIkRI2IYbWGAU3xX+D6+CI4ls8ehxMhNpUVMaZggDvQ==}
-
-  '@protobuf-ts/grpc-transport@2.11.1':
-    resolution: {integrity: sha512-l6wrcFffY+tuNnuyrNCkRM8hDIsAZVLA8Mn7PKdVyYxITosYh60qW663p9kL6TWXYuDCL3oxH8ih3vLKTDyhtg==}
-    peerDependencies:
-      '@grpc/grpc-js': ^1.6.0
-
-  '@protobuf-ts/grpcweb-transport@2.11.1':
-    resolution: {integrity: sha512-1W4utDdvOB+RHMFQ0soL4JdnxjXV+ddeGIUg08DvZrA8Ms6k5NN6GBFU2oHZdTOcJVpPrDJ02RJlqtaoCMNBtw==}
-
-  '@protobuf-ts/runtime-rpc@2.11.1':
-    resolution: {integrity: sha512-4CqqUmNA+/uMz00+d3CYKgElXO9VrEbucjnBFEjqI4GuDrEQ32MaI3q+9qPBvIGOlL4PmHXrzM32vBPWRhQKWQ==}
-
-  '@protobuf-ts/runtime@2.11.1':
-    resolution: {integrity: sha512-KuDaT1IfHkugM2pyz+FwiY80ejWrkH1pAtOBOZFuR6SXEFTsnb/jiQWQ1rCIrcKx2BtyxnxW6BWwsVSA/Ie+WQ==}
 
   '@protobufjs/aspromise@1.1.2':
     resolution: {integrity: sha512-j+gKExEuLmKwvz3OgROXtrJ2UG2x8Ch2YZUxahh+s1F2HZ+wAceUNLkvy6zKCPVRkU++ZWQrdxsUeQXmcg4uoQ==}
@@ -6131,12 +6110,6 @@ packages:
   '@types/caseless@0.12.5':
     resolution: {integrity: sha512-hWtVTC2q7hc7xZ/RLbxapMvDMgUnDvKvMOpKal4DrMyfGBUfB1oKaZlIRr6mJL+If3bAP6sV/QneGzF6tJjZDg==}
 
-  '@types/command-line-args@5.2.3':
-    resolution: {integrity: sha512-uv0aG6R0Y8WHZLTamZwtfsDLVRnOa+n+n5rEvFWL5Na5gZ8V2Teab/duDPFzIIIhs9qizDpcavCusCLJZu62Kw==}
-
-  '@types/command-line-usage@5.0.4':
-    resolution: {integrity: sha512-BwR5KP3Es/CSht0xqBcUXS3qCAUVXwpRKsV2+arxeb65atasuXG9LykC9Ab10Cw3s2raH92ZqOeILaQbsB2ACg==}
-
   '@types/connect@3.4.38':
     resolution: {integrity: sha512-K6uROf1LD88uDQqJCktA4yzL1YYAK6NgfsI0v/mTgyPKWsX1CnJ0XPSDhViejru1GcRkLWb8RlzFYJRqGUbaug==}
 
@@ -6387,9 +6360,6 @@ packages:
 
   '@types/node@22.18.13':
     resolution: {integrity: sha512-Bo45YKIjnmFtv6I1TuC8AaHBbqXtIo+Om5fE4QiU1Tj8QR/qt+8O3BAtOimG5IFmwaWiPmB3Mv3jtYzBA4Us2A==}
-
-  '@types/node@24.12.4':
-    resolution: {integrity: sha512-GUUEShf+PBCGW2KaXwcIt3Yk+e3pkKwWKb9GSyM9WQVE+ep2jzmHdGsHzu4wgcZy5fN9FBdVzjpBQsYlpfpgLA==}
 
   '@types/node@24.9.2':
     resolution: {integrity: sha512-uWN8YqxXxqFMX2RqGOrumsKeti4LlmIMIyV0lgut4jx7KQBcBiW6vkDtIBvHnHIquwNfJhk8v2OtmO8zXWHfPA==}
@@ -6991,10 +6961,6 @@ packages:
     resolution: {integrity: sha512-KMReFUr0B4t+D+OBkjR3KYqvocp2XaSzO55UcB6mgQMd3KbcE+mWTyvVV7D/zsdEbNnV6acZUutkiHQXvTr1Rw==}
     engines: {node: '>= 8'}
 
-  apache-arrow@19.0.1:
-    resolution: {integrity: sha512-APmMLzS4qbTivLrPdQXexGM4JRr+0g62QDaobzEvip/FdQIrv2qLy0mD5Qdmw4buydtVJgbFeKR8f59I6PPGDg==}
-    hasBin: true
-
   append-field@1.0.0:
     resolution: {integrity: sha512-klpgFSWLW1ZEs8svjfb7g4qWY0YS5imI82dTg+QahUvJ8YqAY0P10Uk8tTyh9ZGuYEZEMaeJYCF5BFuX552hsw==}
 
@@ -7040,10 +7006,6 @@ packages:
   aria-query@5.3.2:
     resolution: {integrity: sha512-COROpnaoap1E2F000S62r6A60uHZnmlvomhfyT2DlTcrY1OrBKn2UhH7qn5wTC9zMvD0AY7csdPSNwKP+7WiQw==}
     engines: {node: '>= 0.4'}
-
-  array-back@6.2.2:
-    resolution: {integrity: sha512-gUAZ7HPyb4SJczXAMUXMGAvI976JoK3qEx9v1FTmeYuJj0IBiaKttG1ydtGKdkfqWkIkouke7nG8ufGy77+Cvw==}
-    engines: {node: '>=12.17'}
 
   array-buffer-byte-length@1.0.2:
     resolution: {integrity: sha512-LHE+8BuR7RYGDKvnrmcuSq3tDcKv9OFEXQt/HpbZhY7V6h0zlUXutnAD82GiFx9rdieCMjkvtcsPqBwgUl1Iiw==}
@@ -7449,10 +7411,6 @@ packages:
   chainsaw@0.1.0:
     resolution: {integrity: sha512-75kWfWt6MEKNC8xYXIdRpDehRYY/tNSgwKaJq+dbbDcxORuVrrQ+SEHoWsniVn9XPYfP4gmdWIeDk/4YNp1rNQ==}
 
-  chalk-template@0.4.0:
-    resolution: {integrity: sha512-/ghrgmhfY8RaSdeo43hNXxpoHAtxdbskUHjPpfqUWGttFgycUhYPGx3YZBCnUCvOa7Doivn1IZec3DEGFoMgLg==}
-    engines: {node: '>=12'}
-
   chalk@4.1.2:
     resolution: {integrity: sha512-oKnbhFyRIXpUuez8iBMmyEa4nbj4IOQyuhc/wy9kY7/WVPcwIO9VA668Pu8RkO7+0G76SLROeyw9CpQ061i4mA==}
     engines: {node: '>=10'}
@@ -7614,19 +7572,6 @@ packages:
 
   comma-separated-tokens@2.0.3:
     resolution: {integrity: sha512-Fu4hJdvzeylCfQPp9SGWidpzrMs7tTrlu6Vb8XGaRGck8QSNZJJp538Wrb60Lax4fPwR64ViY468OIUTbRlGZg==}
-
-  command-line-args@6.0.1:
-    resolution: {integrity: sha512-Jr3eByUjqyK0qd8W0SGFW1nZwqCaNCtbXjRo2cRJC1OYxWl3MZ5t1US3jq+cO4sPavqgw4l9BMGX0CBe+trepg==}
-    engines: {node: '>=12.20'}
-    peerDependencies:
-      '@75lb/nature': latest
-    peerDependenciesMeta:
-      '@75lb/nature':
-        optional: true
-
-  command-line-usage@7.0.3:
-    resolution: {integrity: sha512-PqMLy5+YGwhMh1wS04mVG44oqDsgyLRSKJBdOo1bnYhMKBW65gZF1dRp2OZRhiTjgUHljy99qkO7bsctLaw35Q==}
-    engines: {node: '>=12.20.0'}
 
   commander@14.0.3:
     resolution: {integrity: sha512-H+y0Jo/T1RZ9qPP4Eh1pkcQcLRglraJaSLoyOtHxu6AapkjWVCy2Sit1QQ4x3Dng8qDlSsZEet7g5Pq06MvTgw==}
@@ -8837,15 +8782,6 @@ packages:
     resolution: {integrity: sha512-/t88Ty3d5JWQbWYgaOGCCYfXRwV1+be02WqYYlL6h0lEiUAMPM8o8qKGO01YIkOHzka2up08wvgYD0mDiI+q3Q==}
     engines: {node: '>= 0.8'}
 
-  find-replace@5.0.2:
-    resolution: {integrity: sha512-Y45BAiE3mz2QsrN2fb5QEtO4qb44NcS7en/0y9PEVsg351HsLeVclP8QPMH79Le9sH3rs5RSwJu99W0WPZO43Q==}
-    engines: {node: '>=14'}
-    peerDependencies:
-      '@75lb/nature': latest
-    peerDependenciesMeta:
-      '@75lb/nature':
-        optional: true
-
   find-up@4.1.0:
     resolution: {integrity: sha512-PpOwAdQ/YlXQ2vj8a3h8IipDuYRi3wceVQQGYWxNINccq40Anw7BlsEXCMbt1Zt+OLA6Fq9suIpIWD0OsnISlw==}
     engines: {node: '>=8'}
@@ -8867,9 +8803,6 @@ packages:
 
   flatbuffers@1.12.0:
     resolution: {integrity: sha512-c7CZADjRcl6j0PlvFy0ZqXQ67qSEZfrVPynmnL+2zPc+NtMvrF8Y0QceMo7QqnSPc7+uWjUIAbvCQ5WIKlMVdQ==}
-
-  flatbuffers@24.12.23:
-    resolution: {integrity: sha512-dLVCAISd5mhls514keQzmEG6QHmUUsNuWsb4tFafIUwvvgDjXhtfAYSKOzt5SWOy+qByV5pbsDZ+Vb7HUOBEdA==}
 
   flatted@3.3.3:
     resolution: {integrity: sha512-GX+ysw4PBCz0PzosHDepZGANEuFCMLrnRTiEy9McGjmkCQYwRq4A/X786G/fjM/+OjsWSU1ZrY5qyARZmO/uwg==}
@@ -9136,9 +9069,6 @@ packages:
 
   graphemer@1.4.0:
     resolution: {integrity: sha512-EtKwoO6kxCL9WO5xipiHTZlSzBm7WLT627TqC/uVRd0HKmq8NXyebnNYxDoBi7wt8eTWrUrKXCOVaFq9x1kgag==}
-
-  grpc-web@2.0.2:
-    resolution: {integrity: sha512-bvBP0/d5jyVM3eGxxffJhRLAPpH6eXhJeUzBT+bSIEgUKkG4a/BotEimVeW3phP0WLnsJnkRl8uQdRf2yDLaVA==}
 
   gtoken@7.1.0:
     resolution: {integrity: sha512-pCcEwRi+TKpMlxAQObHDQ56KawURgyAf6jtIY046fJ5tIv3zDe/LEIubckAO8fj6JnAxLdmWkUfNyulQ2iKdEw==}
@@ -10056,10 +9986,6 @@ packages:
 
   json-bigint@1.0.0:
     resolution: {integrity: sha512-SiPv/8VpZuWbvLSMtTDU8hEfrZWg/mH/nV/b4o0CYbSxu1UIQPLdwKOCIyLQX+VIPO5vrLX3i8qtqFyhdPSUSQ==}
-
-  json-bignum@0.0.3:
-    resolution: {integrity: sha512-2WHyXj3OfHSgNyuzDbSxI1w2jgw5gkWSWhS7Qg4bWXx1nLk3jnbwfUeS0PSba3IzpTUWdHxBieELUzXRjQB2zg==}
-    engines: {node: '>=0.8'}
 
   json-buffer@3.0.1:
     resolution: {integrity: sha512-4bV5BfR2mqfQTJm+V5tPPdf+ZpuhiIvTuAB5g8kcrXOZpTT/QwwVRWBywX1ozr6lEuPdbHxwaJlm9G6mI2sfSQ==}
@@ -12556,10 +12482,6 @@ packages:
   tabbable@6.4.0:
     resolution: {integrity: sha512-05PUHKSNE8ou2dwIxTngl4EzcnsCDZGJ/iCLtDflR/SHB/ny14rXc+qU5P4mG9JkusiV7EivzY9Mhm55AzAvCg==}
 
-  table-layout@4.1.1:
-    resolution: {integrity: sha512-iK5/YhZxq5GO5z8wb0bY1317uDF3Zjpha0QFFLA8/trAoiLbQD0HUbMesEaxyzUgDxi2QlcbM8IvqOlEjgoXBA==}
-    engines: {node: '>=12.17'}
-
   tailwind-merge@2.6.0:
     resolution: {integrity: sha512-P+Vu1qXfzediirmHOC3xKGAYeZtPcV9g76X+xg2FD4tYgR71ewMA35Y3sCz3zhiN/dwefRpJX0yBcgwi1fXNQA==}
 
@@ -12918,10 +12840,6 @@ packages:
     resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
     engines: {node: '>=14.17'}
     hasBin: true
-
-  typical@7.3.0:
-    resolution: {integrity: sha512-ya4mg/30vm+DOWfBg4YK3j2WD6TWtRkCbasOJr40CseYENzCUby/7rIvXA99JGsQHeNxLbnXdyLLxKSv3tauFw==}
-    engines: {node: '>=12.17'}
 
   uc.micro@1.0.6:
     resolution: {integrity: sha512-8Y75pvTYkLJW2hWQHXxoqRgV7qb9B+9vFEtidML+7koHUFapnVJAZ6cKs+Qjz5Aw3aZWHMC6u0wJE3At+nSGwA==}
@@ -13310,10 +13228,6 @@ packages:
 
   wordwrap@1.0.0:
     resolution: {integrity: sha512-gvVzJFlPycKc5dZN4yPkP8w7Dc37BtP1yczEneOb4uq34pXZcvrtRTmWV8W+Ume+XCxKgbjM+nevkyFPMybd4Q==}
-
-  wordwrapjs@5.1.1:
-    resolution: {integrity: sha512-0yweIbkINJodk27gX9LBGMzyQdBDan3s/dEAiwBOj+Mf0PPyWL6/rikalkv8EeD0E8jm4o5RXEOrFTP3NXbhJg==}
-    engines: {node: '>=12.17'}
 
   wrap-ansi@6.2.0:
     resolution: {integrity: sha512-r6lPcBGxZXlIcymEu7InxDMhdW0KDxpLgoFLcguasxCaJ/SOIZwINatK9KY/tf+ZrlywOKU0UDj3ATXUBfxJXA==}
@@ -15209,17 +15123,6 @@ snapshots:
 
   '@img/sharp-win32-x64@0.34.5':
     optional: true
-
-  '@influxdata/influxdb3-client@2.0.0':
-    dependencies:
-      '@grpc/grpc-js': 1.14.3
-      '@protobuf-ts/grpc-transport': 2.11.1(@grpc/grpc-js@1.14.3)
-      '@protobuf-ts/grpcweb-transport': 2.11.1
-      '@protobuf-ts/runtime-rpc': 2.11.1
-      apache-arrow: 19.0.1
-      grpc-web: 2.0.2
-    transitivePeerDependencies:
-      - '@75lb/nature'
 
   '@inquirer/external-editor@1.0.2(@types/node@24.9.2)':
     dependencies:
@@ -17328,6 +17231,48 @@ snapshots:
       - '@types/react-dom'
       - supports-color
 
+  '@openuidev/react-ui@0.11.6(@openuidev/react-headless@0.8.1(react@18.3.1)(zustand@4.5.7(@types/react@18.3.26)(immer@10.2.0)(react@18.3.1)))(@openuidev/react-lang@0.2.5(@modelcontextprotocol/sdk@1.26.0(zod@4.1.8))(react@18.3.1)(zod@4.1.8))(@types/react-dom@18.3.7(@types/react@18.3.26))(@types/react@18.3.26)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.1.8)(zustand@4.5.7(@types/react@18.3.26)(immer@10.2.0)(react@18.3.1))':
+    dependencies:
+      '@floating-ui/react-dom': 2.1.6(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@openuidev/react-headless': 0.8.1(react@18.3.1)(zustand@4.5.7(@types/react@18.3.26)(immer@10.2.0)(react@18.3.1))
+      '@openuidev/react-lang': 0.2.5(@modelcontextprotocol/sdk@1.26.0(zod@4.1.8))(react@18.3.1)(zod@4.1.8)
+      '@radix-ui/react-accordion': 1.2.12(@types/react-dom@18.3.7(@types/react@18.3.26))(@types/react@18.3.26)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@radix-ui/react-aspect-ratio': 1.1.8(@types/react-dom@18.3.7(@types/react@18.3.26))(@types/react@18.3.26)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@radix-ui/react-checkbox': 1.3.3(@types/react-dom@18.3.7(@types/react@18.3.26))(@types/react@18.3.26)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@radix-ui/react-dialog': 1.1.15(@types/react-dom@18.3.7(@types/react@18.3.26))(@types/react@18.3.26)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@radix-ui/react-dropdown-menu': 2.1.16(@types/react-dom@18.3.7(@types/react@18.3.26))(@types/react@18.3.26)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@radix-ui/react-label': 2.1.8(@types/react-dom@18.3.7(@types/react@18.3.26))(@types/react@18.3.26)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@radix-ui/react-radio-group': 1.3.8(@types/react-dom@18.3.7(@types/react@18.3.26))(@types/react@18.3.26)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@radix-ui/react-select': 2.2.6(@types/react-dom@18.3.7(@types/react@18.3.26))(@types/react@18.3.26)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@radix-ui/react-separator': 1.1.8(@types/react-dom@18.3.7(@types/react@18.3.26))(@types/react@18.3.26)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@radix-ui/react-slider': 1.3.6(@types/react-dom@18.3.7(@types/react@18.3.26))(@types/react@18.3.26)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@radix-ui/react-switch': 1.2.6(@types/react-dom@18.3.7(@types/react@18.3.26))(@types/react@18.3.26)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@radix-ui/react-tabs': 1.1.13(@types/react-dom@18.3.7(@types/react@18.3.26))(@types/react@18.3.26)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@radix-ui/react-toggle-group': 1.1.11(@types/react-dom@18.3.7(@types/react@18.3.26))(@types/react@18.3.26)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@radix-ui/react-tooltip': 1.2.8(@types/react-dom@18.3.7(@types/react@18.3.26))(@types/react@18.3.26)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      clsx: 2.1.1
+      date-fns: 4.1.0
+      lodash-es: 4.18.1
+      lucide-react: 0.562.0(react@18.3.1)
+      react: 18.3.1
+      react-day-picker: 9.14.0(react@18.3.1)
+      react-dom: 18.3.1(react@18.3.1)
+      react-markdown: 10.1.0(@types/react@18.3.26)(react@18.3.1)
+      react-syntax-highlighter: 15.6.6(react@18.3.1)
+      recharts: 2.15.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      rehype-katex: 7.0.1
+      remark-breaks: 4.0.0
+      remark-emoji: 5.0.2
+      remark-gfm: 4.0.1
+      remark-math: 6.0.0
+      tiny-invariant: 1.3.3
+      zod: 4.1.8
+      zustand: 4.5.7(@types/react@18.3.26)(immer@10.2.0)(react@18.3.1)
+    transitivePeerDependencies:
+      - '@types/react'
+      - '@types/react-dom'
+      - supports-color
+
   '@paralleldrive/cuid2@2.3.1':
     dependencies:
       '@noble/hashes': 1.8.0
@@ -17376,23 +17321,6 @@ snapshots:
       '@probe.gl/env': 4.1.0
 
   '@probe.gl/stats@4.1.0': {}
-
-  '@protobuf-ts/grpc-transport@2.11.1(@grpc/grpc-js@1.14.3)':
-    dependencies:
-      '@grpc/grpc-js': 1.14.3
-      '@protobuf-ts/runtime': 2.11.1
-      '@protobuf-ts/runtime-rpc': 2.11.1
-
-  '@protobuf-ts/grpcweb-transport@2.11.1':
-    dependencies:
-      '@protobuf-ts/runtime': 2.11.1
-      '@protobuf-ts/runtime-rpc': 2.11.1
-
-  '@protobuf-ts/runtime-rpc@2.11.1':
-    dependencies:
-      '@protobuf-ts/runtime': 2.11.1
-
-  '@protobuf-ts/runtime@2.11.1': {}
 
   '@protobufjs/aspromise@1.1.2': {}
 
@@ -19059,10 +18987,6 @@ snapshots:
   '@types/caseless@0.12.5':
     optional: true
 
-  '@types/command-line-args@5.2.3': {}
-
-  '@types/command-line-usage@5.0.4': {}
-
   '@types/connect@3.4.38':
     dependencies:
       '@types/node': 25.8.0
@@ -19360,10 +19284,6 @@ snapshots:
   '@types/node@22.18.13':
     dependencies:
       undici-types: 6.21.0
-
-  '@types/node@24.12.4':
-    dependencies:
-      undici-types: 7.16.0
 
   '@types/node@24.9.2':
     dependencies:
@@ -19980,20 +19900,6 @@ snapshots:
       normalize-path: 3.0.0
       picomatch: 2.3.1
 
-  apache-arrow@19.0.1:
-    dependencies:
-      '@swc/helpers': 0.5.21
-      '@types/command-line-args': 5.2.3
-      '@types/command-line-usage': 5.0.4
-      '@types/node': 20.19.33
-      command-line-args: 6.0.1
-      command-line-usage: 7.0.3
-      flatbuffers: 24.12.23
-      json-bignum: 0.0.3
-      tslib: 2.8.1
-    transitivePeerDependencies:
-      - '@75lb/nature'
-
   append-field@1.0.0: {}
 
   archiver-utils@2.1.0:
@@ -20074,8 +19980,6 @@ snapshots:
       dequal: 2.0.3
 
   aria-query@5.3.2: {}
-
-  array-back@6.2.2: {}
 
   array-buffer-byte-length@1.0.2:
     dependencies:
@@ -20551,10 +20455,6 @@ snapshots:
     dependencies:
       traverse: 0.3.9
 
-  chalk-template@0.4.0:
-    dependencies:
-      chalk: 4.1.2
-
   chalk@4.1.2:
     dependencies:
       ansi-styles: 4.3.0
@@ -20696,20 +20596,6 @@ snapshots:
   comma-separated-tokens@1.0.8: {}
 
   comma-separated-tokens@2.0.3: {}
-
-  command-line-args@6.0.1:
-    dependencies:
-      array-back: 6.2.2
-      find-replace: 5.0.2
-      lodash.camelcase: 4.3.0
-      typical: 7.3.0
-
-  command-line-usage@7.0.3:
-    dependencies:
-      array-back: 6.2.2
-      chalk-template: 0.4.0
-      table-layout: 4.1.1
-      typical: 7.3.0
 
   commander@14.0.3: {}
 
@@ -22159,8 +22045,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  find-replace@5.0.2: {}
-
   find-up@4.1.0:
     dependencies:
       locate-path: 5.0.0
@@ -22229,8 +22113,6 @@ snapshots:
       keyv: 4.5.4
 
   flatbuffers@1.12.0: {}
-
-  flatbuffers@24.12.23: {}
 
   flatted@3.3.3: {}
 
@@ -22537,8 +22419,6 @@ snapshots:
   graceful-fs@4.2.11: {}
 
   graphemer@1.4.0: {}
-
-  grpc-web@2.0.2: {}
 
   gtoken@7.1.0:
     dependencies:
@@ -23952,7 +23832,7 @@ snapshots:
 
   jest-worker@27.5.1:
     dependencies:
-      '@types/node': 24.12.4
+      '@types/node': 25.9.1
       merge-stream: 2.0.0
       supports-color: 8.1.1
 
@@ -24113,8 +23993,6 @@ snapshots:
   json-bigint@1.0.0:
     dependencies:
       bignumber.js: 9.3.1
-
-  json-bignum@0.0.3: {}
 
   json-buffer@3.0.1: {}
 
@@ -27319,11 +27197,6 @@ snapshots:
 
   tabbable@6.4.0: {}
 
-  table-layout@4.1.1:
-    dependencies:
-      array-back: 6.2.2
-      wordwrapjs: 5.1.1
-
   tailwind-merge@2.6.0: {}
 
   tailwind-merge@3.4.1: {}
@@ -27737,8 +27610,6 @@ snapshots:
   typedarray@0.0.6: {}
 
   typescript@5.9.3: {}
-
-  typical@7.3.0: {}
 
   uc.micro@1.0.6: {}
 
@@ -28236,8 +28107,6 @@ snapshots:
   word-wrap@1.2.5: {}
 
   wordwrap@1.0.0: {}
-
-  wordwrapjs@5.1.1: {}
 
   wrap-ansi@6.2.0:
     dependencies:
