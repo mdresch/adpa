@@ -74,16 +74,31 @@ function trimLeafSourceText(text: string, maxChars: number): string {
   return `${trimmed.slice(0, maxChars)}${TRUNCATION_NOTE}`
 }
 
+function leafSourceMaxChars(node: LayoutPlanNode, baseLeafMax: number): number {
+  if (node.component !== "Table") return baseLeafMax
+  const pipeRows = node.sourceText.split("\n").filter((l) => /^\|/.test(l.trim())).length
+  if (node.hints?.wbsDictionary === "true" || node.hints?.wideTable === "true" || pipeRows >= 10) {
+    return Math.max(baseLeafMax, 8_000, Math.min(14_000, pipeRows * 140))
+  }
+  if (pipeRows >= 6) {
+    return Math.max(baseLeafMax, 4_000)
+  }
+  return baseLeafMax
+}
+
 function compactLayoutPlanNode(node: LayoutPlanNode, leafMaxChars: number): LayoutPlanNode {
-  const children = node.children?.map((c) => compactLayoutPlanNode(c, leafMaxChars))
+  const children = node.children?.map((c) =>
+    compactLayoutPlanNode(c, leafSourceMaxChars(c, leafMaxChars))
+  )
   const hasChildren = Boolean(children?.length)
+  const effectiveLeafMax = leafSourceMaxChars(node, leafMaxChars)
 
   let sourceText = node.sourceText
   if (hasChildren && CONTAINER_WITH_CHILDREN.has(node.component)) {
     const hint = (node.label ?? sourceText).trim()
     sourceText = hint.slice(0, GENUI_LAYOUT_CONTAINER_SOURCE_MAX_CHARS)
   } else {
-    sourceText = trimLeafSourceText(sourceText, leafMaxChars)
+    sourceText = trimLeafSourceText(sourceText, effectiveLeafMax)
   }
 
   return { ...node, sourceText, children }

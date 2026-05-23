@@ -62,10 +62,11 @@ const PROJECT_OPENUI_RULES = [
 ]
 
 const ADPA_EXTENSION_RULES = [
-  "ADPA extensions (merged with GenUI): Bullets, Timeline, Team, Comparison, TableOfContents, ReportCoverHero — use GenUI Callout (not Alert) for banners.",
+  "ADPA extensions (merged with GenUI): Bullets, Timeline, Team, Comparison, TableOfContents, ReportCoverHero, TwoColumnProse — use GenUI Callout (not Alert) for banners.",
   "Timeline vs Steps: Timeline when milestones have dates or phase labels and optional status; GenUI Steps for procedural workflows without a dated roadmap.",
   "Team vs Table: Team for people (name, role, responsibility); Table for homogeneous registers (risks, requirements, RAID).",
   "Comparison vs Table: Comparison for 2–4 side-by-side option columns (in-scope vs out-of-scope); Table for many rows sharing the same columns.",
+  "TwoColumnProse vs Stack: TwoColumnProse for long subsection intros with exactly two narrative columns (e.g. §1.1 Overview); never three stacked TextContent blocks.",
   "TableOfContents: top of Stack when the answer has 4+ major sections; entries must match real section titles from context.",
 ]
 

@@ -17,6 +17,7 @@ export type PlanComponentName =
   | "Comparison"
   | "TableOfContents"
   | "ReportCoverHero"
+  | "TwoColumnProse"
   | "TextContent"
   | "Callout"
   | "Steps"

@@ -180,6 +180,24 @@
   color: rgb(71 85 105);
 }
 
+.genui-openui-root .genui-two-column-prose {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.5rem;
+  width: 100%;
+  align-items: start;
+}
+
+@media (max-width: 40rem) {
+  .genui-openui-root .genui-two-column-prose {
+    grid-template-columns: 1fr;
+  }
+}
+
+.genui-openui-root.genui-report-dark .genui-two-column-prose .genui-report-prose {
+  color: rgb(212 212 212);
+}
+
 .genui-openui-root.genui-report-dark .report-toc {
   background-color: rgb(38 38 38) !important;
   border-color: rgb(64 64 64) !important;

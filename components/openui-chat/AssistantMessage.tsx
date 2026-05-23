@@ -10,15 +10,23 @@ import {
   extractOpenUILangText,
   looksLikeOpenUILang,
 } from "@/lib/openui/library";
+import { buildLayoutPlan, repairGenuiExecutorLang } from "@/lib/openui/layoutPlan";
 
 interface AssistantMessageProps {
   message: AssistantMessage;
   isStreaming: boolean;
+  /** When set (GenUI workspace), repair stacked TextContent → TwoColumnProse before render. */
+  layoutSourceText?: string;
+  layoutPrompt?: string;
+  documentId?: string;
 }
 
 export const CustomAssistantMessage: React.FC<AssistantMessageProps> = ({
   message,
   isStreaming,
+  layoutSourceText,
+  layoutPrompt,
+  documentId,
 }) => {
   const [copied, setCopied] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -28,6 +36,17 @@ export const CustomAssistantMessage: React.FC<AssistantMessageProps> = ({
 
   const rawContent = message.content || "";
   const langText = useMemo(() => extractOpenUILangText(rawContent), [rawContent]);
+  const renderLangText = useMemo(() => {
+    if (isStreaming || !layoutSourceText?.trim() || !langText?.trim()) return langText
+    const plan = buildLayoutPlan({
+      prompt:
+        layoutPrompt?.trim() ||
+        "Render the full document to a interactive UI Component Report",
+      sourceText: layoutSourceText,
+      documentId,
+    })
+    return repairGenuiExecutorLang(langText, plan)
+  }, [isStreaming, layoutSourceText, layoutPrompt, documentId, langText])
   const isGenUILang = useMemo(
     () => looksLikeOpenUILang(langText),
     [langText]
@@ -140,7 +159,7 @@ export const CustomAssistantMessage: React.FC<AssistantMessageProps> = ({
         ) : isGenUILang ? (
           <div className="genui-lang-render min-w-0 w-full">
             <DynamicComponentRenderer
-              response={langText}
+              response={renderLangText}
               isStreaming={isStreaming}
             />
           </div>

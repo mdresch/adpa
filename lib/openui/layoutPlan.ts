@@ -214,11 +214,15 @@ function isStructuredTabularLines(text: string): boolean {
 const TWO_COLUMN_MIN_CHARS = 360
 
 function shouldUseTwoColumnProse(body: string): boolean {
-  const trimmed = body.trim()
-  if (trimmed.length < TWO_COLUMN_MIN_CHARS) return false
+  const trimmed = stripProseDividers(body)
+  if (!trimmed) return false
   if (isMarkdownTableBlock(trimmed) || isBulletListBlock(trimmed)) return false
   if (isNumberedSectionOutlineList(trimmed)) return false
   const paragraphs = trimmed.split(/\n\n+/).filter((p) => p.trim())
+  if (paragraphs.length === 2) {
+    const [a, b] = paragraphs
+    if (a.length >= 80 && b.length >= 80 && trimmed.length >= 200) return true
+  }
   if (paragraphs.length >= 2 && trimmed.length >= 280) return true
   return trimmed.length >= TWO_COLUMN_MIN_CHARS
 }
@@ -288,9 +292,80 @@ export function findSentenceBoundarySplitIndex(
   return best
 }
 
+/** Remove horizontal rules and other non-prose dividers before column split. */
+export function stripProseDividers(body: string): string {
+  return body
+    .replace(/^---+$/gm, "")
+    .replace(/^\s*[*_]{3,}\s*$/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+}
+
+type SectionContentBlock = { kind: "prose" | "table"; text: string }
+
+/** Split subsection body into prose blocks and markdown tables (keeps intro + table + tail prose). */
+export function splitBodyIntoContentBlocks(body: string): SectionContentBlock[] {
+  const text = body.trim()
+  if (!text) return []
+
+  const lines = text.split("\n")
+  const blocks: SectionContentBlock[] = []
+  let proseBuf: string[] = []
+  let tableBuf: string[] = []
+  let inTable = false
+
+  const flushProse = () => {
+    const chunk = proseBuf.join("\n").trim()
+    proseBuf = []
+    if (!chunk) return
+    const subChunks = chunk.split(/\n(?=\*\*[^*\n]+\*\*:?\s*(?:\n|$))/).map((c) => c.trim()).filter(Boolean)
+    for (const sub of subChunks.length > 0 ? subChunks : [chunk]) {
+      blocks.push({ kind: "prose", text: sub })
+    }
+  }
+
+  const flushTable = () => {
+    const chunk = tableBuf.join("\n").trim()
+    tableBuf = []
+    inTable = false
+    if (chunk && isMarkdownTableBlock(chunk)) {
+      blocks.push({ kind: "table", text: chunk })
+    } else if (chunk) {
+      proseBuf.push(chunk)
+    }
+  }
+
+  for (const line of lines) {
+    const trimmedLine = line.trim()
+    const isPipeRow = /^\|.+\|/.test(trimmedLine)
+    const isTableSep = /^\|[\s:|-]+\|/.test(trimmedLine)
+    if (isPipeRow) {
+      if (!inTable) {
+        flushProse()
+        inTable = true
+      }
+      tableBuf.push(line)
+      continue
+    }
+    if (inTable && isTableSep) {
+      tableBuf.push(line)
+      continue
+    }
+    if (inTable) flushTable()
+    proseBuf.push(line)
+  }
+  if (inTable) flushTable()
+  else flushProse()
+
+  if (blocks.length === 0) {
+    return [{ kind: "prose", text }]
+  }
+  return blocks
+}
+
 /** Split long prose for side-by-side TextContent columns (paragraph, then sentence boundaries). */
 export function splitProseIntoTwoColumns(body: string): [string, string] {
-  const trimmed = body.trim()
+  const trimmed = stripProseDividers(body)
   if (!trimmed) return ["", ""]
 
   const paragraphs = trimmed.split(/\n\n+/).filter((p) => p.trim())
@@ -346,7 +421,21 @@ function classifySegmentBody(
   }
 
   if (isMarkdownTableBlock(trimmed) || isStructuredTabularLines(trimmed)) {
-    return { component: "Table", mapping: "widget", hints: { note: "derive columns and rows from source" } }
+    const pipeRows = trimmed.split("\n").filter((l) => /^\|/.test(l.trim())).length
+    const wbsLike =
+      /\bwbs\s+dictionary\b/i.test(`${title ?? ""}\n${trimmed}`) ||
+      (/\blevel\s*1\b/i.test(trimmed) && /\blevel\s*2\b/i.test(trimmed))
+    return {
+      component: "Table",
+      mapping: "widget",
+      hints: {
+        note: wbsLike
+          ? "WBS Dictionary — preserve all hierarchy columns and rows from source (Level 1–4); use Table widget"
+          : "derive columns and rows from source",
+        ...(wbsLike ? { wbsDictionary: "true" } : {}),
+        ...(pipeRows >= 8 ? { wideTable: "true", rowCount: String(pipeRows) } : {}),
+      },
+    }
   }
   if (isTimelineBlock(trimmed)) {
     return { component: "Timeline", mapping: "widget", hints: { note: "milestones from dated lines" } }
@@ -409,14 +498,25 @@ function isHeadingOnlySegment(seg: TextSegment): boolean {
   return false
 }
 
-/** Major report chapter (H1 or numbered ##) — not every ### subsection. */
+/** Document metadata lines (Project:/Date:/Version:) — not chapter boundaries. */
+function isReportMetadataHeading(seg: TextSegment): boolean {
+  const level = seg.headingLevel ?? 2
+  const title = normalizeTitle(seg.title ?? "")
+  if (level !== 2) return false
+  if (/^\d+\.\s/.test(title)) return false
+  return /^(Project|Date|Version|Author|Document|Prepared\s+by|Status):/i.test(title)
+}
+
+/** Major report chapter (H1 or numbered ## like "1. Introduction") — not metadata or ###. */
 function isChapterBoundary(seg: TextSegment): boolean {
   const level = seg.headingLevel ?? 2
   const title = seg.title ?? ""
+  if (isReportMetadataHeading(seg)) return false
   if (level === 1) return true
   if (level === 2) {
     if (/^\d+\.\d+/.test(title)) return false
-    return true
+    if (/^\d+\.\s/.test(title)) return true
+    return false
   }
   return false
 }
@@ -445,12 +545,33 @@ type ReportChapter = {
   subsections: TextSegment[]
 }
 
+function formatReportMetadataBlurb(metadata: TextSegment[]): string {
+  const parts: string[] = []
+  for (const seg of metadata) {
+    const title = normalizeTitle(seg.title ?? "")
+    if (!title) continue
+    const body = seg.body.trim()
+    if (!body || isHeadingOnlySegment(seg)) {
+      parts.push(title)
+      continue
+    }
+    const oneLine = body.replace(/\s+/g, " ").trim()
+    if (oneLine.length <= 140) {
+      parts.push(`${title} — ${oneLine}`)
+    } else {
+      parts.push(title)
+    }
+  }
+  return parts.join("\n").slice(0, COVER_SUMMARY_MAX_CHARS)
+}
+
 function groupSegmentsIntoChapters(sectionSegments: TextSegment[]): ReportChapter[] {
   const contentSegments = sectionSegments.filter((s) => !isDocumentTitleSegment(s, sectionSegments))
+  const bodySegments = contentSegments.filter((s) => !isReportMetadataHeading(s))
   const chapters: ReportChapter[] = []
   let current: ReportChapter | null = null
 
-  for (const seg of contentSegments) {
+  for (const seg of bodySegments) {
     if (isChapterBoundary(seg) && !isSubsectionBoundary(seg)) {
       if (current) chapters.push(current)
       current = {
@@ -535,62 +656,72 @@ function slugId(s: string): string {
     .slice(0, 40) || "untitled"
 }
 
-function buildTwoColumnTextNode(
+function buildLeafNodeFromBody(
   seg: TextSegment,
-  classified: ReturnType<typeof classifySegmentBody>
+  body: string,
+  idSuffix = ""
 ): LayoutPlanNode {
-  const [col1, col2] = splitProseIntoTwoColumns(seg.body)
+  const subSeg: TextSegment = { ...seg, id: `${seg.id}${idSuffix}`, body }
+  const classified = classifySegmentBody(body, seg.title)
+  if (
+    classified.component === "TextContent" &&
+    classified.mapping === "typography-fallback" &&
+    shouldUseTwoColumnProse(body)
+  ) {
+    return buildTwoColumnTextNode(subSeg, classified)
+  }
+  return {
+    id: subSeg.id,
+    component: classified.component,
+    mapping: classified.mapping,
+    sourceText: body,
+    label: seg.title,
+    fallbackReason: classified.fallbackReason,
+    hints: classified.hints,
+  }
+}
+
+function buildCompositeSegmentNode(seg: TextSegment, blocks: SectionContentBlock[]): LayoutPlanNode {
+  const children = blocks.map((block, i) =>
+    buildLeafNodeFromBody(seg, block.text, `-part-${i}`)
+  )
   return {
     id: seg.id,
     component: "Stack",
     mapping: "widget",
     sourceText: seg.body,
     label: seg.title,
-    fallbackReason: classified.fallbackReason,
     hints: {
-      ...classified.hints,
-      twoColumn: "true",
-      note: "row Stack with two TextContent columns — pre-split at sentence boundaries in sourceText; do not duplicate",
+      note: "subsection with multiple blocks (prose and/or tables) — emit in order; do not merge or drop blocks",
     },
-    children: [
-      {
-        id: `${seg.id}-col1`,
-        component: "TextContent",
-        mapping: "typography-fallback",
-        sourceText: col1,
-        fallbackReason: classified.fallbackReason,
-        hints: { variant: "default", column: "left" },
-      },
-      {
-        id: `${seg.id}-col2`,
-        component: "TextContent",
-        mapping: "typography-fallback",
-        sourceText: col2,
-        fallbackReason: classified.fallbackReason,
-        hints: { variant: "default", column: "right" },
-      },
-    ],
+    children,
+  }
+}
+
+function buildTwoColumnTextNode(seg: TextSegment): LayoutPlanNode {
+  const [left, right] = splitProseIntoTwoColumns(stripProseDividers(seg.body))
+  return {
+    id: seg.id,
+    component: "TwoColumnProse",
+    mapping: "widget",
+    sourceText: seg.body,
+    label: seg.title,
+    hints: {
+      twoColumn: "true",
+      left,
+      right,
+      note: "emit exactly TwoColumnProse(left, right) — never Stack row or three stacked TextContent blocks",
+    },
   }
 }
 
 function buildNodeFromSegment(seg: TextSegment): LayoutPlanNode {
-  const classified = classifySegmentBody(seg.body, seg.title)
-  if (
-    classified.component === "TextContent" &&
-    classified.mapping === "typography-fallback" &&
-    shouldUseTwoColumnProse(seg.body)
-  ) {
-    return buildTwoColumnTextNode(seg, classified)
+  const blocks = splitBodyIntoContentBlocks(seg.body)
+  if (blocks.length > 1) {
+    return buildCompositeSegmentNode(seg, blocks)
   }
-  return {
-    id: seg.id,
-    component: classified.component,
-    mapping: classified.mapping,
-    sourceText: seg.body,
-    label: seg.title,
-    fallbackReason: classified.fallbackReason,
-    hints: classified.hints,
-  }
+  const body = blocks[0]?.text ?? seg.body
+  return buildLeafNodeFromBody(seg, body)
 }
 
 function buildSubsectionBlock(seg: TextSegment): LayoutPlanNode {
@@ -917,13 +1048,20 @@ function buildShellNodes(
     preambleSeg?.body,
     docTitle
   )
-  const coverBlurb =
+  const metadataBlurb = formatReportMetadataBlurb(
+    sectionSegments.filter(isReportMetadataHeading)
+  )
+  let coverBlurb =
     coverSummaryOverride?.trim() ||
     buildCoverBlurbFromSources({
       fullSummary: summarySource,
       preambleBody: preambleSeg?.body,
       executiveSummaryBody: executiveSummaryBodyFromChapters(chapters),
     })
+  if (metadataBlurb) {
+    const combined = [metadataBlurb, coverBlurb].filter(Boolean).join("\n\n").trim()
+    coverBlurb = combined.slice(0, COVER_SUMMARY_MAX_CHARS)
+  }
   const coverImage = useCover
     ? pickReportCoverImage({
         seed: documentId,
@@ -1105,12 +1243,12 @@ function escapeLangString(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
 }
 
-function twoColumnStackRequiredLang(n: LayoutPlanNode, pad: string): string {
-  if (n.hints?.twoColumn !== "true" || n.component !== "Stack") return ""
-  const cols = n.children?.filter((c) => c.component === "TextContent") ?? []
-  if (cols.length !== 2) return ""
-  const [a, b] = cols
-  return `${pad}  REQUIRED_LANG: Stack([TextContent("${escapeLangString(a.sourceText)}", "default"), TextContent("${escapeLangString(b.sourceText)}", "default")], "row", "m", "stretch", "start", true)`
+function twoColumnProseRequiredLang(n: LayoutPlanNode, pad: string): string {
+  if (n.component !== "TwoColumnProse" || n.hints?.twoColumn !== "true") return ""
+  const left = n.hints.left
+  const right = n.hints.right
+  if (typeof left !== "string" || typeof right !== "string") return ""
+  return `${pad}  REQUIRED_LANG: TwoColumnProse(left="${escapeLangString(left)}", right="${escapeLangString(right)}")`
 }
 
 function flattenNodes(nodes: LayoutPlanNode[], depth = 0): string[] {
@@ -1118,7 +1256,7 @@ function flattenNodes(nodes: LayoutPlanNode[], depth = 0): string[] {
   for (const n of nodes) {
     const pad = "  ".repeat(depth)
     const headerLabel = n.label?.trim()
-    const twoColLang = twoColumnStackRequiredLang(n, pad)
+    const twoColLang = twoColumnProseRequiredLang(n, pad)
     lines.push(
       `${pad}- id: ${n.id}`,
       `${pad}  component: ${n.component}`,
@@ -1141,8 +1279,14 @@ function flattenNodes(nodes: LayoutPlanNode[], depth = 0): string[] {
       `${pad}  """`
     )
     if (n.children?.length) {
-      lines.push(`${pad}  children:`)
-      lines.push(...flattenNodes(n.children, depth + 2))
+      if (twoColLang) {
+        lines.push(
+          `${pad}  children: (none — emit only REQUIRED_LANG TwoColumnProse above; do NOT add TextContent or Stack)`
+        )
+      } else {
+        lines.push(`${pad}  children:`)
+        lines.push(...flattenNodes(n.children, depth + 2))
+      }
     }
   }
   return lines.filter(Boolean)
@@ -1190,8 +1334,12 @@ export function formatLayoutPlanForExecutor(
     "- Subsections (### or 1.1, 1.2) go INSIDE the chapter Card as Stack blocks with subsection CardHeader — never a separate top-level Card per ###.",
     "- Skip empty heading-only nodes; do not emit TextContent that only repeats the section title — use CardHeader for the title instead.",
     "- Narrative prose → TextContent. Bullet/numbered lists → Bullets. Markdown tables → Table([Col(\"Header\", [cells...]), ...]) with ONE argument only — never Table(..., \"caption\").",
-    "- Long narrative blocks (hints.twoColumn or sourceTextChars ≥ ~360): Stack([col1, col2], \"row\", \"m\", \"stretch\", \"start\", true) with two TextContent children. left/right sourceText in the plan is already split at paragraph or sentence boundaries — copy exactly; never merge columns or break mid-sentence.",
-    "- Apply two-column row Stacks for chapter lead paragraphs and long subsection intros (e.g. Executive Summary, §2.1 Purpose, §3.1) when the plan marks twoColumn or REQUIRED_LANG on a Stack node.",
+    "- Two-column narrative (component TwoColumnProse or hints.twoColumn): emit exactly TwoColumnProse(left=\"…\", right=\"…\") with the left/right strings from the plan — never three stacked TextContent blocks or a column Stack.",
+    "- When REQUIRED_LANG shows TwoColumnProse, copy it verbatim for that node id; do not substitute Stack([TextContent, TextContent], \"row\", …).",
+    "- Subsections with multiple blocks (Stack children in plan): render every child in order — intro prose, then Table, then trailing prose (e.g. Justification for Hybrid Approach).",
+    "- Do not emit TextContent(\"---\") or other horizontal-rule placeholders; markdown --- lines are omitted from plan prose — end the subsection after the last real paragraph or table.",
+    "- WBS Dictionary and wide markdown tables: use Table with all pipe rows from sourceText; hints.wbsDictionary means preserve Level 1–4 columns.",
+    "- Apply TwoColumnProse for chapter lead paragraphs and long subsection intros (e.g. Executive Summary, §1.1 Overview) when the plan component is TwoColumnProse.",
     "- Use Accordion only when the user prompt explicitly requests accordion/collapsible/FAQ AND Bullets is not a better fit.",
     "- Do not invent metrics, dates, or names not supported by source text.",
     "- Do not append duplicate appendix tables at the end of the document; place each table only under its matching ### subsection.",
@@ -1209,6 +1357,202 @@ export function formatLayoutPlanForExecutor(
     ...flattenNodes(cappedPlan.nodes),
     "=== END LAYOUT PLAN ===",
   ].join("\n")
+}
+
+function collectAllPlanNodes(nodes: LayoutPlanNode[]): LayoutPlanNode[] {
+  const out: LayoutPlanNode[] = []
+  for (const n of nodes) {
+    out.push(n)
+    if (n.children?.length) out.push(...collectAllPlanNodes(n.children))
+  }
+  return out
+}
+
+function unescapeLangString(s: string): string {
+  return s.replace(/\\"/g, '"').replace(/\\\\/g, "\\")
+}
+
+/**
+ * When the executor ignores REQUIRED_LANG and emits stacked TextContent pairs,
+ * rewrite matching pairs to TwoColumnProse using plan left/right hints.
+ */
+function isHorizontalRulePlaceholder(text: string): boolean {
+  const t = text.trim()
+  return /^---+$/.test(t) || /^\s*[*_]{3,}\s*$/.test(t)
+}
+
+const ASSIGN_TEXT_CONTENT_RE =
+  /^\s*(\w+)\s*=\s*TextContent\s*\(\s*(?:"((?:[^"\\]|\\.)*)"|text\s*=\s*"((?:[^"\\]|\\.)*)")(?:\s*,\s*"[^"]*")?\s*\)\s*,?\s*$/gm
+
+const INLINE_DIVIDER_TEXT_CONTENT_RE =
+  /,?\s*TextContent\s*\(\s*(?:"---+"|text\s*=\s*"---+")(?:\s*,\s*"[^"]*")?\s*\)\s*/g
+
+/**
+ * Remove executor-only horizontal-rule placeholders (TextContent("---")) that
+ * duplicate markdown dividers already stripped from the layout plan.
+ */
+export function stripDividerNoiseInLang(lang: string): string {
+  const dividerVarNames = new Set<string>()
+  let m: RegExpExecArray | null
+  ASSIGN_TEXT_CONTENT_RE.lastIndex = 0
+  while ((m = ASSIGN_TEXT_CONTENT_RE.exec(lang)) !== null) {
+    const raw = m[2] ?? m[3] ?? ""
+    if (isHorizontalRulePlaceholder(unescapeLangString(raw))) {
+      dividerVarNames.add(m[1])
+    }
+  }
+
+  let out = lang
+  for (const name of dividerVarNames) {
+    out = out.replace(
+      new RegExp(`^\\s*${name}\\s*=\\s*TextContent\\s*\\([^)]*\\)\\s*,?\\s*$`, "gm"),
+      ""
+    )
+    out = out.replace(new RegExp(`,\\s*${name}\\s*(?=\\])`), "")
+    out = out.replace(new RegExp(`\\[\\s*${name}\\s*,`), "[")
+    out = out.replace(new RegExp(`${name}\\s*,\\s*`), "")
+  }
+
+  out = out.replace(INLINE_DIVIDER_TEXT_CONTENT_RE, "")
+  return out.replace(/\n{3,}/g, "\n\n")
+}
+
+function collectLangDefinedIds(lang: string): Set<string> {
+  const ids = new Set<string>()
+  const re = /^\s*(\w+)\s*=/gm
+  let m: RegExpExecArray | null
+  while ((m = re.exec(lang)) !== null) {
+    ids.add(m[1])
+  }
+  return ids
+}
+
+function splitTopLevelCommaList(inner: string): string[] {
+  const parts: string[] = []
+  let depth = 0
+  let start = 0
+  for (let i = 0; i < inner.length; i++) {
+    const c = inner[i]
+    if (c === "[" || c === "(" || c === "{") depth++
+    else if (c === "]" || c === ")" || c === "}") depth--
+    else if (c === "," && depth === 0) {
+      const piece = inner.slice(start, i).trim()
+      if (piece) parts.push(piece)
+      start = i + 1
+    }
+  }
+  const tail = inner.slice(start).trim()
+  if (tail) parts.push(tail)
+  return parts
+}
+
+function findBalancedBracketSlice(
+  text: string,
+  openBracketIdx: number
+): { inner: string; closeIdx: number } | null {
+  if (text[openBracketIdx] !== "[") return null
+  let depth = 0
+  for (let i = openBracketIdx; i < text.length; i++) {
+    const c = text[i]
+    if (c === "[") depth++
+    else if (c === "]") {
+      depth--
+      if (depth === 0) {
+        return { inner: text.slice(openBracketIdx + 1, i), closeIdx: i }
+      }
+    }
+  }
+  return null
+}
+
+function pruneCommaListIdentifiers(inner: string, defined: Set<string>): string {
+  const parts = splitTopLevelCommaList(inner)
+  const kept = parts.filter((part) => {
+    const idOnly = part.match(/^(\w+)$/)
+    if (!idOnly) return true
+    return defined.has(idOnly[1])
+  })
+  return kept.join(", ")
+}
+
+/**
+ * Drop Stack/Card child ids that were never assigned (executor typos like a missing subsection header).
+ */
+export function pruneUndefinedRefsInLang(lang: string): string {
+  const defined = collectLangDefinedIds(lang)
+  const arrayOpenRe = /(Stack|Card)\s*\(\s*\[/g
+  let out = ""
+  let last = 0
+  let m: RegExpExecArray | null
+  while ((m = arrayOpenRe.exec(lang)) !== null) {
+    const openBracket = m.index + m[0].length - 1
+    const balanced = findBalancedBracketSlice(lang, openBracket)
+    if (!balanced) {
+      last = m.index + 1
+      continue
+    }
+    out += lang.slice(last, openBracket + 1)
+    out += pruneCommaListIdentifiers(balanced.inner, defined)
+    last = balanced.closeIdx
+    arrayOpenRe.lastIndex = last + 1
+  }
+  out += lang.slice(last)
+  return out
+}
+
+/** Post-process executor Lang: two-column repair, divider cleanup, dangling ref prune. */
+export function repairGenuiExecutorLang(lang: string, plan: LayoutPlan): string {
+  return pruneUndefinedRefsInLang(
+    stripDividerNoiseInLang(repairTwoColumnProseInLang(lang, plan))
+  )
+}
+
+export function repairTwoColumnProseInLang(lang: string, plan: LayoutPlan): string {
+  let out = lang
+  for (const node of collectAllPlanNodes(plan.nodes)) {
+    if (node.component !== "TwoColumnProse" || node.hints?.twoColumn !== "true") continue
+    const left = node.hints.left
+    const right = node.hints.right
+    if (typeof left !== "string" || typeof right !== "string" || !left.trim() || !right.trim()) {
+      continue
+    }
+
+    const canonical = `TwoColumnProse(left="${escapeLangString(left)}", right="${escapeLangString(right)}")`
+    if (out.includes(canonical)) continue
+
+    const leftKey = left.replace(/\s+/g, " ").trim().slice(0, 48)
+    const rightKey = right.replace(/\s+/g, " ").trim().slice(0, 48)
+    if (!leftKey || !rightKey) continue
+
+    const pairRe =
+      /TextContent\s*\(\s*"((?:[^"\\]|\\.)*)"\s*,[^)]*\)\s*,?\s*TextContent\s*\(\s*"((?:[^"\\]|\\.)*)"\s*,[^)]*\)/gs
+
+    out = out.replace(pairRe, (match, rawA, rawB) => {
+      const a = unescapeLangString(rawA)
+      const b = unescapeLangString(rawB)
+      const aLeft = a.includes(leftKey) || leftKey.includes(a.slice(0, 40))
+      const bRight = b.includes(rightKey) || rightKey.includes(b.slice(0, 40))
+      const aRight = a.includes(rightKey) || rightKey.includes(a.slice(0, 40))
+      const bLeft = b.includes(leftKey) || leftKey.includes(b.slice(0, 40))
+      if (aLeft && bRight) return canonical
+      if (aRight && bLeft) {
+        return `TwoColumnProse(left="${escapeLangString(right)}", right="${escapeLangString(left)}")`
+      }
+      return match
+    })
+
+    const rowStackRe =
+      /Stack\s*\(\s*\[\s*TextContent\s*\(\s*"((?:[^"\\]|\\.)*)"\s*,[^)]*\)\s*,\s*TextContent\s*\(\s*"((?:[^"\\]|\\.)*)"\s*,[^)]*\)\s*\]\s*,\s*"row"[^)]*\)/gs
+    out = out.replace(rowStackRe, (match, rawA, rawB) => {
+      const a = unescapeLangString(rawA)
+      const b = unescapeLangString(rawB)
+      const aLeft = a.includes(leftKey) || leftKey.includes(a.slice(0, 40))
+      const bRight = b.includes(rightKey) || rightKey.includes(b.slice(0, 40))
+      if (aLeft && bRight) return canonical
+      return match
+    })
+  }
+  return out
 }
 
 export const OPENUI_EXECUTOR_RULES = [
