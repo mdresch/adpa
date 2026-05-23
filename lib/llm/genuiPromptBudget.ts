@@ -74,14 +74,26 @@ function trimLeafSourceText(text: string, maxChars: number): string {
   return `${trimmed.slice(0, maxChars)}${TRUNCATION_NOTE}`
 }
 
+function countPipeColumns(text: string): number {
+  const header = text.split("\n").find((l) => /^\|/.test(l.trim()))
+  if (!header) return 0
+  return header.split("|").filter((c) => c.trim().length > 0).length
+}
+
 function leafSourceMaxChars(node: LayoutPlanNode, baseLeafMax: number): number {
   if (node.component !== "Table") return baseLeafMax
   const pipeRows = node.sourceText.split("\n").filter((l) => /^\|/.test(l.trim())).length
-  if (node.hints?.wbsDictionary === "true" || node.hints?.wideTable === "true" || pipeRows >= 10) {
-    return Math.max(baseLeafMax, 8_000, Math.min(14_000, pipeRows * 140))
+  const pipeCols = countPipeColumns(node.sourceText)
+  if (
+    node.hints?.attributeTable === "true" ||
+    node.hints?.wbsDictionary === "true" ||
+    node.hints?.wideTable === "true" ||
+    pipeRows >= 10
+  ) {
+    return Math.max(baseLeafMax, 10_000, Math.min(20_000, pipeRows * 180 + pipeCols * 400))
   }
-  if (pipeRows >= 6) {
-    return Math.max(baseLeafMax, 4_000)
+  if (pipeRows >= 6 || pipeCols >= 6) {
+    return Math.max(baseLeafMax, 6_000, Math.min(14_000, pipeRows * 160))
   }
   return baseLeafMax
 }

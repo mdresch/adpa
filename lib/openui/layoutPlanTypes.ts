@@ -59,6 +59,8 @@ export type LayoutPlan = {
   intentPrimary: string
   confidence: number
   nodes: LayoutPlanNode[]
+  /** Single-widget / section-scoped render — no cover page or table of contents */
+  focusedDetail?: boolean
   /** All source characters that must appear in the final Lang output */
   sourceCoverage: { segmentCount: number; totalChars: number }
 }
