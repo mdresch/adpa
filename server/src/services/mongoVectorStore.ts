@@ -4,7 +4,13 @@ import { MongoClient, Db, Collection } from 'mongodb';
 import { logger } from '../utils/logger';
 import { RAGDocument, DocumentChunk } from '../types/rag';
 import { buildMongoChunkDocument, type MongoChunkWriteInput } from '../lib/mongoChunkSchema';
-import { toMongoEqualityId, toMongoIndexName } from '../lib/mongoQuerySafety';
+import {
+    findOneByRagDocumentId,
+    ragChunkByDocumentIdFilter,
+    ragDocumentIdReplaceFilter,
+    toMongoEqualityId,
+    toMongoIndexName,
+} from '../lib/mongoQuerySafety';
 
 const DOCUMENTS_COLLECTION = 'documents';
 const CHUNKS_COLLECTION = 'chunks';
@@ -128,9 +134,9 @@ export class MongoVectorStore {
     ): Promise<string> {
         this.ensureConnected();
 
-        const documentId = toMongoEqualityId(document.id, 'documentId');
+        const { filter: idFilter, id: documentId } = ragDocumentIdReplaceFilter(document.id);
         const now = new Date();
-        const existing = await this.documentsCollection.findOne({ id: documentId });
+        const existing = await findOneByRagDocumentId(this.documentsCollection, document.id);
         const docWithTimestamps: RAGDocument = {
             ...document,
             id: documentId,
@@ -139,7 +145,7 @@ export class MongoVectorStore {
         };
 
         await this.documentsCollection.replaceOne(
-            { id: documentId },
+            idFilter,
             docWithTimestamps as RAGDocument,
             { upsert: true }
         );
@@ -161,8 +167,7 @@ export class MongoVectorStore {
 
     async getDocument(id: string): Promise<RAGDocument | null> {
         this.ensureConnected();
-        const documentId = toMongoEqualityId(id, 'documentId');
-        return await this.documentsCollection.findOne({ id: documentId }) as RAGDocument | null;
+        return (await findOneByRagDocumentId(this.documentsCollection, id)) as RAGDocument | null;
     }
 
     async createChunks(chunks: MongoChunkWriteInput[]): Promise<string[]> {
@@ -182,12 +187,9 @@ export class MongoVectorStore {
 
     async getChunks(documentId: string): Promise<DocumentChunk[]> {
         this.ensureConnected();
-        const safeDocumentId = toMongoEqualityId(documentId, 'documentId');
-        return await this.chunksCollection
-            .find({
-                $or: [{ documentId: safeDocumentId }, { document_id: safeDocumentId }],
-            })
-            .toArray() as DocumentChunk[];
+        return (await this.chunksCollection
+            .find(ragChunkByDocumentIdFilter(documentId))
+            .toArray()) as DocumentChunk[];
     }
 
     async vectorSearch(

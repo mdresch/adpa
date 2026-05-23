@@ -1,4 +1,10 @@
-import { toMongoEqualityId, toMongoIndexName } from '../../lib/mongoQuerySafety';
+import {
+    ragChunkByDocumentIdFilter,
+    ragDocumentIdFilter,
+    ragDocumentIdReplaceFilter,
+    toMongoEqualityId,
+    toMongoIndexName,
+} from '../../lib/mongoQuerySafety';
 
 describe('mongoQuerySafety', () => {
     describe('toMongoEqualityId', () => {
@@ -11,6 +17,32 @@ describe('mongoQuerySafety', () => {
             expect(() => toMongoEqualityId({ $gt: '' } as unknown as string)).toThrow();
             expect(() => toMongoEqualityId('{"$gt":""}')).toThrow();
             expect(() => toMongoEqualityId('id.with.dot')).toThrow();
+        });
+    });
+
+    describe('ragDocumentIdFilter', () => {
+        it('uses $eq for document id lookups', () => {
+            const id = '550e8400-e29b-41d4-a716-446655440000';
+            expect(ragDocumentIdFilter(id)).toEqual({ id: { $eq: id } });
+        });
+    });
+
+    describe('ragDocumentIdReplaceFilter', () => {
+        it('returns filter and id for replaceOne', () => {
+            const id = '550e8400-e29b-41d4-a716-446655440000';
+            expect(ragDocumentIdReplaceFilter(id)).toEqual({
+                filter: { id: { $eq: id } },
+                id,
+            });
+        });
+    });
+
+    describe('ragChunkByDocumentIdFilter', () => {
+        it('uses $eq on both document id fields', () => {
+            const id = '550e8400-e29b-41d4-a716-446655440000';
+            expect(ragChunkByDocumentIdFilter(id)).toEqual({
+                $or: [{ documentId: { $eq: id } }, { document_id: { $eq: id } }],
+            });
         });
     });
 
