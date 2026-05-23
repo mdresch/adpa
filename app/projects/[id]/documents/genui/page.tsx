@@ -36,10 +36,17 @@ import {
   Copy,
   Check,
   Sparkles,
-  MessageSquare,
-  Plus,
+  LayoutTemplate,
 } from "lucide-react";
+import { GenuiReportExportBarPortal } from "@/components/genui/GenuiReportExportBar";
 import { getDocumentChatPrompts } from "@/lib/documents/document-chat-prompts";
+import {
+  GENUI_RENDER_FULL_DOCUMENT_DARK_PROMPT,
+  GENUI_RENDER_FULL_DOCUMENT_PROMPT,
+} from "@/lib/documents/genui-prompts";
+import { GenuiPromptBridge } from "@/components/genui/GenuiPromptBridge";
+import { GenuiReportSurfaceProvider } from "@/components/genui/GenuiReportSurfaceContext";
+import { GenuiThreadToolbar } from "@/components/genui/GenuiThreadToolbar";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiClient } from "@/lib/api";
 import { toast } from "@/lib/notify";
@@ -71,6 +78,8 @@ export default function DocumentGenUIWorkspace() {
   const [copied, setCopied] = useState(false);
   const [chatSessionKey, setChatSessionKey] = useState(0);
   const [reportDarkTheme, setReportDarkTheme] = useState(false);
+  const [pendingRenderPrompt, setPendingRenderPrompt] = useState<string | null>(null);
+  const clearPendingRenderPrompt = useCallback(() => setPendingRenderPrompt(null), []);
 
   useEffect(() => {
     setChatSessionKey(0);
@@ -162,10 +171,17 @@ export default function DocumentGenUIWorkspace() {
   };
 
   const selectedSummary = documents.find((d) => d.id === documentId);
-  const starterPrompts = useMemo(
-    () => getDocumentChatPrompts(doc?.title ?? "Document", selectedSummary?.template_name),
-    [doc?.title, selectedSummary?.template_name]
-  );
+  const starterPrompts = useMemo(() => {
+    const prompts = getDocumentChatPrompts(
+      doc?.title ?? "Document",
+      selectedSummary?.template_name
+    );
+    return prompts.filter(
+      (p) =>
+        p !== GENUI_RENDER_FULL_DOCUMENT_PROMPT &&
+        p !== GENUI_RENDER_FULL_DOCUMENT_DARK_PROMPT
+    );
+  }, [doc?.title, selectedSummary?.template_name]);
 
   const conversationStarters = useMemo(
     () => ({
@@ -180,17 +196,19 @@ export default function DocumentGenUIWorkspace() {
 
   const genuiLayoutPrompt =
     "Render the full document to a interactive UI Component Report";
+  const [lastUserLayoutPrompt, setLastUserLayoutPrompt] = useState(genuiLayoutPrompt);
 
   const renderGenuiAssistantMessage = useCallback(
     (props: { message: OpenUIAssistantMessage; isStreaming: boolean }) => (
       <CustomAssistantMessage
         {...props}
         layoutSourceText={doc?.content}
-        layoutPrompt={genuiLayoutPrompt}
+        layoutPrompt={lastUserLayoutPrompt || genuiLayoutPrompt}
         documentId={documentId ?? undefined}
+        reportSurface
       />
     ),
-    [doc?.content, documentId]
+    [doc?.content, documentId, lastUserLayoutPrompt]
   );
 
   if (authLoading || (loading && !doc)) {
@@ -301,7 +319,7 @@ When generating layout, charts, or tables, use metrics from the excerpt and layo
         <main className="flex-1 flex overflow-hidden">
           <PageTransition className="flex flex-1 overflow-hidden w-full h-full">
             <div className="flex w-full h-full divide-x divide-slate-200">
-              <div className="genui-source-pane w-1/2 flex flex-col h-full">
+              <div className="genui-source-pane flex flex-col h-full">
                 <div className="p-6 border-b border-slate-200 bg-white flex justify-between items-start gap-4">
                   <div className="min-w-0">
                     <span className="text-[10px] font-semibold uppercase tracking-[0.24em] text-indigo-600">
@@ -360,22 +378,22 @@ When generating layout, charts, or tables, use metrics from the excerpt and layo
                 </div>
               </div>
 
-              <div className="flex w-1/2 min-w-0 h-full flex-col min-h-0 relative bg-white border-l border-slate-200">
+              <div className="genui-advisor-pane flex min-w-0 h-full flex-col min-h-0 relative bg-white border-l border-slate-200">
                 <div className="shrink-0 px-5 py-3 border-b border-slate-200 bg-slate-50">
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex items-start gap-3 min-w-0 flex-1">
                       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-100 text-violet-700">
-                        <MessageSquare className="h-4 w-4" />
+                        <LayoutTemplate className="h-4 w-4" />
                       </div>
                       <div className="min-w-0">
                         <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-violet-700">
-                          Step 2 — Ask the AI
+                          Step 2 — Component report
                         </span>
                         <p className="text-sm text-slate-900 mt-0.5 font-medium">
-                          Document advisor
+                          OpenUI interactive report
                         </p>
                         <p className="genui-muted text-xs mt-1 leading-relaxed">
-                          Pick a suggested question below or type in the chat box at the bottom. Responses can include tables, charts, and structured summaries grounded in the document on the left.
+                          Use a suggested prompt or type below to build cards, tables, timelines, and summaries from the source document. Export PDF, Word, or HTML when the report is ready.
                         </p>
                         {process.env.NEXT_PUBLIC_GENUI_LLM_PROVIDER ? (
                           <p className="text-[10px] text-slate-500 mt-1.5 font-mono">
@@ -386,22 +404,12 @@ When generating layout, charts, or tables, use metrics from the excerpt and layo
                         ) : null}
                       </div>
                     </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-8 shrink-0 gap-1.5 text-xs border-slate-200 text-slate-700 hover:bg-white"
-                      onClick={() => setChatSessionKey((k) => k + 1)}
-                      title="Start a new conversation about this document"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      New chat
-                    </Button>
                   </div>
                 </div>
                 <div
                   className={`genui-openui-root flex-1 min-h-0 w-full${reportDarkTheme ? " genui-report-dark" : ""}`}
                 >
+                  <GenuiReportSurfaceProvider>
                   <FullScreen
                     key={`${documentId}-${chatSessionKey}`}
                     processMessage={async ({ messages, abortController }) => {
@@ -411,6 +419,7 @@ When generating layout, charts, or tables, use metrics from the excerpt and layo
                         typeof lastUser?.content === "string"
                           ? lastUser.content
                           : String(lastUser?.content ?? "");
+                      setLastUserLayoutPrompt(lastPrompt.trim() || genuiLayoutPrompt);
                       setReportDarkTheme(wantsGenuiReportDarkTheme(lastPrompt));
 
                       let coverSummary: string | undefined
@@ -468,9 +477,9 @@ When generating layout, charts, or tables, use metrics from the excerpt and layo
                     componentLibrary={projectOpenUILibrary}
                     agentName={`${doc.title} advisor`}
                     welcomeMessage={{
-                      title: `Explore “${doc.title}”`,
+                      title: `Build a report from “${doc.title}”`,
                       description:
-                        "Ask questions about this document. The advisor can build interactive charts, tables, checklists, and summaries from the source text shown on the left — not from the open web.",
+                        "Choose a starter or describe the view you need. The report is generated from the source text on the left — not from the open web.",
                       image: (
                         <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-100 text-violet-700">
                           <Sparkles className="h-7 w-7" />
@@ -479,8 +488,48 @@ When generating layout, charts, or tables, use metrics from the excerpt and layo
                     }}
                     conversationStarters={conversationStarters}
                     assistantMessage={renderGenuiAssistantMessage}
+                    threadHeader={
+                      <>
+                        <GenuiThreadToolbar
+                          renderDisabled={!doc.content?.trim() || loading}
+                          onRenderDocument={() =>
+                            setPendingRenderPrompt(GENUI_RENDER_FULL_DOCUMENT_PROMPT)
+                          }
+                          onNewReport={() => setChatSessionKey((k) => k + 1)}
+                        />
+                        <GenuiPromptBridge
+                          prompt={pendingRenderPrompt}
+                          onSent={clearPendingRenderPrompt}
+                        />
+                        <GenuiReportExportBarPortal
+                          documentTitle={doc.title}
+                          sourceMarkdown={doc.content}
+                          presentationContext={
+                            projectId && documentId
+                              ? {
+                                  projectId,
+                                  documentId,
+                                  documentVersion: doc.version,
+                                  documentTitle: doc.title,
+                                  sourceMarkdown: doc.content,
+                                  lastUserLayoutPrompt,
+                                }
+                              : undefined
+                          }
+                        />
+                      </>
+                    }
                   />
+                  </GenuiReportSurfaceProvider>
                 </div>
+                <div
+                  className="genui-report-export-anchor shrink-0"
+                  data-genui-step="2-export"
+                  data-genui-project-id={projectId ?? undefined}
+                  data-genui-document-id={documentId ?? undefined}
+                  data-genui-document-version={doc?.version}
+                  aria-hidden={false}
+                />
               </div>
             </div>
           </PageTransition>

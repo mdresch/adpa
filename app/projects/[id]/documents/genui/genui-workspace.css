@@ -7,6 +7,24 @@
 .genui-workspace .genui-source-pane {
   background-color: #fff;
   color: rgb(15 23 42);
+  flex: 0 0 38%;
+  max-width: 38%;
+  min-width: 0;
+}
+
+.genui-workspace .genui-advisor-pane {
+  flex: 1 1 62%;
+  min-width: 0;
+}
+
+/* Bottom export bar (portaled from FullScreen thread context) */
+.genui-report-export-anchor {
+  flex: 0 0 auto;
+  z-index: 5;
+}
+
+.genui-workspace .genui-advisor-pane:has(.genui-report-export-bar) .genui-openui-root .openui-shell-thread-composer {
+  margin-bottom: 0;
 }
 
 .genui-workspace .genui-muted {
@@ -46,6 +64,26 @@
   display: none !important;
 }
 
+/* Workspace toolbar has "+ New Report"; hide OpenUI's built-in "New Chat" */
+.genui-workspace .openui-shell-new-chat-button,
+.genui-workspace .openui-shell-new-chat-button_collapsed,
+.genui-workspace .openui-bottom-tray-header-new-chat-button,
+.genui-workspace [aria-label="New chat"],
+.genui-workspace [aria-label="New Chat"] {
+  display: none !important;
+}
+
+/* Custom Step 2 header replaces OpenUI mobile chrome */
+.genui-openui-root .openui-shell-mobile-header {
+  display: none !important;
+}
+
+/* Safety net: never show chat-style assistant chrome inside GenUI */
+.genui-openui-root .genui-advisor-message > div:first-child,
+.genui-openui-root .genui-advisor-message > div > span:first-child {
+  display: none !important;
+}
+
 .genui-openui-root .openui-shell-thread-wrapper,
 .genui-openui-root .openui-shell-thread-container {
   width: 100%;
@@ -80,8 +118,28 @@
 }
 
 .genui-openui-root .openui-shell-thread-scroll-area {
-  padding-left: var(--openui-space-m);
-  padding-right: var(--openui-space-m);
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+
+/* Report surface: full-width component canvas inside the message list */
+.genui-openui-root .genui-report-surface {
+  width: 100%;
+  max-width: none;
+}
+
+.genui-openui-root .genui-report-surface .genui-lang-render {
+  width: 100%;
+  max-width: none;
+}
+
+.genui-openui-root .openui-shell-thread-messages {
+  max-width: none !important;
+  width: 100%;
+}
+
+.genui-openui-root .genui-advisor-message {
+  max-width: none;
 }
 
 .dark .genui-workspace,

@@ -94,8 +94,12 @@ Split-pane page for governance documents: source text (left) + OpenUI advisor (r
 | **Human codedoc** | `docs/codedocs/genui-workspace.md`, `docs/codedocs/openui-chat.md` |
 | **Not the same as** | Project OpenUI Chat (`/openui-chat`, `server/src/modules/openuiChat`, `GOOGLE_AI_API_KEY` in `server/.env`) |
 | **Step 2 LLM (document)** | `POST /api/chat` with `systemPrompt` → Mistral or Google Gemini (`GENUI_LLM_PROVIDER`, `MISTRAL_*` or `GOOGLE_AI_API_KEY` in `.env.local`) |
-| **Rendering (both surfaces)** | `projectOpenUILibrary` = full `@openuidev/react-ui/genui-lib` catalog + **Bullets** (`lib/openui/projectOpenUILibrary.ts`); same on `FullScreen` + `Renderer`; prompts via `buildOpenUISystemPrompt()` |
-| **Key files** | `app/projects/[id]/documents/genui/page.tsx`, `app/openui-chat/`, `lib/openui/systemPrompt.ts`, `components/openui-chat/AssistantMessage.tsx` |
+| **Step 2 export** | Client PDF/Word/HTML — `lib/genui/reportExport.ts`, `GenuiReportExportBar.tsx` |
+| **Step 3 (reserved)** | Presentation snapshots + blob artifacts — `docs/superpowers/specs/2026-05-21-genui-step3-presentations-design.md`, `lib/genui/presentationSnapshot.ts` |
+| **Layout modes** | **Focused** (timeline/gantt/kanban, no cover) vs **full report** — `lib/openui/layoutPlan.ts`; starter prompts in `lib/documents/genui-prompts.ts` |
+| **Rendering (both surfaces)** | `projectOpenUILibrary` = genui-lib + ADPA extensions (`lib/openui/adpaGenuiExtensionDefs.ts`); same on `FullScreen` + `Renderer`; `buildOpenUISystemPrompt()` |
+| **Add Lang components** | `defineComponent` → `adpaGenuiExtensionDefs.ts` (+ optional `layoutPlan.ts`); stack-wide — see genui skill checklist (do not change doc fetch/`docId` wiring) |
+| **Key files** | `app/projects/[id]/documents/genui/page.tsx`, `app/openui-chat/`, `lib/openui/layoutPlan.ts`, `lib/openui/systemPrompt.ts`, `components/openui-chat/AssistantMessage.tsx` |
 
 Load the matching skill before changing GenUI layout, OpenUI chat, prompts, or structured UI output. Do not use bare `openuiLibrary` when prompts mention Bullets.
 

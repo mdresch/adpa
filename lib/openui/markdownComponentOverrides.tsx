@@ -115,8 +115,24 @@ export const TableDef = defineComponent({
     const startRow = safePage * DEFAULT_PAGE_SIZE
     const visibleRowCount = Math.min(startRow + DEFAULT_PAGE_SIZE, rowCount) - startRow
 
+    const exportPayload = {
+      columns: colDefs.map((c) => ({
+        label: c.label,
+        data: c.data.map((cell) =>
+          typeof cell === "string" || typeof cell === "number"
+            ? String(cell)
+            : cell == null
+              ? ""
+              : String(cell)
+        ),
+      })),
+    }
+
     return (
-      <div>
+      <div
+        data-genui-table-export={JSON.stringify(exportPayload)}
+        className="genui-export-table-host"
+      >
         <ScrollableTable>
           <TableHeader>
             <TableRow>

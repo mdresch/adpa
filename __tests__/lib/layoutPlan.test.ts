@@ -5,6 +5,7 @@ import {
   splitBodyIntoContentBlocks,
   splitProseIntoTwoColumns,
   stripProseDividers,
+  wantsGenuiFocusedDetailRender,
   wantsGenuiReportDarkTheme,
   repairTwoColumnProseInLang,
   stripDividerNoiseInLang,
@@ -105,6 +106,91 @@ Paragraph two with more narrative.`
     expect(plan.shell).toBe("risk")
     const serialized = JSON.stringify(plan.nodes)
     expect(serialized).toMatch(/Table/)
+  })
+
+  test("focused timeline from a section omits cover and table of contents", () => {
+    const source = `# Schedule Management Plan
+
+## Executive Summary
+Project overview paragraph.
+
+## Schedule Management Plan
+| Milestone | Date | Status |
+| --- | --- | --- |
+| Kickoff | 2026-05-01 | completed |
+| OpenUI integration | 2026-05-10 | completed |
+| Auto UI module | 2026-05-18 | in-progress |
+| UAT | 2026-05-25 | upcoming |
+| Launch | 2026-05-31 | upcoming |`
+
+    const prompt = "Render a timeline from the Schedule Management Plan section"
+    expect(wantsGenuiFocusedDetailRender(prompt)).toBe(true)
+
+    const plan = buildLayoutPlan({
+      prompt,
+      sourceText: source,
+      documentId: "82efd3d4-1482-4de6-859e-a940202cb0f1",
+    })
+
+    expect(plan.focusedDetail).toBe(true)
+    expect(plan.shell).toBe("timeline")
+    const serialized = JSON.stringify(plan.nodes)
+    expect(serialized).toMatch(/Timeline/)
+    expect(serialized).not.toMatch(/doc-cover/)
+    expect(serialized).not.toMatch(/ReportCoverHero/)
+    expect(serialized).not.toMatch(/TableOfContents/)
+
+    const block = formatLayoutPlanForExecutor(plan)
+    expect(block).toContain("focusedDetail: true")
+    expect(block).toContain("FOCUSED DETAIL MODE")
+    expect(block).toContain("no cover Card")
+  })
+
+  test("follow-up gantt from this report stays focused with table shell, no cover", () => {
+    const source = `## 1. Executive Summary
+Summary.
+
+## 6. Schedule Development
+### 6.4 Milestone Schedule
+| Milestone | Date |
+| --- | --- |
+| Kickoff | 2026-05-01 |
+
+## 12. Approval
+Sign-off.`
+
+    const prompt = "from this report could you generate a gantt chart?"
+    expect(wantsGenuiFocusedDetailRender(prompt)).toBe(true)
+
+    const plan = buildLayoutPlan({
+      prompt,
+      sourceText: source,
+      documentId: "doc-1",
+    })
+
+    expect(plan.focusedDetail).toBe(true)
+    expect(plan.shell).toBe("table")
+    const serialized = JSON.stringify(plan.nodes)
+    expect(serialized).not.toMatch(/doc-cover/)
+    expect(serialized).not.toMatch(/TableOfContents/)
+    expect(serialized).not.toMatch(/card_ch1/)
+  })
+
+  test("full document render still includes cover when governance doc has chapters", () => {
+    const source = `## 1. Executive Summary
+Summary text.
+
+## 2. Schedule Management Plan
+Milestone table here.`
+
+    const plan = buildLayoutPlan({
+      prompt: "Render the full document with cover page and table of contents",
+      sourceText: source,
+      documentId: "doc-1",
+    })
+
+    expect(plan.focusedDetail).toBeFalsy()
+    expect(JSON.stringify(plan.nodes)).toMatch(/doc-cover/)
   })
 
   test("formatLayoutPlanForExecutor includes strict rules and source text", () => {

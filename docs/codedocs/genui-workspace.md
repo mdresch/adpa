@@ -5,7 +5,9 @@ description: "Split-pane document viewer plus OpenUI advisor: routes, rendering 
 
 The **document GenUI workspace** lets users read an extracted governance document on the left and chat with an AI advisor on the right. The advisor can return **OpenUI Lang**, which the UI renders as interactive components (cards, tables, charts, tabs, steps).
 
-This page is **not** the same as [OpenUI Chat](/docs/openui-chat), which is project-scoped chat backed by `server/src/modules/openuiChat` with thread persistence and RAG. The document workspace uses a separate HTTP path and Mistral streaming.
+This page is **not** the same as [OpenUI Chat](/docs/openui-chat), which is project-scoped chat backed by `server/src/modules/openuiChat` with thread persistence and RAG. The document workspace uses `POST /api/chat` with `systemPrompt` (Mistral or Gemini via `GENUI_LLM_PROVIDER`).
+
+**Any document** in the project stack can use this route (`docId` in the query string). Layout rules are driven by the **user’s message** and markdown structure, not by a fixed document type.
 
 For agent-driven maintenance, see `.agents/skills/adpa-genui-workspace/SKILL.md` and the **Document GenUI workspace** section in `AGENTS.md`.
 
@@ -24,7 +26,10 @@ Navigation from other document modes (View, Source, Report) uses `DocumentPageTo
 | Pane | Purpose |
 | --- | --- |
 | **Step 1 — Source document** | Title, metadata, word count, full extracted `doc.content` from the documents API |
-| **Step 2 — Ask the AI** | OpenUI `FullScreen` chat: starters, streaming replies, **New chat** (client session reset) |
+| **Step 2 — Component report** | OpenUI `FullScreen`: **Render document** CTA, starters, streaming OpenUI Lang in **report surface**, **Export report** bar (PDF / Word / HTML) |
+| **Step 3 — Published presentations** | *Planned* — snapshot + blob artifacts + optional publish to **Confluence / Jira / SharePoint / ProjectWise**; see [design spec](../superpowers/specs/2026-05-21-genui-step3-presentations-design.md) |
+
+Right pane uses ~62% width. Light theme is default; dark report is an explicit conversation starter (`GENUI_RENDER_FULL_DOCUMENT_DARK_PROMPT`), not automatic.
 
 Styling lives in `app/projects/[id]/documents/genui/genui-workspace.css` (light theme, panel-sized OpenUI shell, sidebar hidden inside the embed).
 
@@ -38,9 +43,12 @@ Styling lives in `app/projects/[id]/documents/genui/genui-workspace.css` (light 
 | Chat proxy (Mistral) | `app/api/chat/route.ts` |
 | Assistant rendering | `components/openui-chat/AssistantMessage.tsx` (re-exported from `components/Chat/AssistantMessage.tsx`) |
 | Lang → components | `components/openui-chat/DynamicComponentRenderer.tsx` |
-| Canonical library | `lib/openui/projectOpenUILibrary.ts`, `lib/openui/bulletsDef.tsx`, `lib/openui/systemPrompt.ts` |
+| Canonical library | `lib/openui/projectOpenUILibrary.ts`, `lib/openui/adpaGenuiExtensionDefs.ts`, `lib/openui/systemPrompt.ts` |
+| Layout planner | `lib/openui/layoutPlan.ts` (focused vs full report, shell selection) |
+| Report surface | `components/genui/GenuiReportSurfaceContext.tsx` |
 | Fence stripping / detection | `lib/openui/library.ts` — `extractOpenUILangText()`, `looksLikeOpenUILang()` |
-| Conversation starters | `lib/documents/document-chat-prompts.ts` |
+| Conversation starters | `lib/documents/document-chat-prompts.ts`, `lib/documents/genui-prompts.ts` |
+| Render CTA bridge | `components/genui/GenuiPromptBridge.tsx` (`useThread().processMessage`) |
 | Route IDs | `lib/documents/use-project-document-route-ids.ts` |
 | Toolbar / GenUI button | `components/documents/DocumentPageToolbar.tsx` |
 
@@ -48,10 +56,11 @@ Styling lives in `app/projects/[id]/documents/genui/genui-workspace.css` (light 
 
 1. The page loads the document via the authenticated documents API (`projectId` + `documentId`).
 2. It builds a **system prompt** from `buildOpenUISystemPrompt()` (`projectOpenUILibrary.prompt()` + layout rules in `lib/openui/systemPrompt.ts`) plus the full document body and metadata.
-3. `FullScreen` posts to `POST /api/chat` with `{ systemPrompt, messages }`.
-4. When `systemPrompt` is present, `app/api/chat/route.ts` streams from **Mistral** or **Google Gemini** (`GENUI_LLM_PROVIDER`: `mistral` default, `google` for Gemini via OpenAI-compatible API). Without `systemPrompt`, the same route proxies to backend OpenUI chat (Gemini in `server`).
-5. The model should reply in **OpenUI Lang** (e.g. `root = Stack([...])`), sometimes wrapped in ` ```openui-lang ` fences.
-6. `CustomAssistantMessage` detects Lang, strips fences, and renders with `@openuidev/react-lang` `Renderer` and **`projectOpenUILibrary`** (full GenUI catalog + Bullets).
+3. `FullScreen` posts to `POST /api/chat` with `{ systemPrompt, messages }`. The page passes **`lastUserLayoutPrompt`** (latest user text) into `CustomAssistantMessage` for layout repair — not only the default full-document string.
+4. `buildLayoutPlan({ prompt, sourceText: doc.content, documentId })` runs before the executor LLM; output is injected as `=== REQUIRED LAYOUT PLAN ===` via `enrichOpenUIApiMessages()`.
+5. When `systemPrompt` is present, `app/api/chat/route.ts` streams from **Mistral** or **Google Gemini** (`GENUI_LLM_PROVIDER`). Without `systemPrompt`, the route proxies to backend OpenUI chat.
+6. The model should reply in **OpenUI Lang** (e.g. `root = Stack([...])`), sometimes wrapped in ` ```openui-lang ` fences.
+7. `CustomAssistantMessage` detects Lang, strips fences, and renders with `@openuidev/react-lang` `Renderer` and **`projectOpenUILibrary`** (GenUI catalog + ADPA extensions).
 
 ```mermaid
 flowchart LR
@@ -71,14 +80,35 @@ flowchart LR
 - Prompts should request **Card / Stack / Accordion / Table** layouts, not a single top-level `Bullets` (see `systemPrompt.ts`).
 - Always run model output through **`extractOpenUILangText()`** before `looksLikeOpenUILang()` / `Renderer`.
 
+## Focused vs full document layout
+
+| Mode | Typical user prompt | Result |
+| --- | --- | --- |
+| **Focused detail** | Timeline/gantt/kanban from a section; `no cover`, `no table of contents`; follow-ups like “from this report, gantt chart” | Single **Timeline** or **Table** in `root = Stack([...])` — **no** cover or TOC |
+| **Full report** | `GENUI_RENDER_FULL_DOCUMENT_PROMPT`, “render the full document”, cover + chapters | Cover + optional TOC + **Card per chapter** when the doc has enough `##` headings |
+
+Prompt constants: `lib/documents/genui-prompts.ts`. Schedule-related starters: keyword bucket in `document-chat-prompts.ts`.
+
+**Current mapping (until dedicated Lang widgets exist):**
+
+| User intent | Lang output |
+| --- | --- |
+| Timeline / milestones | `Timeline` |
+| “Gantt chart” | `Table` (activities, dates, dependencies) |
+| Kanban-style | `Table` with status columns |
+
+Planner helpers: `wantsGenuiFocusedDetailRender()`, `wantsGenuiFullDocumentLayout()` in `layoutPlan.ts`. Tests: `__tests__/lib/layoutPlan.test.ts`.
+
 ## Environment variables
 
 Set in `.env.local` (see `.env.local.example`):
 
 | Variable | Required for Step 2 | Notes |
 | --- | --- | --- |
-| `MISTRAL_API_KEY` | Yes | Missing key → 503 from `/api/chat` |
+| `GENUI_LLM_PROVIDER` | No | `mistral` (default) or `google` for Gemini |
+| `MISTRAL_API_KEY` | When provider is Mistral | Missing key → 503 from `/api/chat` |
 | `MISTRAL_MODEL` | No | Default `mistral-large-latest` |
+| `GOOGLE_AI_API_KEY` / `GOOGLE_GENERATIVE_AI_API_KEY` | When provider is `google` | Same keys as server Gemini |
 | `BACKEND_URL` | Step 1 | Document fetch via Express proxy |
 | Auth (`auth_token` cookie / Firebase) | Yes | Page requires login |
 
@@ -88,6 +118,27 @@ OpenUI package styles are imported on the page:
 import "@openuidev/react-ui/defaults.css";
 import "@openuidev/react-ui/components.css";
 ```
+
+## Export and Step 3 (publish)
+
+### Step 2 — client export (shipped)
+
+Rendered `.genui-lang-render` DOM — not raw Lang. See `lib/genui/reportExport.ts` and `components/genui/GenuiReportExportBar.tsx`.
+
+| Format | Mechanism |
+| --- | --- |
+| PDF | Browser print dialog |
+| Word | HTML wrapped as `.doc` |
+| HTML | Standalone download |
+| More | Plain text, OpenUI Lang source, Step 1 markdown |
+
+Server `GET /api/v1/documents/:id/export/pdf` still exports **markdown** only — different audience.
+
+### Step 3 — reserved (not implemented)
+
+**Canonical document:** `documents.content` (markdown). **Published report:** snapshot row + blobs (PDF, optional Lang replay). Full design: [2026-05-21-genui-step3-presentations-design.md](../superpowers/specs/2026-05-21-genui-step3-presentations-design.md).
+
+Code reserve: `lib/genui/presentationSnapshot.ts` (`buildPresentationSnapshotDraft`, API path helpers). Enable future UI with `NEXT_PUBLIC_GENUI_STEP3_PUBLISH=true`.
 
 ## Persistence and sessions
 
@@ -99,12 +150,15 @@ import "@openuidev/react-ui/components.css";
 
 | Goal | Where to change |
 | --- | --- |
-| Suggested questions | `lib/documents/document-chat-prompts.ts` |
-| Grounding / instructions | `systemPrompt` block in `genui/page.tsx` |
+| Suggested questions | `lib/documents/document-chat-prompts.ts`, `lib/documents/genui-prompts.ts` |
+| Focused vs full planner rules | `lib/openui/layoutPlan.ts`, `lib/openui/componentSelector.ts` |
+| Grounding / executor instructions | `lib/openui/systemPrompt.ts` |
 | Layout / contrast / OpenUI embed | `genui-workspace.css` |
-| New OpenUI components | Prefer `@openuidev/react-ui/genui-lib` Lang syntax; consult OpenUI docs for grammar |
+| **New Lang component (stack-wide)** | See checklist in `.agents/skills/adpa-genui-workspace/SKILL.md` — register in `adpaGenuiExtensionDefs.ts` (not only `DynamicComponentRenderer` JSON) |
 | Thread history per document | New persistence design — do not break `/api/v1/openui-chat` without a migration plan |
-| RAG for large documents | Chunk retrieval from existing server RAG; watch Mistral context limits |
+| RAG for large documents | Chunk retrieval from existing server RAG; watch context limits |
+
+Adding a component does **not** require changing `docId` routing or document fetch — only the shared OpenUI library, planner, prompts, and tests.
 
 Future PM dashboards are described in `docs/superpowers/specs/2026-05-18-genui-personalized-dashboards-design.md`; that is a separate route from this document workspace.
 
@@ -131,6 +185,8 @@ Future PM dashboards are described in `docs/superpowers/specs/2026-05-18-genui-p
 | Empty Step 1 | Document API or missing `doc.content` |
 | Chat layout broken | `genui-workspace.css` overrides under `.genui-openui-root` |
 | Model ignores document | Empty content or weak system prompt |
+| Full SMP after “gantt from report” | Follow-up not treated as focused — avoid “full document” on chart follow-ups; see `wantsGenuiFocusedDetailRender` |
+| Gantt shows as table | Expected until a Gantt Lang extension is registered |
 
 ## Related documentation
 
