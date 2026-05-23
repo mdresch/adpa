@@ -1,3 +1,11 @@
+import {
+  GENUI_GANTT_REGISTER_PROMPT,
+  GENUI_KANBAN_STYLE_PROMPT,
+  GENUI_RENDER_FULL_DOCUMENT_DARK_PROMPT,
+  GENUI_RENDER_FULL_DOCUMENT_PROMPT,
+  GENUI_TIMELINE_FROM_SCHEDULE_PROMPT,
+} from "@/lib/documents/genui-prompts"
+
 const DOCUMENT_PROMPTS: { keywords: string[]; prompts: string[] }[] = [
   {
     keywords: ["risk"],
@@ -44,6 +52,15 @@ const DOCUMENT_PROMPTS: { keywords: string[]; prompts: string[] }[] = [
       "Visualize communication flow",
     ],
   },
+  {
+    keywords: ["schedule", "timeline", "milestone", "gantt"],
+    prompts: [
+      GENUI_TIMELINE_FROM_SCHEDULE_PROMPT,
+      GENUI_GANTT_REGISTER_PROMPT,
+      GENUI_KANBAN_STYLE_PROMPT,
+      "List critical path activities as a table with start and finish dates",
+    ],
+  },
 ]
 
 /** Suggested chat prompts based on document name / template keywords. */
@@ -55,7 +72,8 @@ export function getDocumentChatPrompts(docName: string, templateName?: string): 
     }
   }
   return [
-    "Render the full document: cover page, table of contents, then one Card per numbered chapter (### subsections inside chapters). Dark report theme — black background, gray sunk cards. Use Bullets for lists; Team only for named rosters.",
+    GENUI_RENDER_FULL_DOCUMENT_PROMPT,
+    GENUI_RENDER_FULL_DOCUMENT_DARK_PROMPT,
     "Summarize this document in a short executive overview",
     "Show the main sections as a structured table",
     "List every action item and owner mentioned",

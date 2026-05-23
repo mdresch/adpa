@@ -88,9 +88,101 @@ export function wantsGenuiFullDocumentLayout(prompt: string): boolean {
   return false
 }
 
+/**
+ * Section-scoped or single-widget render (timeline only, one paragraph, etc.).
+ * Suppresses cover page and table of contents even when source text is a full governance doc.
+ */
+export function wantsGenuiFocusedDetailRender(prompt: string): boolean {
+  if (wantsGenuiFullDocumentLayout(prompt)) return false
+  const p = prompt.trim()
+  if (!p) return false
+
+  if (
+    /\b(no|without|skip|omit|exclude)\s+(a\s+)?(cover(\s+page)?|table\s+of\s+contents|toc)\b/i.test(
+      p
+    )
+  ) {
+    return true
+  }
+
+  const explicitPartial = [
+    /\b(only|just)\s+(the\s+)?(paragraph|timeline|table|section|schedule|milestone)/i,
+    /\brender\s+(only\s+)?(a|an|the)\s+(timeline|table|paragraph|gantt)\b/i,
+    /\b(timeline|paragraph|table)\s+from\b/i,
+    /\bfrom\s+the\s+.+\s+section\s+only\b/i,
+    /\bsingle\s+(detail|component|widget|paragraph)\b/i,
+    /\b(one|a)\s+(paragraph|timeline|table)\s+only\b/i,
+    /\b(single|one)\s+paragraph\b/i,
+    /\b(gantt\s+chart|kanban(?:-style)?\s+board)\b/i,
+    /\b(generate|render|show|create|build)\s+(a\s+)?(gantt|kanban|timeline)\b/i,
+  ]
+  if (explicitPartial.some((re) => re.test(p))) return true
+
+  if (
+    /\b(timeline|roadmap|milestone|schedule)\b/i.test(p) &&
+    /\bfrom\b/i.test(p) &&
+    !/\b(full|entire|whole)\s+document\b/i.test(p)
+  ) {
+    return true
+  }
+
+  /** Follow-up on a prior assistant report: "from this report, show a gantt chart" */
+  if (
+    /\b(from|based\s+on|using)\s+(this\s+)?(report|answer|response|visualization)\b/i.test(p) &&
+    /\b(gantt|kanban|timeline|chart|table|milestone|schedule|activities?|dependencies)\b/i.test(p) &&
+    !/\b(full|entire|whole)\s+document\b/i.test(p) &&
+    !/\b(all\s+chapters?|complete\s+report|cover\s+page)\b/i.test(p)
+  ) {
+    return true
+  }
+
+  if (/\b(gantt|kanban)\b/i.test(p) && !/\b(full|entire|whole)\s+document\b/i.test(p)) {
+    return true
+  }
+
+  return false
+}
+
+function normalizeSectionNeedle(value: string): string {
+  return value.toLowerCase().replace(/\s+/g, " ").trim()
+}
+
+/** When focused, narrow segmentation to the section the user named (e.g. schedule management plan). */
+function filterSegmentsForFocusedPrompt(
+  sectionSegments: TextSegment[],
+  prompt: string
+): TextSegment[] {
+  const quoted = prompt.match(/\bfrom\s+(?:the\s+)?["']([^"']+)["']/i)
+  const sectionMatch = prompt.match(
+    /\bfrom\s+(?:the\s+)?(.+?)\s+(?:section|part|chapter)\b/i
+  )
+  const needleRaw =
+    quoted?.[1]?.trim() ||
+    sectionMatch?.[1]?.trim() ||
+    (/\bschedule\s+management\s+plan\b/i.test(prompt) ? "schedule management plan" : undefined) ||
+    (/\bgantt\b/i.test(prompt) ? "schedule development" : undefined) ||
+    (/\bmilestone\s+schedule\b/i.test(prompt) ? "milestone schedule" : undefined)
+  if (!needleRaw) return sectionSegments
+
+  const needle = normalizeSectionNeedle(needleRaw)
+  const byTitle = sectionSegments.filter((s) => {
+    const title = s.title ? normalizeSectionNeedle(s.title) : ""
+    return title.includes(needle) || needle.includes(title)
+  })
+  if (byTitle.length > 0) return byTitle
+  return sectionSegments
+}
+
 function resolveShellId(prompt: string, primary: ComponentType): LayoutShellId {
   const p = prompt.toLowerCase()
   if (wantsGenuiFullDocumentLayout(prompt)) return "charter"
+  if (
+    wantsGenuiFocusedDetailRender(prompt) &&
+    (/\bgantt\b/i.test(p) ||
+      (/\b(activities?|start|finish|dependencies)\b/i.test(p) && /\b(date|schedule)\b/i.test(p)))
+  ) {
+    return "table"
+  }
   if (p.includes("charter") || p.includes("initiation")) return "charter"
   if (p.includes("status") || p.includes("leadership") || p.includes("progress report")) {
     return "status"
@@ -422,17 +514,25 @@ function classifySegmentBody(
 
   if (isMarkdownTableBlock(trimmed) || isStructuredTabularLines(trimmed)) {
     const pipeRows = trimmed.split("\n").filter((l) => /^\|/.test(l.trim())).length
+    const pipeHeader = trimmed.split("\n").find((l) => /^\|/.test(l.trim())) ?? ""
+    const pipeCols = pipeHeader.split("|").filter((c) => c.trim().length > 0).length
     const wbsLike =
       /\bwbs\s+dictionary\b/i.test(`${title ?? ""}\n${trimmed}`) ||
       (/\blevel\s*1\b/i.test(trimmed) && /\blevel\s*2\b/i.test(trimmed))
+    const attributeLike =
+      /\bactivity\s+attributes\b/i.test(`${title ?? ""}\n${trimmed}`) ||
+      (pipeCols >= 6 && /constraints|deliverable|activity\s+name/i.test(pipeHeader))
     return {
       component: "Table",
       mapping: "widget",
       hints: {
         note: wbsLike
           ? "WBS Dictionary — preserve all hierarchy columns and rows from source (Level 1–4); use Table widget"
-          : "derive columns and rows from source",
+          : attributeLike
+            ? "Activity attributes — preserve every row and full cell text from source; do not truncate cells"
+            : "derive columns and rows from source",
         ...(wbsLike ? { wbsDictionary: "true" } : {}),
+        ...(attributeLike ? { attributeTable: "true" } : {}),
         ...(pipeRows >= 8 ? { wideTable: "true", rowCount: String(pipeRows) } : {}),
       },
     }
@@ -1031,10 +1131,14 @@ function buildShellNodes(
   segments: TextSegment[],
   prompt: string,
   documentId?: string,
-  coverSummaryOverride?: string
+  coverSummaryOverride?: string,
+  focusedDetail = false
 ): LayoutPlanNode[] {
   const preambleSeg = segments.find((s) => s.id === "preamble")
-  const sectionSegments = segments.filter((s) => s.id !== "preamble")
+  let sectionSegments = segments.filter((s) => s.id !== "preamble")
+  if (focusedDetail) {
+    sectionSegments = filterSegmentsForFocusedPrompt(sectionSegments, prompt)
+  }
   const docTitle = documentTitleFromSegments(sectionSegments)
   const hierarchical = usesHierarchicalChapters(sectionSegments)
   const chapters = hierarchical ? groupSegmentsIntoChapters(sectionSegments) : []
@@ -1043,7 +1147,8 @@ function buildShellNodes(
     sectionSegments.find((s) => pred(s) && !isHeadingOnlySegment(s))
 
   const summarySource = extractDocumentSummary(segments, sectionSegments, chapters, prompt)
-  const useCover = shouldIncludeDocumentCover(sectionSegments, segments, chapters)
+  const useCover =
+    !focusedDetail && shouldIncludeDocumentCover(sectionSegments, segments, chapters)
   const { title: coverTitle, subtitle: coverSubtitle } = extractCoverTitleAndSubtitle(
     preambleSeg?.body,
     docTitle
@@ -1099,11 +1204,12 @@ function buildShellNodes(
   }
 
   const frontCard = coverCard ?? introCard
+  const withFront = (nodes: LayoutPlanNode[]) =>
+    focusedDetail ? nodes : [frontCard, ...nodes]
 
   if (sectionSegments.length === 0) {
     const single = classifySegmentBody(prompt)
-    return [
-      frontCard,
+    return withFront([
       {
         id: "answer-primary",
         component: single.component,
@@ -1112,23 +1218,23 @@ function buildShellNodes(
         fallbackReason: single.fallbackReason,
         hints: single.hints,
       },
-    ]
+    ])
   }
 
   const preferHierarchicalReport =
-    wantsGenuiFullDocumentLayout(prompt) ||
-    (hierarchical && chapters.length >= 2)
+    !focusedDetail &&
+    (wantsGenuiFullDocumentLayout(prompt) ||
+      (hierarchical && chapters.length >= 2))
 
   if (!preferHierarchicalReport && (shell === "risk" || shell === "table")) {
     const tableSeg = sectionSegments.find(
       (s) => classifySegmentBody(s.body, s.title).component === "Table"
     )
     if (tableSeg) {
-      return [frontCard, buildNodeFromSegment(tableSeg)]
+      return withFront([buildNodeFromSegment(tableSeg)])
     }
     const merged = sectionSegments.map((s) => s.body).join("\n\n").slice(0, 12_000)
-    return [
-      frontCard,
+    return withFront([
       {
         id: "primary-table",
         component: "Table",
@@ -1136,24 +1242,22 @@ function buildShellNodes(
         sourceText: merged,
         hints: { note: "risk or register columns from context" },
       },
-    ]
+    ])
   }
 
   if (shell === "timeline") {
     const tl = sectionSegments.find(
       (s) => classifySegmentBody(s.body, s.title).component === "Timeline"
     )
-    return [
-      frontCard,
-      tl
-        ? buildNodeFromSegment(tl)
-        : {
-            id: "primary-timeline",
-            component: "Timeline",
-            mapping: "widget",
-            sourceText: sectionSegments.map((s) => s.body).join("\n").slice(0, 12_000),
-          },
-    ]
+    const timelineNode = tl
+      ? buildNodeFromSegment(tl)
+      : {
+          id: "primary-timeline",
+          component: "Timeline" as const,
+          mapping: "widget" as const,
+          sourceText: sectionSegments.map((s) => s.body).join("\n").slice(0, 12_000),
+        }
+    return withFront([timelineNode])
   }
 
   if (hierarchical && chapters.length > 0) {
@@ -1197,10 +1301,10 @@ function buildShellNodes(
   }
 
   if (flatSections.length >= 1) {
-    return [frontCard, ...flatSections.map((seg) => buildSectionCardNode(seg, prompt))]
+    return withFront(flatSections.map((seg) => buildSectionCardNode(seg, prompt)))
   }
 
-  return [frontCard, ...sectionSegments.map(buildNodeFromSegment)]
+  return withFront(sectionSegments.map(buildNodeFromSegment))
 }
 
 function planConfidence(shell: LayoutShellId, segments: TextSegment[], nodes: LayoutPlanNode[]): number {
@@ -1220,10 +1324,18 @@ function planConfidence(shell: LayoutShellId, segments: TextSegment[], nodes: La
 export function buildLayoutPlan(input: BuildLayoutPlanInput): LayoutPlan {
   const prompt = input.prompt.trim()
   const sourceText = (input.sourceText ?? "").trim()
+  const focusedDetail = wantsGenuiFocusedDetailRender(prompt)
   const primary = selectComponentType({ prompt })
   const shell = resolveShellId(prompt, primary)
   const segments = sourceText ? segmentSourceText(sourceText) : []
-  const nodes = buildShellNodes(shell, segments, prompt, input.documentId, input.coverSummary)
+  const nodes = buildShellNodes(
+    shell,
+    segments,
+    prompt,
+    input.documentId,
+    input.coverSummary,
+    focusedDetail
+  )
   const totalChars = nodes.reduce((sum, n) => sum + n.sourceText.length, 0)
 
   return {
@@ -1231,6 +1343,7 @@ export function buildLayoutPlan(input: BuildLayoutPlanInput): LayoutPlan {
     root: "Stack",
     intentPrimary: toGenUIComponentName(primary),
     confidence: planConfidence(shell, segments, nodes),
+    focusedDetail,
     nodes,
     sourceCoverage: {
       segmentCount: segments.length || 1,
@@ -1298,19 +1411,40 @@ export function formatLayoutPlanForExecutor(
   options?: { reportDarkTheme?: boolean }
 ): string {
   const cappedPlan = compactLayoutPlanForExecutor(plan)
+  const focused = cappedPlan.focusedDetail === true
+  const hasCover = collectAllPlanNodes(cappedPlan.nodes).some((n) => n.id === "doc-cover")
   const shellHints: Record<LayoutShellId, string> = {
     charter:
       "root = Stack([TableOfContents?, intro Card, one Card per major chapter; ### subsections nested inside chapter Card])",
     status: "root = Stack([intro Card, section Cards, Bullets or Table for blockers])",
     risk: "root = Stack([intro Card, Table or section Cards per risk area])",
-    timeline: "root = Stack([intro Card, Timeline or section Cards])",
+    timeline: focused
+      ? "root = Stack([Timeline]) — no cover Card, no TableOfContents"
+      : "root = Stack([intro Card, Timeline or section Cards])",
     team: "root = Stack([intro Card, Team or section Cards])",
     comparison: "root = Stack([intro Card, Comparison])",
-    table: "root = Stack([intro Card, Table])",
+    table: focused
+      ? "root = Stack([Table]) — no cover Card, no TableOfContents"
+      : "root = Stack([intro Card, Table])",
     dashboard: "root = Stack([intro Card, section Cards or Tabs])",
-    generic:
-      "root = Stack([intro Card, one Card per document section — not Accordion unless user asked])",
+    generic: focused
+      ? "root = Stack([requested section Card or widget only]) — no cover Card, no TableOfContents"
+      : "root = Stack([intro Card, one Card per document section — not Accordion unless user asked])",
   }
+
+  const coverRules = hasCover
+    ? [
+        "- When node id doc-cover is present: root Stack MUST start with cover Card (ReportCoverHero with exact imageUrl from cover-hero hints, then CardHeader, then TextContent cover blurb) before TableOfContents and chapter Cards.",
+        "- Node cover-summary is a SHORT cover teaser (see hints.maxChars). Do NOT paste the full executive summary from chapter 1; preserve cover sourceText only (may tighten wording, not expand).",
+      ]
+    : []
+
+  const focusedRules = focused
+    ? [
+        "- FOCUSED DETAIL MODE: Do NOT add ReportCoverHero, cover Card, intro Card, or TableOfContents unless a matching node id appears in NODES below.",
+        "- root Stack MUST contain ONLY the components listed in NODES, in the same order — no extra Cards.",
+      ]
+    : []
 
   return [
     "=== REQUIRED LAYOUT PLAN (strict — do not change structure) ===",
@@ -1318,6 +1452,7 @@ export function formatLayoutPlanForExecutor(
     `root: ${cappedPlan.root}`,
     `intentPrimary: ${cappedPlan.intentPrimary}`,
     `confidence: ${cappedPlan.confidence.toFixed(2)}`,
+    ...(focused ? ["focusedDetail: true"] : []),
     `suggestedRootPattern: ${shellHints[cappedPlan.shell]}`,
     "",
     "EXECUTOR RULES:",
@@ -1326,8 +1461,8 @@ export function formatLayoutPlanForExecutor(
     "- Put facts from each node's sourceText into that component's props (rows, items, milestones, etc.).",
     "- Nodes with mapping typography-fallback MUST use TextContent (or Callout if warning) with the full sourceText preserved.",
     "- Never use root = Bullets(...) or root = TextContent(...) alone.",
-    "- When node id doc-cover is present: root Stack MUST start with cover Card (ReportCoverHero with exact imageUrl from cover-hero hints, then CardHeader, then TextContent cover blurb) before TableOfContents and chapter Cards.",
-    "- Node cover-summary is a SHORT cover teaser (see hints.maxChars). Do NOT paste the full executive summary from chapter 1; preserve cover sourceText only (may tighten wording, not expand).",
+    ...focusedRules,
+    ...coverRules,
     "- CardHeader must stay inside Card. One top-level Card per major chapter (H1 or numbered ## like \"1. Executive Summary\").",
     "- Every node with component CardHeader MUST appear as CardHeader(\"<label>\") or CardHeader(\"<label>\", \"<subtitle>\") — positional strings only (no title= named syntax).",
     "- CardHeader accepts at most two positional args. Never three args. Never CardHeader(\"title\", \"default\", ...) — \"default\" is TextContent size, not CardHeader.",
@@ -1339,6 +1474,7 @@ export function formatLayoutPlanForExecutor(
     "- Subsections with multiple blocks (Stack children in plan): render every child in order — intro prose, then Table, then trailing prose (e.g. Justification for Hybrid Approach).",
     "- Do not emit TextContent(\"---\") or other horizontal-rule placeholders; markdown --- lines are omitted from plan prose — end the subsection after the last real paragraph or table.",
     "- WBS Dictionary and wide markdown tables: use Table with all pipe rows from sourceText; hints.wbsDictionary means preserve Level 1–4 columns.",
+    "- hints.attributeTable or hints.wideTable: include every row and full cell text from sourceText — never emit \"[Truncated]\" or \"[Truncated for API limits\" in Table cells.",
     "- Apply TwoColumnProse for chapter lead paragraphs and long subsection intros (e.g. Executive Summary, §1.1 Overview) when the plan component is TwoColumnProse.",
     "- Use Accordion only when the user prompt explicitly requests accordion/collapsible/FAQ AND Bullets is not a better fit.",
     "- Do not invent metrics, dates, or names not supported by source text.",

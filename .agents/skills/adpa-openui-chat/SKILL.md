@@ -14,7 +14,7 @@ Project-scoped advisor at **`/openui-chat`**: pick a project, chat with persiste
 | Rule | Detail |
 |------|--------|
 | **Single library** | `projectOpenUILibrary` from `lib/openui/projectOpenUILibrary.ts` |
-| **What it is** | GenUI catalog (`openuiLibrary`) **+** ADPA extensions: `Bullets`, `Timeline`, `Team`, `Comparison`, `TableOfContents` (`lib/openui/adpaGenuiExtensionDefs.ts`) |
+| **What it is** | GenUI catalog (`openuiLibrary`) **+** ADPA extensions in `lib/openui/adpaGenuiExtensionDefs.ts` (`Bullets`, `Timeline`, `Team`, `Comparison`, `TableOfContents`, `ReportCoverHero`, `TwoColumnProse`, …) |
 | **Prompt** | `projectOpenUILibrary.prompt(openuiPromptOptions)` via `buildOpenUISystemPrompt()` in `lib/openui/systemPrompt.ts` |
 | **Renderer** | Same library on `FullScreen` `componentLibrary` **and** `CustomAssistantMessage` → `DynamicComponentRenderer` |
 | **Never** | Replace with Bullets-only defs, bare `openuiLibrary` while prompts mention Bullets, or `adpaLibrary` (legacy Report grammar) on this surface |
@@ -23,7 +23,8 @@ Module init **throws** if base component count &lt; 40 or Card/Accordion/Table/B
 
 ```ts
 import { projectOpenUILibrary, openuiPromptOptions, ADPA_GENUI_EXTENSION_NAMES } from "@/lib/openui/projectOpenUILibrary"
-// New ADPA-only widgets: add defineComponent in lib/openui/*.tsx, append to adpaGenuiExtensionDefs.ts (never duplicate GenUI names)
+// New ADPA-only widgets: defineComponent in lib/openui/<name>Def.tsx → ADPA_GENUI_EXTENSION_DEFS in adpaGenuiExtensionDefs.ts
+// Planner hooks (optional): layoutPlan.ts, componentSelector.ts — same as document GenUI workspace
 ```
 
 ### When to use `adpaLibrary`
@@ -90,6 +91,10 @@ ADPA **chooses** widgets; the model **fills** the plan (does not redesign layout
 
 Tests: `__tests__/lib/layoutPlan.test.ts`
 
+### Focused vs full layout (shared with document GenUI)
+
+`buildLayoutPlan()` is **document-agnostic** (any `sourceText` + user `prompt`). **Focused detail** (`wantsGenuiFocusedDetailRender`) omits cover/TOC and often emits one `Timeline` or `Table` (user “gantt” → table shell until a Gantt Lang component exists). **Full report** (`wantsGenuiFullDocumentLayout`) adds cover + chapter Cards. Document workspace uses the same planner with `doc.content`; this chat can pass RAG or pasted text as `layoutSourceText`. Details: `.agents/skills/adpa-genui-workspace/SKILL.md`.
+
 ## Prompt / layout rules (avoid “Bullets-only” UI)
 
 `lib/openui/systemPrompt.ts` enforces:
@@ -140,11 +145,15 @@ Frontend panel calls `/api/v1/openui-chat/...` with Bearer token (Next rewrite t
 1. Load **this skill** for `/openui-chat` and `server/src/modules/openuiChat`.
 2. Load **genui-workspace** skill only when editing document GenUI page.
 3. Follow `adpa-aev-workflow` for scoped edits.
-4. Any library change: update `projectOpenUILibrary.ts`, `systemPrompt.ts`, **both** render sites, and add/extend `projectOpenUILibrary.test.ts`.
+4. Any library change: update `adpaGenuiExtensionDefs.ts`, `systemPrompt.ts`, **both** render sites (`openui-chat-fullscreen-panel`, `genui/page.tsx`), and extend `projectOpenUILibrary.test.ts` + `layoutPlan.test.ts` if planner-related.
 
 ## Extending components
 
+Use the **same checklist** as document GenUI (`.agents/skills/adpa-genui-workspace/SKILL.md` → “Add a new OpenUI Lang component”). Summary:
+
 1. Prefer existing GenUI names from `getProjectOpenUIComponentNames()`.
-2. For ADPA-only widgets: add `defineComponent` in `lib/openui/` (e.g. `bulletsDef.tsx`), append to `components` array in `projectOpenUILibrary.ts`.
-3. Re-run library test; confirm prompt still lists new component.
-4. Do **not** register only one component — always preserve full `openuiLibrary.components` spread.
+2. `defineComponent` in `lib/openui/<name>Def.tsx` → append to **`ADPA_GENUI_EXTENSION_DEFS`** / **`ADPA_GENUI_EXTENSION_NAMES`** in `adpaGenuiExtensionDefs.ts` (merged by `projectOpenUIPromptLibrary.ts` — **do not** hand-edit a duplicate `components` array in `projectOpenUILibrary.ts`).
+3. Optional: `layoutPlan.ts`, `componentSelector.ts`, `systemPrompt.ts` so prompts pick the new widget.
+4. Re-run `projectOpenUILibrary.test.ts`; add `layoutPlan.test.ts` cases when behavior is planner-specific.
+5. Preserve full `openuiLibrary.components` spread — never replace the catalog with a single custom widget.
+6. `DynamicComponentRenderer` JSON branches are **legacy**; new surfaces should use Lang + `Renderer`.
