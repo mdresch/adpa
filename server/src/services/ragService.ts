@@ -1,5 +1,6 @@
 import { pool } from "../database/connection"
 import { logger } from "../utils/logger"
+import { isMongoRagEnabled, queryMongoForRag } from "./mongoRagService"
 
 // Use global fetch (Node 18+) or fallback if needed, but avoid 'node-fetch' import if possible to prevent ESM/CJS issues
 // If global.fetch is undefined, one might need to import it, but standard Node 18+ has it.
@@ -218,6 +219,29 @@ export class RagService {
         }
 
         try {
+            if (isMongoRagEnabled()) {
+                try {
+                    const mongoRows = await queryMongoForRag(queryText, topK, filter);
+                    if (mongoRows.length > 0) {
+                        const duration = Date.now() - startTime;
+                        await this.logAnalytics({
+                            operation_type: 'query',
+                            success: true,
+                            duration_ms: duration,
+                            chunks_processed: mongoRows.length,
+                            metadata: {
+                                backend: 'mongodb_atlas',
+                                query_length: queryText.length,
+                                top_k: topK,
+                            },
+                        });
+                        return mongoRows;
+                    }
+                } catch (mongoError: any) {
+                    logger.warn(`[RagService] MongoDB query failed, falling back to pgvector: ${mongoError.message}`);
+                }
+            }
+
             // 1. Embed Query
             const response = await fetch('https://api.voyageai.com/v1/embeddings', {
                 method: 'POST',
