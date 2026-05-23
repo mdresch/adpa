@@ -49,19 +49,36 @@ export function formatExportTableCellText(cell: string): string {
     .trim();
 }
 
-export function buildTableBodyRowsHtml(columns: GenuiTableExportColumn[]): string {
-  const rowCount = tableExportRowCount(columns);
-  const rows: string[] = [];
-  for (let ri = 0; ri < rowCount; ri++) {
-    const cells = columns
-      .map((col) => {
-        const text = formatExportTableCellText(col.data[ri] ?? "");
-        return `<td>${escapeHtmlText(text).replace(/\n/g, "<br />")}</td>`;
-      })
-      .join("");
-    rows.push(`<tr>${cells}</tr>`);
+/** Fill table body via DOM APIs (avoids assigning user-derived HTML to innerHTML). */
+export function populateTableBodyRows(
+  tbody: HTMLTableSectionElement,
+  columns: GenuiTableExportColumn[]
+): void {
+  while (tbody.firstChild) {
+    tbody.removeChild(tbody.firstChild);
   }
-  return rows.join("");
+
+  const rowCount = tableExportRowCount(columns);
+  for (let ri = 0; ri < rowCount; ri++) {
+    const tr = document.createElement("tr");
+    for (const col of columns) {
+      const td = document.createElement("td");
+      appendExportTableCellText(td, col.data[ri] ?? "");
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+}
+
+function appendExportTableCellText(td: HTMLTableCellElement, raw: string): void {
+  const formatted = formatExportTableCellText(raw);
+  const lines = formatted.split("\n");
+  lines.forEach((line, index) => {
+    if (index > 0) {
+      td.appendChild(document.createElement("br"));
+    }
+    td.appendChild(document.createTextNode(line));
+  });
 }
 
 /** Resolve root-relative asset paths for offline Word / print. */

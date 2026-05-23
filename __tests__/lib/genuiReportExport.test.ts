@@ -2,9 +2,9 @@
  * @jest-environment jsdom
  */
 import {
-  buildTableBodyRowsHtml,
   formatExportTableCellText,
   parseTableExportPayload,
+  populateTableBodyRows,
   resolveExportUrl,
   tableExportRowCount,
 } from "@/lib/genui/reportExportPrepare";
@@ -61,12 +61,13 @@ describe("reportExportPrepare", () => {
   });
 
   it("builds all table body rows for export", () => {
-    const html = buildTableBodyRowsHtml([
+    const tbody = document.createElement("tbody");
+    populateTableBodyRows(tbody, [
       { label: "ID", data: ["1", "2", "3"] },
       { label: "Name", data: ["Alpha", "Beta", "Gamma"] },
     ]);
-    expect(html.match(/<tr>/g)?.length).toBe(3);
-    expect(html).toContain("Gamma");
+    expect(tbody.querySelectorAll("tr").length).toBe(3);
+    expect(tbody.textContent).toContain("Gamma");
   });
 
   it("strips simple markdown emphasis in cells", () => {

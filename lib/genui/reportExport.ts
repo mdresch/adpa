@@ -7,9 +7,9 @@
  */
 
 import {
-  buildTableBodyRowsHtml,
   escapeHtmlText,
   parseTableExportPayload,
+  populateTableBodyRows,
   resolveExportUrl,
 } from "@/lib/genui/reportExportPrepare";
 
@@ -134,7 +134,7 @@ function expandPaginatedTables(root: HTMLElement): void {
 
     const tbody = wrapper.querySelector("tbody");
     if (tbody) {
-      tbody.innerHTML = buildTableBodyRowsHtml(payload.columns);
+      populateTableBodyRows(tbody, payload.columns);
     }
   });
 }
