@@ -9,6 +9,7 @@ import { ReportCoverHeroDef } from "./reportCoverHeroDef"
 import { TableOfContentsDef } from "./tableOfContentsDef"
 import { TeamDef } from "./teamDef"
 import { TimelineDef } from "./timelineDef"
+import { TwoColumnProseDef } from "./twoColumnProseDef"
 
 export const ADPA_GENUI_EXTENSION_DEFS = [
   BulletsDef,
@@ -17,6 +18,7 @@ export const ADPA_GENUI_EXTENSION_DEFS = [
   ComparisonDef,
   TableOfContentsDef,
   ReportCoverHeroDef,
+  TwoColumnProseDef,
 ] as const
 
 export const ADPA_GENUI_EXTENSION_NAMES = [
@@ -26,4 +28,5 @@ export const ADPA_GENUI_EXTENSION_NAMES = [
   "Comparison",
   "TableOfContents",
   "ReportCoverHero",
+  "TwoColumnProse",
 ] as const

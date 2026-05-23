@@ -215,10 +215,14 @@ const TWO_COLUMN_MIN_CHARS = 360
 
 function shouldUseTwoColumnProse(body: string): boolean {
   const trimmed = stripProseDividers(body)
-  if (trimmed.length < TWO_COLUMN_MIN_CHARS) return false
+  if (!trimmed) return false
   if (isMarkdownTableBlock(trimmed) || isBulletListBlock(trimmed)) return false
   if (isNumberedSectionOutlineList(trimmed)) return false
   const paragraphs = trimmed.split(/\n\n+/).filter((p) => p.trim())
+  if (paragraphs.length === 2) {
+    const [a, b] = paragraphs
+    if (a.length >= 80 && b.length >= 80 && trimmed.length >= 200) return true
+  }
   if (paragraphs.length >= 2 && trimmed.length >= 280) return true
   return trimmed.length >= TWO_COLUMN_MIN_CHARS
 }
@@ -694,41 +698,20 @@ function buildCompositeSegmentNode(seg: TextSegment, blocks: SectionContentBlock
   }
 }
 
-function buildTwoColumnTextNode(
-  seg: TextSegment,
-  classified: ReturnType<typeof classifySegmentBody>
-): LayoutPlanNode {
-  const [col1, col2] = splitProseIntoTwoColumns(seg.body)
+function buildTwoColumnTextNode(seg: TextSegment): LayoutPlanNode {
+  const [left, right] = splitProseIntoTwoColumns(stripProseDividers(seg.body))
   return {
     id: seg.id,
-    component: "Stack",
+    component: "TwoColumnProse",
     mapping: "widget",
     sourceText: seg.body,
     label: seg.title,
-    fallbackReason: classified.fallbackReason,
     hints: {
-      ...classified.hints,
       twoColumn: "true",
-      note: "row Stack with two TextContent columns — pre-split at sentence boundaries in sourceText; do not duplicate",
+      left,
+      right,
+      note: "emit exactly TwoColumnProse(left, right) — never Stack row or three stacked TextContent blocks",
     },
-    children: [
-      {
-        id: `${seg.id}-col1`,
-        component: "TextContent",
-        mapping: "typography-fallback",
-        sourceText: col1,
-        fallbackReason: classified.fallbackReason,
-        hints: { variant: "default", column: "left" },
-      },
-      {
-        id: `${seg.id}-col2`,
-        component: "TextContent",
-        mapping: "typography-fallback",
-        sourceText: col2,
-        fallbackReason: classified.fallbackReason,
-        hints: { variant: "default", column: "right" },
-      },
-    ],
   }
 }
 
@@ -1260,12 +1243,12 @@ function escapeLangString(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
 }
 
-function twoColumnStackRequiredLang(n: LayoutPlanNode, pad: string): string {
-  if (n.hints?.twoColumn !== "true" || n.component !== "Stack") return ""
-  const cols = n.children?.filter((c) => c.component === "TextContent") ?? []
-  if (cols.length !== 2) return ""
-  const [a, b] = cols
-  return `${pad}  REQUIRED_LANG: Stack([TextContent("${escapeLangString(a.sourceText)}", "default"), TextContent("${escapeLangString(b.sourceText)}", "default")], "row", "m", "stretch", "start", true)`
+function twoColumnProseRequiredLang(n: LayoutPlanNode, pad: string): string {
+  if (n.component !== "TwoColumnProse" || n.hints?.twoColumn !== "true") return ""
+  const left = n.hints.left
+  const right = n.hints.right
+  if (typeof left !== "string" || typeof right !== "string") return ""
+  return `${pad}  REQUIRED_LANG: TwoColumnProse(left="${escapeLangString(left)}", right="${escapeLangString(right)}")`
 }
 
 function flattenNodes(nodes: LayoutPlanNode[], depth = 0): string[] {
@@ -1273,7 +1256,7 @@ function flattenNodes(nodes: LayoutPlanNode[], depth = 0): string[] {
   for (const n of nodes) {
     const pad = "  ".repeat(depth)
     const headerLabel = n.label?.trim()
-    const twoColLang = twoColumnStackRequiredLang(n, pad)
+    const twoColLang = twoColumnProseRequiredLang(n, pad)
     lines.push(
       `${pad}- id: ${n.id}`,
       `${pad}  component: ${n.component}`,
@@ -1298,7 +1281,7 @@ function flattenNodes(nodes: LayoutPlanNode[], depth = 0): string[] {
     if (n.children?.length) {
       if (twoColLang) {
         lines.push(
-          `${pad}  children: (inlined in REQUIRED_LANG above — emit exactly two TextContent in one row Stack; do NOT add a third TextContent for the full sourceText)`
+          `${pad}  children: (none — emit only REQUIRED_LANG TwoColumnProse above; do NOT add TextContent or Stack)`
         )
       } else {
         lines.push(`${pad}  children:`)
@@ -1351,11 +1334,12 @@ export function formatLayoutPlanForExecutor(
     "- Subsections (### or 1.1, 1.2) go INSIDE the chapter Card as Stack blocks with subsection CardHeader — never a separate top-level Card per ###.",
     "- Skip empty heading-only nodes; do not emit TextContent that only repeats the section title — use CardHeader for the title instead.",
     "- Narrative prose → TextContent. Bullet/numbered lists → Bullets. Markdown tables → Table([Col(\"Header\", [cells...]), ...]) with ONE argument only — never Table(..., \"caption\").",
-    "- Long narrative blocks (hints.twoColumn or REQUIRED_LANG row Stack): exactly ONE row Stack with exactly TWO TextContent children — never three stacked paragraphs for a two-column subsection.",
-    "- When REQUIRED_LANG shows a two-column Stack, do not emit separate TextContent nodes for col1/col2 ids; use only the REQUIRED_LANG Stack.",
+    "- Two-column narrative (component TwoColumnProse or hints.twoColumn): emit exactly TwoColumnProse(left=\"…\", right=\"…\") with the left/right strings from the plan — never three stacked TextContent blocks or a column Stack.",
+    "- When REQUIRED_LANG shows TwoColumnProse, copy it verbatim for that node id; do not substitute Stack([TextContent, TextContent], \"row\", …).",
     "- Subsections with multiple blocks (Stack children in plan): render every child in order — intro prose, then Table, then trailing prose (e.g. Justification for Hybrid Approach).",
+    "- Do not emit TextContent(\"---\") or other horizontal-rule placeholders; markdown --- lines are omitted from plan prose — end the subsection after the last real paragraph or table.",
     "- WBS Dictionary and wide markdown tables: use Table with all pipe rows from sourceText; hints.wbsDictionary means preserve Level 1–4 columns.",
-    "- Apply two-column row Stacks for chapter lead paragraphs and long subsection intros (e.g. Executive Summary, §2.1 Purpose, §3.1) when the plan marks twoColumn or REQUIRED_LANG on a Stack node.",
+    "- Apply TwoColumnProse for chapter lead paragraphs and long subsection intros (e.g. Executive Summary, §1.1 Overview) when the plan component is TwoColumnProse.",
     "- Use Accordion only when the user prompt explicitly requests accordion/collapsible/FAQ AND Bullets is not a better fit.",
     "- Do not invent metrics, dates, or names not supported by source text.",
     "- Do not append duplicate appendix tables at the end of the document; place each table only under its matching ### subsection.",
@@ -1373,6 +1357,202 @@ export function formatLayoutPlanForExecutor(
     ...flattenNodes(cappedPlan.nodes),
     "=== END LAYOUT PLAN ===",
   ].join("\n")
+}
+
+function collectAllPlanNodes(nodes: LayoutPlanNode[]): LayoutPlanNode[] {
+  const out: LayoutPlanNode[] = []
+  for (const n of nodes) {
+    out.push(n)
+    if (n.children?.length) out.push(...collectAllPlanNodes(n.children))
+  }
+  return out
+}
+
+function unescapeLangString(s: string): string {
+  return s.replace(/\\"/g, '"').replace(/\\\\/g, "\\")
+}
+
+/**
+ * When the executor ignores REQUIRED_LANG and emits stacked TextContent pairs,
+ * rewrite matching pairs to TwoColumnProse using plan left/right hints.
+ */
+function isHorizontalRulePlaceholder(text: string): boolean {
+  const t = text.trim()
+  return /^---+$/.test(t) || /^\s*[*_]{3,}\s*$/.test(t)
+}
+
+const ASSIGN_TEXT_CONTENT_RE =
+  /^\s*(\w+)\s*=\s*TextContent\s*\(\s*(?:"((?:[^"\\]|\\.)*)"|text\s*=\s*"((?:[^"\\]|\\.)*)")(?:\s*,\s*"[^"]*")?\s*\)\s*,?\s*$/gm
+
+const INLINE_DIVIDER_TEXT_CONTENT_RE =
+  /,?\s*TextContent\s*\(\s*(?:"---+"|text\s*=\s*"---+")(?:\s*,\s*"[^"]*")?\s*\)\s*/g
+
+/**
+ * Remove executor-only horizontal-rule placeholders (TextContent("---")) that
+ * duplicate markdown dividers already stripped from the layout plan.
+ */
+export function stripDividerNoiseInLang(lang: string): string {
+  const dividerVarNames = new Set<string>()
+  let m: RegExpExecArray | null
+  ASSIGN_TEXT_CONTENT_RE.lastIndex = 0
+  while ((m = ASSIGN_TEXT_CONTENT_RE.exec(lang)) !== null) {
+    const raw = m[2] ?? m[3] ?? ""
+    if (isHorizontalRulePlaceholder(unescapeLangString(raw))) {
+      dividerVarNames.add(m[1])
+    }
+  }
+
+  let out = lang
+  for (const name of dividerVarNames) {
+    out = out.replace(
+      new RegExp(`^\\s*${name}\\s*=\\s*TextContent\\s*\\([^)]*\\)\\s*,?\\s*$`, "gm"),
+      ""
+    )
+    out = out.replace(new RegExp(`,\\s*${name}\\s*(?=\\])`), "")
+    out = out.replace(new RegExp(`\\[\\s*${name}\\s*,`), "[")
+    out = out.replace(new RegExp(`${name}\\s*,\\s*`), "")
+  }
+
+  out = out.replace(INLINE_DIVIDER_TEXT_CONTENT_RE, "")
+  return out.replace(/\n{3,}/g, "\n\n")
+}
+
+function collectLangDefinedIds(lang: string): Set<string> {
+  const ids = new Set<string>()
+  const re = /^\s*(\w+)\s*=/gm
+  let m: RegExpExecArray | null
+  while ((m = re.exec(lang)) !== null) {
+    ids.add(m[1])
+  }
+  return ids
+}
+
+function splitTopLevelCommaList(inner: string): string[] {
+  const parts: string[] = []
+  let depth = 0
+  let start = 0
+  for (let i = 0; i < inner.length; i++) {
+    const c = inner[i]
+    if (c === "[" || c === "(" || c === "{") depth++
+    else if (c === "]" || c === ")" || c === "}") depth--
+    else if (c === "," && depth === 0) {
+      const piece = inner.slice(start, i).trim()
+      if (piece) parts.push(piece)
+      start = i + 1
+    }
+  }
+  const tail = inner.slice(start).trim()
+  if (tail) parts.push(tail)
+  return parts
+}
+
+function findBalancedBracketSlice(
+  text: string,
+  openBracketIdx: number
+): { inner: string; closeIdx: number } | null {
+  if (text[openBracketIdx] !== "[") return null
+  let depth = 0
+  for (let i = openBracketIdx; i < text.length; i++) {
+    const c = text[i]
+    if (c === "[") depth++
+    else if (c === "]") {
+      depth--
+      if (depth === 0) {
+        return { inner: text.slice(openBracketIdx + 1, i), closeIdx: i }
+      }
+    }
+  }
+  return null
+}
+
+function pruneCommaListIdentifiers(inner: string, defined: Set<string>): string {
+  const parts = splitTopLevelCommaList(inner)
+  const kept = parts.filter((part) => {
+    const idOnly = part.match(/^(\w+)$/)
+    if (!idOnly) return true
+    return defined.has(idOnly[1])
+  })
+  return kept.join(", ")
+}
+
+/**
+ * Drop Stack/Card child ids that were never assigned (executor typos like a missing subsection header).
+ */
+export function pruneUndefinedRefsInLang(lang: string): string {
+  const defined = collectLangDefinedIds(lang)
+  const arrayOpenRe = /(Stack|Card)\s*\(\s*\[/g
+  let out = ""
+  let last = 0
+  let m: RegExpExecArray | null
+  while ((m = arrayOpenRe.exec(lang)) !== null) {
+    const openBracket = m.index + m[0].length - 1
+    const balanced = findBalancedBracketSlice(lang, openBracket)
+    if (!balanced) {
+      last = m.index + 1
+      continue
+    }
+    out += lang.slice(last, openBracket + 1)
+    out += pruneCommaListIdentifiers(balanced.inner, defined)
+    last = balanced.closeIdx
+    arrayOpenRe.lastIndex = last + 1
+  }
+  out += lang.slice(last)
+  return out
+}
+
+/** Post-process executor Lang: two-column repair, divider cleanup, dangling ref prune. */
+export function repairGenuiExecutorLang(lang: string, plan: LayoutPlan): string {
+  return pruneUndefinedRefsInLang(
+    stripDividerNoiseInLang(repairTwoColumnProseInLang(lang, plan))
+  )
+}
+
+export function repairTwoColumnProseInLang(lang: string, plan: LayoutPlan): string {
+  let out = lang
+  for (const node of collectAllPlanNodes(plan.nodes)) {
+    if (node.component !== "TwoColumnProse" || node.hints?.twoColumn !== "true") continue
+    const left = node.hints.left
+    const right = node.hints.right
+    if (typeof left !== "string" || typeof right !== "string" || !left.trim() || !right.trim()) {
+      continue
+    }
+
+    const canonical = `TwoColumnProse(left="${escapeLangString(left)}", right="${escapeLangString(right)}")`
+    if (out.includes(canonical)) continue
+
+    const leftKey = left.replace(/\s+/g, " ").trim().slice(0, 48)
+    const rightKey = right.replace(/\s+/g, " ").trim().slice(0, 48)
+    if (!leftKey || !rightKey) continue
+
+    const pairRe =
+      /TextContent\s*\(\s*"((?:[^"\\]|\\.)*)"\s*,[^)]*\)\s*,?\s*TextContent\s*\(\s*"((?:[^"\\]|\\.)*)"\s*,[^)]*\)/gs
+
+    out = out.replace(pairRe, (match, rawA, rawB) => {
+      const a = unescapeLangString(rawA)
+      const b = unescapeLangString(rawB)
+      const aLeft = a.includes(leftKey) || leftKey.includes(a.slice(0, 40))
+      const bRight = b.includes(rightKey) || rightKey.includes(b.slice(0, 40))
+      const aRight = a.includes(rightKey) || rightKey.includes(a.slice(0, 40))
+      const bLeft = b.includes(leftKey) || leftKey.includes(b.slice(0, 40))
+      if (aLeft && bRight) return canonical
+      if (aRight && bLeft) {
+        return `TwoColumnProse(left="${escapeLangString(right)}", right="${escapeLangString(left)}")`
+      }
+      return match
+    })
+
+    const rowStackRe =
+      /Stack\s*\(\s*\[\s*TextContent\s*\(\s*"((?:[^"\\]|\\.)*)"\s*,[^)]*\)\s*,\s*TextContent\s*\(\s*"((?:[^"\\]|\\.)*)"\s*,[^)]*\)\s*\]\s*,\s*"row"[^)]*\)/gs
+    out = out.replace(rowStackRe, (match, rawA, rawB) => {
+      const a = unescapeLangString(rawA)
+      const b = unescapeLangString(rawB)
+      const aLeft = a.includes(leftKey) || leftKey.includes(a.slice(0, 40))
+      const bRight = b.includes(rightKey) || rightKey.includes(b.slice(0, 40))
+      if (aLeft && bRight) return canonical
+      return match
+    })
+  }
+  return out
 }
 
 export const OPENUI_EXECUTOR_RULES = [

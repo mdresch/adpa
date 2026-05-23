@@ -6,6 +6,10 @@ import {
   splitProseIntoTwoColumns,
   stripProseDividers,
   wantsGenuiReportDarkTheme,
+  repairTwoColumnProseInLang,
+  stripDividerNoiseInLang,
+  repairGenuiExecutorLang,
+  pruneUndefinedRefsInLang,
 } from "@/lib/openui/layoutPlan"
 import type { LayoutPlanNode } from "@/lib/openui/layoutPlanTypes"
 import { validateExecutorLang } from "@/lib/openui/langValidation"
@@ -156,7 +160,7 @@ Cost of inaction exceeds $15M over five years.`
     expect(ch1?.children?.some((c) => c.id.startsWith("sub-"))).toBe(true)
   })
 
-  test("long chapter intro plans two-column Stack with split TextContent children", () => {
+  test("long chapter intro plans TwoColumnProse with left/right hints", () => {
     const para1 =
       "The ADPA - Morphic AI Integration project aims to enhance the ADPA platform with state-of-the-art AI-powered search capabilities by integrating Morphic AI's technology. This integration addresses the current limitations of ADPA's search functionality, which impacts user productivity and decision-making."
     const para2 =
@@ -172,12 +176,12 @@ Cost of inaction exceeds $15M over five years.`
       return [n, ...(n.children ?? []).flatMap(collect)]
     })
     const twoCol = allNodes.find((n) => n.hints?.twoColumn === "true")
-    expect(twoCol?.component).toBe("Stack")
-    expect(twoCol?.children?.length).toBe(2)
-    expect(twoCol?.children?.every((c) => c.component === "TextContent")).toBe(true)
+    expect(twoCol?.component).toBe("TwoColumnProse")
+    expect(typeof twoCol?.hints?.left).toBe("string")
+    expect(typeof twoCol?.hints?.right).toBe("string")
     const block = formatLayoutPlanForExecutor(plan)
-    expect(block).toMatch(/Stack\(\[TextContent\(/)
-    expect(block).toMatch(/"row", "m", "stretch", "start", true/)
+    expect(block).toMatch(/REQUIRED_LANG: TwoColumnProse\(left=/)
+    expect(block).not.toMatch(/Stack\(\[TextContent\(/)
   })
 
   test("numbered purpose outline is Bullets not Table", () => {
@@ -320,10 +324,10 @@ The hybrid model balances governance with agility.`
       return [n, ...(n.children ?? []).flatMap(collect)]
     })
     const twoCol = allNodes.find((n) => n.id.includes("1-1") && n.hints?.twoColumn === "true")
-    expect(twoCol?.component).toBe("Stack")
+    expect(twoCol?.component).toBe("TwoColumnProse")
     const block = formatLayoutPlanForExecutor(plan)
-    expect(block).toMatch(/inlined in REQUIRED_LANG/)
-    expect(block).not.toMatch(/section-1-1-overview[^"]*"\s*\n\s*children:\s*\n\s*- id: section-1-1-overview-col1/s)
+    expect(block).toMatch(/REQUIRED_LANG: TwoColumnProse\(left=/)
+    expect(block).not.toMatch(/section-1-1-overview-col1/)
 
     const section12Nodes = allNodes.filter((n) => n.id.includes("1-2"))
     expect(section12Nodes.some((n) => n.component === "Table" && n.sourceText.includes("Initiation"))).toBe(
@@ -525,11 +529,111 @@ Second paragraph also has enough characters to qualify for two column layout in 
       return [n, ...(n.children ?? []).flatMap(collect)]
     })
     const twoCol = allNodes.find((n) => n.hints?.twoColumn === "true")
-    const [c1, c2] = twoCol?.children ?? []
-    expect(c1?.sourceText).toBe(para1)
-    expect(c2?.sourceText).toBe(para2)
-    expect(c1?.sourceText).toMatch(/\.\s*$/)
-    expect(c2?.sourceText).toMatch(/^Key benefits/)
+    expect(twoCol?.hints?.left).toBe(para1)
+    expect(twoCol?.hints?.right).toBe(para2)
+    expect(String(twoCol?.hints?.left)).toMatch(/\.\s*$/)
+    expect(String(twoCol?.hints?.right)).toMatch(/^Key benefits/)
+  })
+})
+
+describe("repairTwoColumnProseInLang", () => {
+  test("rewrites adjacent TextContent pair to TwoColumnProse", () => {
+    const para1 =
+      "The purpose of this Scope Management Plan (SMP) is to establish a comprehensive framework for defining, documenting, validating, and controlling the project scope for the ADPA - Implementation of OpenUI and Auto UI Generation project."
+    const para2 =
+      "This document serves as a subsidiary plan to the Project Management Plan (PMP) and provides detailed guidance on scope-related processes, roles, responsibilities, and deliverables."
+    const source = `## 1. Introduction and Scope Management Approach
+
+### 1.1 Overview of the Scope Management Plan
+${para1}
+
+${para2}`
+    const plan = buildLayoutPlan({
+      prompt: "Render the full document to a interactive UI Component Report",
+      sourceText: source,
+    })
+    const allNodes = plan.nodes.flatMap(function collect(n: LayoutPlanNode): LayoutPlanNode[] {
+      return [n, ...(n.children ?? []).flatMap(collect)]
+    })
+    expect(allNodes.some((n) => n.component === "TwoColumnProse")).toBe(true)
+
+    const badLang = `root = Stack([
+  section = Stack([
+    CardHeader("1.1 Overview of the Scope Management Plan"),
+    TextContent("${para1}", "default"),
+    TextContent("${para2}", "default")
+  ])
+])`
+    const fixed = repairTwoColumnProseInLang(badLang, plan)
+    expect(fixed).toMatch(/TwoColumnProse\(left=/)
+    expect(fixed).not.toMatch(/TextContent\("The purpose of this Scope/)
+  })
+})
+
+describe("stripDividerNoiseInLang", () => {
+  test("removes divider-only TextContent assignments and Stack references", () => {
+    const lang = `subSec2_3 = Stack([
+  subSec2_3_Header = CardHeader("2.3 Scope Exclusions"),
+  sec2_3_Part0 = TextContent("Exclusion text here.", "default"),
+  sec2_3_Part1 = Table([Col("A", ["1"])]),
+  sec2_3_Part2 = TextContent("---")
+])`
+    const fixed = stripDividerNoiseInLang(lang)
+    expect(fixed).not.toMatch(/sec2_3_Part2/)
+    expect(fixed).not.toMatch(/TextContent\("---"/)
+    expect(fixed).toMatch(/sec2_3_Part1/)
+    expect(fixed).toMatch(/Stack\(\[/)
+  })
+
+  test("removes inline TextContent dividers in arrays", () => {
+    const lang = `x = Stack([CardHeader("T"), TextContent("body", "default"), TextContent("---", "default")])`
+    const fixed = stripDividerNoiseInLang(lang)
+    expect(fixed).not.toMatch(/TextContent\("---"/)
+    expect(fixed).toMatch(/TextContent\("body"/)
+  })
+})
+
+describe("pruneUndefinedRefsInLang", () => {
+  test("removes undefined ids from Stack and Card child arrays", () => {
+    const lang = `ch9_sec1_prose = TwoColumnProse("a", "b")
+ch9_sec9_1 = Stack([ch9_sec9_1_header, ch9_sec1_prose], "column", "s")
+card_ch9 = Card([ch9_header, ch9_sec9_1, ch9_missing], "card")`
+    const fixed = pruneUndefinedRefsInLang(lang)
+    expect(fixed).not.toMatch(/ch9_sec9_1_header/)
+    expect(fixed).not.toMatch(/ch9_missing/)
+    expect(fixed).toMatch(/ch9_sec1_prose/)
+    expect(fixed).toMatch(/Stack\(\[ch9_sec1_prose\]/)
+  })
+})
+
+describe("repairGenuiExecutorLang", () => {
+  test("applies two-column repair and divider cleanup", () => {
+    const para1 =
+      "The purpose of this Scope Management Plan (SMP) is to establish a comprehensive framework for defining, documenting, validating, and controlling the project scope for the ADPA - Implementation of OpenUI and Auto UI Generation project."
+    const para2 =
+      "This document serves as a subsidiary plan to the Project Management Plan (PMP) and provides detailed guidance on scope-related processes, roles, responsibilities, and deliverables."
+    const source = `## 1. Introduction and Scope Management Approach
+
+### 1.1 Overview of the Scope Management Plan
+${para1}
+
+${para2}`
+    const plan = buildLayoutPlan({
+      prompt: "Render the full document to a interactive UI Component Report",
+      sourceText: source,
+    })
+    const badLang = `root = Stack([
+  section = Stack([
+    CardHeader("1.1 Overview of the Scope Management Plan"),
+    TextContent("${para1}", "default"),
+    TextContent("${para2}", "default"),
+    tail = TextContent("---")
+  ])
+])`
+    const fixed = repairGenuiExecutorLang(badLang, plan)
+    expect(fixed).toMatch(/TwoColumnProse\(left=/)
+    expect(fixed).not.toMatch(/TextContent\("---"/)
+    expect(fixed).not.toMatch(/\btail\b/)
   })
 })
 

@@ -6,7 +6,11 @@ import "@openuidev/react-ui/defaults.css";
 import "@openuidev/react-ui/components.css";
 import "./genui-workspace.css";
 import { FullScreen } from "@openuidev/react-ui";
-import { openAIMessageFormat, openAIReadableStreamAdapter } from "@openuidev/react-headless";
+import {
+  openAIMessageFormat,
+  openAIReadableStreamAdapter,
+  type AssistantMessage as OpenUIAssistantMessage,
+} from "@openuidev/react-headless";
 import { projectOpenUILibrary } from "@/lib/openui/projectOpenUILibrary";
 import { trimTextForGenuiPrompt } from "@/lib/llm/genuiPromptBudget";
 import { buildOpenUIGenuiLibraryPrompt, enrichOpenUIApiMessages } from "@/lib/openui/systemPrompt";
@@ -172,6 +176,21 @@ export default function DocumentGenUIWorkspace() {
       })),
     }),
     [starterPrompts]
+  );
+
+  const genuiLayoutPrompt =
+    "Render the full document to a interactive UI Component Report";
+
+  const renderGenuiAssistantMessage = useCallback(
+    (props: { message: OpenUIAssistantMessage; isStreaming: boolean }) => (
+      <CustomAssistantMessage
+        {...props}
+        layoutSourceText={doc?.content}
+        layoutPrompt={genuiLayoutPrompt}
+        documentId={documentId ?? undefined}
+      />
+    ),
+    [doc?.content, documentId]
   );
 
   if (authLoading || (loading && !doc)) {
@@ -459,7 +478,7 @@ When generating layout, charts, or tables, use metrics from the excerpt and layo
                       ),
                     }}
                     conversationStarters={conversationStarters}
-                    assistantMessage={CustomAssistantMessage}
+                    assistantMessage={renderGenuiAssistantMessage}
                   />
                 </div>
               </div>
