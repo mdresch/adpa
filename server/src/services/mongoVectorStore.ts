@@ -20,14 +20,37 @@ export class MongoVectorStore {
     private client: MongoClient | null = null;
     private _db!: Db;
     private isConnected: boolean = false;
+    /** Single in-flight connect; prevents concurrent callers from opening duplicate clients. */
+    private connectPromise: Promise<void> | null = null;
 
     get db(): Db {
         this.ensureConnected();
         return this._db;
     }
 
+    /**
+     * Establishes (or reuses) the MongoDB client. Safe to call concurrently — all callers
+     * await the same connection attempt.
+     */
     async connect(): Promise<void> {
-        if (this.isConnected) return;
+        if (this.isConnected) {
+            return;
+        }
+
+        if (!this.connectPromise) {
+            this.connectPromise = this.performConnect().finally(() => {
+                this.connectPromise = null;
+            });
+        }
+
+        await this.connectPromise;
+
+        if (!this.isConnected) {
+            throw new Error('MongoDB connection failed');
+        }
+    }
+
+    private async performConnect(): Promise<void> {
         const uri = getMongoUri();
         const dbName = getMongoDbName();
         if (!uri) {
@@ -35,24 +58,31 @@ export class MongoVectorStore {
         }
 
         try {
-            this.client = new MongoClient(uri);
-            await this.client.connect();
-            this._db = this.client.db(dbName);
+            const client = new MongoClient(uri);
+            await client.connect();
+            this.client = client;
+            this._db = client.db(dbName);
             this.isConnected = true;
 
             logger.info('Connected to MongoDB Atlas for Vector Store', {
-                database: dbName
+                database: dbName,
             });
         } catch (error) {
+            this.client = null;
+            this.isConnected = false;
             logger.error('Failed to connect to MongoDB Atlas', {
-                error: (error as Error).message
+                error: (error as Error).message,
             });
             throw error;
         }
     }
 
     async disconnect(): Promise<void> {
-        if (!this.client) return;
+        this.connectPromise = null;
+        if (!this.client) {
+            this.isConnected = false;
+            return;
+        }
         try {
             await this.client.close();
             this.client = null;
@@ -60,7 +90,7 @@ export class MongoVectorStore {
             logger.info('Disconnected from MongoDB Atlas');
         } catch (error) {
             logger.error('Failed to disconnect from MongoDB Atlas', {
-                error: (error as Error).message
+                error: (error as Error).message,
             });
             throw error;
         }
@@ -70,8 +100,13 @@ export class MongoVectorStore {
         return Boolean(getMongoUri());
     }
 
+    /** True when a client is connected and ready for operations. */
+    isConnectionReady(): boolean {
+        return this.isConnected && this.client !== null;
+    }
+
     private ensureConnected(): void {
-        if (!this.isConnected) {
+        if (!this.isConnectionReady()) {
             throw new Error('Database not connected. Call connect() first.');
         }
     }
@@ -226,7 +261,7 @@ export class MongoVectorStore {
             };
         }
 
-        this.ensureConnected();
+        await this.connect();
 
         const docCount = await this.documentsCollection.countDocuments();
         const chunkCount = await this.chunksCollection.countDocuments();
@@ -237,13 +272,14 @@ export class MongoVectorStore {
 
         let indexStatus = 'unknown';
         try {
-            const indexes = await (this.chunksCollection as Collection & {
-                listSearchIndexes: () => { toArray: () => Promise<Array<{ name: string; queryable?: boolean }>> };
-            }).listSearchIndexes().toArray();
+            const listSearchIndexes = (this.chunksCollection as unknown as {
+                listSearchIndexes: () => { toArray: () => Promise<Array<Record<string, unknown>>> };
+            }).listSearchIndexes;
+            const indexes = await listSearchIndexes.call(this.chunksCollection).toArray();
             const indexName = process.env.MONGODB_VECTOR_INDEX || 'vector_search_index';
             const vectorIndex = indexes.find((idx) => idx.name === indexName);
             if (vectorIndex) {
-                indexStatus = vectorIndex.queryable ? 'active' : 'building';
+                indexStatus = vectorIndex.queryable === true ? 'active' : 'building';
             } else {
                 indexStatus = 'missing';
             }
@@ -265,7 +301,11 @@ export class MongoVectorStore {
 
     async ping(): Promise<boolean> {
         try {
-            if (!this.isConnected || !this.client) {
+            if (!this.isMongoConfigured()) {
+                return false;
+            }
+            await this.connect();
+            if (!this.client) {
                 return false;
             }
             await this.client.db(getMongoDbName()).command({ ping: 1 });

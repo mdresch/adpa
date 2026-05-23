@@ -51,7 +51,6 @@ async function handleStats(_req: Request, res: Response) {
             });
         }
 
-        await mongoVectorStore.connect();
         const stats = await mongoVectorStore.getStats();
         return res.json(stats);
     } catch (error) {
