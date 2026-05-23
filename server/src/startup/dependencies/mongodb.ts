@@ -12,7 +12,7 @@ export const mongodbDependency: Dependency = {
     try {
       if (!process.env.MONGODB_URI) {
         logger.warn("MongoDB (Optional) not configured, skipping initialization")
-        updateDependencyHealth("MongoDB Atlas", "healthy", 0, "Not configured")
+        updateDependencyHealth("MongoDB Atlas", "unhealthy", 0, "Not configured (optional)")
         return
       }
       await mongoVectorStore.connect()
