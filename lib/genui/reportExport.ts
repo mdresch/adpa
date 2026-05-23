@@ -44,6 +44,12 @@ export function downloadTextFile(content: string, filename: string, mime = "text
   URL.revokeObjectURL(url);
 }
 
+/** Safe teardown for PDF print iframe (avoids throws if body is gone during navigation). */
+function removePrintIframe(iframe: HTMLIFrameElement): void {
+  if (!iframe.parentNode || typeof document === "undefined" || !document.body) return;
+  document.body.removeChild(iframe);
+}
+
 const EXPORT_PRINT_STYLES = `
   @page { size: A4; margin: 16mm; }
   body {
@@ -207,6 +213,10 @@ export async function exportGenuiReportPdf(title: string): Promise<GenuiReportEx
     return { ok: false, reason: "Render a report first (use a starter or Render document)." };
   }
 
+  if (typeof document === "undefined" || !document.body) {
+    return { ok: false, reason: "Export is not available in this environment." };
+  }
+
   const iframe = document.createElement("iframe");
   iframe.style.position = "fixed";
   iframe.style.width = "0";
@@ -217,7 +227,7 @@ export async function exportGenuiReportPdf(title: string): Promise<GenuiReportEx
 
   const doc = iframe.contentWindow?.document;
   if (!doc) {
-    document.body.removeChild(iframe);
+    removePrintIframe(iframe);
     return { ok: false, reason: "Could not open print preview." };
   }
 
@@ -236,7 +246,7 @@ export async function exportGenuiReportPdf(title: string): Promise<GenuiReportEx
     return { ok: false, reason: "Print dialog failed." };
   } finally {
     setTimeout(() => {
-      if (iframe.parentNode) document.body.removeChild(iframe);
+      removePrintIframe(iframe);
     }, 500);
   }
 }
