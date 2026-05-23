@@ -86,6 +86,9 @@ async function seedDatabase() {
         "templates.create": true,
         "templates.update": true,
         "ai.generate": true,
+        "integrations.view": true,
+        "integrations.read": true,
+        "integrations.sync": true,
       })
     ])
 
