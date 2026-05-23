@@ -1,8 +1,10 @@
 
+import { randomUUID } from 'node:crypto';
 import { MongoClient, Db, Collection } from 'mongodb';
 import { logger } from '../utils/logger';
 import { RAGDocument, DocumentChunk } from '../types/rag';
 import { buildMongoChunkDocument, type MongoChunkWriteInput } from '../lib/mongoChunkSchema';
+import { toMongoEqualityId, toMongoIndexName } from '../lib/mongoQuerySafety';
 
 const DOCUMENTS_COLLECTION = 'documents';
 const CHUNKS_COLLECTION = 'chunks';
@@ -126,38 +128,41 @@ export class MongoVectorStore {
     ): Promise<string> {
         this.ensureConnected();
 
+        const documentId = toMongoEqualityId(document.id, 'documentId');
         const now = new Date();
-        const existing = await this.documentsCollection.findOne({ id: document.id });
+        const existing = await this.documentsCollection.findOne({ id: documentId });
         const docWithTimestamps: RAGDocument = {
             ...document,
+            id: documentId,
             createdAt: existing?.createdAt ?? now,
             updatedAt: now,
         };
 
         await this.documentsCollection.replaceOne(
-            { id: document.id },
+            { id: documentId },
             docWithTimestamps as RAGDocument,
             { upsert: true }
         );
 
         logger.info('RAG Document upserted', {
-            documentId: document.id,
+            documentId,
             title: document.title,
         });
 
-        return document.id;
+        return documentId;
     }
 
     /** @deprecated Prefer upsertDocument */
     async createDocument(document: Omit<RAGDocument, 'createdAt' | 'updatedAt'> & { id?: string }): Promise<string> {
-        const id = document.id || this.generateId();
+        const id = document.id ? toMongoEqualityId(document.id, 'documentId') : this.generateId();
         await this.upsertDocument({ ...document, id } as Omit<RAGDocument, 'createdAt' | 'updatedAt'> & { id: string });
         return id;
     }
 
     async getDocument(id: string): Promise<RAGDocument | null> {
         this.ensureConnected();
-        return await this.documentsCollection.findOne({ id }) as RAGDocument | null;
+        const documentId = toMongoEqualityId(id, 'documentId');
+        return await this.documentsCollection.findOne({ id: documentId }) as RAGDocument | null;
     }
 
     async createChunks(chunks: MongoChunkWriteInput[]): Promise<string[]> {
@@ -177,9 +182,10 @@ export class MongoVectorStore {
 
     async getChunks(documentId: string): Promise<DocumentChunk[]> {
         this.ensureConnected();
+        const safeDocumentId = toMongoEqualityId(documentId, 'documentId');
         return await this.chunksCollection
             .find({
-                $or: [{ documentId }, { document_id: documentId }],
+                $or: [{ documentId: safeDocumentId }, { document_id: safeDocumentId }],
             })
             .toArray() as DocumentChunk[];
     }
@@ -193,17 +199,18 @@ export class MongoVectorStore {
     ): Promise<Array<DocumentChunk & { score?: number }>> {
         this.ensureConnected();
 
+        const safeIndexName = toMongoIndexName(indexName);
         const pipeline: Record<string, unknown>[] = [];
 
         logger.info('Preparing vector search', {
             queryVectorDimensions: queryVector.length,
             limit,
-            indexName,
+            indexName: safeIndexName,
             numCandidates: numCandidates || limit * 20,
         });
 
         const vectorSearchStage: Record<string, unknown> = {
-            index: indexName,
+            index: safeIndexName,
             path: 'embedding',
             queryVector,
             numCandidates: numCandidates || limit * 20,
@@ -234,7 +241,7 @@ export class MongoVectorStore {
         } catch (error) {
             logger.error('Vector search failed', {
                 error: (error as Error).message,
-                indexName,
+                indexName: safeIndexName,
             });
             throw error;
         }
@@ -276,8 +283,12 @@ export class MongoVectorStore {
                 listSearchIndexes: () => { toArray: () => Promise<Array<Record<string, unknown>>> };
             }).listSearchIndexes;
             const indexes = await listSearchIndexes.call(this.chunksCollection).toArray();
-            const indexName = process.env.MONGODB_VECTOR_INDEX || 'vector_search_index';
-            const vectorIndex = indexes.find((idx) => idx.name === indexName);
+            const indexName = toMongoIndexName(
+                process.env.MONGODB_VECTOR_INDEX || 'vector_search_index'
+            );
+            const vectorIndex = indexes.find(
+                (idx) => typeof idx.name === 'string' && idx.name === indexName
+            );
             if (vectorIndex) {
                 indexStatus = vectorIndex.queryable === true ? 'active' : 'building';
             } else {
@@ -317,7 +328,7 @@ export class MongoVectorStore {
     }
 
     private generateId(): string {
-        return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 11)}`;
+        return randomUUID();
     }
 }
 
