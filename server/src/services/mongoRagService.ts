@@ -25,7 +25,11 @@ export async function searchMongoChunks(
     projectId?: string
 ): Promise<MongoSearchMatch[]> {
     if (!mongoVectorStore.isMongoConfigured()) {
-        throw new Error('MongoDB is not configured');
+        throw new Error('MongoDB is not configured (set MONGODB_URI on the API server)');
+    }
+
+    if (!process.env.VOYAGE_API_KEY) {
+        throw new Error('Semantic search requires VOYAGE_API_KEY on the API server');
     }
 
     await mongoVectorStore.connect();
@@ -42,6 +46,23 @@ export async function searchMongoChunks(
         topK,
         filters
     );
+
+    if (results.length === 0) {
+        const stats = await mongoVectorStore.getStats();
+        if (stats.chunks === 0) {
+            throw new Error(
+                'No vectors in MongoDB yet. Enable the integration on Overview, run Sync, then refresh stats.'
+            );
+        }
+        if (stats.embeddedChunks === 0) {
+            const mode = (process.env.MONGODB_EMBEDDING_MODE || 'atlas').toLowerCase();
+            throw new Error(
+                mode === 'server'
+                    ? 'Chunks exist but none have embeddings. Re-run sync with MONGODB_EMBEDDING_MODE=server.'
+                    : 'Chunks exist but none are embedded yet. Wait for Atlas triggers or switch to MONGODB_EMBEDDING_MODE=server.'
+            );
+        }
+    }
 
     return results.map((row) => ({
         content: row.content,

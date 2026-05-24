@@ -379,8 +379,10 @@ export default function Integrations() {
     try {
       setLoading(true)
       console.log("Loading integrations from backend...")
-      const response: any = await apiClient.getIntegrations()
-      const backendIntegrations = Array.isArray(response) ? response : response.integrations || [] // Handle both formats
+      const response: any = await apiClient.get("/integrations?limit=100")
+      const backendIntegrations = Array.isArray(response)
+        ? response
+        : response.integrations || response.data?.integrations || []
       console.log("Backend integrations:", backendIntegrations)
 
       // Handle case where API returns non-array data
@@ -1187,7 +1189,10 @@ export default function Integrations() {
         // Use the dedicated Notion sync function with project selection
         await handleNotionSync()
       } else if (integration.type === "mongodb") {
-        // Open MongoDB Sync Dialog
+        if (integration.id === "mongodb-default") {
+          toast.error("Enable MongoDB with the toggle first, then run Sync.")
+          return
+        }
         setMongoIntegrationToSync(integration.id)
         setMongoSyncDialogOpen(true)
       } else {

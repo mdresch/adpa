@@ -1,7 +1,7 @@
 import express, { Request, Response } from 'express';
 import Joi from 'joi';
 import { pool } from '../database/connection';
-import { authenticateToken, requirePermission } from '../middleware/auth';
+import { authenticateToken, requireIntegrationReadAccess, requirePermission } from '../middleware/auth';
 import { validate } from '../middleware/validation';
 import { childLogger } from '../utils/logger';
 import { mongoVectorStore } from '../services/mongoVectorStore';
@@ -37,10 +37,40 @@ async function getIntegrationType(integrationId: string): Promise<string | null>
     return result.rows[0].type as string;
 }
 
+function buildMongoCapabilityFlags(stats: {
+    configured: boolean;
+    embeddedChunks: number;
+    indexStatus: string;
+}) {
+    const voyageConfigured = Boolean(process.env.VOYAGE_API_KEY);
+    const embeddingMode = (process.env.MONGODB_EMBEDDING_MODE || 'atlas').toLowerCase();
+    const searchReady =
+        stats.configured &&
+        voyageConfigured &&
+        stats.embeddedChunks > 0 &&
+        (stats.indexStatus === 'active' || stats.indexStatus === 'building');
+
+    let setupHint: string | undefined;
+    if (!stats.configured) {
+        setupHint = 'Set MONGODB_URI on the API server, then restart the backend.';
+    } else if (!voyageConfigured) {
+        setupHint = 'Set VOYAGE_API_KEY on the API server for semantic search embeddings.';
+    } else if (stats.embeddedChunks === 0) {
+        setupHint =
+            embeddingMode === 'server'
+                ? 'Run a MongoDB sync from the Integrations overview (embeddings are generated during sync).'
+                : 'Run a MongoDB sync, then wait for Atlas to finish embedding chunks (MONGODB_EMBEDDING_MODE=atlas).';
+    } else if (stats.indexStatus === 'missing') {
+        setupHint = 'Create the Atlas Vector Search index on the chunks collection.';
+    }
+
+    return { voyageConfigured, embeddingMode, searchReady, setupHint };
+}
+
 async function handleStats(_req: Request, res: Response) {
     try {
         if (!mongoVectorStore.isMongoConfigured()) {
-            return res.json({
+            const payload = {
                 documents: 0,
                 chunks: 0,
                 embeddedChunks: 0,
@@ -48,11 +78,18 @@ async function handleStats(_req: Request, res: Response) {
                 indexStatus: 'not_configured',
                 database: process.env.MONGODB_DB_NAME || 'adpa_rag',
                 configured: false,
+            };
+            return res.json({
+                ...payload,
+                ...buildMongoCapabilityFlags(payload),
             });
         }
 
         const stats = await mongoVectorStore.getStats();
-        return res.json(stats);
+        return res.json({
+            ...stats,
+            ...buildMongoCapabilityFlags(stats),
+        });
     } catch (error) {
         log.error('MongoDB stats failed', error);
         return res.status(503).json({
@@ -65,21 +102,21 @@ async function handleStats(_req: Request, res: Response) {
 router.get(
     '/mongodb/stats',
     authenticateToken,
-    requirePermission('integrations.read'),
+    requireIntegrationReadAccess,
     handleStats
 );
 
 router.get(
     '/:integrationId/mongodb/stats',
     authenticateToken,
-    requirePermission('integrations.read'),
+    requireIntegrationReadAccess,
     handleStats
 );
 
 router.get(
     '/:integrationId/pinecone/stats',
     authenticateToken,
-    requirePermission('integrations.read'),
+    requireIntegrationReadAccess,
     async (_req: Request, res: Response) => {
         try {
             const { pineconeService } = await import('../services/pineconeService');
@@ -101,7 +138,7 @@ router.get(
 router.post(
     '/mongodb/search',
     authenticateToken,
-    requirePermission('integrations.read'),
+    requireIntegrationReadAccess,
     validate(searchSchema),
     async (req: Request, res: Response) => {
         try {
@@ -121,7 +158,7 @@ router.post(
 router.post(
     '/:integrationId/mongodb/search',
     authenticateToken,
-    requirePermission('integrations.read'),
+    requireIntegrationReadAccess,
     validate(searchSchema),
     async (req: Request, res: Response) => {
         try {
@@ -228,7 +265,7 @@ router.post(
 router.get(
     '/:integrationId/sync/status',
     authenticateToken,
-    requirePermission('integrations.read'),
+    requireIntegrationReadAccess,
     async (req: Request, res: Response) => {
         try {
             const { integrationId } = req.params;
