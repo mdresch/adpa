@@ -82,6 +82,7 @@ import templatesModuleRoutes from "./modules/templates/routes"
 import intelligenceModuleRoutes from "./modules/intelligence/routes"
 import integrationsModuleRoutes from "./modules/integrations/routes"
 import integrationPineconeRoutes from "./routes/integrationPineconeRoutes"
+import mongodbIntegrationRoutes from "./routes/mongodbIntegrationRoutes"
 import adobePdfRoutes from "./routes/adobe-pdf"
 import { createDocumentFormatRoutes } from "./routes/document-formats"
 import contextAiRoutes from "./routes/context-ai"
@@ -282,8 +283,9 @@ if (portfolioModuleRoutes && portfolioModuleRoutes[0]) {
 }
 if (templatesModuleRoutes && templatesModuleRoutes[0]) app.use("/api/templates", templatesModuleRoutes[0].router)
 if (intelligenceModuleRoutes && intelligenceModuleRoutes[0]) app.use("/api/analytics", intelligenceModuleRoutes[0].router)
-// Pinecone stats/search/sync — register before generic /:id CRUD
+// Vector integration routes — before generic /:id CRUD (integrations module)
 app.use("/api/integrations", integrationPineconeRoutes)
+app.use("/api/integrations", mongodbIntegrationRoutes)
 if (integrationsModuleRoutes && integrationsModuleRoutes[0]) app.use("/api/integrations", integrationsModuleRoutes[0].router)
 if (documentModuleRoutes && documentModuleRoutes[0]) app.use("/api/documents", documentModuleRoutes[0].router)
 if (analysisModuleRoutes && analysisModuleRoutes[0]) {

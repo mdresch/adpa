@@ -4,7 +4,7 @@
  * if those ever broaden to wildcards.
  */
 
-import { Router, Request, Response } from "express"
+import { Router, Request, Response, NextFunction } from "express"
 import { authenticateToken, requirePermission } from "../middleware/auth"
 import { pool } from "../database/connection"
 import { logger } from "../utils/logger"
@@ -203,7 +203,7 @@ router.post(
   "/:integrationId/sync",
   authenticateToken,
   requirePermission("integrations.sync"),
-  async (req: Request, res: Response) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { integrationId } = req.params
       const { projectId } = (req.body as { projectId?: string }) ?? {}
@@ -214,9 +214,7 @@ router.post(
       }
 
       if (integration.type !== "pinecone") {
-        return res.status(400).json({
-          error: `Sync for integration type "${integration.type}" is not implemented on this endpoint`,
-        })
+        return next()
       }
 
       const service = resolvePineconeService(integration)
