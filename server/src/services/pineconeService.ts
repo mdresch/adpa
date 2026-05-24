@@ -1,5 +1,27 @@
-import { Pinecone, PineconeRecord } from '@pinecone-database/pinecone';
+import { Pinecone } from '@pinecone-database/pinecone';
 import { logger } from '../utils/logger';
+
+const INTEGRATED_SEARCH_NAMESPACES = ['projects', 'documents', 'entities'] as const;
+
+export function normalizePineconeHost(raw?: string | null): string | undefined {
+  if (!raw || typeof raw !== 'string') return undefined;
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+  return trimmed.replace(/^https?:\/\//i, '').replace(/\/$/, '');
+}
+
+function mapSearchHit(hit: {
+  _id?: string;
+  _score?: number;
+  fields?: Record<string, unknown>;
+}) {
+  const metadata = (hit.fields ?? {}) as Record<string, unknown>;
+  return {
+    id: hit._id,
+    score: hit._score ?? 0,
+    metadata,
+  };
+}
 
 interface PineconeConfig {
   apiKey: string;
@@ -87,10 +109,10 @@ export class PineconeService {
 
     this.indexName = config?.indexName || process.env.PINECONE_INDEX_NAME || 'adpa-rag-index';
 
-    const normalizedConfigHost = typeof config?.indexHost === 'string' ? config.indexHost.trim() : undefined;
-    const normalizedEnvHost = typeof process.env.PINECONE_INDEX_HOST === 'string'
-      ? process.env.PINECONE_INDEX_HOST.trim()
-      : undefined;
+    const normalizedConfigHost = normalizePineconeHost(
+      typeof config?.indexHost === 'string' ? config.indexHost : undefined
+    );
+    const normalizedEnvHost = normalizePineconeHost(process.env.PINECONE_INDEX_HOST);
 
     // If config is provided and omits host, prefer auto-discovery instead of falling back to env host.
     const host = config
@@ -264,17 +286,27 @@ export class PineconeService {
       logger.info('Starting entity upsert with integrated embedding', { entitiesCount: entities.length });
 
       // Use integrated embedding with correct record format from documentation
-      const records = entities.map(entity => ({
-        _id: `entity_${entity.id || entity.name}`, // Use _id as required by upsert_records
-        text: `${entity.name} ${entity.type || entity.entity_type || ''} ${entity.description || ''}`.trim(), // Combined text for embedding
-        type: 'entity',
-        name: entity.name,
-        entity_type: entity.type || entity.entity_type || 'unknown',
-        confidence: entity.confidence || 0.85,
-        document_id: entity.document_id || '',
-        project_id: entity.project_id || '',
-        created_at: entity.created_at || new Date().toISOString()
-      })).filter(r => r.text.length > 0);
+      const { entityRowToPineconeRecord } = await import('./pineconeEntitySync');
+      const records = entities
+        .map((entity) => {
+          if (entity.entity_type && entity.project_id) {
+            return entityRowToPineconeRecord(entity);
+          }
+          return {
+            _id: `entity_${entity.entity_type || 'unknown'}_${entity.id || entity.name}`,
+            text: `${entity.name} ${entity.type || entity.entity_type || ''} ${entity.description || ''} ${entity.source_document_title || ''}`.trim(),
+            type: 'entity',
+            name: entity.name,
+            entity_type: entity.type || entity.entity_type || 'unknown',
+            confidence: entity.confidence || 0.85,
+            document_id: entity.document_id || entity.source_document_id || '',
+            source_document_id: entity.source_document_id || entity.document_id || '',
+            source_document_title: entity.source_document_title || '',
+            project_id: entity.project_id || '',
+            created_at: entity.created_at || new Date().toISOString(),
+          };
+        })
+        .filter(r => r.text.length > 0);
 
       if (records.length === 0) {
         logger.warn('Skipping entities upsert: No records with valid text content');
@@ -404,43 +436,124 @@ export class PineconeService {
     }
   }
 
+  private async searchIntegratedNamespace(
+    namespace: string,
+    query: string,
+    topK: number,
+    filter?: Record<string, unknown>
+  ): Promise<any[]> {
+    const indexTarget = this.index.namespace(namespace);
+    const response = await indexTarget.searchRecords({
+      query: {
+        topK,
+        inputs: { text: query },
+        ...(filter ? { filter } : {}),
+      },
+      fields: [
+        'type',
+        'name',
+        'title',
+        'text',
+        'project_id',
+        'description',
+        'entity_type',
+        'source_document_id',
+        'source_document_title',
+        'document_id',
+        'framework',
+        'status',
+      ],
+    });
+
+    return (response.result?.hits ?? []).map(mapSearchHit);
+  }
+
+  private async searchVectorNamespace(
+    namespace: string,
+    query: string,
+    topK: number,
+    filter?: Record<string, unknown>
+  ): Promise<any[]> {
+    const queryVector = await this.generateQueryEmbedding(query.toLowerCase());
+    const searchRequest: Record<string, unknown> = {
+      vector: queryVector,
+      topK,
+      includeMetadata: true,
+    };
+
+    if (filter) {
+      searchRequest.filter = filter;
+    }
+
+    const results = await this.index.namespace(namespace).query(searchRequest);
+    return results.matches || [];
+  }
+
   /**
-   * Search for similar items in Pinecone
+   * Search for similar items in Pinecone (integrated embedding index + legacy vector namespaces)
    */
   async search(query: string, topK: number = 10, filter?: any, namespace?: string): Promise<any[]> {
-    if (!query || query.trim().length === 0) {
+    const trimmedQuery = query?.trim();
+    if (!trimmedQuery) {
       logger.warn('Search query is empty, skipping');
       return [];
     }
+
     try {
-      const queryVector = await this.generateQueryEmbedding(query.toLowerCase());
+      if (namespace) {
+        if (namespace === 'chunks') {
+          const matches = await this.searchVectorNamespace(namespace, trimmedQuery, topK, filter);
+          logger.info('Pinecone vector search completed', {
+            query: trimmedQuery,
+            topK,
+            namespace,
+            resultsCount: matches.length,
+          });
+          return matches;
+        }
 
-      const searchRequest: any = {
-        vector: queryVector,
-        topK,
-        includeMetadata: true
-      };
-
-      if (filter) {
-        searchRequest.filter = filter;
+        const matches = await this.searchIntegratedNamespace(namespace, trimmedQuery, topK, filter);
+        logger.info('Pinecone integrated search completed', {
+          query: trimmedQuery,
+          topK,
+          namespace,
+          resultsCount: matches.length,
+        });
+        return matches;
       }
 
-      const indexTarget = namespace ? this.index.namespace(namespace) : this.index;
-      const results = await indexTarget.query(searchRequest);
+      const perNamespaceLimit = Math.max(topK, 5);
+      const namespaceResults = await Promise.all(
+        INTEGRATED_SEARCH_NAMESPACES.map(async (ns) => {
+          try {
+            return await this.searchIntegratedNamespace(ns, trimmedQuery, perNamespaceLimit, filter);
+          } catch (error) {
+            logger.warn('Pinecone namespace search skipped', {
+              namespace: ns,
+              error: (error as Error).message,
+            });
+            return [];
+          }
+        })
+      );
 
-      logger.info('Pinecone search completed', {
-        query,
+      const merged = namespaceResults
+        .flat()
+        .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+        .slice(0, topK);
+
+      logger.info('Pinecone multi-namespace search completed', {
+        query: trimmedQuery,
         topK,
-        namespace,
-        resultsCount: results.matches?.length || 0
+        resultsCount: merged.length,
       });
 
-      return results.matches || [];
+      return merged;
     } catch (error) {
       logger.error('Pinecone search failed', {
         error: (error as Error).message,
-        query,
-        namespace
+        query: trimmedQuery,
+        namespace,
       });
       return [];
     }
@@ -451,7 +564,7 @@ export class PineconeService {
    */
   async delete(ids: string[]): Promise<boolean> {
     try {
-      await this.index.deleteOne(ids);
+      await this.index.deleteMany({ ids });
       logger.info('Vectors deleted from Pinecone', { count: ids.length });
       return true;
     } catch (error) {
@@ -500,6 +613,7 @@ export class PineconeService {
     const stats = {
       projects: { total: 0, synced: 0, failed: 0 },
       documents: { total: 0, synced: 0, failed: 0 },
+      entities: { total: 0, synced: 0, failed: 0 },
       chunks: { total: 0, synced: 0, failed: 0 }
     };
 
@@ -643,7 +757,50 @@ export class PineconeService {
         }
       }
 
-      // 3. Sync chunks from MongoDB (if available)
+      // 3. Sync extracted entities from PostgreSQL domain tables
+      logger.info('Starting Pinecone sync - Entities', { projectId });
+
+      const { fetchEntitiesForPinecone, entityRowToPineconeRecord } = await import('./pineconeEntitySync');
+      const entityRows = await fetchEntitiesForPinecone(pgPool, projectId);
+      stats.entities.total = entityRows.length;
+
+      if (onProgress) {
+        await onProgress({
+          stage: 'entities',
+          current: 0,
+          total: stats.entities.total,
+          message: `Syncing ${stats.entities.total} entities...`,
+        });
+      }
+
+      if (entityRows.length > 0) {
+        const batchSize = 50;
+        for (let i = 0; i < entityRows.length; i += batchSize) {
+          const batch = entityRows.slice(i, i + batchSize);
+          const records = batch.map(entityRowToPineconeRecord).filter((r) => r.text.length > 0);
+          if (records.length === 0) continue;
+
+          try {
+            const result = await this.index.namespace('entities').upsertRecords({ records });
+            const synced = result?.upsertedCount || records.length;
+            stats.entities.synced += synced;
+
+            if (onProgress) {
+              await onProgress({
+                stage: 'entities',
+                current: stats.entities.synced,
+                total: stats.entities.total,
+                message: `Synced ${stats.entities.synced}/${stats.entities.total} entities to namespace "entities"`,
+              });
+            }
+          } catch (error) {
+            stats.entities.failed += records.length;
+            logger.error('Failed to sync entity batch', { error: (error as Error).message });
+          }
+        }
+      }
+
+      // 4. Sync chunks from MongoDB (if available)
       if (process.env.MONGODB_URI) {
         try {
           logger.info('Starting Pinecone sync - Chunks', { projectId });
@@ -715,7 +872,8 @@ export class PineconeService {
         }
       }
 
-      const totalSynced = stats.projects.synced + stats.documents.synced + stats.chunks.synced;
+      const totalSynced =
+        stats.projects.synced + stats.documents.synced + stats.entities.synced + stats.chunks.synced;
 
       logger.info('Pinecone sync completed', { stats, totalSynced });
 
@@ -725,6 +883,7 @@ export class PineconeService {
           synced_items: totalSynced,
           projects: stats.projects,
           documents: stats.documents,
+          entities: stats.entities,
           chunks: stats.chunks,
           last_sync: new Date().toISOString()
         }

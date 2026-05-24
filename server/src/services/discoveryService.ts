@@ -32,7 +32,7 @@ export class DiscoveryService {
         const internalResults = await pineconeService.search(query, limit)
         results.push(...internalResults.map((r: any) => ({
           title: r.metadata?.title || r.metadata?.name || 'Internal Document',
-          content: r.metadata?.content || r.metadata?.description || '',
+          content: r.metadata?.text || r.metadata?.content || r.metadata?.description || '',
           source: 'internal' as const,
           score: r.score,
           metadata: r.metadata

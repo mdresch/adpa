@@ -353,7 +353,13 @@ export function PineconeDashboard({ integrationId }: PineconeDashboardProps) {
                         <span className="font-semibold text-blue-600">Score: {(match.score * 100).toFixed(1)}%</span>
                         <Badge variant="outline" className="text-[10px]">{match.metadata?.type || 'unknown'}</Badge>
                       </div>
-                      <p className="font-medium">{match.metadata?.title || match.metadata?.name || match.id}</p>
+                      <p className="font-medium">
+                        {match.metadata?.title ||
+                          match.metadata?.name ||
+                          (typeof match.metadata?.text === 'string'
+                            ? `${match.metadata.text.slice(0, 80)}${match.metadata.text.length > 80 ? '…' : ''}`
+                            : match.id)}
+                      </p>
                       {match.metadata?.text && (
                         <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{match.metadata.text}</p>
                       )}

@@ -647,7 +647,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
       setShowEntityDialog(true)
 
       const { getApiUrl } = await import('@/lib/api-url')
-      const apiUrl = getApiUrl(`/project-data-extraction/entities/${projectId}/${entityType}?limit=100`)
+      const apiUrl = getApiUrl(`/project-data-extraction/entities/${projectId}/${entityType}?limit=500`)
       console.log('[ENTITY-DETAILS] Fetching:', apiUrl)
 
       const response = await fetch(apiUrl, {
