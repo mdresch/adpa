@@ -22,6 +22,7 @@ import { Badge } from "@/components/ui/badge"
 import { Loader2, CheckCircle2, XCircle } from "lucide-react"
 import { Database } from "@/components/ui/icons-shim"
 import { toast } from "sonner"
+import { apiClient } from "@/lib/api"
 
 interface Project {
     id: string
@@ -96,7 +97,7 @@ export function MongoDBSyncDialog({
                             ...prev,
                             ...data,
                             // Map DB status to UI status if needed
-                            status: data.status === 'connected' ? 'idle' : data.status
+                            status: data.status ?? 'idle',
                         }))
 
                         if (data.status === 'completed' || data.status === 'error') {
@@ -121,7 +122,12 @@ export function MongoDBSyncDialog({
     }, [polling, integrationId, onSyncComplete])
 
     const handleStartSync = async () => {
-        if (!integrationId || !projectId) return
+        if (!integrationId || integrationId.endsWith("-default") || !projectId) {
+            if (integrationId?.endsWith("-default")) {
+                toast.error("Enable MongoDB on the Overview tab before syncing.")
+            }
+            return
+        }
 
         try {
             setSyncStatus({
@@ -133,23 +139,13 @@ export function MongoDBSyncDialog({
             })
             setPolling(true)
 
-            const token = localStorage.getItem('auth_token') || localStorage.getItem('token')
             const bodyProjectId = projectId === "all" ? null : projectId
 
-            const response = await fetch(`/api/integrations/${integrationId}/sync`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${token}`
-                },
-                body: JSON.stringify({ projectId: bodyProjectId })
-            })
+            const data = await apiClient.post<{ success: boolean; message?: string }>(
+                `/integrations/${integrationId}/sync`,
+                { projectId: bodyProjectId }
+            )
 
-            if (!response.ok) {
-                throw new Error("Failed to start sync")
-            }
-
-            const data = await response.json()
             if (!data.success) {
                 throw new Error(data.message || "Sync failed to start")
             }
@@ -157,7 +153,8 @@ export function MongoDBSyncDialog({
             toast.success("Sync started")
         } catch (error) {
             console.error("Sync start error:", error)
-            toast.error("Failed to start sync")
+            const msg = error instanceof Error ? error.message : "Failed to start sync"
+            toast.error(msg)
             setPolling(false)
             setSyncStatus(prev => ({ ...prev, status: 'error' }))
         }

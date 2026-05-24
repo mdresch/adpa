@@ -191,7 +191,7 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
       id: user.id,
       email: user.email,
       role: user.role,
-      permissions: user.permissions,
+      permissions: normalizeUserPermissions(user.permissions),
     }
 
     // Update last login (best-effort; log but don't fail auth if update errors)
@@ -226,6 +226,20 @@ export const requireRole = (roles: string[]) => {
   }
 }
 
+function normalizeUserPermissions(permissions: unknown): Record<string, boolean> {
+  if (!permissions) {
+    return {}
+  }
+  if (typeof permissions === 'string') {
+    try {
+      return JSON.parse(permissions) as Record<string, boolean>
+    } catch {
+      return {}
+    }
+  }
+  return permissions as Record<string, boolean>
+}
+
 export const requirePermission = (permission: string) => {
   return (req: AuthRequest, res: Response, next: NextFunction) => {
     if (!req.user) {
@@ -238,13 +252,38 @@ export const requirePermission = (permission: string) => {
       return next()
     }
 
-    const userPermissions = req.user.permissions || {}
+    const userPermissions = normalizeUserPermissions(req.user.permissions)
     if (!userPermissions[permission]) {
       return res.status(403).json({ error: `Permission '${permission}' required` })
     }
 
     next()
   }
+}
+
+/** Read-only integration dashboards (MongoDB/Pinecone stats, search, sync status). */
+export const requireIntegrationReadAccess = (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  if (!req.user) {
+    return res.status(401).json({ error: "Authentication required" })
+  }
+
+  const userRole = req.user.role?.toLowerCase()
+  if (userRole === 'super_admin' || userRole === 'admin') {
+    return next()
+  }
+
+  const userPermissions = normalizeUserPermissions(req.user.permissions)
+  if (userPermissions['integrations.read'] || userPermissions['integrations.view']) {
+    return next()
+  }
+
+  return res.status(403).json({
+    error: "Permission 'integrations.read' or 'integrations.view' required",
+  })
 }
 
 // Backwards-compatible aliases used across the codebase and tests

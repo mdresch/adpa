@@ -1,7 +1,16 @@
 
+import { randomUUID } from 'node:crypto';
 import { MongoClient, Db, Collection } from 'mongodb';
 import { logger } from '../utils/logger';
 import { RAGDocument, DocumentChunk } from '../types/rag';
+import { buildMongoChunkDocument, type MongoChunkWriteInput } from '../lib/mongoChunkSchema';
+import {
+    findOneByRagDocumentId,
+    ragChunkByDocumentIdFilter,
+    ragDocumentIdReplaceFilter,
+    toMongoEqualityId,
+    toMongoIndexName,
+} from '../lib/mongoQuerySafety';
 
 const DOCUMENTS_COLLECTION = 'documents';
 const CHUNKS_COLLECTION = 'chunks';
@@ -14,18 +23,42 @@ function getMongoUri(): string | undefined {
 function getMongoDbName(): string {
     return process.env.MONGODB_DB_NAME || 'adpa_rag';
 }
+
 export class MongoVectorStore {
     private client: MongoClient | null = null;
     private _db!: Db;
     private isConnected: boolean = false;
+    /** Single in-flight connect; prevents concurrent callers from opening duplicate clients. */
+    private connectPromise: Promise<void> | null = null;
 
     get db(): Db {
         this.ensureConnected();
         return this._db;
     }
 
+    /**
+     * Establishes (or reuses) the MongoDB client. Safe to call concurrently — all callers
+     * await the same connection attempt.
+     */
     async connect(): Promise<void> {
-        if (this.isConnected) return;
+        if (this.isConnected) {
+            return;
+        }
+
+        if (!this.connectPromise) {
+            this.connectPromise = this.performConnect().finally(() => {
+                this.connectPromise = null;
+            });
+        }
+
+        await this.connectPromise;
+
+        if (!this.isConnected) {
+            throw new Error('MongoDB connection failed');
+        }
+    }
+
+    private async performConnect(): Promise<void> {
         const uri = getMongoUri();
         const dbName = getMongoDbName();
         if (!uri) {
@@ -33,44 +66,59 @@ export class MongoVectorStore {
         }
 
         try {
-            this.client = new MongoClient(uri);
-            await this.client.connect();
-            this._db = this.client.db(dbName);
+            const client = new MongoClient(uri);
+            await client.connect();
+            this.client = client;
+            this._db = client.db(dbName);
             this.isConnected = true;
 
             logger.info('Connected to MongoDB Atlas for Vector Store', {
-                database: dbName
+                database: dbName,
             });
         } catch (error) {
+            this.client = null;
+            this.isConnected = false;
             logger.error('Failed to connect to MongoDB Atlas', {
-                error: (error as Error).message
+                error: (error as Error).message,
             });
             throw error;
         }
     }
 
     async disconnect(): Promise<void> {
-        if (!this.client) return;
+        this.connectPromise = null;
+        if (!this.client) {
+            this.isConnected = false;
+            return;
+        }
         try {
             await this.client.close();
+            this.client = null;
             this.isConnected = false;
             logger.info('Disconnected from MongoDB Atlas');
         } catch (error) {
             logger.error('Failed to disconnect from MongoDB Atlas', {
-                error: (error as Error).message
+                error: (error as Error).message,
             });
             throw error;
         }
     }
 
+    isMongoConfigured(): boolean {
+        return Boolean(getMongoUri());
+    }
+
+    /** True when a client is connected and ready for operations. */
+    isConnectionReady(): boolean {
+        return this.isConnected && this.client !== null;
+    }
+
     private ensureConnected(): void {
-        if (!this.isConnected) {
-            // Auto-connect attempt could go here, but for now throw
+        if (!this.isConnectionReady()) {
             throw new Error('Database not connected. Call connect() first.');
         }
     }
 
-    // Collections
     get documentsCollection(): Collection<RAGDocument> {
         this.ensureConnected();
         return this._db.collection(DOCUMENTS_COLLECTION);
@@ -81,82 +129,94 @@ export class MongoVectorStore {
         return this._db.collection(CHUNKS_COLLECTION);
     }
 
-    // Document Operations
-    async createDocument(document: Omit<RAGDocument, 'createdAt' | 'updatedAt'> & { id?: string }): Promise<string> {
+    async upsertDocument(
+        document: Omit<RAGDocument, 'createdAt' | 'updatedAt'> & { id: string }
+    ): Promise<string> {
         this.ensureConnected();
 
+        const { filter: idFilter, id: documentId } = ragDocumentIdReplaceFilter(document.id);
         const now = new Date();
+        const existing = await findOneByRagDocumentId(this.documentsCollection, document.id);
         const docWithTimestamps: RAGDocument = {
             ...document,
-            id: document.id || this.generateId(),
-            createdAt: now,
-            updatedAt: now
+            id: documentId,
+            createdAt: existing?.createdAt ?? now,
+            updatedAt: now,
         };
 
-        await this.documentsCollection.insertOne(docWithTimestamps as any);
+        await this.documentsCollection.replaceOne(
+            idFilter,
+            docWithTimestamps as RAGDocument,
+            { upsert: true }
+        );
 
-        logger.info('RAG Document created', {
-            documentId: docWithTimestamps.id,
-            title: document.title
+        logger.info('RAG Document upserted', {
+            documentId,
+            title: document.title,
         });
 
-        return docWithTimestamps.id;
+        return documentId;
+    }
+
+    /** @deprecated Prefer upsertDocument */
+    async createDocument(document: Omit<RAGDocument, 'createdAt' | 'updatedAt'> & { id?: string }): Promise<string> {
+        const id = document.id ? toMongoEqualityId(document.id, 'documentId') : this.generateId();
+        await this.upsertDocument({ ...document, id } as Omit<RAGDocument, 'createdAt' | 'updatedAt'> & { id: string });
+        return id;
     }
 
     async getDocument(id: string): Promise<RAGDocument | null> {
         this.ensureConnected();
-        return await this.documentsCollection.findOne({ id }) as RAGDocument | null;
+        return (await findOneByRagDocumentId(this.documentsCollection, id)) as RAGDocument | null;
     }
 
-    // Chunk Operations
-    async createChunks(chunks: Omit<DocumentChunk, 'id' | 'createdAt'>[]): Promise<string[]> {
+    async createChunks(chunks: MongoChunkWriteInput[]): Promise<string[]> {
         this.ensureConnected();
 
-        const now = new Date();
-        const chunksWithTimestamps = chunks.map(chunk => ({
-            ...chunk,
-            id: this.generateId(),
-            createdAt: now
-        }));
-
-        if (chunksWithTimestamps.length > 0) {
-            const result = await this.chunksCollection.insertMany(chunksWithTimestamps as any);
-            return Object.values(result.insertedIds).map(id => id.toString());
+        if (chunks.length === 0) {
+            return [];
         }
-        return [];
+
+        const chunksWithTimestamps = chunks.map((chunk) =>
+            buildMongoChunkDocument(chunk, this.generateId())
+        );
+
+        await this.chunksCollection.insertMany(chunksWithTimestamps as DocumentChunk[]);
+        return chunksWithTimestamps.map((c) => c.id);
     }
 
     async getChunks(documentId: string): Promise<DocumentChunk[]> {
         this.ensureConnected();
-        return await this.chunksCollection.find({ documentId }).toArray() as DocumentChunk[];
+        return (await this.chunksCollection
+            .find(ragChunkByDocumentIdFilter(documentId))
+            .toArray()) as DocumentChunk[];
     }
 
-    // Vector Search
     async vectorSearch(
         queryVector: number[],
         limit: number = 10,
-        filters?: any,
-        indexName: string = 'vector_search_index',
+        filters?: Record<string, unknown>,
+        indexName: string = process.env.MONGODB_VECTOR_INDEX || 'vector_search_index',
         numCandidates?: number
-    ): Promise<DocumentChunk[]> {
+    ): Promise<Array<DocumentChunk & { score?: number }>> {
         this.ensureConnected();
 
-        const pipeline: any[] = [];
+        const safeIndexName = toMongoIndexName(indexName);
+        const pipeline: Record<string, unknown>[] = [];
 
         logger.info('Preparing vector search', {
             queryVectorDimensions: queryVector.length,
             limit,
-            indexName,
-            numCandidates: numCandidates || limit * 20
+            indexName: safeIndexName,
+            numCandidates: numCandidates || limit * 20,
         });
 
-        // Build $vectorSearch stage
-        const vectorSearchStage: any = {
-            index: indexName,
+        const vectorSearchStage: Record<string, unknown> = {
+            index: safeIndexName,
             path: 'embedding',
-            queryVector: queryVector,
-            numCandidates: numCandidates || limit * 20, // Recommended to be 10-20x the limit
-            limit: limit
+            queryVector,
+            numCandidates: numCandidates || limit * 20,
+            limit,
         };
 
         if (filters && Object.keys(filters).length > 0) {
@@ -164,62 +224,80 @@ export class MongoVectorStore {
         }
 
         pipeline.push({ $vectorSearch: vectorSearchStage });
-
-        // Project fields
-        // Note: In MongoDB, you can't mix inclusion and exclusion (except for _id).
-        // Since we are including specific fields, 'embedding' will be excluded by default.
         pipeline.push({
             $project: {
                 content: 1,
                 documentId: 1,
+                document_id: 1,
                 metadata: 1,
+                project_id: 1,
                 createdAt: 1,
-                score: { $meta: 'vectorSearchScore' } // Standard score field for $vectorSearch
-            }
-        });
-
-        logger.info('Executing vector search', {
-            limit,
-            filterCount: filters ? Object.keys(filters).length : 0
+                score: { $meta: 'vectorSearchScore' },
+            },
         });
 
         try {
             const results = await this.chunksCollection.aggregate(pipeline).toArray();
             logger.info('Vector search completed', { resultCount: results.length });
-            return results as DocumentChunk[];
+            return results as Array<DocumentChunk & { score?: number }>;
         } catch (error) {
             logger.error('Vector search failed', {
                 error: (error as Error).message,
-                pipeline: JSON.stringify(pipeline)
+                indexName: safeIndexName,
             });
-            return [];
+            throw error;
         }
     }
 
-    async getStats(): Promise<any> {
-        this.ensureConnected();
+    async getStats(): Promise<{
+        documents: number;
+        chunks: number;
+        embeddedChunks: number;
+        embeddingPercentage: number;
+        indexStatus: string;
+        database: string;
+        configured: boolean;
+    }> {
+        if (!this.isMongoConfigured()) {
+            return {
+                documents: 0,
+                chunks: 0,
+                embeddedChunks: 0,
+                embeddingPercentage: 0,
+                indexStatus: 'not_configured',
+                database: getMongoDbName(),
+                configured: false,
+            };
+        }
+
+        await this.connect();
 
         const docCount = await this.documentsCollection.countDocuments();
         const chunkCount = await this.chunksCollection.countDocuments();
 
-        // Count chunks with embeddings (non-empty array)
         const embeddedChunkCount = await this.chunksCollection.countDocuments({
-            embedding: { $exists: true, $not: { $size: 0 } }
+            embedding: { $exists: true, $not: { $size: 0 } },
         });
 
-        // Try to check index health (simple check if it exists in listSearchIndexes)
         let indexStatus = 'unknown';
         try {
-            // listSearchIndexes is available in Atlas
-            const indexes = await (this.chunksCollection as any).listSearchIndexes().toArray();
-            const vectorIndex = indexes.find((idx: any) => idx.name === 'vector_search_index');
+            const listSearchIndexes = (this.chunksCollection as unknown as {
+                listSearchIndexes: () => { toArray: () => Promise<Array<Record<string, unknown>>> };
+            }).listSearchIndexes;
+            const indexes = await listSearchIndexes.call(this.chunksCollection).toArray();
+            const indexName = toMongoIndexName(
+                process.env.MONGODB_VECTOR_INDEX || 'vector_search_index'
+            );
+            const vectorIndex = indexes.find(
+                (idx) => typeof idx.name === 'string' && idx.name === indexName
+            );
             if (vectorIndex) {
-                indexStatus = vectorIndex.queryable ? 'active' : 'building';
+                indexStatus = vectorIndex.queryable === true ? 'active' : 'building';
             } else {
                 indexStatus = 'missing';
             }
         } catch (err) {
-            logger.warn('Failed to list search indexes (might not be Atlas or insufficient permissions)', { error: (err as Error).message });
+            logger.warn('Failed to list search indexes', { error: (err as Error).message });
             indexStatus = 'unavailable';
         }
 
@@ -229,14 +307,20 @@ export class MongoVectorStore {
             embeddedChunks: embeddedChunkCount,
             embeddingPercentage: chunkCount > 0 ? Math.round((embeddedChunkCount / chunkCount) * 100) : 0,
             indexStatus,
-            database: getMongoDbName()
+            database: getMongoDbName(),
+            configured: true,
         };
     }
 
     async ping(): Promise<boolean> {
         try {
-            this.ensureConnected();
-            if (!this.client) return false;
+            if (!this.isMongoConfigured()) {
+                return false;
+            }
+            await this.connect();
+            if (!this.client) {
+                return false;
+            }
             await this.client.db(getMongoDbName()).command({ ping: 1 });
             return true;
         } catch (error) {
@@ -246,7 +330,7 @@ export class MongoVectorStore {
     }
 
     private generateId(): string {
-        return Math.random().toString(36).substring(2) + Date.now().toString(36);
+        return randomUUID();
     }
 }
 

@@ -647,6 +647,26 @@ export async function searchDocuments(
   userId: string
 ): Promise<SearchResult[]> {
   try {
+    if (request.useSemanticSearch !== false) {
+      const { isMongoRagEnabled, searchDocumentsViaMongo } = await import('./mongoRagService')
+      if (isMongoRagEnabled()) {
+        try {
+          const mongoResults = await searchDocumentsViaMongo(
+            request.query,
+            userId,
+            request.limit || 20
+          )
+          if (mongoResults.length > 0) {
+            return mongoResults
+          }
+        } catch (mongoError) {
+          logger.warn('[searchDocuments] MongoDB vector search failed, using default retrieval', {
+            error: (mongoError as Error).message,
+          })
+        }
+      }
+    }
+
     // Use semantic search if enabled
     if (request.useSemanticSearch) {
       // Get user's projects for context

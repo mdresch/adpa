@@ -653,12 +653,15 @@ export class PineconeService {
           const db = mongoClient.db('adpa_rag');
           const chunksCollection = db.collection('chunks');
 
-          const chunkFilter: any = {
-            embedding: { $exists: true, $not: { $size: 0 } }
+          const chunkFilter: Record<string, unknown> = {
+            embedding: { $exists: true, $not: { $size: 0 } },
           };
 
           if (projectId) {
-            chunkFilter.project_id = projectId;
+            chunkFilter.$or = [
+              { project_id: projectId },
+              { 'metadata.projectId': projectId },
+            ];
           }
 
           const chunks = await chunksCollection.find(chunkFilter).limit(1000).toArray();
@@ -682,11 +685,14 @@ export class PineconeService {
                 values: chunk.embedding,
                 metadata: {
                   type: 'chunk',
-                  document_id: chunk.document_id || '',
-                  project_id: chunk.project_id || '',
+                  document_id: chunk.document_id || chunk.documentId || '',
+                  project_id:
+                    chunk.project_id ||
+                    chunk.metadata?.projectId ||
+                    '',
                   content: chunk.content ? chunk.content.substring(0, 500) : '',
-                  chunk_index: chunk.chunk_index || 0,
-                  created_at: chunk.created_at || new Date().toISOString()
+                  chunk_index: chunk.chunk_index ?? chunk.metadata?.chunkIndex ?? 0,
+                  created_at: chunk.created_at || chunk.createdAt || new Date().toISOString()
                 }
               })).filter(v => v.values && v.values.length > 0);
 
