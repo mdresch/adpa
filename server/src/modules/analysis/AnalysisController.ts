@@ -30,6 +30,7 @@ import { listDomainExtractionConfigs } from '@/modules/context';
 import { PMBOK_DOMAINS } from '@/types/pmbok';
 import { ENTITY_DOMAIN_WEIGHTS } from '../../types/entity-domain-weights';
 import { createInitialBatchProgressMeta, normalizeBatchingConfig } from '../../services/extraction/batchPlanner';
+import { ENTITY_COUNT_TABLES } from './entityTypeTables';
 
 export class AnalysisController {
   private repository = new AnalysisRepository(pool);
@@ -421,26 +422,46 @@ export class AnalysisController {
   getExtractionResults = async (req: Request, res: Response) => {
     try {
       const { projectId } = req.params;
-      const tables = [
-        { key: 'stakeholders', name: 'stakeholders' },
-        { key: 'requirements', name: 'requirements' },
-        { key: 'risks', name: 'risks' },
-        { key: 'milestones', name: 'milestones' },
-        { key: 'activities', name: 'activities' },
-        { key: 'deliverables', name: 'deliverables' },
-        { key: 'constraints', name: 'constraints' },
-        { key: 'success_criteria', name: 'success_criteria' },
-        { key: 'best_practices', name: 'best_practices' },
-        { key: 'team_agreements', name: 'team_agreements' },
-        { key: 'development_approaches', name: 'development_approaches' },
-        { key: 'work_items', name: 'work_items' },
-        { key: 'performance_actuals', name: 'performance_actuals' },
-      ];
-      const entityCounts = await this.repository.getProjectEntityCounts(projectId, tables);
+      const entityCounts = await this.repository.getProjectEntityCounts(projectId, ENTITY_COUNT_TABLES);
       res.json({ success: true, projectId, entityCounts });
     } catch (error) {
       this.logger.error('Extraction results fetch failed', { error });
       res.status(500).json({ error: 'Extraction results fetch failed' });
+    }
+  };
+
+  /**
+   * List entities for a project by type (used by ProjectDataExtraction entity detail dialog).
+   */
+  getEntitiesByType = async (req: Request, res: Response) => {
+    try {
+      const { projectId, entityType } = req.params;
+      const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? '100'), 10) || 100, 1), 500);
+      const offset = Math.max(parseInt(String(req.query.offset ?? '0'), 10) || 0, 0);
+
+      const { entities, total, tableName } = await this.repository.getProjectEntitiesByType(
+        projectId,
+        entityType,
+        { limit, offset }
+      );
+
+      res.json({
+        success: true,
+        projectId,
+        entityType,
+        tableName,
+        entities,
+        total,
+        limit,
+        offset,
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.startsWith('Unknown entity type:')) {
+        return res.status(400).json({ error: message });
+      }
+      this.logger.error('Entity details fetch failed', { error: message });
+      res.status(500).json({ error: 'Entity details fetch failed' });
     }
   };
 }
