@@ -1,6 +1,9 @@
 import { Pool, PoolClient } from 'pg';
 import { childLogger } from '../../utils/logger';
-import { resolveEntityTableName } from './entityTypeTables';
+import {
+  getAllowedEntityTableName,
+  quotedEntityTableName,
+} from './entityTypeTables';
 
 export class AnalysisRepository {
   private logger = childLogger({ component: 'AnalysisRepository' });
@@ -212,8 +215,9 @@ export class AnalysisRepository {
     
     for (const table of tables) {
       try {
+        const fromTable = quotedEntityTableName(table.name);
         const result = await this.pool.query(
-          `SELECT COUNT(*) as count FROM ${table.name} WHERE project_id = $1`,
+          `SELECT COUNT(*) as count FROM ${fromTable} WHERE project_id = $1`,
           [projectId]
         );
         counts[table.key] = parseInt(result.rows[0].count) || 0;
@@ -234,23 +238,21 @@ export class AnalysisRepository {
     entityTypeKey: string,
     options?: { limit?: number; offset?: number }
   ): Promise<{ entities: Record<string, unknown>[]; total: number; tableName: string }> {
-    const tableName = resolveEntityTableName(entityTypeKey);
-    if (!tableName) {
-      throw new Error(`Unknown entity type: ${entityTypeKey}`);
-    }
+    const tableName = getAllowedEntityTableName(entityTypeKey);
+    const fromTable = quotedEntityTableName(tableName);
 
     const limit = Math.min(Math.max(options?.limit ?? 100, 1), 500);
     const offset = Math.max(options?.offset ?? 0, 0);
 
     const countResult = await this.pool.query(
-      `SELECT COUNT(*)::int AS count FROM ${tableName} WHERE project_id = $1`,
+      `SELECT COUNT(*)::int AS count FROM ${fromTable} WHERE project_id = $1`,
       [projectId]
     );
     const total = countResult.rows[0]?.count ?? 0;
 
     try {
       const result = await this.pool.query(
-        `SELECT * FROM ${tableName}
+        `SELECT * FROM ${fromTable}
          WHERE project_id = $1
          ORDER BY created_at DESC NULLS LAST, id DESC
          LIMIT $2 OFFSET $3`,
@@ -261,7 +263,7 @@ export class AnalysisRepository {
       const message = error instanceof Error ? error.message : String(error);
       if (message.includes('created_at')) {
         const result = await this.pool.query(
-          `SELECT * FROM ${tableName}
+          `SELECT * FROM ${fromTable}
            WHERE project_id = $1
            ORDER BY id DESC
            LIMIT $2 OFFSET $3`,

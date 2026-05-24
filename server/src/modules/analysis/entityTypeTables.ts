@@ -71,6 +71,9 @@ export const ENTITY_CAMEL_KEY_TO_TABLE: Record<string, string> = {
 
 const ALLOWED_TABLES = new Set(Object.values(ENTITY_CAMEL_KEY_TO_TABLE))
 
+/** Safe PostgreSQL unquoted identifiers (lowercase snake_case entity tables). */
+const PG_IDENTIFIER_RE = /^[a-z][a-z0-9_]*$/
+
 /** Tables used for project-level entity count queries ({ key, name }). */
 export const ENTITY_COUNT_TABLES = Object.entries(ENTITY_CAMEL_KEY_TO_TABLE).map(([key, name]) => ({
   key,
@@ -93,4 +96,37 @@ export function resolveEntityTableName(entityTypeKey: string): string | null {
   }
 
   return null
+}
+
+/**
+ * Assert table name is on the entity whitelist and matches safe identifier rules.
+ * Use before interpolating a table name into SQL (values still use $1, $2, …).
+ */
+export function assertAllowedEntityTableName(tableName: string): void {
+  if (!ALLOWED_TABLES.has(tableName)) {
+    throw new Error(`Invalid entity table: ${tableName}`)
+  }
+  if (!PG_IDENTIFIER_RE.test(tableName)) {
+    throw new Error(`Invalid entity table identifier: ${tableName}`)
+  }
+}
+
+/**
+ * Resolve entity type key to a whitelist-validated table name for SQL FROM clauses.
+ */
+export function getAllowedEntityTableName(entityTypeKey: string): string {
+  const tableName = resolveEntityTableName(entityTypeKey)
+  if (!tableName) {
+    throw new Error(`Unknown entity type: ${entityTypeKey}`)
+  }
+  assertAllowedEntityTableName(tableName)
+  return tableName
+}
+
+/**
+ * Double-quoted PostgreSQL identifier for a whitelist-validated entity table.
+ */
+export function quotedEntityTableName(tableName: string): string {
+  assertAllowedEntityTableName(tableName)
+  return `"${tableName}"`
 }
