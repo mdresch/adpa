@@ -197,6 +197,42 @@ Respond ONLY with valid JSON matching this structure:
     const n = Number(val)
     return isNaN(n) ? fallback : n
   }
+
+  async getTemplateAudits(templateId: string): Promise<any[]> {
+    const result = await pool.query(
+      `SELECT * FROM template_audits WHERE template_id = $1 ORDER BY created_at DESC`,
+      [templateId]
+    )
+    return result.rows
+  }
+
+  async triggerManualAudit(templateId: string): Promise<string> {
+    const tempResult = await pool.query(
+      `SELECT * FROM templates WHERE id = $1 AND deleted_at IS NULL`,
+      [templateId]
+    )
+    if (tempResult.rows.length === 0) {
+      throw new Error('Template not found')
+    }
+    const templateData = tempResult.rows[0]
+
+    const versionResult = await pool.query(
+      "SELECT COUNT(*) FROM template_audits WHERE template_id = $1",
+      [templateId]
+    )
+    const version = Number(versionResult.rows[0].count) + 1
+
+    const auditId = await this.createPendingAudit(templateId, 'manual', version)
+    
+    // Run audit in background (non-blocking)
+    setImmediate(() => {
+      this.runAudit(auditId, templateData).catch(err => {
+        logger.error(`[TEMPLATE-AUDIT] Manual audit execution failed for template ${templateId}`, err)
+      })
+    })
+
+    return auditId
+  }
 }
 
 export const templateAuditService = new TemplateAuditService()
