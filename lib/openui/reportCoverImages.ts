@@ -6,6 +6,9 @@
 export const REPORT_COVER_BASE_PATH = "/images/report-covers"
 
 /** Filenames copied into public/images/report-covers (keep in sync when adding assets). */
+/** Prefer for inline / gap-filler thumbnails in reports */
+export const REPORT_THUMB_FILENAME = "small lighhouse.jpeg" as const
+
 export const REPORT_COVER_FILENAMES = [
   "Lighhouses connected with sattelite.jpeg",
   "lighhouses far reaching beams.jpeg",
@@ -87,6 +90,39 @@ export function reportCoverPublicUrl(filename: string): string {
   return `${REPORT_COVER_BASE_PATH}/${encodeURIComponent(filename)}`
 }
 
+const REPORT_COVER_FILENAME_SET = new Set<string>(REPORT_COVER_FILENAMES)
+
+/** Decode the filename segment from a public cover URL (encoded or not). */
+export function decodeReportCoverFilenameFromUrl(imageUrl: string): string | null {
+  const prefix = `${REPORT_COVER_BASE_PATH}/`
+  if (!imageUrl.startsWith(prefix)) return null
+  const segment = imageUrl.slice(prefix.length).split("?")[0] ?? ""
+  if (!segment) return null
+  try {
+    return decodeURIComponent(segment).replace(/\+/g, " ")
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Only allow complete, catalogued cover URLs. Partial stream fragments (truncated paths)
+ * return null so <img> is not mounted and Next does not 404-spam the dev server.
+ */
+export function coerceReportCoverImageUrl(
+  imageUrl: string | undefined | null
+): string | null {
+  if (!imageUrl || typeof imageUrl !== "string") return null
+  const trimmed = imageUrl.trim()
+  if (!trimmed.startsWith(`${REPORT_COVER_BASE_PATH}/`)) return null
+
+  const filename = decodeReportCoverFilenameFromUrl(trimmed)
+  if (!filename) return null
+  if (!REPORT_COVER_FILENAME_SET.has(filename)) return null
+
+  return reportCoverPublicUrl(filename)
+}
+
 function stableIndex(seed: string, length: number): number {
   if (length <= 0) return 0
   let h = 2166136261
@@ -97,9 +133,24 @@ function stableIndex(seed: string, length: number): number {
   return (h >>> 0) % length
 }
 
-function altFromFilename(filename: string): string {
+function altFromFilename(
+  filename: string,
+  kind: "cover" | "section" | "thumb" = "cover"
+): string {
   const base = filename.replace(/\.jpe?g$/i, "").replace(/\s+/g, " ").trim()
-  return `Report cover: ${base}`
+  if (kind === "thumb") return `Report illustration: ${base}`
+  return kind === "cover" ? `Report cover: ${base}` : `Section illustration: ${base}`
+}
+
+function pickReportImageFromPools(seed: string, haystack: string, altKind: "cover" | "section"): ReportCoverPick {
+  for (const { pattern, files } of KEYWORD_POOLS) {
+    if (!pattern.test(haystack) || files.length === 0) continue
+    const filename = files[stableIndex(seed, files.length)]!
+    return { filename, url: reportCoverPublicUrl(filename), alt: altFromFilename(filename, altKind) }
+  }
+
+  const filename = REPORT_COVER_FILENAMES[stableIndex(seed, REPORT_COVER_FILENAMES.length)]!
+  return { filename, url: reportCoverPublicUrl(filename), alt: altFromFilename(filename, altKind) }
 }
 
 export function pickReportCoverImage(options: {
@@ -109,13 +160,47 @@ export function pickReportCoverImage(options: {
 }): ReportCoverPick {
   const haystack = `${options.prompt ?? ""} ${options.documentTitle ?? ""}`.trim()
   const seed = options.seed?.trim() || haystack || "adpa-report-cover"
+  return pickReportImageFromPools(seed, haystack, "cover")
+}
 
-  for (const { pattern, files } of KEYWORD_POOLS) {
-    if (!pattern.test(haystack) || files.length === 0) continue
-    const filename = files[stableIndex(seed, files.length)]!
-    return { filename, url: reportCoverPublicUrl(filename), alt: altFromFilename(filename) }
+/** Deterministic chapter/section art from the same public library (distinct seed from cover). */
+export function pickReportSectionImage(options: {
+  seed: string
+  sectionTitle?: string
+  prompt?: string
+  documentTitle?: string
+}): ReportCoverPick {
+  const haystack = `${options.sectionTitle ?? ""} ${options.prompt ?? ""} ${options.documentTitle ?? ""}`.trim()
+  const seed = `section::${options.seed.trim()}`
+  return pickReportImageFromPools(seed, haystack, "section")
+}
+
+/** Small inline placeholder art (two-up under prose, or between tables). */
+export function pickReportThumbImage(options: {
+  seed: string
+  sectionTitle?: string
+  prompt?: string
+  documentTitle?: string
+  /** 0 = left / first, 1 = right / second in a pair */
+  slot?: 0 | 1
+}): ReportCoverPick {
+  const haystack = `${options.sectionTitle ?? ""} ${options.prompt ?? ""} ${options.documentTitle ?? ""}`.trim()
+  const seed = `thumb::${options.seed.trim()}::${options.slot ?? 0}`
+  if (options.slot === 0 || options.slot === undefined) {
+    const filename = REPORT_THUMB_FILENAME
+    return {
+      filename,
+      url: reportCoverPublicUrl(filename),
+      alt: altFromFilename(filename, "thumb"),
+    }
   }
-
-  const filename = REPORT_COVER_FILENAMES[stableIndex(seed, REPORT_COVER_FILENAMES.length)]!
-  return { filename, url: reportCoverPublicUrl(filename), alt: altFromFilename(filename) }
+  const filename =
+    REPORT_COVER_FILENAMES[
+      stableIndex(seed, REPORT_COVER_FILENAMES.length)
+    ]!
+  return {
+    filename,
+    url: reportCoverPublicUrl(filename),
+    alt: altFromFilename(filename, "thumb"),
+  }
 }

@@ -6,6 +6,16 @@ import {
   resolveGenuiLlmProvider,
   type GenuiLlmProvider,
 } from '@/lib/llm/genuiLlmProvider'
+
+/** Default completion budget for full governance reports (10+ chapter BRDs). */
+function resolveGenuiMaxOutputTokens(provider: GenuiLlmProvider): number {
+  const raw = process.env.GENUI_MAX_OUTPUT_TOKENS?.trim()
+  if (raw) {
+    const n = Number.parseInt(raw, 10)
+    if (Number.isFinite(n) && n >= 4096) return Math.min(n, 65_536)
+  }
+  return provider === 'google' ? 32_768 : 16_384
+}
 import { estimateGenuiChatPayloadChars } from '@/lib/llm/genuiPromptBudget'
 
 function backendUrl(): string {
@@ -113,11 +123,14 @@ async function streamGenuiChat(
     })
   }
 
+  const maxOutputTokens = resolveGenuiMaxOutputTokens(provider)
+
   try {
     const response = await client.chat.completions.create({
       model: config.model,
       messages: [{ role: 'system', content: systemPrompt }, ...messages],
       stream: true,
+      max_tokens: maxOutputTokens,
     })
 
     return new NextResponse(response.toReadableStream(), {

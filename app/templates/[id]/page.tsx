@@ -31,11 +31,12 @@ import {
   Zap,
   Calendar,
 } from "@/components/ui/icons-shim"
-import { Award, Target, ArrowUp, Brain, Archive, ClipboardCheck, Sparkles, Network, RefreshCw } from "lucide-react"
+import { Award, Target, ArrowUp, Brain, Archive, ClipboardCheck, Sparkles, Network, RefreshCw, Shield } from "lucide-react"
 import { useAuth } from "@/contexts/AuthContext"
 import { apiClient } from "@/lib/api"
 import { toast } from '@/lib/notify'
 import { TemplateRecommendations } from "@/components/templates/TemplateRecommendations"
+import { TemplateAuditsPanel } from "@/components/templates/TemplateAuditsPanel"
 
 interface Template {
   id: string
@@ -754,7 +755,7 @@ export default function TemplateDetailPage() {
                       </CardHeader>
                       <CardContent className="space-y-4">
                         <Tabs defaultValue="overview" onValueChange={(v) => v === "gkg" && !gkgData && !gkgLoading && !gkgError && fetchGkgTemplate()}>
-                          <TabsList className="grid w-full grid-cols-5">
+                          <TabsList className="grid w-full grid-cols-6">
                             <TabsTrigger value="overview">Overview</TabsTrigger>
                             <TabsTrigger value="content">Content</TabsTrigger>
                             <TabsTrigger value="variables">Purpose & Profile</TabsTrigger>
@@ -765,6 +766,10 @@ export default function TemplateDetailPage() {
                             <TabsTrigger value="recommendations">
                               <Sparkles className="h-4 w-4 mr-1" />
                               Recommendations
+                            </TabsTrigger>
+                            <TabsTrigger value="audits">
+                              <Shield className="h-4 w-4 mr-1" />
+                              Audits
                             </TabsTrigger>
                           </TabsList>
                           
@@ -1247,6 +1252,9 @@ export default function TemplateDetailPage() {
                           </TabsContent>
                           <TabsContent value="recommendations" className="mt-4">
                             <TemplateRecommendations templateId={template.id} />
+                          </TabsContent>
+                          <TabsContent value="audits" className="mt-4">
+                            <TemplateAuditsPanel templateId={template.id} />
                           </TabsContent>
                         </Tabs>
                       </CardContent>

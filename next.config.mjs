@@ -24,6 +24,8 @@ const nextConfig = {
   // Keep module/CSS resolution on F:\ repo when .next is a junction to %LOCALAPPDATA% (pnpm dev:cache)
   turbopack: {
     root: projectRoot,
+    // Note: @itwin packages use legacy ~ tilde SCSS imports that Turbopack
+    // cannot resolve. Production builds use --no-turbopack (webpack) instead.
   },
   typescript: {
     // Temporarily ignore TypeScript build errors during Vercel build.
@@ -42,6 +44,9 @@ const nextConfig = {
     '@openuidev/react-lang',
     '@openuidev/react-ui',
     'lucide-react',
+    // @itwin packages — used via dynamic import in components/digital-twin/iTwinViewer.tsx.
+    // Production builds use webpack (--no-turbopack) which handles their legacy
+    // ~ tilde SCSS imports. Dev Turbopack is unaffected (SCSS not imported at dev time).
     '@itwin/viewer-react',
     '@itwin/itwinui-react',
     '@itwin/appui-react',
@@ -53,7 +58,12 @@ const nextConfig = {
   ],
 
   sassOptions: {
-    includePaths: ['./node_modules'],
+    includePaths: [
+      './node_modules',
+      // Provide @itwin package roots so sass can resolve their partials
+      // when they are processed (fallback; primary fix is turbopack.rules above)
+      './node_modules/@itwin/core-react/lib/core-react',
+    ],
     quietDeps: true,
   },
 

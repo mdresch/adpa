@@ -225,6 +225,32 @@
   opacity: 0.94;
 }
 
+.genui-openui-root .report-section-hero {
+  margin: 0.5rem 0 0.75rem;
+}
+
+.genui-openui-root.genui-report-dark .report-section-hero {
+  border-color: rgb(64 64 64);
+}
+
+.genui-openui-root.genui-report-dark .report-section-hero img {
+  opacity: 0.92;
+}
+
+.genui-openui-root .report-thumb-hero {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.genui-openui-root.genui-report-dark .report-thumb-hero {
+  border-color: rgb(82 82 82);
+  background: rgb(23 23 23 / 0.5);
+}
+
+.genui-openui-root.genui-report-dark .report-thumb-hero img {
+  opacity: 0.88;
+}
+
 /* Shared prose tokens (light default; overridden in report-dark). */
 .genui-report-prose {
   color: rgb(51 65 85);

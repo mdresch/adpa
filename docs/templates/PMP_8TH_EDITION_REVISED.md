@@ -3,8 +3,8 @@
 
 **Framework**: PMBOK® Guide 8th Edition (Performance Domains & Principles)  
 **ESG Integration**: Optional (applies only when project requires sustainability/governance compliance)  
-**Version**: 2.0 (Revised - ESG Conditional)  
-**Date**: November 3, 2025
+**Version**: 2.1 (Signature Artifact — ESG Conditional)  
+**Date**: May 21, 2026
 
 ---
 
@@ -37,12 +37,33 @@ Receive project context from the user and generate a comprehensive, tailored **P
 
 ---
 
+### Signature artifact standard (v2.1)
+
+The generated PMP must be **executive-ready and signable** after human review—not a synthesis draft that references other documents without standing alone.
+
+| Requirement | Rule |
+|-------------|------|
+| **No placeholders** | Never output `[Name]`, `[TBD]`, `[Insert X]`, `[Engineer Name]`, or bracketed role fillers. Use names, emails, and titles from project context. If missing, write **"Not specified in project documentation"** (once per role, not repeated in tables). |
+| **Human authorship** | **Prepared By** and **Revision History → Author** use the Project Manager (or named author) from context only—never "AI Agent" or model names. |
+| **Section numbering** | Always include **§5**. If ESG Applicability is **No**, §5 is the short "Not applicable" stub (see template). If **Yes**, §5 is full ESG compliance content. Never skip from §4.9 to §6. |
+| **Single source of truth** | **§6 Change Management** is the canonical change-control process and CCB roster. In §4.1, §4.8, and §8, use one sentence + "See §6" instead of repeating full CCB/process text. |
+| **Stakeholders & risks** | Full **stakeholder matrix** only in **§3.1**. §4.9 summarizes engagement levels and change management; do not duplicate the full matrix. Full **risk register** only in **§3.7**; §4.8 references §3.7. |
+| **Subsidiary plans** | Start **§4** with the **Subsidiary Management Plans Index** table. Each §4.x opens with **3–5 binding bullets** (thresholds, dates, owners), then narrative—avoid "as per \`Scope Management Plan\`" without stating the decision in this document. |
+| **KPIs** | Split **in-flight project KPIs** (§3.6 table) from **post-launch benefits** (objectives from charter). Label post-launch rows with measurement start date (e.g. "from go-live + 30 days"). |
+| **Short timelines** | For projects ≤ 6 weeks, prefer **weekly milestone tracking** over formal EVM; if SPI/CPI are used, state cadence explicitly (e.g. bi-weekly snapshot). |
+| **Product terms** | Use one product name consistently (e.g. "Thesys OpenUI" / "OpenUI transformation engine") as used in the charter; align with ADPA GenUI where the project delivers interactive UI from LLM output. |
+| **Sign-off block** | **§10.4** must list PM, Sponsor, and **Head of IT** and **Head of Business Operations** (or equivalent from context) with name lines and date—no empty signature roles. |
+
+---
+
 ### Response Format
 Professional Markdown document with:
-- Clear headings and subheadings
-- Tables for stakeholder matrices, KPIs, risk registers, and budgets
+- **Document control** and **executive summary** immediately after the title block
+- Clear headings and subheadings (numbered §1–§10 plus appendices)
+- Tables for stakeholder matrices, KPIs, risk registers, budgets, subsidiary plan index, and CCB
 - Narrative linking project activities to PMBOK 8 principles and performance domains
-- **ESG-specific sections** (if applicable): ESG KPIs, compliance checklists, stakeholder engagement for sustainability
+- **ESG-specific sections** only when ESG Applicability is **Yes**
+- **Do not** include "AI Generation Metadata" blocks in the body (those are system logs, not part of the signed artifact)
 
 ---
 
@@ -58,7 +79,35 @@ Professional Markdown document with:
 **Priority**: [High/Medium/Low]  
 **Prepared By**: [Name/Role]  
 **Date**: [Date]  
-**Version**: [X.X]
+**Version**: [X.X]  
+**Project ID**: [Extract UUID or internal project ID from charter/context, if available]  
+**Document ID**: [Extract document ID if available, else omit line]
+
+---
+
+## Document Control
+
+| Field | Value |
+|-------|--------|
+| **Classification** | [Extract: e.g. Internal / Confidential] |
+| **Distribution** | Sponsor, PM, core team, CCB, IT Operations |
+| **Related artifacts** | Project Charter; Integration Management Plan; [list subsidiary plan titles from context] |
+| **Approval authority** | [Extract sponsor name and title] |
+| **Next review** | [Extract or align with next milestone / phase gate] |
+
+---
+
+## Executive Summary
+
+*(Maximum ~250 words. Sponsor-readable. No PMBOK teaching prose.)*
+
+| Topic | Summary |
+|-------|---------|
+| **Problem & value** | [Why the project exists; top 1–2 measurable outcomes] |
+| **Approach** | [Predictive / Agile / Hybrid — one sentence] |
+| **Timeline & budget** | [Start–end dates; total budget] |
+| **Top risks** | [Three risks by ID or short title] |
+| **Success measures** | [In-flight + post-launch metrics with targets] |
 
 ---
 
@@ -299,14 +348,21 @@ Professional Markdown document with:
 - **Performance Tracking**: [Extract: e.g., "Weekly velocity (story points), monthly financial actuals vs. budget"]
 - **Earned Value Management (EVM)**: [Extract: e.g., "SPI ≥ 0.95, CPI ≥ 1.0"]
 
-**Key Performance Indicators (KPIs)**:
+**In-flight project KPIs** *(measured during May 1 – May 31 delivery)*:
 
-| KPI | Target | Current | Status | Owner |
-|-----|--------|---------|--------|-------|
-| [Extract: Schedule Performance Index (SPI)] | ≥ 0.95 | [Extract] | 🟢 | PM |
-| [Extract: Cost Performance Index (CPI)] | ≥ 1.0 | [Extract] | 🟢 | PM |
-| [Extract: User Adoption Rate] | 90% | [Extract] | 🟡 | BA |
-| [Extract: Dashboard Load Time] | <3s | [Extract] | 🟢 | Tech Lead |
+| KPI | Target | Measurement Method | Frequency | Owner |
+|-----|--------|--------------------|-----------|-------|
+| [Extract: SPI or milestone adherence] | [Extract] | [Extract] | [Weekly / Bi-weekly] | PM |
+| [Extract: CPI or budget variance] | [Extract] | [Extract] | [Extract] | PM |
+| [Extract: e.g. UI generation lead time] | [Extract] | [Extract] | [Extract] | Tech Lead |
+| [Extract: defect density / UAT pass rate] | [Extract] | [Extract] | [Extract] | QA |
+
+**Post-launch benefits realization** *(measured after go-live; not part of in-flight SPI/CPI)*:
+
+| Benefit metric | Target | Measurement starts | Owner |
+|----------------|--------|-------------------|-------|
+| [Extract from charter, e.g. user interaction +30%] | [Extract] | [e.g. 30 days post go-live] | [Extract] |
+| [Extract, e.g. manual UI dev time −40%] | [Extract] | [Extract] | [Extract] |
 
 **For ESG Projects - Add ESG KPIs**:
 
@@ -356,6 +412,26 @@ Professional Markdown document with:
 
 ## 4. Subsidiary Management Plans
 
+### Subsidiary Management Plans Index
+
+*(Populate from project context. Link or ID when known; otherwise title + owner.)*
+
+| # | Subsidiary plan | Version | Owner | Status |
+|---|-----------------|---------|-------|--------|
+| 4.1 | Scope Management Plan | [Extract] | [Extract] | [Draft / Approved] |
+| 4.2 | Schedule Management Plan | [Extract] | [Extract] | [Extract] |
+| 4.3 | Cost Management Plan | [Extract] | [Extract] | [Extract] |
+| 4.4 | Quality Management Plan | [Extract] | [Extract] | [Extract] |
+| 4.5 | Resource Management Plan | [Extract] | [Extract] | [Extract] |
+| 4.6 | Communications Management Plan | [Extract] | [Extract] | [Extract] |
+| 4.7 | Procurement Management Plan | [Extract] | [Extract] | [Extract / N/A] |
+| 4.8 | Risk Management Plan | [Extract] | [Extract] | [Extract] |
+| 4.9 | Stakeholder Engagement Plan | [Extract] | [Extract] | [Extract] |
+
+**How to use this PMP**: Sections **4.1–4.9** state **binding decisions** for this project. Detailed procedures may live in subsidiary documents; this integrated plan remains authoritative for baselines, thresholds, and governance.
+
+---
+
 ### 4.1 Scope Management Plan
 
 **Scope Definition**: [Extract: e.g., "Migrate 487 Tableau workbooks, decommission Tableau Server, train 500 users"]
@@ -367,9 +443,7 @@ Professional Markdown document with:
 **For ESG Projects**:
 - **ESG Scope**: [Extract: e.g., "Includes Scope 1, 2, and 3 emissions tracking; excludes financed emissions"]
 
-**Change Control**:
-- **Threshold**: Changes >$50K or >1 week schedule impact require CCB approval
-- **Process**: Jira change request → PM impact analysis → CCB decision → Baseline update
+**Change Control**: Per **§6 Change Management Plan** (thresholds, CCB, and process). Summarize only scope-specific rules here, if any.
 
 **Artifacts**:
 - Scope Statement
@@ -494,7 +568,7 @@ Professional Markdown document with:
 |------|--------|---------------|-------|--------|
 | Azure Synapse | Microsoft | Enterprise Agreement | $800K | Executed |
 | Power BI Premium | Microsoft | Enterprise Agreement | Included | Executed |
-| Training Services | [TBD] | Fixed-price | $200K | RFP issued |
+| Training Services | [Extract vendor name or "Not specified in project documentation"] | Fixed-price | [Extract] | [Extract status] |
 
 **For ESG Projects**:
 - **ESG Vendor Criteria**: [Extract: e.g., "Vendors must provide ISO 14001 certification or B-Corp status"]
@@ -509,7 +583,7 @@ Professional Markdown document with:
 
 ### 4.8 Risk Management Plan
 
-*(See Section 3.7 Uncertainty Performance Domain for detailed risk register)*
+**Risk register**: See **§3.7 Uncertainty Performance Domain** (canonical risk IDs, scores, and owners). Do not duplicate the full register here.
 
 **Risk Tolerance**: [Extract: e.g., "High risk tolerance for technical innovation, low tolerance for compliance/budget overruns"]
 
@@ -528,7 +602,7 @@ Professional Markdown document with:
 
 ### 4.9 Stakeholder Engagement Plan
 
-*(See Section 3.1 Stakeholders Performance Domain for detailed stakeholder matrix)*
+**Stakeholder register**: See **§3.1 Stakeholders Performance Domain** (canonical matrix). Do not duplicate the full matrix here.
 
 **Engagement Levels**:
 - **Unaware** → **Resistant** → **Neutral** → **Supportive** → **Leading**
@@ -545,12 +619,23 @@ Professional Markdown document with:
 
 ---
 
-## 5. ESG Compliance Validation & Quality Control
-*(Include ONLY if ESG-related project)*
+## 5. ESG Compliance *(Conditional)*
 
-> **Note**: This section applies only to projects with ESG objectives. For standard projects, skip to Section 6.
+> **Generation rule (mandatory)**  
+> - If document header **ESG Applicability: No** → output **only** §5.0 below (do not include §5.1–5.2).  
+> - If **ESG Applicability: Yes** → output §5.1–5.2 and **omit** §5.0.  
+> **Never skip §5** (do not jump from §4.9 to §6).
+
+### 5.0 ESG Compliance — Not Applicable
+
+*(Use this entire subsection when ESG Applicability is No.)*
+
+This project does not include sustainability reporting, EU Taxonomy alignment, or GRI/TCFD/SASB disclosure objectives. Environmental, social, and governance controls are limited to standard organizational policies (security, privacy, and ethics) covered in **§4.4 Quality Management Plan** and **§7 Governance & Oversight**. No ESG-specific subsidiary plans, KPIs, or audit cycles apply.
+
+---
 
 ### 5.1 Compliance Checklist
+*(Include ONLY when ESG Applicability is Yes — omit §5.0 when using this content)*
 
 | ESG Requirement | Validation Method | Frequency | Owner | Status |
 |----------------|-------------------|-----------|-------|--------|
@@ -587,9 +672,17 @@ Professional Markdown document with:
 5. **Implementation**: Update baselines, communicate to stakeholders
 
 **Change Control Board (CCB)**:
-- **Members**: Sponsor, PM, Technical Lead, BA, Finance
-- **Quorum**: 3 of 5 members
-- **Authority**: Approve changes up to $100K; >$100K requires Sponsor approval
+
+| Name | Role | Responsibilities | Contact |
+|------|------|------------------|---------|
+| [Extract sponsor full name] | Sponsor | Final authority per thresholds below | [Extract email] |
+| [Extract PM full name] | Project Manager (Chair) | Impact analysis, change log, implementation | [Extract email] |
+| [Extract technical lead full name] | Technical Advisor | Feasibility, integration impact | [Extract email] |
+| [Extract senior dev or architect name] | Technical Advisor | Effort, quality, architecture | [Extract email] |
+| [Extract finance contact name] | Financial Advisor | Budget compliance | [Extract email] |
+
+- **Quorum**: [Extract, e.g. 3 of 5]
+- **Authority**: [Extract thresholds, e.g. PM ≤ $1K; CCB $1K–$5K; Sponsor > $5K or > 2 schedule days]
 
 **For ESG Projects**:
 - **ESG Change Control**: All changes to ESG metrics or compliance frameworks require CSO approval
@@ -717,9 +810,14 @@ Professional Markdown document with:
 - ✅ *(If ESG)* Final ESG Report (third-party validated)
 
 **Sign-Off**:
-- **Project Manager**: [Name, Date, Signature]
-- **Sponsor**: [Name, Date, Signature]
-- *(If ESG)* **Chief Sustainability Officer**: [Name, Date, Signature]
+
+| Role | Name | Signature | Date |
+|------|------|-----------|------|
+| Project Manager | [Extract PM full name] | _________________________ | [Project end date] |
+| Sponsor | [Extract sponsor full name and title] | _________________________ | [Extract] |
+| Head of IT | [Extract from context or "Not specified in project documentation"] | _________________________ | [Extract] |
+| Head of Business Operations | [Extract from context or "Not specified in project documentation"] | _________________________ | [Extract] |
+| *(If ESG Applicability: Yes)* Chief Sustainability Officer | [Extract] | _________________________ | [Extract] |
 
 ---
 
@@ -757,6 +855,7 @@ Professional Markdown document with:
 
 ### Appendix C: Glossary
 
+- **ADPA**: [Extract organization legal name from context—never leave as placeholder]
 - **PMBOK**: Project Management Body of Knowledge
 - **EVM**: Earned Value Management
 - **SPI**: Schedule Performance Index
@@ -773,8 +872,9 @@ Professional Markdown document with:
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
-| 1.0 | [Date] | [PM Name] | Initial draft |
-| 2.0 | 2025-11-03 | AI Agent | Revised: Made ESG optional, focused on PMBOK 8 principles |
+| 1.0 | [Extract approval date] | [Extract PM full name] | Initial integrated PMP (PMBOK 8) |
+
+*(Do not add template-version rows authored by "AI Agent". Template changes belong in repository history, not in the signed artifact.)*
 
 ---
 
@@ -785,22 +885,36 @@ Professional Markdown document with:
 ## Extraction Rules for AI Generation
 
 ### ✅ DO:
-1. **Extract ALL relevant project details** from provided context (charter, documents, stakeholder register)
-2. **Link every section to PMBOK 8 principles** (Value, Systems Thinking, Adaptability, etc.)
-3. **Use real data and metrics** (e.g., "$4.2M savings" vs. "[Insert Savings]")
-4. **Tailor the approach** (explain why Agile/Hybrid/Predictive was selected)
-5. **Focus on outcomes** (e.g., "90% user adoption" vs. "Conduct training")
-6. **Include ESG ONLY IF** project charter explicitly requires it:
-   - Sustainability initiatives (carbon reduction, renewable energy)
-   - Regulatory ESG compliance (GRI, SASB, TCFD)
-   - Explicit ESG objectives in charter
+1. **Extract ALL relevant project details** from context (charter, subsidiary plans, stakeholder register, WBS, risk register, budget).
+2. **Produce a signature-ready draft**: Document Control, Executive Summary, §1–§10, appendices—complete in one pass.
+3. **Always include §5**: stub (ESG No) or full ESG content (ESG Yes).
+4. **Link sections to PMBOK 8 principles** where it adds clarity; avoid textbook definitions in every paragraph.
+5. **Use real data** (dates, dollars, names, IDs, WBS elements such as 2.3.1).
+6. **Deduplicate**: one canonical stakeholder matrix (§3.1), one risk register (§3.7), one change process (§6).
+7. **Subsidiary plans (§4)**: index table + binding bullets per §4.x before narrative detail.
+8. **Separate in-flight KPIs from post-launch benefits** in §3.6.
+9. **Set ESG Applicability** in the header to **Yes** or **No** from charter—then follow §5 generation rule.
 
 ### ❌ DO NOT:
-1. **Force ESG into non-ESG projects** (e.g., IT system migrations, product launches)
-2. **Use generic placeholders** (e.g., "[Insert Metric]") - extract actual data
-3. **Omit PMBOK 8 principles** - every section must reference applicable principles
-4. **Assume ESG is mandatory** - only include if project requires it
-5. **Focus on processes over outcomes** (PMBOK 8 is outcome-focused)
+1. **Use bracket placeholders** (`[Name]`, `[TBD]`, `[Insert …]`)—use extracted values or "Not specified in project documentation".
+2. **Credit "AI Agent"** in Prepared By, Revision History, or sign-off.
+3. **Skip §5** when ESG is No (use §5.0 stub).
+4. **Repeat** full change-control or stakeholder tables in §4 and §8 if already in §3.1 / §6.
+5. **Rely on** "as per \`Document Name\`" without stating the decision in this PMP.
+6. **Force ESG** into non-ESG projects (no §5.1–5.2 when Applicability is No).
+7. **Embed** AI generation metadata (tokens, cost, provider) in the document body.
+8. **Focus on processes over outcomes** (PMBOK 8 is outcome-focused).
+
+### Signature artifact checklist (self-review before finishing)
+
+- [ ] Header: ESG Applicability, Project ID, version, PM and Sponsor names filled
+- [ ] Document Control + Executive Summary present
+- [ ] §4 opens with Subsidiary Management Plans Index
+- [ ] §5 present (stub or ESG content per header)
+- [ ] §6 CCB table has real names and emails (or explicit "Not specified…")
+- [ ] §10.4 sign-off includes IT and Business Operations roles
+- [ ] No `[…]` placeholders remain in output
+- [ ] Appendix C defines ADPA with real organization name
 
 ---
 
@@ -812,15 +926,15 @@ Professional Markdown document with:
    - **YES**: Project includes sustainability, ESG compliance, or governance objectives
    - **NO**: Standard project (IT, process improvement, product development)
 3. **Generate PMP** using this template:
-   - Include all PMBOK 8 sections (mandatory)
-   - Include ESG sections only if ESG applicability = YES
-   - Extract real data (no placeholders)
-   - Link to PMBOK 8 principles throughout
+   - Include Document Control, Executive Summary, §1–§10, appendices
+   - §5 per ESG Applicability (stub vs full ESG—never skip)
+   - Extract real data; run signature artifact checklist
 4. **Validate output**:
-   - All 8 performance domains addressed
-   - All 12 principles referenced
-   - ESG sections present only if applicable
-   - Outcome-focused language (not process-focused)
+   - All 8 performance domains addressed (§3.1–§3.7 + §2 development approach)
+   - Appendix A maps all 12 principles
+   - No duplicate canonical tables; §6 is single change-control source
+   - Outcome-focused language; tables populated for executives
+5. **GenUI / export** (when rendered in ADPA): preserve `##` section structure for TOC; keep matrices as Markdown tables; signature block in §10.4 must survive PDF export
 
 ### For Project Managers:
 1. **Provide context** to AI:
@@ -839,8 +953,9 @@ Professional Markdown document with:
 
 ---
 
-**Template Version**: 2.0 (Balanced ESG Approach)  
-**Last Updated**: November 3, 2025  
-**Author**: AI Agent (ADPA Development Team)  
-**Status**: Production-Ready
+**Template Version**: 2.1 (Signature Artifact — ESG Conditional)  
+**Last Updated**: May 21, 2026  
+**Maintainer**: ADPA Development Team  
+**Status**: Production-Ready  
+**Changelog (2.1)**: Document control & executive summary; mandatory §5 for non-ESG; subsidiary plan index; deduplication rules; CCB/sign-off completeness; KPI split; no AI authorship in revision history.
 

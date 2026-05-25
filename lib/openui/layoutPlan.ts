@@ -18,14 +18,37 @@ import type {
 } from "@/lib/openui/layoutPlanTypes"
 import { compactLayoutPlanForExecutor } from "@/lib/llm/genuiPromptBudget"
 import {
+  bulletsCallHasCompleteItems,
+  findMatchingParen,
+  replaceLangNodeAssignment,
+  sanitizeOpenUILang,
+  tableOfContentsCallHasEntries,
+} from "@/lib/openui/sanitizeOpenUILang"
+import {
   buildCoverBlurbFromSources,
   COVER_SUMMARY_MAX_CHARS,
 } from "@/lib/openui/coverSummary"
-import { pickReportCoverImage, type ReportCoverPick } from "@/lib/openui/reportCoverImages"
+import {
+  coerceReportCoverImageUrl,
+  pickReportCoverImage,
+  pickReportSectionImage,
+  pickReportThumbImage,
+  type ReportCoverPick,
+} from "@/lib/openui/reportCoverImages"
+import {
+  isBoldKeyValueOverviewBody,
+  splitProjectOverviewContent,
+} from "@/lib/openui/projectOverviewLayout"
 
 export type { BuildLayoutPlanInput, LayoutPlan, LayoutPlanNode, TextSegment } from "@/lib/openui/layoutPlanTypes"
 
 const MIN_SEGMENT_CHARS = 12
+
+/**
+ * When false, layout plans only place ReportCoverHero on doc-cover (catalog P0 focus).
+ * Section banners and thumb pairs are omitted — see docs/implementation/GENUI_COMPONENT_CATALOG_AUDIT.md.
+ */
+export const GENUI_BODY_REPORT_IMAGES_ENABLED = false
 
 /** Map legacy selector types to GenUI / ADPA Lang names */
 export function toGenUIComponentName(type: ComponentType): PlanComponentName {
@@ -210,10 +233,28 @@ function isMarkdownTableBlock(text: string): boolean {
   if (lines.length < 2) return false
   const pipeRows = lines.filter((l) => /^\|.+\|/.test(l.trim()))
   if (pipeRows.length >= 2) {
-    const sep = lines.find((l) => /^\|[\s:|-]+\|/.test(l.trim()))
-    return !!sep || pipeRows.length >= 3
+    const sepIndex = pipeRows.findIndex((l) => /^\|[\s:|-]+\|/.test(l.trim()))
+    if (sepIndex >= 0) {
+      return pipeRows.slice(sepIndex + 1).some((row) => pipeRowHasContentCells(row))
+    }
+    return pipeRows.length >= 3 && pipeRows.slice(1).some((row) => pipeRowHasContentCells(row))
   }
   return false
+}
+
+function pipeRowHasContentCells(row: string): boolean {
+  if (/^\|[\s:|-]+\|/.test(row.trim())) return false
+  const cells = row.split("|").slice(1, -1)
+  return cells.some((cell) => cell.trim().length > 0)
+}
+
+function isEmptyMarkdownTablePlaceholder(text: string): boolean {
+  const lines = text.trim().split("\n").filter((l) => l.trim())
+  const pipeRows = lines.filter((l) => /^\|.+\|/.test(l.trim()))
+  if (pipeRows.length < 2) return false
+  const sepIndex = pipeRows.findIndex((l) => /^\|[\s:|-]+\|/.test(l.trim()))
+  if (sepIndex < 0) return false
+  return !pipeRows.slice(sepIndex + 1).some((row) => pipeRowHasContentCells(row))
 }
 
 function isBulletListBlock(text: string): boolean {
@@ -297,10 +338,15 @@ function isNumberedSectionOutlineList(text: string): boolean {
 
 function isStructuredTabularLines(text: string): boolean {
   if (isNumberedSectionOutlineList(text)) return false
+  if (isBoldKeyValueOverviewBody(text)) return false
   const lines = text.trim().split("\n").filter((l) => l.trim())
   if (lines.length < 3) return false
   const colonRows = lines.filter((l) => /^[^|]+\|[^|]+/.test(l) || /^[^:]+:\s*\S/.test(l))
   return colonRows.length >= lines.length * 0.5
+}
+
+function isOverviewMetadataTableMarkdown(text: string): boolean {
+  return /^\|\s*Attribute\s*\|\s*Value\s*\|/im.test(text.trim())
 }
 
 const TWO_COLUMN_MIN_CHARS = 360
@@ -393,7 +439,31 @@ export function stripProseDividers(body: string): string {
     .trim()
 }
 
-type SectionContentBlock = { kind: "prose" | "table"; text: string }
+type SectionContentBlock = { kind: "prose" | "table" | "list"; text: string }
+
+function pushProseAndListBlocks(chunk: string, blocks: SectionContentBlock[]): void {
+  const subChunks = chunk
+    .split(/\n(?=\*\*[^*\n]+\*\*:?\s*(?:\n|$))/)
+    .map((c) => c.trim())
+    .filter(Boolean)
+
+  for (const sub of subChunks.length > 0 ? subChunks : [chunk]) {
+    const lines = sub.split("\n")
+    const listStart = lines.findIndex((l) => /^\s*([-*•]|\d+\.)\s+\S/.test(l))
+    const bulletCount = lines.filter((l) => /^\s*([-*•]|\d+\.)\s+\S/.test(l)).length
+
+    if (listStart >= 0 && bulletCount >= 2) {
+      const before = lines.slice(0, listStart).join("\n").trim()
+      if (before) blocks.push({ kind: "prose", text: before })
+
+      const list = lines.slice(listStart).join("\n").trim()
+      blocks.push({ kind: isBulletListBlock(list) ? "list" : "prose", text: list })
+      continue
+    }
+
+    blocks.push({ kind: isBulletListBlock(sub) ? "list" : "prose", text: sub })
+  }
+}
 
 /** Split subsection body into prose blocks and markdown tables (keeps intro + table + tail prose). */
 export function splitBodyIntoContentBlocks(body: string): SectionContentBlock[] {
@@ -410,10 +480,7 @@ export function splitBodyIntoContentBlocks(body: string): SectionContentBlock[] 
     const chunk = proseBuf.join("\n").trim()
     proseBuf = []
     if (!chunk) return
-    const subChunks = chunk.split(/\n(?=\*\*[^*\n]+\*\*:?\s*(?:\n|$))/).map((c) => c.trim()).filter(Boolean)
-    for (const sub of subChunks.length > 0 ? subChunks : [chunk]) {
-      blocks.push({ kind: "prose", text: sub })
-    }
+    pushProseAndListBlocks(chunk, blocks)
   }
 
   const flushTable = () => {
@@ -422,6 +489,8 @@ export function splitBodyIntoContentBlocks(body: string): SectionContentBlock[] 
     inTable = false
     if (chunk && isMarkdownTableBlock(chunk)) {
       blocks.push({ kind: "table", text: chunk })
+    } else if (chunk && isEmptyMarkdownTablePlaceholder(chunk)) {
+      return
     } else if (chunk) {
       proseBuf.push(chunk)
     }
@@ -450,6 +519,7 @@ export function splitBodyIntoContentBlocks(body: string): SectionContentBlock[] 
   else flushProse()
 
   if (blocks.length === 0) {
+    if (isEmptyMarkdownTablePlaceholder(text)) return []
     return [{ kind: "prose", text }]
   }
   return blocks
@@ -516,6 +586,7 @@ function classifySegmentBody(
     const pipeRows = trimmed.split("\n").filter((l) => /^\|/.test(l.trim())).length
     const pipeHeader = trimmed.split("\n").find((l) => /^\|/.test(l.trim())) ?? ""
     const pipeCols = pipeHeader.split("|").filter((c) => c.trim().length > 0).length
+    const overviewMeta = isOverviewMetadataTableMarkdown(trimmed)
     const wbsLike =
       /\bwbs\s+dictionary\b/i.test(`${title ?? ""}\n${trimmed}`) ||
       (/\blevel\s*1\b/i.test(trimmed) && /\blevel\s*2\b/i.test(trimmed))
@@ -528,11 +599,14 @@ function classifySegmentBody(
       hints: {
         note: wbsLike
           ? "WBS Dictionary — preserve all hierarchy columns and rows from source (Level 1–4); use Table widget"
-          : attributeLike
-            ? "Activity attributes — preserve every row and full cell text from source; do not truncate cells"
-            : "derive columns and rows from source",
+          : overviewMeta
+            ? "Project overview metadata only (short Attribute|Value rows) — do not add Purpose/Business Value rows; narrative is a separate node"
+            : attributeLike
+              ? "Activity attributes — preserve every row and full cell text from source; do not truncate cells"
+              : "derive columns and rows from source",
         ...(wbsLike ? { wbsDictionary: "true" } : {}),
         ...(attributeLike ? { attributeTable: "true" } : {}),
+        ...(overviewMeta ? { overviewMetadataTable: "true" } : {}),
         ...(pipeRows >= 8 ? { wideTable: "true", rowCount: String(pipeRows) } : {}),
       },
     }
@@ -580,13 +654,17 @@ function classifySegmentBody(
 }
 
 function normalizeTitle(title: string): string {
-  return title.replace(/^#{1,4}\s+/, "").trim()
+  return title
+    .replace(/^#{1,4}\s+/, "")
+    .replace(/\*\*/g, "")
+    .trim()
 }
 
 function isHeadingOnlySegment(seg: TextSegment): boolean {
   const title = normalizeTitle(seg.title ?? "")
   const body = seg.body.trim()
   if (!body) return true
+  if (isEmptyMarkdownTablePlaceholder(body)) return true
   if (body === title) return true
   if (normalizeTitle(body) === title) return true
   if (body.length < 60 && !body.includes("\n\n") && !isMarkdownTableBlock(body)) {
@@ -759,8 +837,21 @@ function slugId(s: string): string {
 function buildLeafNodeFromBody(
   seg: TextSegment,
   body: string,
-  idSuffix = ""
+  idSuffix = "",
+  gapImages?: SectionImagePlanContext
 ): LayoutPlanNode {
+  const overviewBlocks = splitProjectOverviewContent(body, seg.title)
+  const hasOverviewNarrative =
+    overviewBlocks?.some((b) => b.kind === "prose" && b.text.trim().length > 0) ?? false
+  if (overviewBlocks && hasOverviewNarrative) {
+    const subSeg: TextSegment = { ...seg, body }
+    const asSectionBlocks: SectionContentBlock[] = overviewBlocks.map((b) => ({
+      kind: b.kind,
+      text: b.text,
+    }))
+    return buildCompositeSegmentNode(subSeg, asSectionBlocks, gapImages)
+  }
+
   const subSeg: TextSegment = { ...seg, id: `${seg.id}${idSuffix}`, body }
   const classified = classifySegmentBody(body, seg.title)
   if (
@@ -768,7 +859,7 @@ function buildLeafNodeFromBody(
     classified.mapping === "typography-fallback" &&
     shouldUseTwoColumnProse(body)
   ) {
-    return buildTwoColumnTextNode(subSeg, classified)
+    return buildTwoColumnTextNode(subSeg, gapImages)
   }
   return {
     id: subSeg.id,
@@ -781,10 +872,87 @@ function buildLeafNodeFromBody(
   }
 }
 
-function buildCompositeSegmentNode(seg: TextSegment, blocks: SectionContentBlock[]): LayoutPlanNode {
-  const children = blocks.map((block, i) =>
-    buildLeafNodeFromBody(seg, block.text, `-part-${i}`)
-  )
+function buildThumbImageNode(
+  nodeId: string,
+  ctx: SectionImagePlanContext,
+  seedSuffix: string,
+  sectionTitle: string,
+  slot: 0 | 1
+): LayoutPlanNode {
+  const image = pickReportThumbImage({
+    seed: `${ctx.documentId ?? "doc"}::${seedSuffix}::${slot}`,
+    sectionTitle,
+    prompt: ctx.prompt,
+    documentTitle: ctx.documentTitle,
+    slot,
+  })
+  return {
+    id: nodeId,
+    component: "ReportCoverHero",
+    mapping: "widget",
+    sourceText: image.alt,
+    label: sectionTitle,
+    hints: {
+      imageUrl: image.url,
+      alt: image.alt,
+      variant: "thumb",
+      note: "small inline thumbnail — copy imageUrl and variant=thumb exactly",
+    },
+  }
+}
+
+/** Two small images in a row (under split prose or for visual gap tests). */
+function buildThumbPairRowNode(
+  nodeId: string,
+  ctx: SectionImagePlanContext,
+  seedSuffix: string,
+  sectionTitle: string
+): LayoutPlanNode {
+  return {
+    id: nodeId,
+    component: "Stack",
+    mapping: "widget",
+    sourceText: sectionTitle,
+    label: `${sectionTitle} illustrations`,
+    hints: {
+      note: 'emit Stack([ReportCoverHero thumb, ReportCoverHero thumb], "row", "m", "stretch", "start", true) — two small images below prose or in table gaps',
+    },
+    children: [
+      buildThumbImageNode(`${nodeId}-l`, ctx, `${seedSuffix}-l`, sectionTitle, 0),
+      buildThumbImageNode(`${nodeId}-r`, ctx, `${seedSuffix}-r`, sectionTitle, 1),
+    ],
+  }
+}
+
+function buildCompositeSegmentNode(
+  seg: TextSegment,
+  blocks: SectionContentBlock[],
+  gapImages?: SectionImagePlanContext
+): LayoutPlanNode {
+  const children: LayoutPlanNode[] = []
+  const title = normalizeTitle(seg.title ?? seg.id)
+
+  for (let i = 0; i < blocks.length; i++) {
+    const block = blocks[i]!
+    children.push(buildLeafNodeFromBody(seg, block.text, `-part-${i}`, gapImages))
+
+    if (
+      gapImages?.enabled &&
+      block.kind === "table" &&
+      i + 1 < blocks.length
+    ) {
+      children.push(
+        buildThumbImageNode(
+          `${seg.id}-gap-${i}`,
+          gapImages,
+          `${seg.id}-between-${i}`,
+          `${title} (between tables)`,
+          i % 2 === 0 ? 0 : 1
+        )
+      )
+    }
+  }
+
   return {
     id: seg.id,
     component: "Stack",
@@ -798,9 +966,12 @@ function buildCompositeSegmentNode(seg: TextSegment, blocks: SectionContentBlock
   }
 }
 
-function buildTwoColumnTextNode(seg: TextSegment): LayoutPlanNode {
+function buildTwoColumnTextNode(
+  seg: TextSegment,
+  gapImages?: SectionImagePlanContext
+): LayoutPlanNode {
   const [left, right] = splitProseIntoTwoColumns(stripProseDividers(seg.body))
-  return {
+  const twoCol: LayoutPlanNode = {
     id: seg.id,
     component: "TwoColumnProse",
     mapping: "widget",
@@ -810,22 +981,43 @@ function buildTwoColumnTextNode(seg: TextSegment): LayoutPlanNode {
       twoColumn: "true",
       left,
       right,
-      note: "emit exactly TwoColumnProse(left, right) — never Stack row or three stacked TextContent blocks",
+      note: "emit exactly TwoColumnProse(\"left\", \"right\") as two positionals — never Stack row or three stacked TextContent blocks",
     },
   }
+
+  if (!gapImages?.enabled) return twoCol
+
+  const title = normalizeTitle(seg.title ?? seg.id)
+  return {
+    id: `${seg.id}-with-thumbs`,
+    component: "Stack",
+    mapping: "widget",
+    sourceText: seg.body,
+    label: title,
+    hints: {
+      note: "TwoColumnProse then a row of two thumb images — preserve child order",
+    },
+    children: [twoCol, buildThumbPairRowNode(`${seg.id}-thumbs`, gapImages, seg.id, title)],
+  }
 }
 
-function buildNodeFromSegment(seg: TextSegment): LayoutPlanNode {
+function buildNodeFromSegment(
+  seg: TextSegment,
+  gapImages?: SectionImagePlanContext
+): LayoutPlanNode {
   const blocks = splitBodyIntoContentBlocks(seg.body)
   if (blocks.length > 1) {
-    return buildCompositeSegmentNode(seg, blocks)
+    return buildCompositeSegmentNode(seg, blocks, gapImages)
   }
   const body = blocks[0]?.text ?? seg.body
-  return buildLeafNodeFromBody(seg, body)
+  return buildLeafNodeFromBody(seg, body, "", gapImages)
 }
 
-function buildSubsectionBlock(seg: TextSegment): LayoutPlanNode {
-  const inner = buildNodeFromSegment(seg)
+function buildSubsectionBlock(
+  seg: TextSegment,
+  gapImages?: SectionImagePlanContext
+): LayoutPlanNode {
+  const inner = buildNodeFromSegment(seg, gapImages)
   const title = normalizeTitle(seg.title ?? seg.id)
   return {
     id: `sub-${seg.id}`,
@@ -848,8 +1040,57 @@ function buildSubsectionBlock(seg: TextSegment): LayoutPlanNode {
   }
 }
 
+type SectionImagePlanContext = {
+  enabled: boolean
+  documentId?: string
+  prompt: string
+  documentTitle?: string
+}
+
+function buildSectionImageNode(
+  nodeId: string,
+  image: ReportCoverPick,
+  sectionTitle: string
+): LayoutPlanNode {
+  return {
+    id: nodeId,
+    component: "ReportCoverHero",
+    mapping: "widget",
+    sourceText: image.alt,
+    label: `${sectionTitle} illustration`,
+    hints: {
+      imageUrl: image.url,
+      alt: image.alt,
+      variant: "section",
+      note: "ReportCoverHero after CardHeader — copy imageUrl and variant=section exactly",
+    },
+  }
+}
+
+function appendPrimarySectionImage(
+  children: LayoutPlanNode[],
+  ctx: SectionImagePlanContext,
+  sectionId: string,
+  sectionTitle: string,
+  nodeIdPrefix: string
+): void {
+  if (!ctx.enabled) return
+
+  const primary = pickReportSectionImage({
+    seed: `${ctx.documentId ?? "doc"}::${sectionId}`,
+    sectionTitle,
+    prompt: ctx.prompt,
+    documentTitle: ctx.documentTitle,
+  })
+  children.push(buildSectionImageNode(`${nodeIdPrefix}-img`, primary, sectionTitle))
+}
+
 /** One major chapter: rounded Card containing ### subsections (not one Card per heading). */
-function buildChapterCardNode(chapter: ReportChapter, prompt: string): LayoutPlanNode {
+function buildChapterCardNode(
+  chapter: ReportChapter,
+  prompt: string,
+  sectionImages?: SectionImagePlanContext
+): LayoutPlanNode {
   const children: LayoutPlanNode[] = [
     {
       id: `ch-h-${chapter.id}`,
@@ -860,13 +1101,24 @@ function buildChapterCardNode(chapter: ReportChapter, prompt: string): LayoutPla
     },
   ]
 
+  appendPrimarySectionImage(
+    children,
+    sectionImages ?? { enabled: false, prompt },
+    chapter.id,
+    chapter.title,
+    `ch-${chapter.id}`
+  )
+
   if (chapter.leadSegment && !isHeadingOnlySegment(chapter.leadSegment)) {
-    children.push(buildNodeFromSegment(chapter.leadSegment))
+    children.push(buildNodeFromSegment(chapter.leadSegment, sectionImages))
   }
+
+  let subsectionIndex = 0
+  const midImageAfter = sectionImages?.enabled && chapter.subsections.length >= 3 ? 2 : -1
 
   for (const sub of chapter.subsections) {
     if (shouldUseAccordionForSection(sub, prompt)) {
-      const inner = buildNodeFromSegment(sub)
+      const inner = buildNodeFromSegment(sub, sectionImages)
       children.push({
         id: `acc-wrap-${sub.id}`,
         component: "Accordion",
@@ -885,7 +1137,18 @@ function buildChapterCardNode(chapter: ReportChapter, prompt: string): LayoutPla
         ],
       })
     } else {
-      children.push(buildSubsectionBlock(sub))
+      children.push(buildSubsectionBlock(sub, sectionImages))
+    }
+
+    subsectionIndex++
+    if (subsectionIndex === midImageAfter) {
+      const mid = pickReportSectionImage({
+        seed: `${sectionImages!.documentId ?? "doc"}::${chapter.id}::mid`,
+        sectionTitle: `${chapter.title} (continued)`,
+        prompt: sectionImages!.prompt,
+        documentTitle: sectionImages!.documentTitle,
+      })
+      children.push(buildSectionImageNode(`ch-${chapter.id}-img-mid`, mid, chapter.title))
     }
   }
 
@@ -903,8 +1166,12 @@ function buildChapterCardNode(chapter: ReportChapter, prompt: string): LayoutPla
 }
 
 /** Flat Card for simple docs with only ## sections and no ### hierarchy. */
-function buildSectionCardNode(seg: TextSegment, prompt: string): LayoutPlanNode {
-  const inner = buildNodeFromSegment(seg)
+function buildSectionCardNode(
+  seg: TextSegment,
+  prompt: string,
+  sectionImages?: SectionImagePlanContext
+): LayoutPlanNode {
+  const inner = buildNodeFromSegment(seg, sectionImages)
   const title = normalizeTitle(seg.title ?? seg.id)
 
   if (shouldUseAccordionForSection(seg, prompt)) {
@@ -927,6 +1194,24 @@ function buildSectionCardNode(seg: TextSegment, prompt: string): LayoutPlanNode 
     }
   }
 
+  const sectionChildren: LayoutPlanNode[] = [
+    {
+      id: `card-h-${seg.id}`,
+      component: "CardHeader",
+      mapping: "widget",
+      sourceText: title,
+      label: title,
+    },
+  ]
+  appendPrimarySectionImage(
+    sectionChildren,
+    sectionImages ?? { enabled: false, prompt },
+    seg.id,
+    title,
+    `sec-${seg.id}`
+  )
+  sectionChildren.push(inner)
+
   return {
     id: `card-${seg.id}`,
     component: "Card",
@@ -934,16 +1219,7 @@ function buildSectionCardNode(seg: TextSegment, prompt: string): LayoutPlanNode 
     sourceText: title,
     label: title,
     hints: { note: "report section Card with CardHeader + body widget" },
-    children: [
-      {
-        id: `card-h-${seg.id}`,
-        component: "CardHeader",
-        mapping: "widget",
-        sourceText: title,
-        label: title,
-      },
-      inner,
-    ],
+    children: sectionChildren,
   }
 }
 
@@ -1178,29 +1454,53 @@ function buildShellNodes(
     ? buildCoverNode(coverTitle, coverBlurb, coverSubtitle, coverImage)
     : null
 
+  const sectionCardCount =
+    chapters.length > 0
+      ? chapters.length
+      : sectionSegments.filter((s) => isChapterBoundary(s) && !isHeadingOnlySegment(s)).length
+
+  const sectionImageCtx: SectionImagePlanContext = {
+    enabled:
+      GENUI_BODY_REPORT_IMAGES_ENABLED && !focusedDetail && sectionCardCount >= 1,
+    documentId,
+    prompt,
+    documentTitle: docTitle ?? coverTitle,
+  }
+
+  const introChildren: LayoutPlanNode[] = [
+    {
+      id: "intro-header",
+      component: "CardHeader",
+      mapping: "widget",
+      sourceText: docTitle ?? (shell === "charter" ? "Project charter" : "Executive summary"),
+      label: "Summary",
+    },
+  ]
+  if (sectionImageCtx.enabled && !useCover) {
+    appendPrimarySectionImage(
+      introChildren,
+      sectionImageCtx,
+      "intro",
+      introChildren[0]!.label ?? "Summary",
+      "intro"
+    )
+  }
+  introChildren.push({
+    id: "intro-text",
+    component: "TextContent",
+    mapping: "typography-fallback",
+    sourceText: summarySource.slice(0, 1200),
+    fallbackReason: "executive summary lead",
+    hints: { variant: "default" },
+  })
+
   const introCard: LayoutPlanNode = {
     id: "intro-card",
     component: "Card",
     mapping: "widget",
     sourceText: summarySource.slice(0, 1200),
     label: "Summary",
-    children: [
-      {
-        id: "intro-header",
-        component: "CardHeader",
-        mapping: "widget",
-        sourceText: docTitle ?? (shell === "charter" ? "Project charter" : "Executive summary"),
-        label: "Summary",
-      },
-      {
-        id: "intro-text",
-        component: "TextContent",
-        mapping: "typography-fallback",
-        sourceText: summarySource.slice(0, 1200),
-        fallbackReason: "executive summary lead",
-        hints: { variant: "default" },
-      },
-    ],
+    children: introChildren,
   }
 
   const frontCard = coverCard ?? introCard
@@ -1262,7 +1562,9 @@ function buildShellNodes(
 
   if (hierarchical && chapters.length > 0) {
     const tocEntries = chapters.map((c) => c.title)
-    const chapterNodes = chapters.map((ch) => buildChapterCardNode(ch, prompt))
+    const chapterNodes = chapters.map((ch) =>
+      buildChapterCardNode(ch, prompt, sectionImageCtx)
+    )
     const nodes: LayoutPlanNode[] = [frontCard, ...chapterNodes]
     const tocMinChapters = useCover ? 2 : 4
     if (chapters.length >= tocMinChapters) {
@@ -1296,15 +1598,17 @@ function buildShellNodes(
         hints: { entries: tocEntries },
       })
     }
-    nodes.push(...flatSections.map((seg) => buildSectionCardNode(seg, prompt)))
+    nodes.push(...flatSections.map((seg) => buildSectionCardNode(seg, prompt, sectionImageCtx)))
     return nodes
   }
 
   if (flatSections.length >= 1) {
-    return withFront(flatSections.map((seg) => buildSectionCardNode(seg, prompt)))
+    return withFront(
+      flatSections.map((seg) => buildSectionCardNode(seg, prompt, sectionImageCtx))
+    )
   }
 
-  return withFront(sectionSegments.map(buildNodeFromSegment))
+  return withFront(sectionSegments.map((seg) => buildNodeFromSegment(seg)))
 }
 
 function planConfidence(shell: LayoutShellId, segments: TextSegment[], nodes: LayoutPlanNode[]): number {
@@ -1361,7 +1665,12 @@ function twoColumnProseRequiredLang(n: LayoutPlanNode, pad: string): string {
   const left = n.hints.left
   const right = n.hints.right
   if (typeof left !== "string" || typeof right !== "string") return ""
-  return `${pad}  REQUIRED_LANG: TwoColumnProse(left="${escapeLangString(left)}", right="${escapeLangString(right)}")`
+  return `${pad}  REQUIRED_LANG: ${buildTwoColumnProseLang(left, right)}`
+}
+
+/** OpenUI TwoColumnProse: two positionals — left string, right string. */
+function buildTwoColumnProseLang(left: string, right: string): string {
+  return `TwoColumnProse("${escapeLangString(left)}", "${escapeLangString(right)}")`
 }
 
 function flattenNodes(nodes: LayoutPlanNode[], depth = 0): string[] {
@@ -1370,19 +1679,34 @@ function flattenNodes(nodes: LayoutPlanNode[], depth = 0): string[] {
     const pad = "  ".repeat(depth)
     const headerLabel = n.label?.trim()
     const twoColLang = twoColumnProseRequiredLang(n, pad)
+    const bulletsLang = bulletsRequiredLang(n, pad)
+    const comparisonLang = comparisonRequiredLang(n, pad)
     lines.push(
       `${pad}- id: ${n.id}`,
       `${pad}  component: ${n.component}`,
       `${pad}  mapping: ${n.mapping}`,
       `${pad}  label: ${n.label ?? "(none)"}`,
       twoColLang,
+      bulletsLang,
+      comparisonLang,
       n.component === "CardHeader" && headerLabel
         ? typeof n.hints?.subtitle === "string"
           ? `${pad}  REQUIRED_LANG: CardHeader("${escapeLangString(headerLabel)}", "${escapeLangString(n.hints.subtitle)}")`
           : `${pad}  REQUIRED_LANG: CardHeader("${escapeLangString(headerLabel)}")`
         : "",
       n.component === "ReportCoverHero" && typeof n.hints?.imageUrl === "string"
-        ? `${pad}  REQUIRED_LANG: ReportCoverHero(imageUrl="${escapeLangString(n.hints.imageUrl)}", alt="${escapeLangString(String(n.hints.alt ?? "Report cover"))}")`
+        ? `${pad}  REQUIRED_LANG: ${buildReportCoverHeroLang(
+            String(n.hints.imageUrl),
+            String(n.hints.alt ?? "Report cover"),
+            n.hints.variant === "section" || n.hints.variant === "thumb"
+              ? n.hints.variant
+              : undefined
+          )}`
+        : "",
+      n.component === "Stack" &&
+      n.children?.length === 2 &&
+      n.children.every((c) => c.component === "ReportCoverHero" && c.hints?.variant === "thumb")
+        ? `${pad}  REQUIRED_LANG: Stack([${buildReportCoverHeroLang(String(n.children[0]!.hints?.imageUrl ?? ""), String(n.children[0]!.hints?.alt ?? ""), "thumb")}, ${buildReportCoverHeroLang(String(n.children[1]!.hints?.imageUrl ?? ""), String(n.children[1]!.hints?.alt ?? ""), "thumb")}], "row", "m", "stretch", "start", true)`
         : "",
       `${pad}  sourceTextChars: ${n.sourceText.length}`,
       n.fallbackReason ? `${pad}  fallbackReason: ${n.fallbackReason}` : "",
@@ -1432,10 +1756,34 @@ export function formatLayoutPlanForExecutor(
       : "root = Stack([intro Card, one Card per document section — not Accordion unless user asked])",
   }
 
+  const hasSectionImages = collectAllPlanNodes(cappedPlan.nodes).some(
+    (n) => n.component === "ReportCoverHero" && n.hints?.variant === "section"
+  )
+  const hasThumbImages = collectAllPlanNodes(cappedPlan.nodes).some(
+    (n) => n.component === "ReportCoverHero" && n.hints?.variant === "thumb"
+  )
+
   const coverRules = hasCover
     ? [
         "- When node id doc-cover is present: root Stack MUST start with cover Card (ReportCoverHero with exact imageUrl from cover-hero hints, then CardHeader, then TextContent cover blurb) before TableOfContents and chapter Cards.",
         "- Node cover-summary is a SHORT cover teaser (see hints.maxChars). Do NOT paste the full executive summary from chapter 1; preserve cover sourceText only (may tighten wording, not expand).",
+      ]
+    : []
+
+  const sectionImageRules = hasSectionImages
+    ? [
+        "- Chapter/section Cards include ReportCoverHero nodes with hints.variant=section: emit immediately after that Card's CardHeader, before body widgets. Copy imageUrl and alt from hints exactly; include variant=\"section\".",
+        "- Do NOT invent image URLs — only use URLs from REQUIRED_LANG on ReportCoverHero nodes.",
+        "- Mid-chapter section images (ids ending in -img-mid) break up long chapters; place at the plan position among children, not at the end of the whole report.",
+      ]
+    : []
+
+  const thumbImageRules = hasThumbImages
+    ? [
+        "- ReportCoverHero with variant=thumb are small inline placeholders: copy imageUrl/alt exactly; include variant=\"thumb\".",
+        "- When REQUIRED_LANG shows a Stack row of two thumb ReportCoverHero components, emit that Stack verbatim (do not omit thumbs).",
+        "- Thumb pair nodes (ids ending in -thumbs) sit directly under TwoColumnProse inside the same parent Stack.",
+        "- Gap filler thumbs (ids containing -gap- or -between-) sit between tables in subsection Stacks — preserve order.",
       ]
     : []
 
@@ -1445,6 +1793,13 @@ export function formatLayoutPlanForExecutor(
         "- root Stack MUST contain ONLY the components listed in NODES, in the same order — no extra Cards.",
       ]
     : []
+
+  const coverOnlyImageRules =
+    !GENUI_BODY_REPORT_IMAGES_ENABLED && hasCover
+      ? [
+          "- COVER-ONLY IMAGES: Emit ReportCoverHero ONLY inside doc-cover (cover-hero). Do NOT add section banners, thumb pairs, Image, or ImageGallery in chapter Cards unless a matching node appears in NODES.",
+        ]
+      : []
 
   return [
     "=== REQUIRED LAYOUT PLAN (strict — do not change structure) ===",
@@ -1461,21 +1816,34 @@ export function formatLayoutPlanForExecutor(
     "- Put facts from each node's sourceText into that component's props (rows, items, milestones, etc.).",
     "- Nodes with mapping typography-fallback MUST use TextContent (or Callout if warning) with the full sourceText preserved.",
     "- Never use root = Bullets(...) or root = TextContent(...) alone.",
+    "- Emit the COMPLETE OpenUI Lang through every node in NODES (all chapters and Appendices). Do not stop early or truncate lists, tables, or paragraphs mid-sentence.",
+    "- Preserve every bullet and table row from each node's sourceText — nested lists under §2.1-style scope sections must include all capability, deliverable, and organizational items.",
     ...focusedRules,
     ...coverRules,
+    ...coverOnlyImageRules,
+    ...sectionImageRules,
+    ...thumbImageRules,
     "- CardHeader must stay inside Card. One top-level Card per major chapter (H1 or numbered ## like \"1. Executive Summary\").",
     "- Every node with component CardHeader MUST appear as CardHeader(\"<label>\") or CardHeader(\"<label>\", \"<subtitle>\") — positional strings only (no title= named syntax).",
     "- CardHeader accepts at most two positional args. Never three args. Never CardHeader(\"title\", \"default\", ...) — \"default\" is TextContent size, not CardHeader.",
     "- Subsections (### or 1.1, 1.2) go INSIDE the chapter Card as Stack blocks with subsection CardHeader — never a separate top-level Card per ###.",
     "- Skip empty heading-only nodes; do not emit TextContent that only repeats the section title — use CardHeader for the title instead.",
     "- Narrative prose → TextContent. Bullet/numbered lists → Bullets. Markdown tables → Table([Col(\"Header\", [cells...]), ...]) with ONE argument only — never Table(..., \"caption\").",
-    "- Two-column narrative (component TwoColumnProse or hints.twoColumn): emit exactly TwoColumnProse(left=\"…\", right=\"…\") with the left/right strings from the plan — never three stacked TextContent blocks or a column Stack.",
+    "- Bullets: exactly THREE positionals — title (string or null), style (\"bullet\"|\"numbered\"|\"checklist\"), items ([\"line1\", \"line2\", ...]). NEVER pass each bullet as its own positional argument.",
+    "- When REQUIRED_LANG shows Bullets(...), copy it verbatim for that node id.",
+    "- Two-column narrative (component TwoColumnProse or hints.twoColumn): emit exactly TwoColumnProse(\"left paragraph\", \"right paragraph\") as TWO positionals — never left= / right= named syntax, never three stacked TextContent blocks or a column Stack.",
+    "- TableOfContents: TWO positionals — title (string or null), entries ([{title: \"…\", level: 1}, …]). Never pass each entry as its own argument.",
+    "- ReportCoverHero: TWO or THREE positionals — imageUrl string, alt string, optional variant (\"cover\"|\"section\"|\"thumb\"). Never imageUrl= named syntax.",
+    "- Comparison: TWO positionals — title (string or null), sides ([{name: \"…\", highlighted?: true, attributes: {…}}, …]). Never pass the sides array as the only argument; never pass each side object as its own positional; never title= / sides= named syntax.",
+    "- When REQUIRED_LANG shows Comparison(...), copy it verbatim for that node id.",
     "- When REQUIRED_LANG shows TwoColumnProse, copy it verbatim for that node id; do not substitute Stack([TextContent, TextContent], \"row\", …).",
     "- Subsections with multiple blocks (Stack children in plan): render every child in order — intro prose, then Table, then trailing prose (e.g. Justification for Hybrid Approach).",
     "- Do not emit TextContent(\"---\") or other horizontal-rule placeholders; markdown --- lines are omitted from plan prose — end the subsection after the last real paragraph or table.",
     "- WBS Dictionary and wide markdown tables: use Table with all pipe rows from sourceText; hints.wbsDictionary means preserve Level 1–4 columns.",
     "- hints.attributeTable or hints.wideTable: include every row and full cell text from sourceText — never emit \"[Truncated]\" or \"[Truncated for API limits\" in Table cells.",
+    "- hints.overviewMetadataTable: Attribute|Value table is metadata only (name, PM, sponsor, org, authorization). Purpose and Business Value MUST appear only in the separate TwoColumnProse or TextContent node — never as a Table row.",
     "- Apply TwoColumnProse for chapter lead paragraphs and long subsection intros (e.g. Executive Summary, §1.1 Overview) when the plan component is TwoColumnProse.",
+    "- Apply TwoColumnProse for **Purpose and Business Value** narrative blocks (full paragraphs, PMBOK value delivery) — never compress that prose into a table cell.",
     "- Use Accordion only when the user prompt explicitly requests accordion/collapsible/FAQ AND Bullets is not a better fit.",
     "- Do not invent metrics, dates, or names not supported by source text.",
     "- Do not append duplicate appendix tables at the end of the document; place each table only under its matching ### subsection.",
@@ -1636,11 +2004,412 @@ export function pruneUndefinedRefsInLang(lang: string): string {
   return out
 }
 
-/** Post-process executor Lang: two-column repair, divider cleanup, dangling ref prune. */
-export function repairGenuiExecutorLang(lang: string, plan: LayoutPlan): string {
-  return pruneUndefinedRefsInLang(
-    stripDividerNoiseInLang(repairTwoColumnProseInLang(lang, plan))
+/** Pull list lines from source (bullets, numbers, or one title per line for TOC bodies). */
+export function extractListItemsFromSourceText(sourceText: string): string[] {
+  const lines = sourceText.replace(/\r\n/g, "\n").split("\n")
+  const items: string[] = []
+  for (const line of lines) {
+    const m = line.match(/^\s*(?:[-*•]|\d+\.)\s+(.+)$/)
+    if (m?.[1]?.trim()) items.push(m[1].trim())
+  }
+  if (items.length >= 2) return items
+  const plain = lines.map((l) => l.trim()).filter((l) => l.length > 0 && !/^#/.test(l))
+  return plain.length >= 2 ? plain : items
+}
+
+function buildReportCoverHeroLang(
+  imageUrl: string,
+  alt: string,
+  variant?: "cover" | "section" | "thumb"
+): string {
+  const url = `"${escapeLangString(imageUrl)}"`
+  const altArg = `"${escapeLangString(alt)}"`
+  if (variant) return `ReportCoverHero(${url}, ${altArg}, "${variant}")`
+  return `ReportCoverHero(${url}, ${altArg})`
+}
+
+/** OpenUI TableOfContents: title (string or null), entries array. */
+function buildTableOfContentsLang(title: string, entryTitles: string[]): string {
+  const entries = entryTitles
+    .map((t, i) => `{title: "${escapeLangString(t)}", level: ${i === 0 ? 1 : 2}}`)
+    .join(", ")
+  const titleArg = title.trim() ? `"${escapeLangString(title)}"` : "null"
+  return `TableOfContents(${titleArg}, [${entries}])`
+}
+
+function bulletsStyleFromSource(sourceText: string): "bullet" | "numbered" | "checklist" {
+  const lines = sourceText.replace(/\r\n/g, "\n").split("\n").filter((l) => l.trim())
+  if (lines.length === 0) return "bullet"
+  const numbered = lines.filter((l) => /^\s*\d+\.\s+/.test(l)).length
+  if (numbered >= 2 && numbered >= lines.length * 0.35) return "numbered"
+  return "bullet"
+}
+
+/** OpenUI Bullets: exactly three positionals — title (string or null), style, items array. */
+function buildBulletsLang(
+  title: string | undefined,
+  items: string[],
+  style: "bullet" | "numbered" | "checklist" = "bullet"
+): string {
+  const itemLang = items.map((t) => `"${escapeLangString(t)}"`).join(", ")
+  const titleArg = title?.trim() ? `"${escapeLangString(title.trim())}"` : "null"
+  return `Bullets(${titleArg}, "${style}", [${itemLang}])`
+}
+
+function bulletsRequiredLang(n: LayoutPlanNode, pad: string): string {
+  if (n.component !== "Bullets") return ""
+  const items = extractListItemsFromSourceText(n.sourceText)
+  if (items.length < 2) return ""
+  const style = bulletsStyleFromSource(n.sourceText)
+  const title = n.label?.trim()
+  return `${pad}  REQUIRED_LANG: ${buildBulletsLang(title, items, style)}`
+}
+
+function escapeRegExpLiteral(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
+/** Replace malformed Bullets(...) on plan node ids with canonical list from sourceText. */
+function repairTwoColumnProseAssignmentsFromPlan(lang: string, plan: LayoutPlan): string {
+  let out = lang
+  for (const node of collectAllPlanNodes(plan.nodes)) {
+    if (node.component !== "TwoColumnProse" || node.hints?.twoColumn !== "true") continue
+    const left = node.hints.left
+    const right = node.hints.right
+    if (typeof left !== "string" || typeof right !== "string" || !left.trim() || !right.trim()) {
+      continue
+    }
+    const canonical = buildTwoColumnProseLang(left, right)
+    const next = replaceLangNodeAssignment(out, node.id, "TwoColumnProse", canonical)
+    if (next !== out) out = next
+  }
+  return out
+}
+
+function repairTableOfContentsAssignmentFromPlan(lang: string, plan: LayoutPlan): string {
+  const tocNode = collectAllPlanNodes(plan.nodes).find((n) => n.component === "TableOfContents")
+  if (!tocNode) return lang
+  const hintEntries = tocNode.hints?.entries
+  const entryTitles = Array.isArray(hintEntries)
+    ? hintEntries.map(String)
+    : extractListItemsFromSourceText(tocNode.sourceText)
+  if (entryTitles.length < 2) return lang
+  const canonical = buildTableOfContentsLang(
+    typeof tocNode.label === "string" && tocNode.label.trim()
+      ? tocNode.label.trim()
+      : "Table of Contents",
+    entryTitles
   )
+  return replaceLangNodeAssignment(lang, tocNode.id, "TableOfContents", canonical)
+}
+
+function repairReportCoverHeroAssignmentsFromPlan(lang: string, plan: LayoutPlan): string {
+  let out = lang
+  for (const node of collectAllPlanNodes(plan.nodes)) {
+    if (node.component !== "ReportCoverHero" || typeof node.hints?.imageUrl !== "string") continue
+    const variant =
+      node.hints.variant === "section" || node.hints.variant === "thumb"
+        ? node.hints.variant
+        : undefined
+    const canonical = buildReportCoverHeroLang(
+      String(node.hints.imageUrl),
+      String(node.hints.alt ?? "Report cover"),
+      variant
+    )
+    const next = replaceLangNodeAssignment(out, node.id, "ReportCoverHero", canonical)
+    if (next !== out) out = next
+  }
+  return out
+}
+
+function repairBulletsAssignmentsFromPlan(lang: string, plan: LayoutPlan): string {
+  let out = lang
+  for (const node of collectAllPlanNodes(plan.nodes)) {
+    if (node.component !== "Bullets") continue
+    const items = extractListItemsFromSourceText(node.sourceText)
+    if (items.length < 2) continue
+    const style = bulletsStyleFromSource(node.sourceText)
+    const canonical = buildBulletsLang(node.label?.trim(), items, style)
+    out = replaceLangNodeAssignment(out, node.id, "Bullets", canonical)
+  }
+  return out
+}
+
+/** OpenUI Comparison: two positionals — title (string or null), sides array. */
+function buildComparisonLang(title: string | null | undefined, sidesArray: string): string {
+  const titleArg = title?.trim() ? `"${escapeLangString(title.trim())}"` : "null"
+  return `Comparison(${titleArg}, ${sidesArray})`
+}
+
+function buildComparisonFromSource(sourceText: string, title?: string): string | null {
+  const inBlock = sourceText.match(
+    /in[-\s]?scope[:\s]*([\s\S]*?)(?=out[-\s]?of[-\s]?scope\b|$)/i
+  )
+  const outBlock = sourceText.match(/out[-\s]?of[-\s]?scope[:\s]*([\s\S]*?)$/i)
+  if (!inBlock?.[1]?.trim() || !outBlock?.[1]?.trim()) return null
+  const heading = title?.trim() || "Comparison"
+  const inSummary = inBlock[1].trim().slice(0, 600)
+  const outSummary = outBlock[1].trim().slice(0, 600)
+  const sides = `[{name: "In scope", highlighted: true, attributes: {summary: "${escapeLangString(inSummary)}"}}, {name: "Out of scope", highlighted: false, attributes: {summary: "${escapeLangString(outSummary)}"}}]`
+  return buildComparisonLang(heading, sides)
+}
+
+function comparisonRequiredLang(n: LayoutPlanNode, pad: string): string {
+  if (n.component !== "Comparison") return ""
+  const built = buildComparisonFromSource(n.sourceText, n.label?.trim())
+  if (!built) return ""
+  return `${pad}  REQUIRED_LANG: ${built}`
+}
+
+const BULLETS_CALL_RE = /\bBullets\s*\(/g
+const TOC_CALL_RE = /\bTableOfContents\s*\(/g
+
+/** Replace only incomplete Bullets/TOC calls (balanced parens; skips "(CCB)" inside strings). */
+function repairIncompleteBulletsAndTocCallsInLang(lang: string, plan: LayoutPlan): string {
+  const nodes = collectAllPlanNodes(plan.nodes)
+  const bulletNodes = nodes.filter((n) => n.component === "Bullets")
+  const tocNode = nodes.find((n) => n.component === "TableOfContents")
+
+  let out = lang
+
+  if (tocNode) {
+    const hintEntries = tocNode.hints?.entries
+    const entryTitles = Array.isArray(hintEntries)
+      ? hintEntries.map(String)
+      : extractListItemsFromSourceText(tocNode.sourceText)
+    if (entryTitles.length >= 2) {
+      const tocLang = buildTableOfContentsLang(
+        typeof tocNode.label === "string" && tocNode.label.trim()
+          ? tocNode.label.trim()
+          : "Table of Contents",
+        entryTitles
+      )
+      TOC_CALL_RE.lastIndex = 0
+      let result = ""
+      let lastIndex = 0
+      let match: RegExpExecArray | null
+      while ((match = TOC_CALL_RE.exec(out)) !== null) {
+        const openParen = match.index + match[0].length - 1
+        const closeParen = findMatchingParen(out, openParen)
+        if (closeParen < 0) continue
+        const inner = out.slice(openParen + 1, closeParen)
+        result += out.slice(lastIndex, match.index)
+        result += tableOfContentsCallHasEntries(inner)
+          ? out.slice(match.index, closeParen + 1)
+          : tocLang
+        lastIndex = closeParen + 1
+        TOC_CALL_RE.lastIndex = lastIndex
+      }
+      result += out.slice(lastIndex)
+      out = result
+    }
+  }
+
+  if (bulletNodes.length > 0) {
+    let bulletIdx = 0
+    BULLETS_CALL_RE.lastIndex = 0
+    let result = ""
+    let lastIndex = 0
+    let match: RegExpExecArray | null
+    while ((match = BULLETS_CALL_RE.exec(out)) !== null) {
+      const openParen = match.index + match[0].length - 1
+      const closeParen = findMatchingParen(out, openParen)
+      if (closeParen < 0) continue
+      const inner = out.slice(openParen + 1, closeParen)
+      const fullCall = out.slice(match.index, closeParen + 1)
+      result += out.slice(lastIndex, match.index)
+      if (bulletsCallHasCompleteItems(inner)) {
+        result += fullCall
+      } else {
+        const node = bulletNodes[bulletIdx++] ?? bulletNodes[bulletNodes.length - 1]!
+        const items = extractListItemsFromSourceText(node.sourceText)
+        if (items.length < 2) {
+          result += fullCall
+        } else {
+          const titleFromCall =
+            inner.match(/\btitle\s*=\s*"((?:[^"\\]|\\.)*)"/)?.[1] ??
+            inner.match(/^\s*"((?:[^"\\]|\\.)*)"/)?.[1]
+          const title = titleFromCall
+            ? unescapeLangString(titleFromCall)
+            : node.label?.trim()
+          const style = bulletsStyleFromSource(node.sourceText)
+          result += buildBulletsLang(title, items, style)
+        }
+      }
+      lastIndex = closeParen + 1
+      BULLETS_CALL_RE.lastIndex = lastIndex
+    }
+    result += out.slice(lastIndex)
+    out = result
+  }
+
+  return out
+}
+
+/** Fill missing required props on ADPA extension widgets from layout plan sourceText. */
+export function repairIncompleteExtensionComponentsInLang(
+  lang: string,
+  plan: LayoutPlan
+): string {
+  let out = repairIncompleteBulletsAndTocCallsInLang(lang, plan)
+
+  out = repairBulletsAssignmentsFromPlan(out, plan)
+  out = repairTableOfContentsAssignmentFromPlan(out, plan)
+  out = repairReportCoverHeroAssignmentsFromPlan(out, plan)
+  out = repairTwoColumnProseAssignmentsFromPlan(out, plan)
+
+  return out
+}
+
+const REPORT_COVER_HERO_CALL_RE =
+  /ReportCoverHero\s*\((?:[^()"']|"[^"\\]*(?:\\.[^"\\]*)*"|'[^'\\]*(?:\\.[^'\\]*)*')*\)/gi
+
+function collectAllowedCoverHeroImageUrls(plan: LayoutPlan): Set<string> {
+  const urls = new Set<string>()
+  for (const n of collectAllPlanNodes(plan.nodes)) {
+    if (n.component !== "ReportCoverHero") continue
+    if (n.hints?.variant === "section" || n.hints?.variant === "thumb") continue
+    const url = n.hints?.imageUrl
+    if (typeof url === "string" && url.trim()) urls.add(url.trim())
+  }
+  return urls
+}
+
+/** Strip markdown **bold** from CardHeader strings in emitted Lang. */
+export function stripMarkdownBoldInCardHeaders(lang: string): string {
+  return lang.replace(
+    /CardHeader\s*\(\s*"((?:[^"\\]|\\.)*)"\s*(?:,\s*"((?:[^"\\]|\\.)*)")?\s*\)/g,
+    (match, rawA, rawB) => {
+      const title = unescapeLangString(rawA).replace(/\*\*/g, "")
+      if (rawB) {
+        const subtitle = unescapeLangString(rawB).replace(/\*\*/g, "")
+        return `CardHeader("${escapeLangString(title)}", "${escapeLangString(subtitle)}")`
+      }
+      return `CardHeader("${escapeLangString(title)}")`
+    }
+  )
+}
+
+type ParsedReportCoverHeroCall = {
+  imageUrl: string | null
+  variant: "cover" | "section" | "thumb" | null
+}
+
+function parseReportCoverHeroCall(callText: string): ParsedReportCoverHeroCall {
+  let variant: ParsedReportCoverHeroCall["variant"] = null
+  const namedVariant = callText.match(/\bvariant\s*=\s*"(cover|section|thumb)"/i)
+  if (namedVariant) {
+    variant = namedVariant[1] as NonNullable<ParsedReportCoverHeroCall["variant"]>
+  } else {
+    const positionalVariant = callText.match(/,\s*"(cover|section|thumb)"\s*\)\s*$/i)
+    if (positionalVariant) {
+      variant = positionalVariant[1] as NonNullable<ParsedReportCoverHeroCall["variant"]>
+    }
+  }
+
+  const namedUrl = callText.match(/imageUrl\s*=\s*"((?:[^"\\]|\\.)*)"/)
+  if (namedUrl) {
+    return { imageUrl: unescapeLangString(namedUrl[1]), variant }
+  }
+
+  const positionalUrl = callText.match(/ReportCoverHero\s*\(\s*"((?:[^"\\]|\\.)*)"/)
+  if (positionalUrl) {
+    return { imageUrl: unescapeLangString(positionalUrl[1]), variant }
+  }
+
+  return { imageUrl: null, variant }
+}
+
+function reportCoverUrlMatchesAllowed(imageUrl: string, allowedUrls: Set<string>): boolean {
+  const trimmed = imageUrl.trim()
+  if (allowedUrls.has(trimmed)) return true
+  const coerced = coerceReportCoverImageUrl(trimmed)
+  if (!coerced) return false
+  if (allowedUrls.has(coerced)) return true
+  for (const allowed of allowedUrls) {
+    if (coerceReportCoverImageUrl(allowed) === coerced) return true
+  }
+  return false
+}
+
+/** Remove section/thumb ReportCoverHero (and unplanned heroes) when body images are disabled. */
+export function stripBodyReportCoverHeroInLang(lang: string, plan: LayoutPlan): string {
+  if (GENUI_BODY_REPORT_IMAGES_ENABLED) return lang
+
+  const allowedUrls = collectAllowedCoverHeroImageUrls(plan)
+  let out = lang
+  REPORT_COVER_HERO_CALL_RE.lastIndex = 0
+  out = out.replace(REPORT_COVER_HERO_CALL_RE, (match) => {
+    const { imageUrl, variant } = parseReportCoverHeroCall(match)
+    if (variant === "section" || variant === "thumb") return ""
+
+    if (allowedUrls.size === 0) return match
+
+    if (imageUrl) {
+      return reportCoverUrlMatchesAllowed(imageUrl, allowedUrls) ? match : ""
+    }
+
+    // Positional cover heroes must not be stripped when imageUrl= named syntax is absent.
+    return match
+  })
+
+  out = out.replace(/,\s*,/g, ", ")
+  out = out.replace(/\[\s*,/g, "[")
+  out = out.replace(/,\s*\]/g, "]")
+  return out
+}
+
+/** Full multi-chapter reports: skip global two-column regex (can corrupt unrelated TextContent pairs). */
+export function isFullMultiChapterReportLang(lang: string): boolean {
+  const ids = lang.match(/\bcardChapter\d+/g) ?? []
+  return new Set(ids).size >= 6
+}
+
+/** Remove model tail artifacts (leaked markdown fences) from Lang assignments and stacks. */
+export function stripTrailingFenceArtifactsInLang(lang: string): string {
+  const fenceVarNames = new Set<string>()
+  const assignFenceRe =
+    /^\s*(\w+)\s*=\s*TextContent\s*\(\s*(?:"```+"|'```+')(?:\s*,\s*"[^"]*")?\s*\)\s*,?\s*$/gm
+  let m: RegExpExecArray | null
+  while ((m = assignFenceRe.exec(lang)) !== null) {
+    fenceVarNames.add(m[1])
+  }
+
+  let out = lang.replace(assignFenceRe, "")
+  for (const name of fenceVarNames) {
+    out = out.replace(new RegExp(`,\\s*${name}\\s*(?=\\])`), "")
+    out = out.replace(new RegExp(`\\[\\s*${name}\\s*,`), "[")
+    out = out.replace(new RegExp(`${name}\\s*,\\s*`), "")
+  }
+  return out.replace(/\n{3,}/g, "\n\n")
+}
+
+/** Post-process executor Lang: plan repairs, divider/fence cleanup, sanitize. Ref prune is opt-in only. */
+export function repairGenuiExecutorLang(
+  lang: string,
+  plan: LayoutPlan,
+  options?: { pruneUndefinedRefs?: boolean }
+): string {
+  const fullReport = isFullMultiChapterReportLang(lang)
+  const withTwoColumn = fullReport ? lang : repairTwoColumnProseInLang(lang, plan)
+
+  const withExtensions = fullReport
+    ? withTwoColumn
+    : repairIncompleteExtensionComponentsInLang(withTwoColumn, plan)
+
+  let repaired = stripTrailingFenceArtifactsInLang(
+    stripDividerNoiseInLang(
+      stripMarkdownBoldInCardHeaders(
+        stripBodyReportCoverHeroInLang(withExtensions, plan)
+      )
+    )
+  )
+
+  if (options?.pruneUndefinedRefs) {
+    repaired = pruneUndefinedRefsInLang(repaired)
+  }
+
+  return sanitizeOpenUILang(repaired)
 }
 
 export function repairTwoColumnProseInLang(lang: string, plan: LayoutPlan): string {
@@ -1653,7 +2422,7 @@ export function repairTwoColumnProseInLang(lang: string, plan: LayoutPlan): stri
       continue
     }
 
-    const canonical = `TwoColumnProse(left="${escapeLangString(left)}", right="${escapeLangString(right)}")`
+    const canonical = buildTwoColumnProseLang(left, right)
     if (out.includes(canonical)) continue
 
     const leftKey = left.replace(/\s+/g, " ").trim().slice(0, 48)
@@ -1661,7 +2430,7 @@ export function repairTwoColumnProseInLang(lang: string, plan: LayoutPlan): stri
     if (!leftKey || !rightKey) continue
 
     const pairRe =
-      /TextContent\s*\(\s*"((?:[^"\\]|\\.)*)"\s*,[^)]*\)\s*,?\s*TextContent\s*\(\s*"((?:[^"\\]|\\.)*)"\s*,[^)]*\)/gs
+      /TextContent\s*\(\s*"((?:[^"\\]|\\.)*)"\s*,[^)]*\)\s*,?\s*TextContent\s*\(\s*"((?:[^"\\]|\\.)*)"\s*,[^)]*\)/g
 
     out = out.replace(pairRe, (match, rawA, rawB) => {
       const a = unescapeLangString(rawA)
@@ -1672,13 +2441,13 @@ export function repairTwoColumnProseInLang(lang: string, plan: LayoutPlan): stri
       const bLeft = b.includes(leftKey) || leftKey.includes(b.slice(0, 40))
       if (aLeft && bRight) return canonical
       if (aRight && bLeft) {
-        return `TwoColumnProse(left="${escapeLangString(right)}", right="${escapeLangString(left)}")`
+        return buildTwoColumnProseLang(right, left)
       }
       return match
     })
 
     const rowStackRe =
-      /Stack\s*\(\s*\[\s*TextContent\s*\(\s*"((?:[^"\\]|\\.)*)"\s*,[^)]*\)\s*,\s*TextContent\s*\(\s*"((?:[^"\\]|\\.)*)"\s*,[^)]*\)\s*\]\s*,\s*"row"[^)]*\)/gs
+      /Stack\s*\(\s*\[\s*TextContent\s*\(\s*"((?:[^"\\]|\\.)*)"\s*,[^)]*\)\s*,\s*TextContent\s*\(\s*"((?:[^"\\]|\\.)*)"\s*,[^)]*\)\s*\]\s*,\s*"row"[^)]*\)/g
     out = out.replace(rowStackRe, (match, rawA, rawB) => {
       const a = unescapeLangString(rawA)
       const b = unescapeLangString(rawB)

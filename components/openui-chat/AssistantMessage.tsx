@@ -12,7 +12,11 @@ import {
   looksLikeOpenUILang,
   type OpenUIChatJson,
 } from "@/lib/openui/library";
-import { buildLayoutPlan, repairGenuiExecutorLang } from "@/lib/openui/layoutPlan";
+import {
+  buildLayoutPlan,
+  isFullMultiChapterReportLang,
+  repairGenuiExecutorLang,
+} from "@/lib/openui/layoutPlan";
 import { useGenuiReportSurface } from "@/components/genui/GenuiReportSurfaceContext";
 
 interface AssistantMessageProps {
@@ -47,7 +51,11 @@ export const CustomAssistantMessage: React.FC<AssistantMessageProps> = ({
   );
   const langText = useMemo(() => extractOpenUILangText(rawContent), [rawContent]);
   const renderLangText = useMemo(() => {
-    if (isStreaming || !layoutSourceText?.trim() || !langText?.trim()) return langText
+    if (!langText?.trim()) return langText
+    if (isStreaming || !layoutSourceText?.trim()) return langText
+    // Executor already emitted cardChapter1..N; plan repair can truncate Bullets("(CCB)") etc.
+    if (isFullMultiChapterReportLang(langText)) return langText
+
     const plan = buildLayoutPlan({
       prompt:
         layoutPrompt?.trim() ||
@@ -55,7 +63,13 @@ export const CustomAssistantMessage: React.FC<AssistantMessageProps> = ({
       sourceText: layoutSourceText,
       documentId,
     })
-    return repairGenuiExecutorLang(langText, plan)
+    const repaired = repairGenuiExecutorLang(langText, plan)
+    const chapterCardCount = (s: string) =>
+      new Set(s.match(/\bcardChapter\d+/g) ?? []).size
+    if (chapterCardCount(repaired) < chapterCardCount(langText)) {
+      return langText
+    }
+    return repaired
   }, [isStreaming, layoutSourceText, layoutPrompt, documentId, langText])
   const isGenUILang = useMemo(
     () => looksLikeOpenUILang(langText),

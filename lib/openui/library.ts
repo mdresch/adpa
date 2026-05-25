@@ -108,15 +108,27 @@ export function isLegacyComponentPayload(
 }
 
 /** Strip markdown code fences the model sometimes wraps around OpenUI Lang */
+function stripStreamLinePrefix(text: string): string {
+  return text.replace(/^\d+:\s*/, "")
+}
+
+function stripTrailingLangFence(text: string): string {
+  if (!/^root\s*=/m.test(text)) return text
+  return text.replace(/\n?```\s*$/, "")
+}
+
 export function extractOpenUILangText(text: string): string {
-  const trimmed = text.trim()
+  let trimmed = stripStreamLinePrefix(text.trim())
   const closedFence = trimmed.match(/^```(?:openui-lang|openui)\s*\n([\s\S]*?)\n```$/i)
-  if (closedFence) return sanitizeOpenUILang(closedFence[1].trim())
+  if (closedFence) return sanitizeOpenUILang(stripTrailingLangFence(closedFence[1].trim()))
 
   const openFence = trimmed.match(/^```(?:openui-lang|openui)\s*\n([\s\S]*)$/i)
-  if (openFence) return sanitizeOpenUILang(openFence[1].trim())
+  if (openFence) return sanitizeOpenUILang(stripTrailingLangFence(openFence[1].trim()))
 
-  return sanitizeOpenUILang(trimmed)
+  const inlineFence = trimmed.match(/^```(?:openui-lang|openui)\s*([\s\S]*)$/i)
+  if (inlineFence) return sanitizeOpenUILang(stripTrailingLangFence(inlineFence[1].trim()))
+
+  return sanitizeOpenUILang(stripTrailingLangFence(trimmed))
 }
 
 /** Heuristic: assistant content looks like OpenUI Lang (statement syntax, not XML) */
