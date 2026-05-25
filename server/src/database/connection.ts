@@ -171,6 +171,9 @@ let connectionPromise: Promise<void> | null = null
 export const pool = new Proxy({} as Pool, {
   get(_target, prop) {
     if (!internalPool) {
+      if (typeof prop === 'symbol' || ['toString', 'valueOf', 'inspect'].includes(String(prop))) {
+        return undefined
+      }
       throw new Error(`Database not connected. Property '${String(prop)}' accessed before connectDatabase() completed.`)
     }
 

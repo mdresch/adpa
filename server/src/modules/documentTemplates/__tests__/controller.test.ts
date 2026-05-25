@@ -10,7 +10,29 @@ import type { AuthenticatedUser } from '../types'
 
 // Mock dependencies
 jest.mock('../service')
-jest.mock('../../../utils/logger')
+jest.mock('uuid', () => ({
+  v4: jest.fn(() => 'mock-uuid-123')
+}))
+jest.mock('../../../utils/logger', () => {
+  const mockLog = {
+    info: jest.fn(),
+    error: jest.fn(),
+    warn: jest.fn(),
+    debug: jest.fn(),
+    child: jest.fn().mockReturnThis()
+  }
+  return {
+    logger: mockLog,
+    childLogger: jest.fn().mockReturnValue(mockLog),
+    asyncLocalStorage: {}
+  }
+})
+jest.mock('../../../services/templateAuditService', () => ({
+  templateAuditService: {
+    getTemplateAudits: jest.fn(),
+    triggerManualAudit: jest.fn()
+  }
+}))
 
 const mockService = documentTemplateService as jest.Mocked<typeof documentTemplateService>
 const mockLogger = logger as jest.Mocked<typeof logger>
@@ -331,6 +353,69 @@ describe('DocumentTemplateController', () => {
 
       expect(mockRes.status).toHaveBeenCalledWith(404)
       expect(mockRes.json).toHaveBeenCalledWith({ error: 'Template not found or not deleted' })
+    })
+  })
+
+  describe('getTemplateAudits', () => {
+    beforeEach(() => {
+      mockReq.params = { id: 'template-1' }
+    })
+
+    it('should return template audits successfully', async () => {
+      const mockTemplate = { id: 'template-1', name: 'Test' }
+      const mockAudits = [{ id: 'audit-1', status: 'completed' }]
+      
+      mockService.getTemplateById.mockResolvedValue(mockTemplate as any)
+      const { templateAuditService } = require('../../../services/templateAuditService')
+      templateAuditService.getTemplateAudits.mockResolvedValue(mockAudits)
+
+      await controller.getTemplateAudits(mockReq as any, mockRes as any)
+
+      expect(mockService.getTemplateById).toHaveBeenCalledWith('template-1', mockUser)
+      expect(templateAuditService.getTemplateAudits).toHaveBeenCalledWith('template-1')
+      expect(mockRes.json).toHaveBeenCalledWith({ audits: mockAudits })
+    })
+
+    it('should return 404 if template not found', async () => {
+      mockService.getTemplateById.mockResolvedValue(null)
+
+      await controller.getTemplateAudits(mockReq as any, mockRes as any)
+
+      expect(mockRes.status).toHaveBeenCalledWith(404)
+      expect(mockRes.json).toHaveBeenCalledWith({ error: 'Template not found' })
+    })
+  })
+
+  describe('triggerTemplateAudit', () => {
+    beforeEach(() => {
+      mockReq.params = { id: 'template-1' }
+    })
+
+    it('should trigger manual template audit successfully', async () => {
+      const mockTemplate = { id: 'template-1', name: 'Test' }
+      
+      mockService.getTemplateById.mockResolvedValue(mockTemplate as any)
+      const { templateAuditService } = require('../../../services/templateAuditService')
+      templateAuditService.triggerManualAudit.mockResolvedValue('audit-1')
+
+      await controller.triggerTemplateAudit(mockReq as any, mockRes as any)
+
+      expect(mockService.getTemplateById).toHaveBeenCalledWith('template-1', mockUser)
+      expect(templateAuditService.triggerManualAudit).toHaveBeenCalledWith('template-1')
+      expect(mockRes.status).toHaveBeenCalledWith(202)
+      expect(mockRes.json).toHaveBeenCalledWith({
+        message: 'Template audit triggered successfully',
+        audit_id: 'audit-1'
+      })
+    })
+
+    it('should return 404 if template not found', async () => {
+      mockService.getTemplateById.mockResolvedValue(null)
+
+      await controller.triggerTemplateAudit(mockReq as any, mockRes as any)
+
+      expect(mockRes.status).toHaveBeenCalledWith(404)
+      expect(mockRes.json).toHaveBeenCalledWith({ error: 'Template not found' })
     })
   })
 })

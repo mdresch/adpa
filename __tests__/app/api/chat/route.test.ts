@@ -114,6 +114,7 @@ describe('app/api/chat route', () => {
         { role: 'user', content: 'Chart profit vs expenses' },
       ],
       stream: true,
+      max_tokens: 16_384,
     })
     expect(global.fetch).not.toHaveBeenCalled()
   })

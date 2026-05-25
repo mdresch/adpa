@@ -7,6 +7,7 @@ import type { Request, Response } from 'express'
 import { documentTemplateService } from './service'
 import { logger, childLogger } from '../../utils/logger'
 import type { AuthenticatedUser } from './types'
+import { templateAuditService } from '../../services/templateAuditService'
 
 interface AuthenticatedRequest extends Request {
   user?: AuthenticatedUser
@@ -277,6 +278,59 @@ export class DocumentTemplateController {
       }
 
   log.error('Permanently delete template error:', error)
+      res.status(500).json({ error: 'Internal server error' })
+    }
+  }
+
+  /**
+   * GET /api/document-templates/:id/audits
+   * Get all audits for a template
+   */
+  async getTemplateAudits(req: AuthenticatedRequest, res: Response): Promise<void> {
+    const log = childLogger({ requestId: req.requestId })
+    try {
+      const { id } = req.params
+      const user = req.user!
+
+      // Check if template exists and user can access it
+      const template = await documentTemplateService.getTemplateById(id, user)
+      if (!template) {
+        res.status(404).json({ error: 'Template not found' })
+        return
+      }
+
+      const audits = await templateAuditService.getTemplateAudits(id)
+      res.json({ audits })
+    } catch (error) {
+      log.error('Get template audits error:', error)
+      res.status(500).json({ error: 'Internal server error' })
+    }
+  }
+
+  /**
+   * POST /api/document-templates/:id/audit
+   * Trigger a manual template audit run
+   */
+  async triggerTemplateAudit(req: AuthenticatedRequest, res: Response): Promise<void> {
+    const log = childLogger({ requestId: req.requestId })
+    try {
+      const { id } = req.params
+      const user = req.user!
+
+      // Check if template exists and user can access it
+      const template = await documentTemplateService.getTemplateById(id, user)
+      if (!template) {
+        res.status(404).json({ error: 'Template not found' })
+        return
+      }
+
+      const auditId = await templateAuditService.triggerManualAudit(id)
+      res.status(202).json({
+        message: 'Template audit triggered successfully',
+        audit_id: auditId
+      })
+    } catch (error) {
+      log.error('Trigger template audit error:', error)
       res.status(500).json({ error: 'Internal server error' })
     }
   }

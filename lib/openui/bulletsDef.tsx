@@ -13,10 +13,16 @@ export const BulletsDef = defineComponent({
   }),
   component: ({ props }) => {
     const { BulletsComponent } = require("@/components/openui-chat/components/BulletsComponent")
+    const rawItems = props.items
+    const items: string[] = Array.isArray(rawItems)
+      ? rawItems.map((t) => String(t))
+      : typeof rawItems === "string" && rawItems.trim()
+        ? [rawItems]
+        : []
     return (
       <BulletsComponent
         props={{ title: props.title, style: props.style ?? "bullet" } as any}
-        data={((props.items as string[]) ?? []).map((text) => ({ text }))}
+        data={items.map((text) => ({ text }))}
       />
     )
   },

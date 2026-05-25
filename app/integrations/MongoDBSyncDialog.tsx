@@ -142,7 +142,7 @@ export function MongoDBSyncDialog({
             const bodyProjectId = projectId === "all" ? null : projectId
 
             const data = await apiClient.post<{ success: boolean; message?: string }>(
-                `/integrations/${integrationId}/sync`,
+                `/api/integrations/${integrationId}/sync`,
                 { projectId: bodyProjectId }
             )
 

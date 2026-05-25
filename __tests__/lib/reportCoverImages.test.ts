@@ -1,5 +1,7 @@
 import {
+  coerceReportCoverImageUrl,
   pickReportCoverImage,
+  pickReportSectionImage,
   reportCoverPublicUrl,
   REPORT_COVER_FILENAMES,
 } from "@/lib/openui/reportCoverImages"
@@ -9,6 +11,18 @@ describe("reportCoverImages", () => {
     expect(reportCoverPublicUrl("lighthouse shield axzure.jpeg")).toBe(
       "/images/report-covers/lighthouse%20shield%20axzure.jpeg"
     )
+  })
+
+  test("coerceReportCoverImageUrl rejects partial stream paths", () => {
+    expect(coerceReportCoverImageUrl("/images/report-covers/lighthouse%20shield%")).toBe(
+      null
+    )
+    expect(coerceReportCoverImageUrl("/images/report-covers/OIG2%20(3).")).toBe(null)
+    expect(
+      coerceReportCoverImageUrl(
+        reportCoverPublicUrl("lighthouse shield axzure.jpeg")
+      )
+    ).toBe("/images/report-covers/lighthouse%20shield%20axzure.jpeg")
   })
 
   test("stable pick for same document id", () => {
@@ -31,5 +45,16 @@ describe("reportCoverImages", () => {
     const pick = pickReportCoverImage({ seed: "fallback-test" })
     expect(REPORT_COVER_FILENAMES).toContain(pick.filename)
     expect(pick.url.startsWith("/images/report-covers/")).toBe(true)
+  })
+
+  test("section pick differs from cover for same document id", () => {
+    const cover = pickReportCoverImage({ seed: "doc-xyz", prompt: "governance" })
+    const section = pickReportSectionImage({
+      seed: "doc-xyz::chapter-1",
+      sectionTitle: "Executive Summary",
+      prompt: "governance",
+    })
+    expect(section.alt).toMatch(/^Section illustration:/)
+    expect(section.filename).not.toBe(cover.filename)
   })
 })

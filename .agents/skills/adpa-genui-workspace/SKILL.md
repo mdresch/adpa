@@ -199,7 +199,7 @@ Register once in the **ADPA extension layer**; both this **report workspace** an
 
 **Checklist (mirror `lib/openui/timelineDef.tsx`):**
 
-1. **Prefer existing GenUI** — `getProjectOpenUIComponentNames()` from `lib/openui/projectOpenUILibrary.ts`.
+1. **Prefer existing GenUI** — `getProjectOpenUIComponentNames()` from `lib/openui/projectOpenUILibrary.ts`. For catalog coverage, visual-equivalence families (Table vs Carousel vs Bullets, etc.), and planner audit status, see `docs/implementation/GENUI_COMPONENT_CATALOG_AUDIT.md`.
 2. **Define extension** — `lib/openui/<name>Def.tsx` with `defineComponent`.
 3. **Register** — `ADPA_GENUI_EXTENSION_DEFS` / `ADPA_GENUI_EXTENSION_NAMES` in `adpaGenuiExtensionDefs.ts`.
 4. **Planner intent** — `componentSelector.ts`, `layoutPlan.ts` (`toGenUIComponentName`, `resolveShellId`, `buildShellNodes`).

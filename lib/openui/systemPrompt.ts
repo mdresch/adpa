@@ -199,7 +199,9 @@ export function buildOpenUIUserMessage(options: {
   )
 
   parts.push(
-    "\nRespond with OpenUI Lang only. Implement the REQUIRED LAYOUT PLAN exactly. Use TextContent only where a node is marked typography-fallback — preserve that sourceText in full."
+    "\nRespond with OpenUI Lang only. Implement the REQUIRED LAYOUT PLAN exactly. Use TextContent only where a node is marked typography-fallback — preserve that sourceText in full.",
+    "Emit the complete report through the last planned node (including Appendices). Do not truncate Bullets items, Table rows, or prose mid-sentence.",
+    "CardHeader titles must be plain text (no ** markdown bold)."
   )
 
   return parts.join("\n")

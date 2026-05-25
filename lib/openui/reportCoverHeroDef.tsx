@@ -5,10 +5,14 @@ import { z } from "zod/v4"
 export const ReportCoverHeroDef = defineComponent({
   name: "ReportCoverHero",
   description:
-    "Full-width cover image at the top of the doc-cover Card. Use imageUrl from layout plan hints exactly; place before CardHeader.",
+    "Report illustration from /images/report-covers/. Use imageUrl from layout plan hints exactly. Cover: doc-cover. Section: after CardHeader (variant=section). Thumb: small inline pair under TwoColumnProse or between tables (variant=thumb).",
   props: z.object({
     imageUrl: z.string().describe("Public URL e.g. /images/report-covers/..."),
     alt: z.string().optional().describe("Accessible description of the image"),
+    variant: z
+      .enum(["cover", "section", "thumb"])
+      .optional()
+      .describe("section = chapter banner; thumb = small inline / gap filler; omit on doc-cover"),
   }),
   component: ({ props }) => {
     const { ReportCoverHeroComponent } = require("@/components/openui-chat/components/ReportCoverHeroComponent")

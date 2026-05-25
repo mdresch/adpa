@@ -109,9 +109,37 @@ Use in **Lessons learned** section of project closure or next charter appendix:
 
 ---
 
+## 6. PMP template v2.1 (signature artifact)
+
+Integrated **Project Management Plan** generation uses `docs/templates/PMP_8TH_EDITION_REVISED.md` **v2.1**. Regenerating a PMP should yield:
+
+- Document Control + Executive Summary up front
+- **§5 always present** (ESG stub when `ESG Applicability: No`)
+- Subsidiary plan index at §4; no duplicate CCB/stakeholder/risk tables
+- Real names in CCB and §10.4 sign-off (no `[Name]` placeholders)
+- Human PM only in Revision History (not "AI Agent")
+
+Quality audits for `project-management-plan` enforce the same checklist in `qualityAuditService.ts`.
+
+---
+
+## 7. Component catalog utilization (next hardening)
+
+The merged OpenUI library exposes **61** Lang components; the layout planner currently assigns only a **fraction**, with heavy use of `TextContent` + `Table`. Treat catalog coverage as a deliverable:
+
+- **Audit checklist** — every component marked P0 (planner) through P4 (primitive); see `docs/implementation/GENUI_COMPONENT_CATALOG_AUDIT.md`.
+- **Visual equivalence** — same source facts may render as Table, Carousel, Bullets, Comparison, etc.; **first** tabular segment → Table (unless user locks tables); **2nd/3rd** → rotate per family when text allows (e.g. Carousel for 3–8 card-like rows).
+- **Edge cases** — validate against standard governance doc types (charter, SMP, WBS, risk register) listed in the audit doc.
+- **Do not rotate** pipe markdown tables, WBS/attribute registers, or when the user requests tabular output.
+
+---
+
 ## References
+
+- PMP template: `docs/templates/PMP_8TH_EDITION_REVISED.md` (v2.1)
 
 - GenUI workspace skill: `.agents/skills/adpa-genui-workspace/SKILL.md`
 - Human codedoc: `docs/codedocs/genui-workspace.md`
+- Component catalog audit: `docs/implementation/GENUI_COMPONENT_CATALOG_AUDIT.md`
 - Step 3 design reserve: `docs/superpowers/specs/2026-05-21-genui-step3-presentations-design.md`
 - DRACO overview: `docs/07-architecture/ADR-004-DRACO-AI-GOVERNANCE.md`

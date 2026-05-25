@@ -10,10 +10,12 @@ interface TableOfContentsComponentProps {
 
 export function TableOfContentsComponent({ props }: TableOfContentsComponentProps) {
   const title = (props.title as string) || "Table of Contents"
-  const entries =
-    (props.entries as { title: string; level?: number }[] | undefined) ??
-    (props.items as string[] | undefined)?.map((t) => ({ title: t, level: 1 })) ??
-    []
+  const rawEntries = props.entries
+  const entries = Array.isArray(rawEntries)
+    ? (rawEntries as { title: string; level?: number }[])
+    : Array.isArray(props.items)
+      ? (props.items as string[]).map((t) => ({ title: t, level: 1 }))
+      : []
 
   return (
     <nav className="report-toc rounded-lg border px-5 py-4 print:break-after-page">

@@ -1,0 +1,13 @@
+﻿
+> adpa-admin-frontend@2.0.0 build F:\Source\Repos\adpa
+> next build --no-turbopack
+
+node.exe : error: unknown option '--no-turbopack'
+At C:\Users\MennoDrescher\AppData\Roaming\npm\pnpm.ps1:24 char:5
++     & "node$exe"  "$basedir/node_modules/pnpm/bin/pnpm.mjs" $args
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (error: unknown option '--no-turbopack':String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+(Did you mean --turbopack?)
+ΓÇëELIFECYCLEΓÇë Command failed with exit code 1.

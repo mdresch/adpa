@@ -10,9 +10,14 @@ import {
   repairTwoColumnProseInLang,
   stripDividerNoiseInLang,
   repairGenuiExecutorLang,
+  stripBodyReportCoverHeroInLang,
+  stripMarkdownBoldInCardHeaders,
+  stripTrailingFenceArtifactsInLang,
+  repairIncompleteExtensionComponentsInLang,
   pruneUndefinedRefsInLang,
 } from "@/lib/openui/layoutPlan"
-import type { LayoutPlanNode } from "@/lib/openui/layoutPlanTypes"
+import { splitProjectOverviewContent } from "@/lib/openui/projectOverviewLayout"
+import type { LayoutPlan, LayoutPlanNode } from "@/lib/openui/layoutPlanTypes"
 import { validateExecutorLang } from "@/lib/openui/langValidation"
 
 describe("segmentSourceText", () => {
@@ -266,7 +271,7 @@ Cost of inaction exceeds $15M over five years.`
     expect(typeof twoCol?.hints?.left).toBe("string")
     expect(typeof twoCol?.hints?.right).toBe("string")
     const block = formatLayoutPlanForExecutor(plan)
-    expect(block).toMatch(/REQUIRED_LANG: TwoColumnProse\(left=/)
+    expect(block).toMatch(/REQUIRED_LANG: TwoColumnProse\("/)
     expect(block).not.toMatch(/Stack\(\[TextContent\(/)
   })
 
@@ -376,6 +381,118 @@ Architecture details.`
     expect(plan.nodes.length).toBeGreaterThan(3)
   })
 
+  test("stakeholder register skips empty table placeholders and splits long engagement bullets", () => {
+    const source = `# Stakeholder Register: Cloud Migration Program
+
+## 4. Engagement Strategy
+Engagement strategy intro.
+
+### 4.2. Tailored Engagement Strategies Table
+| ID | Name | Power/Influence | Interest | Engagement Strategy (PMBOK 7) |
+| :--- | :--- | :--- | :--- | :--- |
+|     |      |                  |          |                                |
+
+## 5. Engagement Planning
+Effective stakeholder engagement demands a dynamic and tailored approach.
+
+### 5.1. Manage Closely (High Power, High Interest)
+Stakeholders in this quadrant require intensive and personalized engagement.
+
+*   **Eleanor Vance, Chief Digital Officer (CDO) (S-001):** Engagement involves bi-weekly one-on-one strategic alignment meetings to review program progress against business objectives.
+*   **Robert Sterling, Chief Information Officer (CIO) (S-002):** Engagement includes weekly technical deep-dive sessions with cloud architecture and program leadership.`
+
+    const plan = buildLayoutPlan({
+      prompt: "Render the full stakeholder register as a component report",
+      sourceText: source,
+      documentId: "stakeholder-register",
+    })
+
+    const allNodes = plan.nodes.flatMap(function collect(n): LayoutPlanNode[] {
+      return [n, ...(n.children ?? []).flatMap(collect)]
+    })
+
+    expect(allNodes.some((n) => n.sourceText.includes("Power/Influence"))).toBe(false)
+    expect(allNodes.some((n) => n.component === "Bullets" && n.sourceText.includes("Eleanor Vance"))).toBe(true)
+    expect(allNodes.some((n) => n.component === "TextContent" && n.sourceText.includes("Eleanor Vance"))).toBe(false)
+  })
+
+  test("chapter and section cards omit body ReportCoverHero when cover-only mode", () => {
+    const source = `## 1. Executive Summary
+Overview paragraph.
+
+## 2. Strategic Alignment
+Alignment narrative.`
+
+    const plan = buildLayoutPlan({
+      prompt: "Render the full governance document as a component report",
+      sourceText: source,
+      documentId: "doc-with-section-images",
+    })
+
+    const allNodes = plan.nodes.flatMap(function collect(n): LayoutPlanNode[] {
+      return [n, ...(n.children ?? []).flatMap(collect)]
+    })
+    const sectionHeroes = allNodes.filter(
+      (n) => n.component === "ReportCoverHero" && n.hints?.variant === "section"
+    )
+    expect(sectionHeroes.length).toBe(0)
+
+    const coverHeroes = allNodes.filter(
+      (n) => n.component === "ReportCoverHero" && n.hints?.variant !== "section" && n.hints?.variant !== "thumb"
+    )
+    expect(coverHeroes.length).toBeGreaterThanOrEqual(1)
+
+    const executor = formatLayoutPlanForExecutor(plan)
+    expect(executor).not.toMatch(/variant="section"/)
+    expect(executor).toMatch(/COVER-ONLY IMAGES/)
+  })
+
+  test("full report omits thumb pairs when cover-only mode", () => {
+    const para1 = "Left column narrative for the overview section with enough length to qualify for two column prose layout in the planner."
+    const para2 = "Right column narrative continues the overview with complementary detail about scope and governance alignment for readers."
+    const source = `## 1. Introduction
+
+### 1.1 Overview
+${para1}
+
+${para2}
+
+### 1.2 Schedule baseline
+Intro before table.
+
+| Phase | Owner |
+| --- | --- |
+| Initiation | PM |
+
+| Phase | Owner |
+| --- | --- |
+| Close | PM |
+
+Tail paragraph after tables.`
+
+    const plan = buildLayoutPlan({
+      prompt: "Render the full governance document as a component report",
+      sourceText: source,
+      documentId: "doc-thumb-placement",
+    })
+
+    const allNodes = plan.nodes.flatMap(function collect(n): LayoutPlanNode[] {
+      return [n, ...(n.children ?? []).flatMap(collect)]
+    })
+
+    const thumbNodes = allNodes.filter((n) => n.hints?.variant === "thumb")
+    expect(thumbNodes.length).toBe(0)
+
+    const twoColWithThumbs = allNodes.find((n) => n.id.includes("with-thumbs"))
+    expect(twoColWithThumbs).toBeUndefined()
+
+    const gapThumb = allNodes.find((n) => n.id.includes("-gap-"))
+    expect(gapThumb).toBeUndefined()
+
+    const executor = formatLayoutPlanForExecutor(plan)
+    expect(executor).not.toMatch(/variant="thumb"/)
+  })
+
   test("SMP §1.1 two-column plan does not list duplicate col children to executor", () => {
     const para1 =
       "The purpose of this Scope Management Plan (SMP) is to establish a comprehensive framework for defining, documenting, validating, and controlling the project scope for the ADPA - Implementation of OpenUI and Auto UI Generation project."
@@ -412,7 +529,7 @@ The hybrid model balances governance with agility.`
     const twoCol = allNodes.find((n) => n.id.includes("1-1") && n.hints?.twoColumn === "true")
     expect(twoCol?.component).toBe("TwoColumnProse")
     const block = formatLayoutPlanForExecutor(plan)
-    expect(block).toMatch(/REQUIRED_LANG: TwoColumnProse\(left=/)
+    expect(block).toMatch(/REQUIRED_LANG: TwoColumnProse\("/)
     expect(block).not.toMatch(/section-1-1-overview-col1/)
 
     const section12Nodes = allNodes.filter((n) => n.id.includes("1-2"))
@@ -526,6 +643,73 @@ ROI discussion.`
   })
 })
 
+describe("project overview layout", () => {
+  test("pulls Purpose and Business Value out of Attribute|Value table into prose", () => {
+    const purposeText =
+      "The ADPA project is a critical initiative designed to revolutionize how users interact with LLM outputs. " +
+      "It delivers measurable value through increased engagement, reduced manual UI work, and faster time-to-insight " +
+      "across the organization, aligning with strategic goals for intelligent automation and PMBOK value delivery."
+
+    const body = `| Attribute | Value |
+| --- | --- |
+| Project Name | ADPA - OpenUI |
+| Project Manager | Menno Drescher |
+| Sponsor | Anya Sharma |
+| Organization | ADPA |
+| Authorization | Project ID: 82efd3d4 |
+| Purpose and Business Value | ${purposeText} |`
+
+    const blocks = splitProjectOverviewContent(body, "1.1 Project Overview")
+    expect(blocks).not.toBeNull()
+    expect(blocks!.some((b) => b.kind === "prose" && b.text.includes(purposeText))).toBe(true)
+    expect(blocks!.find((b) => b.kind === "table")?.text).toMatch(/Project Name/)
+    expect(blocks!.find((b) => b.kind === "table")?.text).not.toMatch(/revolutionize how users/)
+
+    const plan = buildLayoutPlan({
+      prompt: "Render the full governance document as a component report",
+      sourceText: `## 1. Context\n\n### 1.1 Project Overview\n\n${body}`,
+      documentId: "doc-overview-split",
+    })
+
+    const allNodes = plan.nodes.flatMap(function collect(n): LayoutPlanNode[] {
+      return [n, ...(n.children ?? []).flatMap(collect)]
+    })
+    const purposeProse = allNodes.find(
+      (n) =>
+        (n.component === "TwoColumnProse" || n.component === "TextContent") &&
+        n.sourceText.includes("revolutionize how users")
+    )
+    expect(purposeProse).toBeDefined()
+    const metaTable = allNodes.find(
+      (n) => n.component === "Table" && n.hints?.overviewMetadataTable === "true"
+    )
+    expect(metaTable).toBeDefined()
+    expect(metaTable?.sourceText).not.toContain("revolutionize how users")
+
+    const executor = formatLayoutPlanForExecutor(plan)
+    expect(executor).toMatch(/overviewMetadataTable/)
+    expect(executor).toMatch(/Purpose and Business Value/)
+  })
+
+  test("bold-label §1.1 template is not classified as a single data table", () => {
+    const body = `**Project Name**: ADPA - OpenUI
+**Project Manager**: Menno Drescher, Architect
+**Sponsor**: Anya Sharma, CDO
+**Organization**: ADPA
+**Authorization**: Charter ref 2026-001
+
+**Purpose and Business Value** *(PMBOK 8 Principle: Value Delivery)*:
+
+The project exists to transform LLM markdown into interactive UI. It delivers measurable benefits including higher engagement and lower manual UI effort for application teams across ADPA.`
+
+    const blocks = splitProjectOverviewContent(body, "1.1 Project Overview")
+    expect(blocks?.some((b) => b.kind === "prose" && /transform LLM markdown/i.test(b.text))).toBe(
+      true
+    )
+    expect(blocks?.find((b) => b.kind === "table")?.text).toMatch(/Project Name/)
+  })
+})
+
 describe("splitBodyIntoContentBlocks", () => {
   test("splits prose, table, and justification tail for §1.2-style sections", () => {
     const body = `Intro paragraph before the table.
@@ -542,6 +726,29 @@ The hybrid model balances governance with agility.`
     expect(blocks[0]?.text).toMatch(/Intro paragraph/)
     expect(blocks[1]?.kind).toBe("table")
     expect(blocks[2]?.text).toMatch(/Justification for Hybrid Approach/)
+  })
+
+  test("drops empty markdown table placeholders instead of rendering pipes", () => {
+    const body = `| Role | Responsibilities |
+| :--- | :--- |
+|      |                  |`
+
+    expect(splitBodyIntoContentBlocks(body)).toEqual([])
+  })
+
+  test("splits intro prose from long stakeholder bullet details", () => {
+    const body = `Stakeholders in this quadrant require intensive and personalized engagement.
+
+*   **Eleanor Vance, Chief Digital Officer (CDO) (S-001):** Engagement involves bi-weekly one-on-one strategic alignment meetings to review program progress against business objectives.
+*   **Robert Sterling, Chief Information Officer (CIO) (S-002):** Engagement includes weekly technical deep-dive sessions with cloud architecture and program leadership.`
+
+    const blocks = splitBodyIntoContentBlocks(body)
+
+    expect(blocks).toHaveLength(2)
+    expect(blocks[0]?.kind).toBe("prose")
+    expect(blocks[1]?.kind).toBe("list")
+    expect(blocks[1]?.text).toContain("Eleanor Vance")
+    expect(blocks[1]?.text).toContain("Robert Sterling")
   })
 })
 
@@ -651,7 +858,7 @@ ${para2}`
   ])
 ])`
     const fixed = repairTwoColumnProseInLang(badLang, plan)
-    expect(fixed).toMatch(/TwoColumnProse\(left=/)
+    expect(fixed).toMatch(/TwoColumnProse\("/)
     expect(fixed).not.toMatch(/TextContent\("The purpose of this Scope/)
   })
 })
@@ -692,7 +899,108 @@ card_ch9 = Card([ch9_header, ch9_sec9_1, ch9_missing], "card")`
   })
 })
 
+describe("repairIncompleteExtensionComponentsInLang", () => {
+  test("fills TableOfContents entries and Bullets items from plan", () => {
+    const bulletSource = `- Cloud adoption accelerates
+- AI governance rises
+- Vendor consolidation`
+    const plan = buildLayoutPlan({
+      prompt: "Render full report",
+      sourceText: "placeholder",
+    })
+    const fixedPlan = {
+      ...plan,
+      nodes: [
+        {
+          id: "doc-toc",
+          component: "TableOfContents" as const,
+          mapping: "widget" as const,
+          label: "Table of Contents",
+          sourceText: "Chapter One\nChapter Two\nChapter Three\nChapter Four",
+          hints: {
+            entries: ["Chapter One", "Chapter Two", "Chapter Three", "Chapter Four"],
+          },
+        },
+        {
+          id: "ch3TrendsBullets",
+          component: "Bullets" as const,
+          mapping: "widget" as const,
+          label: "Trends",
+          sourceText: bulletSource,
+        },
+        {
+          id: "ch3CompetitiveBullets",
+          component: "Bullets" as const,
+          mapping: "widget" as const,
+          label: "Competitive",
+          sourceText: bulletSource,
+        },
+      ],
+    }
+
+    const badLang = `root = Stack([
+  toc = TableOfContents(title="Table of Contents"),
+  ch3TrendsBullets = Bullets(title="Trends"),
+  ch3CompetitiveBullets = Bullets(title="Competitive"),
+])`
+    const fixed = repairIncompleteExtensionComponentsInLang(badLang, fixedPlan)
+    expect(fixed).toMatch(/TableOfContents\([^,]+, \[\{title:/)
+    expect(fixed).toMatch(/Bullets\("Trends", "bullet", \["/)
+    expect(fixed).toMatch(/Cloud adoption accelerates/)
+  })
+
+  test("preserves Bullets with parentheses inside item strings (e.g. CCB)", () => {
+    const plan = buildLayoutPlan({
+      prompt: "Render the full document",
+      sourceText: "## 6. Governance\n\n- Change one",
+    })
+    const lang = `root = Stack([chapter6])
+chapter6 = Card([section6_2])
+section6_2 = Bullets("6.2 Change Control Process", "numbered", [
+  "**Review by Change Control Board (CCB)**: The CCB will review.",
+  "**Decision**: Approved or rejected."
+])`
+    const fixed = repairIncompleteExtensionComponentsInLang(lang, plan)
+    expect(fixed).toContain("(CCB)")
+    expect(fixed).toMatch(/Bullets\("6\.2 Change Control Process", "numbered", \[/)
+    expect(fixed).not.toMatch(/Bullets\("6\.2 Change Control Process", "bullet", \[\]/)
+  })
+})
+
+describe("stripMarkdownBoldInCardHeaders", () => {
+  test("removes ** from CardHeader titles", () => {
+    const lang =
+      'coverHeader = CardHeader("**Business Requirements Document (BRD)**")'
+    expect(stripMarkdownBoldInCardHeaders(lang)).toBe(
+      'coverHeader = CardHeader("Business Requirements Document (BRD)")'
+    )
+  })
+})
+
 describe("repairGenuiExecutorLang", () => {
+  test("repairs Bullets with excess positionals via plan sourceText", () => {
+    const bulletSource = `- Cloud adoption accelerates
+- AI governance rises
+- Vendor consolidation`
+    const plan = buildLayoutPlan({
+      prompt: "Render the full document",
+      sourceText: `## 3. Trends\n\n### Market\n${bulletSource}`,
+    })
+    const allNodes = (nodes: typeof plan.nodes): typeof plan.nodes[number][] =>
+      nodes.flatMap((n) => [n, ...allNodes(n.children ?? [])])
+    const bulletNode = allNodes(plan.nodes).find((n) => n.component === "Bullets")
+    expect(bulletNode).toBeDefined()
+
+    const badLang = `${bulletNode!.id} = Bullets("Trends", "bullet", "only", "three", "kept", "dropped")`
+    const fixed = repairGenuiExecutorLang(badLang, plan)
+    expect(fixed).toMatch(
+      new RegExp(
+        `${bulletNode!.id} = Bullets\\([^,]+, "bullet", \\[[\\s\\S]*Cloud adoption[\\s\\S]*\\]\\)`
+      )
+    )
+    expect(fixed).not.toMatch(/Bullets\([^)]*"only", "three"/)
+  })
+
   test("applies two-column repair and divider cleanup", () => {
     const para1 =
       "The purpose of this Scope Management Plan (SMP) is to establish a comprehensive framework for defining, documenting, validating, and controlling the project scope for the ADPA - Implementation of OpenUI and Auto UI Generation project."
@@ -717,8 +1025,114 @@ ${para2}`
   ])
 ])`
     const fixed = repairGenuiExecutorLang(badLang, plan)
-    expect(fixed).toMatch(/TwoColumnProse\(left=/)
+    expect(fixed).toMatch(/TwoColumnProse\("/)
     expect(fixed).not.toMatch(/TextContent\("---"/)
+    expect(fixed).not.toMatch(/\btail\b/)
+  })
+
+  test("preserves section6_2 Bullets with (CCB) after full repair pipeline", () => {
+    const plan = buildLayoutPlan({
+      prompt: "Render the full document",
+      sourceText: "## 1\n\nA",
+    })
+    const chapters = Array.from({ length: 12 }, (_, i) => {
+      const n = i + 1
+      return `cardChapter${n} = Card([CardHeader("Ch ${n}")])`
+    }).join("\n")
+    const rootIds = chapters
+      .split("\n")
+      .map((line) => line.split("=")[0]!.trim())
+      .join(", ")
+    const lang = `root = Stack([coverCard, toc, ${rootIds}])
+${chapters}
+section6_2 = Bullets("6.2 Change Control Process", "numbered", [
+  "**Review by Change Control Board (CCB)**: The CCB decides.",
+  "**Implementation**: Roll out after approval."
+])`
+    const fixed = repairGenuiExecutorLang(lang, plan)
+    expect(fixed).toContain("(CCB)")
+    expect(new Set(fixed.match(/\bcardChapter\d+/g) ?? []).size).toBe(12)
+  })
+
+  test("keeps positional doc-cover ReportCoverHero in cover-only mode", () => {
+    const coverUrl = "/images/report-covers/OIG1.o2QeAohBpUXatr.jpeg"
+    const plan: LayoutPlan = {
+      shell: "charter",
+      root: "Stack",
+      intentPrimary: "full document report",
+      confidence: 1,
+      focusedDetail: false,
+      sourceCoverage: { segmentCount: 1, totalChars: 1 },
+      nodes: [
+        {
+          id: "doc-cover",
+          component: "Card",
+          mapping: "widget",
+          sourceText: "Executive Summary",
+          children: [
+            {
+              id: "coverHero",
+              component: "ReportCoverHero",
+              mapping: "widget",
+              sourceText: "Executive Summary",
+              hints: {
+                imageUrl: coverUrl,
+                alt: "Report cover: OIG1.o2QeAohBpUXatr",
+              },
+            },
+          ],
+        },
+      ],
+    }
+    const lang = `coverHero = ReportCoverHero("${coverUrl}", "Report cover: OIG1.o2QeAohBpUXatr")
+coverCard = Card([coverHero, CardHeader("Executive Summary")])
+root = Stack([coverCard])`
+
+    const stripped = stripBodyReportCoverHeroInLang(lang, plan)
+    expect(stripped).toMatch(/ReportCoverHero\s*\(/)
+    expect(stripped).toContain("coverHero")
+
+    const repaired = repairGenuiExecutorLang(lang, plan)
+    expect(repaired).toMatch(/ReportCoverHero\s*\(/)
+  })
+
+  test("strips positional section ReportCoverHero in cover-only mode", () => {
+    const plan = buildLayoutPlan({
+      prompt: "Render report",
+      sourceText: "## 1\n\nBody",
+    })
+    const lang = `banner = ReportCoverHero("/images/report-covers/lighthouse.jpeg", "Section", "section")`
+    const stripped = stripBodyReportCoverHeroInLang(lang, plan)
+    expect(stripped).not.toMatch(/ReportCoverHero/)
+  })
+
+  test("does not drop cardChapter ids from root on full multi-chapter lang", () => {
+    const plan = buildLayoutPlan({
+      prompt: "Render the full document",
+      sourceText: "## 1\n\nA\n\n## 2\n\nB",
+    })
+    const chapters = Array.from({ length: 12 }, (_, i) => {
+      const n = i + 1
+      return `cardChapter${n} = Card([CardHeader("Ch ${n}")])`
+    }).join("\n")
+    const lang = `root = Stack([coverCard, toc, ${chapters
+      .split("\n")
+      .map((line) => line.split("=")[0]!.trim())
+      .join(", ")}])\n${chapters}`
+    const fixed = repairGenuiExecutorLang(lang, plan)
+    expect(new Set(fixed.match(/\bcardChapter\d+/g) ?? []).size).toBe(12)
+  })
+})
+
+describe("stripTrailingFenceArtifactsInLang", () => {
+  test("removes leaked markdown fence TextContent and stack refs", () => {
+    const fence = "```"
+    const lang = `root = Stack([
+  section12Part2 = TextContent("---", "default"),
+  tail = TextContent("${fence}", "default")
+])`
+    const fixed = stripTrailingFenceArtifactsInLang(lang)
+    expect(fixed).not.toContain('TextContent("' + fence)
     expect(fixed).not.toMatch(/\btail\b/)
   })
 })
