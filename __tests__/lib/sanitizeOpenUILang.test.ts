@@ -2,6 +2,7 @@ import {
   sanitizeOpenUILang,
   sanitizeCardHeaderCalls,
   splitTopLevelLangArgs,
+  replaceLangNodeAssignment,
 } from "@/lib/openui/sanitizeOpenUILang"
 
 describe("splitTopLevelLangArgs", () => {
@@ -149,5 +150,30 @@ describe("sanitizeCardHeaderCalls", () => {
   it("still works as CardHeader-only helper", () => {
     const input = 'x = CardHeader("A", "B", "C")'
     expect(sanitizeCardHeaderCalls(input)).toBe('x = CardHeader("A", "B")')
+  })
+})
+
+describe("replaceLangNodeAssignment", () => {
+  it("replaces only the requested node assignment with balanced parentheses", () => {
+    const input = [
+      'section10 = TwoColumnProse("keep", "unchanged")',
+      'section1 = TwoColumnProse("old left (with parens)", "old right")',
+      'section11 = TwoColumnProse("also", "unchanged")',
+    ].join("\n")
+
+    expect(
+      replaceLangNodeAssignment(
+        input,
+        "section1",
+        "TwoColumnProse",
+        'TwoColumnProse("new left", "new right")'
+      )
+    ).toBe(
+      [
+        'section10 = TwoColumnProse("keep", "unchanged")',
+        'section1 = TwoColumnProse("new left", "new right")',
+        'section11 = TwoColumnProse("also", "unchanged")',
+      ].join("\n")
+    )
   })
 })

@@ -30,7 +30,7 @@ const TABLE: ComponentSanitizeSpec = {
   namedKeys: ["columns"],
 }
 
-/** Precompiled patterns (Codacy: avoid `new RegExp` with dynamic component names). */
+/** Precompiled patterns keep component matching literal and static-analysis friendly. */
 const COMPONENT_CALL_RE: Record<string, RegExp> = {
   CardHeader: /\bCardHeader\s*\(/g,
   TextContent: /\bTextContent\s*\(/g,
@@ -100,6 +100,14 @@ function parseNamedArg(arg: string): { key: string; value: string } | null {
   const m = arg.trim().match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.+)$/s)
   if (!m) return null
   return { key: m[1], value: m[2].trim() }
+}
+
+function findNamedTopLevelLangArg(inner: string, key: string): string | null {
+  for (const arg of splitTopLevelLangArgs(inner)) {
+    const named = parseNamedArg(arg)
+    if (named?.key === key) return named.value
+  }
+  return null
 }
 
 function normalizeArgs(spec: ComponentSanitizeSpec, rawArgs: string[]): string[] {
@@ -276,8 +284,9 @@ function sanitizeBulletsCallInner(inner: string): string {
 
 /** Extract a named string prop even when the value contains commas. */
 function extractNamedLangString(inner: string, key: string): string | null {
-  const re = new RegExp(`\\b${key}\\s*=\\s*"((?:[^"\\\\]|\\\\.)*)"`)
-  const m = inner.match(re)
+  const value = findNamedTopLevelLangArg(inner, key)
+  if (!value) return null
+  const m = value.match(/^"((?:[^"\\]|\\.)*)"$/)
   if (!m) return null
   return `"${m[1]}"`
 }
@@ -320,12 +329,12 @@ function findMatchingBracket(
 }
 
 function extractNamedLangArray(inner: string, key: string): string | null {
-  const keyMatch = inner.match(new RegExp(`\\b${key}\\s*=\\s*\\[`))
-  if (!keyMatch || keyMatch.index == null) return null
-  const openBracket = inner.indexOf("[", keyMatch.index)
-  const closeBracket = findMatchingBracket(inner, openBracket, "[", "]")
+  const value = findNamedTopLevelLangArg(inner, key)
+  if (!value?.trim().startsWith("[")) return null
+  const trimmed = value.trim()
+  const closeBracket = findMatchingBracket(trimmed, 0, "[", "]")
   if (closeBracket < 0) return null
-  return inner.slice(openBracket, closeBracket + 1)
+  return trimmed.slice(0, closeBracket + 1)
 }
 
 function sanitizeTwoColumnProseCallInner(inner: string): string {
@@ -630,27 +639,68 @@ export function replaceLangNodeAssignment(
   componentName: string,
   replacementCall: string
 ): string {
-  const idEsc = nodeId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-  const compEsc = componentName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-  const re = new RegExp(`\\b${idEsc}\\s*=\\s*${compEsc}\\s*\\(`, "g")
-  let match: RegExpExecArray | null
   let out = lang
   let offset = 0
+  let searchFrom = 0
 
-  while ((match = re.exec(lang)) !== null) {
-    const openParen = match.index + match[0].length - 1
+  while (searchFrom < lang.length) {
+    const start = lang.indexOf(nodeId, searchFrom)
+    if (start < 0) break
+
+    if (
+      isLangIdentifierChar(lang[start - 1]) ||
+      isLangIdentifierChar(lang[start + nodeId.length])
+    ) {
+      searchFrom = start + nodeId.length
+      continue
+    }
+
+    let cursor = skipLangWhitespace(lang, start + nodeId.length)
+    if (lang[cursor] !== "=") {
+      searchFrom = start + nodeId.length
+      continue
+    }
+
+    cursor = skipLangWhitespace(lang, cursor + 1)
+    if (
+      !lang.startsWith(componentName, cursor) ||
+      isLangIdentifierChar(lang[cursor + componentName.length])
+    ) {
+      searchFrom = start + nodeId.length
+      continue
+    }
+
+    cursor = skipLangWhitespace(lang, cursor + componentName.length)
+    if (lang[cursor] !== "(") {
+      searchFrom = start + nodeId.length
+      continue
+    }
+
+    const openParen = cursor
     const closeParen = findMatchingParen(lang, openParen)
-    if (closeParen < 0) continue
+    if (closeParen < 0) {
+      searchFrom = openParen + 1
+      continue
+    }
 
-    const start = match.index
     const end = closeParen + 1
     const replacement = `${nodeId} = ${replacementCall}`
     out = out.slice(0, start + offset) + replacement + out.slice(end + offset)
     offset += replacement.length - (end - start)
-    re.lastIndex = start + replacement.length
+    searchFrom = end
   }
 
   return out
+}
+
+function isLangIdentifierChar(ch: string | undefined): boolean {
+  return ch != null && /[A-Za-z0-9_$]/.test(ch)
+}
+
+function skipLangWhitespace(source: string, start: number): number {
+  let cursor = start
+  while (cursor < source.length && /\s/.test(source[cursor]!)) cursor++
+  return cursor
 }
 
 /**
