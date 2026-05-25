@@ -349,6 +349,49 @@ class QualityAuditService {
           }
         }
 
+        // Closed-loop trigger: if document quality audit score is < 70, trigger template audit
+        if (overallScore < 70) {
+          logger.info(`[QUALITY-AUDIT] 📉 Document score ${overallScore} is < 70. Triggering closed-loop template audit for template ${templateId}`, {
+            documentId,
+            templateId
+          })
+          
+          setImmediate(async () => {
+            try {
+              const { templateAuditService } = await import('./templateAuditService')
+              const tempResult = await pool.query(
+                "SELECT * FROM templates WHERE id = $1 AND deleted_at IS NULL",
+                [templateId]
+              )
+              if (tempResult.rows.length > 0) {
+                const templateData = tempResult.rows[0]
+                const versionResult = await pool.query(
+                  "SELECT COUNT(*) FROM template_audits WHERE template_id = $1",
+                  [templateId]
+                )
+                const version = Number(versionResult.rows[0].count) + 1
+                
+                const failureContext = {
+                  documentId,
+                  documentScore: overallScore,
+                  issues: issues.map(iss => ({
+                    severity: iss.severity,
+                    dimension: iss.dimension,
+                    description: iss.description,
+                    recommendation: iss.recommendation
+                  })),
+                  recommendations
+                }
+
+                const auditId = await templateAuditService.createPendingAudit(templateId, 'document_failure', version)
+                await templateAuditService.runAudit(auditId, templateData, failureContext)
+              }
+            } catch (err: any) {
+              logger.error(`[QUALITY-AUDIT] Failed to trigger closed-loop template audit for template ${templateId}`, err)
+            }
+          })
+        }
+
         // 9. Also trigger regular template analysis if quality is below 90%
         if (overallScore < 90) {
           const hasLowScore = Object.values(dimensionalScores).some(score => score < 80)
@@ -618,10 +661,17 @@ For Project Charter (PMBOK):
 - Is project manager authority defined?
 `,
       'project-management-plan': `
-For Project Management Plan (PMBOK 8):
+For Project Management Plan (PMBOK 8, template v2.1 signature artifact):
 - Are all 12 principles referenced? (Value, Systems Thinking, Stewardship, Team, Stakeholders, Leadership, Tailoring, Quality, Complexity, Risk, Adaptability, Change)
 - Are all 8 performance domains addressed? (Stakeholders, Team, Planning, Project Work, Delivery, Measurement, Uncertainty, Development Approach)
 - Is the document outcome-focused (not just process-focused)?
+- Document Control and Executive Summary present near the top?
+- Section 5 present (ESG stub when N/A, or full ESG when applicable)—not skipped?
+- Subsidiary Management Plans Index at start of section 4?
+- No bracket placeholders ([Name], [TBD], [Insert])—real names or "Not specified in project documentation"?
+- Change control / CCB defined once in section 6 without full duplication in 4.1/4.8/8?
+- Section 10.4 sign-off includes PM, Sponsor, Head of IT, Head of Business Operations?
+- Revision history author is human PM (not "AI Agent")?
 `,
       'scope-baseline': `
 For Scope Baseline (PMBOK):

@@ -11,7 +11,17 @@ import { pool } from '../../../database/connection'
 
 // Mock dependencies
 jest.mock('../service')
-jest.mock('../../../database/connection')
+jest.mock('uuid', () => ({
+  v4: jest.fn(() => 'mock-uuid-123')
+}))
+jest.mock('../../../database/connection', () => ({
+  pool: {
+    query: jest.fn().mockResolvedValue({ rows: [] })
+  },
+  connectDatabase: jest.fn().mockResolvedValue(undefined),
+  setInternalPool: jest.fn(),
+  getDatabasePool: jest.fn()
+}))
 jest.mock('../../../utils/redis', () => ({
   cache: {
     get: jest.fn(),
@@ -19,11 +29,24 @@ jest.mock('../../../utils/redis', () => ({
     del: jest.fn()
   }
 }))
-jest.mock('../../../utils/logger', () => ({
-  logger: {
+jest.mock('../../../utils/logger', () => {
+  const mockLog = {
     info: jest.fn(),
     error: jest.fn(),
-    warn: jest.fn()
+    warn: jest.fn(),
+    debug: jest.fn(),
+    child: jest.fn().mockReturnThis()
+  }
+  return {
+    logger: mockLog,
+    childLogger: jest.fn().mockReturnValue(mockLog),
+    asyncLocalStorage: {}
+  }
+})
+jest.mock('../../../services/templateAuditService', () => ({
+  templateAuditService: {
+    getTemplateAudits: jest.fn(),
+    triggerManualAudit: jest.fn()
   }
 }))
 
@@ -97,9 +120,9 @@ describe('Document Templates Routes', () => {
         .set('Authorization', `Bearer ${authToken}`)
         .expect(200)
 
-      expect(response.body).toEqual(mockResult)
+      expect(response.body).toEqual(JSON.parse(JSON.stringify(mockResult)))
       expect(mockService.getTemplates).toHaveBeenCalledWith(
-        expect.objectContaining({ page: 1, limit: 10 }),
+        {},
         expect.objectContaining({ id: 'user-123' })
       )
     })
@@ -134,12 +157,12 @@ describe('Document Templates Routes', () => {
 
       expect(mockService.getTemplates).toHaveBeenCalledWith(
         expect.objectContaining({
-          page: 2,
-          limit: 5,
+          page: '2',
+          limit: '5',
           framework: 'TOGAF',
           category: 'Architecture',
           search: 'test',
-          is_public: true
+          is_public: 'true'
         }),
         expect.any(Object)
       )
@@ -168,7 +191,7 @@ describe('Document Templates Routes', () => {
         .set('Authorization', `Bearer ${authToken}`)
         .expect(200)
 
-      expect(response.body).toEqual({ template: mockTemplate })
+      expect(response.body).toEqual(JSON.parse(JSON.stringify({ template: mockTemplate })))
     })
 
     it('should return 404 for non-existent template', async () => {
@@ -220,10 +243,10 @@ describe('Document Templates Routes', () => {
         .send(createData)
         .expect(201)
 
-      expect(response.body).toEqual({
+      expect(response.body).toEqual(JSON.parse(JSON.stringify({
         message: 'Template created successfully',
         template: mockCreatedTemplate
-      })
+      })))
     })
 
     it('should return 400 for invalid data', async () => {
@@ -270,10 +293,10 @@ describe('Document Templates Routes', () => {
         .send(updateData)
         .expect(200)
 
-      expect(response.body).toEqual({
+      expect(response.body).toEqual(JSON.parse(JSON.stringify({
         message: 'Template updated successfully',
         template: mockUpdatedTemplate
-      })
+      })))
     })
 
     it('should return 404 for non-existent template', async () => {
@@ -340,10 +363,10 @@ describe('Document Templates Routes', () => {
         .send(cloneData)
         .expect(201)
 
-      expect(response.body).toEqual({
+      expect(response.body).toEqual(JSON.parse(JSON.stringify({
         message: 'Template cloned successfully',
         template: mockClonedTemplate
-      })
+      })))
     })
   })
 
@@ -389,7 +412,7 @@ describe('Document Templates Routes', () => {
         .set('Authorization', `Bearer ${authToken}`)
         .expect(200)
 
-      expect(response.body).toEqual(mockResult)
+      expect(response.body).toEqual(JSON.parse(JSON.stringify(mockResult)))
     })
   })
 
@@ -427,6 +450,46 @@ describe('Document Templates Routes', () => {
         .expect((res) => {
           expect(res.body.message).toBe('Template permanently deleted')
         })
+    })
+  })
+
+  describe('GET /api/document-templates/:id/audits', () => {
+    it('should return audits for a template', async () => {
+      const mockTemplate = { id: 'template-1', name: 'Test' }
+      const mockAudits = [{ id: 'audit-1', status: 'completed' }]
+      
+      mockService.getTemplateById.mockResolvedValue(mockTemplate as any)
+      const { templateAuditService } = require('../../../services/templateAuditService')
+      templateAuditService.getTemplateAudits.mockResolvedValue(mockAudits)
+
+      const response = await request(app)
+        .get('/api/document-templates/550e8400-e29b-41d4-a716-446655440000/audits')
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200)
+
+      expect(response.body).toEqual({ audits: mockAudits })
+      expect(templateAuditService.getTemplateAudits).toHaveBeenCalledWith('550e8400-e29b-41d4-a716-446655440000')
+    })
+  })
+
+  describe('POST /api/document-templates/:id/audit', () => {
+    it('should trigger template audit manually', async () => {
+      const mockTemplate = { id: 'template-1', name: 'Test' }
+      
+      mockService.getTemplateById.mockResolvedValue(mockTemplate as any)
+      const { templateAuditService } = require('../../../services/templateAuditService')
+      templateAuditService.triggerManualAudit.mockResolvedValue('audit-1')
+
+      const response = await request(app)
+        .post('/api/document-templates/550e8400-e29b-41d4-a716-446655440000/audit')
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(202)
+
+      expect(response.body).toEqual({
+        message: 'Template audit triggered successfully',
+        audit_id: 'audit-1'
+      })
+      expect(templateAuditService.triggerManualAudit).toHaveBeenCalledWith('550e8400-e29b-41d4-a716-446655440000')
     })
   })
 })

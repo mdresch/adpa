@@ -473,4 +473,26 @@ router.delete(
   documentTemplateController.permanentlyDeleteTemplate.bind(documentTemplateController)
 )
 
+/**
+ * GET /api/document-templates/:id/audits
+ * Get all template audits
+ */
+router.get(
+  '/:id/audits',
+  authenticateToken,
+  validateParams(uuidParam),
+  documentTemplateController.getTemplateAudits.bind(documentTemplateController)
+)
+
+/**
+ * POST /api/document-templates/:id/audit
+ * Trigger a manual template audit run
+ */
+router.post(
+  '/:id/audit',
+  authenticateToken,
+  validateParams(uuidParam),
+  documentTemplateController.triggerTemplateAudit.bind(documentTemplateController)
+)
+
 export default router
