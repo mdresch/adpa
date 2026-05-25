@@ -9,11 +9,38 @@ import { logger } from '../../../utils/logger'
 import type { AuthenticatedUser, CreateTemplateRequest, UpdateTemplateRequest } from '../types'
 
 // Mock dependencies
-jest.mock('../../../database/connection')
+jest.mock('../../../database/connection', () => ({
+  pool: {
+    query: jest.fn().mockResolvedValue({ rows: [] })
+  },
+  connectDatabase: jest.fn().mockResolvedValue(undefined),
+  setInternalPool: jest.fn(),
+  getDatabasePool: jest.fn()
+}))
 jest.mock('../../../utils/redis')
-jest.mock('../../../utils/logger')
+jest.mock('../../../utils/logger', () => ({
+  logger: {
+    info: jest.fn(),
+    error: jest.fn(),
+    warn: jest.fn(),
+    debug: jest.fn()
+  },
+  childLogger: jest.fn().mockImplementation(() => ({
+    info: jest.fn(),
+    error: jest.fn(),
+    warn: jest.fn(),
+    debug: jest.fn()
+  })),
+  asyncLocalStorage: {}
+}))
 jest.mock('uuid', () => ({
   v4: jest.fn(() => 'test-uuid-123')
+}))
+jest.mock('../../../services/templateAuditService', () => ({
+  templateAuditService: {
+    createPendingAudit: jest.fn().mockResolvedValue('mock-audit-id'),
+    runAudit: jest.fn().mockResolvedValue(undefined)
+  }
 }))
 
 const mockPool = pool as jest.Mocked<typeof pool>
@@ -34,6 +61,8 @@ describe('DocumentTemplateService', () => {
     }
 
     jest.clearAllMocks()
+    mockPool.query.mockReset()
+    mockPool.query.mockResolvedValue({ rows: [] } as any)
   })
 
   describe('getTemplates', () => {
@@ -169,6 +198,12 @@ describe('DocumentTemplateService', () => {
         ])
       )
       expect(mockLogger.info).toHaveBeenCalledWith('Template created: New Template by test@example.com')
+
+      // Wait for setImmediate to execute background audit
+      await new Promise(resolve => setImmediate(resolve))
+      const { templateAuditService } = require('../../../services/templateAuditService')
+      expect(templateAuditService.createPendingAudit).toHaveBeenCalledWith('test-uuid-123', 'lifecycle', 1)
+      expect(templateAuditService.runAudit).toHaveBeenCalledWith('mock-audit-id', mockCreatedTemplate)
     })
   })
 
@@ -196,12 +231,19 @@ describe('DocumentTemplateService', () => {
       mockPool.query
         .mockResolvedValueOnce({ rows: [{ created_by: 'user-123' }] } as any)
         .mockResolvedValueOnce({ rows: [mockUpdatedTemplate] } as any)
+        .mockResolvedValueOnce({ rows: [{ count: '2' }] } as any) // For template_audits version query
 
       const result = await service.updateTemplate('template-1', updateData, mockUser)
 
       expect(result).toEqual(mockUpdatedTemplate)
       expect(mockCache.del).toHaveBeenCalledWith('template:template-1')
       expect(mockLogger.info).toHaveBeenCalledWith('Template updated: template-1 by test@example.com')
+
+      // Wait for setImmediate to execute background audit
+      await new Promise(resolve => setImmediate(resolve))
+      const { templateAuditService } = require('../../../services/templateAuditService')
+      expect(templateAuditService.createPendingAudit).toHaveBeenCalledWith('template-1', 'lifecycle', 3)
+      expect(templateAuditService.runAudit).toHaveBeenCalledWith('mock-audit-id', mockUpdatedTemplate)
     })
 
     it('should return null if template not found', async () => {

@@ -7,6 +7,7 @@ import { pool } from '../../database/connection'
 import { cache } from '../../utils/redis'
 import { logger } from '../../utils/logger'
 import { v4 as uuidv4 } from 'uuid'
+import { templateAuditService } from '../../services/templateAuditService'
 import type {
   DocumentTemplate,
   CreateTemplateRequest,
@@ -212,6 +213,16 @@ export class DocumentTemplateService {
 
     logger.info(`Template created: ${name} by ${user.email}`)
 
+    // Trigger background audit in a non-blocking manner (advisory)
+    setImmediate(async () => {
+      try {
+        const auditId = await templateAuditService.createPendingAudit(result.rows[0].id, 'lifecycle', 1)
+        await templateAuditService.runAudit(auditId, result.rows[0])
+      } catch (err) {
+        logger.error(`[TEMPLATE-AUDIT] Background lifecycle hook failed for new template ${result.rows[0].id}`, err)
+      }
+    })
+
     return result.rows[0]
   }
 
@@ -290,6 +301,21 @@ export class DocumentTemplateService {
     await cache.del(`template:${id}`)
 
     logger.info(`Template updated: ${id} by ${user.email}`)
+
+    // Trigger background audit in a non-blocking manner (advisory)
+    setImmediate(async () => {
+      try {
+        const versionResult = await pool.query(
+          "SELECT COUNT(*) FROM template_audits WHERE template_id = $1",
+          [id]
+        )
+        const version = Number(versionResult.rows[0].count) + 1
+        const auditId = await templateAuditService.createPendingAudit(id, 'lifecycle', version)
+        await templateAuditService.runAudit(auditId, result.rows[0])
+      } catch (err) {
+        logger.error(`[TEMPLATE-AUDIT] Background lifecycle hook failed for updated template ${id}`, err)
+      }
+    })
 
     return result.rows[0]
   }
