@@ -32,7 +32,7 @@ export class TemplateAuditService {
       const paragraphs = JSON.stringify(templateData.template_paragraphs || [])
 
       // 1. Governance Evaluator call
-      const govPrompt = this.buildGovernancePrompt(framework, templateName, templateDesc, systemPrompt, paragraphs)
+      const govPrompt = this.buildGovernancePrompt(framework, templateName, templateDesc, systemPrompt, paragraphs, docFailureContext)
       const govPromise = aiService.generateWithFallback({
         provider: 'google', // Default provider
         prompt: govPrompt,
@@ -42,7 +42,7 @@ export class TemplateAuditService {
       })
 
       // 2. Counterfactual Challenger call
-      const chalPrompt = this.buildChallengerPrompt(framework, templateName, templateDesc, systemPrompt, paragraphs)
+      const chalPrompt = this.buildChallengerPrompt(framework, templateName, templateDesc, systemPrompt, paragraphs, docFailureContext)
       const chalPromise = aiService.generateWithFallback({
         provider: 'openai', // Default provider
         prompt: chalPrompt,
@@ -115,9 +115,14 @@ export class TemplateAuditService {
     }
   }
 
-  private buildGovernancePrompt(framework: string, name: string, desc: string, systemPrompt: string, paragraphs: string): string {
+  private buildGovernancePrompt(framework: string, name: string, desc: string, systemPrompt: string, paragraphs: string, docFailureContext?: any): string {
+    let failureSection = ''
+    if (docFailureContext) {
+      failureSection = `\n## Document Generation Failure Context:\nA document generated from this template failed a quality audit with a score of ${docFailureContext.documentScore}/100.\nIssues identified:\n${JSON.stringify(docFailureContext.issues || [])}\nRecommendations:\n${JSON.stringify(docFailureContext.recommendations || [])}\n\nPay close attention to these issues. Verify if they stem from gaps/vagueness in the template structure or prompt instructions.\n`
+    }
     return `You are the Governance Evaluator on the DRACO Template Audit Board.
 Your role: Rigorously audit this document template's prompt guidance, paragraphs, and structure for compliance with the designated framework: ${framework}.
+${failureSection}
 
 ## Template to Audit:
 - Name: ${name}
@@ -144,9 +149,14 @@ Respond ONLY with valid JSON matching this structure:
 }`
   }
 
-  private buildChallengerPrompt(framework: string, name: string, desc: string, systemPrompt: string, paragraphs: string): string {
+  private buildChallengerPrompt(framework: string, name: string, desc: string, systemPrompt: string, paragraphs: string, docFailureContext?: any): string {
+    let failureSection = ''
+    if (docFailureContext) {
+      failureSection = `\n## Document Generation Failure Context:\nA document generated from this template failed a quality audit with a score of ${docFailureContext.documentScore}/100.\nIssues identified:\n${JSON.stringify(docFailureContext.issues || [])}\nRecommendations:\n${JSON.stringify(docFailureContext.recommendations || [])}\n\nPay close attention to these issues. Verify if they stem from gaps/vagueness in the template structure or prompt instructions.\n`
+    }
     return `You are the Counterfactual Challenger on the DRACO Template Audit Board.
 Your role: Adversarially stress-test this document template's instructions and prompt guidance. Identify logical loopholes, vague guidelines, and areas where the generating AI could hallucinate, make circular claims, or produce low-quality content.
+${failureSection}
 
 ## Template to Audit:
 - Name: ${name}
