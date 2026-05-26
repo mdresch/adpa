@@ -30,15 +30,8 @@ describe('InlineEntityParserService', () => {
       markdown,
     });
 
-    // Verify cleaned markdown
-    const expectedCleanedMarkdown = [
-      '# Project Report',
-      'This is a test report.',
-      'Some more text in between.',
-      'End of document.',
-    ].join('\n');
-
-    expect(result.cleanedMarkdown).toBe(expectedCleanedMarkdown);
+    // Verify cleaned markdown (should preserve H8 tag lines)
+    expect(result.cleanedMarkdown).toBe(markdown);
     expect(result.extractedCount).toBe(3);
 
     // Verify saveSingleEntityType calls
@@ -81,7 +74,7 @@ describe('InlineEntityParserService', () => {
     expect(saveSingleEntityType).not.toHaveBeenCalled();
   });
 
-  it('should ignore malformed JSON but still strip the H8 line', async () => {
+  it('should ignore malformed JSON but still preserve the H8 line', async () => {
     const markdown = [
       'Before line.',
       '######## stakeholder: { invalid json }',
@@ -94,7 +87,7 @@ describe('InlineEntityParserService', () => {
       markdown,
     });
 
-    expect(result.cleanedMarkdown).toBe('Before line.\nAfter line.');
+    expect(result.cleanedMarkdown).toBe(markdown);
     expect(result.extractedCount).toBe(0);
     expect(saveSingleEntityType).not.toHaveBeenCalled();
   });

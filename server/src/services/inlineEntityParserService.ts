@@ -35,12 +35,11 @@ export class InlineEntityParserService {
           entityGroups[entityType].push(entity);
           extractedCount++;
         } catch (error) {
-          // Log error or handle parsing failure, still exclude it from the cleaned markdown
+          // Log error or handle parsing failure
           console.error(`Failed to parse inline entity JSON: ${jsonStr}`, error);
         }
-      } else {
-        cleanedLines.push(line);
       }
+      cleanedLines.push(line);
     }
 
     // Call saveSingleEntityType for each entity group
