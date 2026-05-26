@@ -215,9 +215,10 @@ class DocumentGenerationService {
       const draftConcurrency = this.getDraftConcurrency(request.provider)
       logger.info(`[AGENT] Phase 2: Drafting ${generationPlan.sections.length} sections with concurrency ${draftConcurrency}...`)
 
-      // Draft sections with bounded parallelism to avoid provider quota floods.
-      const draftedSections = await this.mapWithConcurrency(generationPlan.sections, draftConcurrency, (sectionTask, index) => {
-        return this.draftSection({
+      const { InlineEntityParserService } = await import('./inlineEntityParserService')
+
+      const draftedSections = await this.mapWithConcurrency(generationPlan.sections, draftConcurrency, async (sectionTask, index) => {
+        const sectionProse = await this.draftSection({
           task: sectionTask,
           order: index,
           project,
@@ -231,6 +232,20 @@ class DocumentGenerationService {
           userId: request.userId,
           templateId: request.templateId,
         })
+
+        const parseResult = await InlineEntityParserService.parseAndProcess({
+          projectId: request.projectId,
+          userId: request.userId,
+          markdown: sectionProse.markdown
+        }).catch(err => {
+          logger.error(`Inline entity parsing failed for section "${sectionTask.heading}":`, err)
+          return { cleanedMarkdown: sectionProse.markdown, extractedCount: 0 }
+        })
+
+        return {
+          ...sectionProse,
+          markdown: parseResult.cleanedMarkdown
+        }
       })
 
       // Sort sections back into their planned order (Promise.all preserves array order, but it's safe to sort)
@@ -417,7 +432,11 @@ class DocumentGenerationService {
     }
 
     sectionPrompt += `\n---\n\n`
-    sectionPrompt += `Output ONLY the Markdown for your assigned section. Start your output exactly with: ${params.task.heading}`
+    sectionPrompt += `Output the Markdown for your assigned section starting exactly with ${params.task.heading}.`
+    sectionPrompt += `\n\nAdditionally, at the very end of your output, list any key entities (stakeholders, risks, milestones, budget_baseline, cost_estimates, deliverables) mentioned or defined in this section using the markdown H8 bracket format:\n`
+    sectionPrompt += `######## entity_type: {"attribute1": "value1", ...}\n`
+    sectionPrompt += `Use valid JSON for the entity attributes. Example:\n`
+    sectionPrompt += `######## stakeholders: {"name": "Project Sponsor", "role": "Funder", "influence_level": 5}\n`
 
     const traceName = `agentic-doc-gen-draft-${params.order + 1}`
     const temperature = params.temperature || 0.5
