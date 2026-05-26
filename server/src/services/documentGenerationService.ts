@@ -4,6 +4,7 @@ import { unifiedAIService } from "./unifiedAIService"
 import { documentTemplateService } from "../modules/documentTemplates/service"
 import { getContextForStrategy } from "./gkg"
 import { z } from "zod"
+import { INLINE_ENTITY_EXTRACTION_PROMPT } from "./inlineEntityExtractionPrompt"
 
 export interface DocumentGenerationRequest {
   jobId?: string
@@ -433,10 +434,7 @@ class DocumentGenerationService {
 
     sectionPrompt += `\n---\n\n`
     sectionPrompt += `Output the Markdown for your assigned section starting exactly with ${params.task.heading}.`
-    sectionPrompt += `\n\nAdditionally, at the very end of your output, list any key entities (stakeholders, risks, milestones, budget_baseline, cost_estimates, deliverables) mentioned or defined in this section using the markdown H8 bracket format:\n`
-    sectionPrompt += `######## entity_type: {"attribute1": "value1", ...}\n`
-    sectionPrompt += `Use valid JSON for the entity attributes. Example:\n`
-    sectionPrompt += `######## stakeholders: {"name": "Project Sponsor", "role": "Funder", "influence_level": 5}\n`
+    sectionPrompt += INLINE_ENTITY_EXTRACTION_PROMPT
 
     const traceName = `agentic-doc-gen-draft-${params.order + 1}`
     const temperature = params.temperature || 0.5
