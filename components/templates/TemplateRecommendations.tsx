@@ -38,6 +38,46 @@ interface TemplateSuggestion {
   }
 }
 
+function stringifyRecommendationText(value: unknown): string {
+  if (value === null || value === undefined) return ''
+  if (typeof value === 'string') return value.trim()
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>
+    const candidate =
+      record.proposed_change ||
+      record.description ||
+      record.recommendation ||
+      record.issue_addressed ||
+      record.title
+
+    if (candidate) {
+      return stringifyRecommendationText(candidate)
+    }
+
+    return JSON.stringify(value)
+  }
+
+  return String(value)
+}
+
+function buildDiffAppendix(title: string, values: unknown[] = []): string {
+  const lines = values
+    .map(stringifyRecommendationText)
+    .filter((line) => line.length > 0)
+
+  if (lines.length === 0) return ''
+
+  return [
+    '',
+    '',
+    '---',
+    '',
+    title,
+    ...lines.map((line) => `- ${line}`),
+  ].join('\n')
+}
+
 export function TemplateRecommendations({ templateId }: { templateId: string }) {
   const [suggestions, setSuggestions] = useState<TemplateSuggestion[]>([])
   const [loading, setLoading] = useState(true)
@@ -575,7 +615,7 @@ export function TemplateRecommendations({ templateId }: { templateId: string }) 
 
       {/* Optimization Diff Dialog */}
       <Dialog open={showOptimizationDialog} onOpenChange={setShowOptimizationDialog}>
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[96vw] max-w-[1800px] max-h-[92vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-purple-600" />
@@ -628,7 +668,21 @@ export function TemplateRecommendations({ templateId }: { templateId: string }) 
                         // Default to "No system prompt" if empty
                         if (!currentPrompt) currentPrompt = 'No system prompt defined'
                         if (!suggestedPrompt) suggestedPrompt = currentPrompt
-                        
+
+                        const regularSuggestionPromptAppendix = selectedOptimization.optimization?.is_regular_suggestion
+                          ? buildDiffAppendix(
+                              'Proposed system prompt changes',
+                              selectedOptimization.optimization.changes_summary?.system_prompt_changes ||
+                                selectedOptimization.suggested_improvements?.filter((improvement: any) =>
+                                  String(improvement.section || '').toLowerCase().includes('system_prompt'),
+                                ),
+                            )
+                          : ''
+
+                        if (currentPrompt === suggestedPrompt && regularSuggestionPromptAppendix) {
+                          suggestedPrompt = `${suggestedPrompt}${regularSuggestionPromptAppendix}`
+                        }
+
                         const isIdentical = currentPrompt === suggestedPrompt
                         
                         if (process.env.NODE_ENV === 'development') {
@@ -659,7 +713,10 @@ export function TemplateRecommendations({ templateId }: { templateId: string }) 
                                 </AlertDescription>
                               </Alert>
                             )}
-                            <div className="border rounded-lg overflow-hidden">
+                            <div
+                              data-testid="optimization-diff-system-prompt"
+                              className="optimization-diff-shell border rounded-lg overflow-x-auto"
+                            >
                               <SideBySideDiff
                                 oldContent={currentPrompt}
                                 newContent={suggestedPrompt}
@@ -702,7 +759,22 @@ export function TemplateRecommendations({ templateId }: { templateId: string }) 
                         // Default to \"No content\" if empty
                         if (!currentContent) currentContent = 'No template content defined'
                         if (!suggestedContent) suggestedContent = currentContent
-                        
+
+                        const regularSuggestionContentAppendix = selectedOptimization.optimization?.is_regular_suggestion
+                          ? buildDiffAppendix(
+                              'Proposed template content changes',
+                              selectedOptimization.optimization.changes_summary?.content_changes?.length
+                                ? selectedOptimization.optimization.changes_summary.content_changes
+                                : selectedOptimization.suggested_improvements?.filter((improvement: any) =>
+                                    !String(improvement.section || '').toLowerCase().includes('system_prompt'),
+                                  ),
+                            )
+                          : ''
+
+                        if (currentContent === suggestedContent && regularSuggestionContentAppendix) {
+                          suggestedContent = `${suggestedContent}${regularSuggestionContentAppendix}`
+                        }
+
                         const isIdentical = currentContent === suggestedContent
                         
                         if (process.env.NODE_ENV === 'development') {
@@ -734,7 +806,10 @@ export function TemplateRecommendations({ templateId }: { templateId: string }) 
                                 </AlertDescription>
                               </Alert>
                             )}
-                            <div className="border rounded-lg overflow-hidden">
+                            <div
+                              data-testid="optimization-diff-template-content"
+                              className="optimization-diff-shell border rounded-lg overflow-x-auto"
+                            >
                               <SideBySideDiff
                                 oldContent={currentContent}
                                 newContent={suggestedContent}

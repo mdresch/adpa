@@ -6,8 +6,8 @@
 'use client'
 
 import { useMemo } from 'react'
-import { parseDiff, Diff, Hunk, tokenize } from 'react-diff-view'
-import { diffLines, formatLines } from 'unidiff'
+import { Diff, Hunk, tokenize } from 'react-diff-view'
+import { buildSideBySideDiffFiles } from './sideBySideDiffParser'
 import 'react-diff-view/style/index.css'
 import './diff-view.css'
 
@@ -35,47 +35,18 @@ export function SideBySideDiff({ oldContent, newContent, filename = 'document.md
     return newContent
   }, [newContent])
 
-  const diffText = useMemo(() => {
-    // Check if contents are identical
+  const files = useMemo(() => {
     if (validatedOldContent === validatedNewContent) {
       console.log('[SideBySideDiff] Content is identical, no changes to display')
-      return ''
-    }
-
-    // Create unified diff format
-    const oldLines = validatedOldContent.split('\n')
-    const newLines = validatedNewContent.split('\n')
-    
-    // Use unidiff to create a proper diff with expanded context for better clarity
-    const formatted = formatLines(diffLines(oldLines, newLines), {
-      context: 5  // Increased from 3 to 5 for more context around changes
-    })
-
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[SideBySideDiff] Generated diff:', {
-        oldLinesCount: oldLines.length,
-        newLinesCount: newLines.length,
-        diffLength: formatted.length,
-        hasChanges: formatted.length > 0
-      })
-    }
-
-    return formatted
-  }, [validatedOldContent, validatedNewContent])
-
-  const files = useMemo(() => {
-    if (!diffText) {
       return []
     }
 
     try {
-      // Parse the diff text into structured format
-      const diffHeader = [
-        `--- ${filename}`,
-        `+++ ${filename}`,
-        diffText
-      ].join('\n')
-      const parsed = parseDiff(diffHeader)
+      const parsed = buildSideBySideDiffFiles({
+        oldContent: validatedOldContent,
+        newContent: validatedNewContent,
+        filename,
+      })
       
       if (process.env.NODE_ENV === 'development') {
         console.log('[SideBySideDiff] Parsed diff files:', {
@@ -89,7 +60,7 @@ export function SideBySideDiff({ oldContent, newContent, filename = 'document.md
       console.error('[SideBySideDiff] Error parsing diff:', error)
       return []
     }
-  }, [diffText, filename])
+  }, [validatedOldContent, validatedNewContent, filename])
 
   // Calculate change statistics from the parsed diff for accuracy
   const stats = useMemo(() => {

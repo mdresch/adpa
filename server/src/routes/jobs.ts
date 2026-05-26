@@ -174,7 +174,7 @@ router.get("/",
         let jobName = ''
         
         // Priority 1: Document name (most specific)
-        const docName = job.document_name || jobData.documentName
+        const docName = job.document_name || jobData.documentName || jobData.document_name || jobData.name
         
         // Priority 2: Template name (for new documents being generated)
         const templateName = job.template_name || jobData.template_name || jobData.variables?.template_name
@@ -220,9 +220,9 @@ router.get("/",
           workerProcessId: job.worker_process_id,
           queuePosition: job.queue_position,
           logs: jobData.logs || [],
-          projectName: job.project_name,
+          projectName: job.project_name || jobData.projectName || jobData.variables?.project_name,
           templateName: job.template_name,
-          documentName: job.document_name,
+          documentName: docName,
           userName: job.user_name,
           // Additional metadata for AI jobs
           metadata: {
@@ -232,10 +232,11 @@ router.get("/",
             template_id: jobData.template_id,
             template_name: job.template_name || jobData.variables?.template_name,
             project_id: jobData.projectId || jobData.variables?.project_id,
-            project_name: job.project_name,
+            project_name: job.project_name || jobData.projectName || jobData.variables?.project_name,
             document_id: job.document_id,
-            document_name: job.document_name,
+            document_name: docName,
             tokens: jobData.tokens || job.result?.usage,
+            llmInsights: jobData.llm_insights || null,
             // Worker and queue information
             worker_id: job.worker_id,
             worker_process_id: job.worker_process_id,
@@ -351,13 +352,36 @@ router.get("/:id",
       }
 
       const job = result.rows[0]
+      const jobData = typeof job.data === 'string' ? JSON.parse(job.data) : (job.data || {})
+      const detailProjectName = job.project_name || jobData.projectName || jobData.variables?.project_name
+      const detailDocumentName = job.document_name || jobData.documentName || jobData.document_name || jobData.name
+      const detailTemplateName = job.template_name || jobData.template_name || jobData.variables?.template_name
 
       // Users can only view their own jobs unless they're admin
       if (job.created_by !== req.user?.id && req.user?.role !== "admin") {
         return res.status(403).json({ error: "Access denied" })
       }
 
-      res.json({ job })
+      res.json({
+        job: {
+          ...job,
+          project_name: detailProjectName,
+          document_name: detailDocumentName,
+          template_name: detailTemplateName,
+          metadata: {
+            provider: jobData.provider,
+            model: jobData.model,
+            temperature: jobData.temperature,
+            template_id: jobData.template_id,
+            template_name: detailTemplateName,
+            project_id: job.project_id || jobData.projectId || jobData.variables?.project_id,
+            project_name: detailProjectName,
+            document_id: jobData.documentId || jobData.document_id,
+            document_name: detailDocumentName,
+            llmInsights: jobData.llm_insights || null,
+          },
+        }
+      })
     } catch (error) {
       const log = childLogger({ requestId: (req as any).requestId })
       log.error("Get job error:", error)
@@ -615,10 +639,10 @@ router.get("/admin/all",
         
         // Build descriptive job name
         let jobName = ''
-        const docName = jobData.documentName || jobData.document_name
-        const templateName = jobData.template_name || jobData.variables?.template_name
+        const docName = job.document_name || jobData.documentName || jobData.document_name || jobData.name
+        const templateName = job.template_name || jobData.template_name || jobData.variables?.template_name
         const genericName = jobData.name || `${job.type} Job`
-        const projectName = jobData.projectName || jobData.variables?.project_name
+        const projectName = job.project_name || jobData.projectName || jobData.variables?.project_name
         
         if (docName && projectName) {
           jobName = `${docName} - ${projectName}`
@@ -656,9 +680,9 @@ router.get("/admin/all",
           workerProcessId: job.worker_process_id,
           queuePosition: job.queue_position,
           logs: jobData.logs || [],
-          projectName: jobData.projectName || jobData.variables?.project_name,
-          templateName: jobData.template_name || jobData.variables?.template_name,
-          documentName: jobData.documentName || jobData.document_name,
+          projectName,
+          templateName,
+          documentName: docName,
           userName: job.created_by_name,
           userEmail: job.created_by_email,
           metadata: {
@@ -666,12 +690,13 @@ router.get("/admin/all",
             model: jobData.model,
             temperature: jobData.temperature,
             template_id: jobData.template_id,
-            template_name: jobData.template_name || jobData.variables?.template_name,
+            template_name: templateName,
             project_id: jobData.projectId || jobData.variables?.project_id,
-            project_name: jobData.projectName || jobData.variables?.project_name,
+            project_name: projectName,
             document_id: jobData.documentId || jobData.document_id,
-            document_name: jobData.documentName || jobData.document_name,
+            document_name: docName,
             tokens: jobData.tokens || job.result?.usage,
+            llmInsights: jobData.llm_insights || null,
             worker_id: job.worker_id,
             worker_process_id: job.worker_process_id,
             queue_name: job.queue_name,

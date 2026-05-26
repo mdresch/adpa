@@ -797,6 +797,7 @@ export interface DomainExtractionAnalyticsResponse {
 // Extended RequestInit with custom options
 interface ExtendedRequestOptions extends RequestInit {
   suppressNotFoundError?: boolean
+  suppressAllErrors?: boolean
 }
 
 // Extended Error type for API errors
@@ -965,8 +966,10 @@ export class ApiClient {
       const nativeError = error as Error
       // Don't log expected errors if suppressNotFoundError is set
       // Suppresses: 404 (not found), 401/403 (auth errors - user not logged in)
-      const shouldSuppressLog = options.suppressNotFoundError &&
-        (apiError?.status === 404 || apiError?.status === 401 || apiError?.status === 403)
+      // suppressAllErrors skips logging for ALL errors (use for non-critical polling)
+      const shouldSuppressLog = options.suppressAllErrors ||
+        (options.suppressNotFoundError &&
+          (apiError?.status === 404 || apiError?.status === 401 || apiError?.status === 403))
 
       if (!shouldSuppressLog) {
         const statusCode = apiError?.status || apiError?.response?.status
@@ -1871,8 +1874,9 @@ export class ApiClient {
     includeStakeholders?: boolean
     includeDocuments?: boolean
     customContext?: string
-  }): Promise<{ document: Document; generation: any }> {
-    const response = await this.request<{ document: Document; generation: any }>("/document-generation/generate", {
+    async?: boolean
+  }): Promise<{ document: Document; generation: any } | { jobId: string; async: true; message: string }> {
+    const response = await this.request<{ document: Document; generation: any } | { jobId: string; async: true; message: string }>("/document-generation/generate", {
       method: "POST",
       body: JSON.stringify(data),
     })

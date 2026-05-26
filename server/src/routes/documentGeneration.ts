@@ -10,6 +10,7 @@ import { pool } from "../database/connection"
 import { getQueueService } from "../services/queueService"
 import { semanticVersionService } from "../services/semanticVersionService"
 import { storageArchivalService } from "../services/storageArchivalService"
+import { findExistingTemplateDocument, getAIProviderQuotaDetails } from "../utils/documentGenerationRouteGuards"
 
 const router = express.Router()
 
@@ -102,7 +103,7 @@ router.post("/check-template",
 const generateDocumentSchema = Joi.object({
   projectId: Joi.string().uuid().required(),
   name: Joi.string().min(1).max(255).required(),
-  description: Joi.string().max(1000).optional(),
+  description: Joi.string().max(1000).allow('').optional(),
   templateId: Joi.string().uuid().optional(),
   userPrompt: Joi.string().min(1).required(),
   provider: Joi.string().required(),
@@ -111,6 +112,7 @@ const generateDocumentSchema = Joi.object({
   includeStakeholders: Joi.boolean().default(true),
   includeDocuments: Joi.boolean().default(true),
   customContext: Joi.string().max(5000).optional(),
+  async: Joi.boolean().default(false), // Force async/background mode
 })
 
 // Generate document with AI
@@ -146,38 +148,85 @@ router.post("/generate",
       )
 
       if (projectCheck.rows.length === 0) {
-        return res.status(403).json({ error: "Access denied to project" })
+        const isAdmin = req.user?.role === 'admin' || req.user?.role === 'super_admin'
+        if (!isAdmin) {
+          return res.status(403).json({ error: "Access denied to project" })
+        }
       }
 
-      // 🔍 Check for template conflicts using the new versioning service
+      // 🔍 Check for template conflicts without creating a placeholder document.
       if (templateId) {
-        const { VersioningService } = await import('../services/document/VersioningService');
-        const versioningService = new VersioningService();
+        const existing = await findExistingTemplateDocument(pool, projectId, templateId)
 
-        // Create a temporary document name - this will be updated later
-        const tempDocumentName = name || `Generated Document - ${new Date().toISOString()}`;
-
-        const creationResult = await versioningService.createDocumentFromTemplate(
-          templateId,
-          projectId,
-          {
-            userId: req.user?.id || '',
-            content: '', // Empty content for now, we'll generate it below
-            documentName: tempDocumentName
-          }
-        );
-
-        if (creationResult.conflict) {
-          // Conflict detected - return conflict information to frontend
+        if (existing) {
           return res.status(409).json({
-            code: 'TEMPLATE_CONFLICT',
-            message: 'Template conflict detected',
+            code: 'TEMPLATE_ALREADY_USED',
+            message: 'A document from this template already exists in this project',
             conflict: true,
-            conflictId: creationResult.conflictId,
-            conflictResult: creationResult.conflictResult,
-            options: creationResult.conflictResult.resolutionOptions
-          });
+            existing: {
+              id: existing.id,
+              name: existing.name,
+              version: existing.version,
+              semantic_version: existing.semantic_version,
+              updated_at: existing.updated_at
+            },
+            options: {
+              createNewVersion: true,
+              createSeparate: true,
+              viewExisting: true
+            }
+          })
         }
+      }
+
+      // 🚀 ASYNC PATH: Route ALL template-based generation to the background job queue.
+      // Even a 1-section template can take several minutes with the agentic planning pipeline,
+      // which would exceed the Next.js proxy timeout and cause ECONNRESET.
+      // Prompt-only generation (no templateId) stays synchronous since it's usually fast.
+      const forceAsync = req.body.async === true
+      const shouldRunAsync = forceAsync || !!templateId
+
+      if (shouldRunAsync) {
+        const jobId = uuidv4()
+        const jobPayload = {
+          jobId,
+          userId: req.user?.id || null,
+          projectId,
+          prompt: userPrompt,
+          provider,
+          model: model || null,
+          temperature,
+          template_id: templateId || null,
+          name: name?.trim() || undefined,
+          description: description?.trim() || undefined,
+          use_context: true,
+          template_name: undefined as string | undefined,
+        }
+
+        // Resolve template name for the job record (non-fatal if it fails)
+        if (templateId) {
+          try {
+            const tmpl = await pool.query('SELECT name FROM templates WHERE id = $1', [templateId])
+            if (tmpl.rows.length > 0) jobPayload.template_name = tmpl.rows[0].name
+          } catch (_) { /* non-fatal */ }
+        }
+
+        try {
+          await getQueueService().addJob('ai-generate', jobPayload)
+        } catch (queueErr) {
+          log.error('[DOC-GEN] Failed to enqueue ai-generate job', queueErr)
+          return res.status(503).json({
+            error: 'Job queue is unavailable. Please try again shortly or contact support.',
+            details: queueErr instanceof Error ? queueErr.message : String(queueErr),
+          })
+        }
+
+        log.info(`[DOC-GEN] Enqueued async job ${jobId} for project ${projectId}`)
+        return res.status(202).json({
+          jobId,
+          async: true,
+          message: 'Document generation queued. Track progress via the Job Monitor.',
+        })
       }
 
       // Generate document using service
@@ -952,6 +1001,18 @@ router.post("/generate",
       })
     } catch (error) {
       log.error("Document generation error:", error)
+
+      const quotaDetails = getAIProviderQuotaDetails(error)
+      if (quotaDetails) {
+        return res.status(429).json({
+          error: "AI provider quota exceeded",
+          code: "AI_PROVIDER_QUOTA_EXCEEDED",
+          details: quotaDetails,
+          provider: req.body.provider,
+          model: req.body.model
+        })
+      }
+
       res.status(500).json({
         error: "Document generation failed",
         details: error instanceof Error ? error.message : "Unknown error"

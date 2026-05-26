@@ -6,6 +6,10 @@
   font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
 }
 
+.optimization-diff-shell .diff-view-container {
+  min-width: 72rem;
+}
+
 /* Change statistics summary */
 .diff-stats-summary {
   display: flex;
@@ -102,6 +106,11 @@
   grid-template-columns: 1fr 1fr;
   gap: 1px; /* Add a small gap between columns */
   background-color: hsl(var(--border)); /* Creates a visible separator */
+}
+
+.optimization-diff-shell .diff-split-view,
+.optimization-diff-shell .diff-split-header {
+  grid-template-columns: minmax(34rem, 1fr) minmax(34rem, 1fr);
 }
 
 .diff-view-container .diff-split-col {

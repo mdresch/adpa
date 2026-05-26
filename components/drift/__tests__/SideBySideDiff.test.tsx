@@ -8,6 +8,7 @@
  */
 
 import { jest } from '@jest/globals';
+import { buildSideBySideDiffFiles } from '../sideBySideDiffParser';
 
 describe('SideBySideDiff Component', () => {
   describe('Basic Rendering', () => {
@@ -42,6 +43,32 @@ describe('SideBySideDiff Component', () => {
   });
 
   describe('Diff Functionality', () => {
+    it('should parse recommendation appendix content with markdown separators', () => {
+      const files = buildSideBySideDiffFiles({
+        oldContent: 'Current system prompt',
+        newContent: [
+          'Current system prompt',
+          '',
+          '---',
+          '',
+          'Proposed system prompt changes',
+          '- Add explicit PMBOK risk-owner instructions.',
+        ].join('\n'),
+        filename: 'system_prompt.txt',
+      });
+
+      expect(files).toHaveLength(1);
+      expect(files[0].hunks).toHaveLength(1);
+
+      const changes = files[0].hunks.flatMap((hunk: any) => hunk.changes);
+      expect(
+        changes.some(
+          (change: any) =>
+            change.type === 'insert' && change.content.includes('Proposed system prompt changes'),
+        ),
+      ).toBe(true);
+    });
+
     it('should detect additions', () => {
       const oldContent = 'Original text';
       const newContent = 'Original text\nNew line added';

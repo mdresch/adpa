@@ -52,6 +52,7 @@ import {
   FileText,
   AlertCircle,
   Trash,
+  Copy,
 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useAuth } from "@/contexts/AuthContext"
@@ -157,6 +158,16 @@ export default function JobMonitorPage() {
   const [loadingWorkers, setLoadingWorkers] = React.useState(true)
   const didScrollToQueryJobRef = React.useRef(false)
 
+  const copyToClipboard = React.useCallback(async (text: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      toast.success(`${label} copied`)
+    } catch (error) {
+      console.error("Failed to copy text:", error)
+      toast.error("Failed to copy prompt")
+    }
+  }, [])
+
   // Fetch aggregate metrics
   React.useEffect(() => {
     const fetchJobs = async () => {
@@ -234,7 +245,7 @@ export default function JobMonitorPage() {
   React.useEffect(() => {
     const fetchQueues = async () => {
       try {
-        const response = await apiClient.request('/queue-stats/overview', { suppressNotFoundError: true } as any)
+        const response = await apiClient.request<{ queues?: any[] }>('/queue-stats/overview', { suppressNotFoundError: true } as any)
         setQueues(response.queues || [])
       } catch (error: any) {
         // Log error but don't fallback to mock data - show empty state instead
@@ -258,7 +269,7 @@ export default function JobMonitorPage() {
   React.useEffect(() => {
     const fetchWorkers = async () => {
       try {
-        const response = await apiClient.request('/queue-stats/workers', { suppressNotFoundError: true } as any)
+        const response = await apiClient.request<{ workers?: any[] }>('/queue-stats/workers', { suppressNotFoundError: true } as any)
         setWorkers(response.workers || [])
       } catch (error: any) {
         // Log error but don't fallback to mock data - show empty state instead
@@ -1191,6 +1202,18 @@ return (
                                         <p className="text-muted-foreground">Temperature</p>
                                         <p className="font-medium">{(job as any).metadata.temperature || "-"}</p>
                                       </div>
+                                      {((job as any).metadata.project_name || job.projectName) && (
+                                        <div>
+                                          <p className="text-muted-foreground">Project</p>
+                                          <p className="font-medium">{(job as any).metadata.project_name || job.projectName}</p>
+                                        </div>
+                                      )}
+                                      {((job as any).metadata.document_name || job.documentName) && (
+                                        <div>
+                                          <p className="text-muted-foreground">Document</p>
+                                          <p className="font-medium">{(job as any).metadata.document_name || job.documentName}</p>
+                                        </div>
+                                      )}
                                       {(job as any).metadata.tokens && (
                                         <div>
                                           <p className="text-muted-foreground">Tokens Used</p>
@@ -1217,6 +1240,68 @@ return (
                                     </div>
                                   </div>
                                 )}
+
+                                {(() => {
+                                  const llmRequests = Array.isArray((job as any).metadata?.llmInsights?.requests)
+                                    ? (job as any).metadata.llmInsights.requests
+                                    : []
+
+                                  if (llmRequests.length === 0) return null
+
+                                  return (
+                                    <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                                      <h5 className="text-sm font-semibold mb-2">LLM Payload Sent</h5>
+                                      <p className="text-xs text-muted-foreground mb-3">
+                                        Full prompt snapshots captured after context assembly and before the provider request.
+                                      </p>
+                                      <div className="space-y-3">
+                                        {llmRequests.map((request: any, index: number) => {
+                                          const prompt = typeof request.prompt === "string" ? request.prompt : ""
+                                          const label = request.label || `${request.phase || "LLM"} request ${index + 1}`
+
+                                          return (
+                                            <div key={`${request.traceName || request.phase || "llm"}-${index}`} className="rounded-md border border-amber-200 dark:border-amber-800 bg-white/70 dark:bg-slate-950/40 p-3">
+                                              <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                                                <div>
+                                                  <p className="text-sm font-medium">{label}</p>
+                                                  <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                                                    <span>Phase: {request.phase || "-"}</span>
+                                                    <span>Provider: {request.provider || "-"}</span>
+                                                    <span>Model: {request.model || "-"}</span>
+                                                    <span>Temperature: {request.temperature ?? "-"}</span>
+                                                    <span>{request.characterCount ?? prompt.length} chars</span>
+                                                  </div>
+                                                  {request.heading && (
+                                                    <p className="mt-1 text-xs text-muted-foreground">Section: {request.heading}</p>
+                                                  )}
+                                                </div>
+                                                <Button
+                                                  type="button"
+                                                  variant="outline"
+                                                  size="sm"
+                                                  className="h-8 shrink-0"
+                                                  onClick={() => copyToClipboard(prompt, label)}
+                                                >
+                                                  <Copy className="mr-2 h-3 w-3" />
+                                                  Copy
+                                                </Button>
+                                              </div>
+                                              <details className="mt-3" open={index === 0}>
+                                                <summary className="cursor-pointer text-xs font-medium text-amber-800 dark:text-amber-200">
+                                                  Show full prompt
+                                                </summary>
+                                                <pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-md bg-slate-950 p-3 text-xs text-slate-100">
+                                                  {prompt || "No prompt captured."}
+                                                </pre>
+                                              </details>
+                                            </div>
+                                          )
+                                        })}
+                                      </div>
+                                    </div>
+                                  )
+                                })()}
+
                                 {job.logs && job.logs.length > 0 && (
                                   <div className="mt-4">
                                     <p className="text-sm text-muted-foreground mb-2">Logs</p>

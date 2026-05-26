@@ -14,6 +14,11 @@ import { FileText, Plus, Edit, Copy, Archive, Download, Upload, Search, Filter, 
 import { toast } from '@/lib/notify'
 import { apiClient, Template } from "@/lib/api"
 import {
+  buildTemplateDialogPayload,
+  getTemplatePromptVersionValue,
+  type TemplateParagraph,
+} from "@/lib/templates/templateDialogPayload"
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -114,15 +119,6 @@ function getGkgSummary(gkg: { profile?: string; scope?: string; documentStatusFi
   return parts.length > 0 ? parts.join(' · ') : null
 }
 
-interface TemplateParagraph {
-  section_name: string
-  section_type: 'header' | 'paragraph' | 'list' | 'table' | 'code_block' | 'summary' | 'conclusion'
-  description: string
-  required: boolean
-  order: number
-  prompt_guidance?: string
-}
-
 export default function Templates() {
   const router = useRouter()
   const [templates, setTemplates] = useState<Template[]>([])
@@ -196,17 +192,17 @@ export default function Templates() {
   }
 
   const openEditDialog = (template: Template) => {
-  // prefer freshest template data from state by id (in case the passed object is stale)
-  const fresh = templates.find((t) => String(t.id) === String(template?.id)) || template
-  setEditingTemplate(fresh || null)
-  setFormName(fresh?.name || "")
-  setFormFramework(fresh?.framework || "")
-  setFormCategory(fresh?.category || "")
-  setFormVersion(fresh?.version ? String(fresh.version) : "1.0")
-  setFormDescription(fresh?.description || "")
-  setFormSystemPrompt(fresh?.system_prompt || "")
-  setFormTemplateParagraphs(fresh?.template_paragraphs || [])
-  setIsDialogOpen(true)
+    // prefer freshest template data from state by id (in case the passed object is stale)
+    const fresh = templates.find((t) => String(t.id) === String(template?.id)) || template
+    setEditingTemplate(fresh || null)
+    setFormName(fresh?.name || "")
+    setFormFramework(fresh?.framework || "")
+    setFormCategory(fresh?.category || "")
+    setFormVersion(getTemplatePromptVersionValue(fresh))
+    setFormDescription(fresh?.description || "")
+    setFormSystemPrompt(fresh?.system_prompt || "")
+    setFormTemplateParagraphs(fresh?.template_paragraphs || [])
+    setIsDialogOpen(true)
   }
 
   const closeDialog = () => {
@@ -220,7 +216,7 @@ export default function Templates() {
       setFormName(editingTemplate.name || "")
       setFormFramework(editingTemplate.framework || "")
       setFormCategory(editingTemplate.category || "")
-      setFormVersion(editingTemplate.version ? String(editingTemplate.version) : "1.0")
+      setFormVersion(getTemplatePromptVersionValue(editingTemplate))
       setFormDescription(editingTemplate.description || "")
       setFormSystemPrompt(editingTemplate.system_prompt || "")
       setFormTemplateParagraphs(editingTemplate.template_paragraphs || [])
@@ -421,17 +417,16 @@ export default function Templates() {
 
     setSubmitting(true)
     try {
-      const payload = {
+      const payload = buildTemplateDialogPayload({
+        mode: editingTemplate ? "update" : "create",
         name: formName,
         description: formDescription,
         framework: formFramework,
         category: formCategory,
-        content: { blocks: [] },
-        variables: [],
-        is_public: false,
-        system_prompt: formSystemPrompt || undefined,
-        template_paragraphs: formTemplateParagraphs.length > 0 ? formTemplateParagraphs : undefined,
-      }
+        promptVersion: formVersion,
+        systemPrompt: formSystemPrompt,
+        templateParagraphs: formTemplateParagraphs,
+      })
 
       if (editingTemplate) {
         await apiClient.updateTemplate(editingTemplate.id, payload)

@@ -263,6 +263,10 @@ export class QueueService {
         documentId = validatedData.documentId
       }
 
+      if (!documentName && 'name' in validatedData && typeof validatedData.name === 'string') {
+        documentName = validatedData.name
+      }
+
       // Phase 4: Single query to fetch project, template, and document names with caching
       if (projectId || templateId || documentId) {
         try {

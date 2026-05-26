@@ -6,7 +6,6 @@ import { motion, AnimatePresence } from "framer-motion"
 import {
   Shield,
   AlertTriangle,
-  CheckCircle,
   RefreshCw,
   FileText,
   Sparkles,
@@ -30,6 +29,14 @@ import { apiClient } from "@/lib/api"
 import { toast } from "@/lib/notify"
 import { formatDistanceToNow } from "date-fns"
 
+type AuditListEntry =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | Record<string, unknown>
+
 interface TemplateAudit {
   id: string
   template_id: string
@@ -40,16 +47,16 @@ interface TemplateAudit {
   governance_score: number | null
   resilience_score: number | null
   verdict: "pass" | "flagged" | "fail" | null
-  governance_findings: string[]
-  governance_recommendations: string[]
+  governance_findings: AuditListEntry[]
+  governance_recommendations: AuditListEntry[]
   compliance_gaps: Array<{
     framework: string
     requirement: string
     gap_description: string
     severity: "minor" | "major" | "critical"
   }>
-  challenger_findings: string[]
-  challenger_recommendations: string[]
+  challenger_findings: AuditListEntry[]
+  challenger_recommendations: AuditListEntry[]
   challenged_assumptions: Array<{
     assumption: string
     counter_argument: string
@@ -65,6 +72,47 @@ interface TemplateAudit {
   created_at: string
   completed_at: string | null
   document_failure_context?: any
+}
+
+function readStringField(value: Record<string, unknown>, key: string) {
+  const field = value[key]
+  return typeof field === "string" && field.trim().length > 0 ? field.trim() : ""
+}
+
+function humanizeKey(key: string) {
+  return key.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase())
+}
+
+function formatAuditListEntry(entry: AuditListEntry): string {
+  if (entry === null || entry === undefined) return ""
+  if (typeof entry === "string") return entry
+  if (typeof entry === "number" || typeof entry === "boolean") return String(entry)
+
+  const framework = readStringField(entry, "framework")
+  const requirement = readStringField(entry, "requirement")
+  const severity = readStringField(entry, "severity")
+  const primaryText =
+    readStringField(entry, "recommendation") ||
+    readStringField(entry, "description") ||
+    readStringField(entry, "gap_description") ||
+    readStringField(entry, "suggested_fix") ||
+    readStringField(entry, "counter_argument") ||
+    readStringField(entry, "assumption")
+
+  const context = [framework, requirement].filter(Boolean).join(": ")
+  if (context && primaryText) {
+    return `${context} - ${primaryText}${severity ? ` (${severity})` : ""}`
+  }
+  if (primaryText) return primaryText
+
+  return Object.entries(entry)
+    .flatMap(([key, value]) => {
+      if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+        return [`${humanizeKey(key)}: ${String(value)}`]
+      }
+      return []
+    })
+    .join("; ")
 }
 
 function ScoreRing({ score, size = 56, color }: { score: number; size?: number; color: string }) {
@@ -222,28 +270,30 @@ export function TemplateAuditsPanel({ templateId }: { templateId: string }) {
   return (
     <div className="space-y-6">
       {/* Header / Actions Card */}
-      <div className="flex items-center justify-between border border-white/10 rounded-xl p-4 bg-white/5 backdrop-blur-md">
-        <div>
-          <h3 className="text-base font-semibold text-white">DRACO Compliance & Security Audits</h3>
-          <p className="text-xs text-slate-400 mt-1">
-            Audits enforce rules matching TOGAF, SABSA, and PMBOK framework guidelines.
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          {pendingCount > 0 && (
-            <div className="flex items-center gap-2 text-xs text-blue-400 animate-pulse">
-              <RefreshCw className="h-3 w-3 animate-spin" />
-              <span>Running {pendingCount} background audit{pendingCount !== 1 ? 's' : ''}...</span>
-            </div>
-          )}
-          <Button
-            onClick={handleRunAudit}
-            disabled={triggering || pendingCount > 0}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium shadow-lg transition duration-200"
-          >
-            <Play className="h-4 w-4 mr-2" />
-            Trigger Audit
-          </Button>
+      <div className="space-y-4 border border-white/10 rounded-xl p-4 bg-white/5 backdrop-blur-md">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h3 className="text-base font-semibold text-white">DRACO Compliance & Security Audits</h3>
+            <p className="text-xs text-slate-400 mt-1">
+              Audits enforce rules matching TOGAF, SABSA, and PMBOK framework guidelines.
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-3">
+            {pendingCount > 0 && (
+              <div className="flex items-center gap-2 text-xs text-blue-400 animate-pulse">
+                <RefreshCw className="h-3 w-3 animate-spin" />
+                <span>Running {pendingCount} background audit{pendingCount !== 1 ? 's' : ''}...</span>
+              </div>
+            )}
+            <Button
+              onClick={handleRunAudit}
+              disabled={triggering || pendingCount > 0}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium shadow-lg transition duration-200"
+            >
+              <Play className="h-4 w-4 mr-2" />
+              Trigger Audit
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -377,7 +427,7 @@ export function TemplateAuditsPanel({ templateId }: { templateId: string }) {
                                   <h5 className="text-xs font-semibold text-white mb-2">Findings</h5>
                                   <ul className="list-disc pl-4 space-y-1">
                                     {(audit.governance_findings || []).map((finding, idx) => (
-                                      <li key={idx} className="text-xs text-slate-300">{finding}</li>
+                                      <li key={idx} className="text-xs text-slate-300">{formatAuditListEntry(finding)}</li>
                                     ))}
                                     {(audit.governance_findings || []).length === 0 && (
                                       <p className="text-xs text-slate-500 italic">No specific findings logged.</p>
@@ -435,7 +485,7 @@ export function TemplateAuditsPanel({ templateId }: { templateId: string }) {
                                   <h5 className="text-xs font-semibold text-white mb-2">Remediation Guidelines</h5>
                                   <ul className="list-disc pl-4 space-y-1">
                                     {(audit.governance_recommendations || []).map((rec, idx) => (
-                                      <li key={idx} className="text-xs text-slate-300">{rec}</li>
+                                      <li key={idx} className="text-xs text-slate-300">{formatAuditListEntry(rec)}</li>
                                     ))}
                                     {(audit.governance_recommendations || []).length === 0 && (
                                       <p className="text-xs text-slate-500 italic">No recommendations provided.</p>
@@ -461,7 +511,7 @@ export function TemplateAuditsPanel({ templateId }: { templateId: string }) {
                                   <h5 className="text-xs font-semibold text-white mb-2">Findings</h5>
                                   <ul className="list-disc pl-4 space-y-1">
                                     {(audit.challenger_findings || []).map((finding, idx) => (
-                                      <li key={idx} className="text-xs text-slate-300">{finding}</li>
+                                      <li key={idx} className="text-xs text-slate-300">{formatAuditListEntry(finding)}</li>
                                     ))}
                                     {(audit.challenger_findings || []).length === 0 && (
                                       <p className="text-xs text-slate-500 italic">No specific loopholes logged.</p>
@@ -519,7 +569,7 @@ export function TemplateAuditsPanel({ templateId }: { templateId: string }) {
                                   <h5 className="text-xs font-semibold text-white mb-2">Prompt Sharpening Guidelines</h5>
                                   <ul className="list-disc pl-4 space-y-1">
                                     {(audit.challenger_recommendations || []).map((rec, idx) => (
-                                      <li key={idx} className="text-xs text-slate-300">{rec}</li>
+                                      <li key={idx} className="text-xs text-slate-300">{formatAuditListEntry(rec)}</li>
                                     ))}
                                     {(audit.challenger_recommendations || []).length === 0 && (
                                       <p className="text-xs text-slate-500 italic">No recommendations provided.</p>

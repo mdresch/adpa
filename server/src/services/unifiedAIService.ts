@@ -4,10 +4,11 @@
  */
 
 import { generateText, generateObject } from 'ai'
-import { openai } from '@ai-sdk/openai'
-// import { google } from '@ai-sdk/google' // Package not installed
-import { mistral } from '@ai-sdk/mistral'
-// import { azure } from '@ai-sdk/azure' // Package not installed
+import { createOpenAI } from '@ai-sdk/openai'
+import { createGoogleGenerativeAI } from '@ai-sdk/google'
+import { createMistral } from '@ai-sdk/mistral'
+import { createAzure } from '@ai-sdk/azure'
+import { createOllama } from 'ollama-ai-provider-v2'
 import { logger } from '../utils/logger'
 import { pool } from '../database/connection'
 import { isTracingEnabled, isNativeLangfuseEnabled } from '../tracing'
@@ -23,12 +24,13 @@ const langfuse = new Langfuse({
 export interface AIProvider {
   id: string
   name: string
-  type: 'openai' | 'google' | 'mistral' | 'azure'
+  type: 'openai' | 'google' | 'mistral' | 'azure' | 'ollama' | 'foundry-local'
   apiKey: string
   baseURL?: string
   isActive: boolean
   priority: number
   configuration?: any
+  default_model?: string
 }
 
 export interface AIGenerateRequest {
@@ -65,8 +67,16 @@ class UnifiedAIService {
   private providers: Map<string, AIProvider> = new Map()
   private clients: Map<string, any> = new Map()
 
+  private initialized = false
+
   constructor() {
     // Initialize providers when service is created
+  }
+
+  private async ensureInitialized(): Promise<void> {
+    if (!this.initialized) {
+      await this.initializeProviders()
+    }
   }
 
   /**
@@ -77,6 +87,7 @@ class UnifiedAIService {
       const result = await pool.query(`
         SELECT 
           id, name, provider_type, api_key_encrypted, configuration, is_active,
+          default_model,
           COALESCE(priority, 1) as priority
         FROM ai_providers 
         WHERE is_active = true
@@ -89,11 +100,12 @@ class UnifiedAIService {
             id: row.id,
             name: row.name,
             type: row.provider_type,
-            apiKey: this.decryptApiKey(row.api_key_encrypted),
+            apiKey: this.resolveApiKey(row.provider_type, row.api_key_encrypted),
             baseURL: row.configuration?.baseURL,
             isActive: row.is_active,
             priority: row.priority,
-            configuration: row.configuration
+            configuration: row.configuration,
+            default_model: row.default_model,
           }
 
           await this.addProvider(provider)
@@ -103,6 +115,7 @@ class UnifiedAIService {
         }
       }
 
+      this.initialized = true
       logger.info(`Initialized ${this.providers.size} AI providers using AI SDK`)
     } catch (error) {
       logger.error("Failed to initialize AI providers:", error)
@@ -135,22 +148,34 @@ class UnifiedAIService {
    */
   private createAISDKClient(provider: AIProvider): any {
     const config = {
+      ...provider.configuration,
       apiKey: provider.apiKey,
-      baseURL: provider.baseURL,
-      ...provider.configuration
+      baseURL: provider.baseURL || provider.configuration?.baseURL,
     }
 
     switch (provider.type) {
       case 'openai':
-        return openai(config)
+        return createOpenAI(config)
       case 'google':
-        throw new Error('Google AI SDK not installed. Install @ai-sdk/google to use this provider.')
-      // return google(config)
+        return createGoogleGenerativeAI(config)
       case 'mistral':
-        return mistral(config)
+        return createMistral(config)
       case 'azure':
-        throw new Error('Azure AI SDK not installed. Install @ai-sdk/azure to use this provider.')
-      // return azure(config)
+        return createAzure(config)
+      case 'ollama': {
+        const ollamaBaseUrl = provider.baseURL || provider.configuration?.endpoint || 'http://localhost:11434'
+        const baseURL = ollamaBaseUrl.endsWith('/api') ? ollamaBaseUrl : `${ollamaBaseUrl}/api`
+        return createOllama({ baseURL })
+      }
+      case 'foundry-local': {
+        const foundryBaseUrl = provider.baseURL || provider.configuration?.endpoint || 'http://localhost:8080/v1'
+        const baseURL = foundryBaseUrl.endsWith('/v1') ? foundryBaseUrl : `${foundryBaseUrl}/v1`
+        return createOpenAI({
+          ...provider.configuration,
+          baseURL,
+          apiKey: provider.apiKey || 'not-required',
+        })
+      }
       default:
         throw new Error(`Unsupported provider type: ${provider.type}`)
     }
@@ -177,21 +202,33 @@ class UnifiedAIService {
    */
   async generate(request: AIGenerateRequest): Promise<AIGenerateResponse> {
     let langfuseTrace: any = null
-    let langfuseGeneration: any = null
 
     try {
-      const provider = this.providers.get(request.provider)
-      if (!provider) {
-        throw new Error(`Provider ${request.provider} not found`)
+      await this.ensureInitialized()
+
+      // 1. Resolve starting provider
+      let startingProvider = this.providers.get(request.provider)
+      if (!startingProvider) {
+        const lower = request.provider.toLowerCase()
+        startingProvider = Array.from(this.providers.values()).find(
+          p => p.name.toLowerCase() === lower || p.type.toLowerCase() === lower
+        )
       }
 
-      if (!provider.isActive) {
-        throw new Error(`Provider ${provider.name} is not active`)
+      // 2. Build provider fallback chain
+      const activeProviders = Array.from(this.providers.values()).filter(p => p.isActive)
+      const chain: AIProvider[] = []
+      if (startingProvider && startingProvider.isActive) {
+        chain.push(startingProvider)
+      }
+      for (const p of activeProviders) {
+        if (!chain.some(item => item.id === p.id)) {
+          chain.push(p)
+        }
       }
 
-      const client = this.clients.get(request.provider)
-      if (!client) {
-        throw new Error(`Client for provider ${request.provider} not found`)
+      if (chain.length === 0) {
+        throw new Error(`Provider ${request.provider} not found and no active fallback provider available`)
       }
 
       // Prepare messages
@@ -205,107 +242,138 @@ class UnifiedAIService {
         throw new Error('No prompt or messages provided')
       }
 
-      // Get default model if not specified
-      const model = request.model || this.getDefaultModel(provider.type)
-
-      // Create Langfuse trace and generation
+      // Create Langfuse trace (overall trace, once)
       langfuseTrace = isNativeLangfuseEnabled() ? langfuse.trace({
-        name: request.traceName || `unified-ai-generate-${provider.type}-entity`,
+        name: request.traceName || `unified-ai-generate-chain`,
         sessionId: request.projectId || request.documentId || undefined,
         userId: request.userId,
         metadata: {
-          provider: provider.name,
+          requestedProvider: request.provider,
           projectId: request.projectId,
           documentId: request.documentId,
           templateId: request.template_id,
           correlationId: asyncLocalStorage.getStore(),
         },
-        tags: [provider.type, model]
+        tags: [request.provider]
       }) : null
 
-      if (langfuseTrace) {
-        langfuseGeneration = langfuseTrace.generation({
-          name: `${provider.type}-generation`,
-          model: model,
-          modelParameters: {
-            temperature: request.temperature,
-            maxTokens: request.max_tokens
-          },
-          input: messages
-        })
-      }
+      let lastError: any = null
 
-      // Generate content using AI SDK
-      const response = await generateText({
-        model: client(model),
-        messages: messages.map(msg => ({
-          role: msg.role as 'user' | 'assistant' | 'system',
-          content: msg.content,
-        })),
-        maxOutputTokens: request.max_tokens || 8000,
-        temperature: request.temperature || 0.7,
-        experimental_telemetry: {
-          isEnabled: isTracingEnabled(),
-          functionId: `unified-ai-generate-${provider.type}`,
-          metadata: {
-            provider: provider.name,
-            model: model,
-            correlationId: asyncLocalStorage.getStore()
-          }
+      for (let i = 0; i < chain.length; i++) {
+        const provider = chain[i]
+        const isFallbackChainStep = i > 0
+        
+        let model = request.model
+        if (isFallbackChainStep || !model) {
+          model = provider.configuration?.defaultModel || provider.configuration?.default_model || provider.default_model || this.getDefaultModel(provider.type)
         }
-      })
 
-      logger.info(`Generated content using AI provider: ${provider.name}`)
+        const client = this.clients.get(provider.name)
+        if (!client) {
+          logger.warn(`[UNIFIED-AI] Client for provider '${provider.name}' not found, skipping fallback`)
+          continue
+        }
 
-      const {
-        promptTokens,
-        completionTokens,
-        totalTokens,
-      } = this.normalizeUsage(response.usage)
+        if (isFallbackChainStep) {
+          logger.warn(`[UNIFIED-AI] Previous provider failed. Falling back to '${provider.name}' using model '${model}'`)
+        }
 
-      if (langfuseGeneration) {
+        // Langfuse generation inside the loop
+        let langfuseGeneration: any = null
+        if (langfuseTrace) {
+          langfuseGeneration = langfuseTrace.generation({
+            name: `${provider.type}-generation`,
+            model: model,
+            modelParameters: {
+              temperature: request.temperature,
+              maxTokens: request.max_tokens
+            },
+            input: messages
+          })
+        }
+
         try {
-          langfuseGeneration.end({
-            output: response.text,
-            usage: {
-              promptTokens,
-              completionTokens,
-              totalTokens
+          // Generate content using AI SDK with maxRetries set to 1 to fail fast and fallback
+          const response = await generateText({
+            model: client(model),
+            messages: messages.map(msg => ({
+              role: msg.role as 'user' | 'assistant' | 'system',
+              content: msg.content,
+            })),
+            maxOutputTokens: request.max_tokens || 8000,
+            temperature: request.temperature || 0.7,
+            maxRetries: 1, // Fail fast to trigger fallback
+            experimental_telemetry: {
+              isEnabled: isTracingEnabled(),
+              functionId: `unified-ai-generate-${provider.type}`,
+              metadata: {
+                provider: provider.name,
+                model: model,
+                correlationId: asyncLocalStorage.getStore()
+              }
             }
           })
-          await langfuse.flushAsync()
-        } catch (telemetryError) {
-          logger.warn('[UNIFIED-AI] Langfuse telemetry failed (non-blocking)', { error: telemetryError instanceof Error ? telemetryError.message : String(telemetryError) })
+
+          logger.info(`Generated content using AI provider: ${provider.name} (model: ${model})`)
+
+          const {
+            promptTokens,
+            completionTokens,
+            totalTokens,
+          } = this.normalizeUsage(response.usage)
+
+          if (langfuseGeneration) {
+            try {
+              langfuseGeneration.end({
+                output: response.text,
+                usage: {
+                  promptTokens,
+                  completionTokens,
+                  totalTokens
+                }
+              })
+              await langfuse.flushAsync()
+            } catch (telemetryError) {
+              logger.warn('[UNIFIED-AI] Langfuse telemetry failed (non-blocking)', { error: telemetryError instanceof Error ? telemetryError.message : String(telemetryError) })
+            }
+          }
+
+          return {
+            content: response.text,
+            provider: provider.name,
+            model: model,
+            usage: {
+              prompt_tokens: promptTokens,
+              completion_tokens: completionTokens,
+              total_tokens: totalTokens,
+            },
+            metadata: {
+              finishReason: response.finishReason,
+            }
+          }
+        } catch (err: any) {
+          logger.warn(`[UNIFIED-AI] Provider '${provider.name}' failed: ${err?.message || err}`)
+          lastError = err
+
+          if (langfuseGeneration) {
+            try {
+              langfuseGeneration.end({
+                level: 'ERROR',
+                statusMessage: err instanceof Error ? err.message : String(err)
+              })
+              await langfuse.flushAsync()
+            } catch (telemetryError) {
+              logger.warn('[UNIFIED-AI] Langfuse telemetry failure in error handler (non-blocking)', { error: telemetryError instanceof Error ? telemetryError.message : String(telemetryError) })
+            }
+          }
+
+          // Continue to next provider in fallback chain
         }
       }
 
-      return {
-        content: response.text,
-        provider: provider.name,
-        model: model,
-        usage: {
-          prompt_tokens: promptTokens,
-          completion_tokens: completionTokens,
-          total_tokens: totalTokens,
-        },
-        metadata: {
-          finishReason: response.finishReason,
-        }
-      }
-
+      logger.error(`[UNIFIED-AI] All providers in the chain failed. Last error:`, lastError)
+      throw lastError || new Error(`All providers in the fallback chain failed to generate content`)
     } catch (error) {
-      logger.error(`Failed to generate content with AI provider ${request.provider}:`, error)
-      if (langfuseGeneration) {
-        try {
-          langfuseGeneration.end({
-            level: 'ERROR',
-            statusMessage: error instanceof Error ? error.message : String(error)
-          })
-          await langfuse.flushAsync()
-        } catch (telemetryError) {
-          logger.warn('[UNIFIED-AI] Langfuse telemetry failure in error handler (non-blocking)', { error: telemetryError instanceof Error ? telemetryError.message : String(telemetryError) })
-        }
-      }
       throw error
     }
   }
@@ -315,21 +383,33 @@ class UnifiedAIService {
    */
   async generateStructuredObject(request: AIStructuredGenerateRequest): Promise<{ object: any; usage?: any }> {
     let langfuseTrace: any = null
-    let langfuseGeneration: any = null
 
     try {
-      const provider = this.providers.get(request.provider)
-      if (!provider) {
-        throw new Error(`Provider ${request.provider} not found`)
+      await this.ensureInitialized()
+
+      // 1. Resolve starting provider
+      let startingProvider = this.providers.get(request.provider)
+      if (!startingProvider) {
+        const lower = request.provider.toLowerCase()
+        startingProvider = Array.from(this.providers.values()).find(
+          p => p.name.toLowerCase() === lower || p.type.toLowerCase() === lower
+        )
       }
 
-      if (!provider.isActive) {
-        throw new Error(`Provider ${provider.name} is not active`)
+      // 2. Build provider fallback chain
+      const activeProviders = Array.from(this.providers.values()).filter(p => p.isActive)
+      const chain: AIProvider[] = []
+      if (startingProvider && startingProvider.isActive) {
+        chain.push(startingProvider)
+      }
+      for (const p of activeProviders) {
+        if (!chain.some(item => item.id === p.id)) {
+          chain.push(p)
+        }
       }
 
-      const client = this.clients.get(request.provider)
-      if (!client) {
-        throw new Error(`Client for provider ${request.provider} not found`)
+      if (chain.length === 0) {
+        throw new Error(`Provider ${request.provider} not found and no active fallback provider available`)
       }
 
       // Prepare messages
@@ -343,101 +423,132 @@ class UnifiedAIService {
         throw new Error('No prompt or messages provided')
       }
 
-      // Get default model if not specified
-      const model = request.model || this.getDefaultModel(provider.type)
-
-      // Create Langfuse trace and generation
+      // Create Langfuse trace (overall trace, once)
       langfuseTrace = isNativeLangfuseEnabled() ? langfuse.trace({
-        name: request.traceName || `unified-ai-generate-object-${provider.type}-entity`,
+        name: request.traceName || `unified-ai-generate-object-chain`,
         sessionId: request.projectId || request.documentId || undefined,
         userId: request.userId,
         metadata: {
-          provider: provider.name,
+          requestedProvider: request.provider,
           projectId: request.projectId,
           documentId: request.documentId,
           templateId: request.template_id,
           correlationId: asyncLocalStorage.getStore(),
         },
-        tags: [provider.type, model]
+        tags: [request.provider]
       }) : null
 
-      if (langfuseTrace) {
-        langfuseGeneration = langfuseTrace.generation({
-          name: `${provider.type}-object-generation`,
-          model: model,
-          modelParameters: {
-            temperature: request.temperature,
-          },
-          input: messages
-        })
-      }
+      let lastError: any = null
 
-      // Generate object using AI SDK
-      const response = await generateObject({
-        model: client(model),
-        schema: request.schema,
-        messages: messages.map(msg => ({
-          role: msg.role as 'user' | 'assistant' | 'system',
-          content: msg.content,
-        })),
-        temperature: request.temperature || 0.7,
-        experimental_telemetry: {
-          isEnabled: isTracingEnabled(),
-          functionId: `unified-ai-generate-object-${provider.type}`,
-          metadata: {
-            provider: provider.name,
-            model: model,
-            correlationId: asyncLocalStorage.getStore(),
-          }
+      for (let i = 0; i < chain.length; i++) {
+        const provider = chain[i]
+        const isFallbackChainStep = i > 0
+        
+        let model = request.model
+        if (isFallbackChainStep || !model) {
+          model = provider.configuration?.defaultModel || provider.configuration?.default_model || provider.default_model || this.getDefaultModel(provider.type)
         }
-      })
 
-      logger.info(`Generated structured object using AI provider: ${provider.name}`)
+        const client = this.clients.get(provider.name)
+        if (!client) {
+          logger.warn(`[UNIFIED-AI] Client for provider '${provider.name}' not found, skipping fallback`)
+          continue
+        }
 
-      const {
-        promptTokens,
-        completionTokens,
-        totalTokens,
-      } = this.normalizeUsage(response.usage)
+        if (isFallbackChainStep) {
+          logger.warn(`[UNIFIED-AI] Previous provider failed. Falling back to '${provider.name}' using model '${model}'`)
+        }
 
-      if (langfuseGeneration) {
+        // Langfuse generation inside the loop
+        let langfuseGeneration: any = null
+        if (langfuseTrace) {
+          langfuseGeneration = langfuseTrace.generation({
+            name: `${provider.type}-object-generation`,
+            model: model,
+            modelParameters: {
+              temperature: request.temperature,
+            },
+            input: messages
+          })
+        }
+
         try {
-          langfuseGeneration.end({
-            output: JSON.stringify(response.object),
-            usage: {
-              promptTokens,
-              completionTokens,
-              totalTokens
+          // Generate object using AI SDK with maxRetries set to 1 to fail fast and fallback
+          const response = await generateObject({
+            model: client(model),
+            schema: request.schema,
+            messages: messages.map(msg => ({
+              role: msg.role as 'user' | 'assistant' | 'system',
+              content: msg.content,
+            })),
+            temperature: request.temperature || 0.7,
+            maxRetries: 1, // Fail fast to trigger fallback
+            experimental_telemetry: {
+              isEnabled: isTracingEnabled(),
+              functionId: `unified-ai-generate-object-${provider.type}`,
+              metadata: {
+                provider: provider.name,
+                model: model,
+                correlationId: asyncLocalStorage.getStore(),
+              }
             }
           })
-          await langfuse.flushAsync()
-        } catch (telemetryError) {
-          logger.warn('[UNIFIED-AI] Langfuse structured telemetry failed (non-blocking)', { error: telemetryError instanceof Error ? telemetryError.message : String(telemetryError) })
+
+          logger.info(`Generated structured object using AI provider: ${provider.name} (model: ${model})`)
+
+          const {
+            promptTokens,
+            completionTokens,
+            totalTokens,
+          } = this.normalizeUsage(response.usage)
+
+          if (langfuseGeneration) {
+            try {
+              langfuseGeneration.end({
+                output: JSON.stringify(response.object),
+                usage: {
+                  promptTokens,
+                  completionTokens,
+                  totalTokens
+                }
+              })
+              await langfuse.flushAsync()
+            } catch (telemetryError) {
+              logger.warn('[UNIFIED-AI] Langfuse structured telemetry failed (non-blocking)', { error: telemetryError instanceof Error ? telemetryError.message : String(telemetryError) })
+            }
+          }
+
+          return {
+            object: response.object,
+            usage: {
+              prompt_tokens: promptTokens,
+              completion_tokens: completionTokens,
+              total_tokens: totalTokens,
+            }
+          }
+        } catch (err: any) {
+          logger.warn(`[UNIFIED-AI] Provider '${provider.name}' structured generation failed: ${err?.message || err}`)
+          lastError = err
+
+          if (langfuseGeneration) {
+            try {
+              langfuseGeneration.end({
+                level: 'ERROR',
+                statusMessage: err instanceof Error ? err.message : String(err)
+              })
+              await langfuse.flushAsync()
+            } catch (telemetryError) {
+              logger.warn('[UNIFIED-AI] Langfuse structured failure telemetry failed (non-blocking)', { error: telemetryError instanceof Error ? telemetryError.message : String(telemetryError) })
+            }
+          }
+
+          // Continue to next provider in fallback chain
         }
       }
 
-      return {
-        object: response.object,
-        usage: {
-          prompt_tokens: promptTokens,
-          completion_tokens: completionTokens,
-          total_tokens: totalTokens,
-        }
-      }
-
+      logger.error(`[UNIFIED-AI] All providers in the structured generation chain failed. Last error:`, lastError)
+      throw lastError || new Error(`All providers in the fallback chain failed to generate structured object`)
     } catch (error) {
-      logger.error(`Failed to generate structured object with AI provider ${request.provider}:`, error)
-      if (langfuseGeneration) {
-        try {
-          langfuseGeneration.end({
-            level: 'ERROR',
-            statusMessage: error instanceof Error ? error.message : String(error)
-          })
-          await langfuse.flushAsync()
-        } catch (telemetryError) {
-          logger.warn('[UNIFIED-AI] Langfuse structured failure telemetry failed (non-blocking)', { error: telemetryError instanceof Error ? telemetryError.message : String(telemetryError) })
-        }
-      }
       throw error
     }
   }
@@ -456,7 +567,7 @@ class UnifiedAIService {
         // Google models
         'gemini-2.5-flash', 'gemini-1.5-pro', 'gemini-1.5-flash',
         // Mistral models
-        'mistral-large-latest', 'mistral-medium-latest', 'mistral-small-latest',
+        'mistral-large-2411', 'mistral-large-latest', 'mistral-medium-latest', 'mistral-small-latest',
         'mistral-tiny', 'codestral-latest', 'pixtral-12b-2409', 'pixtral-large-latest',
         // Azure models (same as OpenAI)
         'gpt-4', 'gpt-4-turbo', 'gpt-3.5-turbo'
@@ -489,7 +600,7 @@ class UnifiedAIService {
         return ['gemini-2.5-flash', 'gemini-1.5-pro', 'gemini-1.5-flash']
       case 'mistral':
         return [
-          'mistral-large-latest', 'mistral-medium-latest', 'mistral-small-latest',
+          'mistral-large-2411', 'mistral-large-latest', 'mistral-medium-latest', 'mistral-small-latest',
           'mistral-tiny', 'codestral-latest', 'pixtral-12b-2409', 'pixtral-large-latest'
         ]
       default:
@@ -504,33 +615,36 @@ class UnifiedAIService {
     switch (providerType) {
       case 'openai':
       case 'azure':
+      case 'foundry-local':
         return 'gpt-3.5-turbo'
       case 'google':
         return 'gemini-2.5-flash'
       case 'mistral':
-        return 'mistral-large-latest'
+        return 'mistral-large-2411'
+      case 'ollama':
+        return 'qwen3:8b'
       default:
         return 'gpt-3.5-turbo'
     }
   }
 
   /**
-   * Validate API key by making a simple test request
+   * Validate API key format (no live API call during initialization).
+   * Actual connectivity errors will surface at generation time with meaningful errors.
    */
   private async validateApiKey(provider: AIProvider): Promise<void> {
-    try {
-      const client = this.createAISDKClient(provider)
-      const defaultModel = this.getDefaultModel(provider.type)
-
-      // Test the API key by making a simple request
-      await generateText({
-        model: client(defaultModel),
-        messages: [{ role: 'user', content: 'Hello' }],
-        maxOutputTokens: 1,
-      })
-    } catch (error: any) {
-      throw new Error(`API key validation failed: ${error.message}`)
+    // Local providers don't need API keys
+    if (provider.type === 'ollama' || provider.type === 'foundry-local') {
+      logger.debug(`Skipping API key check for local provider: ${provider.name}`)
+      return
     }
+
+    // Cloud providers: just verify the key is non-empty and appears to be base64/plain text
+    if (!provider.apiKey || provider.apiKey.trim().length === 0) {
+      throw new Error(`API key for provider '${provider.name}' is empty or missing`)
+    }
+
+    logger.debug(`API key format validated for provider: ${provider.name} (live connectivity check deferred to generation time)`)
   }
 
   /**
@@ -543,6 +657,17 @@ class UnifiedAIService {
       logger.error('Failed to decrypt API key:', error)
       throw new Error('Invalid API key format')
     }
+  }
+
+  private resolveApiKey(providerType: AIProvider['type'], encryptedKey: string | null | undefined): string {
+    if (!encryptedKey) {
+      if (providerType === 'ollama' || providerType === 'foundry-local') {
+        return ''
+      }
+      throw new Error(`API key for provider type '${providerType}' is empty or missing`)
+    }
+
+    return this.decryptApiKey(encryptedKey)
   }
 
   /**
@@ -560,18 +685,31 @@ class UnifiedAIService {
     let langfuseGeneration: any = null
 
     try {
-      const provider = this.providers.get(request.provider)
+      await this.ensureInitialized()
+      let provider = this.providers.get(request.provider)
+      let model = request.model
+      let isFallback = false
       if (!provider) {
-        throw new Error(`Provider ${request.provider} not found`)
+        const lower = request.provider.toLowerCase()
+        provider = Array.from(this.providers.values()).find(
+          p => p.name.toLowerCase() === lower || p.type.toLowerCase() === lower
+        )
+      }
+      if (!provider || !provider.isActive) {
+        const firstActive = Array.from(this.providers.values()).find(p => p.isActive)
+        if (firstActive) {
+          logger.warn(`Requested provider '${request.provider}' not found or inactive. Falling back to '${firstActive.name}'`)
+          provider = firstActive
+          isFallback = true
+        }
+      }
+      if (!provider) {
+        throw new Error(`Provider ${request.provider} not found and no active fallback provider available`)
       }
 
-      if (!provider.isActive) {
-        throw new Error(`Provider ${provider.name} is not active`)
-      }
-
-      const client = this.clients.get(request.provider)
+      const client = this.clients.get(provider.name)
       if (!client) {
-        throw new Error(`Client for provider ${request.provider} not found`)
+        throw new Error(`Client for provider ${provider.name} not found`)
       }
 
       // Prepare messages
@@ -585,8 +723,10 @@ class UnifiedAIService {
         throw new Error('No prompt or messages provided')
       }
 
-      // Get default model if not specified
-      const model = request.model || this.getDefaultModel(provider.type)
+      // Get default model if not specified or if we used a fallback provider
+      if (isFallback || !model) {
+        model = provider.configuration?.defaultModel || provider.configuration?.default_model || provider.default_model || this.getDefaultModel(provider.type)
+      }
 
       // Create Langfuse trace and generation
       langfuseTrace = isNativeLangfuseEnabled() ? langfuse.trace({

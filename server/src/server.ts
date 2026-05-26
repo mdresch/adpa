@@ -163,6 +163,7 @@ import documentModuleRoutes from "./modules/documents/routes"
 import analysisModuleRoutes from "./modules/analysis/routes"
 import openuiChatModuleRoutes from "./modules/openuiChat/routes"
 import { registerRoutes } from "./routes/registry"
+import { shouldStartServerForArgv } from "./utils/serverStartup"
 
 const app = express()
 const server = createServer(app)
@@ -478,17 +479,9 @@ process.on('uncaughtException', (error) => {
   process.exit(1);
 });
 
-if (process.argv[1] && (process.argv[1].endsWith('server.ts') || process.argv[1].includes('src/server.ts'))) {
+if (shouldStartServerForArgv()) {
   console.log("🚀 Starting server context...");
   startServer().catch(err => { console.error("❌ Error during server startup:", err); });
-} else if (!process.argv[1] || process.argv[1].includes('server')) {
-  console.log("🚀 Starting server context (fallback)...");
-  startServer().catch(err => {
-    // Do NOT process.exit(1) here — if the port was already bound, the server is still
-    // alive and should keep running (background DB retry will open the readiness gate).
-    // Only exit if the port was never bound (server hasn't started at all).
-    console.error("❌ Error during server startup (non-fatal, server may still be listening):", err);
-  });
 }
 
-export { app }
+export { app, shouldStartServerForArgv }

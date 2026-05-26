@@ -1544,7 +1544,7 @@ class AIService {
           const mistral = createMistral({ apiKey: directApiKey })
 
           // Use appropriate Mistral model (not Google model!)
-          const mistralModels = ['mistral-large-latest', 'mistral-small-latest', 'open-mistral-7b', 'open-mixtral-8x7b']
+          const mistralModels = ['mistral-large-2411', 'mistral-large-latest', 'mistral-small-latest', 'open-mistral-7b', 'open-mixtral-8x7b']
           const modelName = mistralModels.includes(request.model || '')
             ? request.model
             : 'mistral-small-latest' // Default to small (free tier)
@@ -2253,7 +2253,7 @@ class AIService {
       'openai': 'gpt-4o',
       'google': GOOGLE_PRIMARY_MODEL,
       'groq': 'llama-3.3-70b-versatile',
-      'mistral': 'mistral-large-latest',
+      'mistral': 'mistral-large-2411',
       'anthropic': 'claude-3-5-sonnet-latest',
       'azure': 'gpt-4',
       'deepseek': 'deepseek-chat',
@@ -2413,7 +2413,7 @@ class AIService {
         // AI Gateway supported Groq models
         return ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "llama3-70b-8192", "llama3-8b-8192", "mixtral-8x7b-32768"]
       case "mistral":
-        return ["mistral-large-latest", "mistral-small-latest", "mistral-medium-latest"]
+        return ["mistral-large-2411", "mistral-large-latest", "mistral-small-latest", "mistral-medium-latest"]
       case "anthropic":
         return ["claude-sonnet-4-20250514", "claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-3-opus-20240229", "claude-3-5-sonnet-latest", "claude-3-5-haiku-latest"]
       case "deepseek":

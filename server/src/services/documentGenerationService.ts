@@ -1,12 +1,12 @@
 import { pool } from "../database/connection"
 import { logger } from "../utils/logger"
-import { aiService } from "./aiService"
 import { unifiedAIService } from "./unifiedAIService"
 import { documentTemplateService } from "../modules/documentTemplates/service"
 import { getContextForStrategy } from "./gkg"
 import { z } from "zod"
 
 export interface DocumentGenerationRequest {
+  jobId?: string
   projectId: string
   templateId?: string
   userPrompt: string
@@ -34,7 +34,115 @@ export interface TemplateContext {
   }>
 }
 
+interface LLMPromptSnapshot {
+  phase: 'planning' | 'drafting'
+  label: string
+  traceName: string
+  provider: string
+  model?: string
+  temperature: number
+  prompt: string
+  characterCount: number
+  capturedAt: string
+  order?: number
+  heading?: string
+  goal?: string
+}
+
 class DocumentGenerationService {
+  private async recordLLMPromptSnapshot(
+    jobId: string | undefined,
+    snapshot: Omit<LLMPromptSnapshot, 'characterCount' | 'capturedAt'>
+  ) {
+    if (!jobId) return
+
+    const payload: LLMPromptSnapshot = {
+      ...snapshot,
+      characterCount: snapshot.prompt.length,
+      capturedAt: new Date().toISOString(),
+    }
+
+    try {
+      await pool.query(
+        `
+        UPDATE jobs
+        SET data = jsonb_set(
+          jsonb_set(
+            COALESCE(data, '{}'::jsonb),
+            '{llm_insights}',
+            COALESCE(data->'llm_insights', '{}'::jsonb),
+            true
+          ),
+          '{llm_insights,requests}',
+          COALESCE(data #> '{llm_insights,requests}', '[]'::jsonb) || jsonb_build_array($1::jsonb),
+          true
+        )
+        WHERE id = $2
+        `,
+        [JSON.stringify(payload), jobId]
+      )
+    } catch (error) {
+      logger.warn('Failed to record LLM prompt snapshot for job monitor', {
+        jobId,
+        phase: snapshot.phase,
+        label: snapshot.label,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+
+  private getDraftConcurrency(provider: string): number {
+    const configured = Number(process.env.ADPA_DOC_GEN_DRAFT_CONCURRENCY)
+    if (Number.isInteger(configured) && configured > 0) {
+      return configured
+    }
+
+    // Keep inline generation responsive without flooding quota-limited providers.
+    if (provider === 'google') {
+      return 2
+    }
+    if (provider === 'mistral') {
+      return 1
+    }
+
+    return 3
+  }
+
+  private async mapWithConcurrency<T, R>(
+    items: T[],
+    concurrency: number,
+    mapper: (item: T, index: number) => Promise<R>
+  ): Promise<R[]> {
+    const results: R[] = new Array(items.length)
+    let nextIndex = 0
+
+    const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+      while (nextIndex < items.length) {
+        const currentIndex = nextIndex
+        nextIndex += 1
+        results[currentIndex] = await mapper(items[currentIndex], currentIndex)
+      }
+    })
+
+    await Promise.all(workers)
+    return results
+  }
+
+  private getTemplateParagraphs(template: TemplateContext | null) {
+    const paragraphs = template?.template_paragraphs
+    if (!Array.isArray(paragraphs)) {
+      if (paragraphs !== undefined && paragraphs !== null) {
+        logger.warn('Ignoring non-array template_paragraphs during document generation', {
+          templateId: template?.id,
+          templateName: template?.name,
+          valueType: typeof paragraphs,
+        })
+      }
+      return []
+    }
+
+    return paragraphs
+  }
 
   async generateDocument(request: DocumentGenerationRequest) {
     try {
@@ -83,6 +191,7 @@ class DocumentGenerationService {
       // 3. AGENTIC PHASE 1: Plan Document Structure (Research Plan)
       logger.info(`[AGENT] Phase 1: Planning Document Structure...`)
       const generationPlan = await this.planDocumentStructure({
+        jobId: request.jobId,
         userPrompt: request.userPrompt,
         project,
         template,
@@ -103,16 +212,18 @@ class DocumentGenerationService {
       const customContextItems = await this.fetchContextItems(request.projectId)
 
       // 5. AGENTIC PHASE 2: Parallel Drafting of Sections
-      logger.info(`[AGENT] Phase 2: Drafting ${generationPlan.sections.length} sections in parallel...`)
+      const draftConcurrency = this.getDraftConcurrency(request.provider)
+      logger.info(`[AGENT] Phase 2: Drafting ${generationPlan.sections.length} sections with concurrency ${draftConcurrency}...`)
 
-      // We draft each section in parallel to save time, providing targeted context for each.
-      const sectionPromises = generationPlan.sections.map((sectionTask, index) => {
+      // Draft sections with bounded parallelism to avoid provider quota floods.
+      const draftedSections = await this.mapWithConcurrency(generationPlan.sections, draftConcurrency, (sectionTask, index) => {
         return this.draftSection({
           task: sectionTask,
           order: index,
           project,
           gkgContext: gkg_context_snapshot,
           contextItems: customContextItems,
+          jobId: request.jobId,
           provider: request.provider,
           model: request.model,
           temperature: request.temperature,
@@ -121,8 +232,6 @@ class DocumentGenerationService {
           templateId: request.templateId,
         })
       })
-
-      const draftedSections = await Promise.all(sectionPromises)
 
       // Sort sections back into their planned order (Promise.all preserves array order, but it's safe to sort)
       draftedSections.sort((a, b) => a.order - b.order)
@@ -140,19 +249,6 @@ class DocumentGenerationService {
       }
 
       const markdown = this.validateAndCleanMarkdown(finalMarkdown)
-
-      // 🔍 Increment template usage
-      if (request.templateId) {
-        try {
-          await pool.query(
-            `UPDATE templates SET usage_count = usage_count + 1, last_used_at = NOW(), updated_at = NOW() WHERE id = $1`,
-            [request.templateId]
-          )
-          logger.info(`Template usage incremented for ${request.templateId}`)
-        } catch (usageErr) {
-          logger.warn(`Failed to increment template usage for ${request.templateId}`, usageErr)
-        }
-      }
 
       // 7. Return structured result
       return {
@@ -183,6 +279,7 @@ class DocumentGenerationService {
    * Asks the AI to analyze the prompt/template and output an array of precise "Research Tasks".
    */
   private async planDocumentStructure(params: {
+    jobId?: string;
     userPrompt: string;
     project: ProjectContext;
     template: TemplateContext | null;
@@ -205,9 +302,11 @@ class DocumentGenerationService {
     plannerPrompt += `Your job is to read the User's Request and the required Template Structure, and break the document down into an array of sections that need to be drafted.\n\n`
     plannerPrompt += `### Project Overview:\n- Name: ${params.project.name}\n- Status: ${params.project.status}\n\n`
 
-    if (params.template?.template_paragraphs) {
+    const templateParagraphs = this.getTemplateParagraphs(params.template)
+
+    if (templateParagraphs.length > 0) {
       plannerPrompt += `### Required Template Structure:\n`
-      const sortedParagraphs = params.template.template_paragraphs.sort((a, b) => a.order - b.order)
+      const sortedParagraphs = [...templateParagraphs].sort((a, b) => a.order - b.order)
       sortedParagraphs.forEach((para) => {
         plannerPrompt += `${para.order}. ${para.section_name} (${para.section_type}, required: ${para.required})\n`
         if (para.description) plannerPrompt += `   Description: ${para.description}\n`
@@ -217,6 +316,16 @@ class DocumentGenerationService {
 
     plannerPrompt += `### User Request:\n${params.userPrompt}\n\n`
     plannerPrompt += `Output a JSON array of sections. Map the required template structure to the user's specific request.`
+
+    await this.recordLLMPromptSnapshot(params.jobId, {
+      phase: 'planning',
+      label: 'Plan Document Structure',
+      traceName: 'agentic-doc-gen-plan',
+      provider: params.provider,
+      model: params.model,
+      temperature: 0.1,
+      prompt: plannerPrompt,
+    })
 
     try {
       const result = await unifiedAIService.generateStructuredObject({
@@ -234,9 +343,9 @@ class DocumentGenerationService {
     } catch (e: any) {
       logger.warn(`Failed structured generation, falling back to manual template mapping`, e)
       // Fallback: If AI fails the structured output, manually construct the plan based on template paragraphs
-      if (params.template?.template_paragraphs) {
+      if (templateParagraphs.length > 0) {
         return {
-          sections: params.template.template_paragraphs
+          sections: [...templateParagraphs]
             .sort((a, b) => a.order - b.order)
             .map(p => ({
               heading: `## ${p.section_name}`,
@@ -262,6 +371,7 @@ class DocumentGenerationService {
     project: ProjectContext;
     gkgContext?: { markdown: string };
     contextItems: Array<any>;
+    jobId?: string;
     provider: string;
     model?: string;
     temperature?: number;
@@ -309,16 +419,32 @@ class DocumentGenerationService {
     sectionPrompt += `\n---\n\n`
     sectionPrompt += `Output ONLY the Markdown for your assigned section. Start your output exactly with: ${params.task.heading}`
 
-    const aiResponse = await aiService.generateWithFallback({
+    const traceName = `agentic-doc-gen-draft-${params.order + 1}`
+    const temperature = params.temperature || 0.5
+
+    await this.recordLLMPromptSnapshot(params.jobId, {
+      phase: 'drafting',
+      label: `Draft Section ${params.order + 1}`,
+      traceName,
+      provider: params.provider,
+      model: params.model,
+      temperature,
+      prompt: sectionPrompt,
+      order: params.order,
+      heading: params.task.heading,
+      goal: params.task.goal,
+    })
+
+    const aiResponse = await unifiedAIService.generate({
       prompt: sectionPrompt,
       provider: params.provider,
       model: params.model,
-      temperature: params.temperature || 0.5, // Slightly lower temperature for drafting facts
-      traceName: `agentic-doc-gen-draft-${params.order + 1}`,
+      temperature, // Slightly lower temperature for drafting facts
+      traceName,
       projectId: params.projectId,
       userId: params.userId,
       template_id: params.templateId,
-    }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
+    })
 
     return {
       order: params.order,

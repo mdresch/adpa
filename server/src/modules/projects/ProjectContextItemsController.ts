@@ -6,6 +6,7 @@ import { childLogger } from '../../utils/logger'
 import { ProjectRepository } from './ProjectRepository'
 import { contextAnalyticsService } from '../../services/contextAnalyticsService'
 import { contextRecommendationService } from '../../services/contextRecommendationService'
+import { documentParserService } from '../../services/documentParserService'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const log = childLogger({ component: 'ProjectContextItemsController' })
@@ -134,10 +135,27 @@ export class ProjectContextItemsController {
         original_filename = req.file.originalname
         file_type = req.file.mimetype
         try {
-          content = req.file.buffer.toString('utf8')
-        } catch {
-          content = ''
+          const ext = req.file.originalname.split('.').pop()?.toLowerCase();
+          if (ext && ['pdf', 'docx', 'xlsx'].includes(ext)) {
+            const parsed = await documentParserService.parseDocument(req.file.buffer, req.file.originalname);
+            content = parsed.content || '';
+          } else {
+            content = req.file.buffer.toString('utf8');
+          }
+        } catch (parseError: any) {
+          log.warn('Failed to parse uploaded file via documentParserService, falling back to basic string decoding', parseError);
+          try {
+            content = req.file.buffer.toString('utf8');
+          } catch {
+            content = '';
+          }
         }
+        
+        // Strip null bytes to prevent Postgres UTF-8 0x00 insert failures
+        if (content) {
+          content = content.replace(/\0/g, '');
+        }
+
         if (!content && req.file.buffer?.length) {
           content = `[Binary file: ${req.file.originalname} (${req.file.mimetype})]`
         }

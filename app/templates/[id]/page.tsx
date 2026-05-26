@@ -37,6 +37,7 @@ import { apiClient } from "@/lib/api"
 import { toast } from '@/lib/notify'
 import { TemplateRecommendations } from "@/components/templates/TemplateRecommendations"
 import { TemplateAuditsPanel } from "@/components/templates/TemplateAuditsPanel"
+import { TemplatePromptSuggestionsPanel } from "@/components/templates/TemplatePromptSuggestionsPanel"
 
 interface Template {
   id: string
@@ -177,7 +178,9 @@ export default function TemplateDetailPage() {
   const [promoting, setPromoting] = useState(false)
   const [archiving, setArchiving] = useState(false)
   const [gkgData, setGkgData] = useState<{
+    totalGeneratedDocuments: number
     totalDocuments: number
+    unsyncedDocuments: number
     totalUnits: number
     documents: { documentId: string; title: string; projectId: string; projectName: string; unitCount: number }[]
     entityTypeCounts: { entityType: string; count: number }[]
@@ -199,13 +202,17 @@ export default function TemplateDetailPage() {
       const data = await apiClient.get<{
         status: string
         templateId: string
+        totalGeneratedDocuments?: number
         totalDocuments: number
+        unsyncedDocuments?: number
         totalUnits: number
         documents: { documentId: string; title: string; projectId: string; projectName: string; unitCount: number }[]
         entityTypeCounts: { entityType: string; count: number }[]
       }>(`/gkg/template/${templateId}`)
       setGkgData({
+        totalGeneratedDocuments: data.totalGeneratedDocuments ?? data.totalDocuments,
         totalDocuments: data.totalDocuments,
+        unsyncedDocuments: data.unsyncedDocuments ?? Math.max((data.totalGeneratedDocuments ?? data.totalDocuments) - data.totalDocuments, 0),
         totalUnits: data.totalUnits,
         documents: data.documents ?? [],
         entityTypeCounts: data.entityTypeCounts ?? [],
@@ -755,7 +762,7 @@ export default function TemplateDetailPage() {
                       </CardHeader>
                       <CardContent className="space-y-4">
                         <Tabs defaultValue="overview" onValueChange={(v) => v === "gkg" && !gkgData && !gkgLoading && !gkgError && fetchGkgTemplate()}>
-                          <TabsList className="grid w-full grid-cols-6">
+                          <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 xl:grid-cols-7">
                             <TabsTrigger value="overview">Overview</TabsTrigger>
                             <TabsTrigger value="content">Content</TabsTrigger>
                             <TabsTrigger value="variables">Purpose & Profile</TabsTrigger>
@@ -765,11 +772,15 @@ export default function TemplateDetailPage() {
                             </TabsTrigger>
                             <TabsTrigger value="recommendations">
                               <Sparkles className="h-4 w-4 mr-1" />
-                              Recommendations
+                              AI Review
                             </TabsTrigger>
                             <TabsTrigger value="audits">
                               <Shield className="h-4 w-4 mr-1" />
                               Audits
+                            </TabsTrigger>
+                            <TabsTrigger value="prompt-suggestions">
+                              <Brain className="h-4 w-4 mr-1" />
+                              Proposed
                             </TabsTrigger>
                           </TabsList>
                           
@@ -1194,10 +1205,19 @@ export default function TemplateDetailPage() {
                             )}
                             {!gkgLoading && !gkgError && gkgData && (
                               <>
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                                  <div className="rounded-lg border bg-muted/50 p-4">
+                                    <p className="text-2xl font-bold">{gkgData.totalGeneratedDocuments}</p>
+                                    <p className="text-sm text-muted-foreground">Documents generated</p>
+                                  </div>
                                   <div className="rounded-lg border bg-muted/50 p-4">
                                     <p className="text-2xl font-bold">{gkgData.totalDocuments}</p>
-                                    <p className="text-sm text-muted-foreground">Documents generated</p>
+                                    <p className="text-sm text-muted-foreground">Documents in graph</p>
+                                    {gkgData.unsyncedDocuments > 0 && (
+                                      <p className="mt-1 text-xs text-amber-600">
+                                        {gkgData.unsyncedDocuments} generated document{gkgData.unsyncedDocuments === 1 ? "" : "s"} not synced
+                                      </p>
+                                    )}
                                   </div>
                                   <div className="rounded-lg border bg-muted/50 p-4">
                                     <p className="text-2xl font-bold">{gkgData.totalUnits}</p>
@@ -1255,6 +1275,9 @@ export default function TemplateDetailPage() {
                           </TabsContent>
                           <TabsContent value="audits" className="mt-4">
                             <TemplateAuditsPanel templateId={template.id} />
+                          </TabsContent>
+                          <TabsContent value="prompt-suggestions" className="mt-4">
+                            <TemplatePromptSuggestionsPanel templateId={template.id} />
                           </TabsContent>
                         </Tabs>
                       </CardContent>
@@ -1392,7 +1415,7 @@ export default function TemplateDetailPage() {
                             <FileText className="h-4 w-4 text-muted-foreground" />
                             <span className="text-sm">Document Generations</span>
                           </div>
-                          <span className="font-semibold">{template.validation_count}</span>
+                          <span className="font-semibold">{template.usage_count}</span>
                         </div>
                         
                         <div className="flex items-center justify-between">
