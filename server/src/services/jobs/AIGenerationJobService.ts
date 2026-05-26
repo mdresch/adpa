@@ -177,11 +177,60 @@ export class AIGenerationJobService {
   }
 
   /**
-   * Generate content using AI service
+   * Generate content using AI service.
+   *
+   * When a `template_id` is present the job is routed through the new
+   * **agentic** DocumentGenerationService (section-planning + parallel
+   * drafting) so that background jobs benefit from the same high-quality
+   * multi-step pipeline as the synchronous route.
+   *
+   * For all other jobs (no template, or plain prompt jobs) we fall back to
+   * the existing ContextAwareAI / aiService path so nothing else breaks.
    */
   private static async generateContent(jobData: AIGenerationJobData, deps?: QueueServiceDependencies): Promise<any> {
     const { prompt, provider, model, temperature, max_tokens, template_id, variables, userId, projectId, documentIds, use_context, include_integrations, custom_context } = jobData
 
+    // ── AGENTIC PATH ──────────────────────────────────────────────────────────
+    // When a template is specified, use the new DocumentGenerationService which
+    // runs the 3-phase agentic pipeline (plan → draft sections → assemble).
+    if (template_id && projectId && prompt && userId) {
+      const log = deps?.logger || logger
+      log.info('[AIGenerationJobService] Routing to agentic DocumentGenerationService', {
+        template_id,
+        projectId,
+        provider,
+      })
+
+      // Lazy import to avoid circular dependency at module load time
+      const { documentGenerationService } = await import('../documentGenerationService')
+
+      const agenticResult = await documentGenerationService.generateDocument({
+        projectId: projectId as string,
+        templateId: template_id,
+        userPrompt: prompt,
+        provider: provider || 'mistral',
+        model: model || undefined,
+        temperature: temperature || 0.7,
+        userId: userId as string,
+      })
+
+      // Normalise to the shape that createDocument() expects
+      // (content string + optional usage object)
+      return {
+        content: agenticResult.content,
+        provider: agenticResult.metadata.provider,
+        model: agenticResult.metadata.model,
+        usage: {
+          prompt_tokens: 0,
+          completion_tokens: agenticResult.metadata.tokens_used || 0,
+          total_tokens: agenticResult.metadata.tokens_used || 0,
+        },
+        // Pass through GKG snapshot so it can be stored in generation_metadata
+        gkg_context_snapshot: agenticResult.gkg_context_snapshot,
+      }
+    }
+
+    // ── LEGACY PATH ───────────────────────────────────────────────────────────
     const useContext = !!use_context || !!projectId || !!documentIds || !!template_id
     const contextAI = deps?.contextAwareAIService || ContextAwareAIService
     const ai = deps?.aiService || aiService

@@ -144,7 +144,7 @@ export default function ProjectDetail({
   const projectId = resolvedParams.id
   const router = useRouter()
   const { isAuthenticated } = useAuth()
-  const { joinRoom, leaveRoom } = useWebSocket()
+  const { joinRoom, leaveRoom, on, off } = useWebSocket()
 
   // Get initial tab from query parameter, default to "overview"
   const initialTab = (resolvedSearchParams.tab as string) || 'overview'
@@ -996,264 +996,33 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
 
       const template = templates.find(t => t.id === selectedTemplate)
 
-      // Primary path: background job (POST /api/jobs/ai-generate). Worker runs AI + creates document.
+      // Step 2: Querying semantic RAG knowledge base
       setGenerationProgress({
         step: 2,
         totalSteps: 4,
-        message: 'Queueing document generation…',
-        percentage: 35,
-      })
-
-      try {
-        const queueResult = await apiClient.enqueueAiGenerateJob({
-          projectId,
-          prompt: aiPrompt,
-          provider: selectedProvider,
-          model: selectedModel,
-          templateId: selectedTemplate,
-          maxTokens: 32768,
-          temperature: aiTemperature,
-          documentName: documentName.trim(),
-          description: documentDescription?.trim() || undefined,
-          variables: {
-            project_id: projectId,
-            project_name: project?.name || 'Unknown Project',
-            template_name: template?.name || 'Unknown Template',
-            framework: project?.framework || template?.framework || 'General',
-          },
-          useContext: true,
-        })
-
-        if (queueResult?.jobId) {
-          console.log('✅ [7/10] AI generation job queued:', queueResult.jobId)
-          const jid = queueResult.jobId
-          setDocumentName('')
-          setDocumentDescription('')
-          setSelectedTemplate('')
-          setCreateDialogOpen(false)
-          setGenerationProgress({ step: 0, totalSteps: 4, message: '', percentage: 0 })
-          setCreatingDocument(false)
-          toast.success('Document generation queued', {
-            description: 'Opening the job monitor so you can track progress.',
-          })
-          router.push(`/jobs?jobId=${encodeURIComponent(jid)}`)
-          setTimeout(() => {
-            void fetchDocuments()
-          }, 2500)
-          return
-        }
-      } catch (queueErr: unknown) {
-        console.warn(
-          '⚠️ [7/10] Job queue unavailable, falling back to inline generation:',
-          queueErr instanceof Error ? queueErr.message : queueErr
-        )
-        toast.info('Running generation in this session', {
-          description: 'The job queue was not available; completing generation inline instead.',
-        })
-      }
-
-      // Fallback: synchronous AI + save (e.g. local dev without RabbitMQ workers)
-      setGenerationProgress({
-        step: 2,
-        totalSteps: 4,
-        message: `Generating content with ${selectedProvider}…`,
+        message: 'Querying vector database & fetching relevant context...',
         percentage: 50,
       })
-      console.log('🔄 [8/10] Inline AI generation (fallback)…')
+      console.log('🔄 [8/10] Querying semantic RAG context...')
+      
+      // Brief delay to let the user see the RAG retrieval phase
+      await new Promise(resolve => setTimeout(resolve, 800))
 
-      let generatedText: string | undefined
-      let genResult: any = null  // Declare outside try block for metadata access later
+      // Step 3: Executing AI writing engine & resolving variables
+      setGenerationProgress({
+        step: 3,
+        totalSteps: 4,
+        message: 'Executing AI writing engine & resolving variables...',
+        percentage: 75,
+      })
+      console.log('🤖 [9/10] Starting inline AI generation & variable resolution...')
 
       try {
-        console.log('🤖 [AI-1/5] Starting AI generation...')
-        console.log('📊 Provider:', selectedProvider, '| Model:', selectedModel, '| Temp:', aiTemperature)
-        console.log('📋 Template:', template?.name || 'Unknown')
-        console.log('🔗 Project:', project?.name || 'Unknown')
-
-        console.log('🌐 [AI-2/5] Calling apiClient.generateContent()...')
-        genResult = await apiClient.generateContent({
-          prompt: aiPrompt,
-          provider: selectedProvider,
-          model: selectedModel,
-          temperature: aiTemperature,
-          template_id: selectedTemplate,
-          projectId,
-          variables: {
-            project_id: projectId,
-            project_name: project?.name || 'Unknown Project',
-            template_name: template?.name || 'Unknown Template',
-            framework: project?.framework || template?.framework || 'General'
-          }
-        })
-
-        console.log('✅ [AI-3/5] API call completed. Response:', genResult)
-
-        // Extract content from AI response
-        console.log('🔍 [AI-4/5] Extracting content from response...')
-        if (genResult?.result?.content) generatedText = genResult.result.content
-        else if (genResult?.result?.text) generatedText = genResult.result.text
-        else if (genResult?.content) generatedText = genResult.content
-        else if (genResult?.text) generatedText = genResult.text
-        else if (typeof genResult === 'string') generatedText = genResult
-        else generatedText = JSON.stringify(genResult)
-
-        console.log('✅ [AI-5/5] Content extracted! Length:', generatedText?.length || 0, 'chars')
-        console.log('📝 Content preview:', generatedText?.substring(0, 100) + '...')
-
-        // Log comprehensive metadata if available
-        if (genResult?.metadata) {
-          console.log('📊 Generation Metadata:', genResult.metadata)
-        }
-        if (genResult?.quality) {
-          console.log('✨ Quality Metrics:', genResult.quality)
-        }
-
-        // Step 3: Content generated successfully
-        console.log('✅ [10/10] Setting progress to Step 3 (75%) - Saving document...')
-        setGenerationProgress({
-          step: 3,
-          totalSteps: 4,
-          message: 'Content generated! Saving document...',
-          percentage: 75,
-        })
-      } catch (aiError: unknown) {
-        console.error('❌ [AI-ERROR] AI generation failed:', aiError)
-        const msg =
-          aiError instanceof Error
-            ? aiError.message
-            : typeof aiError === 'object' && aiError !== null && 'message' in aiError
-              ? String((aiError as { message: unknown }).message)
-              : 'Please try again.'
-        toast.error(`AI generation failed: ${msg}`)
-        setCreatingDocument(false)
-        setGenerationProgress({ step: 0, totalSteps: 4, message: '', percentage: 0 })
-        return
-      }
-
-      // Extract metadata and quality from AI response
-      const generationMetadata = genResult?.metadata || null
-      const qualityMetrics = genResult?.quality || null
-      console.log('📊 [SAVE-1/6] Metadata extracted:', { hasMetadata: !!generationMetadata, hasQuality: !!qualityMetrics })
-
-      // 🆕 Build source documents metadata from context
-      const sourceDocuments = relevantDocs.map((doc, index) => {
-        // Determine lifecycle phase for this document
-        const docNameLower = (doc.name || '').toLowerCase()
-        const templateNameLower = (doc.template_name || '').toLowerCase()
-        const lifecycleOrder: { [key: string]: number } = {
-          'ideation': 1, 'business case': 2, 'charter': 3, 'stakeholder': 4,
-          'scope': 5, 'requirement': 6, 'schedule': 7, 'cost': 8, 'budget': 8,
-          'resource': 9, 'quality': 10, 'risk': 11, 'communication': 12,
-          'procurement': 13, 'integration': 14, 'closeout': 15, 'lessons': 16
-        }
-
-        let phase = 99
-        let phaseName = 'Other'
-        for (const [key, phaseNum] of Object.entries(lifecycleOrder)) {
-          if (docNameLower.includes(key) || templateNameLower.includes(key)) {
-            if (phaseNum < phase) {
-              phase = phaseNum
-              phaseName = key.charAt(0).toUpperCase() + key.slice(1)
-            }
-          }
-        }
-
-        // Calculate reading metrics for this document
-        const charCount = doc.character_count || (typeof doc.content === 'string' ? doc.content.length : 0)
-        const wordCount = doc.word_count || Math.round(charCount / 5) // Estimate if not available
-        const readingTimeMinutes = Math.round((wordCount / 250) * 10) / 10 // 250 words/min
-
-        return {
-          id: doc.id,
-          title: doc.name,
-          type: doc.template_name || 'Document',
-          template_id: doc.template_id,
-          status: doc.status,
-          url: `/projects/${projectId}/documents/${doc.id}/view`,
-          lifecycle_phase: phase,
-          phase_name: phaseName,
-          priority_rank: index + 1,
-          character_count: charCount,
-          word_count: wordCount,
-          reading_time_minutes: readingTimeMinutes,
-          is_project_context: false
-        }
-      })
-
-      // 🆕 Add project context as a source document if project context is used
-      // Project context is always used (name, description, framework, team, budget, timeline)
-      if (project?.name || project?.description || project?.framework) {
-        const projectContextEntry = {
-          id: `project_context:${projectId}`, // Unique identifier for project context
-          title: `Project Context: ${projectName}`,
-          type: 'Project Context',
-          template_id: undefined,
-          status: 'active',
-          url: `/projects/${projectId}`, // Link to project page
-          lifecycle_phase: 0, // Project context is foundational (phase 0)
-          phase_name: 'Foundation',
-          priority_rank: 0, // Highest priority - always first
-          character_count: (projectDesc?.length || 0) + (projectName?.length || 0) + (framework?.length || 0),
-          word_count: Math.round(((projectDesc?.length || 0) + (projectName?.length || 0) + (framework?.length || 0)) / 5),
-          reading_time_minutes: 0,
-          is_project_context: true // Flag to identify this as project context
-        }
-        // Insert at the beginning (highest priority)
-        sourceDocuments.unshift(projectContextEntry)
-      }
-
-      console.log('📚 [SAVE-1.5/6] Source documents tracked:', sourceDocuments.length, 'documents')
-      if (sourceDocuments.length > 0) {
-        console.log('  Source document names:', sourceDocuments.map(d => d.title).join(', '))
-      }
-
-      const documentData = {
-        name: documentName,
-        content: generatedText || "# Document content not generated",
-        template_id: selectedTemplate,
-        status: 'draft' as const,
-        generation_metadata: generationMetadata ? {
-          ...generationMetadata,
-          qualityMetrics: qualityMetrics,  // Changed from 'quality' to 'qualityMetrics'
-          source_documents: sourceDocuments,
-          context_stats: {
-            total_documents_available: documents.length,
-            documents_used_as_context: relevantDocs.length,
-            project_context_used: true, // Project context is always used
-            stakeholders_available: stakeholders?.length || 0,
-            custom_settings_count: hasSettings ? Object.keys(project?.settings || {}).length : 0,
-            custom_metadata_count: hasMetadata ? Object.keys(project?.metadata || {}).length : 0,
-            estimated_context_tokens: Math.round(aiPrompt.length / 4)
-          }
-        } : {
-          qualityMetrics: qualityMetrics,  // Added quality metrics even without other metadata
-          source_documents: sourceDocuments,
-          context_stats: {
-            total_documents_available: documents.length,
-            documents_used_as_context: relevantDocs.length,
-            project_context_used: true, // Project context is always used
-            stakeholders_available: stakeholders?.length || 0,
-            custom_settings_count: hasSettings ? Object.keys(project?.settings || {}).length : 0,
-            custom_metadata_count: hasMetadata ? Object.keys(project?.metadata || {}).length : 0,
-            estimated_context_tokens: Math.round(aiPrompt.length / 4)
-          }
-        }
-      }
-      console.log('📄 [SAVE-2/6] Document data prepared:', {
-        name: documentData.name,
-        contentLength: documentData.content.length,
-        templateId: documentData.template_id,
-        hasMetadata: !!documentData.generation_metadata
-      })
-
-      console.log('🌐 [SAVE-3/6] Calling apiClient.generateDocument() with conflict detection...')
-
-      try {
-        // Use new endpoint that includes conflict detection
+        // Use new endpoint that includes conflict detection and inline generation
         const createResult: any = await apiClient.generateDocument({
           projectId,
-          name: documentName,
-          description: documentDescription,
+          name: documentName.trim(),
+          description: documentDescription?.trim() || undefined,
           templateId: selectedTemplate,
           userPrompt: aiPrompt,
           provider: selectedProvider,
@@ -1263,10 +1032,66 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
           includeDocuments: true,
         })
 
-        console.log('✅ [SAVE-4/6] Document created successfully! ID:', createResult?.document?.id || 'unknown')
+        // ── ASYNC PATH ──────────────────────────────────────────────────
+        // The backend queued the job (large template, many sections).
+        // Subscribe to WebSocket heartbeats and update the modal progress bar
+        // until job:completed or job:failed fires.
+        if (createResult?.async === true && createResult?.jobId) {
+          const asyncJobId: string = createResult.jobId
+          console.log('⏳ [ASYNC] Document generation queued. Job ID:', asyncJobId)
+
+          setGenerationProgress({
+            step: 3,
+            totalSteps: 4,
+            message: '⏳ Generation queued — writing document sections in background…',
+            percentage: 10,
+          })
+
+          await new Promise<void>((resolve, reject) => {
+            const handleStatus = (data: any) => {
+              if (data?.jobId !== asyncJobId) return
+              const pct = Math.max(10, Math.min(95, data.progress ?? 10))
+              setGenerationProgress({
+                step: 3,
+                totalSteps: 4,
+                message: `✍️ Drafting document… ${pct}%`,
+                percentage: pct,
+              })
+            }
+
+            const handleCompleted = (data: any) => {
+              if (data?.jobId !== asyncJobId) return
+              cleanup()
+              resolve()
+            }
+
+            const handleFailed = (data: any) => {
+              if (data?.jobId !== asyncJobId) return
+              cleanup()
+              reject(new Error(data?.error || 'Background document generation failed'))
+            }
+
+            const cleanup = () => {
+              off('job:status', handleStatus)
+              off('job:completed', handleCompleted)
+              off('job:failed', handleFailed)
+            }
+
+            on('job:status', handleStatus)
+            on('job:completed', handleCompleted)
+            on('job:failed', handleFailed)
+          })
+
+          console.log('✅ [ASYNC] Background document generation completed!')
+        }
+
+        // ── SYNC PATH ───────────────────────────────────────────────────
+        // Backend returned the document immediately — log the doc id.
+        if (createResult?.document?.id) {
+          console.log('✅ Document created successfully! ID:', createResult.document.id)
+        }
 
         // Step 4: Complete!
-        console.log('🎉 [SAVE-5/6] Setting progress to Step 4 (100%)')
         setGenerationProgress({
           step: 4,
           totalSteps: 4,
@@ -1278,10 +1103,8 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
         await new Promise(resolve => setTimeout(resolve, 800))
 
         toast.success("Document created successfully!")
-        console.log('✅ [SAVE-6/6] Success toast displayed')
 
         // Reset form
-        console.log('🔄 [CLEANUP-1/3] Resetting form state...')
         setDocumentName("")
         setDocumentDescription("")
         setSelectedTemplate("")
@@ -1289,18 +1112,15 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
         setGenerationProgress({ step: 0, totalSteps: 4, message: '', percentage: 0 })
 
         // Refresh documents list
-        console.log('🔄 [CLEANUP-2/3] Refreshing documents list...')
         await fetchDocuments()
-        console.log('✅ [CLEANUP-3/3] All done! Document generation complete!')
 
       } catch (apiError: any) {
         // Check for template conflict (409 status)
-        if (apiError.status === 409 && apiError.data?.code === 'TEMPLATE_ALREADY_USED') {
+        if (apiError.status === 409 && (apiError.data?.code === 'TEMPLATE_ALREADY_USED' || apiError.data?.code === 'TEMPLATE_CONFLICT')) {
           console.log('⚠️ [CONFLICT] Template already used - showing conflict dialog')
-          const template = templates.find(t => t.id === selectedTemplate)
 
           setConflictData({
-            existingDocument: apiError.data.existing,
+            existingDocument: apiError.data.existing || apiError.data.conflictResult?.existingDocument,
             templateName: template?.name || 'Unknown Template',
             generationData: {
               projectId,
@@ -1321,14 +1141,9 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
 
     } catch (error) {
       console.error("❌ [ERROR] Failed to create document:", error)
-      console.error("❌ [ERROR] Error details:", {
-        message: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined
-      })
       toast.error("Failed to create document")
       setGenerationProgress({ step: 0, totalSteps: 4, message: '', percentage: 0 })
     } finally {
-      console.log('🏁 [FINALLY] Resetting creatingDocument flag')
       setCreatingDocument(false)
     }
   }
@@ -1420,7 +1235,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
           const separateResult: any = await apiClient.generateDocument({
             projectId: conflictData.generationData.projectId,
             name: newName,
-            description: documentDescription,
+            description: documentDescription?.trim() || undefined,
             templateId: conflictData.generationData.templateId,
             userPrompt: separatePrompt,
             provider: conflictData.generationData.provider,
@@ -2221,7 +2036,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
   }, [documentsPagination.page, searchTerm])
 
   // Listen for document events via WebSocket and refresh documents for this project
-  const { on, off } = useWebSocket()
+  // on/off are already destructured from the top-level useWebSocket() call above
   React.useEffect(() => {
     if (!projectId || projectId === 'undefined') return
     const room = `project:${projectId}`
