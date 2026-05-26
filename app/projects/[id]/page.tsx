@@ -1033,56 +1033,21 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
         })
 
         // ── ASYNC PATH ──────────────────────────────────────────────────
-        // The backend queued the job (large template, many sections).
-        // Subscribe to WebSocket heartbeats and update the modal progress bar
-        // until job:completed or job:failed fires.
+        // The backend accepted the request and queued the job. The queue owns
+        // generation from here, so the create dialog should not wait on-screen.
         if (createResult?.async === true && createResult?.jobId) {
           const asyncJobId: string = createResult.jobId
           console.log('⏳ [ASYNC] Document generation queued. Job ID:', asyncJobId)
 
-          setGenerationProgress({
-            step: 3,
-            totalSteps: 4,
-            message: '⏳ Generation queued — writing document sections in background…',
-            percentage: 10,
-          })
+          toast.info('Document generation started')
 
-          await new Promise<void>((resolve, reject) => {
-            const handleStatus = (data: any) => {
-              if (data?.jobId !== asyncJobId) return
-              const pct = Math.max(10, Math.min(95, data.progress ?? 10))
-              setGenerationProgress({
-                step: 3,
-                totalSteps: 4,
-                message: `✍️ Drafting document… ${pct}%`,
-                percentage: pct,
-              })
-            }
-
-            const handleCompleted = (data: any) => {
-              if (data?.jobId !== asyncJobId) return
-              cleanup()
-              resolve()
-            }
-
-            const handleFailed = (data: any) => {
-              if (data?.jobId !== asyncJobId) return
-              cleanup()
-              reject(new Error(data?.error || 'Background document generation failed'))
-            }
-
-            const cleanup = () => {
-              off('job:status', handleStatus)
-              off('job:completed', handleCompleted)
-              off('job:failed', handleFailed)
-            }
-
-            on('job:status', handleStatus)
-            on('job:completed', handleCompleted)
-            on('job:failed', handleFailed)
-          })
-
-          console.log('✅ [ASYNC] Background document generation completed!')
+          setDocumentName("")
+          setDocumentDescription("")
+          setSelectedTemplate("")
+          setCreateDialogOpen(false)
+          setGenerationProgress({ step: 0, totalSteps: 4, message: '', percentage: 0 })
+          await fetchDocuments()
+          return
         }
 
         // ── SYNC PATH ───────────────────────────────────────────────────
@@ -1375,6 +1340,21 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
       return []
     }
 
+    const getPreferredModel = (provider: any) => {
+      const models = provider?.models || []
+      const candidates = [
+        provider?.model,
+        provider?.default_model,
+        provider?.defaultModel,
+        provider?.configuration?.model,
+        provider?.configuration?.default_model,
+        provider?.configuration?.defaultModel,
+      ].filter((model): model is string => typeof model === 'string' && model.trim().length > 0)
+
+      const configuredModel = candidates.find((model) => models.includes(model))
+      return configuredModel || models[0] || ''
+    }
+
     try {
       const providers: any = await apiClient.getAIProviders()
       const normalizedProviders = (providers || []).map((provider: any) => ({
@@ -1391,11 +1371,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
         const providerToUse = currentProvider || activeProviders[0]
         setSelectedProvider(providerToUse.name)
 
-        if (providerToUse.models && providerToUse.models.length > 0) {
-          setSelectedModel(providerToUse.models[0])
-        } else {
-          setSelectedModel('')
-        }
+        setSelectedModel(getPreferredModel(providerToUse))
       }
     } catch (error) {
       console.error("Failed to fetch AI providers:", error)
@@ -2660,9 +2636,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                             onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                               const provider = aiProviders.find(p => p.name === e.target.value)
                               setSelectedProvider(e.target.value as AIProviderType)
-                              if (provider && provider.models && provider.models.length > 0) {
-                                setSelectedModel(provider.models[0])
-                              }
+                              setSelectedModel(provider ? getPreferredModel(provider) : '')
                             }}
                           >
                             {aiProviders.filter(p => p.is_active).map((provider) => (

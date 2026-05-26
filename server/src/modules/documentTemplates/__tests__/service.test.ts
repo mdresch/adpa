@@ -166,7 +166,8 @@ describe('DocumentTemplateService', () => {
         category: 'Architecture',
         content: { sections: [] },
         variables: [],
-        is_public: false
+        is_public: false,
+        prompt_version: 4,
       }
 
       const mockCreatedTemplate = {
@@ -244,6 +245,34 @@ describe('DocumentTemplateService', () => {
       const { templateAuditService } = require('../../../services/templateAuditService')
       expect(templateAuditService.createPendingAudit).toHaveBeenCalledWith('template-1', 'lifecycle', 3)
       expect(templateAuditService.runAudit).toHaveBeenCalledWith('mock-audit-id', mockUpdatedTemplate)
+    })
+
+    it('should persist prompt version and an intentionally cleared system prompt', async () => {
+      const updateData: UpdateTemplateRequest = {
+        system_prompt: '',
+        prompt_version: 5,
+      }
+
+      const mockUpdatedTemplate = {
+        id: 'template-1',
+        name: 'Updated Template',
+        system_prompt: '',
+        prompt_version: 5,
+        created_by: 'user-123',
+      }
+
+      mockPool.query
+        .mockResolvedValueOnce({ rows: [{ created_by: 'user-123' }] } as any)
+        .mockResolvedValueOnce({ rows: [mockUpdatedTemplate] } as any)
+        .mockResolvedValueOnce({ rows: [{ count: '2' }] } as any)
+
+      await service.updateTemplate('template-1', updateData, mockUser)
+
+      const updateCall = mockPool.query.mock.calls.find(([query]) =>
+        String(query).includes('UPDATE templates')
+      )
+      expect(updateCall).toBeDefined()
+      expect(updateCall?.[1]).toEqual(expect.arrayContaining(['', 5]))
     })
 
     it('should return null if template not found', async () => {

@@ -126,6 +126,7 @@ export class TemplateController {
       const data = {
         ...req.body,
         id: uuidv4(),
+        template_scope,
         company_id: finalCompanyId,
         is_read_only: template_scope === 'standard',
         created_by: user.id

@@ -58,4 +58,28 @@ describe('TemplateAuditService', () => {
       expect.arrayContaining([83, 85, 80, 'pass'])
     )
   })
+
+  it('should persist document failure context when supplied', async () => {
+    const mockGenerate = aiService.generateWithFallback as jest.Mock
+    mockGenerate.mockImplementation(async ({ aiCallType }) => {
+      if (aiCallType === 'draco_governance_evaluation') {
+        return { content: JSON.stringify({ score: 65, findings: [], recommendations: [], compliance_gaps: [] }) }
+      }
+      return { content: JSON.stringify({ score: 60, findings: [], recommendations: [], challenged_assumptions: [], logical_vulnerabilities: [] }) }
+    })
+
+    const failureContext = {
+      documentId: 'doc-1',
+      documentScore: 52,
+      issues: [{ severity: 'major', description: 'Missing transition plan' }],
+      recommendations: ['Tighten the transition-state instructions'],
+    }
+
+    await templateAuditService.runAudit('audit-id', { id: 'temp-id', name: 'Plan', framework: 'BABOK v3' }, failureContext)
+
+    expect(pool.query).toHaveBeenCalledWith(
+      expect.stringContaining('document_failure_context'),
+      expect.arrayContaining([JSON.stringify(failureContext)])
+    )
+  })
 })

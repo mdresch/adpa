@@ -537,12 +537,87 @@ router.post(
   }
 )
 
+const auditPromptSuggestionSchema = Joi.object({
+  templateId: Joi.string().uuid().required()
+})
+
+/**
+ * GET /api/quality-audits/template-optimization/audit-prompt-suggestion
+ * Get latest pending audit-generated system prompt suggestion for a template
+ */
+router.get(
+  '/template-optimization/audit-prompt-suggestion',
+  authenticateToken,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { error, value } = auditPromptSuggestionSchema.validate(req.query)
+      if (error) {
+        return res.status(400).json({
+          success: false,
+          error: error.message
+        })
+      }
+
+      const { templateOptimizationService } = await import('../services/templateOptimizationService')
+      const suggestion = await templateOptimizationService.getLatestAuditPromptSuggestion(value.templateId)
+
+      res.json({
+        success: true,
+        suggestion
+      })
+    } catch (error: unknown) {
+      logger.error('[QUALITY-AUDIT-API] Failed to get audit prompt suggestion', {
+        error: error instanceof Error ? error.message : String(error)
+      })
+      next(error)
+    }
+  }
+)
+
+/**
+ * POST /api/quality-audits/template-optimization/audit-prompt-suggestion/generate
+ * Generate a reviewable system prompt suggestion from latest completed template audit
+ */
+router.post(
+  '/template-optimization/audit-prompt-suggestion/generate',
+  authenticateToken,
+  validate(auditPromptSuggestionSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { templateId } = req.body
+      const { templateOptimizationService } = await import('../services/templateOptimizationService')
+      const suggestionId = await templateOptimizationService.generatePromptSuggestionFromLatestAudit(templateId)
+      const suggestion = await templateOptimizationService.getOptimizationSuggestion(suggestionId)
+
+      res.json({
+        success: true,
+        suggestionId,
+        suggestion,
+        message: 'Audit-generated system prompt suggestion created.'
+      })
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error)
+      if (message.includes('No completed template audit') || message.includes('Template not found')) {
+        return res.status(400).json({
+          success: false,
+          error: message
+        })
+      }
+
+      logger.error('[QUALITY-AUDIT-API] Failed to generate audit prompt suggestion', {
+        error: message
+      })
+      next(error)
+    }
+  }
+)
+
 /**
  * POST /api/quality-audits/template-optimization/:suggestionId/apply
  * Apply AI-generated template optimization (MANUAL GATE)
  */
 router.post(
-  '/template-optimization/:suggestionId/apply',
+  '/template-optimization/:suggestionId([0-9a-fA-F-]{36})/apply',
   authenticateToken,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -592,7 +667,7 @@ router.post(
  * Get detailed optimization suggestion with diff view
  */
 router.get(
-  '/template-optimization/:suggestionId',
+  '/template-optimization/:suggestionId([0-9a-fA-F-]{36})',
   authenticateToken,
   async (req: Request, res: Response, next: NextFunction) => {
     try {

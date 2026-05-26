@@ -1,10 +1,40 @@
 import { Pool, PoolClient } from 'pg';
 import { childLogger } from '../../utils/logger';
 
+const JSONB_UPDATE_FIELDS = new Set([
+  'content',
+  'variables',
+  'template_paragraphs',
+  'gkg_context_strategy',
+]);
+
 export class TemplateRepository {
   private logger = childLogger({ component: 'TemplateRepository' });
 
   constructor(private pool: Pool) {}
+
+  private normalizeJsonbUpdateValue(field: string, value: unknown) {
+    if (value === null) return null;
+
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+
+      if (!trimmed) {
+        if (field === 'content') return '{}';
+        if (field === 'variables') return '[]';
+        return null;
+      }
+
+      try {
+        JSON.parse(trimmed);
+        return trimmed;
+      } catch {
+        return JSON.stringify(value);
+      }
+    }
+
+    return JSON.stringify(value);
+  }
 
   async findTemplates(filters: any, isSuperAdmin: boolean, userCompanyId: string | null, userId: string, client?: PoolClient): Promise<any[]> {
     const db = client || this.pool;
@@ -354,8 +384,8 @@ export class TemplateRepository {
     for (const field of allowedFields) {
       if (data[field] !== undefined) {
         updates.push(`${field} = $${paramIndex}`);
-        if (typeof data[field] === 'object' && data[field] !== null) {
-          params.push(JSON.stringify(data[field]));
+        if (JSONB_UPDATE_FIELDS.has(field)) {
+          params.push(this.normalizeJsonbUpdateValue(field, data[field]));
         } else {
           params.push(data[field]);
         }

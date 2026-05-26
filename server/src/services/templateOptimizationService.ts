@@ -13,7 +13,7 @@ import { v4 as uuidv4 } from 'uuid'
 interface TemplateVersion {
   id: string
   name: string
-  content: string
+  content: any
   system_prompt?: string
   prompt_version: number
   framework: string
@@ -35,7 +35,7 @@ interface QualityAudit {
 
 interface TemplateOptimizationSuggestion {
   suggested_system_prompt: string
-  suggested_content: string
+  suggested_content?: string
   change_explanation: string
   expected_quality_gain: number
   changes_summary: {
@@ -49,7 +49,172 @@ interface TemplateOptimizationSuggestion {
   analyzerModel?: string
 }
 
+interface TemplateAuditResult {
+  id: string
+  overall_score: number | null
+  governance_score: number | null
+  resilience_score: number | null
+  verdict: string | null
+  governance_findings: unknown[]
+  governance_recommendations: unknown[]
+  compliance_gaps: unknown[]
+  challenger_findings: unknown[]
+  challenger_recommendations: unknown[]
+  logical_vulnerabilities: unknown[]
+  challenged_assumptions: unknown[]
+}
+
 export class TemplateOptimizationService {
+  /**
+   * Create a reviewable, system-prompt-only optimization from the latest template audit.
+   */
+  async generatePromptSuggestionFromLatestAudit(templateId: string): Promise<string> {
+    const templateResult = await pool.query(
+      `SELECT id, name, content, system_prompt, prompt_version, framework, category
+       FROM templates
+       WHERE id = $1`,
+      [templateId]
+    )
+
+    if (templateResult.rows.length === 0) {
+      throw new Error('Template not found')
+    }
+
+    const auditResult = await pool.query(
+      `SELECT id, overall_score, governance_score, resilience_score, verdict,
+              governance_findings, governance_recommendations, compliance_gaps,
+              challenger_findings, challenger_recommendations,
+              logical_vulnerabilities, challenged_assumptions
+       FROM template_audits
+       WHERE template_id = $1
+       AND status = 'completed'
+       ORDER BY completed_at DESC NULLS LAST, created_at DESC
+       LIMIT 1`,
+      [templateId]
+    )
+
+    if (auditResult.rows.length === 0) {
+      throw new Error('No completed template audit found for prompt suggestion')
+    }
+
+    const template = templateResult.rows[0] as TemplateVersion
+    const audit = this.normalizeAuditResult(auditResult.rows[0])
+    const { provider, model } = await this.getPreferredProvider()
+
+    const result = await aiService.generateWithFallback({
+      provider,
+      model,
+      prompt: this.buildAuditPromptSuggestionPrompt(template, audit),
+      system_prompt: `You are an expert audit-driven system prompt optimization specialist for governance document templates.
+Improve only the system prompt. Preserve the current template content and output valid JSON only.`,
+      temperature: 0.2,
+      max_tokens: 4000
+    }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
+
+    const usage = result.usage
+    const totalTokens = usage?.totalTokens ?? usage?.total_tokens ?? 0
+    const estimatedCost = (totalTokens / 1000000) * 0.50
+    const parsed = this.parseOptimizationJson(result.content)
+    const suggestedSystemPrompt = parsed.suggested_system_prompt?.trim()
+
+    if (!suggestedSystemPrompt) {
+      throw new Error('AI response did not include a suggested system prompt')
+    }
+
+    const suggestionId = uuidv4()
+    const expectedQualityGain = Number(parsed.expected_quality_gain) || 10
+    const currentContent = this.normalizeTemplateContentForJsonb(template.content)
+    const originalContent = this.templateContentToText(template.content)
+    const changesSummary = parsed.changes_summary || {
+      system_prompt_changes: [],
+      content_changes: [],
+      key_improvements: []
+    }
+
+    await pool.query(
+      `INSERT INTO template_improvement_suggestions
+       (id, template_id, status, priority, expected_quality_gain, current_avg_quality,
+        analysis_period_start, analysis_period_end, documents_analyzed,
+        common_issues, suggested_improvements, improvement_rationale,
+        analyzer_ai_provider, analyzer_ai_model, analysis_tokens, analysis_cost,
+        created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW() - INTERVAL '1 day', NOW(), $7, $8, $9, $10, $11, $12, $13, $14, NOW())`,
+      [
+        suggestionId,
+        templateId,
+        'pending_review',
+        expectedQualityGain > 10 ? 'high' : 'medium',
+        expectedQualityGain,
+        audit.overall_score ?? 0,
+        1,
+        JSON.stringify(this.extractAuditIssues(audit)),
+        JSON.stringify([{
+          issue_addressed: 'Latest template audit recommendations',
+          proposed_change: parsed.change_explanation || 'Improved system prompt generated from latest template audit.',
+          change_type: 'template_optimization',
+          section: 'system_prompt',
+          system_prompt: suggestedSystemPrompt,
+          template_content: currentContent,
+          changes_summary: changesSummary,
+          metadata: {
+            optimization_type: 'ai_generated',
+            trigger: 'template_audit',
+            audit_id: audit.id,
+            audit_score: audit.overall_score,
+            governance_score: audit.governance_score,
+            resilience_score: audit.resilience_score,
+            generated_at: new Date().toISOString(),
+            original_system_prompt: template.system_prompt || null,
+            original_content: originalContent
+          }
+        }]),
+        parsed.change_explanation || 'Audit-generated system prompt improvement.',
+        result.providerUsed || result.provider || provider,
+        result.model || model,
+        totalTokens,
+        estimatedCost
+      ]
+    )
+
+    logger.info('[TEMPLATE-OPT] Audit prompt suggestion created', {
+      templateId,
+      auditId: audit.id,
+      suggestionId,
+      expectedQualityGain
+    })
+
+    return suggestionId
+  }
+
+  /**
+   * Get the newest pending system-prompt suggestion generated from a template audit.
+   */
+  async getLatestAuditPromptSuggestion(templateId: string): Promise<any | null> {
+    const result = await pool.query(
+      `SELECT *
+       FROM template_improvement_suggestions tis
+       WHERE tis.template_id = $1
+       AND tis.status = 'pending_review'
+       AND EXISTS (
+         SELECT 1
+         FROM jsonb_array_elements(
+           CASE
+             WHEN jsonb_typeof(tis.suggested_improvements) = 'array'
+               THEN tis.suggested_improvements
+             ELSE '[]'::jsonb
+           END
+         ) AS imp
+         WHERE imp->'metadata'->>'trigger' = 'template_audit'
+         AND imp->>'section' = 'system_prompt'
+       )
+       ORDER BY tis.created_at DESC
+       LIMIT 1`,
+      [templateId]
+    )
+
+    return result.rows[0] || null
+  }
+
   /**
    * Analyze quality regression and generate template improvement
    */
@@ -201,12 +366,7 @@ Always respond with valid JSON only.`
 
     // Parse AI response with error handling
     try {
-      let cleaned = result.content.trim()
-      if (cleaned.startsWith('```json')) cleaned = cleaned.substring(7)
-      if (cleaned.startsWith('```')) cleaned = cleaned.substring(3)
-      if (cleaned.endsWith('```')) cleaned = cleaned.substring(0, cleaned.length - 3)
-
-      const parsed = JSON.parse(cleaned.trim())
+      const parsed = this.parseOptimizationJson(result.content)
 
       return {
         suggested_system_prompt: parsed.suggested_system_prompt,
@@ -342,6 +502,207 @@ Focus on ACTIONABLE changes that directly address the regression causes.
 Make the system prompt crystal-clear and the template structure easy for AI to follow.`
   }
 
+  private async getPreferredProvider(): Promise<{ provider: string; model: string }> {
+    const providerResult = await pool.query(
+      "SELECT provider_type, default_model FROM ai_providers WHERE is_active = true ORDER BY priority ASC LIMIT 1"
+    )
+
+    return {
+      provider: providerResult.rows[0]?.provider_type || 'openai',
+      model: providerResult.rows[0]?.default_model || 'gpt-4o'
+    }
+  }
+
+  private parseOptimizationJson(content: string): any {
+    let cleaned = content.trim()
+    if (cleaned.startsWith('```json')) cleaned = cleaned.substring(7)
+    if (cleaned.startsWith('```')) cleaned = cleaned.substring(3)
+    if (cleaned.endsWith('```')) cleaned = cleaned.substring(0, cleaned.length - 3)
+    return JSON.parse(cleaned.trim())
+  }
+
+  private normalizeAuditResult(row: any): TemplateAuditResult {
+    return {
+      id: row.id,
+      overall_score: row.overall_score ?? null,
+      governance_score: row.governance_score ?? null,
+      resilience_score: row.resilience_score ?? null,
+      verdict: row.verdict ?? null,
+      governance_findings: this.ensureArray(row.governance_findings),
+      governance_recommendations: this.ensureArray(row.governance_recommendations),
+      compliance_gaps: this.ensureArray(row.compliance_gaps),
+      challenger_findings: this.ensureArray(row.challenger_findings),
+      challenger_recommendations: this.ensureArray(row.challenger_recommendations),
+      logical_vulnerabilities: this.ensureArray(row.logical_vulnerabilities),
+      challenged_assumptions: this.ensureArray(row.challenged_assumptions)
+    }
+  }
+
+  private ensureArray(value: unknown): unknown[] {
+    if (Array.isArray(value)) return value
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value)
+        return Array.isArray(parsed) ? parsed : []
+      } catch {
+        return []
+      }
+    }
+    return []
+  }
+
+  private templateContentToText(content: unknown): string {
+    if (!content) return ''
+    if (typeof content === 'string') return content
+    if (typeof content === 'object') {
+      const contentRecord = content as Record<string, unknown>
+      const markdown = contentRecord.markdown
+      const nestedContent = contentRecord.content
+      if (typeof markdown === 'string') return markdown
+      if (typeof nestedContent === 'string') return nestedContent
+      return JSON.stringify(content, null, 2)
+    }
+    return String(content)
+  }
+
+  private normalizeTemplateContentForJsonb(content: unknown): unknown {
+    if (typeof content === 'string') {
+      try {
+        return JSON.parse(content)
+      } catch {
+        return { content }
+      }
+    }
+    return content ?? {}
+  }
+
+  private extractAuditIssues(audit: TemplateAuditResult) {
+    const entries = [
+      ...audit.compliance_gaps,
+      ...audit.governance_recommendations,
+      ...audit.challenger_recommendations,
+      ...audit.logical_vulnerabilities
+    ]
+
+    return entries.slice(0, 10).map((entry) => ({
+      dimension: 'template_audit',
+      description: this.formatAuditEntry(entry),
+      count: 1
+    }))
+  }
+
+  private formatAuditEntry(entry: unknown): string {
+    if (entry === null || entry === undefined) return ''
+    if (typeof entry === 'string' || typeof entry === 'number' || typeof entry === 'boolean') {
+      return String(entry)
+    }
+
+    if (typeof entry !== 'object') return String(entry)
+    const record = entry as Record<string, unknown>
+    const framework = this.readStringField(record, 'framework')
+    const requirement = this.readStringField(record, 'requirement')
+    const severity = this.readStringField(record, 'severity')
+    const primaryText =
+      this.readStringField(record, 'recommendation') ||
+      this.readStringField(record, 'description') ||
+      this.readStringField(record, 'gap_description') ||
+      this.readStringField(record, 'suggested_fix') ||
+      this.readStringField(record, 'counter_argument') ||
+      this.readStringField(record, 'assumption')
+
+    const context = [framework, requirement].filter(Boolean).join(': ')
+    if (context && primaryText) {
+      return `${context} - ${primaryText}${severity ? ` (${severity})` : ''}`
+    }
+    if (primaryText) return primaryText
+
+    return Object.entries(record)
+      .flatMap(([key, value]) => {
+        if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+          return [`${key}: ${String(value)}`]
+        }
+        return []
+      })
+      .join('; ')
+  }
+
+  private readStringField(value: Record<string, unknown>, key: string): string {
+    const field = value[key]
+    return typeof field === 'string' && field.trim().length > 0 ? field.trim() : ''
+  }
+
+  private buildAuditPromptSuggestionPrompt(template: TemplateVersion, audit: TemplateAuditResult): string {
+    return `# Audit-Driven System Prompt Optimization
+
+You are generating a replacement system prompt for a governance document template. Use the current content prompt/template and latest audit results to improve governance compliance, resilience, and document quality.
+
+Only generate a new system prompt. Do not rewrite the template content.
+
+## Template
+
+Name: ${template.name}
+Framework: ${template.framework}
+Category: ${template.category}
+Current prompt version: ${template.prompt_version}
+
+## Current System Prompt
+
+\`\`\`
+${template.system_prompt || 'No system prompt defined'}
+\`\`\`
+
+## Current Content Prompt / Template
+
+\`\`\`markdown
+${this.templateContentToText(template.content)}
+\`\`\`
+
+## Latest Audit Results
+
+Overall score: ${audit.overall_score ?? 'n/a'}
+Governance score: ${audit.governance_score ?? 'n/a'}
+Resilience score: ${audit.resilience_score ?? 'n/a'}
+Verdict: ${audit.verdict ?? 'n/a'}
+
+Governance findings:
+${audit.governance_findings.map((item, idx) => `${idx + 1}. ${this.formatAuditEntry(item)}`).join('\n') || 'None'}
+
+Governance recommendations:
+${audit.governance_recommendations.map((item, idx) => `${idx + 1}. ${this.formatAuditEntry(item)}`).join('\n') || 'None'}
+
+Compliance gaps:
+${audit.compliance_gaps.map((item, idx) => `${idx + 1}. ${this.formatAuditEntry(item)}`).join('\n') || 'None'}
+
+Challenger findings:
+${audit.challenger_findings.map((item, idx) => `${idx + 1}. ${this.formatAuditEntry(item)}`).join('\n') || 'None'}
+
+Challenger recommendations:
+${audit.challenger_recommendations.map((item, idx) => `${idx + 1}. ${this.formatAuditEntry(item)}`).join('\n') || 'None'}
+
+Logical vulnerabilities:
+${audit.logical_vulnerabilities.map((item, idx) => `${idx + 1}. ${this.formatAuditEntry(item)}`).join('\n') || 'None'}
+
+Challenged assumptions:
+${audit.challenged_assumptions.map((item, idx) => `${idx + 1}. ${this.formatAuditEntry(item)}`).join('\n') || 'None'}
+
+## Output Requirements
+
+Respond with valid JSON only:
+
+{
+  "suggested_system_prompt": "A complete replacement system prompt that directly addresses the audit results...",
+  "change_explanation": "Explain what changed and why it addresses the audit findings.",
+  "expected_quality_gain": 12,
+  "changes_summary": {
+    "system_prompt_changes": ["Change 1", "Change 2"],
+    "content_changes": [],
+    "key_improvements": ["Improvement 1", "Improvement 2"]
+  }
+}
+
+The suggested system prompt should preserve the template's purpose while adding specific, actionable guardrails for the audit gaps.`
+  }
+
   /**
    * Save optimization suggestion for admin review
    */
@@ -439,7 +800,19 @@ Make the system prompt crystal-clear and the template structure easy for AI to f
       }
 
       const suggestion = sugResult.rows[0]
-      const improvement = suggestion.suggested_improvements[0]
+      let suggestedImprovements = suggestion.suggested_improvements
+      if (typeof suggestedImprovements === 'string') {
+        try {
+          suggestedImprovements = JSON.parse(suggestedImprovements)
+        } catch {
+          suggestedImprovements = []
+        }
+      }
+      const improvement = Array.isArray(suggestedImprovements) ? suggestedImprovements[0] : null
+
+      if (!improvement) {
+        throw new Error('Suggestion does not contain an applicable improvement')
+      }
 
       logger.info('[TEMPLATE-OPT] Applying optimization to template', {
         suggestionId,

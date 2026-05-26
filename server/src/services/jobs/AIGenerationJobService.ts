@@ -205,6 +205,7 @@ export class AIGenerationJobService {
       const { documentGenerationService } = await import('../documentGenerationService')
 
       const agenticResult = await documentGenerationService.generateDocument({
+        jobId: jobData.jobId,
         projectId: projectId as string,
         templateId: template_id,
         userPrompt: prompt,
@@ -651,7 +652,10 @@ export class AIGenerationJobService {
   private static async incrementTemplateUsage(templateId: string, deps?: QueueServiceDependencies): Promise<void> {
     const db = deps?.database || { query: pool.query.bind(pool) } as any
     try {
-      await db.query(`UPDATE templates SET usage_count = usage_count + 1, last_used_at = CURRENT_TIMESTAMP WHERE id = $1`, [templateId])
+      await db.query(
+        `UPDATE templates SET usage_count = COALESCE(usage_count, 0) + 1, last_used_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+        [templateId]
+      )
     } catch (err) { }
   }
 

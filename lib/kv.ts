@@ -1,7 +1,7 @@
 import Redis from 'ioredis';
 
-// Use CHAT_REDIS_URL if available, otherwise fallback to local/null for testing
-const redisUrl = process.env.CHAT_REDIS_URL;
+// Use CHAT_REDIS_URL if available, otherwise fallback to REDIS_URL or ADPA_KV_URL
+const redisUrl = process.env.CHAT_REDIS_URL || process.env.REDIS_URL || process.env.ADPA_KV_URL;
 
 let redis: Redis | null = null;
 
@@ -21,10 +21,10 @@ if (redisUrl) {
   });
 
   redis.on('connect', () => {
-    console.log('[KV-REDIS] ✅ Connected to tramway Redis');
+    console.log('[KV-REDIS] ✅ Connected to Redis');
   });
 } else {
-  console.warn('[KV-REDIS] ⚠️ CHAT_REDIS_URL not set. KV operations will be disabled or fallback.');
+  console.warn('[KV-REDIS] ⚠️ CHAT_REDIS_URL, REDIS_URL, or ADPA_KV_URL not set. KV operations will be disabled.');
 }
 
 export class CacheService {
