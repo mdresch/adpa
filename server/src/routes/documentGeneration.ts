@@ -179,25 +179,12 @@ router.post("/generate",
         }
       }
 
-      // 🚀 ASYNC PATH: Route to background job queue for large templates
-      // Templates with many sections (>3 paragraphs) take 3-5+ minutes synchronously,
-      // which causes Next.js proxy socket hang-ups (ECONNRESET). Those go to the queue.
+      // 🚀 ASYNC PATH: Route ALL template-based generation to the background job queue.
+      // Even a 1-section template can take several minutes with the agentic planning pipeline,
+      // which would exceed the Next.js proxy timeout and cause ECONNRESET.
+      // Prompt-only generation (no templateId) stays synchronous since it's usually fast.
       const forceAsync = req.body.async === true
-      let shouldRunAsync = forceAsync
-
-      if (templateId && !shouldRunAsync) {
-        try {
-          const templateParagraphsResult = await pool.query(
-            `SELECT COUNT(*) as section_count FROM template_paragraphs WHERE template_id = $1`,
-            [templateId]
-          )
-          const sectionCount = parseInt(templateParagraphsResult.rows[0]?.section_count || '0', 10)
-          shouldRunAsync = sectionCount > 3
-          log.info(`[DOC-GEN] Template has ${sectionCount} sections — async=${shouldRunAsync}`)
-        } catch (err) {
-          log.warn('[DOC-GEN] Could not count template sections, defaulting to sync', err)
-        }
-      }
+      const shouldRunAsync = forceAsync || !!templateId
 
       if (shouldRunAsync) {
         const jobId = uuidv4()
@@ -216,7 +203,7 @@ router.post("/generate",
           template_name: undefined as string | undefined,
         }
 
-        // Resolve template name for the job record
+        // Resolve template name for the job record (non-fatal if it fails)
         if (templateId) {
           try {
             const tmpl = await pool.query('SELECT name FROM templates WHERE id = $1', [templateId])
@@ -224,7 +211,15 @@ router.post("/generate",
           } catch (_) { /* non-fatal */ }
         }
 
-        await getQueueService().addJob('ai-generate', jobPayload)
+        try {
+          await getQueueService().addJob('ai-generate', jobPayload)
+        } catch (queueErr) {
+          log.error('[DOC-GEN] Failed to enqueue ai-generate job', queueErr)
+          return res.status(503).json({
+            error: 'Job queue is unavailable. Please try again shortly or contact support.',
+            details: queueErr instanceof Error ? queueErr.message : String(queueErr),
+          })
+        }
 
         log.info(`[DOC-GEN] Enqueued async job ${jobId} for project ${projectId}`)
         return res.status(202).json({

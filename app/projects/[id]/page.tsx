@@ -1141,7 +1141,12 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
 
     } catch (error) {
       console.error("❌ [ERROR] Failed to create document:", error)
-      toast.error("Failed to create document")
+      const apiErr = error as any
+      const errMsg =
+        apiErr?.status === 503
+          ? "Job queue is unavailable — please try again in a moment."
+          : apiErr?.data?.error || apiErr?.message || "Failed to create document"
+      toast.error(errMsg)
       setGenerationProgress({ step: 0, totalSteps: 4, message: '', percentage: 0 })
     } finally {
       setCreatingDocument(false)
