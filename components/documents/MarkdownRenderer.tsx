@@ -8,6 +8,8 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
 import { vscDarkPlus } from "react-syntax-highlighter/dist/cjs/styles/prism"
 import { MermaidDiagram } from "@/components/documents/MermaidDiagram"
 import { isMermaidLanguage } from "@/lib/documents/mermaid"
+import React from "react"
+import { EntityPill } from "./EntityPill"
 
 interface MarkdownRendererProps {
   content: string
@@ -20,6 +22,40 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
+          p({ children, ...props }: any) {
+            // Helper to recursively extract string content from React children
+            // (e.g. if markdown parser split 'influence_level' into emphasis nodes)
+            const extractText = (node: any): string => {
+              if (typeof node === 'string') return node;
+              if (typeof node === 'number') return node.toString();
+              if (Array.isArray(node)) return node.map(extractText).join('');
+              if (React.isValidElement(node)) return extractText((node.props as any).children);
+              return '';
+            };
+
+            const textContent = extractText(children);
+            
+            // Regex to match H8 tags, allowing for multiline JSON content (using [\s\S] for dot-all)
+            // and ignoring trailing backslashes used by some LLMs for line continuation.
+            const match = textContent.trim().match(/^########\s+([a-zA-Z0-9_-]+):\s*([\s\S]+?)(?:\\)?$/);
+            
+            if (match) {
+              const entityType = match[1]
+              const jsonStr = match[2]
+
+              
+              try {
+                const entityData = JSON.parse(jsonStr)
+                return <EntityPill type={entityType} data={entityData} />
+              } catch (e) {
+                // If it fails to parse as JSON, just render it as normal text below
+                console.warn("Failed to parse inline entity JSON", e)
+              }
+            }
+            
+            // Standard paragraph rendering
+            return <p className="mb-4" {...props}>{children}</p>
+          },
           code({ inline, className: codeClassName, children, ...props }: any) {
             const code = String(children).replace(/\n$/, "")
             const match = /language-([\w-]+)/i.exec(codeClassName || "")

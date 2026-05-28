@@ -534,6 +534,24 @@ export class DocumentTemplateService {
 
     return true
   }
+
+  /**
+   * Update template entity production statistics (feedback loop)
+   */
+  async updateTemplateEntityStats(templateId: string, entityCounts: Record<string, number>): Promise<void> {
+    try {
+      const { default: TemplateAnalyticsService } = await import('../../services/templateAnalyticsService')
+      await TemplateAnalyticsService.updateTemplateEntityProfile(templateId)
+      
+      // Clear cache
+      await cache.del(`template:${templateId}`)
+      
+      logger.info(`Template entity stats updated for ${templateId} via TemplateAnalyticsService`)
+    } catch (error) {
+      logger.error(`Failed to update template entity stats for ${templateId}`, error)
+    }
+  }
 }
+
 
 export const documentTemplateService = new DocumentTemplateService()

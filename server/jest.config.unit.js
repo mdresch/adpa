@@ -5,7 +5,11 @@
 module.exports = {
   testEnvironment: 'node',
   roots: ['<rootDir>/src'],
-  testMatch: ['**/__tests__/**/*.unit.test.ts', '**/__tests__/**/templateAuditService.test.ts'],
+  testMatch: [
+    '**/__tests__/**/*.unit.test.ts',
+    '**/__tests__/**/templateAuditService.test.ts',
+    '**/__tests__/**/inlineEntityParserService.test.ts'
+  ],
   // No globalSetup / setupFilesAfterEnv — these tests use mocks only
   testTimeout: 30000,
   moduleNameMapper: {

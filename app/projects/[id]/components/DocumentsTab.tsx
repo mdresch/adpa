@@ -7,10 +7,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import {
-  Dialog,
-  DialogTrigger,
-} from "@/components/ui/dialog"
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -23,7 +19,6 @@ import {
   Clock,
   AlertCircle,
   Search,
-  Plus,
   Download,
   Eye,
   MoreHorizontal,
@@ -56,10 +51,6 @@ interface DocumentsTabProps {
   documentStats: DocumentStats
   searchTerm: string
   setSearchTerm: (term: string) => void
-  createDialogOpen: boolean
-  setCreateDialogOpen: (open: boolean) => void
-  handleUploadDocumentClick: () => void
-  handleDocumentUpload?: (event: React.ChangeEvent<HTMLInputElement>) => void
   documentsLoading: boolean
   displayDocuments: Document[]
   handleEditDocument: (id: string) => void
@@ -101,10 +92,6 @@ export function DocumentsTab({
   documentStats,
   searchTerm,
   setSearchTerm,
-  createDialogOpen,
-  setCreateDialogOpen,
-  handleUploadDocumentClick,
-  handleDocumentUpload,
   documentsLoading,
   displayDocuments,
   handleEditDocument,
@@ -113,7 +100,6 @@ export function DocumentsTab({
   documentsPagination,
   setDocumentsPagination,
 }: DocumentsTabProps) {
-  const router = useRouter()
   
   return (
     <div className="space-y-4">
@@ -173,7 +159,7 @@ export function DocumentsTab({
         </AnimatedGridItem>
       </AnimatedGrid>
 
-      {/* Search & Actions */}
+      {/* Search area */}
       <div className="flex items-center space-x-4">
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
@@ -184,41 +170,6 @@ export function DocumentsTab({
             className="pl-10"
           />
         </div>
-        <Button onClick={() => router.push(`/documents/new?projectId=${projectId}`)}>
-          <Plus className="h-4 w-4 mr-2" />
-          New Document
-        </Button>
-        <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-          <DialogTrigger asChild>
-            <Button variant="outline">
-              <FileText className="h-4 w-4 mr-2" />
-              Generate Document
-            </Button>
-          </DialogTrigger>
-        </Dialog>
-        {/* Legacy Upload - Direct file selection */}
-        {handleDocumentUpload && (
-          <label htmlFor="legacy-file-upload">
-            <Button variant="outline" asChild>
-              <span>
-                <Download className="h-4 w-4 mr-2" />
-                Upload File
-              </span>
-            </Button>
-            <input
-              id="legacy-file-upload"
-              type="file"
-              accept=".pdf,.doc,.docx,.txt,.md"
-              onChange={handleDocumentUpload}
-              className="hidden"
-            />
-          </label>
-        )}
-        {/* Dialog-based Upload */}
-        <Button variant="outline" onClick={handleUploadDocumentClick}>
-          <Download className="h-4 w-4 mr-2" />
-          Upload (Dialog)
-        </Button>
       </div>
 
       {/* Loading state for documents */}
@@ -238,7 +189,7 @@ export function DocumentsTab({
                     <div className="flex-1">
                       <div className="flex items-center space-x-2">
                         <Link
-                          href={`/projects/${projectId}/documents/${doc.id}/view`}
+                          href={`/projects/${projectId}/documents/${doc.id}`}
                           className="font-semibold hover:text-primary transition-colors"
                         >
                           {doc.name}
@@ -257,17 +208,18 @@ export function DocumentsTab({
                     </div>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <Button variant="ghost" size="sm" asChild>
+                    <Button variant="ghost" size="sm" asChild title="Edit Document">
                       <Link href={`/projects/${projectId}/documents/${doc.id}`}>
                         <Edit className="h-4 w-4" />
                       </Link>
                     </Button>
-                    <Button variant="ghost" size="sm" asChild>
+                    <Button variant="ghost" size="sm" asChild title="View in Rich Editor">
                       <Link href={`/projects/${projectId}/documents/${doc.id}/view`}>
                         <Eye className="h-4 w-4" />
                       </Link>
                     </Button>
-                    <Button variant="ghost" size="sm">
+
+                    <Button variant="ghost" size="sm" onClick={() => handleDownloadDocument(doc.id)}>
                       <Download className="h-4 w-4" />
                     </Button>
                     <DropdownMenu>
@@ -307,25 +259,15 @@ export function DocumentsTab({
           ))}
           
           {displayDocuments.length === 0 && (
-            <div className="text-center py-8">
-              <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <div className="text-center py-12 bg-gray-50/50 rounded-lg border-2 border-dashed">
+              <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-20" />
               <h3 className="text-lg font-semibold mb-2">No documents found</h3>
-              <p className="text-muted-foreground mb-4">
+              <p className="text-muted-foreground">
                 {searchTerm 
                   ? "Try adjusting your search criteria" 
-                  : "Start by generating your first document for this project"
+                  : "No documents have been added to this project yet."
                 }
               </p>
-              {!searchTerm && (
-                <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Generate First Document
-                    </Button>
-                  </DialogTrigger>
-                </Dialog>
-              )}
             </div>
           )}
 
@@ -363,4 +305,3 @@ export function DocumentsTab({
     </div>
   )
 }
-
