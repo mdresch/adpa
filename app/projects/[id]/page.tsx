@@ -1286,6 +1286,21 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
   }
 
   // Fetch AI providers for document generation
+  const getPreferredModel = (provider: any) => {
+    const models = provider?.models || []
+    const candidates = [
+      provider?.model,
+      provider?.default_model,
+      provider?.defaultModel,
+      provider?.configuration?.model,
+      provider?.configuration?.default_model,
+      provider?.configuration?.defaultModel,
+    ].filter((model): model is string => typeof model === 'string' && model.trim().length > 0)
+
+    const configuredModel = candidates.find((model) => models.includes(model))
+    return configuredModel || models[0] || ''
+  }
+
   const fetchAIProviders = async () => {
     const normalizeModels = (provider: any): string[] => {
       const toModelArray = (value: any): string[] => {
@@ -1340,20 +1355,6 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
       return []
     }
 
-    const getPreferredModel = (provider: any) => {
-      const models = provider?.models || []
-      const candidates = [
-        provider?.model,
-        provider?.default_model,
-        provider?.defaultModel,
-        provider?.configuration?.model,
-        provider?.configuration?.default_model,
-        provider?.configuration?.defaultModel,
-      ].filter((model): model is string => typeof model === 'string' && model.trim().length > 0)
-
-      const configuredModel = candidates.find((model) => models.includes(model))
-      return configuredModel || models[0] || ''
-    }
 
     try {
       const providers: any = await apiClient.getAIProviders()

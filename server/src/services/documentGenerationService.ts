@@ -164,6 +164,34 @@ class DocumentGenerationService {
         : null
       logger.info(`Template: ${template?.name || 'None'}`)
 
+      // 2.2. The Strict Hard Enforcement Barrier Check
+      const documentType = template?.name || 'Unknown Document Type';
+      const policyQuery = `
+        SELECT rule_code, title, control_effectiveness_status, target_document_types 
+        FROM policy_library 
+        WHERE status = 'ACTIVE';
+      `;
+      const policyResult = await pool.query(policyQuery);
+      const activePolicies = policyResult.rows;
+
+      const degradedControls = activePolicies.filter(
+        p => p.control_effectiveness_status === 'INEFFECTIVE' && 
+             (!p.target_document_types || p.target_document_types.length === 0 || p.target_document_types.includes(documentType))
+      );
+
+      if (degradedControls.length > 0) {
+        const failingCodes = degradedControls.map(c => c.rule_code).join(', ');
+        
+        logger.error(`🚨 HARD LOCKOUT TRIPPED: Generation aborted for documentType '${documentType}'. Controls [${failingCodes}] are currently marked as INEFFECTIVE due to high bypass/remediation failure thresholds.`);
+        
+        // Fast-abort with structured error metadata for the frontend to digest
+        throw new Error(JSON.stringify({
+          error: "GOVERNANCE_LOCKOUT",
+          message: `Generation blocked by ADPA Runtime Compiler. Targeted control frameworks (${failingCodes}) have degraded operational health. Human-in-the-loop audit review required to recalibrate prompt limits.`,
+          affectedControls: degradedControls.map(c => ({ code: c.rule_code, title: c.title }))
+        }));
+      }
+
       // 2.3. Pre-insert a minimal/draft document row to satisfy foreign key constraints for entity extraction during parallel drafting
       const docName = request.name || (template?.name ? `Generated: ${template.name}` : 'Generated Document')
       await pool.query(
@@ -347,7 +375,35 @@ class DocumentGenerationService {
         finalMarkdown += section.markdown.trim() + "\n\n"
       }
 
-      const markdown = this.validateAndCleanMarkdown(finalMarkdown)
+      let markdown = this.validateAndCleanMarkdown(finalMarkdown)
+
+      // 6.5. AGENTIC PHASE 4 & 5: Autonomous Auditing and Patching Loop
+      logger.info(`[AGENT] Phase 4: Commencing Policy Audit Loop...`)
+      let currentScore = 100
+      let attempts = 0
+      const MAX_RETRIES = 3
+      const auditLog: any[] = []
+
+      while (attempts < MAX_RETRIES) {
+        const auditResult = await this.auditDocumentAgainstPolicies(markdown, template?.name, request.provider, request.model)
+        currentScore = auditResult.score
+        
+        if (currentScore >= 90) {
+          logger.info(`[AGENT] Document passed compliance audit with score ${currentScore}%`)
+          break
+        }
+        
+        logger.warn(`[AGENT] Document failed audit (Score: ${currentScore}%). Initiating Phase 5: Patch Agent (Attempt ${attempts + 1}/${MAX_RETRIES})`)
+        
+        // Phase 5: The Patch Agent
+        markdown = await this.patchDocument(markdown, auditResult.failedRules, request.provider, request.model)
+        attempts++
+        auditLog.push({ attempt: attempts, score: currentScore, failedRules: auditResult.failedRules })
+      }
+
+      if (currentScore < 90) {
+        logger.warn(`[AGENT] Document failed compliance audit after ${MAX_RETRIES} attempts. Human approval required.`)
+      }
 
       // 7. Return structured result
       return {
@@ -370,6 +426,9 @@ class DocumentGenerationService {
           }
         },
         ...(gkg_context_snapshot && { gkg_context_snapshot }),
+        audit_log: auditLog,
+        compliance_status: currentScore >= 90 ? 'COMPLIANT' : 'PENDING_HUMAN_APPROVAL',
+        compliance_score: currentScore
       }
 
 
@@ -723,6 +782,134 @@ class DocumentGenerationService {
     }
 
     return cleaned
+  }
+
+  /**
+   * AGENTIC PHASE 4: Policy Auditing
+   * Evaluates the document against the Active policy library.
+   */
+  private async auditDocumentAgainstPolicies(markdown: string, documentType?: string, provider?: string, model?: string): Promise<{ score: number, failedRules: any[] }> {
+    const queryParams: any[] = ['ACTIVE']
+    let query = `
+      SELECT rule_code, title, description, execution_schema
+      FROM policy_library
+      WHERE status = $1
+    `
+    
+    if (documentType) {
+      query += ` AND (target_document_types IS NULL OR target_document_types = '{}' OR $2 = ANY(target_document_types))`
+      queryParams.push(documentType)
+    } else {
+      query += ` AND (target_document_types IS NULL OR target_document_types = '{}')`
+    }
+
+    let activePolicies = []
+    try {
+      const result = await pool.query(query, queryParams)
+      activePolicies = result.rows
+    } catch (e) {
+      logger.error('Failed to fetch active policies', e)
+    }
+
+    if (activePolicies.length === 0) {
+      logger.info(`[AGENT] No active policies found for document type: ${documentType || 'Any'}`)
+      return { score: 100, failedRules: [] }
+    }
+
+    logger.info(`[AGENT] Auditing against ${activePolicies.length} policies for type [${documentType || 'Any'}]`)
+
+    const auditSchema = z.object({
+      score: z.number().min(0).max(100),
+      failedRules: z.array(z.object({
+        ruleCode: z.string(),
+        severity: z.string(),
+        rationale: z.string(),
+        recommendedPatch: z.string().describe("Context-aware text snippet to inject into the document to resolve the failure.")
+      }))
+    })
+
+    let policiesText = activePolicies.map(p => 
+      `- Rule [${p.rule_code}]: ${p.title}\n  Description: ${p.description}\n  Execution Schema: ${JSON.stringify(p.execution_schema)}`
+    ).join('\n\n')
+
+    const prompt = `You are a strict Enterprise Governance Auditor. 
+Evaluate the following project document against the following ACTIVE compliance policies:
+
+${policiesText}
+
+Return a compliance score (0-100) based on how well the document adheres to these specific policies.
+If the document fails ANY policy, add it to the failedRules array with a precise rationale and a recommended text patch to fix it.
+
+Document:
+---
+${markdown.substring(0, 8000)}
+---`
+
+    try {
+      const result = await unifiedAIService.generateStructuredObject({
+        prompt,
+        provider: provider || 'default',
+        model,
+        temperature: 0.1,
+        schema: auditSchema,
+        traceName: 'agentic-policy-audit'
+      })
+      
+      const payload = result.object
+      
+      // We log telemetry for each failed rule in the background (fire and forget)
+      if (payload.failedRules && payload.failedRules.length > 0) {
+        for (const failure of payload.failedRules) {
+          pool.query(`
+            UPDATE policy_library
+            SET telemetry_metrics = jsonb_set(
+              COALESCE(telemetry_metrics, '{}'::jsonb),
+              '{totalRuns}',
+              ((COALESCE(telemetry_metrics->>'totalRuns', '0')::int) + 1)::text::jsonb
+            )
+            WHERE rule_code = $1
+          `, [failure.ruleCode]).catch(err => logger.error(`Failed to update telemetry for ${failure.ruleCode}`, err))
+        }
+      }
+
+      return { score: payload.score, failedRules: payload.failedRules || [] }
+    } catch (e) {
+      logger.error('Failed to audit document, defaulting to pass', e)
+      return { score: 100, failedRules: [] }
+    }
+  }
+
+  /**
+   * AGENTIC PHASE 5: The Patch Agent
+   * Re-writes the document to fix policy violations.
+   */
+  private async patchDocument(markdown: string, failedRules: any[], provider?: string, model?: string): Promise<string> {
+    const prompt = `You are an AI Patch Agent. The following document failed compliance audits.
+    
+Failed Rules to correct:
+${failedRules.map((f: any) => `- [${f.ruleCode}]: ${f.rationale}\n  Recommended fix: ${f.recommendedPatch}`).join('\n')}
+
+Rewrite the document to explicitly satisfy these rules and fix the gaps seamlessly. Maintain original engineering depth while expanding text where required. 
+Return ONLY the fully corrected Markdown without markdown wrappers.
+
+Original Document:
+---
+${markdown}
+---`
+
+    try {
+      const result = await unifiedAIService.generate({
+        prompt,
+        provider: provider || 'default',
+        model,
+        temperature: 0.3,
+        traceName: 'agentic-policy-patch'
+      })
+      return this.validateAndCleanMarkdown(result.content || markdown)
+    } catch (e) {
+      logger.error('Failed to patch document', e)
+      return markdown
+    }
   }
 }
 
