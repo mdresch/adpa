@@ -727,11 +727,3 @@ class DocumentGenerationService {
 }
 
 export const documentGenerationService = new DocumentGenerationService()
-d}`
-    }
-
-    return cleaned
-  }
-}
-
-export const documentGenerationService = new DocumentGenerationService()

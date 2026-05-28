@@ -356,6 +356,9 @@ export default function DocumentEntitiesPage() {
       setEntityCounts(data.entityCounts || {})
       setEntityData(data.entities || {})
       setTotalEntities(data.totalEntities || 0)
+      setContextMatchingScore(data.contextMatchingScore ?? null)
+      setAppliedContextEntities(data.appliedContextEntities || [])
+
 
       // Track entity extraction for each entity type
       if (data.entityCounts) {
