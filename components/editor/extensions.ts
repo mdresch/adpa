@@ -26,6 +26,7 @@ import { Table } from "@tiptap/extension-table";
 import { TableRow } from "@tiptap/extension-table-row";
 import { TableHeader } from "@tiptap/extension-table-header";
 import { TableCell } from "@tiptap/extension-table-cell";
+import { EntityPillExtension } from "./extensions/entity-pill-extension";
 
 // Note: CodeBlockLowlight is omitted for now to avoid 'lowlight' dependency. 
 // If syntax highlighting is needed, install 'lowlight' and uncomment.
@@ -213,4 +214,5 @@ export const defaultExtensions = [
   tableRow,
   tableHeader,
   tableCell,
+  EntityPillExtension,
 ];

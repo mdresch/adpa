@@ -175,6 +175,157 @@ export class DocumentRepository {
   }
 
   /**
+   * Retrieves all documents for a user across all projects with filtering and pagination.
+   */
+  async findAll(options: {
+    limit: number;
+    offset: number;
+    userId: string;
+    isSuperAdmin: boolean;
+    userCompanyId: string | null;
+    status?: string;
+    search?: string;
+    template?: string;
+    framework?: string;
+    grade?: string;
+  }, client?: PoolClient): Promise<{ rows: any[], total: number }> {
+    const db = client || this.db;
+    const { limit, offset, userId, isSuperAdmin, userCompanyId, status, search, template, framework, grade } = options;
+
+    let query = `
+      SELECT d.*, 
+             u.name as created_by_name, 
+             u2.name as updated_by_name,
+             t.name as template_name,
+             t.framework as template_framework,
+             p.name as project_name
+      FROM documents d
+      LEFT JOIN users u ON d.created_by = u.id
+      LEFT JOIN users u2 ON d.updated_by = u2.id
+      LEFT JOIN templates t ON d.template_id = t.id
+      JOIN projects p ON d.project_id = p.id
+      WHERE d.deleted_at IS NULL AND d.parent_document_id IS NULL
+    `;
+
+    const params: any[] = [];
+    let paramCount = 0;
+
+    if (!isSuperAdmin && userCompanyId) {
+      paramCount++;
+      query += ` AND p.company_id = $${paramCount}`;
+      params.push(userCompanyId);
+    } else if (!isSuperAdmin) {
+      paramCount++;
+      query += ` AND (p.owner_id = $${paramCount} OR p.team_members ? $${paramCount}::text)`;
+      params.push(userId);
+    }
+
+    if (status) {
+      paramCount++;
+      query += ` AND d.status = $${paramCount}`;
+      params.push(status);
+    }
+
+    if (search) {
+      paramCount++;
+      query += ` AND d.name ILIKE $${paramCount}`;
+      params.push(`%${search}%`);
+    }
+
+    if (template) {
+      paramCount++;
+      query += ` AND t.name = $${paramCount}`;
+      params.push(template);
+    }
+
+    if (framework) {
+      paramCount++;
+      query += ` AND t.framework = $${paramCount}`;
+      params.push(framework);
+    }
+
+    if (grade) {
+      if (grade === 'not_audited') {
+        query += ` AND d.quality_score IS NULL`;
+      } else if (grade === 'A') {
+        query += ` AND d.quality_score >= 90`;
+      } else if (grade === 'B') {
+        query += ` AND d.quality_score >= 80 AND d.quality_score < 90`;
+      } else if (grade === 'C') {
+        query += ` AND d.quality_score >= 70 AND d.quality_score < 80`;
+      } else if (grade === 'D') {
+        query += ` AND d.quality_score >= 60 AND d.quality_score < 70`;
+      } else if (grade === 'F') {
+        query += ` AND d.quality_score < 60 AND d.quality_score IS NOT NULL`;
+      }
+    }
+
+    const dataQuery = query + ` ORDER BY d.updated_at DESC LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`;
+    const dataParams = [...params, limit, offset];
+
+    const filterIndex = query.indexOf('WHERE');
+    const filterPart = query.substring(filterIndex);
+    const finalCountQuery = `SELECT COUNT(*) FROM documents d LEFT JOIN templates t ON d.template_id = t.id JOIN projects p ON d.project_id = p.id ` + filterPart;
+
+    try {
+      const result = await db.query(dataQuery, dataParams);
+      const countResult = await db.query(finalCountQuery, params);
+      return { rows: result.rows, total: parseInt(countResult.rows[0].count) };
+    } catch (err: any) {
+      if (err.message?.includes('column "company_id"') || err.code === '42703') {
+        // Fallback for missing company_id column
+        let fallbackQuery = `
+          SELECT d.*, 
+                 u.name as created_by_name, 
+                 u2.name as updated_by_name,
+                 t.name as template_name,
+                 t.framework as template_framework,
+                 p.name as project_name
+          FROM documents d
+          LEFT JOIN users u ON d.created_by = u.id
+          LEFT JOIN users u2 ON d.updated_by = u2.id
+          LEFT JOIN templates t ON d.template_id = t.id
+          JOIN projects p ON d.project_id = p.id
+          WHERE d.deleted_at IS NULL AND d.parent_document_id IS NULL
+        `;
+        
+        const fallbackParams: any[] = [];
+        let fbParamCount = 0;
+
+        if (!isSuperAdmin) {
+          fbParamCount++;
+          fallbackQuery += ` AND (p.owner_id = $${fbParamCount} OR p.team_members ? $${fbParamCount}::text)`;
+          fallbackParams.push(userId);
+        }
+        if (status) { fbParamCount++; fallbackQuery += ` AND d.status = $${fbParamCount}`; fallbackParams.push(status); }
+        if (search) { fbParamCount++; fallbackQuery += ` AND d.name ILIKE $${fbParamCount}`; fallbackParams.push(`%${search}%`); }
+        if (template) { fbParamCount++; fallbackQuery += ` AND t.name = $${fbParamCount}`; fallbackParams.push(template); }
+        if (framework) { fbParamCount++; fallbackQuery += ` AND t.framework = $${fbParamCount}`; fallbackParams.push(framework); }
+        if (grade) {
+          if (grade === 'not_audited') fallbackQuery += ` AND d.quality_score IS NULL`;
+          else if (grade === 'A') fallbackQuery += ` AND d.quality_score >= 90`;
+          else if (grade === 'B') fallbackQuery += ` AND d.quality_score >= 80 AND d.quality_score < 90`;
+          else if (grade === 'C') fallbackQuery += ` AND d.quality_score >= 70 AND d.quality_score < 80`;
+          else if (grade === 'D') fallbackQuery += ` AND d.quality_score >= 60 AND d.quality_score < 70`;
+          else if (grade === 'F') fallbackQuery += ` AND d.quality_score < 60 AND d.quality_score IS NOT NULL`;
+        }
+
+        const fbDataQuery = fallbackQuery + ` ORDER BY d.updated_at DESC LIMIT $${fbParamCount + 1} OFFSET $${fbParamCount + 2}`;
+        const fbDataParams = [...fallbackParams, limit, offset];
+
+        const fbFilterIndex = fallbackQuery.indexOf('WHERE');
+        const fbFilterPart = fallbackQuery.substring(fbFilterIndex);
+        const fbCountQuery = `SELECT COUNT(*) FROM documents d LEFT JOIN templates t ON d.template_id = t.id JOIN projects p ON d.project_id = p.id ` + fbFilterPart;
+
+        const result = await db.query(fbDataQuery, fbDataParams);
+        const countResult = await db.query(fbCountQuery, fallbackParams);
+        return { rows: result.rows, total: parseInt(countResult.rows[0].count) };
+      }
+      throw err;
+    }
+  }
+
+  /**
    * Retrieves document statistics for a project.
    */
   async getStats(projectId: string, client?: PoolClient): Promise<QueryResult<any>> {

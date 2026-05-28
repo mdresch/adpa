@@ -1,0 +1,1 @@
+const str = '`json\n######## budget_baseline: {"total": 1}\n`\nSome text\n`\n######## rules: {\n  "key": "val"\n}\n`'; const res = str.replace(/`(?:json|markdown|md)?\s*\n(#{8}\s+[a-zA-Z0-9_-]+:(?:(?!`)[\s\S])*?)\n\s*`/g, '$1'); console.log(res);

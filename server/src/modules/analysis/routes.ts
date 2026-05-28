@@ -24,7 +24,9 @@ router.get("/status/:jobId", authenticateToken, controller.getJobStatus);
 router.get("/summary/:projectId", authenticateToken, controller.getSummary);
 router.get("/results/:projectId", authenticateToken, controller.getExtractionResults);
 router.get("/entities/:projectId/:entityType", authenticateToken, controller.getEntitiesByType);
+router.get("/document/:docId/entities", authenticateToken, controller.getEntitiesByDocument);
 router.post("/trigger-baseline", authenticateToken, controller.triggerBaseline);
+
 
 const analysisRoutes: RouteConfig[] = [
   {

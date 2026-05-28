@@ -80,6 +80,7 @@ type Job = {
   projectName?: string
   documentName?: string
   metadata?: any
+  childJobs?: any[]
 }
 import { toast } from '@/lib/notify'
 
@@ -1184,6 +1185,114 @@ return (
                                     <p className="font-medium capitalize">{job.status}</p>
                                   </div>
                                 </div>
+
+                                {/* Child Sub-processes */}
+                                {job.childJobs && job.childJobs.length > 0 && (() => {
+                                  const total = job.childJobs.length;
+                                  const completed = job.childJobs.filter((c: any) => c.status === 'completed');
+                                  const failed = job.childJobs.filter((c: any) => c.status === 'failed');
+                                  const processing = job.childJobs.filter((c: any) => c.status === 'processing' || c.status === 'running');
+                                  const pending = job.childJobs.filter((c: any) => c.status === 'pending' || c.status === 'queued');
+                                  const pct = Math.round(((completed.length + failed.length) / total) * 100);
+
+                                  const renderChildGrid = (children: any[]) => (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 p-1">
+                                      {children.map((child: any) => (
+                                        <div key={child.id} className="text-xs p-2.5 rounded bg-white dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800/80 shadow-sm flex flex-col justify-between gap-1 hover:border-slate-300 dark:hover:border-slate-700 transition-colors duration-200">
+                                          <div className="flex justify-between items-start gap-1">
+                                            <span className="font-mono text-xs font-semibold capitalize text-slate-700 dark:text-slate-300 truncate">
+                                              {child.type.replace("extract-entity-", "").replace(/_/g, " ")}
+                                            </span>
+                                            <Badge variant="outline" className={`text-[9px] px-1.5 py-0 font-medium ${getStatusColor(child.status)}`}>
+                                              {child.status}
+                                            </Badge>
+                                          </div>
+                                          <span className="text-[10px] text-muted-foreground font-mono truncate">ID: {child.id}</span>
+                                          {(child.startTime || child.completedTime) && (
+                                            <div className="text-[10px] text-muted-foreground flex justify-between mt-1 pt-1 border-t border-slate-100 dark:border-slate-900">
+                                              <span>{child.startTime ? new Date(child.startTime).toLocaleTimeString() : "-"}</span>
+                                              <span>{child.completedTime ? new Date(child.completedTime).toLocaleTimeString() : ""}</span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  );
+
+                                  return (
+                                    <div className="mb-4 p-4 bg-slate-50 dark:bg-slate-900/40 rounded-lg border border-slate-200 dark:border-slate-800 space-y-3">
+                                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                        <h5 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Entity Ingestion Sub-processes</h5>
+                                        <div className="flex items-center gap-2 text-xs">
+                                          <span className="text-muted-foreground">Progress:</span>
+                                          <span className="font-semibold text-blue-600 dark:text-blue-400">{completed.length}/{total} Done</span>
+                                          {failed.length > 0 && <span className="font-semibold text-red-600 dark:text-red-400">({failed.length} Failed)</span>}
+                                        </div>
+                                      </div>
+
+                                      <div className="w-full bg-slate-200 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                                        <div 
+                                          className={`h-full transition-all duration-500 ${failed.length > 0 ? 'bg-red-500' : 'bg-blue-500'}`}
+                                          style={{ width: `${pct}%` }}
+                                        />
+                                      </div>
+
+                                      <div className="space-y-2 mt-2">
+                                        {/* 1. Active / Processing */}
+                                        {processing.length > 0 && (
+                                          <details open className="group">
+                                            <summary className="cursor-pointer text-xs font-semibold text-blue-700 dark:text-blue-400 flex items-center gap-1 py-1 hover:text-blue-800 transition-colors">
+                                              <span className="transition-transform duration-200 group-open:rotate-90">▶</span>
+                                              Active / Processing ({processing.length})
+                                            </summary>
+                                            <div className="mt-2 max-h-60 overflow-y-auto">
+                                              {renderChildGrid(processing)}
+                                            </div>
+                                          </details>
+                                        )}
+
+                                        {/* 2. Failed */}
+                                        {failed.length > 0 && (
+                                          <details open className="group">
+                                            <summary className="cursor-pointer text-xs font-semibold text-red-700 dark:text-red-400 flex items-center gap-1 py-1 hover:text-red-800 transition-colors">
+                                              <span className="transition-transform duration-200 group-open:rotate-90">▶</span>
+                                              Failed ({failed.length})
+                                            </summary>
+                                            <div className="mt-2 max-h-60 overflow-y-auto">
+                                              {renderChildGrid(failed)}
+                                            </div>
+                                          </details>
+                                        )}
+
+                                        {/* 3. Pending / Queued */}
+                                        {pending.length > 0 && (
+                                          <details className="group">
+                                            <summary className="cursor-pointer text-xs font-semibold text-slate-600 dark:text-slate-400 flex items-center gap-1 py-1 hover:text-slate-700 transition-colors">
+                                              <span className="transition-transform duration-200 group-open:rotate-90">▶</span>
+                                              Pending / Queued ({pending.length})
+                                            </summary>
+                                            <div className="mt-2 max-h-60 overflow-y-auto">
+                                              {renderChildGrid(pending)}
+                                            </div>
+                                          </details>
+                                        )}
+
+                                        {/* 4. Completed */}
+                                        {completed.length > 0 && (
+                                          <details className="group">
+                                            <summary className="cursor-pointer text-xs font-semibold text-green-700 dark:text-green-400 flex items-center gap-1 py-1 hover:text-green-800 transition-colors">
+                                              <span className="transition-transform duration-200 group-open:rotate-90">▶</span>
+                                              Completed ({completed.length})
+                                            </summary>
+                                            <div className="mt-2 max-h-72 overflow-y-auto">
+                                              {renderChildGrid(completed)}
+                                            </div>
+                                          </details>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
 
                                 {/* AI-Specific Metadata */}
                                 {(job as any).metadata && (job as any).metadata.provider && (

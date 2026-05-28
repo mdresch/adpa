@@ -113,7 +113,7 @@ const nextConfig = {
             ]
           : []),
         {
-          source: '/api/:path((?!morphic|auth|chat|openui-chat|keepalive|Ritual).*)',
+          source: '/api/:path((?!morphic|auth|chat|genui|openui-chat|keepalive|Ritual).*)',
           destination: `${process.env.BACKEND_URL || 'https://adpa.onrender.com'}/api/:path*`,
         },
       ],

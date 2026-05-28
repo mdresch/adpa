@@ -8,6 +8,7 @@ import { getApiBaseUrl, getApiUrl } from "./api-url"
 
 /** After structural checks, path must match this allowlist before any HTTP client use. */
 const RELATIVE_API_PATH_RE = /^\/api\/[A-Za-z0-9._/-]+$/
+const RELATIVE_API_QUERY_RE = /^\?[A-Za-z0-9._~%=&+,-]*$/
 
 export function assertRelativeApiPath(path: string): string {
   const p = path.trim()
@@ -20,7 +21,11 @@ export function assertRelativeApiPath(path: string): string {
   if (p.includes("..")) {
     throw new Error("Request path must not contain parent path segments")
   }
-  if (!RELATIVE_API_PATH_RE.test(p)) {
+  const [pathname, search, extra] = p.split("?")
+  if (extra !== undefined || !RELATIVE_API_PATH_RE.test(pathname)) {
+    throw new Error("Request path must be under /api/ with safe characters only")
+  }
+  if (search !== undefined && !RELATIVE_API_QUERY_RE.test(`?${search}`)) {
     throw new Error("Request path must be under /api/ with safe characters only")
   }
   return p

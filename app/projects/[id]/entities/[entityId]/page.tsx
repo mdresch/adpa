@@ -35,6 +35,7 @@ interface ExtractedEntity {
   ai_model?: string
   related_entity_ids?: string[]
   source_document_id?: string
+  source_documents?: Array<{ id: string; title: string }>
   created_at?: string
   updated_at?: string
 }
@@ -170,6 +171,46 @@ export default function EntityDetailPage() {
     return colors[type] || 'bg-gray-100 text-gray-800'
   }
 
+  const renderEntityDataGrid = (data: Record<string, any>) => {
+    const keys = Object.keys(data).filter(
+      key => key !== 'source_document_ids' && key !== 'source_document_id'
+    )
+
+    if (keys.length === 0) {
+      return (
+        <pre className="text-sm overflow-x-auto bg-muted p-4 rounded-lg">
+          {JSON.stringify(data, null, 2)}
+        </pre>
+      )
+    }
+
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-muted/30 p-4 rounded-lg border border-border/50">
+        {keys.map((key) => {
+          const val = data[key]
+          let displayVal = ''
+          if (typeof val === 'object' && val !== null) {
+            displayVal = JSON.stringify(val, null, 2)
+          } else {
+            displayVal = String(val)
+          }
+
+          const label = key
+            .split('_')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ')
+
+          return (
+            <div key={key} className="space-y-1">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{label}</span>
+              <p className="text-sm font-medium text-foreground whitespace-pre-wrap">{displayVal}</p>
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
   if (loading) {
     return (
       <div className="h-screen bg-background flex overflow-hidden">
@@ -277,11 +318,7 @@ export default function EntityDetailPage() {
                     {/* Entity Data */}
                     <div>
                       <h3 className="text-lg font-semibold mb-3">Entity Information</h3>
-                      <div className="bg-muted p-4 rounded-lg">
-                        <pre className="text-sm overflow-x-auto">
-                          {JSON.stringify(entity.entity_data, null, 2)}
-                        </pre>
-                      </div>
+                      {renderEntityDataGrid(entity.entity_data)}
                     </div>
 
                     {/* Metadata */}
@@ -296,17 +333,39 @@ export default function EntityDetailPage() {
                           <p className="text-sm">{entity.ai_provider} {entity.ai_model && `(${entity.ai_model})`}</p>
                         </div>
                       )}
-                      {entity.source_document_id && (
+                      {entity.source_documents && entity.source_documents.length > 0 ? (
+                        <div>
+                          <h4 className="text-sm font-medium text-muted-foreground mb-1">Source Documents</h4>
+                          <div className="flex flex-col gap-1 items-start mt-1">
+                            {entity.source_documents.map((doc: any) => (
+                              <Button
+                                key={doc.id}
+                                variant="link"
+                                className="p-0 h-auto font-semibold flex items-center text-primary hover:underline"
+                                onClick={() => router.push(getProjectSourceDocumentPath(projectId, doc.id))}
+                              >
+                                <FileText className="h-4 w-4 mr-1 text-primary inline" />
+                                {doc.title}
+                              </Button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : entity.source_document_id ? (
                         <div>
                           <h4 className="text-sm font-medium text-muted-foreground mb-1">Source Document</h4>
                           <Button
                             variant="link"
-                            className="p-0 h-auto"
+                            className="p-0 h-auto font-semibold flex items-center text-primary hover:underline"
                             onClick={() => router.push(getProjectSourceDocumentPath(projectId, entity.source_document_id))}
                           >
-                            <FileText className="h-4 w-4 mr-1" />
+                            <FileText className="h-4 w-4 mr-1 text-primary inline" />
                             View Document
                           </Button>
+                        </div>
+                      ) : (
+                        <div>
+                          <h4 className="text-sm font-medium text-muted-foreground mb-1">Source Document</h4>
+                          <p className="text-sm text-muted-foreground">No source document linked</p>
                         </div>
                       )}
                       {entity.created_at && (

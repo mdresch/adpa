@@ -510,14 +510,29 @@ ${content.substring(0, 15000)}` // Limit content to avoid token limits
         const entityName = entity.entity_name ? entity.entity_name.trim() : 'Unnamed Entity'
         const entityType = entity.entity_type
         
+        // Aggressive normalization for deduplication (matches what we tell the LLM)
+        const normalizedInputName = entityName
+          .toLowerCase()
+          .replace(/[^\w\s]/g, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+        
         // Check if entity with same type and name already exists in project
+        // We use a flexible SQL check for common variations
         const existingResult = await pool.query(
-          `SELECT id, entity_data, extraction_confidence, document_id, is_verified 
+          `SELECT id, entity_name, entity_data, extraction_confidence, document_id, is_verified 
            FROM entity_extractions 
-           WHERE project_id = $1 AND entity_type = $2 AND LOWER(entity_name) = LOWER($3) AND status != 'deleted'
+           WHERE project_id = $1 
+           AND entity_type = $2 
+           AND status != 'deleted'
+           AND (
+             LOWER(entity_name) = LOWER($3)
+             OR regexp_replace(LOWER(entity_name), '[^\\w\\s]', '', 'g') = $4
+           )
            LIMIT 1`,
-          [projectId, entityType, entityName]
+          [projectId, entityType, entityName, normalizedInputName]
         )
+
 
         let entityId: string
         
