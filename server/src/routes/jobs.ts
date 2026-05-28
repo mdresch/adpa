@@ -154,12 +154,19 @@ router.get("/",
 
       const result = await pool.query(query, params)
 
-      // Fetch child jobs if any are referenced
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       const allChildJobIds: string[] = []
       result.rows.forEach(job => {
-        const jobData = job.job_data || {}
+        const jobData = typeof job.job_data === 'string' ? JSON.parse(job.job_data) : (job.job_data || {})
         if (Array.isArray(jobData.childJobIds)) {
-          allChildJobIds.push(...jobData.childJobIds)
+          // Limit to prevent OOM on massive child job arrays
+          let count = 0;
+          jobData.childJobIds.forEach((id: any) => {
+            if (typeof id === 'string' && uuidRegex.test(id) && count < 50) {
+              allChildJobIds.push(id)
+              count++
+            }
+          })
         }
       })
 
@@ -267,7 +274,7 @@ router.get("/",
           worker: job.worker_id || jobData.worker_id || jobData.worker || 'Unassigned',
           workerProcessId: job.worker_process_id,
           queuePosition: job.queue_position,
-          logs: jobData.logs || [],
+          // logs: jobData.logs || [], // Omitted from list endpoints to prevent OOM
           childJobs: childJobsList,
           projectName: job.project_name || jobData.projectName || jobData.variables?.project_name,
           templateName: job.template_name,
@@ -315,7 +322,7 @@ router.get("/",
       })
     } catch (error) {
       log.error("Get jobs error:", error)
-      res.status(500).json({ error: "Internal server error" })
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) })
     }
   }
 )
@@ -426,22 +433,27 @@ router.get("/:id",
 
       let childJobsList: any[] = []
       if (Array.isArray(jobData.childJobIds) && jobData.childJobIds.length > 0) {
-        const childJobsResult = await pool.query(
-          `SELECT id, type, status, progress, error_message, started_at AT TIME ZONE 'UTC' as started_at, completed_at AT TIME ZONE 'UTC' as completed_at
-           FROM jobs
-           WHERE id = ANY($1::uuid[])
-           ORDER BY type ASC`,
-          [jobData.childJobIds]
-        )
-        childJobsList = childJobsResult.rows.map(cj => ({
-          id: cj.id,
-          type: cj.type,
-          status: cj.status,
-          progress: cj.progress || 0,
-          error: cj.error_message,
-          startTime: cj.started_at,
-          completedTime: cj.completed_at
-        }))
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        const validChildIds = jobData.childJobIds.filter((id: any) => typeof id === 'string' && uuidRegex.test(id));
+        
+        if (validChildIds.length > 0) {
+          const childJobsResult = await pool.query(
+            `SELECT id, type, status, progress, error_message, started_at AT TIME ZONE 'UTC' as started_at, completed_at AT TIME ZONE 'UTC' as completed_at
+             FROM jobs
+             WHERE id = ANY($1::uuid[])
+             ORDER BY type ASC`,
+            [validChildIds]
+          )
+          childJobsList = childJobsResult.rows.map(cj => ({
+            id: cj.id,
+            type: cj.type,
+            status: cj.status,
+            progress: cj.progress || 0,
+            error: cj.error_message,
+            startTime: cj.started_at,
+            completedTime: cj.completed_at
+          }))
+        }
       }
 
       res.json({
@@ -629,7 +641,8 @@ router.get("/admin/all",
     type: Joi.string().optional(),
     user_id: Joi.string().uuid().optional(),
   })),
-  async (req, res) => {
+  async (req: any, res: any) => {
+    console.log("HIT /admin/all route with query:", req.query);
     try {
       const { page = 1, limit = 10, status, type, user_id } = req.query
       const offset = (Number(page) - 1) * Number(limit)
@@ -700,11 +713,19 @@ router.get("/admin/all",
       const result = await pool.query(query, params)
 
       // Fetch child jobs if any are referenced
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       const allChildJobIds: string[] = []
       result.rows.forEach(job => {
         const jobData = typeof job.data === 'string' ? JSON.parse(job.data) : (job.data || {})
         if (Array.isArray(jobData.childJobIds)) {
-          allChildJobIds.push(...jobData.childJobIds)
+          // Limit to prevent OOM on massive child job arrays
+          let count = 0;
+          jobData.childJobIds.forEach((id: any) => {
+            if (typeof id === 'string' && uuidRegex.test(id) && count < 50) {
+              allChildJobIds.push(id)
+              count++
+            }
+          })
         }
       })
 
@@ -811,7 +832,7 @@ router.get("/admin/all",
           worker: job.worker_id || jobData.worker_id || jobData.worker || 'Unassigned',
           workerProcessId: job.worker_process_id,
           queuePosition: job.queue_position,
-          logs: jobData.logs || [],
+          // logs: jobData.logs || [], // Omitted from list endpoints to prevent OOM
           childJobs: childJobsList,
           projectName,
           templateName,
@@ -856,9 +877,10 @@ router.get("/admin/all",
         },
       })
     } catch (error) {
+      require('fs').writeFileSync('crash.log', String(error) + '\n' + (error.stack || ''));
       const log = childLogger({ requestId: (req as any).requestId })
       log.error("Get all jobs error:", error)
-      res.status(500).json({ error: "Internal server error" })
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) })
     }
   }
 )

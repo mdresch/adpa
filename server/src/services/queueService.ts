@@ -515,6 +515,8 @@ extractionQueue.process("extract-project-data", QUEUE_PREFETCH, async (job) => {
   if (process.env.NODE_ENV !== 'test') {
   ; (async () => {
     const { extractSingleEntityType, saveSingleEntityType } = await import("./extraction/ExtractionOrchestrator")
+    const { initializeRegistry } = await import("./extraction/ExtractionRegistry")
+    await initializeRegistry()
 
     const ENTITY_TYPES = [
       'stakeholders', 'requirements', 'risks', 'milestones', 'constraints',

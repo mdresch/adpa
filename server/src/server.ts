@@ -138,6 +138,7 @@ import promptAssistantRoutes from "./routes/promptAssistantRoutes"
 import signatureRoutes from "./routes/signatures"
 import searchRoutes from "./routes/search"
 import complianceRoutes from "./routes/complianceRoutes"
+import policyLibraryRoutes from "./routes/policyLibraryRoutes"
 import gkgEnrichedSearchRoutes from "./routes/gkgEnrichedSearch"
 import mitigationPlanRoutes from "./routes/mitigationPlanRoutes"
 import pmbok6Routes from "./routes/pmbok6Routes"
@@ -165,6 +166,7 @@ import analysisModuleRoutes from "./modules/analysis/routes"
 import openuiChatModuleRoutes from "./modules/openuiChat/routes"
 import { registerRoutes } from "./routes/registry"
 import { shouldStartServerForArgv } from "./utils/serverStartup"
+import { startEffectivenessWorker } from "./workers/effectivenessWorker"
 
 const app = express()
 const server = createServer(app)
@@ -338,6 +340,8 @@ app.use("/api/emergency-meetings", emergencyMeetingsRoutes)
 app.use("/api/escalation", escalationRoutes)
 app.use("/api/quality-audits", qualityAuditRoutes)
 app.use("/api/compliance", complianceRoutes)
+app.use("/api/v1/policy-library", policyLibraryRoutes)
+console.log("✅ Policy Library Routes Mounted")
 app.use("/api/admin", adminRoutes)
 app.use("/api/onboarding", documentUploadRoutes)
 app.use("/api/assessment", assessmentExportRoutes)
@@ -465,20 +469,41 @@ io.on("connection", (socket) => {
 app.use(errorHandler)
 async function startServer() {
   await initializeServerWithDependencyGraph(server, io, PORT)
+
+  // Non-blocking activation of the out-of-band compliance loop
+  try {
+    const DATABASE_URL = process.env.DATABASE_URL || "postgresql://localhost:5432/adpa";
+    await startEffectivenessWorker(pool, DATABASE_URL);
+  } catch (workerErr) {
+    logger.error({ err: workerErr }, '⚠️ Initialization skipped: Governance Engine failed to bind to event channel.');
+  }
 }
 
 process.on('unhandledRejection', (reason, promise) => { logger.error({ promise, reason }, 'Unhandled Rejection'); });
 process.on('uncaughtException', (error) => {
-  // pg emits 'Connection terminated unexpectedly' from a Connection object AFTER
-  // testPool.end() removes the pool's own error listeners during the DB startup probe.
-  // This is a cleanup artifact (e.g. Supabase waking from pause drops the socket),
-  // not a real application crash. Log it as a warning and continue.
   if (error.message === 'Connection terminated unexpectedly') {
     logger.warn({ err: error }, '[pg] Non-fatal: Connection terminated unexpectedly (startup DB probe cleanup)');
     return;
   }
   logger.error(error, 'Uncaught Exception');
   process.exit(1);
+});
+
+// Graceful shutdown for nodemon restarts to prevent EADDRINUSE
+const shutdown = () => {
+  console.log('🛑 Gracefully shutting down server...');
+  server.close(() => {
+    console.log('✅ Server closed. Releasing port.');
+    process.exit(0);
+  });
+};
+
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
+process.once('SIGUSR2', () => {
+  server.close(() => {
+    process.kill(process.pid, 'SIGUSR2');
+  });
 });
 
 if (shouldStartServerForArgv()) {
