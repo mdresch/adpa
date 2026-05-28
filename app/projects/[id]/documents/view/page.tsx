@@ -716,7 +716,7 @@ export default function ProjectDocumentViewer() {
         </DocumentPageToolbar>
         <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar">
           <AnimatedLayout>
-            <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-8">
+            <div className="mx-auto w-full max-w-full px-4 py-6 sm:px-8">
               <div className="mb-6">
                 <p className="mb-1 flex items-center gap-2 text-xs text-slate-500">
                   <Folder className="h-3.5 w-3.5" />
@@ -760,7 +760,7 @@ export default function ProjectDocumentViewer() {
                   </div>
 
                   {/* Sidebar Column */}
-                  <div className="space-y-6">
+                  <div className="space-y-6 sticky top-6 max-h-[calc(100vh-3rem)] overflow-y-auto custom-scrollbar pr-2 pb-6">
                     {/* Metadata Card */}
                     <AnimatedCard>
                       <CardHeader><CardTitle className="text-sm font-medium">Info</CardTitle></CardHeader>
@@ -833,6 +833,44 @@ export default function ProjectDocumentViewer() {
                         )}
                       </CardContent>
                     </AnimatedCard>
+
+                    {/* Table of Contents Card */}
+                    {tableOfContents.length > 0 && (
+                      <AnimatedCard>
+                        <CardHeader><CardTitle className="text-sm font-medium">Table of Contents</CardTitle></CardHeader>
+                        <CardContent>
+                          <div className="space-y-1 text-sm max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
+                            {tableOfContents.map((item, idx) => (
+                              <div
+                                key={idx}
+                                className={`truncate cursor-pointer hover:text-primary transition-colors ${
+                                  item.level === 1 ? 'font-medium mt-2 first:mt-0' :
+                                  item.level === 2 ? 'pl-3 text-muted-foreground' :
+                                  item.level === 3 ? 'pl-6 text-xs text-muted-foreground/80' :
+                                  'pl-9 text-xs text-muted-foreground/60'
+                                }`}
+                                onClick={() => {
+                                  const el = window.document.getElementById(item.id)
+                                  if (el) {
+                                    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                                  } else {
+                                    const editorContent = window.document.querySelector('.ProseMirror')
+                                    if (editorContent) {
+                                      const headings = Array.from(editorContent.querySelectorAll('h1, h2, h3, h4, h5, h6'))
+                                      const target = headings.find(h => h.textContent?.trim() === item.text)
+                                      if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                                    }
+                                  }
+                                }}
+                              >
+                                {item.isDrift && <span className="mr-1 text-[10px]">🔴</span>}
+                                {item.text}
+                              </div>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </AnimatedCard>
+                    )}
                   </div>
                 </div>
 
