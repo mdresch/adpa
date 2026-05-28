@@ -119,11 +119,19 @@ router.get("/",
           u.name as user_name,
           u.email as user_email
         FROM jobs j
-        LEFT JOIN projects p ON j.project_id = p.id OR (j.data->>'projectId')::uuid = p.id OR (j.data->'variables'->>'project_id')::uuid = p.id
-        LEFT JOIN templates t ON (j.data->>'template_id')::uuid = t.id
-        LEFT JOIN documents d ON d.generation_metadata->>'job_id' = j.id::text
+        LEFT JOIN projects p ON 
+          j.project_id = p.id OR 
+          (CASE WHEN j.data->>'projectId' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->>'projectId')::uuid ELSE NULL END) = p.id OR 
+          (CASE WHEN j.data->'variables'->>'project_id' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->'variables'->>'project_id')::uuid ELSE NULL END) = p.id
+        LEFT JOIN templates t ON 
+          (CASE WHEN j.data->>'template_id' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->>'template_id')::uuid ELSE NULL END) = t.id
+        LEFT JOIN documents d ON 
+          d.generation_metadata->>'job_id' = j.id::text OR 
+          (CASE WHEN j.data->'documentIds' IS NOT NULL AND jsonb_typeof(j.data->'documentIds') = 'array' AND jsonb_array_length(j.data->'documentIds') > 0 AND (j.data->'documentIds'->>0) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->'documentIds'->>0)::uuid ELSE NULL END) = d.id OR 
+          (CASE WHEN j.data->>'documentId' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->>'documentId')::uuid ELSE NULL END) = d.id OR
+          (CASE WHEN j.data->>'sourceDocumentId' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->>'sourceDocumentId')::uuid ELSE NULL END) = d.id
         LEFT JOIN users u ON j.created_by = u.id
-        WHERE j.created_by = $1
+        WHERE j.created_by = $1 AND NOT j.type LIKE 'extract-entity-%'
       `
 
       const params: any[] = [req.user?.id]
@@ -146,8 +154,38 @@ router.get("/",
 
       const result = await pool.query(query, params)
 
+      // Fetch child jobs if any are referenced
+      const allChildJobIds: string[] = []
+      result.rows.forEach(job => {
+        const jobData = job.job_data || {}
+        if (Array.isArray(jobData.childJobIds)) {
+          allChildJobIds.push(...jobData.childJobIds)
+        }
+      })
+
+      const childJobsMap = new Map<string, any>()
+      if (allChildJobIds.length > 0) {
+        const childJobsResult = await pool.query(
+          `SELECT id, type, status, progress, error_message, started_at AT TIME ZONE 'UTC' as started_at, completed_at AT TIME ZONE 'UTC' as completed_at
+           FROM jobs
+           WHERE id = ANY($1::uuid[])`,
+          [allChildJobIds]
+        )
+        childJobsResult.rows.forEach(cj => {
+          childJobsMap.set(cj.id, {
+            id: cj.id,
+            type: cj.type,
+            status: cj.status,
+            progress: cj.progress || 0,
+            error: cj.error_message,
+            startTime: cj.started_at,
+            completedTime: cj.completed_at
+          })
+        })
+      }
+
       // Get total count
-      let countQuery = "SELECT COUNT(*) FROM jobs WHERE created_by = $1"
+      let countQuery = "SELECT COUNT(*) FROM jobs WHERE created_by = $1 AND NOT type LIKE 'extract-entity-%'"
       const countParams = [req.user?.id]
       let countParamCount = 1
 
@@ -203,6 +241,16 @@ router.get("/",
           ? 'failed' 
           : job.status
         
+        const childJobsList: any[] = []
+        if (Array.isArray(jobData.childJobIds)) {
+          jobData.childJobIds.forEach((id: string) => {
+            const childJob = childJobsMap.get(id)
+            if (childJob) {
+              childJobsList.push(childJob)
+            }
+          })
+        }
+
         return {
           id: job.id,
           name: jobName,
@@ -220,6 +268,7 @@ router.get("/",
           workerProcessId: job.worker_process_id,
           queuePosition: job.queue_position,
           logs: jobData.logs || [],
+          childJobs: childJobsList,
           projectName: job.project_name || jobData.projectName || jobData.variables?.project_name,
           templateName: job.template_name,
           documentName: docName,
@@ -339,9 +388,22 @@ router.get("/:id",
 
       const result = await pool.query(
         `
-        SELECT j.*, u.name as created_by_name
+        SELECT 
+          j.*, 
+          COALESCE(j.project_name, p.name) as project_name,
+          COALESCE(j.document_name, d.name) as document_name,
+          u.name as created_by_name
         FROM jobs j
         LEFT JOIN users u ON j.created_by = u.id
+        LEFT JOIN projects p ON 
+          j.project_id = p.id OR 
+          (CASE WHEN j.data->>'projectId' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->>'projectId')::uuid ELSE NULL END) = p.id OR 
+          (CASE WHEN j.data->'variables'->>'project_id' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->'variables'->>'project_id')::uuid ELSE NULL END) = p.id
+        LEFT JOIN documents d ON 
+          d.generation_metadata->>'job_id' = j.id::text OR 
+          (CASE WHEN j.data->'documentIds' IS NOT NULL AND jsonb_typeof(j.data->'documentIds') = 'array' AND jsonb_array_length(j.data->'documentIds') > 0 AND (j.data->'documentIds'->>0) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->'documentIds'->>0)::uuid ELSE NULL END) = d.id OR 
+          (CASE WHEN j.data->>'documentId' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->>'documentId')::uuid ELSE NULL END) = d.id OR
+          (CASE WHEN j.data->>'sourceDocumentId' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->>'sourceDocumentId')::uuid ELSE NULL END) = d.id
         WHERE j.id = $1
       `,
         [id]
@@ -362,12 +424,33 @@ router.get("/:id",
         return res.status(403).json({ error: "Access denied" })
       }
 
+      let childJobsList: any[] = []
+      if (Array.isArray(jobData.childJobIds) && jobData.childJobIds.length > 0) {
+        const childJobsResult = await pool.query(
+          `SELECT id, type, status, progress, error_message, started_at AT TIME ZONE 'UTC' as started_at, completed_at AT TIME ZONE 'UTC' as completed_at
+           FROM jobs
+           WHERE id = ANY($1::uuid[])
+           ORDER BY type ASC`,
+          [jobData.childJobIds]
+        )
+        childJobsList = childJobsResult.rows.map(cj => ({
+          id: cj.id,
+          type: cj.type,
+          status: cj.status,
+          progress: cj.progress || 0,
+          error: cj.error_message,
+          startTime: cj.started_at,
+          completedTime: cj.completed_at
+        }))
+      }
+
       res.json({
         job: {
           ...job,
           project_name: detailProjectName,
           document_name: detailDocumentName,
           template_name: detailTemplateName,
+          childJobs: childJobsList,
           metadata: {
             provider: jobData.provider,
             model: jobData.model,
@@ -565,9 +648,9 @@ router.get("/admin/all",
           j.queue_name,
           j.queue_position,
           j.project_id,
-          j.project_name,
+          COALESCE(j.project_name, p.name) as project_name,
           j.template_name,
-          j.document_name,
+          COALESCE(j.document_name, d.name) as document_name,
           j.created_by,
           j.started_at AT TIME ZONE 'UTC' AS started_at,
           j.completed_at AT TIME ZONE 'UTC' AS completed_at,
@@ -578,7 +661,16 @@ router.get("/admin/all",
           u.email as created_by_email
         FROM jobs j
         LEFT JOIN users u ON j.created_by = u.id
-        WHERE 1=1
+        LEFT JOIN projects p ON 
+          j.project_id = p.id OR 
+          (CASE WHEN j.data->>'projectId' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->>'projectId')::uuid ELSE NULL END) = p.id OR 
+          (CASE WHEN j.data->'variables'->>'project_id' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->'variables'->>'project_id')::uuid ELSE NULL END) = p.id
+        LEFT JOIN documents d ON 
+          d.generation_metadata->>'job_id' = j.id::text OR 
+          (CASE WHEN j.data->'documentIds' IS NOT NULL AND jsonb_typeof(j.data->'documentIds') = 'array' AND jsonb_array_length(j.data->'documentIds') > 0 AND (j.data->'documentIds'->>0) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->'documentIds'->>0)::uuid ELSE NULL END) = d.id OR 
+          (CASE WHEN j.data->>'documentId' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->>'documentId')::uuid ELSE NULL END) = d.id OR
+          (CASE WHEN j.data->>'sourceDocumentId' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->>'sourceDocumentId')::uuid ELSE NULL END) = d.id
+        WHERE NOT j.type LIKE 'extract-entity-%'
       `
 
       const params: any[] = []
@@ -607,8 +699,38 @@ router.get("/admin/all",
 
       const result = await pool.query(query, params)
 
+      // Fetch child jobs if any are referenced
+      const allChildJobIds: string[] = []
+      result.rows.forEach(job => {
+        const jobData = typeof job.data === 'string' ? JSON.parse(job.data) : (job.data || {})
+        if (Array.isArray(jobData.childJobIds)) {
+          allChildJobIds.push(...jobData.childJobIds)
+        }
+      })
+
+      const childJobsMap = new Map<string, any>()
+      if (allChildJobIds.length > 0) {
+        const childJobsResult = await pool.query(
+          `SELECT id, type, status, progress, error_message, started_at AT TIME ZONE 'UTC' as started_at, completed_at AT TIME ZONE 'UTC' as completed_at
+           FROM jobs
+           WHERE id = ANY($1::uuid[])`,
+          [allChildJobIds]
+        )
+        childJobsResult.rows.forEach(cj => {
+          childJobsMap.set(cj.id, {
+            id: cj.id,
+            type: cj.type,
+            status: cj.status,
+            progress: cj.progress || 0,
+            error: cj.error_message,
+            startTime: cj.started_at,
+            completedTime: cj.completed_at
+          })
+        })
+      }
+
       // Get total count
-      let countQuery = "SELECT COUNT(*) FROM jobs j WHERE 1=1"
+      let countQuery = "SELECT COUNT(*) FROM jobs j WHERE NOT j.type LIKE 'extract-entity-%'"
       const countParams: any[] = []
       let countParamCount = 0
 
@@ -663,6 +785,16 @@ router.get("/admin/all",
           ? 'failed' 
           : job.status
         
+        const childJobsList: any[] = []
+        if (Array.isArray(jobData.childJobIds)) {
+          jobData.childJobIds.forEach((id: string) => {
+            const childJob = childJobsMap.get(id)
+            if (childJob) {
+              childJobsList.push(childJob)
+            }
+          })
+        }
+
         return {
           id: job.id,
           name: jobName,
@@ -680,6 +812,7 @@ router.get("/admin/all",
           workerProcessId: job.worker_process_id,
           queuePosition: job.queue_position,
           logs: jobData.logs || [],
+          childJobs: childJobsList,
           projectName,
           templateName,
           documentName: docName,

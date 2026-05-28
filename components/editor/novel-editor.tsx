@@ -44,6 +44,10 @@ const cleanMarkdown = (content: string): string => {
     }
   }
 
+  // Remove fenced code blocks that exclusively wrap our H8 entity tags.
+  // The LLM sometimes wraps the tags in ```json ... ``` or ``` ... ```
+  cleaned = cleaned.replace(/```(?:json|markdown|md)?\s*\n(#{8}\s+[a-zA-Z0-9_-]+:(?:(?!```)[\s\S])*?)\n\s*```/g, '$1');
+
   return cleaned;
 };
 

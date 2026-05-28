@@ -231,47 +231,33 @@ export class AnalysisRepository {
   }
 
   /**
-   * Fetch extracted entities for a project from the typed entity table.
+   * Fetch entities associated with a specific document.
+   * Checks both direct document_id and source_document_ids array in entity_data.
    */
-  async getProjectEntitiesByType(
-    projectId: string,
-    entityTypeKey: string,
-    options?: { limit?: number; offset?: number }
-  ): Promise<{ entities: Record<string, unknown>[]; total: number; tableName: string }> {
-    const tableName = getAllowedEntityTableName(entityTypeKey);
-    const fromTable = quotedEntityTableName(tableName);
+  async getEntitiesByDocument(documentId: string): Promise<any[]> {
+    const query = `
+      SELECT * FROM entity_extractions
+      WHERE status != 'deleted'
+      AND (
+        document_id = $1
+        OR entity_data->'source_document_ids' ? $1
+      )
+      ORDER BY entity_type ASC, extraction_confidence DESC
+    `;
+    
+    const result = await this.pool.query(query, [documentId]);
+    return result.rows;
+  }
 
-    const limit = Math.min(Math.max(options?.limit ?? 100, 1), 500);
-    const offset = Math.max(options?.offset ?? 0, 0);
-
-    const countResult = await this.pool.query(
-      `SELECT COUNT(*)::int AS count FROM ${fromTable} WHERE project_id = $1`,
-      [projectId]
+  /**
+   * Get document info for display
+   */
+  async getDocumentInfo(documentId: string) {
+    const result = await this.pool.query(
+      'SELECT id, name, project_id, generation_metadata FROM documents WHERE id = $1',
+      [documentId]
     );
-    const total = countResult.rows[0]?.count ?? 0;
-
-    try {
-      const result = await this.pool.query(
-        `SELECT * FROM ${fromTable}
-         WHERE project_id = $1
-         ORDER BY created_at DESC NULLS LAST, id DESC
-         LIMIT $2 OFFSET $3`,
-        [projectId, limit, offset]
-      );
-      return { entities: result.rows, total, tableName };
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (message.includes('created_at')) {
-        const result = await this.pool.query(
-          `SELECT * FROM ${fromTable}
-           WHERE project_id = $1
-           ORDER BY id DESC
-           LIMIT $2 OFFSET $3`,
-          [projectId, limit, offset]
-        );
-        return { entities: result.rows, total, tableName };
-      }
-      throw error;
-    }
+    return result.rows[0];
   }
 }
+

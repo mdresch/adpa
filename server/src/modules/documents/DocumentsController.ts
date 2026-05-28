@@ -55,6 +55,51 @@ export class DocumentsController {
     }
 
     /**
+     * GET /api/v1/documents
+     */
+    public static async getAll(req: Request, res: Response) {
+        const log = childLogger({ requestId: (req as any).requestId });
+        try {
+            const { page = 1, limit = 10, status, search, template, framework, grade } = req.query;
+            const offset = (Number(page) - 1) * Number(limit);
+
+            const user = (req as any).user;
+            if (!user) return res.status(401).json({ error: "Unauthorized" });
+
+            const isSuperAdmin = user.role?.toLowerCase() === 'super_admin';
+            const userCompanyId = user.role?.toLowerCase() === 'admin' ? user.company_id : null;
+
+            const { rows: documents, total } = await DocumentsController.documentRepository.findAll({
+                limit: Number(limit),
+                offset,
+                userId: user.id,
+                isSuperAdmin,
+                userCompanyId,
+                status: status as string,
+                search: search as string,
+                template: template as string,
+                framework: framework as string,
+                grade: grade as string
+            });
+
+            const parsedDocuments = documents.map(doc => {
+                if (doc.generation_metadata && typeof doc.generation_metadata === 'string') {
+                    try { doc.generation_metadata = JSON.parse(doc.generation_metadata); } catch (e) { }
+                }
+                return doc;
+            });
+
+            res.json({
+                documents: parsedDocuments,
+                pagination: { page: Number(page), limit: Number(limit), total, pages: Math.ceil(total / Number(limit)) }
+            });
+        } catch (error) {
+            log.error("Get all documents error:", error);
+            res.status(500).json({ error: "Internal server error" });
+        }
+    }
+
+    /**
      * GET /api/v1/documents/project/:projectId
      */
     public static async getProjectDocuments(req: Request, res: Response) {

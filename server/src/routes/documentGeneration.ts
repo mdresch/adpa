@@ -229,6 +229,8 @@ router.post("/generate",
         })
       }
 
+      const documentId = uuidv4()
+
       // Generate document using service
       const result = await documentGenerationService.generateDocument({
         projectId,
@@ -238,6 +240,8 @@ router.post("/generate",
         model,
         temperature,
         userId: req.user?.id || '',
+        documentId,
+        name: req.body.name || undefined,
       })
 
       // Calculate word and character counts
@@ -579,14 +583,24 @@ router.post("/generate",
         firstSourceDocType: sourceDocuments[0]?.type
       })
 
-      // Create document in database
-      const documentId = uuidv4()
+      // Create or update document in database
       const documentResult = await pool.query(
         `INSERT INTO documents 
          (id, project_id, name, content, template_id, template_version, 
           created_by, metadata, generation_metadata, status, word_count, character_count, 
           version, semantic_version)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+         ON CONFLICT (id) DO UPDATE SET
+           name = EXCLUDED.name,
+           content = EXCLUDED.content,
+           template_version = EXCLUDED.template_version,
+           metadata = EXCLUDED.metadata,
+           generation_metadata = EXCLUDED.generation_metadata,
+           status = EXCLUDED.status,
+           word_count = EXCLUDED.word_count,
+           character_count = EXCLUDED.character_count,
+           version = EXCLUDED.version,
+           semantic_version = EXCLUDED.semantic_version
          RETURNING *`,
         [
           documentId,

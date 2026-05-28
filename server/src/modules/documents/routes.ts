@@ -6,6 +6,7 @@ import { RouteConfig } from '../../routes/registry';
 const router = Router();
 
 // Document Retrieval
+router.get('/', authenticateToken, DocumentsController.getAll);
 router.get('/project/:projectId', authenticateToken, DocumentsController.getProjectDocuments);
 router.get('/project/:projectId/stats', authenticateToken, DocumentsController.getProjectStats);
 router.get('/project/:projectId/deleted', authenticateToken, DocumentsController.getDeletedDocuments);

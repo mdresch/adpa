@@ -464,4 +464,76 @@ export class AnalysisController {
       res.status(500).json({ error: 'Entity details fetch failed' });
     }
   };
+
+  /**
+   * Get all entities associated with a specific document
+   */
+  getEntitiesByDocument = async (req: Request, res: Response) => {
+    try {
+      const { docId } = req.params;
+      
+      const [entities, document] = await Promise.all([
+        this.repository.getEntitiesByDocument(docId),
+        this.repository.getDocumentInfo(docId)
+      ]);
+
+      if (!document) {
+        return res.status(404).json({ error: "Document not found" });
+      }
+
+      // Group entities by type for frontend
+      const groupedEntities: Record<string, any[]> = {};
+      const entityCounts: Record<string, number> = {};
+
+      // Create a reverse mapping from snake_case to camelCase
+      const TABLE_TO_CAMEL: Record<string, string> = {};
+      const { ENTITY_CAMEL_KEY_TO_TABLE } = await import('./entityTypeTables');
+      Object.entries(ENTITY_CAMEL_KEY_TO_TABLE).forEach(([camel, snake]) => {
+        TABLE_TO_CAMEL[snake] = camel;
+      });
+
+      entities.forEach(entity => {
+        const camelKey = TABLE_TO_CAMEL[entity.entity_type] || entity.entity_type;
+        if (!groupedEntities[camelKey]) {
+          groupedEntities[camelKey] = [];
+          entityCounts[camelKey] = 0;
+        }
+        
+        // Flatten entity_data for display
+        const displayData = {
+          id: entity.id,
+          name: entity.entity_name,
+          ...entity.entity_data,
+          extraction_confidence: entity.extraction_confidence,
+          is_verified: entity.is_verified,
+          created_at: entity.created_at,
+          source_document_id: entity.document_id // Fallback for UI that still uses single ID
+        };
+        
+        groupedEntities[camelKey].push(displayData);
+        entityCounts[camelKey]++;
+      });
+
+      // Extract metadata
+      const metadata = typeof document.generation_metadata === 'string'
+        ? JSON.parse(document.generation_metadata)
+        : document.generation_metadata || {};
+
+      res.json({
+        success: true,
+        documentId: docId,
+        documentName: document.name,
+        projectId: document.project_id,
+        entityCounts,
+        entities: groupedEntities,
+        totalEntities: entities.length,
+        contextMatchingScore: metadata.contextMatchingScore || 0,
+        appliedContextEntities: metadata.appliedContextEntities || []
+      });
+    } catch (error) {
+      this.logger.error('Failed to get entities by document', error);
+      res.status(500).json({ error: 'Failed to fetch document entities' });
+    }
+  };
 }
+

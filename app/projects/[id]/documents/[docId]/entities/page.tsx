@@ -271,7 +271,10 @@ export default function DocumentEntitiesPage() {
   const [totalEntities, setTotalEntities] = useState(0)
   const [primaryKnowledgeDomain, setPrimaryKnowledgeDomain] = useState<KnowledgeDomainKey | null>(null)
   const [secondaryKnowledgeDomains, setSecondaryKnowledgeDomains] = useState<KnowledgeDomainKey[]>([])
+  const [contextMatchingScore, setContextMatchingScore] = useState<number | null>(null)
+  const [appliedContextEntities, setAppliedContextEntities] = useState<any[]>([])
   const [isExtracting, setIsExtracting] = useState(false)
+
   const [extractionProgress, setExtractionProgress] = useState(0)
   const [extractionStatus, setExtractionStatus] = useState<string>("")
   const [currentJobId, setCurrentJobId] = useState<string | null>(null)

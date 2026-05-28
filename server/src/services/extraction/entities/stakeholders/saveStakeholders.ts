@@ -117,14 +117,15 @@ export async function saveStakeholders(
   }
 
   try {
-    // Step 1: Check existing stakeholders in database and filter out duplicates
-    const stakeholdersToSave = await filterExistingStakeholders(client, projectId, stakeholders)
-    const skippedCount = stakeholders.length - stakeholdersToSave.length
+    // Step 1: No longer filtering existing - let ON CONFLICT handle merging
+    const stakeholdersToSave = stakeholders
+    const skippedCount = 0
 
     if (stakeholdersToSave.length === 0) {
-      logger.info('[EXTRACTION] All stakeholders already exist in database, nothing to save')
-      return { saved: 0, skipped: skippedCount, failed: 0 }
+      logger.info('[EXTRACTION] No stakeholders to save')
+      return { saved: 0, skipped: 0, failed: 0 }
     }
+
 
     // Build bulk insert
     const values: any[] = []

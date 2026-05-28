@@ -13,6 +13,12 @@ describe("assertRelativeApiPath", () => {
     )
   })
 
+  it("allows same-origin API paths with encoded query parameters", () => {
+    expect(assertRelativeApiPath("/api/v1/openui-chat/threads?projectId=abc-123")).toBe(
+      "/api/v1/openui-chat/threads?projectId=abc-123"
+    )
+  })
+
   it("rejects absolute and protocol URLs", () => {
     expect(() => assertRelativeApiPath("https://evil.example/api")).toThrow()
     expect(() => assertRelativeApiPath("//evil.example/api")).toThrow()
@@ -25,6 +31,11 @@ describe("assertRelativeApiPath", () => {
   it("rejects paths outside /api allowlist shape", () => {
     expect(() => assertRelativeApiPath("/evil/v1")).toThrow()
     expect(() => assertRelativeApiPath("/api/v1/../../admin")).toThrow()
+  })
+
+  it("rejects unsafe query characters", () => {
+    expect(() => assertRelativeApiPath("/api/v1/openui-chat/threads?next=https://evil.example")).toThrow()
+    expect(() => assertRelativeApiPath("/api/v1/openui-chat/threads?x=<script>")).toThrow()
   })
 })
 

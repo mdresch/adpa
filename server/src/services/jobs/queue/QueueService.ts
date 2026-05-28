@@ -257,10 +257,15 @@ export class QueueService {
       }
 
       let documentId: string | null = null
-      if (validatedType === 'extract-project-data' && 'documentIds' in validatedData && Array.isArray(validatedData.documentIds) && validatedData.documentIds.length === 1) {
+      if (
+        (validatedType === 'extract-project-data' || (typeof validatedType === 'string' && (validatedType as string).startsWith('extract-entity-'))) &&
+        'documentIds' in validatedData && Array.isArray(validatedData.documentIds) && validatedData.documentIds.length > 0
+      ) {
         documentId = validatedData.documentIds[0]
       } else if ('documentId' in validatedData) {
         documentId = validatedData.documentId
+      } else if ('sourceDocumentId' in validatedData) {
+        documentId = validatedData.sourceDocumentId as string
       }
 
       if (!documentName && 'name' in validatedData && typeof validatedData.name === 'string') {
@@ -580,8 +585,13 @@ export class QueueService {
         values.push(errorMessage)
       }
 
-      if (status === 'processing' && !updates.some(u => u.includes('processing_started_at'))) {
-        updates.push(`processing_started_at = CURRENT_TIMESTAMP`)
+      if (status === 'processing') {
+        if (!updates.some(u => u.includes('processing_started_at'))) {
+          updates.push(`processing_started_at = CURRENT_TIMESTAMP`)
+        }
+        if (!updates.some(u => u.includes('started_at'))) {
+          updates.push(`started_at = COALESCE(started_at, CURRENT_TIMESTAMP)`)
+        }
       }
 
       if (status === 'completed') {

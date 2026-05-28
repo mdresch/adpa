@@ -83,6 +83,7 @@ import intelligenceModuleRoutes from "./modules/intelligence/routes"
 import integrationsModuleRoutes from "./modules/integrations/routes"
 import integrationPineconeRoutes from "./routes/integrationPineconeRoutes"
 import mongodbIntegrationRoutes from "./routes/mongodbIntegrationRoutes"
+import integrationNeo4jRoutes from "./routes/integrationNeo4jRoutes"
 import adobePdfRoutes from "./routes/adobe-pdf"
 import { createDocumentFormatRoutes } from "./routes/document-formats"
 import contextAiRoutes from "./routes/context-ai"
@@ -287,6 +288,7 @@ if (intelligenceModuleRoutes && intelligenceModuleRoutes[0]) app.use("/api/analy
 // Vector integration routes — before generic /:id CRUD (integrations module)
 app.use("/api/integrations", integrationPineconeRoutes)
 app.use("/api/integrations", mongodbIntegrationRoutes)
+app.use("/api/integrations", integrationNeo4jRoutes)
 if (integrationsModuleRoutes && integrationsModuleRoutes[0]) app.use("/api/integrations", integrationsModuleRoutes[0].router)
 if (documentModuleRoutes && documentModuleRoutes[0]) app.use("/api/documents", documentModuleRoutes[0].router)
 if (analysisModuleRoutes && analysisModuleRoutes[0]) {

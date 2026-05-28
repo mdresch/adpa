@@ -288,28 +288,52 @@ class DocumentGenerationService {
         }
       })
 
-      // Global Deduplication for template feedback loop
+      // Global Deduplication and Context Adherence Scoring
       const finalUniqueCounts: Record<string, number> = {}
+      const reusedEntityIdentities: Array<{ name: string; type: string; matchConfidence: number }> = []
+      const providedEntities = project.existing_entities || []
+      
       for (const [type, entities] of Object.entries(combinedEntitiesByType)) {
         const seenNames = new Set<string>()
         let uniqueCount = 0
+        
         for (const entity of entities) {
           const name = (entity.name || entity.title || entity.item_name || entity.description || "").toString().toLowerCase().trim()
-          if (name && !seenNames.has(name)) {
+          if (!name) continue;
+
+          if (!seenNames.has(name)) {
             seenNames.add(name)
             uniqueCount++
+
+            // Check if this matches a provided entity (Context Adherence)
+            const normalizedExtracted = name.replace(/[^\w\s]/g, '').replace(/\s+/g, ' ')
+            
+            const match = providedEntities.find(p => {
+              const normalizedProvided = p.name.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim()
+              return p.type === type && (normalizedProvided === normalizedExtracted || normalizedProvided.includes(normalizedExtracted) || normalizedExtracted.includes(normalizedProvided))
+            })
+
+            if (match) {
+              const exactMatch = match.name.toLowerCase().trim() === name
+              reusedEntityIdentities.push({
+                name: match.name,
+                type: match.type,
+                matchConfidence: exactMatch ? 100 : 85 // High confidence for fuzzy/normalized matches
+              })
+            }
           }
         }
         finalUniqueCounts[type] = uniqueCount
       }
 
-      // Note: Template Feedback Loop is now handled automatically in the background
-      // within the database-level save routine (entityExtractionService.storeEntities)
-      // to ensure deduplication-aware counts are recorded.
+      // Calculate overall Context Reuse Score
+      const contextReuseScore = providedEntities.length > 0 
+        ? Math.round((reusedEntityIdentities.length / providedEntities.length) * 100)
+        : 100 // 100% if no context was provided to adhere to
 
-
-      // Sort sections back into their planned order (Promise.all preserves array order, but it's safe to sort)
+      // Sort sections back into their planned order
       draftedSections.sort((a, b) => a.order - b.order)
+
 
       let totalTokensUsed = 0;
 
@@ -334,6 +358,8 @@ class DocumentGenerationService {
           provider: request.provider,
           model: request.model || 'default',
           tokens_used: totalTokensUsed, // Aggregate of all parallel calls
+          contextMatchingScore,
+          appliedContextEntities,
           context: {
             projectName: project.name,
             framework: project.framework,
@@ -345,6 +371,8 @@ class DocumentGenerationService {
         },
         ...(gkg_context_snapshot && { gkg_context_snapshot }),
       }
+
+
 
     } catch (error) {
       logger.error('Agentic document generation failed:', error)
@@ -503,10 +531,20 @@ class DocumentGenerationService {
 
     // Always inject GKG context if available as it represents the semantic truth
     if (params.gkgContext?.markdown) {
-      sectionPrompt += `\n**Semantic Graph Context:**\n${params.gkgContext.markdown}\n`
+      sectionPrompt += `\n**Semantic Graph Context (Known Relationships):**\n${params.gkgContext.markdown}\n`
+    }
+
+    // Inject existing project entities (for deduplication awareness)
+    if (params.project.existing_entities && params.project.existing_entities.length > 0) {
+      sectionPrompt += `\n**Existing Project Entities (REUSE THESE NAMES):**\n`
+      params.project.existing_entities.forEach(ent => {
+        sectionPrompt += `- [${ent.type}] ${ent.name}\n`
+      })
+      sectionPrompt += `\n*Instruction: If your draft introduces any of the entities listed above, use their EXACT names and types to maintain consistency across the project registry.*\n`
     }
 
     // Inject custom context materials
+
     if (params.contextItems && params.contextItems.length > 0) {
       sectionPrompt += `\n**Reference Materials:**\n`
       // Limit to top 3 to avoid context explosion on smaller models
@@ -608,11 +646,23 @@ class DocumentGenerationService {
         [projectId]
       )
 
+      // Fetch sample of existing high-confidence/verified entities for deduplication awareness
+      const entitiesResult = await pool.query(
+        `SELECT entity_name as name, entity_type as type
+         FROM entity_extractions
+         WHERE project_id = $1 AND status = 'active' AND (is_verified = true OR extraction_confidence >= 80)
+         ORDER BY extraction_confidence DESC
+         LIMIT 30`,
+        [projectId]
+      )
+
       return {
         ...project,
         stakeholders: stakeholdersResult.rows,
         documents: documentsResult.rows,
-      }
+        existing_entities: entitiesResult.rows,
+      } as any
+
     } catch (error) {
       logger.error(`Failed to fetch project context for ${projectId}:`, error)
       throw error
@@ -670,6 +720,14 @@ class DocumentGenerationService {
     // Ensure it starts with a heading
     if (!cleaned.startsWith('#') && cleaned.length > 0) {
       cleaned = `# Document\n\n${cleaned}`
+    }
+
+    return cleaned
+  }
+}
+
+export const documentGenerationService = new DocumentGenerationService()
+d}`
     }
 
     return cleaned
