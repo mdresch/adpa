@@ -4,7 +4,8 @@ import { unifiedAIService } from "./unifiedAIService"
 import { documentTemplateService } from "../modules/documentTemplates/service"
 import { getContextForStrategy } from "./gkg"
 import { z } from "zod"
-import { INLINE_ENTITY_EXTRACTION_PROMPT } from "./inlineEntityExtractionPrompt"
+import { buildInlineEntityExtractionPrompt } from "./inlineEntityExtractionPrompt"
+import { v4 as uuidv4 } from "uuid"
 
 export interface DocumentGenerationRequest {
   jobId?: string
@@ -15,6 +16,8 @@ export interface DocumentGenerationRequest {
   model?: string
   temperature?: number
   userId: string
+  documentId?: string
+  name?: string
 }
 
 import { ProjectContext } from '@root-types/adpa'
@@ -148,6 +151,8 @@ class DocumentGenerationService {
   async generateDocument(request: DocumentGenerationRequest) {
     try {
       logger.info(`Starting agentic document generation for project ${request.projectId}`)
+      
+      const docId = request.documentId || uuidv4()
 
       // 1. Fetch project context
       const project = await this.getProjectContext(request.projectId)
@@ -158,6 +163,25 @@ class DocumentGenerationService {
         ? await this.getTemplate(request.templateId)
         : null
       logger.info(`Template: ${template?.name || 'None'}`)
+
+      // 2.3. Pre-insert a minimal/draft document row to satisfy foreign key constraints for entity extraction during parallel drafting
+      const docName = request.name || (template?.name ? `Generated: ${template.name}` : 'Generated Document')
+      await pool.query(
+        `INSERT INTO documents (id, project_id, name, content, template_id, status, created_by, version, semantic_version)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         ON CONFLICT (id) DO NOTHING`,
+        [
+          docId,
+          request.projectId,
+          docName,
+          '',
+          request.templateId || null,
+          'draft',
+          request.userId || null,
+          1,
+          '1.0.0'
+        ]
+      )
 
       // 2.5. Fetch GKG context when template has gkg_context_strategy
       let gkg_context_snapshot: { markdown: string; unitsCount: number; documentsCount: number; entityTypes: string[] } | undefined
@@ -217,6 +241,8 @@ class DocumentGenerationService {
       logger.info(`[AGENT] Phase 2: Drafting ${generationPlan.sections.length} sections with concurrency ${draftConcurrency}...`)
 
       const { InlineEntityParserService } = await import('./inlineEntityParserService')
+      
+      const combinedEntitiesByType: Record<string, any[]> = {}
 
       const draftedSections = await this.mapWithConcurrency(generationPlan.sections, draftConcurrency, async (sectionTask, index) => {
         const sectionProse = await this.draftSection({
@@ -232,22 +258,55 @@ class DocumentGenerationService {
           projectId: request.projectId,
           userId: request.userId,
           templateId: request.templateId,
+          templateName: template?.name,
+          templateCategory: template?.category,
+          templateSystemPrompt: template?.system_prompt,
         })
+
 
         const parseResult = await InlineEntityParserService.parseAndProcess({
           projectId: request.projectId,
           userId: request.userId,
+          documentId: docId,
           markdown: sectionProse.markdown
         }).catch(err => {
           logger.error(`Inline entity parsing failed for section "${sectionTask.heading}":`, err)
-          return { cleanedMarkdown: sectionProse.markdown, extractedCount: 0 }
+          return { cleanedMarkdown: sectionProse.markdown, extractedCount: 0, extractedCountByType: {}, entitiesByType: {} }
         })
+
+        // Merge entities for global deduplication
+        if (parseResult.entitiesByType) {
+          for (const [type, entities] of Object.entries(parseResult.entitiesByType)) {
+            if (!combinedEntitiesByType[type]) combinedEntitiesByType[type] = []
+            combinedEntitiesByType[type].push(...entities)
+          }
+        }
 
         return {
           ...sectionProse,
           markdown: parseResult.cleanedMarkdown
         }
       })
+
+      // Global Deduplication for template feedback loop
+      const finalUniqueCounts: Record<string, number> = {}
+      for (const [type, entities] of Object.entries(combinedEntitiesByType)) {
+        const seenNames = new Set<string>()
+        let uniqueCount = 0
+        for (const entity of entities) {
+          const name = (entity.name || entity.title || entity.item_name || entity.description || "").toString().toLowerCase().trim()
+          if (name && !seenNames.has(name)) {
+            seenNames.add(name)
+            uniqueCount++
+          }
+        }
+        finalUniqueCounts[type] = uniqueCount
+      }
+
+      // Note: Template Feedback Loop is now handled automatically in the background
+      // within the database-level save routine (entityExtractionService.storeEntities)
+      // to ensure deduplication-aware counts are recorded.
+
 
       // Sort sections back into their planned order (Promise.all preserves array order, but it's safe to sort)
       draftedSections.sort((a, b) => a.order - b.order)
@@ -269,6 +328,8 @@ class DocumentGenerationService {
       // 7. Return structured result
       return {
         content: markdown,
+        documentId: docId,
+        entityCounts: finalUniqueCounts,
         metadata: {
           provider: request.provider,
           model: request.model || 'default',
@@ -284,6 +345,7 @@ class DocumentGenerationService {
         },
         ...(gkg_context_snapshot && { gkg_context_snapshot }),
       }
+
     } catch (error) {
       logger.error('Agentic document generation failed:', error)
       throw error
@@ -304,7 +366,7 @@ class DocumentGenerationService {
     projectId: string;
     userId: string;
     templateId?: string;
-  }) {
+  }): Promise<{ sections: Array<{ heading: string; goal: string; informational_needs: string }> }> {
     // We define the Zod schema representing the JSON we want the AI to return.
     const planSchema = z.object({
       sections: z.array(z.object({
@@ -328,10 +390,17 @@ class DocumentGenerationService {
         if (para.description) plannerPrompt += `   Description: ${para.description}\n`
       })
       plannerPrompt += `\n`
+    } else {
+      const docType = params.template?.name || "unstructured document"
+      plannerPrompt += `### Document Type: ${docType}\n`
+      plannerPrompt += `No pre-defined template structure is specified. You MUST design a logical structure of 3 to 6 distinct sections/paragraphs to fulfill the request. `
+      plannerPrompt += `Choose logical headings appropriate for a ${params.project.framework} document, covering background, main components/requirements, implementation/next steps, and constraints.`
+      plannerPrompt += `\n\n`
     }
 
+
     plannerPrompt += `### User Request:\n${params.userPrompt}\n\n`
-    plannerPrompt += `Output a JSON array of sections. Map the required template structure to the user's specific request.`
+    plannerPrompt += `Output a JSON array of sections. Map the required template structure or design a new one based on the user's specific request.`
 
     await this.recordLLMPromptSnapshot(params.jobId, {
       phase: 'planning',
@@ -371,7 +440,12 @@ class DocumentGenerationService {
         }
       } else {
         return {
-          sections: [{ heading: "## Document Generation", goal: "Fulfill user request", informational_needs: "All available project context" }]
+          sections: [
+            { heading: "## 1. Executive Summary", goal: "Summarize the document purpose and key takeaways.", informational_needs: "General project context." },
+            { heading: "## 2. Objectives & Scope", goal: "Define the objectives, scope items, and deliverables.", informational_needs: "Project deliverables and scope items." },
+            { heading: "## 3. Core Content & Details", goal: "Fulfill the detailed requirements of the user request.", informational_needs: "Specific requirements and stakeholders." },
+            { heading: "## 4. Next Steps & Constraints", goal: "Detail implementation activities and project constraints.", informational_needs: "Project constraints and scheduled activities." }
+          ]
         }
       }
     }
@@ -394,13 +468,22 @@ class DocumentGenerationService {
     projectId: string;
     userId: string;
     templateId?: string;
+    templateName?: string;
+    templateCategory?: string;
+    templateSystemPrompt?: string;
   }) {
     let sectionPrompt = `You are an expert technical writer drafting a specific section of a ${params.project.framework} document.\n\n`
+
+    // Inject template-specific guidance if available
+    if (params.templateSystemPrompt) {
+      sectionPrompt += `### Template Standards\n${params.templateSystemPrompt}\n\n`
+    }
 
     // We explicitly tell the AI what its isolated job is
     sectionPrompt += `### Your Mission\n`
     sectionPrompt += `Write ONLY the following section: **${params.task.heading}**\n`
     sectionPrompt += `Goal: ${params.task.goal}\n\n`
+
 
     // Inject targeted context (we can optimize this later to filter context intelligently based on informational_needs)
     sectionPrompt += `### Context Available to You\n`
@@ -434,7 +517,11 @@ class DocumentGenerationService {
 
     sectionPrompt += `\n---\n\n`
     sectionPrompt += `Output the Markdown for your assigned section starting exactly with ${params.task.heading}.`
-    sectionPrompt += INLINE_ENTITY_EXTRACTION_PROMPT
+    sectionPrompt += buildInlineEntityExtractionPrompt({
+      templateName: params.templateName,
+      category: params.templateCategory,
+      userPrompt: params.task.goal,
+    })
 
     const traceName = `agentic-doc-gen-draft-${params.order + 1}`
     const temperature = params.temperature || 0.5
@@ -590,4 +677,3 @@ class DocumentGenerationService {
 }
 
 export const documentGenerationService = new DocumentGenerationService()
-

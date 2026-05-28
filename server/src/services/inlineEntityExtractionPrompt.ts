@@ -5,9 +5,8 @@
  * Each entity type maps exactly to its TypeScript interface so the LLM
  * produces field names that the InlineEntityParserService can save directly.
  *
- * RULE: Only list entity types that the section is likely to introduce.
- *       The LLM decides which apply; all 61 types are documented here.
- *       Do NOT instruct the model to tag every type — only those relevant.
+ * RULE: Return the full, unrestricted set of all 61 entity types until
+ *       registry/profile mappings are established over time.
  */
 
 export const INLINE_ENTITY_EXTRACTION_PROMPT = `
@@ -317,7 +316,11 @@ Fields: metric_name* (string), value* (number), unit? (string), period? (string)
 \`\`\`
 Fields: risk_title* (string), probability_score* (number 1-5), impact_score* (number 1-5), risk_level* (low|medium|high|critical), quadrant? (string)
 
-**contingency_reserves** — already documented above
+**contingency_reserves** — Budget held for identified risks
+\`\`\`
+######## contingency_reserves: {"reserve_name": "Risk Reserve", "amount": 45000, "risk_reference": "Vendor delay risk", "release_criteria": "Vendor contract signed"}
+\`\`\`
+Fields: reserve_name* (string), amount* (number), risk_reference? (string), release_criteria? (string)
 
 **issue_log** — Active project issues requiring resolution
 \`\`\`
@@ -556,3 +559,13 @@ Fields: title* (string), category* (working_hours|communication|decision_making|
 4. Use null for unknown optional numeric fields, omit them entirely for unknown strings
 5. Do not tag source_document or source_document_id — these are set automatically
 `
+
+export function buildInlineEntityExtractionPrompt(options: {
+  templateName?: string
+  category?: string
+  userPrompt?: string
+}): string {
+  // Always return the full unrestricted prompt to ensure all possible entities are captured
+  // without hardcoded template-specific restrictions in the service code.
+  return INLINE_ENTITY_EXTRACTION_PROMPT
+}

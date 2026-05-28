@@ -33,6 +33,7 @@ export interface ExtractedEntity {
   extraction_method?: 'ai' | 'manual' | 'import'
   ai_provider?: string
   ai_model?: string
+  source_documents?: Array<{ id: string; title: string }>
 }
 
 export interface ExtractionOptions {
@@ -494,7 +495,7 @@ ${content.substring(0, 15000)}` // Limit content to avoid token limits
   /**
    * Store extracted entities in database
    */
-  private async storeEntities(
+  public async storeEntities(
     entities: ExtractedEntity[],
     projectId: string,
     documentId: string,
@@ -504,51 +505,121 @@ ${content.substring(0, 15000)}` // Limit content to avoid token limits
 
     for (const entity of entities) {
       try {
-        const id = uuidv4()
         const confidence = entity.extraction_confidence || 50
-        
-        // Auto-verify high confidence entities
         const isVerified = this.shouldAutoVerify(confidence)
+        const entityName = entity.entity_name ? entity.entity_name.trim() : 'Unnamed Entity'
+        const entityType = entity.entity_type
         
-        // For auto-verified entities, we don't have a userId, so verified_by will be null
-        // This indicates it was auto-verified by the system
-        const result = await pool.query(
-          `INSERT INTO entity_extractions (
-            id, project_id, document_id, entity_type, entity_data, entity_name,
-            extraction_confidence, extraction_method, ai_provider, ai_model,
-            related_entity_ids, status, is_verified, verified_at, created_at
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, CURRENT_TIMESTAMP)
-          RETURNING id, entity_type, entity_name, extraction_confidence, created_at
-        `,
-          [
-            id,
-            projectId,
-            documentId,
-            entity.entity_type,
-            JSON.stringify(entity.entity_data),
-            entity.entity_name,
-            confidence,
-            entity.extraction_method || 'ai',
-            options.aiProvider || 'openai',
-            options.aiModel || 'gpt-4',
-            entity.related_entity_ids || [],
-            'active',
-            isVerified, // Auto-verify high confidence
-            isVerified ? new Date() : null // Set verified_at if auto-verified (verified_by will be null for auto-verified)
-          ]
+        // Check if entity with same type and name already exists in project
+        const existingResult = await pool.query(
+          `SELECT id, entity_data, extraction_confidence, document_id, is_verified 
+           FROM entity_extractions 
+           WHERE project_id = $1 AND entity_type = $2 AND LOWER(entity_name) = LOWER($3) AND status != 'deleted'
+           LIMIT 1`,
+          [projectId, entityType, entityName]
         )
+
+        let entityId: string
         
-        if (isVerified) {
-          logger.info('✅ Auto-verified high confidence entity', {
-            entityId: id,
-            entityName: entity.entity_name,
+        if (existingResult.rows.length > 0) {
+          // Entity exists - deduplicate and merge
+          const existingRow = existingResult.rows[0]
+          entityId = existingRow.id
+          
+          const existingData = typeof existingRow.entity_data === 'string'
+            ? JSON.parse(existingRow.entity_data)
+            : existingRow.entity_data || {}
+            
+          // Merge entity_data properties
+          const mergedData = {
+            ...existingData,
+            ...entity.entity_data
+          }
+          
+          // Deduplicate and merge source_document_ids
+          const existingDocIds = existingData.source_document_ids || 
+            (existingRow.document_id ? [existingRow.document_id] : [])
+          
+          const sourceDocumentIds = Array.from(new Set([...existingDocIds, documentId]))
+          mergedData.source_document_ids = sourceDocumentIds
+          
+          // Keep max confidence
+          const mergedConfidence = Math.max(
+            existingRow.extraction_confidence || 50,
             confidence
+          )
+          
+          // Kept verified if either was verified
+          const mergedVerified = existingRow.is_verified || isVerified
+          
+          await pool.query(
+            `UPDATE entity_extractions 
+             SET entity_data = $1, 
+                 extraction_confidence = $2, 
+                 is_verified = $3, 
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = $4`,
+            [
+              JSON.stringify(mergedData),
+              mergedConfidence,
+              mergedVerified,
+              entityId
+            ]
+          )
+          
+          logger.info('🔄 Merged duplicate entity', {
+            entityId,
+            entityName,
+            entityType,
+            sourceDocumentsCount: sourceDocumentIds.length
           })
+        } else {
+          // New entity - insert it
+          entityId = uuidv4()
+          
+          // Add source_document_ids array to entity_data
+          const entityData = {
+            ...entity.entity_data,
+            source_document_ids: [documentId]
+          }
+          
+          const result = await pool.query(
+            `INSERT INTO entity_extractions (
+              id, project_id, document_id, entity_type, entity_data, entity_name,
+              extraction_confidence, extraction_method, ai_provider, ai_model,
+              related_entity_ids, status, is_verified, verified_at, created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, CURRENT_TIMESTAMP)
+            RETURNING id, entity_type, entity_name, extraction_confidence, created_at`,
+            [
+              entityId,
+              projectId,
+              documentId,
+              entityType,
+              JSON.stringify(entityData),
+              entityName,
+              confidence,
+              entity.extraction_method || 'ai',
+              options.aiProvider || 'openai',
+              options.aiModel || 'gpt-4',
+              entity.related_entity_ids || [],
+              'active',
+              isVerified,
+              isVerified ? new Date() : null
+            ]
+          )
+          
+          if (isVerified) {
+            logger.info('✅ Auto-verified high confidence entity', {
+              entityId,
+              entityName,
+              confidence
+            })
+          }
         }
 
         storedEntities.push({
           ...entity,
-          id: result.rows[0].id
+          id: entityId
         })
       } catch (error: any) {
         logger.error('❌ Failed to store entity', {
@@ -556,7 +627,50 @@ ${content.substring(0, 15000)}` // Limit content to avoid token limits
           entity_name: entity.entity_name,
           error: error.message
         })
-        // Continue with other entities
+      }
+    }
+
+    // Recompute document entity counts and update template profile
+    if (documentId && storedEntities.length > 0) {
+      try {
+        const { default: DocumentPurposeService } = await import('./documentPurposeService')
+        const { default: TemplateAnalyticsService } = await import('./templateAnalyticsService')
+        const { documentTemplateService } = await import('../modules/documentTemplates/service')
+
+        // 1. Rebuild all document entity counts & inferred domains in the project
+        logger.info(`[ENTITY-EXTRACTION] Rebuilding document purposes for project ${projectId}`)
+        await DocumentPurposeService.rebuildForProject(projectId)
+
+        // 2. If the document has a template, update template stats and profile
+        const docRes = await pool.query(
+          `SELECT template_id FROM documents WHERE id = $1 AND deleted_at IS NULL`,
+          [documentId]
+        )
+        const templateId = docRes.rows[0]?.template_id
+
+        if (templateId) {
+          // Get the newly calculated entity_counts for this document from the database
+          const updatedDocRes = await pool.query(
+            `SELECT entity_counts FROM documents WHERE id = $1`,
+            [documentId]
+          )
+          const docCounts = updatedDocRes.rows[0]?.entity_counts || {}
+
+          // Remove 'total' field from stats map
+          const statsCounts = { ...docCounts }
+          delete statsCounts.total
+
+          logger.info(`[ENTITY-EXTRACTION] Updating template feedback loop stats for template ${templateId}`, { statsCounts })
+          await documentTemplateService.updateTemplateEntityStats(templateId, statsCounts)
+
+          logger.info(`[ENTITY-EXTRACTION] Updating template entity profile for template ${templateId}`)
+          await TemplateAnalyticsService.updateTemplateEntityProfile(templateId)
+        }
+      } catch (err: any) {
+        logger.error('[ENTITY-EXTRACTION] Failed to update template entity profile / document purpose:', {
+          error: err.message,
+          stack: err.stack
+        })
       }
     }
 
@@ -635,9 +749,6 @@ ${content.substring(0, 15000)}` // Limit content to avoid token limits
     }
   }
 
-  /**
-   * Get entity by ID
-   */
   async getEntityById(entityId: string): Promise<ExtractedEntity | null> {
     try {
       const result = await pool.query(
@@ -656,19 +767,39 @@ ${content.substring(0, 15000)}` // Limit content to avoid token limits
       }
 
       const row = result.rows[0]
+      const entityData = typeof row.entity_data === 'string' 
+        ? JSON.parse(row.entity_data) 
+        : row.entity_data || {}
+
+      // Resolve multiple source documents
+      let sourceDocuments: Array<{ id: string; title: string }> = []
+      const sourceDocumentIds = entityData.source_document_ids || 
+        (row.document_id ? [row.document_id] : [])
+
+      if (sourceDocumentIds && sourceDocumentIds.length > 0) {
+        try {
+          const docsResult = await pool.query(
+            `SELECT id, name as title FROM documents WHERE id = ANY($1::uuid[])`,
+            [sourceDocumentIds]
+          )
+          sourceDocuments = docsResult.rows
+        } catch (docError) {
+          logger.warn(`Failed to fetch source documents for entity ${entityId}:`, docError)
+        }
+      }
+
       return {
         id: row.id,
         entity_type: row.entity_type,
         entity_name: row.entity_name,
-        entity_data: typeof row.entity_data === 'string' 
-          ? JSON.parse(row.entity_data) 
-          : row.entity_data,
+        entity_data: entityData,
         extraction_confidence: row.extraction_confidence,
         extraction_method: row.extraction_method,
         ai_provider: row.ai_provider,
         ai_model: row.ai_model,
         related_entity_ids: row.related_entity_ids || [],
-        source_document_id: row.document_id
+        source_document_id: row.document_id,
+        source_documents: sourceDocuments as any
       }
     } catch (error: any) {
       logger.error('❌ Failed to get entity', {

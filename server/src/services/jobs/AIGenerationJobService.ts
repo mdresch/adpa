@@ -107,7 +107,7 @@ export class AIGenerationJobService {
       let result;
       try {
         // Generate content using AI service
-        result = await AIGenerationJobService.generateContent(jobData, deps)
+        result = await AIGenerationJobService.generateContent(jobData, deps, actualJobId)
       } finally {
         clearInterval(aiHeartbeat)
       }
@@ -187,7 +187,7 @@ export class AIGenerationJobService {
    * For all other jobs (no template, or plain prompt jobs) we fall back to
    * the existing ContextAwareAI / aiService path so nothing else breaks.
    */
-  private static async generateContent(jobData: AIGenerationJobData, deps?: QueueServiceDependencies): Promise<any> {
+  private static async generateContent(jobData: AIGenerationJobData, deps?: QueueServiceDependencies, actualJobId?: string): Promise<any> {
     const { prompt, provider, model, temperature, max_tokens, template_id, variables, userId, projectId, documentIds, use_context, include_integrations, custom_context } = jobData
 
     // ── AGENTIC PATH ──────────────────────────────────────────────────────────
@@ -204,8 +204,10 @@ export class AIGenerationJobService {
       // Lazy import to avoid circular dependency at module load time
       const { documentGenerationService } = await import('../documentGenerationService')
 
+      const docId = uuidv4()
+
       const agenticResult = await documentGenerationService.generateDocument({
-        jobId: jobData.jobId,
+        jobId: jobData.jobId || actualJobId,
         projectId: projectId as string,
         templateId: template_id,
         userPrompt: prompt,
@@ -213,12 +215,15 @@ export class AIGenerationJobService {
         model: model || undefined,
         temperature: temperature || 0.7,
         userId: userId as string,
+        documentId: docId,
+        name: jobData.name || undefined,
       })
 
       // Normalise to the shape that createDocument() expects
       // (content string + optional usage object)
       return {
         content: agenticResult.content,
+        documentId: docId,
         provider: agenticResult.metadata.provider,
         model: agenticResult.metadata.model,
         usage: {
@@ -294,6 +299,7 @@ export class AIGenerationJobService {
     let createdDocumentId: string | null = null
 
     try {
+      const documentId = result?.documentId || uuidv4()
       const docNameProvided = name && name.trim() ? name.trim() : null
       const templateName = (variables?.template_name as string) || jobData.template_name || null
       const docName = docNameProvided || templateName || (template_id ? `Generated Document - ${template_id}` : `AI Generated Document ${new Date().toISOString()}`)
@@ -560,16 +566,45 @@ export class AIGenerationJobService {
 
       const insertResult = await db.query(
         `
-        INSERT INTO documents (project_id, name, content, template_id, status, created_by, updated_by, generation_metadata, word_count, character_count, sentence_count, paragraph_count)
-        VALUES ($1, $2, $3, $4, $5, $6, $6, $7, $8, $9, $10, $11)
+        INSERT INTO documents (id, project_id, name, content, template_id, status, created_by, updated_by, generation_metadata, word_count, character_count, sentence_count, paragraph_count, entity_counts)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $7, $8, $9, $10, $11, $12, $13)
+        ON CONFLICT (id) DO UPDATE SET
+          name = EXCLUDED.name,
+          content = EXCLUDED.content,
+          status = EXCLUDED.status,
+          updated_by = EXCLUDED.updated_by,
+          generation_metadata = EXCLUDED.generation_metadata,
+          word_count = EXCLUDED.word_count,
+          character_count = EXCLUDED.character_count,
+          sentence_count = EXCLUDED.sentence_count,
+          paragraph_count = EXCLUDED.paragraph_count,
+          entity_counts = EXCLUDED.entity_counts
         RETURNING id
       `,
-        [projectIdForDoc, docName, docContent, template_id || null, 'draft', userId || null, JSON.stringify(generationMetadata), wordCount, characterCount, sentenceCount, paragraphCount]
+        [documentId, projectIdForDoc, docName, docContent, template_id || null, 'draft', userId || null, JSON.stringify(generationMetadata), wordCount, characterCount, sentenceCount, paragraphCount, JSON.stringify(result.entityCounts || {})]
       )
 
       if (insertResult.rows.length > 0) {
         createdDocumentId = insertResult.rows[0].id
-        if (template_id) await AIGenerationJobService.incrementTemplateUsage(template_id, deps)
+        if (template_id) {
+          await AIGenerationJobService.incrementTemplateUsage(template_id, deps)
+          
+          // Trigger template profile update (feedback loop)
+          try {
+            const { TemplateAnalyticsService } = await import('../templateAnalyticsService')
+            // This recomputes the entire profile based on aggregated document entity_counts
+            setImmediate(async () => {
+              try {
+                await TemplateAnalyticsService.updateTemplateEntityProfile(template_id)
+                log.info(`[AI-JOB] Template entity profile updated for ${template_id}`)
+              } catch (err) {
+                log.warn(`[AI-JOB] Failed to update template entity profile (non-fatal)`, { template_id, error: err })
+              }
+            })
+          } catch (err) {
+            log.warn(`[AI-JOB] Could not import TemplateAnalyticsService for feedback loop`, err)
+          }
+        }
         if (projectIdForDoc && docContent.trim() && createdDocumentId) {
           await AIGenerationJobService.triggerAutoExtraction(
             jobId || 'unknown',
@@ -581,6 +616,7 @@ export class AIGenerationJobService {
           )
         }
       }
+
     } catch (docErr: any) {
       log.error(`Failed to create document for job ${jobId}:`, docErr)
     }
