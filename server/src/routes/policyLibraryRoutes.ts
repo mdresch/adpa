@@ -50,14 +50,14 @@ router.get('/', async (req: Request, res: Response) => {
       FROM policy_library r
       LEFT JOIN LATERAL (
         SELECT json_agg(json_build_object(
-          'timestamp', hist.recorded_at,
-          'score', hist.new_score
+          'timestamp', hist.timestamp,
+          'score', hist.effectiveness_score
         )) as history
         FROM (
-          SELECT recorded_at, new_score
+          SELECT timestamp, effectiveness_score
           FROM rule_control_effectiveness
           WHERE rule_code = r.rule_code
-          ORDER BY recorded_at DESC
+          ORDER BY timestamp DESC
           LIMIT 30
         ) hist
       ) h ON true
