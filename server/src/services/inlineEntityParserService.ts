@@ -92,10 +92,7 @@ export class InlineEntityParserService {
           extractedCount++;
           extractedCountByType[entityType] = (extractedCountByType[entityType] || 0) + 1;
           
-          // Add all consumed lines to the cleaned output
-          for (let k = 0; k <= consumedLines; k++) {
-            cleanedLines.push(lines[i + k]);
-          }
+          // Skip the lines consumed by this H8 tag (do not add to cleanedLines)
           i += consumedLines + 1;
           continue;
         } else {

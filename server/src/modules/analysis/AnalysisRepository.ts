@@ -250,6 +250,61 @@ export class AnalysisRepository {
   }
 
   /**
+   * Fetch paginated entities by type for a project.
+   */
+  async getProjectEntitiesByType(
+    projectId: string,
+    entityType: string,
+    options: { limit: number; offset: number }
+  ): Promise<{ entities: any[]; total: number; tableName: string }> {
+    const tableName = getAllowedEntityTableName(entityType);
+    const quotedTable = quotedEntityTableName(tableName);
+
+    // Fetch the entities. We select all columns. If there's a source_document_id, we can also try to get document names.
+    // However, table schemas vary. A simple SELECT * is safest.
+    const query = `
+      SELECT *
+      FROM ${quotedTable}
+      WHERE project_id = $1
+      ORDER BY created_at DESC
+      LIMIT $2 OFFSET $3
+    `;
+
+    const countQuery = `
+      SELECT COUNT(*) as total
+      FROM ${quotedTable}
+      WHERE project_id = $1
+    `;
+
+    const [entitiesResult, countResult] = await Promise.all([
+      this.pool.query(query, [projectId, options.limit, options.offset]),
+      this.pool.query(countQuery, [projectId])
+    ]);
+
+    // Enhance with source document information if applicable
+    const entities = entitiesResult.rows;
+    const documentIds = [...new Set(entities.map(e => e.source_document_id).filter(Boolean))];
+
+    if (documentIds.length > 0) {
+      const docsQuery = `SELECT id, name FROM documents WHERE id = ANY($1)`;
+      const docsResult = await this.pool.query(docsQuery, [documentIds]);
+      const docMap = new Map(docsResult.rows.map(d => [d.id, d.name]));
+
+      entities.forEach(e => {
+        if (e.source_document_id && docMap.has(e.source_document_id)) {
+          e.source_document_name = docMap.get(e.source_document_id);
+        }
+      });
+    }
+
+    return {
+      entities,
+      total: parseInt(countResult.rows[0].total, 10) || 0,
+      tableName
+    };
+  }
+
+  /**
    * Get document info for display
    */
   async getDocumentInfo(documentId: string) {
