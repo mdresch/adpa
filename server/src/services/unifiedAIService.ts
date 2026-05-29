@@ -332,7 +332,9 @@ class UnifiedAIService {
                   totalTokens
                 }
               })
-              await langfuse.flushAsync()
+              langfuse.flushAsync().catch((err: any) => {
+                logger.warn('[UNIFIED-AI] Langfuse telemetry flush failed (non-blocking)', { error: err.message || err })
+              })
             } catch (telemetryError) {
               logger.warn('[UNIFIED-AI] Langfuse telemetry failed (non-blocking)', { error: telemetryError instanceof Error ? telemetryError.message : String(telemetryError) })
             }

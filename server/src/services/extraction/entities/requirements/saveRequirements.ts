@@ -77,41 +77,33 @@ function normalizeType(rawType: string | undefined): 'functional' | 'non_functio
   return typeMap[normalized] || 'functional'
 }
 
-import { generateRequirementIdempotencyKey } from '../../IdempotencyKeyService'
-
 /**
- * Deduplicate requirements by idempotency key
+ * Deduplicate requirements within the batch by name
  */
-function deduplicateRequirements(projectId: string, requirements: Requirement[]): Requirement[] {
-  const deduplicatedMap = new Map<string, Requirement>()
+function deduplicateRequirements(requirements: Requirement[]): Requirement[] {
+  const uniqueMap = new Map<string, Requirement>()
 
   requirements.forEach(req => {
-    const idempotencyKey = generateRequirementIdempotencyKey(projectId, {
-      title: req.title,
-      description: req.description
-    })
+    // Use normalized name as the unique key (matches DB constraint)
+    const key = (req.title || '').toLowerCase().trim()
 
-    if (!deduplicatedMap.has(idempotencyKey)) {
-      (req as any).idempotency_key = idempotencyKey
-      deduplicatedMap.set(idempotencyKey, req)
+    if (!uniqueMap.has(key)) {
+      uniqueMap.set(key, req)
     } else {
       // Duplicate found - merge details
-      const existing = deduplicatedMap.get(idempotencyKey)!
-      const merged: Requirement = {
+      const existing = uniqueMap.get(key)!
+      uniqueMap.set(key, {
         ...existing,
         description: req.description || existing.description,
         type: req.type || existing.type,
         priority: req.priority || existing.priority,
         status: req.status || existing.status,
-        acceptance_criteria: req.acceptance_criteria || existing.acceptance_criteria,
-        source: req.source || existing.source
-      }
-        ; (merged as any).idempotency_key = idempotencyKey
-      deduplicatedMap.set(idempotencyKey, merged)
+        acceptance_criteria: req.acceptance_criteria || existing.acceptance_criteria
+      })
     }
   })
 
-  return Array.from(deduplicatedMap.values())
+  return Array.from(uniqueMap.values())
 }
 
 /**
@@ -129,12 +121,13 @@ export async function saveRequirements(
   }
 
   try {
-    // Deduplicate requirements
-    const uniqueRequirements = deduplicateRequirements(projectId, requirements)
+    // Step 1: Deduplicate within the batch by name to prevent "cannot affect row a second time" error
+    const uniqueRequirements = deduplicateRequirements(requirements)
     const skippedCount = requirements.length - uniqueRequirements.length
 
-    if (skippedCount > 0) {
-      logger.info(`[EXTRACTION-REQUIREMENTS] Deduplicated ${requirements.length} → ${uniqueRequirements.length} requirements`)
+    if (uniqueRequirements.length === 0) {
+      logger.info('[EXTRACTION] No valid requirements after deduplication')
+      return { saved: 0, skipped: 0, failed: 0 }
     }
 
     // Build bulk insert
@@ -173,22 +166,22 @@ export async function saveRequirements(
       )
     })
 
-    // Execute bulk insert
+    // Execute bulk insert with name conflict handling
     await client.query(
       `INSERT INTO requirements (
         project_id, title, name, description, type, priority, status, 
         acceptance_criteria, source_document_id, created_by, idempotency_key
       )
       VALUES ${placeholders.join(', ')}
-      ON CONFLICT (project_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO UPDATE SET
+      ON CONFLICT (project_id, name) DO UPDATE SET
         title = EXCLUDED.title,
-        name = EXCLUDED.name,
         description = EXCLUDED.description,
         type = EXCLUDED.type,
         priority = EXCLUDED.priority,
         status = EXCLUDED.status,
         acceptance_criteria = EXCLUDED.acceptance_criteria,
         source_document_id = COALESCE(EXCLUDED.source_document_id, requirements.source_document_id),
+        idempotency_key = EXCLUDED.idempotency_key,
         updated_at = CURRENT_TIMESTAMP`,
       values
     )

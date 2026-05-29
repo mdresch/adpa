@@ -268,12 +268,8 @@ class DocumentGenerationService {
       const draftConcurrency = this.getDraftConcurrency(request.provider)
       logger.info(`[AGENT] Phase 2: Drafting ${generationPlan.sections.length} sections with concurrency ${draftConcurrency}...`)
 
-      const { InlineEntityParserService } = await import('./inlineEntityParserService')
-      
-      const combinedEntitiesByType: Record<string, any[]> = {}
-
       const draftedSections = await this.mapWithConcurrency(generationPlan.sections, draftConcurrency, async (sectionTask, index) => {
-        const sectionProse = await this.draftSection({
+        return await this.draftSection({
           task: sectionTask,
           order: index,
           project,
@@ -290,31 +286,32 @@ class DocumentGenerationService {
           templateCategory: template?.category,
           templateSystemPrompt: template?.system_prompt,
         })
-
-
-        const parseResult = await InlineEntityParserService.parseAndProcess({
-          projectId: request.projectId,
-          userId: request.userId,
-          documentId: docId,
-          markdown: sectionProse.markdown
-        }).catch(err => {
-          logger.error(`Inline entity parsing failed for section "${sectionTask.heading}":`, err)
-          return { cleanedMarkdown: sectionProse.markdown, extractedCount: 0, extractedCountByType: {}, entitiesByType: {} }
-        })
-
-        // Merge entities for global deduplication
-        if (parseResult.entitiesByType) {
-          for (const [type, entities] of Object.entries(parseResult.entitiesByType)) {
-            if (!combinedEntitiesByType[type]) combinedEntitiesByType[type] = []
-            combinedEntitiesByType[type].push(...entities)
-          }
-        }
-
-        return {
-          ...sectionProse,
-          markdown: parseResult.cleanedMarkdown
-        }
       })
+
+      // Sort sections back into their planned order
+      draftedSections.sort((a, b) => a.order - b.order)
+
+      // 6. AGENTIC PHASE 3: Synthesis & Assembly
+      logger.info(`[AGENT] Phase 3: Assembling Document & Extracting Entities...`)
+
+      let rawMarkdown = ""
+      let totalTokensUsed = 0;
+      for (const section of draftedSections) {
+        totalTokensUsed += section.tokensUsed
+        rawMarkdown += section.markdown.trim() + "\n\n"
+      }
+
+      // Perform single-pass entity extraction and cleanup
+      const { InlineEntityParserService } = await import('./inlineEntityParserService')
+      const parseResult = await InlineEntityParserService.parseAndProcess({
+        projectId: request.projectId,
+        userId: request.userId,
+        documentId: docId,
+        markdown: rawMarkdown
+      })
+
+      let markdown = this.validateAndCleanMarkdown(parseResult.cleanedMarkdown)
+      const combinedEntitiesByType = parseResult.entitiesByType || {}
 
       // Global Deduplication and Context Adherence Scoring
       const finalUniqueCounts: Record<string, number> = {}
@@ -355,27 +352,11 @@ class DocumentGenerationService {
       }
 
       // Calculate overall Context Reuse Score
-      const contextReuseScore = providedEntities.length > 0 
+      const contextMatchingScore = providedEntities.length > 0 
         ? Math.round((reusedEntityIdentities.length / providedEntities.length) * 100)
         : 100 // 100% if no context was provided to adhere to
 
-      // Sort sections back into their planned order
-      draftedSections.sort((a, b) => a.order - b.order)
-
-
-      let totalTokensUsed = 0;
-
-      // 6. AGENTIC PHASE 3: Synthesis & Assembly
-      logger.info(`[AGENT] Phase 3: Assembling Document...`)
-
-      let finalMarkdown = ""
-      for (const section of draftedSections) {
-        totalTokensUsed += section.tokensUsed
-        // Ensure each section is separated cleanly
-        finalMarkdown += section.markdown.trim() + "\n\n"
-      }
-
-      let markdown = this.validateAndCleanMarkdown(finalMarkdown)
+      const appliedContextEntities = reusedEntityIdentities
 
       // 6.5. AGENTIC PHASE 4 & 5: Autonomous Auditing and Patching Loop
       logger.info(`[AGENT] Phase 4: Commencing Policy Audit Loop...`)
@@ -613,7 +594,17 @@ class DocumentGenerationService {
     }
 
     sectionPrompt += `\n---\n\n`
-    sectionPrompt += `Output the Markdown for your assigned section starting exactly with ${params.task.heading}.`
+    sectionPrompt += `Output the Markdown for your assigned section starting exactly with ${params.task.heading}.\n\n`
+    
+    // Explicit Instruction for table schema alignment
+    sectionPrompt += `### IMPORTANT: Entity Schema Alignment Instruction\n`
+    sectionPrompt += `Ensure that all extracted entities wrapped in H8 formats exactly match the property fields defined in the database 'template_extracted_entities' table schema.\n`
+    sectionPrompt += `Specifically, for each entity type:\n`
+    sectionPrompt += `- 'stakeholders' MUST map to the 'STAKEHOLDER' entity_type, using the 'name' field as the main identifier (stored as 'extracted_name') and must contain 'role', 'interest_level', and 'influence_level' in the JSON body.\n`
+    sectionPrompt += `- 'requirements' MUST map to the 'REQUIREMENT' entity_type, using the 'title' field as the main identifier (stored as 'extracted_name') and must contain 'description', 'type', and 'priority' in the JSON body.\n`
+    sectionPrompt += `- 'constraints' MUST map to the 'CONSTRAINT' entity_type, using the 'title' field as the main identifier (stored as 'extracted_name') and must contain 'description' and 'type' in the JSON body.\n`
+    sectionPrompt += `All generated JSON values under the H8 tags will be parsed and stored directly in the 'structural_payload' column of the 'template_extracted_entities' table. Do not add unstructured wrapper properties or nesting levels to the JSON objects.\n\n`
+
     sectionPrompt += buildInlineEntityExtractionPrompt({
       templateName: params.templateName,
       category: params.templateCategory,

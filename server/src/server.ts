@@ -166,7 +166,8 @@ import analysisModuleRoutes from "./modules/analysis/routes"
 import openuiChatModuleRoutes from "./modules/openuiChat/routes"
 import { registerRoutes } from "./routes/registry"
 import { shouldStartServerForArgv } from "./utils/serverStartup"
-import { startEffectivenessWorker } from "./workers/effectivenessWorker"
+import { startEffectivenessWorker, initializeEffectivenessListener } from "./workers/effectivenessWorker"
+import councilRouter from "./api/governance/councilRouter"
 
 const app = express()
 const server = createServer(app)
@@ -341,6 +342,7 @@ app.use("/api/escalation", escalationRoutes)
 app.use("/api/quality-audits", qualityAuditRoutes)
 app.use("/api/compliance", complianceRoutes)
 app.use("/api/v1/policy-library", policyLibraryRoutes)
+app.use("/api/v1/governance", councilRouter)
 console.log("✅ Policy Library Routes Mounted")
 app.use("/api/admin", adminRoutes)
 app.use("/api/onboarding", documentUploadRoutes)
@@ -470,12 +472,12 @@ app.use(errorHandler)
 async function startServer() {
   await initializeServerWithDependencyGraph(server, io, PORT)
 
-  // Non-blocking activation of the out-of-band compliance loop
+  // Non-blocking activation of the out-of-band compliance and adjudication loops
   try {
-    const DATABASE_URL = process.env.DATABASE_URL || "postgresql://localhost:5432/adpa";
-    await startEffectivenessWorker(pool, DATABASE_URL);
+    await startEffectivenessWorker();
+    await initializeEffectivenessListener();
   } catch (workerErr) {
-    logger.error({ err: workerErr }, '⚠️ Initialization skipped: Governance Engine failed to bind to event channel.');
+    logger.error({ err: workerErr }, '⚠️ Initialization skipped: Governance Engine failed to bind to event channels.');
   }
 }
 

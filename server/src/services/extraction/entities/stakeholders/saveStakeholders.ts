@@ -103,6 +103,32 @@ async function filterExistingStakeholders(
 }
 
 /**
+ * Deduplicate stakeholders within the batch by name
+ */
+function deduplicateStakeholders(stakeholders: Stakeholder[]): Stakeholder[] {
+  const uniqueMap = new Map<string, Stakeholder>()
+  
+  stakeholders.forEach(s => {
+    const key = (s.name || '').toLowerCase().trim()
+    if (!uniqueMap.has(key)) {
+      uniqueMap.set(key, s)
+    } else {
+      // Merge details if duplicate found in same batch
+      const existing = uniqueMap.get(key)!
+      uniqueMap.set(key, {
+        ...existing,
+        role: s.role || existing.role,
+        email: s.email || existing.email,
+        expectations: s.expectations || existing.expectations,
+        concerns: s.concerns || existing.concerns
+      })
+    }
+  })
+  
+  return Array.from(uniqueMap.values())
+}
+
+/**
  * Save stakeholders to database
  */
 export async function saveStakeholders(
@@ -117,12 +143,12 @@ export async function saveStakeholders(
   }
 
   try {
-    // Step 1: No longer filtering existing - let ON CONFLICT handle merging
-    const stakeholdersToSave = stakeholders
-    const skippedCount = 0
+    // Step 1: Deduplicate within the batch to prevent "cannot affect row a second time" error
+    const uniqueStakeholders = deduplicateStakeholders(stakeholders)
+    const skippedCount = stakeholders.length - uniqueStakeholders.length
 
-    if (stakeholdersToSave.length === 0) {
-      logger.info('[EXTRACTION] No stakeholders to save')
+    if (uniqueStakeholders.length === 0) {
+      logger.info('[EXTRACTION] No valid stakeholders after deduplication')
       return { saved: 0, skipped: 0, failed: 0 }
     }
 
@@ -131,7 +157,7 @@ export async function saveStakeholders(
     const values: any[] = []
     const placeholders: string[] = []
 
-    stakeholdersToSave.forEach((s, index) => {
+    uniqueStakeholders.forEach((s, index) => {
       const offset = index * 11
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11})`
@@ -179,8 +205,7 @@ export async function saveStakeholders(
         expectations, concerns, source_document_id, created_by, idempotency_key
       )
       VALUES ${placeholders.join(', ')}
-      ON CONFLICT (project_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO UPDATE SET
-        name = EXCLUDED.name,
+      ON CONFLICT (project_id, name) DO UPDATE SET
         role = EXCLUDED.role,
         email = EXCLUDED.email,
         interest_level = EXCLUDED.interest_level,
@@ -188,14 +213,15 @@ export async function saveStakeholders(
         expectations = EXCLUDED.expectations,
         concerns = EXCLUDED.concerns,
         source_document_id = COALESCE(EXCLUDED.source_document_id, stakeholders.source_document_id),
+        idempotency_key = EXCLUDED.idempotency_key,
         updated_at = CURRENT_TIMESTAMP`,
       values
     )
 
-    logger.info(`[EXTRACTION] Saved ${stakeholdersToSave.length} stakeholders (${stakeholders.length - stakeholdersToSave.length} duplicates skipped)`)
+    logger.info(`[EXTRACTION] Saved ${uniqueStakeholders.length} stakeholders (${skippedCount} duplicates within batch skipped)`)
 
     return {
-      saved: stakeholdersToSave.length,
+      saved: uniqueStakeholders.length,
       skipped: skippedCount,
       failed: 0
     }

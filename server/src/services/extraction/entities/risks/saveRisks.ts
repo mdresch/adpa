@@ -186,7 +186,7 @@ export async function saveRisks(
       )
     })
 
-    // Execute bulk insert with idempotency key conflict handling (matches partial unique index)
+    // Execute bulk insert with name conflict handling (matches strict project_name index)
     await client.query(
       `INSERT INTO risks (
         project_id, name, description, category, probability, impact, risk_level,
@@ -194,7 +194,7 @@ export async function saveRisks(
         created_by, source_document_id, idempotency_key
       )
       VALUES ${placeholders.join(', ')}
-      ON CONFLICT (project_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO UPDATE SET
+      ON CONFLICT (project_id, name) DO UPDATE SET
         description = EXCLUDED.description,
         category = EXCLUDED.category,
         probability = EXCLUDED.probability,
@@ -206,6 +206,7 @@ export async function saveRisks(
         status = EXCLUDED.status,
         title = EXCLUDED.title,
         source_document_id = COALESCE(EXCLUDED.source_document_id, risks.source_document_id),
+        idempotency_key = EXCLUDED.idempotency_key,
         updated_at = CURRENT_TIMESTAMP`,
       values
     )
