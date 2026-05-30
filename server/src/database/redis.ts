@@ -95,7 +95,11 @@ export function getRedis(): Redis {
     
     // Create a temporary client pointing to localhost as ultimate panic fallback
     // to avoid returning null to synchronous callers immediately
-    return new Redis('redis://localhost:6379', { lazyConnect: true })
+    const fallbackClient = new Redis('redis://localhost:6379', { lazyConnect: true })
+    fallbackClient.on('error', (err) => {
+      logger.debug(`[REDIS] Fallback client connection connection deferred or offline: ${err.message}`)
+    })
+    return fallbackClient
   }
   return redisClient
 }
