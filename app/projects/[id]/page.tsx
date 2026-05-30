@@ -2151,6 +2151,8 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
         return <Clock className="h-4 w-4 text-blue-500" />
       case "draft":
         return <AlertCircle className="h-4 w-4 text-yellow-500" />
+      case "failed":
+        return <AlertCircle className="h-4 w-4 text-red-500" />
       default:
         return <FileText className="h-4 w-4 text-muted-foreground" />
     }
@@ -2164,6 +2166,8 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
         return "secondary"
       case "draft":
         return "outline"
+      case "failed":
+        return "destructive"
       default:
         return "secondary"
     }

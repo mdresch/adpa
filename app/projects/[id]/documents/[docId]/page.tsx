@@ -802,6 +802,8 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
         return "bg-gradient-to-r from-yellow-500 to-orange-500 text-white"
       case "draft":
         return "bg-gradient-to-r from-gray-500 to-slate-500 text-white"
+      case "failed":
+        return "bg-gradient-to-r from-red-500 to-rose-500 text-white"
       default:
         return "bg-gradient-to-r from-slate-500 to-gray-500 text-white"
     }
