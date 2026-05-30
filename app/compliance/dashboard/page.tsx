@@ -9,6 +9,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { getApiBaseUrl } from '@/lib/api-url'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -220,7 +221,18 @@ export default function ComplianceDashboardPage() {
             Monitor compliance with PMBOK, BABOK, and DMBOK standards across your documents
           </p>
         </div>
-        <div className="flex gap-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="outline" size="sm" className="flex items-center gap-1.5 h-9 border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800" asChild>
+            <Link href="/governance">
+              🏛️ Governance Dashboard
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" className="flex items-center gap-1.5 h-9 border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800" asChild>
+            <Link href="/compliance/policy-library">
+              📜 Policy Library
+            </Link>
+          </Button>
+          <div className="h-6 w-px bg-slate-300 dark:bg-slate-700 hidden sm:block mx-1"></div>
           <Select value={selectedPackType} onValueChange={setSelectedPackType}>
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="All Standards" />

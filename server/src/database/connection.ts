@@ -342,9 +342,13 @@ async function connectDatabaseInternal(): Promise<void> {
           dbUrl.hostname.includes('pooler.supabase.com')
 
         // HARDENING: If it's a pooler connection and missing pgbouncer=true, add it!
-        if (isPoolerConnection && !dbUrl.searchParams.has('pgbouncer')) {
-          console.log('🔧 Auto-appending pgbouncer=true for transaction pooler compatibility')
-          dbUrl.searchParams.set('pgbouncer', 'true')
+        if (isPoolerConnection) {
+          if (!dbUrl.searchParams.has('pgbouncer')) {
+            console.log('🔧 Auto-appending pgbouncer=true for transaction pooler compatibility')
+            dbUrl.searchParams.set('pgbouncer', 'true')
+          }
+          // Disable prepared statements for PgBouncer compatibility
+          poolConfig.prepareThreshold = 0
         }
 
         if (isDirectConnection) {

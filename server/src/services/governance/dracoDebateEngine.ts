@@ -157,14 +157,15 @@ Protect organizational safety without causing developer lockout loops. Ensure yo
     const realistVerdict = realistRes.object as DracoAgentVerdict;
     const arbitratorVerdict = arbitratorRes.object as DracoAgentVerdict;
 
-    // Strict 3/3 Unanimity Gate
+    // AI Consensus Status
     const consensusAchieved = puristVerdict.approved && realistVerdict.approved && arbitratorVerdict.approved;
     const finalStatus = consensusAchieved ? 'DRACO_CANDIDATE' : 'COUNCIL_DEADLOCK';
     
-    const patchPayload = consensusAchieved ? {
+    // Always provide the Arbitrator's compromise as the proposed recovery path
+    const patchPayload = {
       description: arbitratorVerdict.proposedDescriptionUpdate,
       thresholds: arbitratorVerdict.proposedThresholdAdjustment
-    } : null;
+    };
 
     const auditId = await logLedgerEntry(
       ruleCode,

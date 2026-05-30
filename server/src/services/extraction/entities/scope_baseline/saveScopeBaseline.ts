@@ -6,6 +6,7 @@ import { logger } from '../../../../utils/logger'
 import type { PoolClient } from 'pg'
 import type { PersistenceResult } from '../../base/Persistence'
 import type { ScopeBaseline } from './types'
+import { coerceArray } from '../../base/Parser'
 
 export async function saveScopeBaseline(
     client: PoolClient,
@@ -34,10 +35,10 @@ export async function saveScopeBaseline(
                 projectId,
                 e.statement || null,
                 e.boundaries || null,
-                e.inclusions || [],
-                e.exclusions || [],
-                e.assumptions || [],
-                e.constraints || [],
+                coerceArray(e.inclusions),
+                coerceArray(e.exclusions),
+                coerceArray(e.assumptions),
+                coerceArray(e.constraints),
                 e.approval_date || null,
                 e.version || null,
                 e.source_document_id || null,

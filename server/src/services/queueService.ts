@@ -654,9 +654,9 @@ import("./digitalTwinTriggerService").then(({ processDocumentTrigger }) => {
   ; (async () => {
     try {
       console.log("[GKG] Registering GKG sync processors...")
-      const { getNeo4jDriver, getNeo4jDatabase } = await import("../utils/neo4j")
-      const { getDatabasePool } = await import("../database/connection")
-      const { runBootstrap, runSyncProject, runSyncDocument, runGkgFullReconciliation } = await import("./gkg")
+      const { getNeo4jDriver, getNeo4jDatabase } = require("../utils/neo4j")
+      const { getDatabasePool } = require("../database/connection")
+      const { runBootstrap, runSyncProject, runSyncDocument, runGkgFullReconciliation } = require("./gkg")
 
       gkgSyncQueue.process("gkg-bootstrap", QUEUE_PREFETCH, async (job) => {
         console.log("[GKG] Processing gkg-bootstrap")
@@ -761,7 +761,7 @@ if (process.env.NODE_ENV !== 'test') {
   ;(async () => {
     try {
       console.log("[SEMANTIC] Registering semantic processing processors...")
-      const { processSemanticDocument, processSemanticBatch } = await import("./jobs/SemanticProcessingJobService")
+      const { processSemanticDocument, processSemanticBatch } = require("./jobs/SemanticProcessingJobService")
 
       semanticProcessingQueue.process("semantic-process-document", QUEUE_PREFETCH, async (job) => {
         logger.info(`[WORKER] semantic-processing worker ${WORKER_ID} picked up document job: ${job.id}`)

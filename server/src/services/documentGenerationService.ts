@@ -446,7 +446,7 @@ Based on the type of error encountered, please follow these steps to resolve the
 
 1. **Governance Lockout**:
    If the error indicates a \`GOVERNANCE_LOCKOUT\`, one or more control frameworks targeted by this template are currently marked as \`INEFFECTIVE\` (e.g., due to telemetry degradation).
-   * **Action**: Go to the [Governance Dashboard](/governance) to review the pending AI prompts/patches. A council member (like Marcus Vance) must review and adjudicate (approve or override) the active tribunal candidates to restore control effectiveness to \`EFFECTIVE\`.
+   * **Action**: Go to the [Governance Dashboard](/governance) to review the pending AI prompts/patches. A council member must review and adjudicate (approve or override) the active tribunal candidates to restore control effectiveness to \`EFFECTIVE\`.
 
 2. **API Provider Rate Limits / Timeout**:
    If the error is related to the AI provider (e.g., Groq, OpenAI, Mistral, Gemini), the request may have timed out or hit rate/token limits.

@@ -389,10 +389,30 @@ export function coerceInteger(value: any): number | null {
 /**
  * Coerce value to array if it's not already
  */
-export function coerceArray<T>(value: any): T[] {
-  if (Array.isArray(value)) return value
-  if (value === null || value === undefined) return []
-  return [value]
+export function coerceArray<T = string>(value: any): T[] {
+  if (Array.isArray(value)) {
+    return value
+      .map(item => (typeof item === 'string' ? item.trim() : String(item ?? '').trim()) as unknown as T)
+      .filter(item => (item as any).length > 0)
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) return []
+    if (trimmed.includes(',') || trimmed.includes(';') || trimmed.includes('|')) {
+      return trimmed
+        .split(/[,;|]/)
+        .map(part => part.trim() as unknown as T)
+        .filter(part => (part as any).length > 0)
+    }
+    return [trimmed as unknown as T]
+  }
+
+  if (value === null || value === undefined) {
+    return []
+  }
+
+  return [value as unknown as T]
 }
 
 /**

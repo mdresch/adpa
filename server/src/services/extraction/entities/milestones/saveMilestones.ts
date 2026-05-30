@@ -44,18 +44,19 @@ function deduplicateMilestones(projectId: string, milestones: Milestone[]): Mile
   const deduplicatedMap = new Map<string, Milestone>()
 
   milestones.forEach(milestone => {
+    const normalizedName = milestone.name.trim().toLowerCase()
     const idempotencyKey = generateMilestoneIdempotencyKey(projectId, {
       name: milestone.name,
       planned_date: milestone.due_date
     })
 
-    if (!deduplicatedMap.has(idempotencyKey)) {
+    if (!deduplicatedMap.has(normalizedName)) {
       // Add hash to the object for later use in save
       (milestone as any).idempotency_key = idempotencyKey
-      deduplicatedMap.set(idempotencyKey, milestone)
+      deduplicatedMap.set(normalizedName, milestone)
     } else {
       // Duplicate found - merge details
-      const existing = deduplicatedMap.get(idempotencyKey)!
+      const existing = deduplicatedMap.get(normalizedName)!
       const merged: Milestone = {
         ...existing,
         description: milestone.description || existing.description,
@@ -64,8 +65,8 @@ function deduplicateMilestones(projectId: string, milestones: Milestone[]): Mile
         deliverables: milestone.deliverables?.length ? milestone.deliverables : existing.deliverables,
         dependencies: milestone.dependencies?.length ? milestone.dependencies : existing.dependencies
       }
-        ; (merged as any).idempotency_key = idempotencyKey
-      deduplicatedMap.set(idempotencyKey, merged)
+      ; (merged as any).idempotency_key = idempotencyKey
+      deduplicatedMap.set(normalizedName, merged)
     }
   })
 
@@ -137,12 +138,12 @@ export async function saveMilestones(
         project_id, name, description, due_date, status, source_document_id, created_by, idempotency_key
       )
       VALUES ${placeholders.join(', ')}
-      ON CONFLICT (project_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO UPDATE SET
-        name = EXCLUDED.name,
+      ON CONFLICT (project_id, name) DO UPDATE SET
         description = EXCLUDED.description,
         due_date = EXCLUDED.due_date,
         status = EXCLUDED.status,
         source_document_id = COALESCE(EXCLUDED.source_document_id, milestones.source_document_id),
+        idempotency_key = COALESCE(EXCLUDED.idempotency_key, milestones.idempotency_key),
         updated_at = CURRENT_TIMESTAMP`,
       values
     )

@@ -6,6 +6,7 @@ import { logger } from '../../../../utils/logger'
 import type { PoolClient } from 'pg'
 import type { PersistenceResult } from '../../base/Persistence'
 import type { ResourcePlan } from './types'
+import { coerceArray } from '../../base/Parser'
 
 export async function saveResourcePlans(
     client: PoolClient,
@@ -36,7 +37,7 @@ export async function saveResourcePlans(
                 e.required_quantity || null,
                 e.start_date || null,
                 e.end_date || null,
-                e.skill_set || [],
+                coerceArray(e.skill_set),
                 e.location || null,
                 e.status || 'Planned',
                 e.source_document_id || null,
