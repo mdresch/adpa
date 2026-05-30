@@ -7,6 +7,7 @@ import type { PoolClient } from 'pg'
 import type { PersistenceResult } from '../../base/Persistence'
 import type { ScheduleActivity } from './types'
 import { isValidUUID } from '../../base/Persistence'
+import { coerceArray } from '../../base/Parser'
 
 function normalizeTimestamp(value?: string | null): string | null {
     if (!value || typeof value !== 'string') return null
@@ -74,8 +75,8 @@ export async function saveScheduleActivities(
                 duration_days: e.duration_days || null,
                 status: e.status || 'Not Started',
                 percent_complete: e.percent_complete || 0,
-                assigned_to: e.assigned_to || [],
-                dependencies: e.dependencies || [],
+                assigned_to: coerceArray(e.assigned_to),
+                dependencies: coerceArray(e.dependencies),
                 is_critical: e.is_critical || false,
                 source_document_id: isValidUUID(e.source_document_id) ? e.source_document_id : null,
                 created_by: userId

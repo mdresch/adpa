@@ -251,8 +251,27 @@ export function NotificationCenter() {
   }, [])
 
   const addNotification = (notification: Omit<Notification, 'id' | 'timestamp' | 'read'>) => {
+    let displayMessage = notification.message
+    let displayTitle = notification.title
+
+    if (notification.message && typeof notification.message === 'string' && notification.message.trim().startsWith('{')) {
+      try {
+        const parsed = JSON.parse(notification.message)
+        if (parsed.message) {
+          displayMessage = parsed.message
+        }
+        if (parsed.error === 'GOVERNANCE_LOCKOUT') {
+          displayTitle = 'Governance Blocked'
+        }
+      } catch (_) {
+        // ignore
+      }
+    }
+
     const newNotification: Notification = {
       ...notification,
+      title: displayTitle,
+      message: displayMessage,
       id: `notif-${Date.now()}-${Math.random().toString(36).substring(7)}`,
       timestamp: new Date().toISOString(),
       read: false,

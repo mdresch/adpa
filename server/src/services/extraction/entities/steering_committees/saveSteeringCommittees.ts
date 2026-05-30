@@ -7,6 +7,7 @@ import type { PoolClient } from 'pg'
 import type { PersistenceResult } from '../../base/Persistence'
 import { normalizeDate } from '../../base/Persistence'
 import type { SteeringCommittee } from './types'
+import { coerceArray } from '../../base/Parser'
 
 export async function saveSteeringCommittees(
     client: PoolClient,
@@ -35,7 +36,7 @@ export async function saveSteeringCommittees(
                 projectId,
                 e.name || '',
                 e.mandate || null,
-                e.members || [],
+                coerceArray(e.members),
                 e.meeting_cadence || null,
                 normalizeDate(e.last_meeting_date), // Use normalizeDate
                 e.source_document_id || null,

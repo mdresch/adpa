@@ -302,6 +302,7 @@ export interface ProjectContext {
   status?: string
   project_team?: any[]
   project_stakeholders?: any[]
+  existing_entities?: Array<{ name: string; type: string }>
 }
 
 export interface ProcessingStatus {

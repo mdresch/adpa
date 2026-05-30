@@ -149,11 +149,11 @@ class DocumentGenerationService {
   }
 
   async generateDocument(request: DocumentGenerationRequest) {
+    let isDocumentCreated = false;
+    const docId = request.documentId || uuidv4();
     try {
       logger.info(`Starting agentic document generation for project ${request.projectId}`)
       
-      const docId = request.documentId || uuidv4()
-
       // 1. Fetch project context
       const project = await this.getProjectContext(request.projectId)
       logger.info(`Project context fetched: ${project.name}`)
@@ -163,6 +163,26 @@ class DocumentGenerationService {
         ? await this.getTemplate(request.templateId)
         : null
       logger.info(`Template: ${template?.name || 'None'}`)
+
+      // 2.3. Pre-insert a minimal/draft document row to satisfy foreign key constraints for entity extraction during parallel drafting
+      const docName = request.name || (template?.name ? `Generated: ${template.name}` : 'Generated Document')
+      await pool.query(
+        `INSERT INTO documents (id, project_id, name, content, template_id, status, created_by, version, semantic_version)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         ON CONFLICT (id) DO NOTHING`,
+        [
+          docId,
+          request.projectId,
+          docName,
+          '',
+          request.templateId || null,
+          'draft',
+          request.userId || null,
+          1,
+          '1.0.0'
+        ]
+      )
+      isDocumentCreated = true;
 
       // 2.2. The Strict Hard Enforcement Barrier Check
       const documentType = template?.name || 'Unknown Document Type';
@@ -191,25 +211,6 @@ class DocumentGenerationService {
           affectedControls: degradedControls.map(c => ({ code: c.rule_code, title: c.title }))
         }));
       }
-
-      // 2.3. Pre-insert a minimal/draft document row to satisfy foreign key constraints for entity extraction during parallel drafting
-      const docName = request.name || (template?.name ? `Generated: ${template.name}` : 'Generated Document')
-      await pool.query(
-        `INSERT INTO documents (id, project_id, name, content, template_id, status, created_by, version, semantic_version)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-         ON CONFLICT (id) DO NOTHING`,
-        [
-          docId,
-          request.projectId,
-          docName,
-          '',
-          request.templateId || null,
-          'draft',
-          request.userId || null,
-          1,
-          '1.0.0'
-        ]
-      )
 
       // 2.5. Fetch GKG context when template has gkg_context_strategy
       let gkg_context_snapshot: { markdown: string; unitsCount: number; documentsCount: number; entityTypes: string[] } | undefined
@@ -416,6 +417,71 @@ class DocumentGenerationService {
 
     } catch (error) {
       logger.error('Agentic document generation failed:', error)
+      
+      if (isDocumentCreated) {
+        try {
+          let errorMessage = error instanceof Error ? error.message : String(error);
+          
+          // Try parsing JSON error (e.g. GOVERNANCE_LOCKOUT error)
+          try {
+            const parsed = JSON.parse(errorMessage);
+            if (parsed.message) {
+              errorMessage = parsed.message;
+            }
+          } catch (_) {}
+
+          const errorMarkdown = `# ❌ Document Generation Failed
+
+The ADPA AI Document Generation engine encountered an error while attempting to generate this document.
+
+## 🔍 Diagnostics & Rationale
+
+* **Error Message**: ${errorMessage}
+* **Timestamp**: ${new Date().toLocaleString()}
+* **Document ID**: ${docId}
+
+## 🛠️ Recommended Resolution Steps
+
+Based on the type of error encountered, please follow these steps to resolve the issue:
+
+1. **Governance Lockout**:
+   If the error indicates a \`GOVERNANCE_LOCKOUT\`, one or more control frameworks targeted by this template are currently marked as \`INEFFECTIVE\` (e.g., due to telemetry degradation).
+   * **Action**: Go to the [Governance Dashboard](/governance) to review the pending AI prompts/patches. A council member must review and adjudicate (approve or override) the active tribunal candidates to restore control effectiveness to \`EFFECTIVE\`.
+
+2. **API Provider Rate Limits / Timeout**:
+   If the error is related to the AI provider (e.g., Groq, OpenAI, Mistral, Gemini), the request may have timed out or hit rate/token limits.
+   * **Action**: Wait a few moments and try generating the document again. If it persists, verify your API keys and model availability in the settings under [AI Models](/settings/ai-models).
+
+3. **System / Dependency Failures**:
+   If this is a system database or queue error:
+   * **Action**: Check if Postgres, Redis, or RabbitMQ are running and reachable by checking the server logs.
+
+---
+*Note: This failure document has been retained in the library for diagnostic tracing. Once you have resolved the underlying issue, you can safely delete this document and re-trigger a clean generation.*
+`;
+
+          await pool.query(
+            `UPDATE documents 
+             SET content = $1, 
+                 status = 'failed', 
+                 word_count = $2, 
+                 character_count = $3,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = $4`,
+            [
+              errorMarkdown,
+              errorMarkdown.split(/\s+/).filter(w => w.length > 0).length,
+              errorMarkdown.length,
+              docId
+            ]
+          );
+          
+          logger.info(`[DOC-GEN] Updated document ${docId} with failure diagnostics.`);
+        } catch (dbErr) {
+          logger.error(`[DOC-GEN] Failed to write error diagnostics to document ${docId}:`, dbErr);
+        }
+      }
+      
       throw error
     }
   }

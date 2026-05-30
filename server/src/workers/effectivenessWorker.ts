@@ -21,7 +21,7 @@ export async function initializeEffectivenessListener(): Promise<void> {
   const client = await pool.connect();
 
   try {
-    // Open a persistent database notification channel for governance states
+    // ─── LAYER 1: EVENT-DRIVEN FAST PATH (LISTEN/NOTIFY) ────────────────────
     await client.query('LISTEN governance_control_mutation');
     logger.info('📡 ADPA Worker Loop: Actively listening on channel [governance_control_mutation]...');
 
@@ -30,31 +30,20 @@ export async function initializeEffectivenessListener(): Promise<void> {
 
       try {
         const payload: ControlDegradationPayload = JSON.parse(msg.payload);
-        
-        logger.warn(`🚨 STATE SHIFT: Control '${payload.ruleCode}' dropped to INEFFECTIVE status.`);
-        logger.info(`[WORKER] Spawning autonomous Draco Tribunal for template profile: ${payload.documentType}`);
-
-        // Construct the template-aware context map
-        const templateGates = {
-          minimumRequiredScore: payload.minimumRequiredScore,
-          mandatoryKeywords: payload.mandatoryKeywords
-        };
-
-        // Fire the 4-agent adjudication loop out-of-band
-        const outcome = await executeDracoDebate(
-          payload.ruleCode,
-          payload.documentType,
-          templateGates,
-          payload.historicalTrend,
-          payload.failureLogs
-        );
-
-        logger.info(`[WORKER] Draco Tribunal processing complete. Outcome Status: ${outcome.finalStatus}`);
-
+        await triggerAdjudication(payload);
       } catch (parseError) {
         logger.error('❌ Worker failed to parse governance notification payload:', parseError);
       }
     });
+
+    // ─── LAYER 2: POLLING FALLBACK (SAFETY SWEEP) ──────────────────────────
+    // Every 5 minutes, sweep for INEFFECTIVE controls that missed the notify trigger
+    setInterval(async () => {
+      await performSafetySweep();
+    }, 5 * 60 * 1000);
+
+    // Run one sweep immediately on startup
+    performSafetySweep().catch(err => logger.error('[WORKER] Initial safety sweep failed', err));
 
     // Basic reconnect resiliency block
     client.on('error', (err) => {
@@ -67,6 +56,82 @@ export async function initializeEffectivenessListener(): Promise<void> {
     logger.error('🚨 Critical: Failed to establish background database event listener hook:', error);
     client.release();
     throw error;
+  }
+}
+
+/**
+ * Triggers the Draco Tribunal for a specific control failure.
+ */
+async function triggerAdjudication(payload: ControlDegradationPayload) {
+  logger.warn(`🚨 ADJUDICATION TRIGGERED: Control '${payload.ruleCode}' is INEFFECTIVE.`);
+  logger.info(`[WORKER] Spawning autonomous Draco Tribunal for template profile: ${payload.documentType}`);
+
+  try {
+    const templateGates = {
+      minimumRequiredScore: payload.minimumRequiredScore,
+      mandatoryKeywords: payload.mandatoryKeywords
+    };
+
+    const outcome = await executeDracoDebate(
+      payload.ruleCode,
+      payload.documentType,
+      templateGates,
+      payload.historicalTrend,
+      payload.failureLogs
+    );
+
+    logger.info(`[WORKER] Draco Tribunal processing complete. Outcome Status: ${outcome.finalStatus}`);
+  } catch (error) {
+    logger.error(`[WORKER] Adjudication failed for ${payload.ruleCode}:`, error);
+  }
+}
+
+/**
+ * Sweeps for INEFFECTIVE controls that do not have a PENDING audit record.
+ */
+async function performSafetySweep() {
+  logger.info('[WORKER] Running Governance Safety Sweep...');
+  
+  try {
+    // Find active, ineffective policies that don't have a PENDING ledger record
+    const res = await pool.query(`
+      SELECT 
+        rule_code, 
+        target_document_types, 
+        execution_schema,
+        control_effectiveness_score
+      FROM policy_library 
+      WHERE control_effectiveness_status = 'INEFFECTIVE'
+      AND status = 'ACTIVE'
+      AND rule_code NOT IN (
+        SELECT rule_code FROM governance_audit_ledger WHERE decision_status = 'PENDING'
+      );
+    `);
+
+    if (res.rows.length === 0) {
+      logger.info('[WORKER] Safety sweep complete. No orphaned ineffective controls found.');
+      return;
+    }
+
+    logger.warn(`[WORKER] Found ${res.rows.length} orphaned ineffective controls. Triggering tribunals...`);
+
+    for (const row of res.rows) {
+      const docType = (row.target_document_types && row.target_document_types[0]) || 'TECHNICAL_SPEC';
+      
+      const payload: ControlDegradationPayload = {
+        ruleCode: row.rule_code,
+        documentType: docType,
+        minimumRequiredScore: row.execution_schema?.minimumRequiredScore || 90,
+        mandatoryKeywords: row.execution_schema?.mandatoryKeywords || [],
+        historicalTrend: [], // Trend will be gathered by the tribunal logic or we can inject it here
+        failureLogs: []
+      };
+
+      await triggerAdjudication(payload);
+    }
+
+  } catch (error) {
+    logger.error('[WORKER] Safety sweep execution failed:', error);
   }
 }
 

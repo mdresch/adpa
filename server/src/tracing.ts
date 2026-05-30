@@ -172,31 +172,13 @@ export function initTracing(): void {
       'deployment.environment': NODE_ENV,
     })
 
-    // Initialize the SDK with auto-instrumentation
+    // Initialize the SDK with NO auto-instrumentation to reduce noise
+    // Only manual traces (like AI provider calls) will be exported
     sdk = new NodeSDK({
       serviceName: SERVICE_NAME,
       resource,
       spanProcessors,
-      instrumentations: [
-        getNodeAutoInstrumentations({
-          // Customize instrumentations as needed
-          '@opentelemetry/instrumentation-http': {
-            enabled: false,
-          },
-          '@opentelemetry/instrumentation-express': {
-            enabled: false,
-          },
-          '@opentelemetry/instrumentation-pg': {
-            enabled: false, // Disable PostgreSQL instrumentation
-          },
-          '@opentelemetry/instrumentation-redis': {
-            enabled: false, // Disable Redis instrumentation
-          },
-          '@opentelemetry/instrumentation-fs': {
-            enabled: false, // Disable file system to reduce noise
-          },
-        }),
-      ],
+      instrumentations: [], // Disabled general system telemetry
     })
 
     // Start the SDK

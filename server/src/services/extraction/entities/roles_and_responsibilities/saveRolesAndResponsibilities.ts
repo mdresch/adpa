@@ -6,6 +6,7 @@ import { logger } from '../../../../utils/logger'
 import type { PoolClient } from 'pg'
 import type { PersistenceResult } from '../../base/Persistence'
 import type { RoleResponsibility } from './types'
+import { coerceArray } from '../../base/Parser'
 
 export async function saveRolesAndResponsibilities(
     client: PoolClient,
@@ -35,7 +36,7 @@ export async function saveRolesAndResponsibilities(
                 e.role_name || '',
                 e.responsibilities || null,
                 e.raci_category || null,
-                e.assigned_to || [],
+                coerceArray(e.assigned_to),
                 e.authority_level || null,
                 e.source_document_id || null,
                 userId

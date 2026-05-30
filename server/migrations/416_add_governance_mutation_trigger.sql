@@ -48,6 +48,7 @@ BEGIN
         );
 
         PERFORM pg_notify('governance_control_mutation', payload::text);
+        PERFORM pg_notify('draco_debug', 'Trigger fired for ' || NEW.rule_code);
     END IF;
     
     RETURN NEW;

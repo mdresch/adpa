@@ -44,12 +44,29 @@ export interface ToastOptions {
 }
 
 const wrap = (type: 'success' | 'error' | 'info' | 'warning' | 'loading') => (message: string, opts?: ToastOptions) => {
-  const title = opts?.title ?? (type === 'success' ? 'Success' : type === 'error' ? 'Error' : 'Notification')
+  let displayMessage = message
+  let displayTitle = opts?.title ?? (type === 'success' ? 'Success' : type === 'error' ? 'Error' : 'Notification')
+  
+  if (message && typeof message === 'string' && message.trim().startsWith('{')) {
+    try {
+      const parsed = JSON.parse(message)
+      if (parsed.message) {
+        displayMessage = parsed.message
+      }
+      if (parsed.error === 'GOVERNANCE_LOCKOUT') {
+        displayTitle = opts?.title ?? 'Governance Blocked'
+      }
+    } catch (_) {
+      // ignore
+    }
+  }
+
+  const title = displayTitle
   const description = opts?.description
   const announce = opts?.announce ?? true
   
   // Filter out room join notifications - they should not appear as toasts
-  const messageLower = message?.toLowerCase() || ''
+  const messageLower = displayMessage?.toLowerCase() || ''
   const titleLower = title?.toLowerCase() || ''
   const combined = `${messageLower} ${titleLower}`.toLowerCase()
   
@@ -65,7 +82,7 @@ const wrap = (type: 'success' | 'error' | 'info' | 'warning' | 'loading') => (me
   // send to notifications center unless explicitly suppressed
   if (!opts?.suppressAdapter) {
     try {
-      sendNotification({ type, title, message, description, announce })
+      sendNotification({ type, title, message: displayMessage, description, announce })
     } catch (e) {
       // non-fatal
       // eslint-disable-next-line no-console
@@ -73,10 +90,10 @@ const wrap = (type: 'success' | 'error' | 'info' | 'warning' | 'loading') => (me
     }
   }
   // show the toast using available adapter (or fallback)
-  if (type === 'success') return sonnerToast.success(message, description)
-  if (type === 'error') return sonnerToast.error(message, description)
-  if (type === 'loading') return sonnerToast.loading(message, description)
-  return sonnerToast.default(message, description)
+  if (type === 'success') return sonnerToast.success(displayMessage, description)
+  if (type === 'error') return sonnerToast.error(displayMessage, description)
+  if (type === 'loading') return sonnerToast.loading(displayMessage, description)
+  return sonnerToast.default(displayMessage, description)
 }
 
 export const toast = {

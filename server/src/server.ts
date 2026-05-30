@@ -221,7 +221,15 @@ app.use(
   }),
 )
 
-app.use(pinoHttp({ logger: logger as any }));
+app.use(pinoHttp({ 
+  logger: logger as any,
+  // Only log if the request fails or is a warning to reduce console noise
+  customLogLevel: (req, res, err) => {
+    if (res.statusCode >= 500 || err) return 'error'
+    if (res.statusCode >= 400) return 'warn'
+    return 'silent' // Silence standard 200/300 logs
+  }
+}));
 app.use(correlationIdMiddleware);
 app.use((req, res, next) => {
   const contentType = req.headers['content-type'] || ''

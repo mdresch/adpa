@@ -2,12 +2,13 @@
 
 import React, { useState, useEffect } from 'react';
 import DracoDiffViewer from './components/DracoDiffViewer';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface AuditRecord {
   audit_id: string;
   rule_code: string;
   document_type: string;
-  event_type: 'DRACO_CANDIDATE' | 'COUNCIL_DEADLOCK';
+  event_type: 'DRACO_CANDIDATE' | 'COUNCIL_DEADLOCK' | 'DATA_INTEGRITY_FAILURE';
   decision_status: 'PENDING' | 'APPROVED' | 'REJECTED';
   template_gate_context: { minimumRequiredScore: number };
   evidence_validation_report: { findings: string; confidenceScore?: number };
@@ -26,6 +27,7 @@ interface AuditRecord {
  * AI-generated governance patches.
  */
 export default function GovernanceDashboard() {
+  const { user } = useAuth();
   const [audits, setAudits] = useState<AuditRecord[]>([]);
   const [policies, setPolicies] = useState<any[]>([]);
   const [selectedAudit, setSelectedAudit] = useState<AuditRecord | null>(null);
@@ -86,7 +88,7 @@ export default function GovernanceDashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action,
-          auditorId: 'USR-M-VANCE', // Bound human authority context token
+          auditorId: user?.name || user?.email || 'Marcus Vance', // Bound human authority context token
           overrideRationale: rationale
         })
       });
@@ -138,7 +140,9 @@ export default function GovernanceDashboard() {
         </div>
         <div className="bg-slate-800 px-4 py-2 rounded-md border border-slate-700 flex items-center gap-3">
           <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></div>
-          <span className="text-xs font-mono text-slate-300">Council Member: Marcus Vance</span>
+          <span className="text-xs font-mono text-slate-300">
+            Council Member: {user?.name || user?.email || 'Marcus Vance'}
+          </span>
         </div>
       </header>
 
@@ -265,9 +269,13 @@ export default function GovernanceDashboard() {
                     <button 
                       onClick={() => handleAdjudicate('APPROVE')}
                       disabled={rationale.length < 10 || isSubmitting || !selectedAudit.arbitrator_verdict?.proposedDescriptionUpdate}
-                      className="px-5 py-2.5 rounded text-sm font-medium font-mono bg-emerald-600 text-white hover:bg-emerald-500 shadow-lg shadow-emerald-950/40 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                      className={`px-5 py-2.5 rounded text-sm font-medium font-mono shadow-lg transition-all ${
+                        selectedAudit.event_type === 'COUNCIL_DEADLOCK' 
+                          ? 'bg-amber-600 text-white hover:bg-amber-500 shadow-amber-950/40' 
+                          : 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-emerald-950/40'
+                      } disabled:opacity-40 disabled:cursor-not-allowed`}
                     >
-                      {isSubmitting ? 'Promoting...' : '🟢 Promote Patch to Production'}
+                      {isSubmitting ? 'Promoting...' : selectedAudit.event_type === 'COUNCIL_DEADLOCK' ? '⚡ Resolve Deadlock & Promote' : '🟢 Promote Patch to Production'}
                     </button>
                   </div>
 

@@ -60,6 +60,9 @@
       ],
       "@/socket": [
         "server/src/socket"
+      ],
+      "@root-types/*": [
+        "types/*"
       ]
     }
   },
