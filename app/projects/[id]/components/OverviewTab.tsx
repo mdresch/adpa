@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import {
@@ -128,6 +129,21 @@ export function OverviewTab({
   projectId
 }: OverviewTabProps) {
   const [pmbok8Metrics, setPmbok8Metrics] = useState<PMBOK8DomainMetrics | null>(null)
+  const [pmbok7Metrics, setPmbok7Metrics] = useState<Record<string, number> | null>(null)
+  const [pmbok6Compliance, setPmbok6Compliance] = useState<{
+    processCoverage: number
+    deliverableCoverage: number
+    activeProcessCount: number
+    presentDeliverableCount: number
+    processes: any[]
+  } | null>(null)
+  const [baselineReadiness, setBaselineReadiness] = useState<{
+    isReady: boolean
+    coveragePercent: number
+    hasCharter: boolean
+    totalEntities: number
+    missingReason: string | null
+  } | null>(null)
   const [qualityMetrics, setQualityMetrics] = useState<DocumentQualityMetrics | null>(null)
   const [issueStats, setIssueStats] = useState<IssueStats | null>(null)
   const [loadingMetrics, setLoadingMetrics] = useState(true)
@@ -187,22 +203,20 @@ export function OverviewTab({
         let extractionData: any = null
         if (extractionResponse.ok) {
           extractionData = await extractionResponse.json()
-          if (extractionData.success && extractionData.pmbok8DomainCounts) {
-            setPmbok8Metrics({
-              team: extractionData.pmbok8DomainCounts.team || 0,
-              developmentApproach: extractionData.pmbok8DomainCounts.developmentApproach || 0,
-              projectWork: extractionData.pmbok8DomainCounts.projectWork || 0,
-              measurement: extractionData.pmbok8DomainCounts.measurement || 0,
-              uncertainty: extractionData.pmbok8DomainCounts.uncertainty || 0,
-              stakeholders: extractionData.entityCounts?.stakeholders || 0,
-              planning: (extractionData.entityCounts?.milestones || 0) + (extractionData.entityCounts?.requirements || 0),
-              delivery: (extractionData.entityCounts?.deliverables || 0) + (extractionData.entityCounts?.successCriteria || 0)
-            })
-          }
-
           // Set metrics from extraction data
           if (extractionData.success) {
+            if (extractionData.pmbok8DomainCounts) {
+              setPmbok8Metrics(extractionData.pmbok8DomainCounts)
+            }
+            if (extractionData.pmbok7DomainCounts) {
+              setPmbok7Metrics(extractionData.pmbok7DomainCounts)
+            }
+            if (extractionData.pmbok6Compliance) {
+              setPmbok6Compliance(extractionData.pmbok6Compliance)
+            }
+            
             const entityCounts = extractionData.entityCounts || {}
+            setBaselineReadiness(extractionData.baselineReadiness || null)
             setAdditionalMetrics(prev => ({
               ...prev,
               aiExtractions: extractionData.totalEntities || 0,
@@ -557,18 +571,42 @@ export function OverviewTab({
     fetchMetrics()
   }, [projectId, stakeholders.length])
 
+  // Define minimum entity thresholds required to achieve a "Green Light" (Full Coverage)
+  // for each PMBOK 8 Performance Domain based on enterprise standard baselines.
+  const PMBOK_THRESHOLDS = {
+    stakeholders: 25,
+    team: 15,
+    developmentApproach: 5,
+    planning: 30,
+    projectWork: 20,
+    delivery: 20,
+    measurement: 15,
+    uncertainty: 20
+  }
+
+  // Tier 2 Knowledge Domain Thresholds
+  const PMBOK7_THRESHOLDS: Record<string, number> = {
+    governance: 10,
+    scope: 25,
+    schedule: 15,
+    finance: 10,
+    resources: 15,
+    risk: 20,
+    stakeholdersOps: 15
+  }
+
   // Calculate PMBOK 8 domain coverage percentage
   const calculateDomainCoverage = () => {
     if (!pmbok8Metrics) return 0
     const domains = [
-      pmbok8Metrics.stakeholders > 0,
-      pmbok8Metrics.team > 0,
-      pmbok8Metrics.developmentApproach > 0,
-      pmbok8Metrics.planning > 0,
-      pmbok8Metrics.projectWork > 0,
-      pmbok8Metrics.delivery > 0,
-      pmbok8Metrics.measurement > 0,
-      pmbok8Metrics.uncertainty > 0
+      pmbok8Metrics.stakeholders >= PMBOK_THRESHOLDS.stakeholders,
+      pmbok8Metrics.team >= PMBOK_THRESHOLDS.team,
+      pmbok8Metrics.developmentApproach >= PMBOK_THRESHOLDS.developmentApproach,
+      pmbok8Metrics.planning >= PMBOK_THRESHOLDS.planning,
+      pmbok8Metrics.projectWork >= PMBOK_THRESHOLDS.projectWork,
+      pmbok8Metrics.delivery >= PMBOK_THRESHOLDS.delivery,
+      pmbok8Metrics.measurement >= PMBOK_THRESHOLDS.measurement,
+      pmbok8Metrics.uncertainty >= PMBOK_THRESHOLDS.uncertainty
     ]
     const coveredDomains = domains.filter(Boolean).length
     return Math.round((coveredDomains / 8) * 100)
@@ -958,126 +996,241 @@ export function OverviewTab({
         </AnimatedGridItem>
       </AnimatedGrid>
 
-      {/* PMBOK 8 Performance Domains & Document Quality */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* PMBOK 8 Performance Domains */}
-        <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-xl">
-          <div className="absolute inset-0 bg-gradient-to-br from-blue-50/30 to-indigo-50/30 dark:from-blue-950/20 dark:to-indigo-950/20" />
-          <CardHeader className="relative z-10">
-            <CardTitle className="flex items-center gap-2">
-              <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
-                <Layers className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+      {/* Baseline Readiness & Primary Performance Domains */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+        {/* Baseline Readiness Checklist */}
+        <AnimatedCard className="xl:col-span-1 border-2 border-primary/10 bg-gradient-to-br from-slate-50 to-white dark:from-slate-900/50 dark:to-slate-950/50 shadow-md">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-bold flex items-center gap-2">
+              <div className={`p-1.5 rounded-md ${baselineReadiness?.isReady ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>
+                <CheckCircle className="h-4 w-4" />
               </div>
-              PMBOK 8th Edition Performance Domains
+              Project Baseline Readiness
             </CardTitle>
-            <CardDescription>Coverage across 8 performance domains</CardDescription>
+            <CardDescription className="text-[11px]">Constitutional maturity requirement for project commitment</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4 relative z-10">
-            {loadingMetrics ? (
-              <div className="text-center py-4 text-muted-foreground">Loading domain metrics...</div>
-            ) : pmbok8Metrics ? (
-              <>
-                <div className="mb-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium">Overall Domain Coverage</span>
-                    <Badge variant={domainCoverage >= 75 ? "default" : domainCoverage >= 50 ? "secondary" : "outline"}>
-                      {domainCoverage}%
-                    </Badge>
-                  </div>
-                  <Progress value={domainCoverage} className="h-2" />
-                </div>
+          <CardContent className="space-y-4">
+            <div className="flex flex-col items-center justify-center py-2 text-center">
+              <div className={`text-3xl font-black mb-1 ${baselineReadiness?.isReady ? 'text-emerald-600' : 'text-slate-400'}`}>
+                {baselineReadiness?.isReady ? 'CERTIFIED' : 'PENDING'}
+              </div>
+              <Badge variant={baselineReadiness?.isReady ? "default" : "secondary"} className={baselineReadiness?.isReady ? "bg-emerald-500" : ""}>
+                {baselineReadiness?.isReady ? "Green Light: Ready to Baseline" : "Criteria Not Yet Met"}
+              </Badge>
+            </div>
 
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2">
-                      <Users className="h-4 w-4 text-blue-500" />
-                      <span>Stakeholders Domain</span>
-                    </div>
-                    <Badge variant={pmbok8Metrics.stakeholders > 0 ? "default" : "outline"}>
-                      {pmbok8Metrics.stakeholders} entities
-                    </Badge>
-                  </div>
+            <div className="space-y-2 pt-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="flex items-center gap-2">
+                  {baselineReadiness?.hasCharter ? <CheckCircle className="h-3 w-3 text-emerald-500" /> : <AlertTriangle className="h-3 w-3 text-amber-500" />}
+                  Project Charter Active
+                </span>
+                <span className="font-mono font-bold text-slate-500">{baselineReadiness?.hasCharter ? 'YES' : 'NO'}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="flex items-center gap-2">
+                  {(baselineReadiness?.coveragePercent || 0) >= 60 ? <CheckCircle className="h-3 w-3 text-emerald-500" /> : <AlertTriangle className="h-3 w-3 text-amber-500" />}
+                  PMBOK Domain Coverage
+                </span>
+                <span className="font-mono font-bold text-slate-500">{baselineReadiness?.coveragePercent || 0}% / 60%</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="flex items-center gap-2">
+                  {(baselineReadiness?.totalEntities || 0) >= 350 ? <CheckCircle className="h-3 w-3 text-emerald-500" /> : <AlertTriangle className="h-3 w-3 text-amber-500" />}
+                  Entity Baseline Density
+                </span>
+                <span className="font-mono font-bold text-slate-500">{baselineReadiness?.totalEntities || 0} / 350</span>
+              </div>
+            </div>
 
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2">
-                      <Shield className="h-4 w-4 text-green-500" />
-                      <span>Team Domain</span>
-                    </div>
-                    <Badge variant={pmbok8Metrics.team > 0 ? "default" : "outline"}>
-                      {pmbok8Metrics.team} agreements
-                    </Badge>
-                  </div>
-
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2">
-                      <Zap className="h-4 w-4 text-purple-500" />
-                      <span>Development Approach</span>
-                    </div>
-                    <Badge variant={pmbok8Metrics.developmentApproach > 0 ? "default" : "outline"}>
-                      {pmbok8Metrics.developmentApproach} approaches
-                    </Badge>
-                  </div>
-
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2">
-                      <Target className="h-4 w-4 text-orange-500" />
-                      <span>Planning Domain</span>
-                    </div>
-                    <Badge variant={pmbok8Metrics.planning > 0 ? "default" : "outline"}>
-                      {pmbok8Metrics.planning} items
-                    </Badge>
-                  </div>
-
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2">
-                      <Activity className="h-4 w-4 text-cyan-500" />
-                      <span>Project Work Domain</span>
-                    </div>
-                    <Badge variant={pmbok8Metrics.projectWork > 0 ? "default" : "outline"}>
-                      {pmbok8Metrics.projectWork} items
-                    </Badge>
-                  </div>
-
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-emerald-500" />
-                      <span>Delivery Domain</span>
-                    </div>
-                    <Badge variant={pmbok8Metrics.delivery > 0 ? "default" : "outline"}>
-                      {pmbok8Metrics.delivery} items
-                    </Badge>
-                  </div>
-
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2">
-                      <Gauge className="h-4 w-4 text-indigo-500" />
-                      <span>Measurement Domain</span>
-                    </div>
-                    <Badge variant={pmbok8Metrics.measurement > 0 ? "default" : "outline"}>
-                      {pmbok8Metrics.measurement} metrics
-                    </Badge>
-                  </div>
-
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2">
-                      <AlertTriangle className="h-4 w-4 text-red-500" />
-                      <span>Uncertainty Domain</span>
-                    </div>
-                    <Badge variant={pmbok8Metrics.uncertainty > 0 ? "default" : "outline"}>
-                      {pmbok8Metrics.uncertainty} items
-                    </Badge>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div className="text-center py-4 text-muted-foreground">
-                No domain metrics available. Run AI extraction to populate.
+            {baselineReadiness?.missingReason && (
+              <div className="mt-2 p-2 rounded bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/30 text-[10px] text-amber-800 dark:text-amber-200 font-medium">
+                ⚠️ Requirement: {baselineReadiness.missingReason}
               </div>
             )}
           </CardContent>
-        </Card>
+        </AnimatedCard>
 
-        {/* Document Quality Metrics */}
+        {/* PMBOK 8 Performance Domains */}
+        <AnimatedCard className="xl:col-span-2 relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-xl">
+          <div className="absolute inset-0 bg-gradient-to-br from-blue-50/30 to-indigo-50/30 dark:from-blue-950/20 dark:to-indigo-950/20" />
+          <CardHeader className="relative z-10 pb-2">
+            <CardTitle className="text-sm font-bold flex items-center gap-2">
+              <div className="p-1.5 rounded-md bg-blue-100 dark:bg-blue-900/30">
+                <Layers className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              </div>
+              Tier 1: PMBOK 8th Edition Performance Domains
+            </CardTitle>
+            <CardDescription className="text-[11px]">Outcome-focused entity distribution across the project lifecycle</CardDescription>
+          </CardHeader>
+          <CardContent className="relative z-10">
+            {loadingMetrics ? (
+              <div className="text-center py-4 text-muted-foreground text-xs italic">Loading performance metrics...</div>
+            ) : pmbok8Metrics ? (
+              <>
+                <div className="mb-4">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-tighter">Performance Maturity index</span>
+                    <span className="text-xs font-mono font-bold">{domainCoverage}%</span>
+                  </div>
+                  <Progress value={domainCoverage} className="h-1.5" />
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-1">
+                  {[
+                    { key: 'stakeholders', label: 'Stakeholders', icon: Users, color: 'blue' },
+                    { key: 'team', label: 'Team', icon: Shield, color: 'green' },
+                    { key: 'developmentApproach', label: 'Dev Approach', icon: Zap, color: 'purple' },
+                    { key: 'planning', label: 'Planning', icon: Target, color: 'orange' },
+                    { key: 'projectWork', label: 'Project Work', icon: Activity, color: 'cyan' },
+                    { key: 'delivery', label: 'Delivery', icon: CheckCircle, color: 'emerald' },
+                    { key: 'measurement', label: 'Measurement', icon: Gauge, color: 'indigo' },
+                    { key: 'uncertainty', label: 'Uncertainty', icon: AlertTriangle, color: 'red' }
+                  ].map(({ key, label, icon: Icon, color }) => {
+                    const count = pmbok8Metrics[key as keyof PMBOK8DomainMetrics] || 0
+                    const threshold = PMBOK_THRESHOLDS[key as keyof typeof PMBOK_THRESHOLDS]
+                    const isMet = count >= threshold
+                    
+                    const colorClasses: Record<string, string> = {
+                      blue: 'text-blue-500', green: 'text-green-500', purple: 'text-purple-500',
+                      orange: 'text-orange-500', cyan: 'text-cyan-500', emerald: 'text-emerald-500',
+                      indigo: 'text-indigo-500', red: 'text-red-500'
+                    }
+
+                    return (
+                      <div key={key} className={`p-2 rounded-lg border bg-white dark:bg-slate-900/50 transition-all ${isMet ? 'border-emerald-200 dark:border-emerald-900/50 shadow-sm' : 'border-slate-100 dark:border-slate-800'}`}>
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center justify-between">
+                            <Icon className={`h-3 w-3 ${colorClasses[color]}`} />
+                            <div className={`h-1.5 w-1.5 rounded-full ${isMet ? 'bg-emerald-500 animate-pulse' : count > 0 ? 'bg-amber-400' : 'bg-slate-200'}`} />
+                          </div>
+                          <div className="text-[10px] font-bold text-slate-500 truncate leading-none mt-1">{label}</div>
+                          <div className="flex items-baseline gap-1 mt-0.5">
+                            <span className={`text-sm font-black font-mono ${isMet ? 'text-emerald-600' : 'text-slate-700 dark:text-slate-300'}`}>{Math.round(count)}</span>
+                            <span className="text-[9px] text-slate-400 font-mono">/ {threshold}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-4 text-muted-foreground text-xs">No performance metrics available.</div>
+            )}
+          </CardContent>
+        </AnimatedCard>
+      </div>
+
+      {/* Tier 2 & Tier 3 Maturity Layers */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Tier 2: PMBOK Knowledge Domains */}
+        <AnimatedCard className="border-2 border-slate-200 dark:border-slate-800 bg-slate-50/30 dark:bg-slate-900/10 h-full">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-bold flex items-center gap-2">
+              <div className="p-1.5 rounded-md bg-slate-200 dark:bg-slate-800">
+                <Database className="h-4 w-4 text-slate-600 dark:text-slate-400" />
+              </div>
+              Tier 2: PMBOK Knowledge Domains
+            </CardTitle>
+            <CardDescription className="text-[11px]">Knowledge-area focused entity distribution and process coverage</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {loadingMetrics ? (
+              <div className="text-center py-4 text-muted-foreground text-xs italic">Loading knowledge metrics...</div>
+            ) : pmbok7Metrics ? (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {[
+                  { key: 'governance', label: 'Gov', icon: Shield, threshold: 10, color: 'blue' },
+                  { key: 'scope', label: 'Scope', icon: Target, threshold: 25, color: 'orange' },
+                  { key: 'schedule', label: 'Sched', icon: Calendar, threshold: 15, color: 'emerald' },
+                  { key: 'finance', label: 'Fin', icon: DollarSign, threshold: 10, color: 'green' },
+                  { key: 'resources', label: 'Res', icon: Users, threshold: 15, color: 'indigo' },
+                  { key: 'risk', label: 'Risk', icon: AlertTriangle, threshold: 20, color: 'red' },
+                  { key: 'stakeholdersOps', label: 'Ops', icon: Activity, threshold: 15, color: 'cyan' }
+                ].map(({ key, label, icon: Icon, threshold, color }) => {
+                  const count = pmbok7Metrics[key] || 0
+                  const isMet = count >= threshold
+                  return (
+                    <div key={key} className={`p-2 rounded-lg border bg-white dark:bg-slate-900/80 ${isMet ? 'border-emerald-500/30' : 'border-slate-200 dark:border-slate-800'}`}>
+                      <div className="flex items-center justify-between mb-1">
+                        <Icon className="h-3 w-3 opacity-70" />
+                        <div className={`h-1.5 w-1.5 rounded-full ${isMet ? 'bg-emerald-500 animate-pulse' : count > 0 ? 'bg-amber-400' : 'bg-slate-200'}`} />
+                      </div>
+                      <div className="text-[9px] font-bold text-slate-500 uppercase truncate">{label}</div>
+                      <div className="flex items-baseline gap-0.5 mt-0.5">
+                        <span className="text-xs font-black">{Math.round(count)}</span>
+                        <span className="text-[8px] text-slate-400">/{threshold}</span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-4 text-muted-foreground text-xs">No knowledge metrics available.</div>
+            )}
+          </CardContent>
+        </AnimatedCard>
+
+        {/* Tier 3: PMBOK 6th Edition Compliance Summary */}
+        <AnimatedCard className="border-2 border-slate-200 dark:border-slate-800 bg-slate-50/30 dark:bg-slate-900/10 h-full">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-bold flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-md bg-amber-100 dark:bg-amber-900/30">
+                  <Shield className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                </div>
+                Tier 3: PMBOK 6th Edition Compliance
+              </div>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-7 text-[10px] font-bold text-primary"
+                onClick={() => window.location.href = `/pmbok6?projectId=${projectId}`}
+              >
+                Deep Dive →
+              </Button>
+            </CardTitle>
+            <CardDescription className="text-[11px]">Strict process activation and deliverable verification</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-end">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase">Process Activation</span>
+                  <span className="text-xs font-mono font-bold text-amber-600">{pmbok6Compliance?.activeProcessCount || 0} / 49</span>
+                </div>
+                <Progress value={pmbok6Compliance?.processCoverage || 0} className="h-1.5" />
+              </div>
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-end">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase">Deliverable Coverage</span>
+                  <span className="text-xs font-mono font-bold text-blue-600">{pmbok6Compliance?.presentDeliverableCount || 0} / 94</span>
+                </div>
+                <Progress value={pmbok6Compliance?.deliverableCoverage || 0} className="h-1.5" />
+              </div>
+            </div>
+
+            <div className="p-2 rounded bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800">
+              <h5 className="text-[10px] font-bold text-slate-400 uppercase mb-2">Recently Activated Processes</h5>
+              <div className="flex flex-wrap gap-1.5">
+                {pmbok6Compliance?.processes && pmbok6Compliance.processes.filter(p => p.status === 'ACTIVE').length > 0 ? (
+                  pmbok6Compliance.processes.filter(p => p.status === 'ACTIVE').slice(0, 4).map(p => (
+                    <Badge key={p.code} variant="secondary" className="text-[9px] bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-900/30">
+                      {p.code} {p.name}
+                    </Badge>
+                  ))
+                ) : (
+                  <span className="text-[10px] text-muted-foreground italic">No processes active yet.</span>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </AnimatedCard>
+      </div>
+
+      {/* Document Quality Assessment */}
+      <div className="grid grid-cols-1 lg:grid-cols-1 gap-4">
         <Card className="relative overflow-hidden border-2 border-primary/20 hover:border-primary/50 transition-all duration-300 hover:shadow-xl">
           <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-purple-50/30 to-transparent dark:from-primary/10 dark:via-purple-950/30" />
           <CardHeader className="relative z-10">

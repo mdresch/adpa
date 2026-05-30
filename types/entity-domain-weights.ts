@@ -51,41 +51,39 @@ export const ENTITY_DOMAIN_WEIGHTS: EntityWeightMap = {
   // CORE ENTITIES - Distributed across Performance & Knowledge Domains
   // ==========================================================================
   
-  // Stakeholders - Dual allocation
+  // Stakeholders - Performance Domain Primary
   stakeholders: [
-    { domain: 'stakeholders', weight: 0.60, isPrimary: true },        // Performance Domain (Primary)
-    { domain: 'stakeholders_ops', weight: 0.40, isPrimary: false }    // Knowledge Domain (Secondary)
+    { domain: 'stakeholders', weight: 1.0, isPrimary: true }         // Stakeholder Performance Domain (100%)
   ],
   
-  // Requirements - Dual allocation
+  // Requirements - Primary anchor for Planning
   requirements: [
-    { domain: 'scope', weight: 0.70, isPrimary: true },    // Scope Knowledge Domain (Primary)
-    { domain: 'planning', weight: 0.30, isPrimary: false } // Planning Performance Domain (Secondary)
+    { domain: 'planning', weight: 0.80, isPrimary: true },           // Planning Performance Domain (Primary)
+    { domain: 'scope', weight: 0.20, isPrimary: false }              // Scope Knowledge Domain (Secondary)
   ],
   
-  // Risks - Dual allocation
+  // Risks - Primary anchor for Uncertainty
   risks: [
-    { domain: 'uncertainty', weight: 0.50, isPrimary: true }, // Performance Domain (Equal Primary)
-    { domain: 'risk', weight: 0.50, isPrimary: true }         // Knowledge Domain (Equal Primary)
+    { domain: 'uncertainty', weight: 0.90, isPrimary: true },        // Uncertainty Performance Domain (Primary)
+    { domain: 'risk', weight: 0.10, isPrimary: false }               // Risk Knowledge Domain (Secondary)
   ],
   
-  // Milestones - Triple allocation
+  // Milestones - Primary for Planning
   milestones: [
-    { domain: 'schedule', weight: 0.60, isPrimary: true },    // Schedule Knowledge Domain (Primary)
-    { domain: 'governance', weight: 0.25, isPrimary: false }, // Governance Knowledge Domain (Secondary)
-    { domain: 'planning', weight: 0.15, isPrimary: false }    // Planning Performance Domain (Secondary)
+    { domain: 'planning', weight: 0.70, isPrimary: true },           // Planning Performance Domain (Primary)
+    { domain: 'schedule', weight: 0.30, isPrimary: false }           // Schedule Knowledge Domain (Secondary)
   ],
   
-  // Constraints - Dual allocation
+  // Constraints - Primary for Uncertainty
   constraints: [
-    { domain: 'uncertainty', weight: 0.60, isPrimary: true }, // Uncertainty Performance Domain (Primary)
-    { domain: 'risk', weight: 0.40, isPrimary: false }        // Risk Knowledge Domain (Secondary)
+    { domain: 'uncertainty', weight: 0.80, isPrimary: true },        // Uncertainty Performance Domain (Primary)
+    { domain: 'risk', weight: 0.20, isPrimary: false }               // Risk Knowledge Domain (Secondary)
   ],
   
-  // Success Criteria - Dual allocation
+  // Success Criteria - Primary for Measurement
   success_criteria: [
-    { domain: 'stakeholders', weight: 0.50, isPrimary: true },  // Stakeholders Performance (Equal Primary)
-    { domain: 'measurement', weight: 0.50, isPrimary: true }    // Measurement Performance (Equal Primary)
+    { domain: 'measurement', weight: 0.70, isPrimary: true },        // Measurement Performance Domain (Primary)
+    { domain: 'stakeholders', weight: 0.30, isPrimary: false }       // Stakeholder Performance Domain (Secondary)
   ],
   
   // Best Practices - Single allocation
@@ -120,11 +118,10 @@ export const ENTITY_DOMAIN_WEIGHTS: EntityWeightMap = {
     { domain: 'governance', weight: 1.0, isPrimary: true } // Governance Knowledge Domain (100%)
   ],
   
-  // Deliverables - Triple allocation
+  // Deliverables - Performance Domain Primary
   deliverables: [
-    { domain: 'scope', weight: 0.50, isPrimary: true },    // Scope Knowledge Domain (Primary)
-    { domain: 'delivery', weight: 0.40, isPrimary: false }, // Delivery Performance Domain (Secondary)
-    { domain: 'planning', weight: 0.10, isPrimary: false }  // Planning Performance Domain (Tertiary)
+    { domain: 'delivery', weight: 0.90, isPrimary: true },           // Delivery Performance Domain (Primary)
+    { domain: 'scope', weight: 0.10, isPrimary: false }              // Scope Knowledge Area (Secondary)
   ],
   
   // Scope Items - Dual allocation
@@ -133,11 +130,10 @@ export const ENTITY_DOMAIN_WEIGHTS: EntityWeightMap = {
     { domain: 'planning', weight: 0.30, isPrimary: false } // Planning Performance Domain (Secondary)
   ],
   
-  // Activities - Triple allocation
+  // Activities - Performance Domain Primary
   activities: [
-    { domain: 'schedule', weight: 0.60, isPrimary: true },           // Schedule Knowledge Domain (Primary)
-    { domain: 'development_approach', weight: 0.25, isPrimary: false }, // Dev Approach Performance (Secondary)
-    { domain: 'planning', weight: 0.15, isPrimary: false }           // Planning Performance Domain (Tertiary)
+    { domain: 'project_work', weight: 0.80, isPrimary: true },       // Project Work Performance (Primary)
+    { domain: 'schedule', weight: 0.20, isPrimary: false }           // Schedule Knowledge Area (Secondary)
   ],
   
   // ==========================================================================
@@ -151,9 +147,10 @@ export const ENTITY_DOMAIN_WEIGHTS: EntityWeightMap = {
     { domain: 'resources', weight: 0.20, isPrimary: false }   // Resources Knowledge Domain (Tertiary)
   ],
   
-  // Development Approaches - SINGLE allocation per user request
+  // Development Approaches - Corrected to Development Approach Performance Domain
   development_approaches: [
-    { domain: 'governance', weight: 1.0, isPrimary: true } // Governance Knowledge Domain (100%)
+    { domain: 'development_approach', weight: 0.80, isPrimary: true }, // Performance Domain (Primary)
+    { domain: 'governance', weight: 0.20, isPrimary: false }           // Knowledge Domain (Secondary)
   ],
   
   // Project Iterations - Dual allocation

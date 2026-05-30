@@ -1396,12 +1396,54 @@ return (
                                                 </Button>
                                               </div>
                                               <details className="mt-3" open={index === 0}>
-                                                <summary className="cursor-pointer text-xs font-medium text-amber-800 dark:text-amber-200">
-                                                  Show full prompt
+                                                <summary className="cursor-pointer text-xs font-medium text-amber-800 dark:text-amber-200 mb-2">
+                                                  Show full prompt & response
                                                 </summary>
-                                                <pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-md bg-slate-950 p-3 text-xs text-slate-100">
-                                                  {prompt || "No prompt captured."}
-                                                </pre>
+                                                <div className="space-y-4 pt-2">
+                                                  {/* Prompt Panel */}
+                                                  <div className="rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                                                    <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 px-3 py-2">
+                                                      <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider">System Prompt Payload</span>
+                                                      <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="h-6 px-2 text-[10px] hover:bg-slate-200 dark:hover:bg-slate-700"
+                                                        onClick={() => copyToClipboard(prompt, "System Prompt")}
+                                                      >
+                                                        <Copy className="h-3 w-3 mr-1.5" /> Copy
+                                                      </Button>
+                                                    </div>
+                                                    <div className="p-3 bg-slate-50/50 dark:bg-slate-950/50">
+                                                      <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-slate-700 dark:text-slate-300">
+                                                        {prompt || "No prompt captured."}
+                                                      </pre>
+                                                    </div>
+                                                  </div>
+                                                  
+                                                  {/* Response Panel */}
+                                                  <div className="rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                                                    <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 px-3 py-2">
+                                                      <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider">AI Provider Response</span>
+                                                      {request.response && (
+                                                        <Button
+                                                          type="button"
+                                                          variant="ghost"
+                                                          size="sm"
+                                                          className="h-6 px-2 text-[10px] hover:bg-slate-200 dark:hover:bg-slate-700"
+                                                          onClick={() => copyToClipboard(request.response, "AI Response")}
+                                                        >
+                                                          <Copy className="h-3 w-3 mr-1.5" /> Copy
+                                                        </Button>
+                                                      )}
+                                                    </div>
+                                                    <div className="p-3 bg-slate-50/50 dark:bg-slate-950/50">
+                                                      <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-slate-700 dark:text-slate-300">
+                                                        {request.response || "No response recorded (generation may have failed or is in progress)."}
+                                                      </pre>
+                                                    </div>
+                                                  </div>
+                                                </div>
                                               </details>
                                             </div>
                                           )

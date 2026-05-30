@@ -46,6 +46,7 @@ interface LLMPromptSnapshot {
   model?: string
   temperature: number
   prompt: string
+  response?: string
   characterCount: number
   capturedAt: string
   order?: number
@@ -110,6 +111,39 @@ class DocumentGenerationService {
     }
 
     return 3
+  }
+
+  /**
+   * Maps a section heading + informational_needs to a filtered list of GKG entity types.
+   * Used to avoid injecting an entire GKG blob into every section — each section only
+   * receives the semantic units that are actually relevant to its topic.
+   */
+  private resolveGkgEntityTypesForSection(heading: string, informationalNeeds: string): string[] {
+    const text = (heading + ' ' + informationalNeeds).toLowerCase()
+
+    const SECTION_GKG_MAP: Array<[RegExp, string[]]> = [
+      [/stakeholder|sponsor|commit|communicat|engagement|relation/i, ['Stakeholder']],
+      [/risk|threat|issue|assumpt|uncertaint|impediment|barrier/i, ['Risk', 'Constraint']],
+      [/scope|deliverable|requirement|wbs|feature|accept|inclus|exclus/i, ['Requirement', 'Deliverable', 'Constraint']],
+      [/schedule|milestone|timeline|deadline|date|phase|gantt|duration/i, ['Milestone', 'Deliverable']],
+      [/budget|cost|financ|spend|fund|estimate|procure|capex|opex/i, ['Risk', 'Constraint']],
+      [/quality|standard|metric|kpi|performance|benchmark/i, ['Requirement', 'Constraint']],
+      [/charter|overview|execut|summary|background|purpose|vision|objective/i,
+        ['Stakeholder', 'Risk', 'Milestone', 'Requirement']],
+      [/close|lesson|review|retrospect|audit|handover/i, ['Risk', 'Milestone', 'Deliverable']],
+      [/integrat|plan|manag|govern|control/i,
+        ['Requirement', 'Risk', 'Stakeholder', 'Milestone', 'Constraint', 'Deliverable']],
+    ]
+
+    const matched = new Set<string>()
+    for (const [pattern, types] of SECTION_GKG_MAP) {
+      if (pattern.test(text)) types.forEach(t => matched.add(t))
+    }
+
+    // Fall back to all entity types if the section doesn't match anything specific
+    return matched.size > 0
+      ? Array.from(matched)
+      : ['Requirement', 'Risk', 'Stakeholder', 'Milestone', 'Constraint', 'Deliverable']
   }
 
   private async mapWithConcurrency<T, R>(
@@ -269,6 +303,10 @@ class DocumentGenerationService {
       const draftConcurrency = this.getDraftConcurrency(request.provider)
       logger.info(`[AGENT] Phase 2: Drafting ${generationPlan.sections.length} sections with concurrency ${draftConcurrency}...`)
 
+      // Build a shared map of all planned sections so each drafter can avoid duplicating
+      // content that belongs to a sibling section (Improvement D — anti-duplication).
+      const allPlannedSections = generationPlan.sections.map(s => ({ heading: s.heading, goal: s.goal }))
+
       const draftedSections = await this.mapWithConcurrency(generationPlan.sections, draftConcurrency, async (sectionTask, index) => {
         return await this.draftSection({
           task: sectionTask,
@@ -286,6 +324,7 @@ class DocumentGenerationService {
           templateName: template?.name,
           templateCategory: template?.category,
           templateSystemPrompt: template?.system_prompt,
+          allPlannedSections,
         })
       })
 
@@ -299,7 +338,7 @@ class DocumentGenerationService {
       let totalTokensUsed = 0;
       for (const section of draftedSections) {
         totalTokensUsed += section.tokensUsed
-        rawMarkdown += section.markdown.trim() + "\n\n"
+        rawMarkdown += (section.markdown || "").trim() + "\n\n"
       }
 
       // Perform single-pass entity extraction and cleanup
@@ -500,28 +539,74 @@ Based on the type of error encountered, please follow these steps to resolve the
     projectId: string;
     userId: string;
     templateId?: string;
-  }): Promise<{ sections: Array<{ heading: string; goal: string; informational_needs: string }> }> {
+  }): Promise<{ sections: Array<{ heading: string; goal: string; informational_needs: string; section_guidance?: string }> }> {
     // We define the Zod schema representing the JSON we want the AI to return.
     const planSchema = z.object({
       sections: z.array(z.object({
         heading: z.string().describe("The Markdown heading for the section (e.g. '## Executive Summary')"),
         goal: z.string().describe("What this specific section needs to accomplish based on the user prompt."),
         informational_needs: z.string().describe("What context (stakeholders, budget, GKG data, etc) is needed to write this section accurately. BE SPECIFIC."),
+        section_guidance: z.string().optional().describe("Verbatim copy of the template's prompt_guidance for this section, if one exists. Leave empty if there is no specific writing guidance for this section."),
       }))
     })
 
+    const planProj = params.project as any
     let plannerPrompt = `You are a Senior Project Manager planning a document using the ${params.project.framework} framework.\n\n`
     plannerPrompt += `Your job is to read the User's Request and the required Template Structure, and break the document down into an array of sections that need to be drafted.\n\n`
-    plannerPrompt += `### Project Overview:\n- Name: ${params.project.name}\n- Status: ${params.project.status}\n\n`
+
+    // ─── Rich Project Context for the Planner ────────────────────────────────
+    // The planner must know all available project data so it can produce specific,
+    // accurate informational_needs for each section rather than generic placeholders.
+    plannerPrompt += `### Project Context:\n`
+    plannerPrompt += `- **Name:** ${params.project.name}\n`
+    if (params.project.description) {
+      plannerPrompt += `- **Description:** ${params.project.description}\n`
+    }
+    plannerPrompt += `- **Framework:** ${params.project.framework}\n`
+    plannerPrompt += `- **Status:** ${params.project.status || 'Active'}\n`
+    if (planProj.budget) plannerPrompt += `- **Budget:** ${planProj.budget}\n`
+    if (planProj.start_date) plannerPrompt += `- **Start Date:** ${planProj.start_date}\n`
+    if (planProj.end_date)   plannerPrompt += `- **End Date:** ${planProj.end_date}\n`
+    if (planProj.team_members) {
+      const teamSummary = Array.isArray(planProj.team_members)
+        ? planProj.team_members.map((m: any) => typeof m === 'string' ? m : (m.name || m.role || '')).filter(Boolean).join(', ')
+        : String(planProj.team_members)
+      if (teamSummary) plannerPrompt += `- **Team:** ${teamSummary}\n`
+    }
+    if (params.project.stakeholders?.length) {
+      const stakeholderList = params.project.stakeholders
+        .slice(0, 8)
+        .map(s => `${s.name} (${s.role})`)
+        .join(', ')
+      plannerPrompt += `- **Key Stakeholders:** ${stakeholderList}\n`
+    }
+    // Surface already-documented entity counts so the planner targets gaps rather than duplicates
+    if (planProj.entityCountsByType && Object.keys(planProj.entityCountsByType).length > 0) {
+      const countStr = Object.entries(planProj.entityCountsByType as Record<string, number>)
+        .map(([t, c]) => `${c} ${t}`).join(', ')
+      plannerPrompt += `- **Already Documented Entities:** ${countStr}\n`
+    } else if (params.project.existing_entities?.length) {
+      const byType: Record<string, number> = {}
+      params.project.existing_entities.forEach(e => { byType[e.type] = (byType[e.type] || 0) + 1 })
+      const countStr = Object.entries(byType).map(([t, c]) => `${c} ${t}`).join(', ')
+      if (countStr) plannerPrompt += `- **Already Documented Entities:** ${countStr}\n`
+    }
+    plannerPrompt += `\n`
+
+    if (params.template?.system_prompt) {
+      plannerPrompt += `### Template Guidance:\n${params.template.system_prompt}\n\n`
+    }
 
     const templateParagraphs = this.getTemplateParagraphs(params.template)
 
     if (templateParagraphs.length > 0) {
       plannerPrompt += `### Required Template Structure:\n`
+      plannerPrompt += `For each section below, copy the "Writing Guidance" verbatim into the section_guidance field of your output.\n\n`
       const sortedParagraphs = [...templateParagraphs].sort((a, b) => a.order - b.order)
       sortedParagraphs.forEach((para) => {
-        plannerPrompt += `${para.order}. ${para.section_name} (${para.section_type}, required: ${para.required})\n`
-        if (para.description) plannerPrompt += `   Description: ${para.description}\n`
+        plannerPrompt += `${para.order}. **${para.section_name}** (${para.section_type}, required: ${para.required})\n`
+        if (para.description)     plannerPrompt += `   Description: ${para.description}\n`
+        if (para.prompt_guidance) plannerPrompt += `   Writing Guidance: ${para.prompt_guidance}\n`
       })
       plannerPrompt += `\n`
     } else {
@@ -536,15 +621,8 @@ Based on the type of error encountered, please follow these steps to resolve the
     plannerPrompt += `### User Request:\n${params.userPrompt}\n\n`
     plannerPrompt += `Output a JSON array of sections. Map the required template structure or design a new one based on the user's specific request.`
 
-    await this.recordLLMPromptSnapshot(params.jobId, {
-      phase: 'planning',
-      label: 'Plan Document Structure',
-      traceName: 'agentic-doc-gen-plan',
-      provider: params.provider,
-      model: params.model,
-      temperature: 0.1,
-      prompt: plannerPrompt,
-    })
+    let resultObject: any = null;
+    let responseText: string = "";
 
     try {
       const result = await unifiedAIService.generateStructuredObject({
@@ -558,22 +636,25 @@ Based on the type of error encountered, please follow these steps to resolve the
         userId: params.userId,
         template_id: params.templateId,
       })
-      return result.object
+      resultObject = result.object
+      responseText = JSON.stringify(result.object, null, 2);
     } catch (e: any) {
       logger.warn(`Failed structured generation, falling back to manual template mapping`, e)
+      responseText = e instanceof Error ? e.message : String(e);
       // Fallback: If AI fails the structured output, manually construct the plan based on template paragraphs
       if (templateParagraphs.length > 0) {
-        return {
+        resultObject = {
           sections: [...templateParagraphs]
             .sort((a, b) => a.order - b.order)
             .map(p => ({
               heading: `## ${p.section_name}`,
               goal: p.description || `Write the ${p.section_name} section`,
-              informational_needs: p.prompt_guidance || "General project context."
+              informational_needs: p.prompt_guidance || "General project context.",
+              section_guidance: p.prompt_guidance || undefined,
             }))
         }
       } else {
-        return {
+        resultObject = {
           sections: [
             { heading: "## 1. Executive Summary", goal: "Summarize the document purpose and key takeaways.", informational_needs: "General project context." },
             { heading: "## 2. Objectives & Scope", goal: "Define the objectives, scope items, and deliverables.", informational_needs: "Project deliverables and scope items." },
@@ -583,6 +664,19 @@ Based on the type of error encountered, please follow these steps to resolve the
         }
       }
     }
+
+    await this.recordLLMPromptSnapshot(params.jobId, {
+      phase: 'planning',
+      label: 'Plan Document Structure',
+      traceName: 'agentic-doc-gen-plan',
+      provider: params.provider,
+      model: params.model,
+      temperature: 0.1,
+      prompt: plannerPrompt,
+      response: responseText
+    })
+
+    return resultObject;
   }
 
   /**
@@ -590,7 +684,7 @@ Based on the type of error encountered, please follow these steps to resolve the
    * Targeted AI call to write just the markdown for a single specific section.
    */
   private async draftSection(params: {
-    task: { heading: string; goal: string; informational_needs: string };
+    task: { heading: string; goal: string; informational_needs: string; section_guidance?: string };
     order: number;
     project: ProjectContext;
     gkgContext?: { markdown: string };
@@ -605,64 +699,160 @@ Based on the type of error encountered, please follow these steps to resolve the
     templateName?: string;
     templateCategory?: string;
     templateSystemPrompt?: string;
+    /** Full list of all planned sections — used to prevent cross-section content duplication */
+    allPlannedSections?: Array<{ heading: string; goal: string }>;
   }) {
-    let sectionPrompt = `You are an expert technical writer drafting a specific section of a ${params.project.framework} document.\n\n`
+    const draftProj = params.project as any
 
-    // Inject template-specific guidance if available
+    // ─── Role & Mission ───────────────────────────────────────────────────────
+    let sectionPrompt = `You are an expert technical writer drafting a specific section of a ${params.project.framework} governance document.\n\n`
+
     if (params.templateSystemPrompt) {
       sectionPrompt += `### Template Standards\n${params.templateSystemPrompt}\n\n`
     }
 
-    // We explicitly tell the AI what its isolated job is
     sectionPrompt += `### Your Mission\n`
     sectionPrompt += `Write ONLY the following section: **${params.task.heading}**\n`
-    sectionPrompt += `Goal: ${params.task.goal}\n\n`
+    sectionPrompt += `Goal: ${params.task.goal}\n`
+    sectionPrompt += `Informational needs: ${params.task.informational_needs}\n`
 
+    // ─── Per-Section Template Writing Guidance ────────────────────────────────
+    // section_guidance is the prompt_guidance from the template paragraph —
+    // the most specific instruction for this exact section. It takes precedence
+    // over all general guidance and must be followed strictly.
+    if (params.task.section_guidance) {
+      sectionPrompt += `\n### Section Writing Guidance (MUST FOLLOW)\n`
+      sectionPrompt += `${params.task.section_guidance}\n`
+    }
+    sectionPrompt += `\n`
 
-    // Inject targeted context (we can optimize this later to filter context intelligently based on informational_needs)
-    sectionPrompt += `### Context Available to You\n`
-    sectionPrompt += `**Project:** ${params.project.name}\n`
-
-    // Simple relevance filter - if informational needs mention stakeholders, inject them
-    if (params.task.informational_needs.toLowerCase().includes('stakeholder') && params.project.stakeholders) {
-      sectionPrompt += `**Key Stakeholders:**\n`
-      params.project.stakeholders.forEach(sh => {
-        sectionPrompt += `- ${sh.name} (${sh.role}) - Influence: ${sh.influence_level}\n`
+    // ─── Document Structure Awareness (Anti-Duplication) ─────────────────────
+    // Each section receives the full planned structure so it knows what SIBLING
+    // sections will cover — preventing narrative duplication across the document.
+    if (params.allPlannedSections && params.allPlannedSections.length > 1) {
+      const otherSections = params.allPlannedSections.filter(s => s.heading !== params.task.heading)
+      sectionPrompt += `### Document Structure — Sections Covered Elsewhere (Do NOT Duplicate)\n`
+      otherSections.forEach(s => {
+        sectionPrompt += `- ${s.heading}: ${s.goal}\n`
       })
+      sectionPrompt += `\n*Write ONLY your assigned section. Do not repeat content that belongs to the sections listed above — the reader will read the full document.*\n\n`
     }
 
-    if (params.task.informational_needs.toLowerCase().includes('budget') && params.project.budget) {
-      sectionPrompt += `**Budget:** ${params.project.budget}\n`
+    // ─── Core Project Context (always injected) ───────────────────────────────
+    sectionPrompt += `### Project Context\n`
+    sectionPrompt += `**Name:** ${params.project.name}\n`
+    if (params.project.description) {
+      sectionPrompt += `**Description:** ${params.project.description}\n`
+    }
+    sectionPrompt += `**Framework:** ${params.project.framework}\n`
+    if (params.project.status) {
+      sectionPrompt += `**Status:** ${params.project.status}\n`
     }
 
-    // Always inject GKG context if available as it represents the semantic truth
+    // ─── Signal-Based Context Injection ──────────────────────────────────────
+    // Derive context signals from the section's informational needs + heading.
+    // This replaces the brittle 2-keyword filter with a full regex signal map.
+    const needsText = (params.task.informational_needs + ' ' + params.task.heading).toLowerCase()
+
+    const signals = {
+      budget:       /budget|cost|financ|spend|fund|estimate|procure|capex|opex/i.test(needsText),
+      schedule:     /schedule|timeline|date|milestone|deadline|duration|phase|gantt/i.test(needsText),
+      team:         /resource|team|staff|personnel|role|responsib|capacity|allocat/i.test(needsText),
+      stakeholders: /stakeholder|sponsor|commit|engagement|communic|influence|interest/i.test(needsText),
+      risks:        /risk|issue|threat|constraint|assumpt|uncertaint|impediment/i.test(needsText),
+      scope:        /scope|deliverable|requirement|wbs|feature|accept|inclus|exclus/i.test(needsText),
+    }
+
+    if (signals.budget && (draftProj.budget || params.project.budget)) {
+      sectionPrompt += `**Budget:** ${draftProj.budget || params.project.budget}\n`
+    }
+
+    if (signals.schedule) {
+      if (draftProj.start_date) sectionPrompt += `**Project Start:** ${draftProj.start_date}\n`
+      if (draftProj.end_date)   sectionPrompt += `**Project End:** ${draftProj.end_date}\n`
+    }
+
+    if (signals.team && draftProj.team_members) {
+      const teamSummary = Array.isArray(draftProj.team_members)
+        ? draftProj.team_members
+            .map((m: any) => typeof m === 'string' ? m : (m.name || m.role || '')).filter(Boolean).join(', ')
+        : String(draftProj.team_members)
+      if (teamSummary) sectionPrompt += `**Team Members:** ${teamSummary}\n`
+    }
+
+    if (params.project.stakeholders?.length) {
+      if (signals.stakeholders) {
+        // Full stakeholder list when the section explicitly needs them
+        sectionPrompt += `\n**Key Stakeholders:**\n`
+        params.project.stakeholders.forEach(sh => {
+          sectionPrompt += `- ${sh.name} (${sh.role}) — Influence: ${sh.influence_level}, Interest: ${sh.interest_level}\n`
+        })
+      } else {
+        // Abbreviated list for all other sections (naming consistency + authority context)
+        const topNames = params.project.stakeholders.slice(0, 4).map(s => `${s.name} (${s.role})`).join(', ')
+        sectionPrompt += `\n**Primary Stakeholders (naming reference):** ${topNames}\n`
+      }
+    }
+
+    // ─── GKG Context (Section-Scoped) ────────────────────────────────────────
+    // Filter the GKG markdown to only entity types relevant to this section,
+    // reducing token waste and preventing the model from picking irrelevant facts.
     if (params.gkgContext?.markdown) {
-      sectionPrompt += `\n**Semantic Graph Context (Known Relationships):**\n${params.gkgContext.markdown}\n`
+      const relevantGkgTypes = this.resolveGkgEntityTypesForSection(params.task.heading, params.task.informational_needs)
+      const gkgLines = params.gkgContext.markdown.split('\n')
+
+      const filteredGkgLines = gkgLines.filter(line => {
+        if (!line.startsWith('- **')) return true // keep header lines
+        return relevantGkgTypes.some(type => line.startsWith(`- **${type}**`))
+      })
+
+      if (filteredGkgLines.some(l => l.startsWith('- **'))) {
+        sectionPrompt += `\n**Semantic Knowledge Graph (Verified Project Data):**\n${filteredGkgLines.join('\n')}\n`
+      }
     }
 
-    // Inject existing project entities (for deduplication awareness)
+    // ─── Existing Entity Registry (Deduplication) ─────────────────────────────
     if (params.project.existing_entities && params.project.existing_entities.length > 0) {
-      sectionPrompt += `\n**Existing Project Entities (REUSE THESE NAMES):**\n`
+      sectionPrompt += `\n**Existing Project Entities (REUSE THESE NAMES EXACTLY):**\n`
       params.project.existing_entities.forEach(ent => {
         sectionPrompt += `- [${ent.type}] ${ent.name}\n`
       })
-      sectionPrompt += `\n*Instruction: If your draft introduces any of the entities listed above, use their EXACT names and types to maintain consistency across the project registry.*\n`
+      sectionPrompt += `\n*Instruction: When referencing any entity above, use the EXACT name shown. Do not create synonyms or alternate spellings.*\n`
     }
 
-    // Inject custom context materials
-
+    // ─── Reference Materials (Relevance-Scored) ───────────────────────────────
+    // Score each context item against the section's informational needs and take
+    // the top 5 (was 3), giving more content budget to high-relevance items.
     if (params.contextItems && params.contextItems.length > 0) {
-      sectionPrompt += `\n**Reference Materials:**\n`
-      // Limit to top 3 to avoid context explosion on smaller models
-      params.contextItems.slice(0, 3).forEach(item => {
-        sectionPrompt += `[${item.title}]: ${item.content.substring(0, 1000)}...\n`
-      })
+      const needsWords = params.task.informational_needs.toLowerCase().split(/\W+/).filter((w: string) => w.length > 3)
+
+      const scored = params.contextItems
+        .map((item: any) => {
+          const titleWords = (item.title || '').toLowerCase().split(/\W+/)
+          const contentSnippet = (item.content || '').toLowerCase().substring(0, 600)
+          const titleScore  = titleWords.filter((w: string) => needsWords.includes(w)).length * 3
+          const contentScore = needsWords.filter((w: string) => contentSnippet.includes(w)).length
+          return { ...item, _score: titleScore + contentScore + (item.priority || 0) }
+        })
+        .sort((a: any, b: any) => b._score - a._score)
+        .slice(0, 5)
+
+      if (scored.length > 0) {
+        sectionPrompt += `\n**Reference Materials:**\n`
+        scored.forEach((item: any) => {
+          // Give more content to highly relevant items
+          const charLimit = item._score >= 3 ? 2000 : 800
+          const content = (item.content || '').substring(0, charLimit)
+          const ellipsis = (item.content?.length || 0) > charLimit ? '...' : ''
+          sectionPrompt += `[${item.title}]: ${content}${ellipsis}\n`
+        })
+      }
     }
 
     sectionPrompt += `\n---\n\n`
     sectionPrompt += `Output the Markdown for your assigned section starting exactly with ${params.task.heading}.\n\n`
-    
-    // Explicit Instruction for table schema alignment
+
+    // Explicit Instruction for entity schema alignment
     sectionPrompt += `### IMPORTANT: Entity Schema Alignment Instruction\n`
     sectionPrompt += `Ensure that all extracted entities wrapped in H8 formats exactly match the property fields defined in the database 'template_extracted_entities' table schema.\n`
     sectionPrompt += `Specifically, for each entity type:\n`
@@ -680,6 +870,27 @@ Based on the type of error encountered, please follow these steps to resolve the
     const traceName = `agentic-doc-gen-draft-${params.order + 1}`
     const temperature = params.temperature || 0.5
 
+    let responseMarkdown: string = "";
+    let tokensUsed: number = 0;
+    
+    try {
+      const aiResponse = await unifiedAIService.generate({
+        prompt: sectionPrompt,
+        provider: params.provider,
+        model: params.model,
+        temperature, // Slightly lower temperature for drafting facts
+        traceName,
+        projectId: params.projectId,
+        userId: params.userId,
+        template_id: params.templateId,
+      })
+      responseMarkdown = aiResponse.content;
+      tokensUsed = aiResponse.usage?.total_tokens || 0;
+    } catch (e: any) {
+      logger.error(`Failed to draft section ${params.task.heading}`, e);
+      responseMarkdown = `Error generating section: ${e instanceof Error ? e.message : String(e)}`;
+    }
+
     await this.recordLLMPromptSnapshot(params.jobId, {
       phase: 'drafting',
       label: `Draft Section ${params.order + 1}`,
@@ -688,26 +899,16 @@ Based on the type of error encountered, please follow these steps to resolve the
       model: params.model,
       temperature,
       prompt: sectionPrompt,
+      response: responseMarkdown,
       order: params.order,
       heading: params.task.heading,
       goal: params.task.goal,
     })
 
-    const aiResponse = await unifiedAIService.generate({
-      prompt: sectionPrompt,
-      provider: params.provider,
-      model: params.model,
-      temperature, // Slightly lower temperature for drafting facts
-      traceName,
-      projectId: params.projectId,
-      userId: params.userId,
-      template_id: params.templateId,
-    })
-
     return {
       order: params.order,
-      markdown: aiResponse.content,
-      tokensUsed: aiResponse.usage?.total_tokens || 0
+      markdown: responseMarkdown,
+      tokensUsed: tokensUsed
     }
   }
 
@@ -762,21 +963,45 @@ Based on the type of error encountered, please follow these steps to resolve the
         [projectId]
       )
 
-      // Fetch sample of existing high-confidence/verified entities for deduplication awareness
+      // Fetch existing high-confidence/verified entities for deduplication awareness
+      // Increased limit from 30 → 50 so the LLM has a richer deduplication registry
       const entitiesResult = await pool.query(
         `SELECT entity_name as name, entity_type as type
          FROM entity_extractions
          WHERE project_id = $1 AND status = 'active' AND (is_verified = true OR extraction_confidence >= 80)
          ORDER BY extraction_confidence DESC
-         LIMIT 30`,
+         LIMIT 50`,
         [projectId]
       )
+
+      // Fetch entity counts by type — used by the planner to understand what is
+      // already documented and where the gaps are, so it targets missing sections.
+      let entityCountsByType: Record<string, number> = {}
+      try {
+        const entityCountsResult = await pool.query(
+          `SELECT entity_type as type, COUNT(*) as count
+           FROM entity_extractions
+           WHERE project_id = $1 AND status = 'active'
+           GROUP BY entity_type
+           ORDER BY count DESC`,
+          [projectId]
+        )
+        entityCountsResult.rows.forEach((row: any) => {
+          entityCountsByType[row.type] = parseInt(row.count, 10)
+        })
+      } catch (countErr) {
+        logger.warn('Failed to fetch entity counts by type (non-fatal)', {
+          projectId,
+          error: countErr instanceof Error ? countErr.message : String(countErr),
+        })
+      }
 
       return {
         ...project,
         stakeholders: stakeholdersResult.rows,
         documents: documentsResult.rows,
         existing_entities: entitiesResult.rows,
+        entityCountsByType,
       } as any
 
     } catch (error) {

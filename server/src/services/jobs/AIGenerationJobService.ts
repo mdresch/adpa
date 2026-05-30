@@ -606,14 +606,10 @@ export class AIGenerationJobService {
           }
         }
         if (projectIdForDoc && docContent.trim() && createdDocumentId) {
-          await AIGenerationJobService.triggerAutoExtraction(
-            jobId || 'unknown',
-            projectIdForDoc as string,
-            (userId || undefined) as string | undefined,
-            createdDocumentId,
-            docName,
-            deps
-          )
+          // Legacy Post-Generation Extraction Trigger has been removed here.
+          // Inline H8 Entity Parsing is now handling entity extraction concurrently 
+          // during document generation in documentGenerationService.ts.
+          // Legacy extraction is now only manually queued for onboarded/external documents.
         }
       }
 
@@ -693,19 +689,6 @@ export class AIGenerationJobService {
         [templateId]
       )
     } catch (err) { }
-  }
-
-  private static async triggerAutoExtraction(sourceJobId: string, projectId: string, userId: string | undefined, documentId: string, documentName: string, deps?: QueueServiceDependencies): Promise<void> {
-    const db = deps?.database || { query: pool.query.bind(pool) } as any
-    const log = deps?.logger || logger
-    try {
-      const extractionJobId = uuidv4()
-      await db.query(`INSERT INTO jobs (id, type, status, data, created_by, project_id) VALUES ($1, $2, $3, $4, $5, $6)`, [extractionJobId, 'project-data-extraction', 'pending', JSON.stringify({ jobId: extractionJobId, projectId, documentIds: [documentId], sourceJobId }), userId || null, projectId])
-      const { extractionQueue } = await import('../queueService')
-      await extractionQueue.add('extract-project-data', { jobId: extractionJobId, projectId, userId: userId || null, documentIds: [documentId], sourceJobId }, { jobId: extractionJobId, priority: 5 })
-    } catch (err) {
-      log.error(`Auto-extraction failed`, err)
-    }
   }
 
   private static async validateAgainstBaseline(jobData: AIGenerationJobData, documentId: string, result: any, deps?: QueueServiceDependencies): Promise<void> {
