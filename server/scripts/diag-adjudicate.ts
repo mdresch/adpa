@@ -3,7 +3,7 @@ import http from 'http';
 const data = JSON.stringify({
     action: "APPROVE",
     auditorId: "Marcus Vance",
-    overrideRationale: "Document generation should allow for a project to be open for public classsification. These are mainly test projects and do not contain client details but are rendered to be published in public to illustrate the effeciveness of the systems."
+    overrideRationale: "Manual unblocking of GOV-SEC-001 for test purposes."
 });
 
 const options = {
@@ -13,15 +13,17 @@ const options = {
     method: 'POST',
     headers: {
         'Content-Type': 'application/json',
-        'Content-Length': data.length
+        'Content-Length': Buffer.byteLength(data)
     }
 };
 
 const req = http.request(options, (res) => {
     console.log(`STATUS: ${res.statusCode}`);
+    let body = '';
     res.setEncoding('utf8');
-    res.on('data', (chunk) => {
-        console.log(`BODY: ${chunk}`);
+    res.on('data', (chunk) => { body += chunk; });
+    res.on('end', () => {
+        console.log(`BODY: ${body}`);
     });
 });
 

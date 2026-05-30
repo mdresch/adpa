@@ -97,7 +97,7 @@ export function getRedis(): Redis {
     // to avoid returning null to synchronous callers immediately
     const fallbackClient = new Redis('redis://localhost:6379', { lazyConnect: true })
     fallbackClient.on('error', (err) => {
-      logger.debug(`[REDIS] Fallback client connection connection deferred or offline: ${err.message}`)
+      logger.debug(`[REDIS] Fallback client connection deferred or offline: ${err.message}`)
     })
     return fallbackClient
   }
