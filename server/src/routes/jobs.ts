@@ -114,22 +114,24 @@ router.get("/",
           j.processing_started_at AT TIME ZONE 'UTC' AS processing_started_at,
           COALESCE(j.project_name, p.name) as project_name,
           COALESCE(j.template_name, t.name) as template_name,
-          COALESCE(j.document_name, d.name) as document_name,
-          d.id as document_id,
+          COALESCE(j.document_name, d1.name, d2.name) as document_name,
+          COALESCE(d1.id, d2.id) as document_id,
           u.name as user_name,
           u.email as user_email
         FROM jobs j
-        LEFT JOIN projects p ON 
-          j.project_id = p.id OR 
-          (CASE WHEN j.data->>'projectId' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->>'projectId')::uuid ELSE NULL END) = p.id OR 
-          (CASE WHEN j.data->'variables'->>'project_id' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->'variables'->>'project_id')::uuid ELSE NULL END) = p.id
+        LEFT JOIN projects p ON p.id = COALESCE(
+          j.project_id,
+          (CASE WHEN j.data->>'projectId' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->>'projectId')::uuid ELSE NULL END),
+          (CASE WHEN j.data->'variables'->>'project_id' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->'variables'->>'project_id')::uuid ELSE NULL END)
+        )
         LEFT JOIN templates t ON 
           (CASE WHEN j.data->>'template_id' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->>'template_id')::uuid ELSE NULL END) = t.id
-        LEFT JOIN documents d ON 
-          d.generation_metadata->>'job_id' = j.id::text OR 
-          (CASE WHEN j.data->'documentIds' IS NOT NULL AND jsonb_typeof(j.data->'documentIds') = 'array' AND jsonb_array_length(j.data->'documentIds') > 0 AND (j.data->'documentIds'->>0) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->'documentIds'->>0)::uuid ELSE NULL END) = d.id OR 
-          (CASE WHEN j.data->>'documentId' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->>'documentId')::uuid ELSE NULL END) = d.id OR
-          (CASE WHEN j.data->>'sourceDocumentId' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->>'sourceDocumentId')::uuid ELSE NULL END) = d.id
+        LEFT JOIN documents d1 ON d1.id = COALESCE(
+          (CASE WHEN j.data->>'documentId' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->>'documentId')::uuid ELSE NULL END),
+          (CASE WHEN j.data->>'sourceDocumentId' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->>'sourceDocumentId')::uuid ELSE NULL END),
+          (CASE WHEN j.data->'documentIds' IS NOT NULL AND jsonb_typeof(j.data->'documentIds') = 'array' AND jsonb_array_length(j.data->'documentIds') > 0 AND (j.data->'documentIds'->>0) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->'documentIds'->>0)::uuid ELSE NULL END)
+        )
+        LEFT JOIN documents d2 ON d2.generation_metadata @> jsonb_build_object('job_id', j.id::text)
         LEFT JOIN users u ON j.created_by = u.id
         WHERE j.created_by = $1 AND NOT j.type LIKE 'extract-entity-%'
       `
@@ -398,19 +400,21 @@ router.get("/:id",
         SELECT 
           j.*, 
           COALESCE(j.project_name, p.name) as project_name,
-          COALESCE(j.document_name, d.name) as document_name,
+          COALESCE(j.document_name, d1.name, d2.name) as document_name,
           u.name as created_by_name
         FROM jobs j
         LEFT JOIN users u ON j.created_by = u.id
-        LEFT JOIN projects p ON 
-          j.project_id = p.id OR 
-          (CASE WHEN j.data->>'projectId' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->>'projectId')::uuid ELSE NULL END) = p.id OR 
-          (CASE WHEN j.data->'variables'->>'project_id' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->'variables'->>'project_id')::uuid ELSE NULL END) = p.id
-        LEFT JOIN documents d ON 
-          d.generation_metadata->>'job_id' = j.id::text OR 
-          (CASE WHEN j.data->'documentIds' IS NOT NULL AND jsonb_typeof(j.data->'documentIds') = 'array' AND jsonb_array_length(j.data->'documentIds') > 0 AND (j.data->'documentIds'->>0) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->'documentIds'->>0)::uuid ELSE NULL END) = d.id OR 
-          (CASE WHEN j.data->>'documentId' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->>'documentId')::uuid ELSE NULL END) = d.id OR
-          (CASE WHEN j.data->>'sourceDocumentId' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->>'sourceDocumentId')::uuid ELSE NULL END) = d.id
+        LEFT JOIN projects p ON p.id = COALESCE(
+          j.project_id,
+          (CASE WHEN j.data->>'projectId' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->>'projectId')::uuid ELSE NULL END),
+          (CASE WHEN j.data->'variables'->>'project_id' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->'variables'->>'project_id')::uuid ELSE NULL END)
+        )
+        LEFT JOIN documents d1 ON d1.id = COALESCE(
+          (CASE WHEN j.data->>'documentId' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->>'documentId')::uuid ELSE NULL END),
+          (CASE WHEN j.data->>'sourceDocumentId' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->>'sourceDocumentId')::uuid ELSE NULL END),
+          (CASE WHEN j.data->'documentIds' IS NOT NULL AND jsonb_typeof(j.data->'documentIds') = 'array' AND jsonb_array_length(j.data->'documentIds') > 0 AND (j.data->'documentIds'->>0) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->'documentIds'->>0)::uuid ELSE NULL END)
+        )
+        LEFT JOIN documents d2 ON d2.generation_metadata @> jsonb_build_object('job_id', j.id::text)
         WHERE j.id = $1
       `,
         [id]
@@ -663,7 +667,7 @@ router.get("/admin/all",
           j.project_id,
           COALESCE(j.project_name, p.name) as project_name,
           j.template_name,
-          COALESCE(j.document_name, d.name) as document_name,
+          COALESCE(j.document_name, d1.name, d2.name) as document_name,
           j.created_by,
           j.started_at AT TIME ZONE 'UTC' AS started_at,
           j.completed_at AT TIME ZONE 'UTC' AS completed_at,
@@ -674,15 +678,17 @@ router.get("/admin/all",
           u.email as created_by_email
         FROM jobs j
         LEFT JOIN users u ON j.created_by = u.id
-        LEFT JOIN projects p ON 
-          j.project_id = p.id OR 
-          (CASE WHEN j.data->>'projectId' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->>'projectId')::uuid ELSE NULL END) = p.id OR 
-          (CASE WHEN j.data->'variables'->>'project_id' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->'variables'->>'project_id')::uuid ELSE NULL END) = p.id
-        LEFT JOIN documents d ON 
-          d.generation_metadata->>'job_id' = j.id::text OR 
-          (CASE WHEN j.data->'documentIds' IS NOT NULL AND jsonb_typeof(j.data->'documentIds') = 'array' AND jsonb_array_length(j.data->'documentIds') > 0 AND (j.data->'documentIds'->>0) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->'documentIds'->>0)::uuid ELSE NULL END) = d.id OR 
-          (CASE WHEN j.data->>'documentId' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->>'documentId')::uuid ELSE NULL END) = d.id OR
-          (CASE WHEN j.data->>'sourceDocumentId' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->>'sourceDocumentId')::uuid ELSE NULL END) = d.id
+        LEFT JOIN projects p ON p.id = COALESCE(
+          j.project_id,
+          (CASE WHEN j.data->>'projectId' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->>'projectId')::uuid ELSE NULL END),
+          (CASE WHEN j.data->'variables'->>'project_id' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->'variables'->>'project_id')::uuid ELSE NULL END)
+        )
+        LEFT JOIN documents d1 ON d1.id = COALESCE(
+          (CASE WHEN j.data->>'documentId' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->>'documentId')::uuid ELSE NULL END),
+          (CASE WHEN j.data->>'sourceDocumentId' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->>'sourceDocumentId')::uuid ELSE NULL END),
+          (CASE WHEN j.data->'documentIds' IS NOT NULL AND jsonb_typeof(j.data->'documentIds') = 'array' AND jsonb_array_length(j.data->'documentIds') > 0 AND (j.data->'documentIds'->>0) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->'documentIds'->>0)::uuid ELSE NULL END)
+        )
+        LEFT JOIN documents d2 ON d2.generation_metadata @> jsonb_build_object('job_id', j.id::text)
         WHERE NOT j.type LIKE 'extract-entity-%'
       `
 
