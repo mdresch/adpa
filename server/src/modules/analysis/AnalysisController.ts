@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { v4 as uuidv4 } from 'uuid';
+import path from 'path';
 import { AnalysisRepository } from './AnalysisRepository';
 import { aiService } from '../../services/aiService';
 import { ContextAwareAIService } from '../context/integration';
@@ -7,6 +8,16 @@ import { openaiConnector } from '../ai/openai';
 import { googleConnector } from '../ai/google';
 import { mistralConnector } from '../ai/mistral';
 import * as queueServiceModule from '../../services/queueService';
+import { pool } from '../../database/connection';
+import { childLogger } from '../../utils/logger';
+import { makeKey, getCache, setCache } from '../../utils/cache';
+import { listDomainExtractionConfigs } from '@/modules/context';
+import { PMBOK_DOMAINS } from '@/types/pmbok';
+import { ENTITY_DOMAIN_WEIGHTS, getEntityWeights } from '../../types/entity-domain-weights';
+import { createInitialBatchProgressMeta, normalizeBatchingConfig } from '../../services/extraction/batchPlanner';
+import { ENTITY_COUNT_TABLES, ENTITY_CAMEL_KEY_TO_TABLE } from './entityTypeTables';
+import { PMBOK6_PROCESS_MAP, PMBOK6_DELIVERABLE_MAP } from '../../types/pmbok6-mapping';
+
 function getDefaultContextWindow(modelId: string, providerType: string): number {
   const contextWindows: Record<string, Record<string, number>> = {
     openai: { 'gpt-4': 8192, 'gpt-4-turbo': 128000, 'gpt-4-32k': 32768, 'gpt-3.5-turbo': 4096, 'gpt-3.5-turbo-16k': 16384 },
@@ -15,6 +26,7 @@ function getDefaultContextWindow(modelId: string, providerType: string): number 
   };
   return contextWindows[providerType]?.[modelId] || 4096;
 }
+
 function getDefaultMaxTokens(modelId: string, providerType: string): number {
   const maxTokens: Record<string, Record<string, number>> = {
     openai: { 'gpt-4': 4096, 'gpt-4-turbo': 4096, 'gpt-4-32k': 8192, 'gpt-3.5-turbo': 2048, 'gpt-3.5-turbo-16k': 4096 },
@@ -23,14 +35,6 @@ function getDefaultMaxTokens(modelId: string, providerType: string): number {
   };
   return maxTokens[providerType]?.[modelId] || 2048;
 }
-import { pool } from '../../database/connection';
-import { childLogger } from '../../utils/logger';
-import { makeKey, getCache, setCache } from '../../utils/cache';
-import { listDomainExtractionConfigs } from '@/modules/context';
-import { PMBOK_DOMAINS } from '@/types/pmbok';
-import { ENTITY_DOMAIN_WEIGHTS } from '../../types/entity-domain-weights';
-import { createInitialBatchProgressMeta, normalizeBatchingConfig } from '../../services/extraction/batchPlanner';
-import { ENTITY_COUNT_TABLES } from './entityTypeTables';
 
 export class AnalysisController {
   private repository = new AnalysisRepository(pool);
@@ -349,50 +353,38 @@ export class AnalysisController {
   getSummary = async (req: Request, res: Response) => {
     try {
       const { projectId } = req.params;
-      const tables = [
-        { key: 'stakeholders', name: 'stakeholders' },
-        { key: 'requirements', name: 'requirements' },
-        { key: 'risks', name: 'risks' },
-        { key: 'milestones', name: 'milestones' },
-        { key: 'activities', name: 'activities' },
-        { key: 'deliverables', name: 'deliverables' },
-        { key: 'constraints', name: 'constraints' },
-        { key: 'success_criteria', name: 'success_criteria' },
-        { key: 'best_practices', name: 'best_practices' },
-        { key: 'team_agreements', name: 'team_agreements' },
-        { key: 'development_approaches', name: 'development_approaches' },
-        { key: 'work_items', name: 'work_items' },
-        { key: 'performance_actuals', name: 'performance_actuals' }
-      ];
+      const tables = ENTITY_COUNT_TABLES;
 
       const entityCounts = await this.repository.getProjectEntityCounts(projectId, tables);
       
-      // Calculate PMBOK 8 Domain Counts based on weights
+      // 1. Tier 1: PMBOK 8 Performance Domains
       const pmbok8DomainCounts: Record<string, number> = {
-        stakeholders: 0,
-        team: 0,
-        development_approach: 0,
-        planning: 0,
-        project_work: 0,
-        delivery: 0,
-        measurement: 0,
-        uncertainty: 0
+        stakeholders: 0, team: 0, development_approach: 0, planning: 0,
+        project_work: 0, delivery: 0, measurement: 0, uncertainty: 0
+      };
+
+      // 2. Tier 2: PMBOK 7 Knowledge Areas
+      const pmbok7DomainCounts: Record<string, number> = {
+        governance: 0, scope: 0, schedule: 0, finance: 0,
+        resources: 0, risk: 0, stakeholders_ops: 0
       };
 
       let totalEntities = 0;
 
       Object.entries(entityCounts).forEach(([entityType, count]) => {
         totalEntities += count;
-        const weights = ENTITY_DOMAIN_WEIGHTS[entityType] || [];
+        const weights = getEntityWeights(entityType);
         weights.forEach(w => {
           if (pmbok8DomainCounts[w.domain] !== undefined) {
             pmbok8DomainCounts[w.domain] += count * w.weight;
           }
+          if (pmbok7DomainCounts[w.domain] !== undefined) {
+            pmbok7DomainCounts[w.domain] += count * w.weight;
+          }
         });
       });
 
-      // Map snake_case domains to camelCase expected by frontend
-      const formattedDomainCounts = {
+      const formattedPmbok8 = {
         team: Math.round(pmbok8DomainCounts.team),
         developmentApproach: Math.round(pmbok8DomainCounts.development_approach),
         projectWork: Math.round(pmbok8DomainCounts.project_work),
@@ -403,12 +395,107 @@ export class AnalysisController {
         delivery: Math.round(pmbok8DomainCounts.delivery)
       };
 
+      const formattedPmbok7 = {
+        governance: Math.round(pmbok7DomainCounts.governance),
+        scope: Math.round(pmbok7DomainCounts.scope),
+        schedule: Math.round(pmbok7DomainCounts.schedule),
+        finance: Math.round(pmbok7DomainCounts.finance),
+        resources: Math.round(pmbok7DomainCounts.resources),
+        risk: Math.round(pmbok7DomainCounts.risk),
+        stakeholdersOps: Math.round(pmbok7DomainCounts.stakeholders_ops)
+      };
+
+      // 3. Tier 3: PMBOK 6th Edition Process Compliance Auditor
+      const processCompliance = PMBOK6_PROCESS_MAP.map(p => {
+        let activationScore = 0;
+        const auditLines: string[] = [];
+
+        p.requirements.forEach(req => {
+          const count = entityCounts[req.entityType] || 0;
+          const met = count >= req.minCount;
+          if (met) {
+            activationScore += req.weight;
+          }
+          auditLines.push(`${req.entityType}: ${count}/${req.minCount} (${met ? 'OK' : 'MISSING'})`);
+        });
+
+        return {
+          code: p.code,
+          name: p.name,
+          status: activationScore >= 1.0 ? 'ACTIVE' : activationScore > 0 ? 'PARTIAL' : 'PLANNED',
+          activationScore: Math.min(Math.round(activationScore * 100), 100),
+          audit: auditLines,
+          deliverables: p.deliverables.map(d => ({
+            name: d,
+            present: (PMBOK6_DELIVERABLE_MAP[d] || []).some(type => (entityCounts[type] || 0) > 0)
+          }))
+        };
+      });
+
+      const allPossibleDeliverables = [...new Set(PMBOK6_PROCESS_MAP.flatMap(p => p.deliverables))];
+      const presentUniqueDeliverables = allPossibleDeliverables.filter(d => 
+        (PMBOK6_DELIVERABLE_MAP[d] || []).some(type => (entityCounts[type] || 0) > 0)
+      ).length;
+
+      const activeProcesses = processCompliance.filter(p => p.status === 'ACTIVE').length;
+
+      const pmbok6Compliance = {
+        processCoverage: Math.round((activeProcesses / 49) * 100),
+        deliverableCoverage: Math.round((presentUniqueDeliverables / allPossibleDeliverables.length) * 100),
+        activeProcessCount: activeProcesses,
+        presentDeliverableCount: presentUniqueDeliverables,
+        totalDeliverableCount: allPossibleDeliverables.length,
+        processes: processCompliance
+      };
+
+      // 4. Calculate High-Integrity Baseline Readiness
+      const CHARTER_TEMPLATE_IDS = [
+        'ffbcf898-0486-46fa-939f-e5629737de0e', 
+        '27788b37-2aa2-473f-accc-5a9e7eec7c48'
+      ];
+      
+      const pmbokThresholds: Record<string, number> = {
+        stakeholders: 25, team: 15, developmentApproach: 5, planning: 30,
+        projectWork: 20, delivery: 20, measurement: 15, uncertainty: 20
+      };
+
+      const domainsMet = Object.entries(pmbokThresholds).filter(([domain, threshold]) => {
+        const count = formattedPmbok8[domain as keyof typeof formattedPmbok8] || 0;
+        return count >= threshold;
+      }).length;
+
+      const coveragePercent = Math.round((domainsMet / 8) * 100);
+
+      const charterDocRes = await this.repository.query(`
+        SELECT id FROM documents 
+        WHERE project_id = $1 
+        AND template_id = ANY($2)
+        AND status IN ('published', 'review')
+        LIMIT 1
+      `, [projectId, CHARTER_TEMPLATE_IDS]);
+
+      const hasCharter = charterDocRes.rows.length > 0;
+
+      const baselineReadiness = {
+        isReady: hasCharter && coveragePercent >= 60 && totalEntities >= 350,
+        coveragePercent,
+        hasCharter,
+        totalEntities,
+        requirements: { minEntities: 350, minCoverage: 60, requiresCharter: true },
+        missingReason: !hasCharter ? 'Project Charter missing' : 
+                       coveragePercent < 60 ? `Insufficient domain coverage (${coveragePercent}% < 60%)` :
+                       totalEntities < 350 ? `Insufficient entity density (${totalEntities} < 350)` : null
+      };
+
       res.json({ 
         success: true, 
         projectId, 
         entityCounts, 
-        pmbok8DomainCounts: formattedDomainCounts,
-        totalEntities
+        pmbok8DomainCounts: formattedPmbok8,
+        pmbok7DomainCounts: formattedPmbok7,
+        pmbok6Compliance,
+        totalEntities,
+        baselineReadiness
       });
     } catch (error) {
       this.logger.error('Summary fetch failed', { error });
@@ -417,7 +504,7 @@ export class AnalysisController {
   };
 
   /**
-   * Full entity counts for extraction UI (same tables as summary, without domain rollups).
+   * Full entity counts for extraction UI.
    */
   getExtractionResults = async (req: Request, res: Response) => {
     try {
@@ -431,7 +518,7 @@ export class AnalysisController {
   };
 
   /**
-   * List entities for a project by type (used by ProjectDataExtraction entity detail dialog).
+   * List entities for a project by type.
    */
   getEntitiesByType = async (req: Request, res: Response) => {
     try {
@@ -445,21 +532,10 @@ export class AnalysisController {
         { limit, offset }
       );
 
-      res.json({
-        success: true,
-        projectId,
-        entityType,
-        tableName,
-        entities,
-        total,
-        limit,
-        offset,
-      });
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (message.startsWith('Unknown entity type:')) {
-        return res.status(400).json({ error: message });
-      }
+      res.json({ success: true, projectId, entityType, tableName, entities, total, limit, offset });
+    } catch (error: any) {
+      const message = error.message || String(error);
+      if (message.startsWith('Unknown entity type:')) return res.status(400).json({ error: message });
       this.logger.error('Entity details fetch failed', { error: message });
       res.status(500).json({ error: 'Entity details fetch failed' });
     }
@@ -471,26 +547,17 @@ export class AnalysisController {
   getEntitiesByDocument = async (req: Request, res: Response) => {
     try {
       const { docId } = req.params;
-      
       const [entities, document] = await Promise.all([
         this.repository.getEntitiesByDocument(docId),
         this.repository.getDocumentInfo(docId)
       ]);
 
-      if (!document) {
-        return res.status(404).json({ error: "Document not found" });
-      }
+      if (!document) return res.status(404).json({ error: "Document not found" });
 
-      // Group entities by type for frontend
       const groupedEntities: Record<string, any[]> = {};
       const entityCounts: Record<string, number> = {};
-
-      // Create a reverse mapping from snake_case to camelCase
       const TABLE_TO_CAMEL: Record<string, string> = {};
-      const { ENTITY_CAMEL_KEY_TO_TABLE } = await import('./entityTypeTables');
-      Object.entries(ENTITY_CAMEL_KEY_TO_TABLE).forEach(([camel, snake]) => {
-        TABLE_TO_CAMEL[snake] = camel;
-      });
+      Object.entries(ENTITY_CAMEL_KEY_TO_TABLE).forEach(([camel, snake]) => { TABLE_TO_CAMEL[snake] = camel; });
 
       entities.forEach(entity => {
         const camelKey = TABLE_TO_CAMEL[entity.entity_type] || entity.entity_type;
@@ -498,35 +565,22 @@ export class AnalysisController {
           groupedEntities[camelKey] = [];
           entityCounts[camelKey] = 0;
         }
-        
-        // Flatten entity_data for display
-        const displayData = {
-          id: entity.id,
-          name: entity.entity_name,
-          ...entity.entity_data,
+        groupedEntities[camelKey].push({
+          id: entity.id, name: entity.entity_name, ...entity.entity_data,
           extraction_confidence: entity.extraction_confidence,
-          is_verified: entity.is_verified,
-          created_at: entity.created_at,
-          source_document_id: entity.document_id // Fallback for UI that still uses single ID
-        };
-        
-        groupedEntities[camelKey].push(displayData);
+          is_verified: entity.is_verified, created_at: entity.created_at,
+          source_document_id: entity.document_id
+        });
         entityCounts[camelKey]++;
       });
 
-      // Extract metadata
       const metadata = typeof document.generation_metadata === 'string'
         ? JSON.parse(document.generation_metadata)
         : document.generation_metadata || {};
 
       res.json({
-        success: true,
-        documentId: docId,
-        documentName: document.name,
-        projectId: document.project_id,
-        entityCounts,
-        entities: groupedEntities,
-        totalEntities: entities.length,
+        success: true, documentId: docId, documentName: document.name, projectId: document.project_id,
+        entityCounts, entities: groupedEntities, totalEntities: entities.length,
         contextMatchingScore: metadata.contextMatchingScore || 0,
         appliedContextEntities: metadata.appliedContextEntities || []
       });
@@ -536,4 +590,3 @@ export class AnalysisController {
     }
   };
 }
-

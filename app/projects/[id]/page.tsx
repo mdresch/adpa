@@ -33,6 +33,7 @@ import { ProjectRisksTab } from "@/components/project/ProjectRisksTab"
 import { ProjectIssuesTab } from "@/components/project/ProjectIssuesTab"
 import { ComplianceSecurityTab } from "./components/ComplianceSecurityTab"
 import { IntegrationsTab } from "./components/IntegrationsTab"
+import { Pmbok6Tab } from "./components/Pmbok6Tab"
 import { DigitalTwinAnalyticsTab } from "./components/DigitalTwinAnalyticsTab"
 import { StrategicAlignmentDashboard } from "@/components/portfolio/StrategicAlignmentDashboard"
 import { ScoringForm } from "@/components/portfolio/ScoringForm"
@@ -3431,6 +3432,10 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                   Development Approach
                 </TabsTrigger>
                 <TabsTrigger value="baseline">Baseline</TabsTrigger>
+                <TabsTrigger value="pmbok6">
+                  <Shield className="h-4 w-4 mr-2" />
+                  PMBOK 6 Compliance
+                </TabsTrigger>
                 <TabsTrigger value="financials">
                   <DollarSign className="h-4 w-4 mr-2" />
                   Financials
@@ -3469,10 +3474,6 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                   documentStats={documentStats}
                   searchTerm={searchTerm}
                   setSearchTerm={setSearchTerm}
-                  createDialogOpen={createDialogOpen}
-                  setCreateDialogOpen={setCreateDialogOpen}
-                  handleUploadDocumentClick={handleUploadDocumentClick}
-                  handleDocumentUpload={handleDocumentUpload}
                   documentsLoading={documentsLoading}
                   displayDocuments={displayDocuments}
                   handleEditDocument={handleEditDocument}
@@ -3543,6 +3544,10 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
               <TabsContent value="baseline" className="space-y-4">
                 {/* Baseline Tab - CR-2026-001 */}
                 <BaselineManagement projectId={projectId} documents={documents} />
+              </TabsContent>
+
+              <TabsContent value="pmbok6" className="space-y-4">
+                <Pmbok6Tab projectId={projectId} />
               </TabsContent>
 
               <TabsContent value="financials" className="space-y-4">
