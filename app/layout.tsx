@@ -5,6 +5,7 @@ import { Inter, Roboto } from "next/font/google"
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toaster"
+import { Toaster as SonnerToaster } from "@/components/ui/sonner"
 import { RouteProgress } from "@/components/route-progress"
 import { MobileWarning } from "@/components/MobileWarning"
 import { AuthProvider } from "@/contexts/AuthContext"
@@ -55,6 +56,7 @@ export default function RootLayout({
                   <RoomStatusList />
                 </div>
                 <Toaster />
+                <SonnerToaster />
               </WebSocketProvider>
             </AuthProvider>
           </ThemeProvider>

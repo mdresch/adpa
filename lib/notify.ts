@@ -1,27 +1,33 @@
 import { sendNotification } from './notifications'
+import { toast as realSonnerToast } from 'sonner'
+
+// Set global toast reference in browser for any legacy modules
+if (typeof window !== 'undefined') {
+  ;(window as any).toast = realSonnerToast
+}
 
 // Minimal local fallback for toast API to avoid hard dependency on `sonner` in CI/build.
 // If `sonner` is present in node_modules the bundler will still pick it up when used elsewhere.
 const sonnerToast = {
   success: (msg: string, description?: string) => {
-    if (typeof window !== 'undefined' && (window as any).toast) {
-      try { (window as any).toast.success(msg, { description }) } catch { /* ignore */ }
+    if (typeof window !== 'undefined') {
+      try { realSonnerToast.success(msg, { description }) } catch { /* ignore */ }
     } else {
       // eslint-disable-next-line no-console
       console.log('[toast success]', msg, description ? `(${description})` : '')
     }
   },
   error: (msg: string, description?: string) => {
-    if (typeof window !== 'undefined' && (window as any).toast) {
-      try { (window as any).toast.error(msg, { description }) } catch { /* ignore */ }
+    if (typeof window !== 'undefined') {
+      try { realSonnerToast.error(msg, { description }) } catch { /* ignore */ }
     } else {
       // eslint-disable-next-line no-console
       console.error('[toast error]', msg, description ? `(${description})` : '')
     }
   },
   loading: (msg: string, description?: string) => {
-    if (typeof window !== 'undefined' && (window as any).toast) {
-      try { (window as any).toast.loading(msg, { description }) } catch { /* ignore */ }
+    if (typeof window !== 'undefined') {
+      try { realSonnerToast.loading(msg, { description }) } catch { /* ignore */ }
     } else {
       // eslint-disable-next-line no-console
       console.log('[toast loading]', msg, description ? `(${description})` : '')
@@ -29,8 +35,12 @@ const sonnerToast = {
   },
   // fallback callable
   default: (msg: string, description?: string) => {
-    // eslint-disable-next-line no-console
-    console.log('[toast]', msg, description ? `(${description})` : '')
+    if (typeof window !== 'undefined') {
+      try { realSonnerToast(msg, { description }) } catch { /* ignore */ }
+    } else {
+      // eslint-disable-next-line no-console
+      console.log('[toast]', msg, description ? `(${description})` : '')
+    }
   }
 }
 

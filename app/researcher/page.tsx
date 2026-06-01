@@ -5,6 +5,8 @@ import useSWR from 'swr'
 import { getApiBaseUrl, ApiClient, RtmRequirement, AmendmentProposalRequest, ResearchAdvice } from '@/lib/api'
 import { ClientRtmTable } from '@/components/researcher/client-rtm-table'
 import { ProposeAmendmentDialog } from '@/components/researcher/propose-amendment-dialog'
+import { NotificationCenter } from '@/components/notification-center'
+import { ClientOnly } from '@/components/client-only'
 import { toast } from 'sonner'
 import { 
   ShieldCheck, 
@@ -23,7 +25,7 @@ export default function ResearcherDashboard() {
   const [selectedRequirement, setSelectedRequirement] = useState<RtmRequirement | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [aiAdvice, setAiAdvice] = useState<ResearchAdvice | null>(null)
-  const [isResearching, setIsResearching] = useState(false)
+  const [researchingId, setResearchingId] = useState<string | null>(null)
 
   // SWR for RTM Ledger - RPAS-CM Certified
   const { data: requirements, mutate, error, isLoading } = useSWR(
@@ -38,7 +40,7 @@ export default function ResearcherDashboard() {
   }
 
   const handleAiResearch = async (requirementId: string) => {
-    setIsResearching(true)
+    setResearchingId(requirementId)
     const target = requirements?.find((r: RtmRequirement) => r.id === requirementId)
     if (target) setSelectedRequirement(target)
     
@@ -54,7 +56,7 @@ export default function ResearcherDashboard() {
         description: 'The Intelligence Tier ritual failed or was gated.'
       })
     } finally {
-      setIsResearching(false)
+      setResearchingId(null)
     }
   }
 
@@ -100,6 +102,9 @@ export default function ResearcherDashboard() {
               <Database className="h-3.5 w-3.5" />
               RTM LEDGER v2.0-CSR
             </div>
+            <ClientOnly>
+              <NotificationCenter />
+            </ClientOnly>
             <a 
               href="/" 
               target="_blank" 
@@ -180,7 +185,7 @@ export default function ResearcherDashboard() {
             requirements={requirements || []} 
             onPropose={handleProposeChange}
             onAiResearch={handleAiResearch}
-            isResearching={isResearching}
+            researchingId={researchingId}
           />
         )}
 

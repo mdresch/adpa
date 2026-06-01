@@ -23,10 +23,10 @@ interface ClientRtmTableProps {
   requirements: RtmRequirement[]
   onPropose: (req: RtmRequirement) => void
   onAiResearch: (requirementId: string) => void
-  isResearching: boolean
+  researchingId: string | null
 }
 
-export function ClientRtmTable({ requirements, onPropose, onAiResearch, isResearching }: ClientRtmTableProps) {
+export function ClientRtmTable({ requirements, onPropose, onAiResearch, researchingId }: ClientRtmTableProps) {
   const [showBaselineOnly, setShowBaselineOnly] = useState(false) // Default to Full Ledger in Researcher View
   const [search, setSearch] = useState('')
 
@@ -148,14 +148,14 @@ export function ClientRtmTable({ requirements, onPropose, onAiResearch, isResear
                     <>
                       <button
                         onClick={() => onAiResearch(req.id)}
-                        disabled={isResearching}
+                        disabled={researchingId !== null}
                         className={cn(
                           "inline-flex items-center gap-1.5 px-3 py-2 bg-primary/10 text-primary rounded-lg text-sm font-bold border border-primary/20 hover:bg-primary/20 active:scale-95 transition-all shadow-sm",
-                          isResearching && "opacity-50 cursor-not-allowed"
+                          researchingId !== null && "opacity-50 cursor-not-allowed"
                         )}
                         title="Invoke RPAS-CM AI Research Advisor"
                       >
-                        {isResearching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                        {researchingId === req.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                         AI Research
                       </button>
                       <button
