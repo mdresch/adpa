@@ -150,12 +150,15 @@ export async function saveRequirements(
 
       // Resolve source_document_id
       const sourceDocumentId = r.source_document_id || null
+      
+      const title = r.title || r.name || 'Untitled Requirement'
+      const description = r.description || title
 
       values.push(
         projectId,
-        r.title,
-        r.title,        // For name column
-        r.description,
+        title,
+        title,        // For name column
+        description,
         mappedType,
         mappedPriority,
         mappedStatus,

@@ -94,6 +94,8 @@ export interface Document {
   status: string
   created_by: string
   updated_by: string
+  created_by_name?: string
+  updated_by_name?: string
   created_at: string
   updated_at: string
   generation_metadata?: any

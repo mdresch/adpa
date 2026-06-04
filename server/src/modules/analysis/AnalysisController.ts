@@ -470,7 +470,8 @@ export class AnalysisController {
         SELECT id FROM documents 
         WHERE project_id = $1 
         AND template_id = ANY($2)
-        AND status IN ('published', 'review')
+        AND status IN ('published', 'review', 'draft', 'generated')
+        AND (word_count IS NULL OR word_count > 100)
         LIMIT 1
       `, [projectId, CHARTER_TEMPLATE_IDS]);
 
@@ -559,8 +560,94 @@ export class AnalysisController {
       const TABLE_TO_CAMEL: Record<string, string> = {};
       Object.entries(ENTITY_CAMEL_KEY_TO_TABLE).forEach(([camel, snake]) => { TABLE_TO_CAMEL[snake] = camel; });
 
+      const singularToPluralMap: Record<string, string> = {
+        // Core entities
+        'stakeholder': 'stakeholders',
+        'requirement': 'requirements',
+        'risk': 'risks',
+        'milestone': 'milestones',
+        'constraint': 'constraints',
+        'deliverable': 'deliverables',
+        'activity': 'activities',
+        'resource': 'resources',
+        'assumption': 'assumptions',
+        'dependency': 'dependencies',
+        'success_criterion': 'success_criteria',
+        'best_practice': 'best_practices',
+        'phase': 'phases',
+        'technology': 'technologies',
+        'quality_standard': 'quality_standards',
+        'compliance_security': 'compliance_security',
+        'scope_item': 'scope_items',
+        
+        // PMBOK 8 Performance Domain
+        'team_agreement': 'team_agreements',
+        'development_approach': 'development_approaches',
+        'project_iteration': 'project_iterations',
+        'work_item': 'work_items',
+        'capacity_plan': 'capacity_plans',
+        'performance_measurement': 'performance_measurements',
+        'earned_value_metric': 'earned_value_metrics',
+        'opportunity': 'opportunities',
+        'risk_response': 'risk_responses',
+        'performance_actual': 'performance_actuals',
+        
+        // PMBOK 8 Knowledge Area Domain
+        // Governance
+        'governance_decision': 'governance_decisions',
+        'approval_workflow': 'approval_workflows',
+        'steering_committee': 'steering_committees',
+        'change_control_board': 'change_control_boards',
+        'policy_compliance': 'policy_compliance',
+        // Scope
+        'scope_baseline': 'scope_baselines',
+        'wbs_node': 'wbs_nodes',
+        'scope_change_request': 'scope_change_requests',
+        'requirements_traceability': 'requirements_traceability',
+        'scope_verification': 'scope_verification',
+        // Schedule
+        'schedule_baseline': 'schedule_baselines',
+        'schedule_activity': 'schedule_activities',
+        'critical_path_activity': 'critical_path_activities',
+        'schedule_variance': 'schedule_variances',
+        'schedule_forecast': 'schedule_forecasts',
+        // Finance
+        'budget_baseline': 'budget_baselines',
+        'cost_actual': 'cost_actuals',
+        'cost_estimate': 'cost_estimates',
+        'funding_tranche': 'funding_tranches',
+        'financial_variance': 'financial_variances',
+        'procurement_cost': 'procurement_costs',
+        // Resources
+        'resource_assignment': 'resource_assignments',
+        'resource_pool': 'resource_pool',
+        'capacity_forecast': 'capacity_forecasts',
+        'utilization_record': 'utilization_records',
+        'resource_conflict': 'resource_conflicts',
+        'onboarding_offboarding': 'onboarding_offboarding',
+        // Risk
+        'risk_assessment': 'risk_assessments',
+        'risk_response_plan': 'risk_response_plans',
+        'risk_trigger': 'risk_triggers',
+        'risk_review': 'risk_reviews',
+        'contingency_reserve': 'contingency_reserves',
+        'risk_metric': 'risk_metrics',
+        // Stakeholders Ops
+        'engagement_action': 'engagement_actions',
+        'communication_log': 'communication_logs',
+        'satisfaction_survey': 'satisfaction_surveys',
+        'stakeholder_issue': 'stakeholder_issues',
+        'relationship_health': 'relationship_health',
+        
+        // Digital Twin
+        'dt_asset': 'dt_assets'
+      };
+
       entities.forEach(entity => {
-        const camelKey = TABLE_TO_CAMEL[entity.entity_type] || entity.entity_type;
+        const typeKey = entity.entity_type.toLowerCase();
+        const mappedType = singularToPluralMap[typeKey] || typeKey;
+        const camelKey = TABLE_TO_CAMEL[mappedType] || TABLE_TO_CAMEL[mappedType + 's'] || entity.entity_type;
+
         if (!groupedEntities[camelKey]) {
           groupedEntities[camelKey] = [];
           entityCounts[camelKey] = 0;

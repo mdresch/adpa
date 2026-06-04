@@ -98,6 +98,20 @@ export class AIGenerationJobService {
       // Update job status to processing and assign worker
       await updateJobStatus(actualJobId, "processing", 10, workerId, "ai-processing")
 
+      // Emit immediate update for UI visibility (QueueService doesn't emit)
+      const ws = deps?.websocket || io
+      if (ws) {
+        ws.emit("job:status", {
+          jobId: actualJobId,
+          userId: jobData.userId,
+          status: "processing",
+          progress: 10,
+          startTime: new Date().toISOString(),
+          projectId: jobData.projectId || jobData.variables?.project_id,
+          message: "Starting processing..."
+        })
+      }
+
       // Phase 6: Start incremental progress heartbeat for AI generation (10% -> 55%)
       // Long documents + GKG context can take 3-5+ minutes; extended range so bar keeps moving
       const aiHeartbeat = AIGenerationJobService.startProgressHeartbeat(
@@ -130,6 +144,53 @@ export class AIGenerationJobService {
       try {
         // Create document from generated content
         createdDocumentId = await AIGenerationJobService.createDocument(jobData, result, deps)
+        
+        // Phase 6: Multi-Level Summary Register
+        if (createdDocumentId && result.content) {
+          const { DocumentSummarizationService } = await import('../documentSummarizationService')
+          
+          const summaries = result.summaries
+          const hasSummaries = summaries && (Array.isArray(summaries) ? summaries.length > 0 : Object.keys(summaries).length > 0)
+
+          if (hasSummaries) {
+            // Normalize snapshots map to summaries array for relational storage
+            const summariesArray = Array.isArray(summaries) 
+              ? summaries 
+              : Object.entries(summaries).map(([k, v]: [string, any]) => ({
+                  level: parseInt(k.replace('p', ''), 10),
+                  content: v.summary || v
+                }))
+
+            logger.info(`[SUMMARIZER] Saving ${summariesArray.length} in-band summaries for ${createdDocumentId}`)
+            setImmediate(async () => {
+              try {
+                await DocumentSummarizationService.saveSummaries(
+                  createdDocumentId!,
+                  result.content,
+                  summariesArray,
+                  jobData.provider || 'default',
+                  jobData.model || 'default'
+                )
+              } catch (saveError) {
+                logger.error(`[SUMMARIZER] Failed to save in-band summaries for ${createdDocumentId}`, saveError)
+              }
+            })
+          } else {
+            // Fallback: Generate summaries in background if not provided in-band
+            logger.info(`[SUMMARIZER] No in-band summaries found, triggering background generation for ${createdDocumentId}`)
+            setImmediate(async () => {
+              try {
+                await DocumentSummarizationService.generateMultiLevelSummaries(
+                  createdDocumentId!, 
+                  result.content, 
+                  jobData.userId || 'system'
+                )
+              } catch (sumError) {
+                logger.error(`[SUMMARIZER] Background summarization failed for ${createdDocumentId}`, sumError)
+              }
+            })
+          }
+        }
       } finally {
         clearInterval(docHeartbeat)
       }
@@ -219,6 +280,9 @@ export class AIGenerationJobService {
         name: jobData.name || undefined,
       })
 
+      // Mission Draco: Integrity Check Log
+      log.info(`[MISSION-DRACO] Integrity Check: Document ${docId} assembled. CUR Score: ${agenticResult.metadata.contextMatchingScore}%. Status: ${agenticResult.compliance_status}.`)
+
       // Normalise to the shape that createDocument() expects
       // (content string + optional usage object)
       return {
@@ -233,6 +297,11 @@ export class AIGenerationJobService {
         },
         // Pass through GKG snapshot so it can be stored in generation_metadata
         gkg_context_snapshot: agenticResult.gkg_context_snapshot,
+        summaries: agenticResult.summaries,
+        contextMatchingScore: agenticResult.metadata.contextMatchingScore,
+        audit_log: agenticResult.audit_log,
+        compliance_status: agenticResult.compliance_status,
+        compliance_score: agenticResult.compliance_score
       }
     }
 
@@ -281,40 +350,20 @@ export class AIGenerationJobService {
     const log = deps?.logger || logger
     const { jobId, userId, template_id, variables, projectId, documentIds, name, framework } = jobData
 
-    // 🔍 DEBUG: Log jobData to see what we received
-    log.info('[AI-JOB] createDocument called with jobData:', {
-      hasJobId: !!jobId,
-      hasUserId: !!userId,
-      hasTemplateId: !!template_id,
-      hasVariables: !!variables,
-      hasProjectId: !!projectId,
-      projectIdValue: projectId,
-      variablesProjectId: variables?.project_id,
-      hasDocumentIds: !!documentIds,
-      documentIdsCount: documentIds?.length || 0,
-      hasName: !!name,
-      hasFramework: !!framework
-    })
-
     let createdDocumentId: string | null = null
 
     try {
       const documentId = result?.documentId || uuidv4()
-      const docNameProvided = name && name.trim() ? name.trim() : null
+      const docNameProvided = name && String(name).trim() ? String(name).trim() : null
       const templateName = (variables?.template_name as string) || jobData.template_name || null
       const docName = docNameProvided || templateName || (template_id ? `Generated Document - ${template_id}` : `AI Generated Document ${new Date().toISOString()}`)
 
       const rawContent = result?.content ? result.content : result
-      const docContent = typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent)
+      const docContent = (typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent)) || ''
       const projectIdForDoc = projectId || variables?.project_id || null
 
-      // 🔍 DEBUG: Log projectId resolution
-      log.info('[AI-JOB] Project ID resolution:', {
-        projectIdFromJobData: projectId,
-        projectIdFromVariables: variables?.project_id,
-        resolvedProjectId: projectIdForDoc,
-        willAddProjectContext: !!projectIdForDoc
-      })
+      // Mission Draco: Sync Verification Log
+      log.info(`[MISSION-DRACO] [SYNC] Saving Document ${documentId}: ${docContent.length} characters. Source context pools: ${documentIds?.length || 0}.`)
 
       const { wordCount, characterCount, sentenceCount, paragraphCount } = AIGenerationJobService.calculateContentStats(docContent)
 
@@ -348,17 +397,12 @@ export class AIGenerationJobService {
               is_project_context: true
             }
             sourceDocuments.push(projectContextEntry)
-            log.info('[AI-JOB] Project context added to source documents', {
-              projectId: projectIdForDoc,
-              projectName: project.name || 'Unknown',
-              sourceDocumentsCount: sourceDocuments.length
-            })
           } else {
-            // Project not found, but still add placeholder
             log.warn('[AI-JOB] Project not found, adding project context placeholder', { projectId: projectIdForDoc })
             const projectContextEntry = {
-              title: `Project Context: Project ${(projectIdForDoc as string).substring(0, 8)}...`,
-              name: `Project Context: Project ${(projectIdForDoc as string).substring(0, 8)}...`,
+              id: `project_context:${projectIdForDoc}`,
+              title: `Project Context`,
+              name: `Project Context`,
               type: 'Project Context',
               template_id: null,
               status: 'active',
@@ -373,26 +417,7 @@ export class AIGenerationJobService {
             sourceDocuments.push(projectContextEntry)
           }
         } catch (error) {
-          log.error('[AI-JOB] Failed to fetch project context, adding placeholder', {
-            projectId: projectIdForDoc,
-            error: error instanceof Error ? error.message : String(error)
-          })
-          const projectContextEntry = {
-            id: `project_context:${projectIdForDoc}`,
-            title: `Project Context: Project ${(projectIdForDoc as string).substring(0, 8)}...`,
-            name: `Project Context: Project ${(projectIdForDoc as string).substring(0, 8)}...`,
-            type: 'Project Context',
-            template_id: null,
-            status: 'active',
-            lifecycle_phase: 0,
-            phase_name: 'Foundation',
-            priority_rank: 0,
-            character_count: 0,
-            word_count: 0,
-            reading_time_minutes: 0,
-            is_project_context: true
-          }
-          sourceDocuments.push(projectContextEntry)
+          log.error('[AI-JOB] Failed to fetch project context', { projectId: projectIdForDoc, error })
         }
 
         // Fetch document details for documentIds if provided
@@ -430,20 +455,11 @@ export class AIGenerationJobService {
             })
 
             sourceDocuments.push(...otherDocuments)
-            log.info('[AI-JOB] Added document details to source documents', {
-              documentIdsCount: documentIds.length,
-              documentsFound: otherDocuments.length,
-              totalSourceDocuments: sourceDocuments.length
-            })
           } catch (error) {
-            log.error('[AI-JOB] Failed to fetch document details for source documents', {
-              documentIds,
-              error: error instanceof Error ? error.message : String(error)
-            })
+            log.error('[AI-JOB] Failed to fetch document details', { documentIds, error })
           }
         }
 
-        // Build context stats
         contextStats = {
           project_context_used: true,
           documents_used: sourceDocuments.filter((doc: any) => !doc.is_project_context).length,
@@ -470,79 +486,6 @@ export class AIGenerationJobService {
       const jobStartTime = jobData.started_at ? new Date(jobData.started_at) : new Date(jobData.timestamp || Date.now())
       const processingTimeSec = ((new Date().getTime() - jobStartTime.getTime()) / 1000).toFixed(2)
 
-      // 🔍 CRITICAL: Verify project context was added before saving
-      // If we have a projectId but no source documents, add project context as emergency fallback
-      if (projectIdForDoc && sourceDocuments.length === 0) {
-        log.error('[AI-JOB] ⚠️ CRITICAL: sourceDocuments is empty! Adding project context as fallback', { projectId: projectIdForDoc })
-        const emergencyProjectContext = {
-          title: `Project Context: Project ${(projectIdForDoc as string).substring(0, 8)}...`,
-          name: `Project Context: Project ${(projectIdForDoc as string).substring(0, 8)}...`,
-          type: 'Project Context',
-          template_id: null,
-          status: 'active',
-          lifecycle_phase: 0,
-          phase_name: 'Foundation',
-          priority_rank: 0,
-          character_count: 0,
-          word_count: 0,
-          reading_time_minutes: 0,
-          is_project_context: true
-        }
-        sourceDocuments.push(emergencyProjectContext)
-        // Also ensure contextStats is set
-        if (!contextStats) {
-          contextStats = {
-            project_context_used: true,
-            documents_used: 0,
-            total_documents: 1
-          }
-        }
-      }
-
-      // 🔍 FINAL SAFETY CHECK: If we still don't have sourceDocuments but have projectIdForDoc, 
-      // try one more time to get project context (this should never happen, but just in case)
-      if (projectIdForDoc && sourceDocuments.length === 0) {
-        log.error('[AI-JOB] ⚠️⚠️⚠️ DOUBLE-CHECK FAILED: sourceDocuments still empty after fallback!', {
-          projectId: projectIdForDoc,
-          hasProjectId: !!projectId,
-          hasVariablesProjectId: !!variables?.project_id
-        })
-        // Last resort: create minimal project context entry
-        const lastResortContext = {
-          id: `project_context:${projectIdForDoc}`,
-          title: `Project Context`,
-          name: `Project Context`,
-          type: 'Project Context',
-          template_id: null,
-          status: 'active',
-          lifecycle_phase: 0,
-          phase_name: 'Foundation',
-          priority_rank: 0,
-          character_count: 0,
-          word_count: 0,
-          reading_time_minutes: 0,
-          is_project_context: true
-        }
-        sourceDocuments.push(lastResortContext)
-        contextStats = {
-          project_context_used: true,
-          documents_used: 0,
-          total_documents: 1
-        }
-      }
-
-      // 🔍 DEBUG: Log what we're saving
-      log.info('[AI-JOB] Generation metadata being saved:', {
-        hasSourceDocuments: sourceDocuments.length > 0,
-        sourceDocumentsCount: sourceDocuments.length,
-        sourceDocumentsIds: sourceDocuments.map((doc: any) => doc.id),
-        hasProjectContext: sourceDocuments.some((doc: any) => doc.is_project_context),
-        hasContextStats: !!contextStats,
-        contextStatsProjectContextUsed: contextStats?.project_context_used,
-        firstSourceDocId: sourceDocuments[0]?.id,
-        firstSourceDocType: sourceDocuments[0]?.type
-      })
-
       const generationMetadata = AIGenerationJobService.buildGenerationMetadata({
         result,
         provider: provider || 'openai',
@@ -560,14 +503,14 @@ export class AIGenerationJobService {
         paragraphCount,
         qualityMetrics,
         jobId,
-        sourceDocuments, // Pass full source documents array
-        contextStats // Pass context stats
+        sourceDocuments,
+        contextStats
       })
 
       const insertResult = await db.query(
         `
-        INSERT INTO documents (id, project_id, name, content, template_id, status, created_by, updated_by, generation_metadata, word_count, character_count, sentence_count, paragraph_count, entity_counts)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $7, $8, $9, $10, $11, $12, $13)
+        INSERT INTO documents (id, project_id, name, content, template_id, status, created_by, updated_by, generation_metadata, word_count, character_count, sentence_count, paragraph_count, entity_counts, context_snapshots)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $7, $8, $9, $10, $11, $12, $13, $14)
         ON CONFLICT (id) DO UPDATE SET
           name = EXCLUDED.name,
           content = EXCLUDED.content,
@@ -578,21 +521,43 @@ export class AIGenerationJobService {
           character_count = EXCLUDED.character_count,
           sentence_count = EXCLUDED.sentence_count,
           paragraph_count = EXCLUDED.paragraph_count,
-          entity_counts = EXCLUDED.entity_counts
+          entity_counts = EXCLUDED.entity_counts,
+          context_snapshots = EXCLUDED.context_snapshots
         RETURNING id
       `,
-        [documentId, projectIdForDoc, docName, docContent, template_id || null, 'draft', userId || null, JSON.stringify(generationMetadata), wordCount, characterCount, sentenceCount, paragraphCount, JSON.stringify(result.entityCounts || {})]
+        [
+          documentId, 
+          projectIdForDoc, 
+          docName, 
+          docContent, 
+          template_id || null, 
+          'draft', 
+          userId || null, 
+          JSON.stringify(generationMetadata), 
+          wordCount, 
+          characterCount, 
+          sentenceCount, 
+          paragraphCount, 
+          JSON.stringify(result.entityCounts || {}),
+          JSON.stringify(result.summaries || {})
+        ]
       )
 
       if (insertResult.rows.length > 0) {
         createdDocumentId = insertResult.rows[0].id
         if (template_id) {
           await AIGenerationJobService.incrementTemplateUsage(template_id, deps)
+          await AIGenerationJobService.trackTemplateUsage({
+            template_id,
+            document_id: createdDocumentId,
+            user_id: userId as string,
+            project_id: projectIdForDoc as string,
+            word_count: wordCount,
+            quality_score: qualityMetrics?.score || 0.7
+          }, deps);
           
-          // Trigger template profile update (feedback loop)
           try {
             const { TemplateAnalyticsService } = await import('../templateAnalyticsService')
-            // This recomputes the entire profile based on aggregated document entity_counts
             setImmediate(async () => {
               try {
                 await TemplateAnalyticsService.updateTemplateEntityProfile(template_id)
@@ -601,15 +566,10 @@ export class AIGenerationJobService {
                 log.warn(`[AI-JOB] Failed to update template entity profile (non-fatal)`, { template_id, error: err })
               }
             })
-          } catch (err) {
-            log.warn(`[AI-JOB] Could not import TemplateAnalyticsService for feedback loop`, err)
-          }
+          } catch (err) { }
         }
         if (projectIdForDoc && docContent.trim() && createdDocumentId) {
-          // Legacy Post-Generation Extraction Trigger has been removed here.
-          // Inline H8 Entity Parsing is now handling entity extraction concurrently 
-          // during document generation in documentGenerationService.ts.
-          // Legacy extraction is now only manually queued for onboarded/external documents.
+          // Sync logic handled concurrently in documentGenerationService
         }
       }
 
@@ -621,21 +581,23 @@ export class AIGenerationJobService {
   }
 
   private static calculateContentStats(content: string) {
-    const wordCount = content.split(/\s+/).filter(w => w.length > 0).length
-    const characterCount = content.length
-    const sentenceCount = (content.match(/[.!?]+/g) || []).length
-    const paragraphCount = (content.match(/\n\n/g) || []).length + 1
+    const safeContent = String(content || '')
+    const wordCount = safeContent.split(/\s+/).filter(w => w.length > 0).length
+    const characterCount = safeContent.length
+    const sentenceCount = (safeContent.match(/[.!?]+/g) || []).length
+    const paragraphCount = (safeContent.match(/\n\n/g) || []).length + 1
     return { wordCount, characterCount, sentenceCount, paragraphCount }
   }
 
   private static async calculateQualityMetrics(content: string, metadata: any): Promise<any> {
     const { analyzeDocumentQuality } = await import('../../utils/documentMetadata')
+    const safeContent = String(content || '')
     const tempMetadata = {
       ...metadata,
-      lineCount: (content.match(/\n/g) || []).length + 1,
-      estimatedReadingTime: Math.ceil(metadata.wordCount / 200)
+      lineCount: (safeContent.match(/\n/g) || []).length + 1,
+      estimatedReadingTime: Math.ceil((metadata.wordCount || 0) / 200)
     }
-    return analyzeDocumentQuality(content, tempMetadata, metadata.sourceDocCount || 0)
+    return analyzeDocumentQuality(safeContent, tempMetadata, metadata.sourceDocCount || 0)
   }
 
   private static calculateAICost(provider: string, model: string, inputTokens: number, outputTokens: number): string {
@@ -652,7 +614,7 @@ export class AIGenerationJobService {
       'anthropic-claude-3-sonnet': { input: 3, output: 15 },
       'anthropic-claude-3-haiku': { input: 0.25, output: 1.25 }
     }
-    const key = `${provider.toLowerCase()}-${model.toLowerCase()}`.replace(/\s+/g, '-')
+    const key = `${String(provider || '').toLowerCase()}-${String(model || '').toLowerCase()}`.replace(/\s+/g, '-')
     const rates = pricing[key] || { input: 1, output: 3 }
     const totalCost = ((inputTokens / 1_000_000) * rates.input) + ((outputTokens / 1_000_000) * rates.output)
     return totalCost < 0.01 ? '$0.00' : `$${totalCost.toFixed(4)}`
@@ -661,7 +623,6 @@ export class AIGenerationJobService {
   private static buildGenerationMetadata(options: any): any {
     const { result, provider, model, temperature, inputTokens, outputTokens, totalTokens, estimatedCost, processingTimeMs, processingTimeSec, wordCount, characterCount, sentenceCount, paragraphCount, qualityMetrics, jobId, sourceDocuments, contextStats } = options
 
-    // Use provided sourceDocuments array if available, otherwise fall back to empty array
     const finalSourceDocuments = sourceDocuments || []
 
     return {
@@ -676,8 +637,8 @@ export class AIGenerationJobService {
       generation: { generated_at: new Date().toISOString(), job_id: jobId, status: 'completed' },
       contentMetrics: { wordCount, characterCount, sentenceCount, paragraphCount },
       qualityMetrics,
-      source_documents: finalSourceDocuments, // Use full source documents array with project context
-      context_stats: contextStats || null // Include context stats if available
+      source_documents: finalSourceDocuments,
+      context_stats: contextStats || null
     }
   }
 
@@ -691,13 +652,60 @@ export class AIGenerationJobService {
     } catch (err) { }
   }
 
+  private static async trackTemplateUsage(options: {
+    template_id: string,
+    document_id: string,
+    user_id: string | null | undefined,
+    project_id: string | null | undefined,
+    word_count: number,
+    quality_score: number
+  }, deps?: QueueServiceDependencies): Promise<void> {
+    const db = deps?.database || { query: pool.query.bind(pool) } as any
+    const log = deps?.logger || logger
+    
+    try {
+      await db.query(`
+        INSERT INTO template_usage (
+          template_id, document_id, user_id, project_id,
+          used_at, word_count, quality_score, success
+        )
+        VALUES ($1, $2, $3, $4, NOW(), $5, $6, true)
+      `, [
+        options.template_id, 
+        options.document_id, 
+        options.user_id || null, 
+        options.project_id || null, 
+        options.word_count,
+        options.quality_score
+      ]);
+
+      if (options.user_id) {
+        await db.query(`SELECT update_template_validation($1, $2, $3)`, [
+          options.template_id,
+          options.quality_score,
+          options.user_id
+        ]);
+      } else {
+        await db.query(`
+          UPDATE templates 
+          SET validation_count = validation_count + 1,
+              success_count = CASE WHEN $1 >= quality_threshold THEN success_count + 1 ELSE success_count END,
+              last_validated_at = NOW()
+          WHERE id = $2
+        `, [options.quality_score, options.template_id]);
+      }
+    } catch (err) {
+      log.warn(`[AI-JOB] Failed to track template usage details`, err);
+    }
+  }
+
   private static async validateAgainstBaseline(jobData: AIGenerationJobData, documentId: string, result: any, deps?: QueueServiceDependencies): Promise<void> {
     const ws = deps?.websocket || io
     const projectId = (jobData.projectId || jobData.variables?.project_id) as string
     if (!projectId) return
     try {
       const { baselineService } = await import('../baselineService')
-      const docContent = typeof result.content === 'string' ? result.content : JSON.stringify(result.content || result)
+      const docContent = (typeof result.content === 'string' ? result.content : JSON.stringify(result.content || result)) || ''
       const drifts = await baselineService.validateDocumentAgainstBaseline(projectId, documentId, docContent, jobData.name || 'Document')
       if (drifts.length > 0) {
         ws.to(`project:${projectId}`).emit("baseline:drift", { documentId, driftCount: drifts.length, drifts: drifts.map((d: any) => ({ type: d.detection_type, severity: d.drift_severity, description: d.drift_description })) })
@@ -739,10 +747,6 @@ export class AIGenerationJobService {
     ws.emit("job:failed", { jobId, userId: jobData.userId, status: "failed", error: errorMessage, projectId: jobData.projectId || jobData.variables?.project_id })
   }
 
-  /**
-   * Start a progress heartbeat to give the user visual feedback for long-running tasks
-   * Phase 6: Continuous progress updates
-   */
   private static startProgressHeartbeat(
     jobId: string,
     startProgress: number,
@@ -757,15 +761,12 @@ export class AIGenerationJobService {
     let currentProgress = startProgress
 
     return setInterval(() => {
-      // 1% every 4s so bar keeps moving for ~3 min during long AI calls (e.g. large docs + GKG context)
       const increment = 1
       if (currentProgress + increment <= maxProgress) {
         currentProgress += increment
 
-        // Update database using promise chaining to avoid top-level await in callbacks
         updateJobStatus(jobId, "processing", currentProgress, workerId, "ai-processing")
           .then(() => {
-            log.info(`[HEARTBEAT] Job ${jobId} progress: ${currentProgress}%`)
             if (ws) {
               try {
                 ws.emit("job:status", {
@@ -773,19 +774,15 @@ export class AIGenerationJobService {
                   userId: jobData?.userId,
                   progress: currentProgress,
                   status: "processing",
+                  startTime: jobData?.started_at || new Date().toISOString(),
                   projectId: jobData?.projectId || jobData?.variables?.project_id,
                   message: "Processing..."
                 })
-              } catch (e) {
-                // ignore websocket emit errors
-              }
+              } catch (e) { }
             }
           })
-          .catch(() => {
-            // Ignore heartbeat errors - not critical if we miss a step
-            log.debug(`[HEARTBEAT] Failed to update progress for job ${jobId}`)
-          })
+          .catch(() => { })
       }
-    }, 4000) // Update every 4 seconds
+    }, 4000)
   }
 }

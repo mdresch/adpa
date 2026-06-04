@@ -56,23 +56,23 @@ const forward = async (
   }
 }
 
-export async function GET(req: NextRequest, { params }: { params: { path: string[] } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   return forward(req, (await params).path || [], 'GET')
 }
 
-export async function POST(req: NextRequest, { params }: { params: { path: string[] } }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   return forward(req, (await params).path || [], 'POST')
 }
 
-export async function PUT(req: NextRequest, { params }: { params: { path: string[] } }) {
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   return forward(req, (await params).path || [], 'PUT')
 }
 
-export async function PATCH(req: NextRequest, { params }: { params: { path: string[] } }) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   return forward(req, (await params).path || [], 'PATCH')
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { path: string[] } }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   return forward(req, (await params).path || [], 'DELETE')
 }
 

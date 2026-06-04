@@ -61,6 +61,8 @@ import {
   Layers,
   Sparkles,
   Award,
+  Info,
+  Cpu,
 } from "@/components/ui/icons-shim"
 import { useAuth } from "@/contexts/AuthContext"
 import { apiClient } from "@/lib/api"
@@ -104,9 +106,23 @@ export default function ProjectDocumentViewer() {
   const [showVersions, setShowVersions] = useState(false) // For dialog
   const [showVersionsDialog, setShowVersionsDialog] = useState(false)
   const [showComments, setShowComments] = useState(false)
-  const [showSummaries, setShowSummaries] = useState(false)
   const [summaries, setSummaries] = useState<any[]>([])
   const [loadingSummaries, setLoadingSummaries] = useState(false)
+    const fetchSummaries = async () => {
+      if (!documentId) return
+      setLoadingSummaries(true)
+      try {
+        const response = await apiClient.get<{ summaries: any[] }>(`/documents/${documentId}/summaries`)
+        // Ensure we only keep summaries with the correct method
+        const filtered = (response.summaries || []).filter(s => s.compression_method === 'mission-draco-rag')
+        setSummaries(filtered)
+      } catch (error) {
+        console.error("Failed to fetch document summaries:", error)
+        setSummaries([])
+      } finally {
+        setLoadingSummaries(false)
+      }
+    }
   const [newComment, setNewComment] = useState("")
   const [tableOfContents, setTableOfContents] = useState<Array<{ id: string; text: string; level: number; isDrift?: boolean }>>([])
   const [activeSection, setActiveSection] = useState<string>("")
@@ -350,7 +366,7 @@ export default function ProjectDocumentViewer() {
     }
 
     void fetchDocument()
-
+    void fetchSummaries()
     const startTime = Date.now()
     let interactionCount = 0
     const handleInteraction = () => { interactionCount++ }
@@ -541,6 +557,9 @@ export default function ProjectDocumentViewer() {
     if (!documentData) return
     try {
       setIsExportingPdf(true)
+      // Note: Backend export might not render H8 pills yet. 
+      // For now, we use the standard backend export, but in the future 
+      // we could send the processed HTML to a different endpoint.
       const blob = await apiClient.exportDocumentPdf(documentId)
       const url = window.URL.createObjectURL(blob)
       const link = window.document.createElement('a')
@@ -581,18 +600,43 @@ export default function ProjectDocumentViewer() {
 
   const exportToMarkdown = () => {
     if (!documentData) return
-    const blob = new Blob([documentData.content], { type: "text/markdown" })
+    // Prepare content by transforming H8 tags to readable text format
+    const processedContent = prepareContentForExport(documentData.content, 'markdown')
+    const blob = new Blob([processedContent], { type: "text/markdown" })
     saveAs(blob, `${documentData.title || documentData.name || 'document'}.md`)
-    toast.success("Exported to Markdown")
+    toast.success("Exported to Markdown (Cleaned)")
   }
 
   const printDocument = () => {
     if (!documentData) return
     const printWindow = window.open('', '_blank')
     if (!printWindow) return
-    printWindow.document.write(`<html><head><title>${documentData.title || documentData.name}</title></head><body>${documentData.content}</body></html>`)
+    
+    // Prepare content for print with visual pills
+    const htmlContent = prepareContentForExport(documentData.content, 'print')
+    const styles = getExportStyleSheet()
+    
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>${documentData.title || documentData.name}</title>
+          <style>${styles}</style>
+        </head>
+        <body>
+          <div class="print-container">
+            ${htmlContent}
+          </div>
+          <script>
+            window.onload = () => {
+              window.print();
+              // Optional: close window after print
+              // window.onafterprint = () => window.close();
+            }
+          </script>
+        </body>
+      </html>
+    `)
     printWindow.document.close()
-    printWindow.print()
   }
 
   const handlePublishToConfluence = async () => {
@@ -738,7 +782,15 @@ export default function ProjectDocumentViewer() {
                   <div className="lg:col-span-3">
                     <AnimatedCard>
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-lg font-medium">Content</CardTitle>
+                        <div className="flex items-center gap-4">
+                          <CardTitle className="text-lg font-medium">Content</CardTitle>
+                          {summaries.length > 0 && (
+                            <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200">
+                              <Sparkles className="h-3 w-3 mr-1" />
+                              Summary Register Active
+                            </Badge>
+                          )}
+                        </div>
                         <div className="flex items-center gap-2">
                           {isSaving && <span className="text-xs text-muted-foreground animate-pulse">Saving...</span>}
                           <Button variant="ghost" size="sm" onClick={copyToClipboard}><Copy className="h-4 w-4" /></Button>
@@ -746,15 +798,101 @@ export default function ProjectDocumentViewer() {
                         </div>
                       </CardHeader>
                       <CardContent>
-                        <NovelEditor
-                          initialValue={documentData.content}
-                          onChange={(json, html, markdown) => {
-                            setEditedContent(markdown)
-                            debouncedAutosave()
-                          }}
-                          storageKey={`novel-doc-${documentId}`}
-                          enableInlineMermaid={false}
-                        />
+                        <Tabs defaultValue="full" className="w-full">
+                          <div className="flex items-center justify-between mb-4 border-b">
+                            <TabsList className="bg-transparent h-9 p-0 gap-4">
+                              <TabsTrigger value="full" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent shadow-none px-2 h-9">
+                                Full Document (H8)
+                              </TabsTrigger>
+                              {summaries.length > 0 && (
+                                <TabsTrigger value="summaries" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent shadow-none px-2 h-9">
+                                  Summary Register
+                                </TabsTrigger>
+                              )}
+                            </TabsList>
+                            
+                            <TabsContent value="summaries" className="mt-0">
+                               <div className="flex items-center gap-2 text-[10px] text-muted-foreground italic">
+                                 <Info className="h-3 w-3" />
+                                 Entities scrubbed for RAG optimization
+                               </div>
+                            </TabsContent>
+                          </div>
+
+                          <TabsContent value="full" className="mt-0 outline-none">
+                            <NovelEditor
+                              initialValue={documentData.content}
+                              onChange={(json, html, markdown) => {
+                                setEditedContent(markdown)
+                                debouncedAutosave()
+                              }}
+                              storageKey={`novel-doc-${documentId}`}
+                              enableInlineMermaid={false}
+                            />
+                          </TabsContent>
+
+                          <TabsContent value="summaries" className="mt-0 outline-none">
+                            <div className="space-y-6">
+                              <Tabs defaultValue="80" className="w-full">
+                                <div className="flex items-center gap-3 mb-4">
+                                  <span className="text-xs font-medium text-muted-foreground">Level:</span>
+                                  <TabsList className="grid grid-cols-4 w-[240px] h-8">
+                                    <TabsTrigger value="80" className="text-[10px]">80%</TabsTrigger>
+                                    <TabsTrigger value="60" className="text-[10px]">60%</TabsTrigger>
+                                    <TabsTrigger value="40" className="text-[10px]">40%</TabsTrigger>
+                                    <TabsTrigger value="20" className="text-[10px]">20%</TabsTrigger>
+                                  </TabsList>
+                                </div>
+
+                                {[80, 60, 40, 20].map(level => {
+                                  const summary = summaries.find(s => s.compression_level === level)
+                                  return (
+                                    <TabsContent key={level} value={level.toString()} className="mt-0">
+                                      {summary ? (
+                                        <div className="rounded-lg border bg-slate-50/50 p-6 relative group">
+                                          <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <Button 
+                                              variant="outline" 
+                                              size="sm" 
+                                              className="h-7 text-[10px]"
+                                              onClick={() => {
+                                                navigator.clipboard.writeText(summary.compressed_content)
+                                                toast.success(`Copied ${level}% summary`)
+                                              }}
+                                            >
+                                              <Copy className="h-3 w-3 mr-1" />
+                                              Copy
+                                            </Button>
+                                          </div>
+                                          <div className="prose prose-slate prose-sm max-w-none">
+                                            {summary.compressed_content.split('\n').map((line: string, i: number) => (
+                                              <p key={i}>{line}</p>
+                                            ))}
+                                          </div>
+                                          <div className="mt-4 pt-4 border-t flex justify-between items-center text-[10px] text-muted-foreground">
+                                            <div className="flex gap-4">
+                                              <span>Words: {summary.compressed_tokens * 0.75}</span>
+                                              <span>Tokens: {summary.compressed_tokens}</span>
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                              <Cpu className="h-3 w-3" />
+                                              Generated via {summary.ai_model}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div className="flex flex-col items-center justify-center py-12 border-2 border-dashed rounded-lg bg-slate-50/30">
+                                          <Loader2 className="h-6 w-6 animate-spin text-slate-300 mb-2" />
+                                          <p className="text-xs text-slate-400">Summarizing document at {level}%...</p>
+                                        </div>
+                                      )}
+                                    </TabsContent>
+                                  )
+                                })}
+                              </Tabs>
+                            </div>
+                          </TabsContent>
+                        </Tabs>
                       </CardContent>
                     </AnimatedCard>
                   </div>

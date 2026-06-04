@@ -69,6 +69,30 @@ function normalizeActionType(value?: string | null): string {
   return map[normalized] || 'other'
 }
 
+function normalizeStatus(value?: string | null): string {
+  const normalized = String(value || '').trim().toLowerCase()
+  
+  const map: Record<string, string> = {
+    planned: 'planned',
+    pending: 'planned',
+    todo: 'planned',
+    open: 'planned',
+    in_progress: 'in_progress',
+    active: 'in_progress',
+    running: 'in_progress',
+    completed: 'completed',
+    done: 'completed',
+    finished: 'completed',
+    blocked: 'blocked',
+    hold: 'blocked',
+    on_hold: 'blocked',
+    cancelled: 'cancelled',
+    discarded: 'cancelled'
+  }
+  
+  return map[normalized] || 'planned'
+}
+
 async function getAllowedActionTypes(client: PoolClient): Promise<string[] | null> {
   const result = await client.query(
     `SELECT pg_get_constraintdef(c.oid) AS constraint_def
@@ -78,6 +102,26 @@ async function getAllowedActionTypes(client: PoolClient): Promise<string[] | nul
      WHERE t.relname = 'engagement_actions'
        AND n.nspname = 'public'
        AND c.conname ILIKE '%action_type%'
+       AND c.contype = 'c'
+     LIMIT 1`
+  )
+
+  const constraintDef: string | undefined = result.rows[0]?.constraint_def
+  if (!constraintDef) return null
+
+  const matches = [...constraintDef.matchAll(/'([^']+)'/g)].map((m) => m[1].toLowerCase())
+  return matches.length > 0 ? matches : null
+}
+
+async function getAllowedStatuses(client: PoolClient): Promise<string[] | null> {
+  const result = await client.query(
+    `SELECT pg_get_constraintdef(c.oid) AS constraint_def
+     FROM pg_constraint c
+     JOIN pg_class t ON c.conrelid = t.oid
+     JOIN pg_namespace n ON t.relnamespace = n.oid
+     WHERE t.relname = 'engagement_actions'
+       AND n.nspname = 'public'
+       AND c.conname ILIKE '%status%'
        AND c.contype = 'c'
      LIMIT 1`
   )
@@ -245,6 +289,8 @@ export async function saveEngagementActions(
     await client.query('DELETE FROM engagement_actions WHERE project_id = $1', [projectId])
 
     const allowedActionTypes = await getAllowedActionTypes(client)
+    const allowedStatuses = await getAllowedStatuses(client)
+    
     const columnResult = await client.query<{ column_name: string }>(
       `SELECT column_name
        FROM information_schema.columns
@@ -288,18 +334,26 @@ export async function saveEngagementActions(
               ? normalizedActionType
               : (allowedActionTypes[0] || 'other'))
 
+      const normalizedStatus = normalizeStatus(e.status)
+      const safeStatus =
+        !allowedStatuses || allowedStatuses.length === 0
+          ? normalizedStatus
+          : (allowedStatuses.includes(normalizedStatus)
+              ? normalizedStatus
+              : (allowedStatuses[0] || 'planned'))
+
       const rowData: Record<string, any> = {
         project_id: projectId,
         action_id: isValidUUID(e.action_id) ? e.action_id : null,
         stakeholder_id: isValidUUID(e.stakeholder_id) ? e.stakeholder_id : null,
         stakeholder_name: e.stakeholder_name || null,
         action_type: safeActionType,
-        description: e.description || null,
+        description: e.description || e.action_type || 'Strategic engagement action',
         planned_date: e.planned_date ? normalizeDate(e.planned_date) : null,
         actual_date: e.actual_date ? normalizeDate(e.actual_date) : null,
         outcome: e.outcome || null,
         follow_up_required: e.follow_up_required ?? false,
-        status: e.status ? String(e.status).toLowerCase().trim() : null,
+        status: safeStatus,
         source_document_id: isValidUUID(e.source_document_id) ? e.source_document_id : null,
         created_by: userId
       }

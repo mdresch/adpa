@@ -34,6 +34,7 @@ export interface DocumentContext {
   project_id: string
   name: string
   content?: any
+  context_snapshots?: Record<string, { summary: string; timestamp: string }>
   template_id?: string
   version: number
   status: string
@@ -157,4 +158,5 @@ export interface ExtractionOptions {
   include_metadata?: boolean
   max_content_length?: number
   content_format?: 'full' | 'summary' | 'outline'
+  token_budget?: number
 }

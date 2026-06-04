@@ -221,7 +221,7 @@ export async function saveRiskTriggers(
       columnOrder.push({ name: riskTitleColumn, value: (e) => e.risk_title || null })
     }
     if (triggerConditionColumn) {
-      columnOrder.push({ name: triggerConditionColumn, value: (e) => e.trigger_condition || null })
+      columnOrder.push({ name: triggerConditionColumn, value: (e) => e.trigger_condition || e.trigger_name || 'Trigger condition not specified' })
     }
     if (thresholdColumn) {
       columnOrder.push({ name: thresholdColumn, value: (e) => e.threshold || null })

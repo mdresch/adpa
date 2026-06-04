@@ -1,6 +1,7 @@
 import { saveSingleEntityType } from './extraction/ExtractionOrchestrator';
 
 function getSingularType(pluralType: string): string {
+  const normalized = String(pluralType || '').toLowerCase().trim();
   const map: Record<string, string> = {
     'stakeholders': 'stakeholder',
     'risks': 'risk',
@@ -13,14 +14,16 @@ function getSingularType(pluralType: string): string {
     'dependencies': 'dependency',
     'resources': 'resource'
   };
-  return map[pluralType.toLowerCase()] || pluralType;
+  return map[normalized] || normalized;
 }
 
 function getEntityName(entity: any, type: string): string {
-  if (entity.name) return entity.name;
-  if (entity.title) return entity.title;
-  if (entity.item_name) return entity.item_name;
-  if (entity.description) return entity.description.substring(0, 50);
+  if (!entity) return `Unnamed ${type}`;
+  
+  const rawName = entity.name || entity.title || entity.item_name || entity.description || '';
+  const stringName = String(rawName).trim();
+  
+  if (stringName.length > 0) return stringName;
   return `Unnamed ${type}`;
 }
 
@@ -34,22 +37,31 @@ export class InlineEntityParserService {
     userId: string;
     documentId?: string;
     markdown: string;
+    providedEntities?: Array<{ name: string; type: string }>;
   }): Promise<{ 
     cleanedMarkdown: string; 
     extractedCount: number; 
     extractedCountByType: Record<string, number>;
     entitiesByType: Record<string, any[]>
   }> {
-    const { projectId, userId, documentId } = params;
+    const { projectId, userId, documentId, providedEntities } = params;
     let { markdown } = params;
 
     if (!markdown) {
       return { cleanedMarkdown: '', extractedCount: 0, extractedCountByType: {}, entitiesByType: {} };
     }
 
+    // Fix truncation artifacts: If a code block was started but never closed (due to LLM output limit), 
+    // close it manually before processing to prevent regexes from matching the rest of the document.
+    const codeBlockCount = (markdown.match(/^```/gm) || []).length;
+    if (codeBlockCount % 2 !== 0) {
+      markdown += "\n```";
+      console.warn(`[PARSER] Found unclosed code block, manually closed at EOF to prevent truncation.`);
+    }
+
     // Remove fenced code blocks that exclusively wrap our H8 entity tags.
-    // The LLM sometimes wraps the tags in ```json ... ``` or ``` ... ```
-    markdown = markdown.replace(/```(?:json|markdown|md)?\s*\n(#{8}\s+[a-zA-Z0-9_-]+:(?:(?!```)[\s\S])*?)\n\s*```/g, '$1');
+    // Fixed: Using a safer regex that doesn't consume large chunks of the document.
+    markdown = markdown.replace(/^```(?:json|markdown|md)?\s*\n(#{8}\s+[a-zA-Z0-9_-]+:(?:(?!```)[\s\S])*?)\n\s*```$/gm, '$1');
 
     const lines = markdown.split(/\r?\n/);
     const cleanedLines: string[] = [];
@@ -88,6 +100,24 @@ export class InlineEntityParserService {
           if (!entityGroups[entityType]) {
             entityGroups[entityType] = [];
           }
+          
+          // Hallucination Check for database sync (Type-specific matching)
+          const name = getEntityName(parsedData, entityType).toLowerCase();
+          const singularType = getSingularType(entityType).toLowerCase();
+          
+          if (providedEntities) {
+            const isTracked = providedEntities.some(p => {
+              const pName = (p.name || "").toLowerCase().trim();
+              const pType = (p.type || "").toLowerCase();
+              return pName === name && (pType === singularType || pType === entityType.toLowerCase());
+            });
+
+            if (!isTracked) {
+              parsedData._status = 'PENDING_REVIEW';
+              parsedData._is_hallucination = true;
+            }
+          }
+
           entityGroups[entityType].push(parsedData);
           extractedCount++;
           extractedCountByType[entityType] = (extractedCountByType[entityType] || 0) + 1;
@@ -121,7 +151,11 @@ export class InlineEntityParserService {
             entity.source_document_id = documentId;
           });
         }
-        await saveSingleEntityType(projectId, userId, entityType, entities);
+        try {
+          await saveSingleEntityType(projectId, userId, entityType, entities);
+        } catch (err) {
+          console.error(`Failed to save inline entities of type ${entityType}:`, err);
+        }
       }
     }
 
@@ -142,6 +176,7 @@ export class InlineEntityParserService {
               extraction_confidence: 85, // Standard generation confidence
               source_document_id: documentId,
               extraction_method: 'ai',
+              status: entity._status || 'active', // Mark as PENDING_REVIEW if hallucinated
               related_entity_ids: []
             });
           }

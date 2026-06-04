@@ -141,17 +141,17 @@ router.get("/",
 
       if (status) {
         paramCount++
-        query += ` AND status = $${paramCount}`
+        query += ` AND j.status = $${paramCount}`
         params.push(status)
       }
 
       if (type) {
         paramCount++
-        query += ` AND type = $${paramCount}`
+        query += ` AND j.type = $${paramCount}`
         params.push(type)
       }
 
-      query += ` ORDER BY created_at DESC LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`
+      query += ` ORDER BY j.created_at DESC LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`
       params.push(limit, offset)
 
       const result = await pool.query(query, params)
@@ -194,19 +194,19 @@ router.get("/",
       }
 
       // Get total count
-      let countQuery = "SELECT COUNT(*) FROM jobs WHERE created_by = $1 AND NOT type LIKE 'extract-entity-%'"
+      let countQuery = "SELECT COUNT(*) FROM jobs j WHERE j.created_by = $1 AND NOT j.type LIKE 'extract-entity-%'"
       const countParams = [req.user?.id]
       let countParamCount = 1
 
       if (status) {
         countParamCount++
-        countQuery += ` AND status = $${countParamCount}`
+        countQuery += ` AND j.status = $${countParamCount}`
         countParams.push(status as string)
       }
 
       if (type) {
         countParamCount++
-        countQuery += ` AND type = $${countParamCount}`
+        countQuery += ` AND j.type = $${countParamCount}`
         countParams.push(type as string)
       }
 

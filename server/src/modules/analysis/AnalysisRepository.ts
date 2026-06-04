@@ -11,6 +11,13 @@ export class AnalysisRepository {
   constructor(private pool: Pool) {}
 
   /**
+   * Execute a query against the database pool
+   */
+  async query(sql: string, params?: any[]) {
+    return this.pool.query(sql, params);
+  }
+
+  /**
    * Create a new background job
    */
   async createJob(data: {

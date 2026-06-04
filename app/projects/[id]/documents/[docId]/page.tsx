@@ -186,6 +186,8 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
   const [loadingAudit, setLoadingAudit] = useState(false)
   // Ref to store timeout ID for quality audit refresh to prevent stale state updates
   const qualityAuditTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  // Ref to prevent duplicate automatic quality audit triggers
+  const hasTriggeredAuditRef = useRef<boolean>(false)
 
   // Document regeneration hook
   const { regenerate, progress, isRegenerating, error: regenerationError, result, reset: resetRegeneration } = useDocumentRegeneration()
@@ -210,7 +212,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
   // Fetch signature request status and recipients
   const fetchSignatureRequest = async () => {
     try {
-      const response = await apiClient.get<{ data: any[] }>(`/signatures/requests?documentDataId=${docId}`)
+      const response = await apiClient.get<{ data: any[] }>(`/signatures/requests?documentId=${docId}`)
       if (response.data && response.data.length > 0) {
         const request = response.data[0]
         setSignatureRequest(request)
@@ -224,7 +226,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
 
       // Also try to get signature status directly
       try {
-        const statusResponse = await apiClient.get<{ data: any }>(`/signatures/documentData/${docId}`, {
+        const statusResponse = await apiClient.get<{ data: any }>(`/signatures/document/${docId}`, {
           suppressNotFoundError: true // Suppress 404 logging - expected when no signature request exists
         })
         if (statusResponse.data && statusResponse.data.recipients) {
@@ -257,7 +259,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
       }
 
       // First, check if quality audit exists
-      const response = await fetch(`${API_BASE_URL}/quality-audits/documentData/${docId}`, {
+      const response = await fetch(`${API_BASE_URL}/quality-audits/document/${docId}`, {
         headers: {
           'Authorization': `Bearer ${authToken}`,
           'Content-Type': 'application/json'
@@ -275,10 +277,16 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
 
       // If no audit exists (404 or no data), automatically trigger one
       if (response.status === 404 || !response.ok) {
-        console.log('[QUALITY-AUDIT] No audit found, automatically triggering quality audit for documentData:', docId)
+        if (hasTriggeredAuditRef.current) {
+          console.log('[QUALITY-AUDIT] Quality audit already triggered in this session, skipping duplicate trigger')
+          return
+        }
+        
+        console.log('[QUALITY-AUDIT] No audit found, automatically triggering quality audit for document:', docId)
+        hasTriggeredAuditRef.current = true
 
         // Automatically trigger quality audit
-        // The backend will fetch the documentData content itself, so we don't need to check it here
+        // The backend will fetch the document content itself, so we don't need to check it here
         try {
           const triggerResponse = await fetch(`${API_BASE_URL}/quality-audits/trigger`, {
             method: 'POST',
@@ -286,7 +294,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
               'Authorization': `Bearer ${authToken}`,
               'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ documentDataId: docId })
+            body: JSON.stringify({ documentId: docId })
           })
 
           if (triggerResponse.ok) {
@@ -304,10 +312,13 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
             }
           } else {
             const errorData = await triggerResponse.json().catch(() => ({}))
-            const errorMessage = errorData.error || triggerResponse.statusText
-            console.error('[QUALITY-AUDIT] Auto-trigger failed:', errorMessage)
-            // Only show toast if it's not a "no content" error (which is expected for some documentDatas)
-            if (!errorMessage.includes('no content')) {
+            const errorObj = errorData.error
+            const errorMessage = typeof errorObj === 'object' && errorObj !== null
+              ? (errorObj.message || JSON.stringify(errorObj))
+              : (typeof errorObj === 'string' ? errorObj : triggerResponse.statusText || "")
+            console.error('[QUALITY-AUDIT] Auto-trigger failed:', errorData.error || triggerResponse.statusText)
+            // Only show toast if it's not a "no content" error (which is expected for some documents)
+            if (typeof errorMessage === 'string' && !errorMessage.toLowerCase().includes('no content')) {
               toast.warning("Quality audit could not be started automatically. You can trigger it manually.")
             }
           }
@@ -525,7 +536,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            documentDataId: docId
+            documentId: docId
           }),
           signal: controller.signal
         })
@@ -544,14 +555,21 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
         }
 
         if (!response.ok) {
-          const errorMessage = data?.error || data?.message || `HTTP ${response.status}: ${response.statusText}`
+          const errorObj = data?.error
+          const errorMessage = typeof errorObj === 'object' && errorObj !== null
+            ? (errorObj.message || JSON.stringify(errorObj))
+            : (typeof errorObj === 'string' ? errorObj : data?.message || `HTTP ${response.status}: ${response.statusText}`)
           throw new Error(errorMessage)
         }
 
         // Validate response structure
         if (!data || data.success === false) {
           console.error('[QUALITY-AUDIT] Invalid response:', data)
-          throw new Error(data?.error || 'Quality audit response was invalid')
+          const errorObj = data?.error
+          const errorMessage = typeof errorObj === 'object' && errorObj !== null
+            ? (errorObj.message || JSON.stringify(errorObj))
+            : (typeof errorObj === 'string' ? errorObj : 'Quality audit response was invalid')
+          throw new Error(errorMessage)
         }
 
         console.log('[QUALITY-AUDIT] Audit completed successfully:', {
@@ -1574,9 +1592,10 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                                   <span className="text-sm font-medium">
                                     {(() => {
                                       // Priority 1: Use raw sentence_count from top-level column
-                                      const sentenceCount = documentData?.sentence_count ||
+                                      const rawSentenceCount = documentData?.sentence_count ||
                                         documentData?.generation_metadata?.contentMetrics?.sentences ||
                                         0
+                                      const sentenceCount = Number(rawSentenceCount) || 0
                                       return sentenceCount > 0 ? sentenceCount.toLocaleString('en-US') : "N/A"
                                     })()}
                                   </span>
@@ -1586,9 +1605,10 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                                   <span className="text-sm font-medium">
                                     {(() => {
                                       // Priority 1: Use raw paragraph_count from top-level column
-                                      const paragraphCount = documentData?.paragraph_count ||
+                                      const rawParagraphCount = documentData?.paragraph_count ||
                                         documentData?.generation_metadata?.contentMetrics?.paragraphs ||
                                         0
+                                      const paragraphCount = Number(rawParagraphCount) || 0
                                       return paragraphCount > 0 ? paragraphCount.toLocaleString('en-US') : "N/A"
                                     })()}
                                   </span>

@@ -4,7 +4,7 @@
 
 import { logger } from '../../../../utils/logger'
 import type { PoolClient } from 'pg'
-import type { PersistenceResult } from '../../base/Persistence'
+import { PersistenceResult, normalizeNumeric } from '../../base/Persistence'
 import type { BenefitRealizationPlan } from './types'
 
 export async function saveBenefitRealizationPlan(
@@ -33,8 +33,8 @@ export async function saveBenefitRealizationPlan(
             values.push(
                 projectId,
                 e.benefit_name || '',
-                e.target_value || null,
-                e.actual_value || null,
+                normalizeNumeric(e.target_value),
+                normalizeNumeric(e.actual_value),
                 e.realization_date || null,
                 e.owner || null,
                 e.strategic_alignment || null,

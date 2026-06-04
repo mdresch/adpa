@@ -172,6 +172,37 @@ export function normalizeDate(value: any): string | null {
 }
 
 /**
+ * Normalize numeric value for database storage
+ * Strips currency symbols, commas, and trailing text (e.g., "650000 EUR in Year 1" -> 650000)
+ */
+export function normalizeNumeric(value: any): number | null {
+  if (value === null || value === undefined) return null
+  
+  if (typeof value === 'number') return value
+  
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) return null
+    
+    // Check for common non-numeric constants
+    const lowered = trimmed.toLowerCase()
+    if (['tbd', 'n/a', 'na', 'none', 'unknown', 'not specified'].includes(lowered)) {
+      return null
+    }
+
+    // Replace commas with nothing (thousands separator)
+    // Extract first continuous group of digits and decimal point
+    const match = trimmed.replace(/,/g, '').match(/(-?\d+\.?\d*)/)
+    if (match) {
+      const parsed = parseFloat(match[1])
+      return isNaN(parsed) ? null : parsed
+    }
+  }
+  
+  return null
+}
+
+/**
  * Normalize enum value to allowed set
  */
 export function normalizeEnum<T extends string>(

@@ -791,6 +791,7 @@ export async function initializeRegistry(): Promise<void> {
   extractionRegistry.setFeatureFlagFromEnv('relationship_health')
   extractionRegistry.setFeatureFlagFromEnv('action_items')
   extractionRegistry.setFeatureFlagFromEnv('meeting_minutes')
+  extractionRegistry.enableFeature('project_charter_details')
   extractionRegistry.setFeatureFlagFromEnv('project_charter_details')
   extractionRegistry.setFeatureFlagFromEnv('business_case_details')
   extractionRegistry.setFeatureFlagFromEnv('benefit_realization_plan')

@@ -10,17 +10,7 @@ import { aiService } from './aiService'
 import { aiCacheService } from './aiCacheService'
 import { v4 as uuidv4 } from 'uuid'
 
-export type EntityType = 
-  | 'stakeholder' 
-  | 'deliverable' 
-  | 'milestone' 
-  | 'risk' 
-  | 'requirement'
-  | 'activity' 
-  | 'assumption' 
-  | 'constraint' 
-  | 'dependency' 
-  | 'resource'
+export type EntityType = string
 
 export interface ExtractedEntity {
   id?: string
@@ -34,6 +24,7 @@ export interface ExtractedEntity {
   ai_provider?: string
   ai_model?: string
   source_documents?: Array<{ id: string; title: string }>
+  status?: string // 'active', 'pending_review', 'deleted', etc.
 }
 
 export interface ExtractionOptions {
@@ -321,31 +312,34 @@ export class EntityExtractionService {
     
     const normalized = type.toLowerCase().trim()
     
-    // Map common variations to valid types
-    const typeMap: Record<string, EntityType> = {
-      'stakeholder': 'stakeholder',
+    // Singularize plural form for consistency
+    const map: Record<string, string> = {
       'stakeholders': 'stakeholder',
-      'deliverable': 'deliverable',
       'deliverables': 'deliverable',
-      'milestone': 'milestone',
       'milestones': 'milestone',
-      'risk': 'risk',
       'risks': 'risk',
-      'requirement': 'requirement',
       'requirements': 'requirement',
-      'activity': 'activity',
       'activities': 'activity',
-      'assumption': 'assumption',
       'assumptions': 'assumption',
-      'constraint': 'constraint',
       'constraints': 'constraint',
-      'dependency': 'dependency',
       'dependencies': 'dependency',
-      'resource': 'resource',
-      'resources': 'resource'
+      'resources': 'resource',
+      'scope_items': 'scope_item',
+      'success_criteria': 'success_criteria',
+      'opportunities': 'opportunity',
+      'work_items': 'work_item'
     }
     
-    return typeMap[normalized] || null
+    if (map[normalized]) {
+      return map[normalized]
+    }
+    
+    // Generic fallback: if it ends with 's' and is not 'success_criteria' or already handled, strip trailing 's'
+    if (normalized.endsWith('s') && normalized !== 'success_criteria' && normalized !== 'business_case_details') {
+      return normalized.slice(0, -1)
+    }
+    
+    return normalized
   }
 
   /**
@@ -435,19 +429,7 @@ ${content.substring(0, 15000)}` // Limit content to avoid token limits
           continue
         }
 
-        // Validate entity type
-        const validTypes: EntityType[] = [
-          'stakeholder', 'deliverable', 'milestone', 'risk', 'requirement',
-          'activity', 'assumption', 'constraint', 'dependency', 'resource'
-        ]
 
-        if (!validTypes.includes(normalizedType)) {
-          logger.warn('⚠️ Invalid entity type after normalization', { 
-            original: item.entity_type, 
-            normalized: normalizedType 
-          })
-          continue
-        }
 
         // Filter by minimum confidence if specified
         const confidence = item.confidence || item.extraction_confidence || 50
@@ -509,6 +491,8 @@ ${content.substring(0, 15000)}` // Limit content to avoid token limits
         const isVerified = this.shouldAutoVerify(confidence)
         const entityName = entity.entity_name ? entity.entity_name.trim() : 'Unnamed Entity'
         const entityType = entity.entity_type
+
+
         
         // Aggressive normalization for deduplication (matches what we tell the LLM)
         const normalizedInputName = entityName
@@ -617,7 +601,7 @@ ${content.substring(0, 15000)}` // Limit content to avoid token limits
               options.aiProvider || 'openai',
               options.aiModel || 'gpt-4',
               entity.related_entity_ids || [],
-              'active',
+              entity.status || 'active',
               isVerified,
               isVerified ? new Date() : null
             ]

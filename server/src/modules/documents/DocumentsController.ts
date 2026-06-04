@@ -395,6 +395,28 @@ export class DocumentsController {
     }
 
     /**
+     * GET /api/v1/documents/:id/summaries
+     */
+    public static async getSummaries(req: Request, res: Response) {
+        const log = childLogger({ requestId: (req as any).requestId });
+        try {
+            const { id } = req.params;
+            const docResult = await DocumentsController.documentRepository.findById(id);
+            if (docResult.rows.length === 0) return res.status(404).json({ error: "Document not found" });
+            const doc = docResult.rows[0];
+
+            const hasAccess = await DocumentsController.checkProjectAccess(req, doc.project_id);
+            if (!hasAccess) return res.status(403).json({ error: "Access denied" });
+
+            const result = await DocumentsController.documentRepository.getSummaries(id);
+            res.json({ success: true, summaries: result.rows });
+        } catch (error) {
+            log.error("Get document summaries error:", error);
+            res.status(500).json({ error: "Internal server error" });
+        }
+    }
+
+    /**
      * POST /api/v1/documents/:id/feedback
      */
     public static async submitFeedback(req: Request, res: Response) {

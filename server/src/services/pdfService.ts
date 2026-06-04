@@ -144,6 +144,70 @@ export class UnifiedPdfService {
     }
 
     /**
+     * Pre-processes markdown to render H8 tags as visual pills
+     */
+    private preprocessMarkdown(markdown: string): string {
+        const h8Regex = /^########\s+([a-zA-Z0-9_-]+):\s*(.*)$/gm;
+        
+        // Simplified mapping for export icons
+        const icons: Record<string, string> = {
+            stakeholders: "👥",
+            risks: "⚠️",
+            deliverables: "📦",
+            milestones: "🚩",
+            constraints: "🛡️",
+            requirements: "✅",
+            resources: "💼",
+            activities: "📝",
+            work_items: "📝",
+            success_criteria: "🏆",
+            scope_verification: "🏆",
+            best_practices: "💡",
+            opportunities: "💡",
+            scope_items: "🎯",
+            phases: "📚",
+            project_iterations: "📚",
+            performance_measurements: "📈",
+            earned_value_metrics: "📈",
+            technologies: "💻",
+            team_agreements: "🤝",
+            capacity_plans: "📅",
+            risk_responses: "⚡",
+        };
+
+        const colors: Record<string, string> = {
+            stakeholders: "#dbeafe",
+            risks: "#fee2e2",
+            deliverables: "#dcfce7",
+            milestones: "#f3e8ff",
+            constraints: "#ffedd5",
+            requirements: "#ccfbf1",
+            resources: "#e0e7ff",
+            activities: "#e0f2fe",
+            work_items: "#e0f2fe",
+            success_criteria: "#d1fae5",
+        };
+
+        return markdown.replace(h8Regex, (match, type, jsonStr) => {
+            let data: any = {};
+            try {
+                data = JSON.parse(jsonStr);
+            } catch (e) {
+                // Ignore parsing errors
+            }
+
+            const displayName = data.name || data.title || type.replace(/_/g, " ");
+            const icon = icons[type.toLowerCase()] || "📄";
+            const color = colors[type.toLowerCase()] || "#f3f4f6";
+
+            return `<span class="h8-pill" style="display: inline-flex; align-items: center; background-color: ${color}; border: 1px solid rgba(0,0,0,0.1); border-radius: 4px; padding: 2px 8px; margin: 0 4px; font-size: 12px; font-weight: 500; font-family: sans-serif; vertical-align: middle;">
+                <span style="margin-right: 4px;">${icon}</span>
+                <span>${displayName}</span>
+            </span>`;
+        });
+    }
+
+    /**
      * Generate PDF from Markdown content
      */
     public async generateFromMarkdown(markdown: string, options: UnifiedPdfOptions = {}): Promise<Buffer> {
@@ -153,9 +217,13 @@ export class UnifiedPdfService {
             breaks: false
         });
 
-        const htmlBody = await marked(markdown);
+        // 1. Preprocess H8 tags to HTML pills
+        const processedMarkdown = this.preprocessMarkdown(markdown);
+
+        // 2. Convert Markdown to HTML
+        const htmlBody = await marked(processedMarkdown);
         
-        // Wrap in a basic professional structure if not provided
+        // 3. Wrap in a basic professional structure if not provided
         const styledHtml = `
             <!DOCTYPE html>
             <html lang="en">
@@ -173,6 +241,7 @@ export class UnifiedPdfService {
                     th, td { border: 1px solid #dfe2e5; padding: 10px; text-align: left; }
                     th { background-color: #f6f8fa; }
                     code { background-color: #f6f8fa; padding: 2px 4px; border-radius: 3px; }
+                    .h8-pill { margin-bottom: 2px; }
                 </style>
             </head>
             <body>

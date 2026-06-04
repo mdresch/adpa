@@ -598,7 +598,50 @@ export class DocxService {
     }
 
     private static normalizeMarkdownForDocx(markdownContent: string): string {
-        const normalizedLines = markdownContent
+        const h8Regex = /^########\s+([a-zA-Z0-9_-]+):\s*(.*)$/gm;
+        
+        // Simplified mapping for export icons
+        const icons: Record<string, string> = {
+            stakeholders: "👥",
+            risks: "⚠️",
+            deliverables: "📦",
+            milestones: "🚩",
+            constraints: "🛡️",
+            requirements: "✅",
+            resources: "💼",
+            activities: "📝",
+            work_items: "📝",
+            success_criteria: "🏆",
+            scope_verification: "🏆",
+            best_practices: "💡",
+            opportunities: "💡",
+            scope_items: "🎯",
+            phases: "📚",
+            project_iterations: "📚",
+            performance_measurements: "📈",
+            earned_value_metrics: "📈",
+            technologies: "💻",
+            team_agreements: "🤝",
+            capacity_plans: "📅",
+            risk_responses: "⚡",
+        };
+
+        const processedMarkdown = markdownContent.replace(h8Regex, (match, type, jsonStr) => {
+            let data: any = {};
+            try {
+                data = JSON.parse(jsonStr);
+            } catch (e) {
+                // Ignore parsing errors
+            }
+
+            const displayName = data.name || data.title || type.replace(/_/g, " ");
+            const icon = icons[type.toLowerCase()] || "📄";
+            
+            // Format for Word: [ Icon TYPE: Name ]
+            return `**[ ${icon} ${type.toUpperCase()}: ${displayName} ]**`;
+        });
+
+        const normalizedLines = processedMarkdown
             .replace(/\/&lt;/gi, '<')
             .replace(/\/&gt;/gi, '>')
             .replace(/\/&quot;/gi, '"')

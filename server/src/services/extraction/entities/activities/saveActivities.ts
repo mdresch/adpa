@@ -128,11 +128,13 @@ export async function saveActivities(
       const sourceDocumentId = a.source_document_id || null
       
       // Both name and activity_name columns use the same value
+      const activityName = a.name || a.activity_name || 'Untitled Activity'
+
       values.push(
         projectId,
-        a.name,          // For name column
-        a.name,          // For activity_name column (NOT NULL)
-        a.description,
+        activityName,          // For name column
+        activityName,          // For activity_name column (NOT NULL)
+        a.description || 'Activity description not specified',
         a.category || null,
         startDate,
         endDate,

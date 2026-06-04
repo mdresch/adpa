@@ -24,6 +24,9 @@ export class TemplateAuditService {
     const startTime = new Date()
     logger.info(`[TEMPLATE-AUDIT] Running audit ${auditId} for template ${templateData.id}`)
     
+    // Update status to processing to reflect activity in UI
+    await pool.query("UPDATE template_audits SET status = 'processing' WHERE id = $1", [auditId])
+    
     try {
       const framework = templateData.framework || 'Custom'
       const templateName = templateData.name
@@ -55,21 +58,31 @@ export class TemplateAuditService {
       const govData = this.parseAIJson(govResult.content)
       const chalData = this.parseAIJson(chalResult.content)
 
-      const govScore = this.safeNum(govData.score, 70)
-      const chalScore = this.safeNum(chalData.score, 70)
-      const overallScore = Math.round((govScore + chalScore) / 2)
+      const isParsingFailure = govData._parsingError || chalData._parsingError
+
+      let govScore: number | null = this.safeNum(govData.score, 70)
+      let chalScore: number | null = this.safeNum(chalData.score, 70)
+      let overallScore: number | null = Math.round(((govScore || 0) + (chalScore || 0)) / 2)
 
       // Calculate verdict
       let verdict: 'pass' | 'flagged' | 'fail' = 'pass'
-      const hasCriticalGap = (govData.compliance_gaps || []).some((gap: any) => gap.severity === 'critical')
-      const hasHighVulnerability = (chalData.logical_vulnerabilities || []).some((vuln: any) => vuln.severity === 'high' || vuln.severity === 'critical')
-      const hasMajorGap = (govData.compliance_gaps || []).some((gap: any) => gap.severity === 'major')
-      const hasMediumVulnerability = (chalData.logical_vulnerabilities || []).some((vuln: any) => vuln.severity === 'medium')
 
-      if (overallScore < 60 || hasCriticalGap || hasHighVulnerability) {
+      if (isParsingFailure) {
+        govScore = null
+        chalScore = null
+        overallScore = null
         verdict = 'fail'
-      } else if (overallScore < 75 || hasMajorGap || hasMediumVulnerability) {
-        verdict = 'flagged'
+      } else {
+        const hasCriticalGap = (govData.compliance_gaps || []).some((gap: any) => gap.severity === 'critical')
+        const hasHighVulnerability = (chalData.logical_vulnerabilities || []).some((vuln: any) => vuln.severity === 'high' || vuln.severity === 'critical')
+        const hasMajorGap = (govData.compliance_gaps || []).some((gap: any) => gap.severity === 'major')
+        const hasMediumVulnerability = (chalData.logical_vulnerabilities || []).some((vuln: any) => vuln.severity === 'medium')
+
+        if ((overallScore || 0) < 60 || hasCriticalGap || hasHighVulnerability) {
+          verdict = 'fail'
+        } else if ((overallScore || 0) < 75 || hasMajorGap || hasMediumVulnerability) {
+          verdict = 'flagged'
+        }
       }
 
       await pool.query(
@@ -103,7 +116,7 @@ export class TemplateAuditService {
           auditId
         ]
       )
-      logger.info(`[TEMPLATE-AUDIT] Completed audit ${auditId} with verdict ${verdict} (Score: ${overallScore})`)
+      logger.info(`[TEMPLATE-AUDIT] Completed audit ${auditId} with verdict ${verdict} (Score: ${overallScore ?? 'NA'})`)
     } catch (err: any) {
       logger.error(`[TEMPLATE-AUDIT] Audit failed for id ${auditId}`, { error: err.message })
       await pool.query(
@@ -189,7 +202,7 @@ Respond ONLY with valid JSON matching this structure:
     try {
       return JSON.parse(cleaned)
     } catch {
-      return { score: 70, findings: ['Failed to parse JSON response from LLM'], recommendations: [] }
+      return { _parsingError: true, findings: ['Failed to parse JSON response from LLM'], recommendations: [] }
     }
   }
 

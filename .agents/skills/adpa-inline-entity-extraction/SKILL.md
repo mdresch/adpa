@@ -291,6 +291,29 @@ Add cases to `inlineEntityParserService.test.ts` covering:
    Do not emit arrays or multi-line JSON inside a single H8 line. The parser
    processes lines individually.
 
+6. **Retain H8 tags in the 100% full document.** The final 100% complete document (`documentText100` or the main stored document text) must retain all `########` tags verbatim in their original spots. Never strip or truncate them.
+7. **Scrub H8 tags in the context summaries.** Multi-scale recursive context summaries (`summary80`, `summary60`, `summary40`, `summary20`) must never contain `########` tags. They must be completely scrubbed of H8 lines to save tokens.
+8. **Preserve entity terms in summaries.** In all summaries, although the H8 prefix tags are scrubbed, the actual entity names, milestones, and framework terms must be retained in the text narrative to ensure semantic connectivity.
+
+---
+
+## Multi-Scale Context Compaction (Summaries)
+
+During final compilation (Phase 6), the generation service produces the full document along with four recursive context compression tiers. These summaries must follow strict density and formatting rules:
+
+| Density Level | Target Field | Key Rules |
+|---|---|---|
+| **100% Full Document** | `documentText100` | MUST retain every single H8 Entity Tag verbatim. No truncation or flimsiness. |
+| **80% Summary** | `summary80` | Eliminate narrative fluff, preserve core metrics, **omit H8 tags** (but keep entity names). |
+| **60% Summary** | `summary60` | Tighter compression, preserve critical entities, **omit H8 tags**. |
+| **40% Summary** | `summary40` | Focus on structural boundaries, **omit H8 tags**. |
+| **20% Summary** | `summary20` | High-density core capsule optimized for token-starved injections, **omit H8 tags**. |
+
+### Principles of Context Compression:
+- **Fluff Elimination:** Remove narrative filler, conversational transitions, and introductory/concluding remarks.
+- **Density Increase:** Every sentence must pack critical technical info, milestones, budget figures, and stakeholder roles.
+- **Traceability:** Keep the H8 tags intact in the 100% document; they are the sole anchors for frontend line highlight mapping.
+
 ---
 
 ## Debugging Missing Entities

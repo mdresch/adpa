@@ -7,7 +7,45 @@ import Joi from 'joi'
 import aiSearchRAGService, { AssistedSearchRequest } from '../services/aiSearchRAGService'
 import { connectDatabase } from '../database/connection'
 
+import { DocumentSummarizationService } from '../services/documentSummarizationService'
+
 const router = express.Router()
+
+/**
+ * POST /api/rag/summarize
+ * Trigger multi-level summarization for a document (20/40/60/80 levels)
+ */
+router.post('/summarize', authenticateToken, async (req, res) => {
+    try {
+        const { document_id } = req.body
+        if (!document_id) {
+            return res.status(400).json({ error: 'document_id is required' })
+        }
+
+        // Fetch document content
+        const { pool } = require('../database/connection')
+        const docRes = await pool.query("SELECT content FROM documents WHERE id = $1", [document_id])
+        
+        if (docRes.rows.length === 0) {
+            return res.status(404).json({ error: 'Document not found' })
+        }
+
+        const userId = (req as any).user?.id || 'system'
+        
+        // Trigger background generation (non-blocking)
+        DocumentSummarizationService.generateMultiLevelSummaries(document_id, docRes.rows[0].content, userId)
+            .catch(err => logger.error(`[RAG-API] Async summarization failed for ${document_id}`, err))
+
+        res.json({ 
+            success: true, 
+            message: 'Multi-level summarization triggered in background',
+            document_id 
+        })
+    } catch (error: any) {
+        logger.error(`Error in /api/rag/summarize: ${error.message}`)
+        res.status(500).json({ error: error.message })
+    }
+})
 
 // POST /api/rag/ingest
 router.post('/ingest', async (req, res) => {

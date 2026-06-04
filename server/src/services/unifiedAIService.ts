@@ -483,6 +483,7 @@ class UnifiedAIService {
               role: msg.role as 'user' | 'assistant' | 'system',
               content: msg.content,
             })),
+            maxTokens: request.max_tokens || 8000,
             temperature: request.temperature || 0.7,
             maxRetries: 1, // Fail fast to trigger fallback
             experimental_telemetry: {

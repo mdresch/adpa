@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -43,6 +43,7 @@ import {
   FileDown,
   Printer,
   X,
+  Layers,
 } from "@/components/ui/icons-shim"
 import {
   Dialog,
@@ -62,8 +63,64 @@ import { getApiUrl, getApiBaseUrl } from "@/lib/api-url"
 import { resolveBulkExportDownloadName } from "@/lib/documents/bulk-export"
 import type { WordBulkExportDialogValues } from "@/lib/documents/word-export"
 import { ExportWordDialog } from "@/components/documents/ExportWordDialog"
+import { SummaryDensityDialog } from "@/components/documents/SummaryDensityDialog"
 import { toast } from '@/lib/notify'
 import { QualityAuditBadge } from "@/components/quality"
+
+// Status configuration for template badges
+
+/** Shape of an active generation job used for document-row matching */
+interface ActiveJobInfo {
+  jobId: string
+  documentId: string | null
+  documentName: string | null
+  status: string
+  progress: number
+  type: string
+}
+
+/** Polls /api/v1/jobs every 8s for actively generating documents */
+function useActiveGenerationJobs(projectId: string | undefined) {
+  const [activeJobs, setActiveJobs] = useState<ActiveJobInfo[]>([])
+  const intervalRef = useRef<NodeJS.Timeout | null>(null)
+
+  const fetchActiveJobs = async () => {
+    try {
+      const [processingData, pendingData] = await Promise.all([
+        apiClient.get('/jobs?status=processing&limit=50') as Promise<any>,
+        apiClient.get('/jobs?status=pending&limit=50') as Promise<any>,
+      ])
+      const allJobs = [
+        ...(processingData?.jobs || []),
+        ...(pendingData?.jobs || []),
+      ]
+      const jobs: ActiveJobInfo[] = allJobs
+        .filter((j: any) => ['ai-generate', 'document-regeneration'].includes(j.type))
+        .map((j: any) => ({
+          jobId: j.id,
+          documentId: j.metadata?.document_id || null,
+          documentName: j.documentName || j.metadata?.document_name || null,
+          status: j.status,
+          progress: j.progress || 0,
+          type: j.type,
+        }))
+      setActiveJobs(jobs)
+    } catch {
+      // silent — non-critical
+    }
+  }
+
+  useEffect(() => {
+    if (!projectId) return
+    fetchActiveJobs()
+    intervalRef.current = setInterval(fetchActiveJobs, 8000)
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current)
+    }
+  }, [projectId])
+
+  return activeJobs
+}
 
 // Status configuration for template badges
 const statusConfig = {
@@ -94,6 +151,8 @@ interface Document {
   version: number
   created_by: string
   updated_by: string
+  created_by_name?: string
+  updated_by_name?: string
   created_at: string
   updated_at: string
   word_count?: number
@@ -151,7 +210,7 @@ export default function ProjectDocuments() {
   const rawProjectId = params?.id as string | undefined
   // Validate that projectId is a valid GUID, not undefined or "undefined"
   const projectId = rawProjectId && isValidGuid(rawProjectId) ? rawProjectId : undefined
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, user } = useAuth()
 
   const [project, setProject] = useState<Project | null>(null)
   const [documents, setDocuments] = useState<Document[]>([])
@@ -203,6 +262,25 @@ export default function ProjectDocuments() {
   // AI Providers/Models state
   const [aiProviders, setAIProviders] = useState<any[]>([])
   const [models, setModels] = useState<any[]>([])
+
+  const activeJobs = useActiveGenerationJobs(projectId)
+
+  /** Look up any active job for a given document id + name */
+  const getActiveJob = (docId: string, docName: string): ActiveJobInfo | undefined =>
+    activeJobs.find(j =>
+      (j.documentId && j.documentId === docId) ||
+      (j.documentName && j.documentName.toLowerCase() === docName.toLowerCase())
+    )
+
+  /** Resolve updated_by UUID to a display name */
+  const resolveUpdatedBy = (updatedBy: string | null | undefined, updatedByName?: string | null): string => {
+    if (updatedByName && updatedByName.trim() !== '') return updatedByName
+    if (!updatedBy) return '—'
+    if (user?.id && updatedBy === user.id) return user.name || user.email || 'You'
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (uuidRegex.test(updatedBy)) return `User ${updatedBy.slice(0, 8)}…`
+    return updatedBy
+  }
 
   // Fetch AI Providers on mount
   useEffect(() => {
@@ -865,6 +943,10 @@ export default function ProjectDocuments() {
 
   const [exportWordDialogOpen, setExportWordDialogOpen] = useState(false)
 
+  // Multi-Scale Summary State
+  const [densityDialogOpen, setDensityDialogOpen] = useState(false)
+  const [selectedDensityDoc, setSelectedDensityDoc] = useState<Document | null>(null)
+
   const handleBulkWordExportFromDialog = async (values: WordBulkExportDialogValues) => {
     if (selectedDocuments.size === 0) {
       toast.error("Please select at least one document")
@@ -982,20 +1064,83 @@ export default function ProjectDocuments() {
     }
   }
 
-  const handleBulkPrint = () => {
+  const handleBulkPrint = async () => {
     if (selectedDocuments.size === 0) {
       toast.error("Please select at least one document")
       return
     }
 
-    // Open each selected document in a new window for printing
-    selectedDocuments.forEach(documentId => {
-      const url = `/projects/${projectId}/documents/${documentId}/view`
-      window.open(url, '_blank')
-    })
+    try {
+      setExporting(true)
+      const documentIds = Array.from(selectedDocuments)
+      
+      // Fetch full content for all selected documents
+      const fullDocuments = await Promise.all(
+        documentIds.map(id => apiClient.get<ADPADocument>(`/documents/${id}`))
+      )
 
-    toast.success(`Opening ${selectedDocuments.size} document(s) for printing`)
-    // Note: User will need to print each window manually
+      const printWindow = window.open('', '_blank')
+      if (!printWindow) {
+        toast.error("Failed to open print window. Please allow popups.")
+        return
+      }
+
+      const styles = getExportStyleSheet()
+      let combinedHtml = ""
+
+      fullDocuments.forEach((doc: any, index) => {
+        const fetchedDoc = doc.document || doc.data || doc
+        const content = fetchedDoc.content || ""
+        const htmlContent = prepareContentForExport(content, 'print')
+        
+        combinedHtml += `
+          <div class="document-page" style="${index > 0 ? 'page-break-before: always;' : ''}">
+            <header style="margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 10px;">
+              <h1 style="margin: 0; font-size: 24px;">${fetchedDoc.title || fetchedDoc.name}</h1>
+              <p style="margin: 5px 0 0 0; font-size: 12px; color: #666;">
+                Project: ${project?.name} | Version: v${fetchedDoc.version} | Date: ${new Date().toLocaleDateString()}
+              </p>
+            </header>
+            <div class="document-content">
+              ${htmlContent}
+            </div>
+          </div>
+        `
+      })
+
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Exported Documents - ${project?.name}</title>
+            <style>
+              ${styles}
+              .document-page { margin-bottom: 50px; }
+              @media print {
+                .document-page { margin-bottom: 0; }
+              }
+            </style>
+          </head>
+          <body>
+            ${combinedHtml}
+            <script>
+              window.onload = () => {
+                setTimeout(() => {
+                  window.print();
+                }, 500);
+              }
+            </script>
+          </body>
+        </html>
+      `)
+      printWindow.document.close()
+
+      toast.success(`Prepared ${documentIds.length} document(s) for printing`)
+    } catch (error) {
+      console.error("Failed to prepare documents for print:", error)
+      toast.error("Failed to prepare documents for print")
+    } finally {
+      setExporting(false)
+    }
   }
 
   // Get status color
@@ -1515,6 +1660,53 @@ export default function ProjectDocuments() {
                   transition={{ delay: 0.5 }}
                   className="space-y-4"
                 >
+                  {/* Active generation banner */}
+                  {activeJobs.length > 0 && (
+                    <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-sm">
+                      <Loader2 className="h-4 w-4 animate-spin flex-shrink-0" />
+                      <span>
+                        <strong>{activeJobs.length}</strong> document{activeJobs.length > 1 ? 's are' : ' is'} currently being generated by AI
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Active generating documents placeholder cards */}
+                  {activeJobs.map((job) => {
+                    const hasPersistedDoc = displayDocuments.some(
+                      doc => (job.documentId && doc.id === job.documentId) ||
+                             (job.documentName && doc.name.toLowerCase() === job.documentName.toLowerCase())
+                    )
+                    if (hasPersistedDoc) return null
+
+                    return (
+                      <AnimatedCard key={job.jobId} className="border-blue-200 dark:border-blue-800 bg-blue-50/10">
+                        <CardContent className="p-6">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center space-x-3 mb-2">
+                                <Loader2 className="h-5 w-5 text-blue-500 animate-spin" />
+                                <div className="flex-1">
+                                  <h3 className="text-lg font-semibold text-muted-foreground italic">
+                                    {job.documentName || "Generating document..."}
+                                  </h3>
+                                </div>
+                                <Badge className="animate-pulse bg-blue-500 hover:bg-blue-500 text-white border-0">
+                                  ⚡ Generating… {job.progress > 0 ? `${job.progress}%` : ""}
+                                </Badge>
+                              </div>
+                              <div className="mt-3 w-full max-w-md">
+                                <Progress value={job.progress} className="h-2 rounded-full" />
+                                <p className="text-xs text-muted-foreground mt-2">
+                                  AI is drafting this document. This card will update automatically.
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </AnimatedCard>
+                    )
+                  })}
+
                   {displayDocuments.length === 0 ? (
                     <AnimatedCard>
                       <CardContent className="flex flex-col items-center justify-center py-16">
@@ -1539,6 +1731,7 @@ export default function ProjectDocuments() {
                     </AnimatedCard>
                   ) : (
                     <>
+
                       {/* Select All Controls */}
                       {displayDocuments.length > 0 && (
                         <div className="flex items-center justify-between mb-4 p-3 border-b bg-muted/30 rounded-t-lg">
@@ -1622,181 +1815,218 @@ export default function ProjectDocuments() {
                       {displayDocuments.map((document, index) => (
                         <AnimatedCard key={document.id}>
                           <CardContent className="p-6">
-                            <div className="flex items-start justify-between">
-                              <div className="flex-1">
-                                <div className="flex items-center space-x-3 mb-2">
-                                  {/* Checkbox */}
-                                  <button
-                                    onClick={() => toggleDocumentSelection(document.id)}
-                                    className="flex-shrink-0 mt-1"
-                                  >
-                                    {selectedDocuments.has(document.id) ? (
-                                      <CheckSquare className="h-5 w-5 text-primary" />
-                                    ) : (
-                                      <Square className="h-5 w-5 text-muted-foreground hover:text-primary transition-colors" />
-                                    )}
-                                  </button>
-                                  <FileText className="h-5 w-5 text-muted-foreground" />
-                                  <div className="flex-1">
-                                    <h3 className="text-lg font-semibold">{document.name}</h3>
-                                    {document.template_name && (
-                                      <p className="text-sm text-blue-600 font-medium">
-                                        📋 {document.template_name}
-                                      </p>
-                                    )}
-                                  </div>
-                                  <Badge className={getStatusColor(document.status)}>
-                                    {document.status}
-                                  </Badge>
-                                  <Badge variant="outline">
-                                    v{document.version}
-                                  </Badge>
-                                  {document.quality_score !== undefined && document.quality_score !== null && (
-                                    <QualityAuditBadge
-                                      documentId={document.id}
-                                      score={document.quality_score}
-                                      grade={calculateGrade(document.quality_score)}
-                                      status={document.quality_status}
-                                      compact
+                            {(() => {
+                              const activeJob = getActiveJob(document.id, document.name)
+                              const isProcessing = !!activeJob
+                              return (
+                                <>
+                                  {/* Progress bar when generating */}
+                                  {isProcessing && (
+                                    <Progress
+                                      value={activeJob!.progress}
+                                      className="h-1 mb-3 rounded-full"
                                     />
                                   )}
-                                  {document.drift_count && document.drift_count > 0 && (
-                                    <Badge
-                                      variant={document.has_critical_drift ? "destructive" : document.has_high_drift ? "default" : "secondary"}
-                                      className="cursor-pointer hover:opacity-80 transition-opacity"
-                                      onClick={(e: React.MouseEvent) => {
-                                        e.stopPropagation()
-                                        router.push(`/projects/${projectId}/drift`)
-                                      }}
-                                    >
-                                      <AlertTriangle className="h-3 w-3 mr-1" />
-                                      {document.drift_count} Drift{document.drift_count > 1 ? 's' : ''}
-                                    </Badge>
-                                  )}
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                                  <div className="flex items-center space-x-2">
-                                    <Tag className="h-4 w-4 text-muted-foreground" />
-                                    <div>
-                                      <p className="text-sm font-medium">Template</p>
-                                      <p className="text-sm text-muted-foreground">
-                                        {document.template_name || 'No template'}
-                                      </p>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center space-x-2">
-                                    <Calendar className="h-4 w-4 text-muted-foreground" />
-                                    <div>
-                                      <p className="text-sm font-medium">Last Updated</p>
-                                      <p className="text-sm text-muted-foreground">
-                                        {new Date(document.updated_at).toLocaleDateString()}
-                                      </p>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center space-x-2">
-                                    <BarChart3 className="h-4 w-4 text-muted-foreground" />
-                                    <div>
-                                      <p className="text-sm font-medium">Size</p>
-                                      <p className="text-sm text-muted-foreground">
-                                        {document.word_count ? `${document.word_count} words` : formatFileSize(document.file_size || 0)}
-                                      </p>
-                                    </div>
-                                  </div>
-                                </div>
-
-                                {/* Template Metadata */}
-                                {document.template_name && (
-                                  <div className="mb-4 p-3 bg-muted/50 rounded-lg">
-                                    <div className="flex items-center space-x-2 mb-2">
-                                      <CheckCircle className="h-4 w-4 text-green-500" />
-                                      <span className="text-sm font-medium">Template Compliance</span>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-2 text-sm">
-                                      <div>
-                                        <span className="text-muted-foreground">Framework:</span>
-                                        <span className="ml-2 font-medium">{document.template_framework}</span>
+                                  <div className="flex items-start justify-between">
+                                    <div className="flex-1">
+                                      <div className="flex items-center space-x-3 mb-2">
+                                        {/* Checkbox */}
+                                        <button
+                                          onClick={() => toggleDocumentSelection(document.id)}
+                                          className="flex-shrink-0 mt-1"
+                                        >
+                                          {selectedDocuments.has(document.id) ? (
+                                            <CheckSquare className="h-5 w-5 text-primary" />
+                                          ) : (
+                                            <Square className="h-5 w-5 text-muted-foreground hover:text-primary transition-colors" />
+                                          )}
+                                        </button>
+                                        {isProcessing ? (
+                                          <Loader2 className="h-5 w-5 text-blue-500 animate-spin" />
+                                        ) : (
+                                          <FileText className="h-5 w-5 text-muted-foreground" />
+                                        )}
+                                        <div className="flex-1">
+                                          <h3 className="text-lg font-semibold">{document.name}</h3>
+                                          {document.template_name && (
+                                            <p className="text-sm text-blue-600 font-medium">
+                                              📋 {document.template_name}
+                                            </p>
+                                          )}
+                                        </div>
+                                        {isProcessing ? (
+                                          <Badge className="animate-pulse bg-blue-500 hover:bg-blue-500 text-white border-0">
+                                            ⚡ Generating… {activeJob!.progress}%
+                                          </Badge>
+                                        ) : (
+                                          <Badge className={getStatusColor(document.status)}>
+                                            {document.status}
+                                          </Badge>
+                                        )}
+                                        <Badge variant="outline">
+                                          v{document.version}
+                                        </Badge>
+                                        {document.quality_score !== undefined && document.quality_score !== null && (
+                                          <QualityAuditBadge
+                                            documentId={document.id}
+                                            score={document.quality_score}
+                                            grade={calculateGrade(document.quality_score)}
+                                            status={document.quality_status}
+                                            compact
+                                          />
+                                        )}
+                                        {document.drift_count && document.drift_count > 0 && (
+                                          <Badge
+                                            variant={document.has_critical_drift ? "destructive" : document.has_high_drift ? "default" : "secondary"}
+                                            className="cursor-pointer hover:opacity-80 transition-opacity"
+                                            onClick={(e: React.MouseEvent) => {
+                                              e.stopPropagation()
+                                              router.push(`/projects/${projectId}/drift`)
+                                            }}
+                                          >
+                                            <AlertTriangle className="h-3 w-3 mr-1" />
+                                            {document.drift_count} Drift{document.drift_count > 1 ? 's' : ''}
+                                          </Badge>
+                                        )}
                                       </div>
-                                      <div>
-                                        <span className="text-muted-foreground">Template:</span>
-                                        <span className="ml-2 font-medium">{document.template_name}</span>
+
+                                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                                        <div className="flex items-center space-x-2">
+                                          <Tag className="h-4 w-4 text-muted-foreground" />
+                                          <div>
+                                            <p className="text-sm font-medium">Template</p>
+                                            <p className="text-sm text-muted-foreground">
+                                              {document.template_name || 'No template'}
+                                            </p>
+                                          </div>
+                                        </div>
+                                        <div className="flex items-center space-x-2">
+                                          <Calendar className="h-4 w-4 text-muted-foreground" />
+                                          <div>
+                                            <p className="text-sm font-medium">Last Updated</p>
+                                            <p className="text-sm text-muted-foreground">
+                                              {new Date(document.updated_at).toLocaleDateString()} by {resolveUpdatedBy(document.updated_by, document.updated_by_name)}
+                                            </p>
+                                          </div>
+                                        </div>
+                                        <div className="flex items-center space-x-2">
+                                          <BarChart3 className="h-4 w-4 text-muted-foreground" />
+                                          <div>
+                                            <p className="text-sm font-medium">Size</p>
+                                            <p className="text-sm text-muted-foreground">
+                                              {document.word_count ? `${document.word_count} words` : formatFileSize(document.file_size || 0)}
+                                            </p>
+                                          </div>
+                                        </div>
                                       </div>
+
+                                      {/* Template Metadata */}
+                                      {document.template_name && (
+                                        <div className="mb-4 p-3 bg-muted/50 rounded-lg">
+                                          <div className="flex items-center space-x-2 mb-2">
+                                            <CheckCircle className="h-4 w-4 text-green-500" />
+                                            <span className="text-sm font-medium">Template Compliance</span>
+                                          </div>
+                                          <div className="grid grid-cols-2 gap-2 text-sm">
+                                            <div>
+                                              <span className="text-muted-foreground">Framework:</span>
+                                              <span className="ml-2 font-medium">{document.template_framework}</span>
+                                            </div>
+                                            <div>
+                                              <span className="text-muted-foreground">Template:</span>
+                                              <span className="ml-2 font-medium">{document.template_name}</span>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Tags */}
+                                      {document.tags && document.tags.length > 0 && (
+                                        <div className="flex flex-wrap gap-1">
+                                          {document.tags.map((tag) => (
+                                            <div key={tag} className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 text-foreground">
+                                              {tag}
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    <div className="flex items-center space-x-2">
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => router.push(`/projects/${projectId}/documents/${document.id}/view`)}
+                                      >
+                                        <Eye className="h-4 w-4 mr-2" />
+                                        View
+                                      </Button>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => router.push(`/projects/${projectId}/documents/source?docId=${document.id}`)}
+                                      >
+                                        <FileText className="h-4 w-4 mr-2" />
+                                        Source
+                                      </Button>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="text-indigo-600 border-indigo-200 bg-indigo-50/50 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-300"
+                                        onClick={() => router.push(`/projects/${projectId}/documents/ui?docId=${document.id}`)}
+                                      >
+                                        <Wand2 className="h-4 w-4 mr-2 text-indigo-500" />
+                                        Report
+                                      </Button>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => router.push(`/projects/${projectId}/documents/${document.id}`)}
+                                      >
+                                        <Edit className="h-4 w-4 mr-2" />
+                                        Edit
+                                      </Button>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="text-amber-600 border-amber-200 bg-amber-50/50 hover:bg-amber-50 hover:text-amber-700 hover:border-amber-300"
+                                        onClick={() => {
+                                          setSelectedDensityDoc(document)
+                                          setDensityDialogOpen(true)
+                                        }}
+                                      >
+                                        <Layers className="h-4 w-4 mr-2 text-amber-500" />
+                                        Density
+                                      </Button>
+                                      <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                          <Button variant="outline" size="sm">
+                                            <MoreHorizontal className="h-4 w-4" />
+                                          </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end">
+                                          <DropdownMenuItem>
+                                            <Download className="h-4 w-4 mr-2" />
+                                            Download
+                                          </DropdownMenuItem>
+                                          <DropdownMenuItem>
+                                            <User className="h-4 w-4 mr-2" />
+                                            Share
+                                          </DropdownMenuItem>
+                                          <DropdownMenuItem
+                                            className="text-destructive"
+                                            onClick={() => handleDeleteDocument(document.id)}
+                                          >
+                                            <Trash2 className="h-4 w-4 mr-2" />
+                                            Delete
+                                          </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                      </DropdownMenu>
                                     </div>
                                   </div>
-                                )}
-
-                                {/* Tags */}
-                                {document.tags && document.tags.length > 0 && (
-                                  <div className="flex flex-wrap gap-1">
-                                    {document.tags.map((tag) => (
-                                      <div key={tag} className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 text-foreground">
-                                        {tag}
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-
-                              <div className="flex items-center space-x-2">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => router.push(`/projects/${projectId}/documents/${document.id}/view`)}
-                                >
-                                  <Eye className="h-4 w-4 mr-2" />
-                                  View
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => router.push(`/projects/${projectId}/documents/source?docId=${document.id}`)}
-                                >
-                                  <FileText className="h-4 w-4 mr-2" />
-                                  Source
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="text-indigo-600 border-indigo-200 bg-indigo-50/50 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-300"
-                                  onClick={() => router.push(`/projects/${projectId}/documents/ui?docId=${document.id}`)}
-                                >
-                                  <Wand2 className="h-4 w-4 mr-2 text-indigo-500" />
-                                  Report
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => router.push(`/projects/${projectId}/documents/${document.id}`)}
-                                >
-                                  <Edit className="h-4 w-4 mr-2" />
-                                  Edit
-                                </Button>
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <Button variant="outline" size="sm">
-                                      <MoreHorizontal className="h-4 w-4" />
-                                    </Button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end">
-                                    <DropdownMenuItem>
-                                      <Download className="h-4 w-4 mr-2" />
-                                      Download
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem>
-                                      <User className="h-4 w-4 mr-2" />
-                                      Share
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                      className="text-destructive"
-                                      onClick={() => handleDeleteDocument(document.id)}
-                                    >
-                                      <Trash2 className="h-4 w-4 mr-2" />
-                                      Delete
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              </div>
-                            </div>
+                                </>
+                              )
+                            })()}
                           </CardContent>
                         </AnimatedCard>
                       ))}
@@ -2224,6 +2454,16 @@ export default function ProjectDocuments() {
       onExport={handleBulkWordExportFromDialog}
       exporting={exporting}
     />
+    {selectedDensityDoc && (
+      <SummaryDensityDialog
+        open={densityDialogOpen}
+        onOpenChange={setDensityDialogOpen}
+        projectId={projectId}
+        documentId={selectedDensityDoc.id}
+        documentTitle={selectedDensityDoc.name}
+        fullRawContent={selectedDensityDoc.content || ''}
+      />
+    )}
     </>
   )
 }
