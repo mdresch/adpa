@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { PageTransition } from "@/components/page-transition"
@@ -268,12 +269,14 @@ export default function DocumentEntitiesPage() {
   const [entityCounts, setEntityCounts] = useState<EntityCounts | null>(null)
   const [entityData, setEntityData] = useState<EntityData>({})
   const [selectedEntityType, setSelectedEntityType] = useState<string | null>(null)
+  const [dialogOpen, setDialogOpen] = useState(false)
   const [totalEntities, setTotalEntities] = useState(0)
   const [primaryKnowledgeDomain, setPrimaryKnowledgeDomain] = useState<KnowledgeDomainKey | null>(null)
   const [secondaryKnowledgeDomains, setSecondaryKnowledgeDomains] = useState<KnowledgeDomainKey[]>([])
   const [contextMatchingScore, setContextMatchingScore] = useState<number | null>(null)
   const [appliedContextEntities, setAppliedContextEntities] = useState<any[]>([])
   const [isExtracting, setIsExtracting] = useState(false)
+  const [retiredExpanded, setRetiredExpanded] = useState(false)
 
   const [extractionProgress, setExtractionProgress] = useState(0)
   const [extractionStatus, setExtractionStatus] = useState<string>("")
@@ -337,7 +340,7 @@ export default function DocumentEntitiesPage() {
   const fetchDocumentEntities = async () => {
     try {
       setLoading(true)
-      const apiUrl = getApiUrl(`/project-data-extraction/document/${docId}/entities`)
+      const apiUrl = getApiUrl(`/analysis/document/${docId}/entities`)
       
       const response = await fetch(apiUrl, {
         headers: {
@@ -757,115 +760,205 @@ export default function DocumentEntitiesPage() {
               </AnimatedCard>
             ) : (
               <div className="space-y-6">
-                {/* Summary Card */}
-                <AnimatedCard>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <CardTitle className="flex items-center gap-2">
-                          <Database className="h-5 w-5" />
-                          Extraction Summary
-                        </CardTitle>
-                        <CardDescription>
-                          Total entities extracted from this document
-                        </CardDescription>
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleExtractEntities}
-                        disabled={isExtracting}
-                        className="gap-2"
-                      >
-                        {isExtracting ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            Extracting...
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles className="h-4 w-4" />
-                            Re-extract
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
-                      <div className="flex items-center gap-2">
-                        <CheckCircle className="h-5 w-5 text-green-500" />
-                        <span className="font-medium">Total Entities</span>
-                      </div>
-                      <Badge variant="secondary" className="text-lg font-bold">
-                        {totalEntities}
-                      </Badge>
-                    </div>
-
-                    {primaryKnowledgeDomain && (
-                      <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] items-start">
-                        <div className="flex items-center gap-2">
-                          <Shield className="h-5 w-5 text-blue-600" />
-                          <div className="flex flex-col">
-                            <span className="font-medium">Primary Knowledge Domain</span>
-                            <span className="text-xs text-muted-foreground">
-                              Where this document is most heavily focused based on its extracted entities.
-                            </span>
-                          </div>
+                {/* Dashboard Widgets */}
+                <div className="grid gap-6 md:grid-cols-2">
+                  {/* Summary Card */}
+                  <AnimatedCard>
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <CardTitle className="flex items-center gap-2">
+                            <Database className="h-5 w-5" />
+                            Extraction Summary
+                          </CardTitle>
+                          <CardDescription>
+                            Total entities extracted from this document
+                          </CardDescription>
                         </div>
-                        <div className="flex flex-wrap gap-2 justify-end">
-                          <Badge variant="default" className="bg-blue-600 text-white">
-                            {KNOWLEDGE_DOMAIN_LABELS[primaryKnowledgeDomain]}
-                          </Badge>
-                          {secondaryKnowledgeDomains.map((domain) => (
-                            <Badge key={domain} variant="outline">
-                              {KNOWLEDGE_DOMAIN_LABELS[domain]}
-                            </Badge>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {primaryKnowledgeDomain && (
-                      <p className="mt-3 text-sm text-muted-foreground">
-                        This document primarily supports the{' '}
-                        <span className="font-semibold">
-                          {KNOWLEDGE_DOMAIN_LABELS[primaryKnowledgeDomain]}
-                        </span>{' '}
-                        domain
-                        {secondaryKnowledgeDomains.length > 0 && (
-                          <>
-                            {' '}with important secondary contributions to{' '}
-                            <span className="font-semibold">
-                              {secondaryKnowledgeDomains.map((d) => KNOWLEDGE_DOMAIN_LABELS[d]).join(', ')}
-                            </span>
-                          </>
-                        )}
-                        .{' '}
-                        {primaryKnowledgeDomain &&
-                          KNOWLEDGE_DOMAIN_DESCRIPTIONS[primaryKnowledgeDomain] && (
-                            <span>{KNOWLEDGE_DOMAIN_DESCRIPTIONS[primaryKnowledgeDomain]}</span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleExtractEntities}
+                          disabled={isExtracting}
+                          className="gap-2"
+                        >
+                          {isExtracting ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Extracting...
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="h-4 w-4" />
+                              Re-extract
+                            </>
                           )}
-                      </p>
-                    )}
-                    {extractionStatus && (
-                      <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                        <p className="text-sm text-blue-900 dark:text-blue-100">{extractionStatus}</p>
-                        {extractionProgress > 0 && (
-                          <div className="mt-2">
-                            <div className="h-2 bg-blue-200 dark:bg-blue-800 rounded-full overflow-hidden">
-                              <div
-                                className="h-full bg-blue-600 transition-all duration-300"
-                                style={{ width: `${extractionProgress}%` }}
-                              />
-                            </div>
-                            <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">{extractionProgress}%</p>
-                          </div>
-                        )}
+                        </Button>
                       </div>
-                    )}
-                  </CardContent>
-                </AnimatedCard>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle className="h-5 w-5 text-green-500" />
+                          <span className="font-medium">Total Entities</span>
+                        </div>
+                        <Badge variant="secondary" className="text-lg font-bold">
+                          {totalEntities}
+                        </Badge>
+                      </div>
+
+                      {primaryKnowledgeDomain && (
+                        <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] items-start">
+                          <div className="flex items-center gap-2">
+                            <Shield className="h-5 w-5 text-blue-600" />
+                            <div className="flex flex-col">
+                              <span className="font-medium">Primary Knowledge Domain</span>
+                              <span className="text-xs text-muted-foreground">
+                                Where this document is most heavily focused based on its extracted entities.
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap gap-2 justify-end">
+                            <Badge variant="default" className="bg-blue-600 text-white">
+                              {KNOWLEDGE_DOMAIN_LABELS[primaryKnowledgeDomain]}
+                            </Badge>
+                            {secondaryKnowledgeDomains.map((domain) => (
+                              <Badge key={domain} variant="outline">
+                                {KNOWLEDGE_DOMAIN_LABELS[domain]}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {primaryKnowledgeDomain && (
+                        <p className="mt-3 text-sm text-muted-foreground">
+                          This document primarily supports the{' '}
+                          <span className="font-semibold">
+                            {KNOWLEDGE_DOMAIN_LABELS[primaryKnowledgeDomain]}
+                          </span>{' '}
+                          domain
+                          {secondaryKnowledgeDomains.length > 0 && (
+                            <>
+                              {' '}with important secondary contributions to{' '}
+                              <span className="font-semibold">
+                                {secondaryKnowledgeDomains.map((d) => KNOWLEDGE_DOMAIN_LABELS[d]).join(', ')}
+                              </span>
+                            </>
+                          )}
+                          .{' '}
+                          {primaryKnowledgeDomain &&
+                            KNOWLEDGE_DOMAIN_DESCRIPTIONS[primaryKnowledgeDomain] && (
+                              <span>{KNOWLEDGE_DOMAIN_DESCRIPTIONS[primaryKnowledgeDomain]}</span>
+                            )}
+                        </p>
+                      )}
+                      {extractionStatus && (
+                        <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                          <p className="text-sm text-blue-900 dark:text-blue-100">{extractionStatus}</p>
+                          {extractionProgress > 0 && (
+                            <div className="mt-2">
+                              <div className="h-2 bg-blue-200 dark:bg-blue-800 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-blue-600 transition-all duration-300"
+                                  style={{ width: `${extractionProgress}%` }}
+                                />
+                              </div>
+                              <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">{extractionProgress}%</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </CardContent>
+                  </AnimatedCard>
+
+                  {/* Context Consistency Card */}
+                  <AnimatedCard>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Gauge className="h-5 w-5 text-emerald-500" />
+                        Context Consistency Dashboard
+                      </CardTitle>
+                      <CardDescription>
+                        Scoring based on entity reuse across project templates
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {(() => {
+                        const allLoadedEntities = Object.values(entityData).flat()
+                        const activeEntities = allLoadedEntities.filter(e => e.status !== 'retired')
+                        const reusedCount = activeEntities.filter(e => e.context_match?.is_match).length
+                        const newCount = activeEntities.filter(e => !e.context_match?.is_match).length
+                        const coreCandidateCount = activeEntities.filter(e => {
+                          const docIds = e.source_document_ids || (e.source_document_id ? [e.source_document_id] : [])
+                          return docIds.length >= 2
+                        }).length
+                        const consistencyScore = activeEntities.length > 0 
+                          ? Math.round((reusedCount / activeEntities.length) * 100) 
+                          : 0
+                        
+                        const radius = 36
+                        const circumference = 2 * Math.PI * radius
+                        const strokeDashoffset = circumference - (consistencyScore / 100) * circumference
+
+                        return (
+                          <div className="space-y-4">
+                            <div className="flex items-center gap-4">
+                              <div className="relative h-20 w-20 flex-shrink-0">
+                                <svg className="h-full w-full -rotate-90">
+                                  <circle
+                                    cx="40"
+                                    cy="40"
+                                    r={radius}
+                                    className="stroke-muted"
+                                    strokeWidth="6"
+                                    fill="transparent"
+                                  />
+                                  <circle
+                                    cx="40"
+                                    cy="40"
+                                    r={radius}
+                                    className="stroke-emerald-500 transition-all duration-500"
+                                    strokeWidth="6"
+                                    fill="transparent"
+                                    strokeDasharray={circumference}
+                                    strokeDashoffset={strokeDashoffset}
+                                    strokeLinecap="round"
+                                  />
+                                </svg>
+                                <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                                  <span className="text-lg font-bold">{consistencyScore}%</span>
+                                  <span className="text-[8px] text-muted-foreground uppercase tracking-wide">Reuse</span>
+                                </div>
+                              </div>
+                              <div>
+                                <h4 className="text-sm font-semibold">Consistency Score</h4>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Percentage of reuse and matches against previous source documents.
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-2 pt-3 border-t">
+                              <div className="text-center p-2 bg-muted/40 rounded">
+                                <div className="text-base font-bold text-emerald-600 dark:text-emerald-400">{reusedCount}</div>
+                                <div className="text-[9px] text-muted-foreground uppercase font-medium">Reused Context</div>
+                              </div>
+                              <div className="text-center p-2 bg-muted/40 rounded">
+                                <div className="text-base font-bold text-blue-600 dark:text-blue-400">{newCount}</div>
+                                <div className="text-[9px] text-muted-foreground uppercase font-medium">New Entities</div>
+                              </div>
+                              <div className="text-center p-2 bg-muted/40 rounded">
+                                <div className="text-base font-bold text-amber-500">{coreCandidateCount}</div>
+                                <div className="text-[9px] text-muted-foreground uppercase font-medium">Core Candidates</div>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })()}
+                    </CardContent>
+                  </AnimatedCard>
+                </div>
 
                 {/* Entity Types Grid */}
                 <AnimatedCard>
@@ -889,13 +982,19 @@ export default function DocumentEntitiesPage() {
                                 ? 'cursor-pointer hover:bg-muted hover:border-primary'
                                 : 'opacity-50 cursor-not-allowed'
                             }`}
-                            onClick={() => isClickable && setSelectedEntityType(key)}
+                            onClick={() => {
+                              if (isClickable) {
+                                setSelectedEntityType(key)
+                                setDialogOpen(true)
+                              }
+                            }}
                             role={isClickable ? 'button' : undefined}
                             tabIndex={isClickable ? 0 : undefined}
                             onKeyDown={(e) => {
                               if (isClickable && (e.key === 'Enter' || e.key === ' ')) {
                                 e.preventDefault()
                                 setSelectedEntityType(key)
+                                setDialogOpen(true)
                               }
                             }}
                           >
@@ -913,79 +1012,150 @@ export default function DocumentEntitiesPage() {
                   </CardContent>
                 </AnimatedCard>
 
-                {/* Entity Details Tabs */}
-                {selectedEntityType && entityData[selectedEntityType] && entityData[selectedEntityType].length > 0 && (
-                  <AnimatedCard>
-                    <CardHeader>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <CardTitle>{getEntityTypeLabel(selectedEntityType)}</CardTitle>
-                          <CardDescription>
-                            {entityData[selectedEntityType].length} {getEntityTypeLabel(selectedEntityType).toLowerCase()} extracted from this document
-                          </CardDescription>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setSelectedEntityType(null)}
-                        >
-                          Close
-                        </Button>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
-                        {entityData[selectedEntityType].map((entity, index) => (
-                          <Card key={entity.id || index} className="overflow-hidden">
-                            <CardHeader className="pb-3">
-                              <CardTitle className="text-base">
-                                {entity.name || entity.title || entity.description?.substring(0, 50) || `${getEntityTypeLabel(selectedEntityType)} #${index + 1}`}
-                              </CardTitle>
-                            </CardHeader>
-                            <CardContent className="space-y-3">
-                              {Object.entries(entity)
-                                .filter(([key]) => {
-                                  // Exclude system fields
-                                  if (['id', 'project_id', 'created_at', 'updated_at', 'extraction_metadata'].includes(key)) {
-                                    return false
-                                  }
-                                  // Skip created_by and updated_by UUIDs if we have name fields
-                                  if ((key === 'created_by' || key === 'updated_by') && 
-                                      typeof entity[key] === 'string' && 
-                                      entity[key].match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i) &&
-                                      entity[`${key}_name`]) {
-                                    return false
-                                  }
-                                  return true
-                                })
-                                .map(([key, value]) => {
-                                  // Prefer _name fields over UUID fields
-                                  if ((key === 'created_by_name' || key === 'updated_by_name')) {
-                                    const baseKey = key.replace('_name', '')
-                                    if (entity[baseKey]) {
-                                      key = baseKey
+                {/* Entity Type Dialog */}
+                <Dialog 
+                  open={dialogOpen} 
+                  onOpenChange={(open) => {
+                    if (!open) {
+                      setSelectedEntityType(null)
+                      setRetiredExpanded(false)
+                    }
+                    setDialogOpen(open)
+                  }}
+                >
+                  <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+                    <DialogHeader>
+                      <DialogTitle className="flex items-center gap-2">
+                        {selectedEntityType && (
+                          <>
+                            {(() => {
+                              const entityType = entityTypes.find(t => t.key === selectedEntityType)
+                              const Icon = entityType?.icon
+                              return Icon ? <Icon className="h-5 w-5" /> : null
+                            })()}
+                            {getEntityTypeLabel(selectedEntityType)}
+                          </>
+                        )}
+                      </DialogTitle>
+                      <DialogDescription>
+                        {selectedEntityType && entityData[selectedEntityType] && (
+                          <>
+                            {entityData[selectedEntityType].length} entities of this type
+                          </>
+                        )}
+                      </DialogDescription>
+                    </DialogHeader>
+                    
+                    {selectedEntityType && entityData[selectedEntityType] && entityData[selectedEntityType].length > 0 && (
+                      <div className="space-y-4 pr-2">
+                        {(() => {
+                          const entitiesForType = entityData[selectedEntityType] || []
+                          const activeForType = entitiesForType.filter(e => e.status !== 'retired')
+                          const retiredForType = entitiesForType.filter(e => e.status === 'retired')
+
+                          const renderEntityCard = (entity: any, index: number) => (
+                            <Card key={entity.id || index} className="overflow-hidden border-l-4 border-l-primary">
+                              <CardHeader className="pb-3">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <CardTitle className="text-base">
+                                    {entity.name || entity.title || entity.description?.substring(0, 50) || `${getEntityTypeLabel(selectedEntityType)} #${index + 1}`}
+                                  </CardTitle>
+                                  <div className="flex flex-wrap gap-1">
+                                    {entity.status === 'retired' && (
+                                      <Badge variant="secondary" className="bg-red-100 text-red-800 dark:bg-red-950/20 dark:text-red-300">
+                                        Retired
+                                      </Badge>
+                                    )}
+                                    {entity.context_match?.is_match && (
+                                      <Badge variant="outline" className="border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-300 flex items-center gap-1 font-semibold">
+                                        ✓ Context Reused: "{entity.context_match.matched_context_entity?.name}" ({Math.round(entity.context_match.score * 100)}% similarity)
+                                      </Badge>
+                                    )}
+                                    {(() => {
+                                      const docIds = entity.source_document_ids || (entity.source_document_id ? [entity.source_document_id] : [])
+                                      if (docIds.length >= 2) {
+                                        return (
+                                          <Badge variant="outline" className="border-amber-500 bg-amber-50 text-amber-700 dark:bg-amber-950/20 dark:text-amber-300 flex items-center gap-1 font-semibold">
+                                            ★ Core Context Candidate
+                                          </Badge>
+                                        )
+                                      }
+                                      return null
+                                    })()}
+                                  </div>
+                                </div>
+                              </CardHeader>
+                              <CardContent className="space-y-3">
+                                {Object.entries(entity)
+                                  .filter(([key]) => {
+                                    if (['id', 'project_id', 'created_at', 'updated_at', 'extraction_metadata', 'status', 'context_match', 'source_document_ids'].includes(key)) {
+                                      return false
                                     }
-                                  }
-                                  
-                                  const isLongContent = key === 'justification' || key === 'description' || (Array.isArray(value) && value.length > 0)
-                                  return (
-                                    <div key={key} className={isLongContent ? 'space-y-1' : 'grid grid-cols-3 gap-2 text-sm'}>
-                                      <span className={`font-medium text-muted-foreground capitalize ${isLongContent ? 'block mb-1' : ''}`}>
-                                        {key.replace(/_/g, ' ')}:
-                                      </span>
-                                      <div className={isLongContent ? 'w-full' : 'col-span-2 break-words'}>
-                                        {renderEntityField(key, value, entity)}
+                                    if ((key === 'created_by' || key === 'updated_by') && 
+                                        typeof entity[key] === 'string' && 
+                                        entity[key].match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i) &&
+                                        entity[`${key}_name`]) {
+                                      return false
+                                    }
+                                    return true
+                                  })
+                                  .map(([key, value]) => {
+                                    if ((key === 'created_by_name' || key === 'updated_by_name')) {
+                                      const baseKey = key.replace('_name', '')
+                                      if (entity[baseKey]) {
+                                        key = baseKey
+                                      }
+                                    }
+                                    
+                                    const isLongContent = key === 'justification' || key === 'description' || (Array.isArray(value) && value.length > 0)
+                                    return (
+                                      <div key={key} className={isLongContent ? 'space-y-1' : 'grid grid-cols-3 gap-2 text-sm'}>
+                                        <span className={`font-medium text-muted-foreground capitalize ${isLongContent ? 'block mb-1' : ''}`}>
+                                          {key.replace(/_/g, ' ')}:
+                                        </span>
+                                        <div className={isLongContent ? 'w-full' : 'col-span-2 break-words'}>
+                                          {renderEntityField(key, value, entity)}
+                                        </div>
                                       </div>
+                                    )
+                                  })}
+                              </CardContent>
+                            </Card>
+                          )
+
+                          return (
+                            <>
+                              {activeForType.length > 0 ? (
+                                activeForType.map((entity, index) => renderEntityCard(entity, index))
+                              ) : (
+                                <p className="text-sm text-muted-foreground italic text-center py-4">No active entities of this type.</p>
+                              )}
+
+                              {retiredForType.length > 0 && (
+                                <div className="mt-6 border-t pt-4">
+                                  <Button
+                                    variant="outline"
+                                    type="button"
+                                    className="w-full flex items-center justify-between text-muted-foreground bg-muted/20"
+                                    onClick={() => setRetiredExpanded(!retiredExpanded)}
+                                  >
+                                    <span className="font-semibold text-xs uppercase tracking-wider">Retired Context Entities ({retiredForType.length})</span>
+                                    <span>{retiredExpanded ? "Collapse ▲" : "Expand ▼"}</span>
+                                  </Button>
+                                  {retiredExpanded && (
+                                    <div className="mt-4 space-y-4">
+                                      {retiredForType.map((entity, index) => renderEntityCard(entity, index))}
                                     </div>
-                                  )
-                                })}
-                            </CardContent>
-                          </Card>
-                        ))}
+                                  )}
+                                </div>
+                              )}
+                            </>
+                          )
+                        })()}
                       </div>
-                    </CardContent>
-                  </AnimatedCard>
-                )}
+                    )}
+                  </DialogContent>
+                </Dialog>
               </div>
             )}
             </div>

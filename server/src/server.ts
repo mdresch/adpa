@@ -148,6 +148,7 @@ import lessonsLearnedRoutes from "./routes/lessonsLearnedRoutes"
 import developmentApproachModuleRoutes from "./modules/developmentApproach/routes"
 import contextOrchestratorRoutes from "./routes/contextOrchestrator"
 import morphicModuleRoutes from "./modules/morphic/routes"
+import entityAuditRoutes from "./modules/entityAudit/routes"
 import uxDocumentationRoutes from "./routes/uxDocumentationRoutes"
 import semanticProcessingRoutes from "./routes/semanticProcessingRoutes"
 import digitalTwinAssetsRoutes from "./routes/digital-twin-assets"
@@ -351,7 +352,9 @@ app.use("/api/quality-audits", qualityAuditRoutes)
 app.use("/api/compliance", complianceRoutes)
 app.use("/api/v1/policy-library", policyLibraryRoutes)
 app.use("/api/v1/governance", councilRouter)
+app.use("/api/v1/entity-audit", entityAuditRoutes)
 console.log("✅ Policy Library Routes Mounted")
+console.log("✅ Entity Audit Routes Mounted")
 app.use("/api/admin", adminRoutes)
 app.use("/api/onboarding", documentUploadRoutes)
 app.use("/api/assessment", assessmentExportRoutes)

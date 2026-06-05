@@ -2,12 +2,14 @@
  * Enhanced Entity Extraction Service
  * Extracts and stores entities in the new entity_extractions table
  * Supports all 10 core entity types with confidence scoring and relationships
+ * Phase 1-3: Immutable audit trail with cryptographic signing integrated
  */
 
 import { pool } from '../database/connection'
 import { logger } from '../utils/logger'
 import { aiService } from './aiService'
 import { aiCacheService } from './aiCacheService'
+import { entityAuditService } from './entityAuditService'
 import { v4 as uuidv4 } from 'uuid'
 
 export type EntityType = string
@@ -485,6 +487,44 @@ ${content.substring(0, 15000)}` // Limit content to avoid token limits
   ): Promise<ExtractedEntity[]> {
     const storedEntities: ExtractedEntity[] = []
 
+    // Fetch matching context
+    let contextEntities: any[] = [];
+    try {
+      const activeRes = await pool.query(
+        `SELECT id, entity_name, entity_type, entity_data, extraction_confidence, status, document_id
+         FROM entity_extractions
+         WHERE project_id = $1 AND status = 'active'`,
+        [projectId]
+      );
+      
+      const docMetaRes = await pool.query(
+        `SELECT generation_metadata FROM documents WHERE id = $1 AND deleted_at IS NULL`,
+        [documentId]
+      );
+      const genMeta = docMetaRes.rows[0]?.generation_metadata;
+      const genMetaObj = typeof genMeta === 'string' ? JSON.parse(genMeta) : (genMeta || {});
+      const sourceDocs = genMetaObj.source_documents || [];
+      const sourceDocIds = new Set<string>(
+        sourceDocs.map((d: any) => typeof d === 'string' ? d : d.id).filter(Boolean)
+      );
+
+      if (sourceDocIds.size > 0) {
+        contextEntities = activeRes.rows.filter(row => {
+          const entityData = typeof row.entity_data === 'string' ? JSON.parse(row.entity_data) : (row.entity_data || {});
+          const docIds = entityData.source_document_ids || (row.document_id ? [row.document_id] : []);
+          return docIds.some((id: string) => sourceDocIds.has(id));
+        });
+      } else {
+        contextEntities = activeRes.rows.filter(row => {
+          const entityData = typeof row.entity_data === 'string' ? JSON.parse(row.entity_data) : (row.entity_data || {});
+          const docIds = entityData.source_document_ids || (row.document_id ? [row.document_id] : []);
+          return !docIds.includes(documentId);
+        });
+      }
+    } catch (err: any) {
+      logger.warn('⚠️ Failed to load matching context for entities', { error: err.message });
+    }
+
     for (const entity of entities) {
       try {
         const confidence = entity.extraction_confidence || 50
@@ -492,7 +532,28 @@ ${content.substring(0, 15000)}` // Limit content to avoid token limits
         const entityName = entity.entity_name ? entity.entity_name.trim() : 'Unnamed Entity'
         const entityType = entity.entity_type
 
+        // Find best fuzzy match in context
+        let bestMatch: any = { isMatch: false, score: 0, method: 'none' };
+        let bestMatchEntity: any = null;
 
+        const sameTypeContext = contextEntities.filter(e => e.entity_type === entityType);
+        for (const contextEnt of sameTypeContext) {
+          const matchResult = areEntitiesFuzzyMatch(entityName, contextEnt.entity_name);
+          if (matchResult.isMatch && matchResult.score > bestMatch.score) {
+            bestMatch = matchResult;
+            bestMatchEntity = contextEnt;
+          }
+        }
+
+        const contextMatch = {
+          is_match: bestMatch.isMatch,
+          score: bestMatch.score,
+          method: bestMatch.method,
+          matched_context_entity: bestMatchEntity ? {
+            id: bestMatchEntity.id,
+            name: bestMatchEntity.entity_name
+          } : null
+        };
         
         // Aggressive normalization for deduplication (matches what we tell the LLM)
         const normalizedInputName = entityName
@@ -517,7 +578,6 @@ ${content.substring(0, 15000)}` // Limit content to avoid token limits
           [projectId, entityType, entityName, normalizedInputName]
         )
 
-
         let entityId: string
         
         if (existingResult.rows.length > 0) {
@@ -525,14 +585,38 @@ ${content.substring(0, 15000)}` // Limit content to avoid token limits
           const existingRow = existingResult.rows[0]
           entityId = existingRow.id
           
-          const existingData = typeof existingRow.entity_data === 'string'
-            ? JSON.parse(existingRow.entity_data)
-            : existingRow.entity_data || {}
+          // Load full row for audit trail snapshot (existingResult selects only a subset)
+          const fullRowRes = await pool.query(`SELECT * FROM entity_extractions WHERE id = $1`, [existingRow.id])
+          const fullRow = fullRowRes.rows[0] || existingRow
+          
+          const existingData = typeof fullRow.entity_data === 'string'
+            ? JSON.parse(fullRow.entity_data)
+            : fullRow.entity_data || {}
+          
+          // Get current state for audit trail
+          const existingFullState = {
+            id: fullRow.id,
+            project_id: fullRow.project_id,
+            document_id: fullRow.document_id,
+            entity_type: fullRow.entity_type,
+            entity_data: existingData,
+            entity_name: fullRow.entity_name,
+            extraction_confidence: fullRow.extraction_confidence || 50,
+            extraction_method: fullRow.extraction_method,
+            ai_provider: fullRow.ai_provider,
+            ai_model: fullRow.ai_model,
+            related_entity_ids: fullRow.related_entity_ids || [],
+            status: fullRow.status || 'active',
+            is_verified: fullRow.is_verified || false,
+            verified_at: fullRow.verified_at,
+            created_at: fullRow.created_at
+          };
             
           // Merge entity_data properties
           const mergedData = {
             ...existingData,
-            ...entity.entity_data
+            ...entity.entity_data,
+            context_match: contextMatch
           }
           
           // Deduplicate and merge source_document_ids
@@ -551,17 +635,50 @@ ${content.substring(0, 15000)}` // Limit content to avoid token limits
           // Kept verified if either was verified
           const mergedVerified = existingRow.is_verified || isVerified
           
+          // Build new state for audit trail
+          const newFullState = {
+            ...existingFullState,
+            entity_data: mergedData,
+            extraction_confidence: mergedConfidence,
+            is_verified: mergedVerified,
+            updated_at: new Date().toISOString()
+          };
+          
+          // Record update in audit trail BEFORE applying changes
+          try {
+            await entityAuditService.recordUpdate(
+              entityId,
+              existingFullState,
+              newFullState,
+              'system'
+            );
+            logger.info('📝 Recorded entity update in audit trail', { entityId });
+          } catch (auditErr: any) {
+            logger.error('⚠️ Failed to record update audit for entity', {
+              entityId,
+              error: auditErr.message
+            });
+          }
+          
+          // Reactivate if retired and regaining references
+          const shouldReactivate = existingRow.status === 'retired' && 
+            (existingDocIds.length === 0 || existingRow.document_id === null);
+          
+          const statusToSet = shouldReactivate ? 'active' : existingRow.status;
+          
           await pool.query(
             `UPDATE entity_extractions 
              SET entity_data = $1, 
                  extraction_confidence = $2, 
-                 is_verified = $3, 
+                 is_verified = $3,
+                 status = $4,
                  updated_at = CURRENT_TIMESTAMP
-             WHERE id = $4`,
+             WHERE id = $5`,
             [
               JSON.stringify(mergedData),
               mergedConfidence,
               mergedVerified,
+              statusToSet,
               entityId
             ]
           )
@@ -576,19 +693,40 @@ ${content.substring(0, 15000)}` // Limit content to avoid token limits
           // New entity - insert it
           entityId = uuidv4()
           
-          // Add source_document_ids array to entity_data
+          // Add source_document_ids array and context_match to entity_data
           const entityData = {
             ...entity.entity_data,
-            source_document_ids: [documentId]
+            source_document_ids: [documentId],
+            context_match: contextMatch
           }
+          
+          // Create full entity object for audit trail
+          const fullEntityForAudit = {
+            id: entityId,
+            project_id: projectId,
+            document_id: documentId,
+            entity_type: entityType,
+            entity_data: entityData,
+            entity_name: entityName,
+            extraction_confidence: confidence,
+            extraction_method: entity.extraction_method || 'ai',
+            ai_provider: options.aiProvider || 'openai',
+            ai_model: options.aiModel || 'gpt-4',
+            related_entity_ids: entity.related_entity_ids || [],
+            status: entity.status || 'active',
+            is_verified: isVerified,
+            verified_at: isVerified ? new Date().toISOString() : null,
+            created_at: new Date().toISOString()
+          };
           
           const result = await pool.query(
             `INSERT INTO entity_extractions (
-              id, project_id, document_id, entity_type, entity_data, entity_name,
-              extraction_confidence, extraction_method, ai_provider, ai_model,
-              related_entity_ids, status, is_verified, verified_at, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, CURRENT_TIMESTAMP)
-            RETURNING id, entity_type, entity_name, extraction_confidence, created_at`,
+               id, project_id, document_id, entity_type, entity_data, entity_name,
+               extraction_confidence, extraction_method, ai_provider, ai_model,
+               related_entity_ids, status, is_verified, verified_at, created_at,
+               current_version, audit_chain_hash
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, CURRENT_TIMESTAMP, 1, NULL)
+             RETURNING id, entity_type, entity_name, extraction_confidence, created_at`,
             [
               entityId,
               projectId,
@@ -606,6 +744,22 @@ ${content.substring(0, 15000)}` // Limit content to avoid token limits
               isVerified ? new Date() : null
             ]
           )
+          
+          // Record creation in audit trail
+          try {
+            await entityAuditService.recordCreation(
+              entityId,
+              fullEntityForAudit,
+              'system' // or get from context
+            );
+            logger.info('📝 Recorded entity creation in audit trail', { entityId });
+          } catch (auditErr: any) {
+            logger.error('⚠️ Failed to record creation audit for entity', {
+              entityId,
+              error: auditErr.message
+            });
+            // Continue - don't fail entity creation due to audit issue
+          }
           
           if (isVerified) {
             logger.info('✅ Auto-verified high confidence entity', {
@@ -627,6 +781,96 @@ ${content.substring(0, 15000)}` // Limit content to avoid token limits
           error: error.message
         })
       }
+    }
+
+    // Retirement Loop: Remove documentId from entities previously referencing it but not in storedEntities
+    try {
+      const storedEntityIds = storedEntities.map(e => e.id).filter(Boolean);
+      
+      const legacyRes = await pool.query(
+        `SELECT id, entity_name, entity_data 
+         FROM entity_extractions 
+         WHERE project_id = $1 
+         AND status = 'active'
+         AND (document_id = $2 OR entity_data->'source_document_ids' ? $2)
+         AND NOT (id = ANY($3::uuid[]))`,
+        [projectId, documentId, storedEntityIds.length > 0 ? storedEntityIds : ['00000000-0000-0000-0000-000000000000']]
+      );
+
+      for (const row of legacyRes.rows) {
+        const entityData = typeof row.entity_data === 'string' ? JSON.parse(row.entity_data) : (row.entity_data || {});
+        let sourceDocIds: string[] = entityData.source_document_ids || [];
+        
+        // Get current state for audit trail
+        const entityId = row.id;
+        const currentState = {
+          id: entityId,
+          entity_name: row.entity_name,
+          entity_data: entityData,
+          status: 'active'
+        };
+        
+        sourceDocIds = sourceDocIds.filter(id => id !== documentId);
+        
+        if (sourceDocIds.length === 0) {
+          // Record retirement in audit trail BEFORE applying changes
+          try {
+            await entityAuditService.recordRetirement(
+              entityId,
+              currentState,
+              'system'
+            );
+            logger.info(`📝 Recorded retirement audit for entity "${row.entity_name}"`, { entityId });
+          } catch (auditErr: any) {
+            logger.error('⚠️ Failed to record retirement audit', {
+              entityId,
+              error: auditErr.message
+            });
+          }
+          
+          await pool.query(
+            `UPDATE entity_extractions 
+             SET status = 'retired', 
+                 extraction_confidence = 0,
+                 entity_data = $1,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = $2`,
+            [JSON.stringify({ ...entityData, source_document_ids: [] }), row.id]
+          );
+          logger.info(`📇 Retired entity "${row.entity_name}" (references dropped to 0)`, { entityId: row.id });
+        } else {
+          // Record reference removal in audit trail
+          try {
+            const newState = {
+              ...currentState,
+              entity_data: { ...entityData, source_document_ids: sourceDocIds }
+            };
+            await entityAuditService.recordUpdate(
+              entityId,
+              currentState,
+              newState,
+              'system'
+            );
+            logger.info(`📝 Recorded reference removal audit for entity "${row.entity_name}"`, { entityId });
+          } catch (auditErr: any) {
+            logger.error('⚠️ Failed to record reference removal audit', {
+              entityId,
+              error: auditErr.message
+            });
+          }
+          
+          await pool.query(
+            `UPDATE entity_extractions 
+             SET entity_data = $1,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = $2`,
+            [JSON.stringify({ ...entityData, source_document_ids: sourceDocIds }), row.id]
+          );
+          logger.info(`📎 Removed document reference from entity "${row.entity_name}"`, { entityId: row.id, remainingRefs: sourceDocIds.length });
+        }
+      }
+    } catch (retireErr: any) {
+      logger.error('❌ Error in entity retirement loop:', retireErr);
     }
 
     // Recompute document entity counts and update template profile
@@ -674,6 +918,106 @@ ${content.substring(0, 15000)}` // Limit content to avoid token limits
     }
 
     return storedEntities
+  }
+
+  /**
+   * Handle document deletion by updating document references in entities
+   */
+  async handleDocumentDeletion(documentId: string, projectId: string): Promise<void> {
+    try {
+      logger.info('🗑️ Starting entity clean-up for deleted document', { documentId, projectId })
+      
+      const legacyRes = await pool.query(
+        `SELECT id, entity_name, entity_data 
+         FROM entity_extractions 
+         WHERE project_id = $1 
+         AND status = 'active'
+         AND (document_id = $2 OR entity_data->'source_document_ids' ? $2)`,
+        [projectId, documentId]
+      );
+
+      for (const row of legacyRes.rows) {
+        const entityData = typeof row.entity_data === 'string' ? JSON.parse(row.entity_data) : (row.entity_data || {});
+        let sourceDocIds: string[] = entityData.source_document_ids || [];
+        
+        // Get current state for audit trail
+        const entityId = row.id;
+        const currentState = {
+          id: entityId,
+          entity_name: row.entity_name,
+          entity_data: entityData,
+          status: 'active'
+        };
+        
+        sourceDocIds = sourceDocIds.filter(id => id !== documentId);
+        
+        if (sourceDocIds.length === 0) {
+          // Record retirement in audit trail BEFORE applying changes
+          try {
+            await entityAuditService.recordRetirement(
+              entityId,
+              currentState,
+              'system'
+            );
+            logger.info(`📝 Recorded retirement audit for entity "${row.entity_name}" (document deleted)`, { entityId });
+          } catch (auditErr: any) {
+            logger.error('⚠️ Failed to record retirement audit on document deletion', {
+              entityId,
+              error: auditErr.message
+            });
+          }
+          
+          await pool.query(
+            `UPDATE entity_extractions 
+             SET status = 'retired', 
+                 extraction_confidence = 0,
+                 entity_data = $1,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = $2`,
+            [JSON.stringify({ ...entityData, source_document_ids: [] }), row.id]
+          );
+          logger.info(`📇 Retired entity "${row.entity_name}" (document deleted, references dropped to 0)`, { entityId: row.id });
+        } else {
+          // Record reference removal in audit trail
+          try {
+            const newState = {
+              ...currentState,
+              entity_data: { ...entityData, source_document_ids: sourceDocIds }
+            };
+            await entityAuditService.recordUpdate(
+              entityId,
+              currentState,
+              newState,
+              'system'
+            );
+            logger.info(`📝 Recorded reference removal audit for entity "${row.entity_name}" (document deleted)`, { entityId });
+          } catch (auditErr: any) {
+            logger.error('⚠️ Failed to record reference removal audit on document deletion', {
+              entityId,
+              error: auditErr.message
+            });
+          }
+          
+          await pool.query(
+            `UPDATE entity_extractions 
+             SET entity_data = $1,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = $2`,
+            [JSON.stringify({ ...entityData, source_document_ids: sourceDocIds }), row.id]
+          );
+          logger.info(`📎 Removed document reference from entity "${row.entity_name}" (document deleted)`, { entityId: row.id, remainingRefs: sourceDocIds.length });
+        }
+      }
+      
+      logger.info('✅ Entity clean-up completed for deleted document', { documentId, projectId })
+    } catch (error: any) {
+      logger.error('❌ Failed to clean up entities for deleted document', {
+        documentId,
+        projectId,
+        error: error.message
+      })
+      throw error
+    }
   }
 
   /**
@@ -894,4 +1238,122 @@ ${content.substring(0, 15000)}` // Limit content to avoid token limits
 }
 
 export const entityExtractionService = new EntityExtractionService()
+
+/**
+ * Calculate the Jaro-Winkler distance between two strings.
+ * Returns a score between 0.0 and 1.0.
+ */
+export function calculateJaroWinkler(s1: string, s2: string): number {
+  s1 = s1.trim().toLowerCase();
+  s2 = s2.trim().toLowerCase();
+  if (s1 === s2) return 1.0;
+  
+  const len1 = s1.length;
+  const len2 = s2.length;
+  if (len1 === 0 || len2 === 0) return 0.0;
+  
+  const matchWindow = Math.max(0, Math.floor(Math.max(len1, len2) / 2) - 1);
+  const s1Matches = new Array(len1).fill(false);
+  const s2Matches = new Array(len2).fill(false);
+  
+  let matches = 0;
+  let transpositions = 0;
+  
+  for (let i = 0; i < len1; i++) {
+    const start = Math.max(0, i - matchWindow);
+    const end = Math.min(len2 - 1, i + matchWindow);
+    
+    for (let j = start; j <= end; j++) {
+      if (!s2Matches[j] && s1[i] === s2[j]) {
+        s1Matches[i] = true;
+        s2Matches[j] = true;
+        matches++;
+        break;
+      }
+    }
+  }
+  
+  if (matches === 0) return 0.0;
+  
+  let k = 0;
+  for (let i = 0; i < len1; i++) {
+    if (s1Matches[i]) {
+      while (!s2Matches[k]) k++;
+      if (s1[i] !== s2[k]) transpositions++;
+      k++;
+    }
+  }
+  
+  const jaro = (matches / len1 + matches / len2 + (matches - transpositions / 2) / matches) / 3;
+  
+  let prefix = 0;
+  for (let i = 0; i < Math.min(4, len1, len2); i++) {
+    if (s1[i] === s2[i]) {
+      prefix++;
+    } else {
+      break;
+    }
+  }
+  
+  return jaro + prefix * 0.1 * (1 - jaro);
+}
+
+/**
+ * Perform cascading fuzzy matching between two entity names.
+ */
+export function areEntitiesFuzzyMatch(
+  name1: string,
+  name2: string
+): { isMatch: boolean; score: number; method: 'exact' | 'normalized' | 'substring' | 'token_overlap' | 'jaro_winkler' | 'none' } {
+  const n1 = name1.trim().toLowerCase();
+  const n2 = name2.trim().toLowerCase();
+  if (!n1 || !n2) {
+    return { isMatch: false, score: 0, method: 'none' };
+  }
+
+  // 1. Exact Match
+  if (n1 === n2) {
+    return { isMatch: true, score: 1.0, method: 'exact' };
+  }
+
+  // 2. Normalized Match
+  const norm1 = n1.replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+  const norm2 = n2.replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+  if (norm1 === norm2) {
+    return { isMatch: true, score: 0.98, method: 'normalized' };
+  }
+
+  // 3. Substring Match
+  if (norm1.length > 2 && norm2.length > 2) {
+    if (norm1.includes(norm2) || norm2.includes(norm1)) {
+      const shorterLen = Math.min(norm1.length, norm2.length);
+      const longerLen = Math.max(norm1.length, norm2.length);
+      const score = 0.80 + 0.10 * (shorterLen / longerLen);
+      return { isMatch: true, score, method: 'substring' };
+    }
+  }
+
+  // 4. Token Overlap Match
+  const stopWords = new Set(['the', 'of', 'a', 'an', 'for', 'and', 'or', 'in', 'on', 'at', 'to', 'with', 'by', 'about', 'as']);
+  const tokens1 = norm1.split(/\s+/).filter(t => t && !stopWords.has(t));
+  const tokens2 = norm2.split(/\s+/).filter(t => t && !stopWords.has(t));
+  if (tokens1.length > 0 && tokens2.length > 0) {
+    const set1 = new Set(tokens1);
+    const set2 = new Set(tokens2);
+    const isSubset1 = tokens1.every(t => set2.has(t));
+    const isSubset2 = tokens2.every(t => set1.has(t));
+    if (isSubset1 || isSubset2) {
+      return { isMatch: true, score: 0.85, method: 'token_overlap' };
+    }
+  }
+
+  // 5. Jaro-Winkler Typographical Match
+  const jwScore = calculateJaroWinkler(norm1, norm2);
+  if (jwScore >= 0.82) {
+    return { isMatch: true, score: jwScore, method: 'jaro_winkler' };
+  }
+
+  return { isMatch: false, score: 0, method: 'none' };
+}
+
 
