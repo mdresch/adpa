@@ -41,6 +41,15 @@ const ENTITY_COLORS: Record<string, string> = {
 
 const DEFAULT_COLOR = "#f3f4f6" // gray-100
 
+function escapeHtml(unsafe: string): string {
+  return String(unsafe)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 /**
  * Renders H8 tags into visual pills for export formats.
  * This removes the JSON metadata and provides a static representation.
@@ -65,7 +74,7 @@ export function renderH8TagsForExport(content: string, format: 'html' | 'text' =
     if (format === 'html') {
       return `<span style="display: inline-flex; align-items: center; background-color: ${color}; border: 1px solid rgba(0,0,0,0.1); border-radius: 4px; padding: 2px 8px; margin: 0 4px; font-size: 12px; font-weight: 500; font-family: sans-serif; vertical-align: middle;">
         <span style="margin-right: 4px;">${icon}</span>
-        <span>${displayName}</span>
+        <span>${escapeHtml(displayName)}</span>
       </span>`
     } else {
       // For Markdown/Text export, use a readable bracket format

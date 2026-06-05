@@ -24,10 +24,9 @@ export class TemplateAuditService {
     const startTime = new Date()
     logger.info(`[TEMPLATE-AUDIT] Running audit ${auditId} for template ${templateData.id}`)
     
-    // Update status to processing to reflect activity in UI
-    await pool.query("UPDATE template_audits SET status = 'processing' WHERE id = $1", [auditId])
-    
     try {
+      // Update status to processing to reflect activity in UI
+      await pool.query("UPDATE template_audits SET status = 'processing' WHERE id = $1", [auditId])
       const framework = templateData.framework || 'Custom'
       const templateName = templateData.name
       const templateDesc = templateData.description || ''

@@ -85,6 +85,7 @@ import { VersionViewerDialog } from "@/components/documents/VersionViewerDialog"
 import { VersionListDialog, DocumentVersion as DocVersion } from "@/components/documents/VersionListDialog"
 
 import { useDocumentRegeneration } from "@/hooks/use-document-regeneration"
+import { prepareContentForExport, getExportStyleSheet } from "@/lib/documents/export-renderer"
 
 import {
   ADPADocument as ADPADoc,

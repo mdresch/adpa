@@ -1,7 +1,8 @@
 import { pool } from '../database/connection';
 import { logger } from '../utils/logger';
-import { unifiedAIService } from './aiService';
+import { unifiedAIService } from './unifiedAIService';
 import { v4 as uuidv4 } from 'uuid';
+import crypto from 'crypto';
 
 /**
  * Document Summarization Service
@@ -142,13 +143,15 @@ Return ONLY the summarized Markdown text.`;
       const compressedTokens = Math.ceil(summarizedContent.length / 4);
       const compressionRatio = compressedTokens / originalTokens;
 
+      const contextHash = crypto.createHash('md5').update(content.substring(0, 1000)).digest('hex');
+
       await pool.query(
         `INSERT INTO document_summaries (
           id, document_id, compression_method, compression_level, 
           target_tokens, original_content, original_tokens, 
           compressed_content, compressed_tokens, compression_ratio,
-          ai_provider, ai_model, is_valid, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, true, NOW(), NOW())
+          ai_provider, ai_model, is_valid, template_context_hash, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, true, $13, NOW(), NOW())
         ON CONFLICT (document_id, compression_level, compression_method, template_context_hash) 
         DO UPDATE SET
           compressed_content = EXCLUDED.compressed_content,
@@ -169,7 +172,8 @@ Return ONLY the summarized Markdown text.`;
           compressedTokens,
           compressionRatio,
           'google',
-          'gemini-2.0-flash'
+          'gemini-2.0-flash',
+          contextHash
         ]
       );
 

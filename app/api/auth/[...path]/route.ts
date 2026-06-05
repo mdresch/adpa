@@ -40,9 +40,14 @@ async function proxyRequest(request: NextRequest, pathSegments: string[]) {
     url.searchParams.append(key, value);
   });
 
-  console.log(`[SmartProxy] Proxying ${request.method} ${request.nextUrl.pathname} -> ${url.toString()}`);
   const authHeader = request.headers.get('authorization');
-  console.log(`[SmartProxy] Incoming Authorization Header: ${authHeader ? `${authHeader.substring(0, 30)}...` : '(none)'}`);
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`[SmartProxy] Proxying ${request.method} ${request.nextUrl.pathname} -> ${url.toString()}`);
+    console.log(`[SmartProxy] Incoming Authorization Header: ${authHeader ? `${authHeader.substring(0, 30)}...` : '(none)'}`);
+  } else {
+    console.log(`[SmartProxy] Proxying ${request.method} ${request.nextUrl.pathname}`);
+    console.log(`[SmartProxy] Incoming Authorization Header: ${authHeader ? 'present' : 'none'}`);
+  }
 
   const headers = new Headers();
   request.headers.forEach((value, key) => {
@@ -77,13 +82,6 @@ async function proxyRequest(request: NextRequest, pathSegments: string[]) {
     // Read the response body
     let data: any = null;
     if (response.status !== 204) {
-      try {
-        const clonedResponse = response.clone();
-        const textData = await clonedResponse.text();
-        console.log(`[SmartProxy] Backend response body: ${textData.substring(0, 300)}`);
-      } catch (e) {
-        console.error('[SmartProxy] Failed to log response body:', e);
-      }
       try {
         data = await response.blob();
       } catch (e) {
