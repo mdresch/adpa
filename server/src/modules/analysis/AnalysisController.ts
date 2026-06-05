@@ -656,7 +656,9 @@ export class AnalysisController {
           id: entity.id, name: entity.entity_name, ...entity.entity_data,
           extraction_confidence: entity.extraction_confidence,
           is_verified: entity.is_verified, created_at: entity.created_at,
-          source_document_id: entity.document_id
+          source_document_id: entity.document_id,
+          status: entity.status,
+          context_match: entity.entity_data?.context_match
         });
         entityCounts[camelKey]++;
       });

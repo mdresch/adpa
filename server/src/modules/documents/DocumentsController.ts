@@ -31,6 +31,7 @@ import { DocxService, type GenerateDocxOptions } from '../../services/docxServic
 import { pool } from '../../database/connection';
 import { storageArchivalService } from '../../services/storageArchivalService';
 import { buildCombinedDocxExport } from './bulkDocxExport';
+import { entityExtractionService } from '../../services/entityExtractionService';
 
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -286,6 +287,14 @@ export class DocumentsController {
 
             await DocumentsController.documentRepository.softDelete(id, req.user?.id || '');
             await cache.del(`document:${id}`);
+
+            // Clean up entity extractions on document deletion
+            setImmediate(() => {
+                entityExtractionService.handleDocumentDeletion(id, doc.project_id).catch(err => {
+                    log.error("Failed to clean up entities for deleted document:", err);
+                });
+            });
+
             res.json({ message: "Document moved to trash successfully" });
         } catch (error) {
             log.error("Delete document error:", error);
