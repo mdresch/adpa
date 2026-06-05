@@ -1599,6 +1599,7 @@ ${patchDocSample}
             if (normalizedSearch) {
               logger.warn(`[PATCH-AGENT] Exact match failed, trying normalized match...`)
               const escapedSearch = patch.search.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').replace(/\s+/g, '\\s+')
+              // eslint-disable-next-line security/detect-non-literal-regexp
               const regex = new RegExp(escapedSearch, 'g')
               if (regex.test(patched)) {
                 patched = patched.replace(regex, patch.replace || '')

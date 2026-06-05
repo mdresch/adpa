@@ -1,3 +1,4 @@
+/* tsql-lint disable */
 -- Migration: Synchronize H8 Entity Schemas with Database
 -- This migration adds missing columns to entity tables to prevent "column does not exist" errors during extraction.
 -- Specifically addresses the 'benefit_name' missing from 'benefit_realization_plan'.

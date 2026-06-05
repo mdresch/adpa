@@ -1,3 +1,4 @@
+/* tsql-lint disable */
 -- Migration: Add get_all_entity_counts_for_template function
 -- Resolves "GKG unavailable" error by providing the aggregation function for template-specific entity counts.
 

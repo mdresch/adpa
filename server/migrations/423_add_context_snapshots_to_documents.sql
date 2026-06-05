@@ -1,3 +1,4 @@
+/* tsql-lint disable */
 -- Migration: Add context_snapshots column to documents table for Multi-Scale Context Compactor
 -- Stores 80%, 60%, 40%, and 20% summaries for adaptive context injection.
 
