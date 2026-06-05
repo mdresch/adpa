@@ -43,6 +43,22 @@ export interface EntityVersionInfo {
 export class EntityAuditService {
   
   /**
+   * Get project_id for an entity
+   */
+  async getEntityProjectId(entityId: string): Promise<string | null> {
+    const result = await pool.query(
+      `SELECT project_id FROM entity_extractions WHERE id = $1`,
+      [entityId]
+    );
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    return result.rows[0].project_id || null;
+  }
+
+  /**
    * Get the current version and chain hash for an entity
    */
   async getEntityVersionInfo(entityId: string): Promise<EntityVersionInfo> {

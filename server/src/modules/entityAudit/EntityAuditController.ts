@@ -6,6 +6,7 @@
 
 import { Request, Response } from 'express';
 import { entityAuditService } from '../../services/entityAuditService';
+import { verifyProjectAccess } from '../../lib/projectAccess';
 import { logger } from '../../utils/logger';
 
 export class EntityAuditController {
@@ -23,6 +24,22 @@ export class EntityAuditController {
         return res.status(400).json({
           error: 'entityId parameter is required'
         });
+      }
+      
+      // Verify project-level access
+      const user = req.user;
+      if (!user) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      
+      const projectId = await entityAuditService.getEntityProjectId(entityId);
+      if (!projectId) {
+        return res.status(404).json({ error: 'Entity not found' });
+      }
+      
+      const hasAccess = await verifyProjectAccess(user, projectId);
+      if (!hasAccess) {
+        return res.status(403).json({ error: 'Forbidden - No project access' });
       }
       
       const options = limit ? { limit: parseInt(limit as string) } : {};
@@ -59,6 +76,22 @@ export class EntityAuditController {
         return res.status(400).json({
           error: 'entityId and version parameters are required'
         });
+      }
+      
+      // Verify project-level access
+      const user = req.user;
+      if (!user) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      
+      const projectId = await entityAuditService.getEntityProjectId(entityId);
+      if (!projectId) {
+        return res.status(404).json({ error: 'Entity not found' });
+      }
+      
+      const hasAccess = await verifyProjectAccess(user, projectId);
+      if (!hasAccess) {
+        return res.status(403).json({ error: 'Forbidden - No project access' });
       }
       
       const versionNum = parseInt(version);
@@ -110,6 +143,22 @@ export class EntityAuditController {
         return res.status(400).json({
           error: 'entityId parameter is required'
         });
+      }
+      
+      // Verify project-level access
+      const user = req.user;
+      if (!user) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      
+      const projectId = await entityAuditService.getEntityProjectId(entityId);
+      if (!projectId) {
+        return res.status(404).json({ error: 'Entity not found' });
+      }
+      
+      const hasAccess = await verifyProjectAccess(user, projectId);
+      if (!hasAccess) {
+        return res.status(403).json({ error: 'Forbidden - No project access' });
       }
       
       if (!timestamp) {
@@ -167,6 +216,22 @@ export class EntityAuditController {
         });
       }
       
+      // Verify project-level access
+      const user = req.user;
+      if (!user) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      
+      const projectId = await entityAuditService.getEntityProjectId(entityId);
+      if (!projectId) {
+        return res.status(404).json({ error: 'Entity not found' });
+      }
+      
+      const hasAccess = await verifyProjectAccess(user, projectId);
+      if (!hasAccess) {
+        return res.status(403).json({ error: 'Forbidden - No project access' });
+      }
+      
       const isValid = await entityAuditService.verifyEntityChain(entityId);
       
       return res.json({
@@ -202,6 +267,22 @@ export class EntityAuditController {
         return res.status(400).json({
           error: 'entityId parameter is required'
         });
+      }
+      
+      // Verify project-level access
+      const user = req.user;
+      if (!user) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      
+      const projectId = await entityAuditService.getEntityProjectId(entityId);
+      if (!projectId) {
+        return res.status(404).json({ error: 'Entity not found' });
+      }
+      
+      const hasAccess = await verifyProjectAccess(user, projectId);
+      if (!hasAccess) {
+        return res.status(403).json({ error: 'Forbidden - No project access' });
       }
       
       const entry = await entityAuditService.getLatestAuditEntry(entityId);
@@ -242,6 +323,22 @@ export class EntityAuditController {
         return res.status(400).json({
           error: 'entityId parameter is required'
         });
+      }
+      
+      // Verify project-level access
+      const user = req.user;
+      if (!user) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      
+      const projectId = await entityAuditService.getEntityProjectId(entityId);
+      if (!projectId) {
+        return res.status(404).json({ error: 'Entity not found' });
+      }
+      
+      const hasAccess = await verifyProjectAccess(user, projectId);
+      if (!hasAccess) {
+        return res.status(403).json({ error: 'Forbidden - No project access' });
       }
       
       const lineage = await entityAuditService.getEntityLineage(entityId);

@@ -4,7 +4,7 @@
   "description": "ADPA Server - Project Management and Document Processing Backend",
   "main": "src/server.ts",
   "scripts": {
-    "start": "node --max-old-space-size=400 -r tsconfig-paths/register dist/server/src/server.js",
+    "start": "node -r tsconfig-paths/register dist/server/src/server.js",
     "predev": "node ../scripts/ensure-zod-v4-exports.mjs",
     "dev": "nodemon --exec tsx src/server.ts",
     "lint": "eslint .",

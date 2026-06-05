@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS public.entity_audit_trail (
 
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_entity_audit_entity_id ON public.entity_audit_trail(entity_id);
-CREATE INDEX IF NOT EXISTS idx_entity_audit_version ON public.entity_audit_trail(entity_id, version);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_entity_audit_entity_version ON public.entity_audit_trail(entity_id, version);
 CREATE INDEX IF NOT EXISTS idx_entity_audit_timestamp ON public.entity_audit_trail(timestamp);
 CREATE INDEX IF NOT EXISTS idx_entity_audit_operation ON public.entity_audit_trail(operation_type);
 CREATE INDEX IF NOT EXISTS idx_entity_audit_snapshot_hash ON public.entity_audit_trail(snapshot_hash);

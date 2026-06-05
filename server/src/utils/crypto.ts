@@ -16,11 +16,22 @@ export function sha256(data: string): string {
 
 /**
  * Generate SHA-256 hash of an object (serialized to JSON)
+ * Recursively sorts all object keys for deterministic hashing
  * @param obj - Object to hash
  * @returns 64-character hexadecimal hash
  */
 export function sha256Object(obj: Record<string, any>): string {
-  const normalized = JSON.stringify(obj, Object.keys(obj).sort());
+  const normalized = JSON.stringify(obj, (key, value) => {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      return Object.keys(value)
+        .sort()
+        .reduce((acc: Record<string, any>, k) => {
+          acc[k] = value[k];
+          return acc;
+        }, {});
+    }
+    return value;
+  });
   return sha256(normalized);
 }
 

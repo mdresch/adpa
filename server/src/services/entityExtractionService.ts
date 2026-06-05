@@ -565,7 +565,9 @@ ${content.substring(0, 15000)}` // Limit content to avoid token limits
         // Check if entity with same type and name already exists in project
         // We use a flexible SQL check for common variations
         const existingResult = await pool.query(
-          `SELECT id, entity_name, entity_data, extraction_confidence, document_id, is_verified 
+          `SELECT id, entity_name, entity_data, extraction_confidence, document_id, is_verified,
+                  status, project_id, entity_type, extraction_method, ai_provider, ai_model,
+                  related_entity_ids, verified_at, created_at
            FROM entity_extractions 
            WHERE project_id = $1 
            AND entity_type = $2 
@@ -656,17 +658,25 @@ ${content.substring(0, 15000)}` // Limit content to avoid token limits
             });
           }
           
+          // Reactivate if retired and regaining references
+          const shouldReactivate = existingRow.status === 'retired' && 
+            (existingDocIds.length === 0 || existingRow.document_id === null);
+          
+          const statusToSet = shouldReactivate ? 'active' : existingRow.status;
+          
           await pool.query(
             `UPDATE entity_extractions 
              SET entity_data = $1, 
                  extraction_confidence = $2, 
-                 is_verified = $3, 
+                 is_verified = $3,
+                 status = $4,
                  updated_at = CURRENT_TIMESTAMP
-             WHERE id = $4`,
+             WHERE id = $5`,
             [
               JSON.stringify(mergedData),
               mergedConfidence,
               mergedVerified,
+              statusToSet,
               entityId
             ]
           )
@@ -781,7 +791,7 @@ ${content.substring(0, 15000)}` // Limit content to avoid token limits
          WHERE project_id = $1 
          AND status = 'active'
          AND (document_id = $2 OR entity_data->'source_document_ids' ? $2)
-         AND id != ANY($3::uuid[])`,
+         AND NOT (id = ANY($3::uuid[]))`,
         [projectId, documentId, storedEntityIds.length > 0 ? storedEntityIds : ['00000000-0000-0000-0000-000000000000']]
       );
 
