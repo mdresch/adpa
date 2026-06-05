@@ -239,16 +239,13 @@ export class AnalysisRepository {
 
   /**
    * Fetch entities associated with a specific document.
-   * Checks both direct document_id and source_document_ids array in entity_data.
+   * Strictly returns entities saved by this document.
    */
   async getEntitiesByDocument(documentId: string): Promise<any[]> {
     const query = `
       SELECT * FROM entity_extractions
       WHERE status != 'deleted'
-      AND (
-        document_id = $1
-        OR entity_data->'source_document_ids' ? $1
-      )
+      AND document_id = $1
       ORDER BY entity_type ASC, extraction_confidence DESC
     `;
     
@@ -322,4 +319,3 @@ export class AnalysisRepository {
     return result.rows[0];
   }
 }
-
