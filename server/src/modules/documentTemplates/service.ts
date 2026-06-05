@@ -215,12 +215,12 @@ export class DocumentTemplateService {
 
     // Trigger background audit in a non-blocking manner (advisory)
     setImmediate(async () => {
-      try {
-        const auditId = await templateAuditService.createPendingAudit(result.rows[0].id, 'lifecycle', 1)
-        await templateAuditService.runAudit(auditId, result.rows[0])
-      } catch (err) {
-        logger.error(`[TEMPLATE-AUDIT] Background lifecycle hook failed for new template ${result.rows[0].id}`, err)
-      }
+        try {
+          const auditId = await templateAuditService.createPendingAudit(result.rows[0].id, 'lifecycle', 1)
+          await templateAuditService.runAudit(auditId, result.rows[0])
+        } catch (err) {
+          logger.error(`[TEMPLATE-AUDIT] Background lifecycle hook failed for new template ${result.rows[0].id}`, err)
+        }
     })
 
     return result.rows[0]
@@ -270,7 +270,8 @@ export class DocumentTemplateService {
           category = COALESCE($4, category),
           content = COALESCE($5, content),
           variables = COALESCE($6, variables),
-          is_public = COALESCE($7, is_public),
+          is_public = false,
+          development_status = 'testing',
           system_prompt = COALESCE($8, system_prompt),
           context_injection_config = COALESCE($9, context_injection_config),
           prompt_build_up = COALESCE($10, prompt_build_up),
@@ -310,8 +311,9 @@ export class DocumentTemplateService {
           [id]
         )
         const version = Number(versionResult.rows[0].count) + 1
-        const auditId = await templateAuditService.createPendingAudit(id, 'lifecycle', version)
+        const auditId = await templateAuditService.createPendingAudit(result.rows[0].id, 'lifecycle', version)
         await templateAuditService.runAudit(auditId, result.rows[0])
+
       } catch (err) {
         logger.error(`[TEMPLATE-AUDIT] Background lifecycle hook failed for updated template ${id}`, err)
       }

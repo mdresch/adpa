@@ -25,7 +25,7 @@ module.exports = {
     '^@/(.*)$': '<rootDir>/src/$1',
   },
   transformIgnorePatterns: [
-    'node_modules/(?!uuid)',
+    'node_modules/(?!(uuid|\\.pnpm/.*uuid))',
   ],
   transform: {
     '^.+\\.(ts|tsx)$': ['ts-jest', {

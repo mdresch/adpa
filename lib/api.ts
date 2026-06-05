@@ -94,6 +94,8 @@ export interface Document {
   status: string
   created_by: string
   updated_by: string
+  created_by_name?: string
+  updated_by_name?: string
   created_at: string
   updated_at: string
   generation_metadata?: any
@@ -1400,9 +1402,8 @@ export class ApiClient {
    * Authored under RPAS-CM for Researcher Dashboard
    */
   async getRtmLedger(): Promise<RtmRequirement[]> {
-    // Note: Orchestrator identifies this as GET api/ritual/rtm/ledger
-    const response = await this.request<{ success: boolean; data: RtmRequirement[] }>("/ritual/rtm/ledger")
-    return response.data || []
+    const response = await this.request<RtmRequirement[]>("/Ritual/ledger/rtm")
+    return response || []
   }
 
   /**
@@ -1410,10 +1411,28 @@ export class ApiClient {
    * Complies with RPAS G5 (Read vs Act) - Drafting only.
    */
   async proposeRtmAmendment(request: AmendmentProposalRequest): Promise<RtmAmendment> {
-    return this.request<RtmAmendment>("/ritual/rtm/propose-amendment", {
+    const res = await this.request<{ Status: string; AmendmentId: string; TargetId: string }>("/Ritual/rtm/propose-amendment", {
       method: "POST",
-      body: JSON.stringify(request)
+      body: JSON.stringify({
+        targetRequirementId: request.requirement_id,
+        proposedDescription: request.proposed_description,
+        justification: request.justification,
+        amendmentType: request.amendment_type,
+        amendmentSubType: request.amendment_sub_type,
+        requester: "SYSTEM"
+      })
     })
+    return {
+      id: res.AmendmentId,
+      requirement_id: res.TargetId,
+      status: "PENDING",
+      proposed_by: "SYSTEM",
+      proposed_at: new Date().toISOString(),
+      proposed_description: request.proposed_description,
+      justification: request.justification,
+      amendment_type: request.amendment_type,
+      amendment_sub_type: request.amendment_sub_type,
+    } as any
   }
 
   /**
@@ -1421,7 +1440,7 @@ export class ApiClient {
    * Leverages Full Historical Ledger context via Orchestrator.
    */
   async getRtmResearchAdvice(requirementId: string): Promise<ResearchAdvice> {
-    return this.request<ResearchAdvice>(`/ritual/rtm/research-advice/${requirementId}`, {
+    return this.request<ResearchAdvice>(`/Ritual/rtm/research-advice/${requirementId}`, {
       method: "POST"
     })
   }

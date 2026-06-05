@@ -81,8 +81,9 @@ function deduplicateRisks(risks: Risk[]): Risk[] {
   const deduplicatedMap = new Map<string, Risk>()
 
   risks.forEach(risk => {
-    // Use title as fallback key if idempotency_key not yet present
-    const dedupKey = risk.title.trim().toLowerCase()
+    // Use title or name as fallback key if idempotency_key not yet present
+    const riskTitle = risk.title || risk.name || 'untitled'
+    const dedupKey = riskTitle.trim().toLowerCase()
 
     if (!deduplicatedMap.has(dedupKey)) {
       deduplicatedMap.set(dedupKey, risk)
@@ -100,7 +101,7 @@ function deduplicateRisks(risks: Risk[]): Risk[] {
         owner: risk.owner || existing.owner
       }
       deduplicatedMap.set(dedupKey, merged)
-      logger.debug(`[EXTRACTION-RISKS] Merged duplicate risk: "${risk.title}"`)
+      logger.debug(`[EXTRACTION-RISKS] Merged duplicate risk: "${riskTitle}"`)
     }
   })
 
@@ -130,6 +131,22 @@ export async function saveRisks(
       logger.info(`[EXTRACTION-RISKS] Deduplicated ${risks.length} → ${uniqueRisks.length} risks`)
     }
 
+    // Query existing risks for this project to handle case-insensitive conflicts
+    const existingRisksRes = await client.query(
+      `SELECT name, title FROM risks WHERE project_id = $1`,
+      [projectId]
+    )
+    const existingTitleMap = new Map<string, { name: string, title: string }>()
+    const existingNameMap = new Map<string, { name: string, title: string }>()
+    existingRisksRes.rows.forEach((row: any) => {
+      if (row.title) {
+        existingTitleMap.set(row.title.toLowerCase().trim(), { name: row.name, title: row.title })
+      }
+      if (row.name) {
+        existingNameMap.set(row.name.toLowerCase().trim(), { name: row.name, title: row.title })
+      }
+    });
+
     // Build bulk insert
     const values: any[] = []
     const placeholders: string[] = []
@@ -148,9 +165,21 @@ export async function saveRisks(
       // For extracted risks from documents, risk_level should always be 'project'
       const riskLevel = 'project' // Extracted risks are always project-level
 
+      const rawName = r.title || r.name || 'Untitled Risk'
+      const normKey = rawName.toLowerCase().trim()
+
+      let finalName = rawName
+      let finalTitle = rawName
+
+      const existing = existingTitleMap.get(normKey) || existingNameMap.get(normKey)
+      if (existing) {
+        finalName = existing.name
+        finalTitle = existing.title
+      }
+
       // Generate idempotency key for safe re-runs
       const idempotencyKey = generateRiskIdempotencyKey(projectId, {
-        title: r.title,
+        title: finalTitle,
         category: r.category,
         probability: mappedProbability,
         impact: mappedImpact
@@ -160,17 +189,19 @@ export async function saveRisks(
       const sourceDocumentId = r.source_document_id || null
 
       logger.debug(`[EXTRACTION-RISKS] Final risk values`, {
-        title: r.title,
+        title: finalTitle,
         probability: mappedProbability,
         impact: mappedImpact,
         risk_level: riskLevel,
         idempotencyKey: idempotencyKey.substring(0, 16)
       })
 
+      const riskDescription = r.description || finalName
+
       values.push(
         projectId,
-        r.title || '',        // name column (required, comes first)
-        r.description || '',
+        finalName,        // name column (required, comes first)
+        riskDescription,
         r.category || null,
         mappedProbability,  // Use validated probability value
         mappedImpact,       // Use validated impact value
@@ -179,7 +210,7 @@ export async function saveRisks(
         r.contingency_plan || null,
         r.owner || null,      // owner column
         'identified',        // status column (default for extracted risks)
-        r.title || '',       // title column (duplicate of name for compatibility)
+        finalTitle,          // title column (duplicate of name for compatibility)
         userId,              // created_by
         sourceDocumentId,    // source_document_id
         idempotencyKey       // idempotency_key (NEW in Phase 1.5)

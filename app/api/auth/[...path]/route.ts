@@ -11,22 +11,22 @@ export const dynamic = 'force-dynamic';
 
 const BACKEND_URL = process.env.BACKEND_URL || 'https://adpa.onrender.com';
 
-export async function GET(request: NextRequest, { params }: { params: { path: string[] } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   const resolvedParams = await params;
   return await proxyRequest(request, resolvedParams.path || []);
 }
 
-export async function POST(request: NextRequest, { params }: { params: { path: string[] } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   const resolvedParams = await params;
   return await proxyRequest(request, resolvedParams.path || []);
 }
 
-export async function PUT(request: NextRequest, { params }: { params: { path: string[] } }) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   const resolvedParams = await params;
   return await proxyRequest(request, resolvedParams.path || []);
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { path: string[] } }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   const resolvedParams = await params;
   return await proxyRequest(request, resolvedParams.path || []);
 }
@@ -39,6 +39,15 @@ async function proxyRequest(request: NextRequest, pathSegments: string[]) {
   request.nextUrl.searchParams.forEach((value, key) => {
     url.searchParams.append(key, value);
   });
+
+  const authHeader = request.headers.get('authorization');
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`[SmartProxy] Proxying ${request.method} ${request.nextUrl.pathname} -> ${url.toString()}`);
+    console.log(`[SmartProxy] Incoming Authorization Header: ${authHeader ? `${authHeader.substring(0, 30)}...` : '(none)'}`);
+  } else {
+    console.log(`[SmartProxy] Proxying ${request.method} ${request.nextUrl.pathname}`);
+    console.log(`[SmartProxy] Incoming Authorization Header: ${authHeader ? 'present' : 'none'}`);
+  }
 
   const headers = new Headers();
   request.headers.forEach((value, key) => {
@@ -68,6 +77,7 @@ async function proxyRequest(request: NextRequest, pathSegments: string[]) {
     }
 
     const response = await fetch(url.toString(), options);
+    console.log(`[SmartProxy] Backend responded with status: ${response.status} for ${url.toString()}`);
 
     // Read the response body
     let data: any = null;

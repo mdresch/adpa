@@ -31,7 +31,7 @@ import {
   Zap,
   Calendar,
 } from "@/components/ui/icons-shim"
-import { Award, Target, ArrowUp, Brain, Archive, ClipboardCheck, Sparkles, Network, RefreshCw, Shield } from "lucide-react"
+import { Award, Target, ArrowUp, Brain, Archive, ClipboardCheck, Sparkles, Network, RefreshCw, Shield, Database } from "lucide-react"
 import { useAuth } from "@/contexts/AuthContext"
 import { apiClient } from "@/lib/api"
 import { toast } from '@/lib/notify'
@@ -181,6 +181,7 @@ export default function TemplateDetailPage() {
     totalGeneratedDocuments: number
     totalDocuments: number
     unsyncedDocuments: number
+    totalExtractedEntities: number
     totalUnits: number
     documents: { documentId: string; title: string; projectId: string; projectName: string; unitCount: number }[]
     entityTypeCounts: { entityType: string; count: number }[]
@@ -205,6 +206,7 @@ export default function TemplateDetailPage() {
         totalGeneratedDocuments?: number
         totalDocuments: number
         unsyncedDocuments?: number
+        totalExtractedEntities?: number
         totalUnits: number
         documents: { documentId: string; title: string; projectId: string; projectName: string; unitCount: number }[]
         entityTypeCounts: { entityType: string; count: number }[]
@@ -213,6 +215,7 @@ export default function TemplateDetailPage() {
         totalGeneratedDocuments: data.totalGeneratedDocuments ?? data.totalDocuments,
         totalDocuments: data.totalDocuments,
         unsyncedDocuments: data.unsyncedDocuments ?? Math.max((data.totalGeneratedDocuments ?? data.totalDocuments) - data.totalDocuments, 0),
+        totalExtractedEntities: data.totalExtractedEntities ?? data.totalUnits,
         totalUnits: data.totalUnits,
         documents: data.documents ?? [],
         entityTypeCounts: data.entityTypeCounts ?? [],
@@ -601,11 +604,11 @@ export default function TemplateDetailPage() {
                                   <div className="flex justify-between text-sm">
                                     <span>Validation Progress</span>
                                     <span className="font-medium">
-                                      {template.validation_count} / {currentConfig.requiresValidation || 0} runs
+                                      {template.validation_count} / {currentConfig.requiresValidation || template.validation_count || 0} runs
                                     </span>
                                   </div>
                                   <Progress 
-                                    value={(template.validation_count / (currentConfig.requiresValidation || 1)) * 100}
+                                    value={(template.validation_count / (currentConfig.requiresValidation || template.validation_count || 1)) * 100}
                                     className="h-2"
                                   />
                                   
@@ -1118,56 +1121,60 @@ export default function TemplateDetailPage() {
                               )}
 
                               {/* Entity production profile */}
-                              <div className="space-y-2">
-                                <p className="text-xs font-semibold text-muted-foreground">
-                                  Entity Production (average per generated document)
-                                </p>
+                              <div className="space-y-4">
+                                <div className="flex items-center justify-between">
+                                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest flex items-center gap-2">
+                                    <Database className="h-3 w-3" />
+                                    Entity Production Profile
+                                  </p>
+                                  {template.validation_count > 0 && (
+                                    <span className="text-[10px] text-slate-400 italic">Averages calculated from {template.validation_count} runs</span>
+                                  )}
+                                </div>
+                                
                                 {template.avg_entity_counts && Object.keys(template.avg_entity_counts).length > 0 ? (
-                                  <div className="space-y-2">
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                     {Object.entries(template.avg_entity_counts)
                                       .sort(([, a], [, b]) => (Number(b) || 0) - (Number(a) || 0))
                                       .map(([entityType, avgCount]) => (
                                         <div
                                           key={entityType}
-                                          className="bg-background rounded p-3 flex items-center justify-between"
+                                          className="bg-background rounded-lg p-3 border border-slate-200 dark:border-slate-800 flex items-center justify-between shadow-sm"
                                         >
-                                          <div>
-                                            <p className="font-medium text-sm">{entityType}</p>
-                                            <p className="text-xs text-muted-foreground">
-                                              Typical entities this template produces.
+                                          <div className="min-w-0">
+                                            <p className="font-bold text-sm capitalize">{entityType.replace(/_/g, ' ')}</p>
+                                            <p className="text-[10px] text-muted-foreground truncate uppercase font-mono">
+                                              ADPA-{entityType.substring(0, 3).toUpperCase()} Type
                                             </p>
                                           </div>
                                           <div className="flex items-center gap-2">
-                                            <span className="text-sm font-semibold">
+                                            <span className="text-lg font-black text-primary">
                                               {(Number(avgCount) || 0).toFixed(1)}
                                             </span>
-                                            <Badge variant="outline" className="text-xs">
-                                              avg / doc
+                                            <Badge variant="outline" className="text-[9px] bg-slate-50 dark:bg-slate-900 font-black">
+                                              AVG/DOC
                                             </Badge>
                                           </div>
                                         </div>
                                       ))}
                                   </div>
                                 ) : (
-                                  <div className="space-y-3">
-                                    <p className="text-sm text-muted-foreground">
-                                      No entity production data available yet. Run extraction on documents generated from
-                                      this template to build its profile.
+                                  <div className="bg-slate-50 dark:bg-slate-900/50 border-2 border-dashed rounded-xl p-8 text-center">
+                                    <Database className="h-10 w-10 mx-auto text-slate-300 mb-3" />
+                                    <p className="text-sm text-muted-foreground max-w-xs mx-auto">
+                                      No entity production data available yet. Generate documents with this template to build its PMBOK 8 footprint.
                                     </p>
                                     {user?.role === 'admin' || user?.role === 'super_admin' ? (
                                       <Button
                                         variant="outline"
                                         size="sm"
+                                        className="mt-4"
                                         onClick={async () => {
                                           try {
                                             toast.info('Rebuilding template analytics...')
-                                            
-                                            // Rebuild template analytics for this specific template via API
                                             const response = await apiClient.request(`/template-analytics/analytics/rebuild-template/${template.id}`, {
                                               method: 'POST'
                                             })
-                                            
-                                            // Refresh template data
                                             await fetchTemplate()
                                             toast.success(response.message || 'Template analytics rebuilt successfully!')
                                           } catch (error: any) {
@@ -1176,8 +1183,8 @@ export default function TemplateDetailPage() {
                                           }
                                         }}
                                       >
-                                        <Sparkles className="h-4 w-4 mr-2" />
-                                        Rebuild Analytics (Admin)
+                                        <Sparkles className="h-3.3 mr-2" />
+                                        Force Rebuild Profile
                                       </Button>
                                     ) : null}
                                   </div>
@@ -1188,7 +1195,7 @@ export default function TemplateDetailPage() {
                           
                           <TabsContent value="gkg" className="mt-4 space-y-4">
                             <p className="text-sm text-muted-foreground">
-                              Documents generated by this template and entities (semantic units) extracted from them in the Governance Knowledge Graph. Run a GKG sync for projects that use this template to see data here.
+                              Documents generated by this template and entities (semantic units) synchronized within the Governance Knowledge Graph. Run a GKG sync for projects that use this template to populate the graph baseline.
                             </p>
                             {gkgLoading && (
                               <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -1205,43 +1212,50 @@ export default function TemplateDetailPage() {
                             )}
                             {!gkgLoading && !gkgError && gkgData && (
                               <>
-                                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                                  <div className="rounded-lg border bg-muted/50 p-4">
+                                <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                                  <div className="rounded-lg border bg-muted/50 p-4 shadow-sm">
                                     <p className="text-2xl font-bold">{gkgData.totalGeneratedDocuments}</p>
-                                    <p className="text-sm text-muted-foreground">Documents generated</p>
+                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-1">Documents Generated</p>
                                   </div>
-                                  <div className="rounded-lg border bg-muted/50 p-4">
+                                  <div className="rounded-lg border bg-muted/50 p-4 shadow-sm">
                                     <p className="text-2xl font-bold">{gkgData.totalDocuments}</p>
-                                    <p className="text-sm text-muted-foreground">Documents in graph</p>
+                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-1">Documents in Graph</p>
                                     {gkgData.unsyncedDocuments > 0 && (
-                                      <p className="mt-1 text-xs text-amber-600">
-                                        {gkgData.unsyncedDocuments} generated document{gkgData.unsyncedDocuments === 1 ? "" : "s"} not synced
+                                      <p className="mt-1 text-[10px] text-amber-600 font-medium italic">
+                                        {gkgData.unsyncedDocuments} pending sync
                                       </p>
                                     )}
                                   </div>
-                                  <div className="rounded-lg border bg-muted/50 p-4">
-                                    <p className="text-2xl font-bold">{gkgData.totalUnits}</p>
-                                    <p className="text-sm text-muted-foreground">Entities extracted</p>
+                                  <div className="rounded-lg border bg-muted/50 p-4 shadow-sm">
+                                    <p className="text-2xl font-bold">{gkgData.totalExtractedEntities}</p>
+                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-1">Entities Extracted</p>
+                                  </div>
+                                  <div className="rounded-lg border bg-primary/5 p-4 shadow-sm border-primary/20">
+                                    <p className="text-2xl font-bold text-primary">{gkgData.totalUnits}</p>
+                                    <p className="text-[10px] font-bold text-primary/70 uppercase tracking-wider mt-1">Entities in Graph</p>
                                   </div>
                                 </div>
                                 {gkgData.documents.length > 0 && (
                                   <div>
-                                    <h4 className="text-sm font-medium mb-2">Documents in graph</h4>
-                                    <ul className="space-y-2 rounded-md border divide-y">
+                                    <h4 className="text-sm font-bold flex items-center gap-2 mb-3">
+                                      <FileText className="h-4 w-4 text-blue-500" />
+                                      Knowledge Graph Documents
+                                    </h4>
+                                    <ul className="space-y-2">
                                       {gkgData.documents.map((doc) => (
-                                        <li key={doc.documentId} className="flex items-center justify-between px-3 py-2">
+                                        <li key={doc.documentId} className="flex items-center justify-between px-4 py-3 bg-white dark:bg-slate-900 border rounded-lg shadow-sm hover:border-primary/30 transition-colors">
                                           <div className="min-w-0">
                                             <a
                                               href={doc.projectId ? `/projects/${doc.projectId}/documents/${doc.documentId}` : "#"}
-                                              className="font-medium text-primary hover:underline truncate block"
+                                              className="font-bold text-sm text-primary hover:underline truncate block"
                                             >
                                               {doc.title || doc.documentId}
                                             </a>
                                             {doc.projectName && (
-                                              <p className="text-xs text-muted-foreground truncate">{doc.projectName}</p>
+                                              <p className="text-[10px] font-medium text-slate-500 truncate mt-0.5">{doc.projectName}</p>
                                             )}
                                           </div>
-                                          <Badge variant="secondary">{doc.unitCount} units</Badge>
+                                          <Badge variant="secondary" className="font-mono text-[10px]">{doc.unitCount} units</Badge>
                                         </li>
                                       ))}
                                     </ul>
@@ -1249,10 +1263,13 @@ export default function TemplateDetailPage() {
                                 )}
                                 {gkgData.entityTypeCounts.length > 0 && (
                                   <div>
-                                    <h4 className="text-sm font-medium mb-2">Entity types extracted</h4>
+                                    <h4 className="text-sm font-bold flex items-center gap-2 mb-3">
+                                      <Network className="h-4 w-4 text-purple-500" />
+                                      Semantic Entity Taxonomy
+                                    </h4>
                                     <div className="flex flex-wrap gap-2">
                                       {gkgData.entityTypeCounts.map((e) => (
-                                        <Badge key={e.entityType} variant="outline">
+                                        <Badge key={e.entityType} variant="outline" className="bg-slate-50 dark:bg-slate-800 text-[10px] font-bold px-2 py-1">
                                           {e.entityType}: {e.count}
                                         </Badge>
                                       ))}
@@ -1260,9 +1277,13 @@ export default function TemplateDetailPage() {
                                   </div>
                                 )}
                                 {gkgData.totalDocuments === 0 && (
-                                  <p className="text-sm text-muted-foreground">
-                                    No documents linked to this template in the graph yet. Sync projects that have generated documents with this template to populate the GKG.
-                                  </p>
+                                  <div className="py-10 text-center rounded-lg border-2 border-dashed">
+                                    <Info className="h-8 w-8 mx-auto text-slate-300 mb-2" />
+                                    <p className="text-sm text-muted-foreground">
+                                      No documents linked to this template in the graph yet.
+                                    </p>
+                                    <p className="text-xs text-muted-foreground mt-1">Sync projects that have generated documents with this template to populate the GKG.</p>
+                                  </div>
                                 )}
                               </>
                             )}
@@ -1413,33 +1434,33 @@ export default function TemplateDetailPage() {
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <FileText className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-sm">Document Generations</span>
+                            <span className="text-sm text-muted-foreground">Document Generations</span>
                           </div>
-                          <span className="font-semibold">{template.usage_count}</span>
+                          <span className="font-bold">{template.usage_count}</span>
                         </div>
                         
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <CheckCircle className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-sm">Successful</span>
+                            <span className="text-sm text-muted-foreground">Successful</span>
                           </div>
-                          <span className="font-semibold">{template.success_count}</span>
+                          <span className="font-bold text-emerald-600">{template.success_count}</span>
                         </div>
                         
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between border-t pt-2 mt-2">
                           <div className="flex items-center gap-2">
                             <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-sm">Success Rate</span>
+                            <span className="text-sm font-semibold">Success Rate</span>
                           </div>
-                          <span className="font-semibold">{successRate}%</span>
+                          <span className="font-black text-primary">{successRate}%</span>
                         </div>
                         
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <Users className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-sm">Visibility</span>
+                            <span className="text-sm text-muted-foreground">Visibility</span>
                           </div>
-                          <Badge variant={template.is_public ? "default" : "secondary"}>
+                          <Badge variant={template.is_public ? "default" : "secondary"} className="text-[10px] uppercase font-bold">
                             {template.is_public ? 'Public' : 'Private'}
                           </Badge>
                         </div>

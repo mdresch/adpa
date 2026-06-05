@@ -336,7 +336,13 @@ export default function JobMonitorPage() {
           ? {
             ...job,
             status: data.status,
-            progress: data.progress || job.progress
+            progress: data.progress || job.progress,
+            startTime: data.startTime || job.startTime,
+            worker: data.worker || job.worker,
+            metadata: {
+              ...(job.metadata || {}),
+              ...(data.metadata || {})
+            }
           }
           : job
       )
@@ -352,7 +358,8 @@ export default function JobMonitorPage() {
             ...job,
             status: 'completed',
             progress: 100,
-            completedTime: new Date().toISOString()
+            completedTime: data.completedTime || new Date().toISOString(),
+            startTime: data.startTime || job.startTime
           }
           : job
       )
@@ -368,6 +375,7 @@ export default function JobMonitorPage() {
             ...job,
             status: 'failed',
             error: data.error,
+            startTime: data.startTime || job.startTime,
             completedTime: new Date().toISOString()
           }
           : job

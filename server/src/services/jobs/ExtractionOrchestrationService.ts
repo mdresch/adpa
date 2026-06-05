@@ -1546,8 +1546,18 @@ export class ExtractionOrchestrationService {
         const { isNeo4jConfigured } = await import("../../utils/neo4j")
         const { addJob } = await import("../queueService")
         if (isNeo4jConfigured() && projectId) {
-          await addJob("gkg-sync-project", { projectId }, { attempts: 2, backoff: { type: "exponential", delay: 5000 } })
-          log.info(`[EXTRACTION-PARENT] Enqueued GKG sync for project ${projectId}`)
+          // Check for existing pending/processing sync job for this project to prevent flooding
+          const existingJob = await db.query(
+            "SELECT id FROM jobs WHERE type = 'gkg-sync-project' AND project_id = $1 AND status IN ('pending', 'processing') LIMIT 1",
+            [projectId]
+          )
+
+          if (existingJob.rows.length === 0) {
+            await addJob("gkg-sync-project", { projectId }, { attempts: 2, backoff: { type: "exponential", delay: 5000 } })
+            log.info(`[EXTRACTION-PARENT] Enqueued GKG sync for project ${projectId}`)
+          } else {
+            log.info(`[EXTRACTION-PARENT] GKG sync already in progress for project ${projectId} (Job: ${existingJob.rows[0].id}), skipping duplicate enqueue`)
+          }
         }
       } catch (gkgErr: any) {
         log.warn(`[EXTRACTION-PARENT] GKG sync enqueue failed (non-fatal): ${gkgErr?.message || gkgErr}`)

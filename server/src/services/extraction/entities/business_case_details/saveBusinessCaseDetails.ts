@@ -4,7 +4,7 @@
 
 import { logger } from '../../../../utils/logger'
 import type { PoolClient } from 'pg'
-import type { PersistenceResult } from '../../base/Persistence'
+import { PersistenceResult, normalizeNumeric } from '../../base/Persistence'
 import type { BusinessCaseDetails } from './types'
 
 export async function saveBusinessCaseDetails(
@@ -34,9 +34,9 @@ export async function saveBusinessCaseDetails(
                 projectId,
                 e.problem_statement || null,
                 e.proposed_solution || null,
-                e.estimated_roi || null,
+                normalizeNumeric(e.estimated_roi),
                 e.payback_period_months || null,
-                e.npv_value || null,
+                normalizeNumeric(e.npv_value),
                 e.strategic_category || null,
                 e.source_document_id || null,
                 userId
@@ -45,8 +45,8 @@ export async function saveBusinessCaseDetails(
 
         await client.query(
             `INSERT INTO business_case_details (
-        project_id, problem_statement, proposed_solution, estimated_roi, 
-        payback_period_months, npv_value, strategic_category, 
+        project_id, problem_statement, proposed_solution, estimated_roi,
+        payback_period_months, npv_value, strategic_category,
         source_document_id, created_by
       )
       VALUES ${placeholders.join(', ')}`,

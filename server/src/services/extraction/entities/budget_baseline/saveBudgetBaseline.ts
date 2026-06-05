@@ -20,19 +20,35 @@ export async function saveBudgetBaseline(
     }
 
     try {
+        const uniqueEntities: BudgetBaseline[] = []
+        const seenKeys = new Set<string>()
+        const entityKeys: string[] = []
         const values: any[] = []
         const placeholders: string[] = []
 
-        entities.forEach((e, index) => {
+        entities.forEach(e => {
+            const idempotencyKey = generateBudgetIdempotencyKey(projectId, {
+                total_amount: e.total_budget,
+                currency: e.currency
+            })
+            if (!seenKeys.has(idempotencyKey)) {
+                seenKeys.add(idempotencyKey)
+                uniqueEntities.push(e)
+                entityKeys.push(idempotencyKey)
+            }
+        })
+
+        if (uniqueEntities.length === 0) {
+            return { saved: 0, skipped: 0, failed: 0 }
+        }
+
+        uniqueEntities.forEach((e, index) => {
             const offset = index * 9
             placeholders.push(
                 `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9})`
             )
 
-            const idempotencyKey = generateBudgetIdempotencyKey(projectId, {
-                total_amount: e.total_budget,
-                currency: e.currency
-            })
+            const idempotencyKey = entityKeys[index]
 
             values.push(
                 projectId,

@@ -118,9 +118,9 @@ export async function saveDeliverables(
       
       values.push(
         projectId,
-        d.name,
-        d.description,
-        d.type,
+        d.name || 'Untitled Deliverable',
+        d.description || null,
+        d.type || null,
         parsedDueDate,
         mappedStatus,  // Use mapped status value
         d.owner || null,

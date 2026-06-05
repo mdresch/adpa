@@ -43,6 +43,18 @@ router.post(
         return res.json({ jobId, status: "enqueued", type: "gkg-bootstrap" })
       }
       if (projectId) {
+        // Check for existing pending/processing sync job for this project
+        const pool = getDatabasePool()
+        const existingJob = await pool.query(
+          "SELECT id FROM jobs WHERE type = 'gkg-sync-project' AND project_id = $1 AND status IN ('pending', 'processing') LIMIT 1",
+          [projectId]
+        )
+
+        if (existingJob.rows.length > 0) {
+          logger.info("[GKG] Sync job already in progress for project", { projectId, jobId: existingJob.rows[0].id })
+          return res.json({ jobId: existingJob.rows[0].id, status: "already_enqueued", type: "gkg-sync-project", projectId })
+        }
+
         const jobId = uuidV4()
         await addJob("gkg-sync-project", { jobId, projectId }, { jobId, attempts: 2, backoff: { type: "exponential", delay: 5000 } })
         logger.info("[GKG] Enqueued gkg-sync-project", { jobId, projectId })
@@ -628,6 +640,22 @@ router.get(
     const session = driver.session({ database })
     try {
       const pool = getDatabasePool()
+      
+      // Phase 4: Fetch total extraction count from Postgres to show sync delta
+      let totalExtractedEntities = 0
+      try {
+        const extractionCountResult = await pool.query(
+          `SELECT get_all_entity_counts_for_template($1) as counts`,
+          [templateId]
+        )
+        const extractionCounts = extractionCountResult.rows[0]?.counts || {}
+        totalExtractedEntities = Object.values(extractionCounts as Record<string, number>).reduce((sum, count) => sum + count, 0)
+      } catch (countError) {
+        logger.warn(`[GKG-API] Failed to fetch Postgres entity counts for template ${templateId}, falling back to 0`, countError)
+        // Fallback: use totalUnits from GKG if available, or 0. 
+        // This prevents the whole route from failing with 500.
+      }
+
       const generatedDocumentsResult = await pool.query(
         `
           SELECT COUNT(*)::int AS total_generated_documents
@@ -687,6 +715,7 @@ router.get(
         totalGeneratedDocuments,
         totalDocuments,
         unsyncedDocuments: Math.max(totalGeneratedDocuments - totalDocuments, 0),
+        totalExtractedEntities,
         totalUnits,
         documents,
         entityTypeCounts,

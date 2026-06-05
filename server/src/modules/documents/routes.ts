@@ -14,6 +14,7 @@ router.get('/:id', authenticateToken, DocumentsController.getById);
 router.get('/:id/pdf-preview', authenticateToken, DocumentsController.getPdfPreview);
 router.get('/:id/versions', authenticateToken, DocumentsController.getVersions);
 router.get('/:id/quality-audit', authenticateToken, DocumentsController.getQualityAudit);
+router.get('/:id/summaries', authenticateToken, DocumentsController.getSummaries);
 
 // Document Lifecycle
 router.post('/project/:projectId', authenticateToken, DocumentsController.create);

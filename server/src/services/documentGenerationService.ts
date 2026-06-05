@@ -6,6 +6,8 @@ import { getContextForStrategy } from "./gkg"
 import { z } from "zod"
 import { buildInlineEntityExtractionPrompt } from "./inlineEntityExtractionPrompt"
 import { v4 as uuidv4 } from "uuid"
+import { updateJobStatus } from "./queueService"
+import { CompactorService } from "./compactorService"
 
 export interface DocumentGenerationRequest {
   jobId?: string
@@ -39,7 +41,7 @@ export interface TemplateContext {
 }
 
 interface LLMPromptSnapshot {
-  phase: 'planning' | 'drafting'
+  phase: 'planning' | 'drafting' | 'auditing' | 'patching' | 'compacting'
   label: string
   traceName: string
   provider: string
@@ -103,14 +105,49 @@ class DocumentGenerationService {
     }
 
     // Keep inline generation responsive without flooding quota-limited providers.
+    // Google free-tier: 20 RPM → serial drafting prevents 429 cascades.
     if (provider === 'google') {
-      return 2
+      return 1
     }
     if (provider === 'mistral') {
       return 1
     }
 
     return 3
+  }
+
+  /**
+   * Retry wrapper for rate-limited (429) AI calls.
+   * On a 429, waits the time the error message advertises (or a default backoff)
+   * before retrying. Non-quota errors are re-thrown immediately.
+   */
+  private async retryOnRateLimit<T>(
+    fn: () => Promise<T>,
+    maxRetries = 3,
+    label = 'AI call'
+  ): Promise<T> {
+    let lastError: unknown
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        return await fn()
+      } catch (err: any) {
+        const msg = err instanceof Error ? err.message : String(err)
+        // Detect quota / rate-limit signals
+        const is429 = /429|quota|rate.?limit|resource.*exhausted|please retry/i.test(msg)
+        if (!is429 || attempt === maxRetries) throw err
+        lastError = err
+
+        // Parse "retry in Xs" from the error message if present
+        const retryMatch = msg.match(/retry in (\d+\.?\d*)s/i)
+        const waitMs = retryMatch
+          ? Math.ceil(parseFloat(retryMatch[1]) * 1000)
+          : Math.min(15000 * attempt, 60000) // 15 s, 30 s, 60 s
+
+        logger.warn(`[RATE-LIMIT] ${label} hit quota (attempt ${attempt}/${maxRetries}). Waiting ${Math.round(waitMs / 1000)}s before retry.`)
+        await new Promise(resolve => setTimeout(resolve, waitMs))
+      }
+    }
+    throw lastError
   }
 
   /**
@@ -180,6 +217,20 @@ class DocumentGenerationService {
     }
 
     return paragraphs
+  }
+
+  private closeUnclosedBlocks(sectionMarkdown: string): string {
+    let sanitized = sectionMarkdown.trim()
+
+    // Track triple-backtick occurrences
+    const codeBlockCount = (sanitized.match(/```/g) || []).length
+    if (codeBlockCount % 2 !== 0) {
+      sanitized += '\n```' // Close unclosed code injection blocks safely
+      logger.warn(`[DOC-GEN] Detected and closed malformed code block in section draft.`)
+    }
+
+    // Ensure trailing whitespace doesn't obscure unparsed H8 text lines
+    return sanitized + '\n'
   }
 
   async generateDocument(request: DocumentGenerationRequest) {
@@ -255,7 +306,7 @@ class DocumentGenerationService {
             const gkgResult = await getContextForStrategy(request.projectId, strategy, {
               userId: request.userId,
             })
-            if (gkgResult.unitsCount > 0 || (gkgResult.markdown && gkgResult.markdown.trim().length > 0)) {
+            if (gkgResult.unitsCount > 0 || (gkgResult.markdown && String(gkgResult.markdown).trim().length > 0)) {
               gkg_context_snapshot = {
                 markdown: gkgResult.markdown,
                 unitsCount: gkgResult.unitsCount,
@@ -302,13 +353,14 @@ class DocumentGenerationService {
       // 5. AGENTIC PHASE 2: Parallel Drafting of Sections
       const draftConcurrency = this.getDraftConcurrency(request.provider)
       logger.info(`[AGENT] Phase 2: Drafting ${generationPlan.sections.length} sections with concurrency ${draftConcurrency}...`)
+      if (request.jobId) await updateJobStatus(request.jobId, "processing", 60)
 
       // Build a shared map of all planned sections so each drafter can avoid duplicating
       // content that belongs to a sibling section (Improvement D — anti-duplication).
       const allPlannedSections = generationPlan.sections.map(s => ({ heading: s.heading, goal: s.goal }))
 
       const draftedSections = await this.mapWithConcurrency(generationPlan.sections, draftConcurrency, async (sectionTask, index) => {
-        return await this.draftSection({
+        const sectionResult = await this.draftSection({
           task: sectionTask,
           order: index,
           project,
@@ -326,32 +378,199 @@ class DocumentGenerationService {
           templateSystemPrompt: template?.system_prompt,
           allPlannedSections,
         })
+        
+        // Incremental progress during drafting
+        if (request.jobId) {
+          const draftProgress = 60 + Math.floor(((index + 1) / generationPlan.sections.length) * 15)
+          await updateJobStatus(request.jobId, "processing", Math.min(draftProgress, 75))
+        }
+        
+        return sectionResult
       })
 
       // Sort sections back into their planned order
       draftedSections.sort((a, b) => a.order - b.order)
 
-      // 6. AGENTIC PHASE 3: Synthesis & Assembly
-      logger.info(`[AGENT] Phase 3: Assembling Document & Extracting Entities...`)
+      // ─── Phase 2.5: Draft Integrity Check ───────────────────────────────
+      // Mission Draco Mandate: Ensure every planned section successfully drafted.
+      // Hard-abort only if ALL sections failed. Partial failures (e.g. rate-limit
+      // survivors that exhausted retries) produce a degraded document with a
+      // diagnostic banner so the user can review and re-trigger failed sections.
+      const failedSections = draftedSections.filter(s => 
+        !s.markdown || 
+        s.markdown.startsWith('Error generating section:') || 
+        s.markdown.trim().length < 50
+      )
 
-      let rawMarkdown = ""
+      if (failedSections.length === draftedSections.length) {
+        // Total failure — nothing to assemble
+        const errorDetail = failedSections.map(s => draftedSections.indexOf(s) + 1).join(', ')
+        throw new Error(`DRAFT_INTEGRITY_FAILURE: ALL sections [${errorDetail}] failed to generate. Assembly aborted.`)
+      }
+
+      if (failedSections.length > 0) {
+        // Partial failure — log warning, inject diagnostic placeholder for failed sections
+        const errorDetail = failedSections.map(s => draftedSections.indexOf(s) + 1).join(', ')
+        logger.warn(`[AGENT] Phase 2.5: Partial draft failure — Section(s) [${errorDetail}] failed (likely rate-limit). Proceeding with ${draftedSections.length - failedSections.length}/${draftedSections.length} successful sections.`)
+        for (const failed of failedSections) {
+          const idx = draftedSections.indexOf(failed)
+          const heading = generationPlan.sections[idx]?.heading || `## Section ${idx + 1}`
+          draftedSections[idx] = {
+            order: failed.order,
+            tokensUsed: 0,
+            markdown: `${heading}\n\n> ⚠️ **This section could not be generated** (provider rate limit or timeout). Re-trigger generation to complete this section.\n`,
+          }
+        }
+      }
+
+      // 6. AGENTIC PHASE 3: Synthesis & Assembly
+      logger.info(`[AGENT] Phase 3: Assembling Document...`)
+      if (request.jobId) await updateJobStatus(request.jobId, "processing", 76)
+
+      let markdown = ""
       let totalTokensUsed = 0;
       for (const section of draftedSections) {
         totalTokensUsed += section.tokensUsed
-        rawMarkdown += (section.markdown || "").trim() + "\n\n"
+        markdown += this.closeUnclosedBlocks(section.markdown || "")
       }
 
-      // Perform single-pass entity extraction and cleanup
+      // Initial cleanup of the assembled markdown
+      markdown = this.validateAndCleanMarkdown(markdown)
+
+      // 6.5. AGENTIC PHASE 4 & 5: Autonomous Auditing and Patching Loop
+      logger.info(`[AGENT] Phase 4: Commencing Policy Audit Loop...`)
+      if (request.jobId) await updateJobStatus(request.jobId, "processing", 80)
+      
+      let currentScore = 100
+      let attempts = 0
+      const MAX_RETRIES = 3
+      const auditLog: any[] = []
+
+      while (attempts < MAX_RETRIES) {
+        const auditResult = await this.auditDocumentAgainstPolicies(markdown, template?.name, request.provider, request.model, request.jobId)
+        currentScore = auditResult.score
+        
+        if (currentScore >= 90) {
+          logger.info(`[AGENT] Document passed compliance audit with score ${currentScore}%`)
+          break
+        }
+        
+        logger.warn(`[AGENT] Document failed audit (Score: ${currentScore}%). Initiating Phase 5: Patch Agent (Attempt ${attempts + 1}/${MAX_RETRIES})`)
+        if (request.jobId) await updateJobStatus(request.jobId, "processing", 80 + (attempts * 2))
+
+        // Phase 5: The Patch Agent
+        markdown = await this.patchDocument(markdown, auditResult.failedRules, request.provider, request.model, request.jobId)
+        attempts++
+        auditLog.push({ attempt: attempts, score: currentScore, failedRules: auditResult.failedRules })
+      }
+
+      if (currentScore < 90) {
+        logger.warn(`[AGENT] Document failed compliance audit after ${MAX_RETRIES} attempts. Human approval required.`)
+      }
+
+      // 6.7. FINAL PHASE: Entity Extraction & Synchronization (Post-Patching)
+      // We run this AFTER the audit loop to ensure the final document contains the tags 
+      // and the database reflects the final state of the document.
+      logger.info(`[AGENT] Final Phase: Syncing H8 Entities to Knowledge Graph...`)
+      if (request.jobId) await updateJobStatus(request.jobId, "processing", 85)
+
       const { InlineEntityParserService } = await import('./inlineEntityParserService')
       const parseResult = await InlineEntityParserService.parseAndProcess({
         projectId: request.projectId,
         userId: request.userId,
         documentId: docId,
-        markdown: rawMarkdown
+        markdown: markdown,
+        providedEntities: project.existing_entities || []
       })
 
-      let markdown = this.validateAndCleanMarkdown(parseResult.cleanedMarkdown)
+      // The final markdown must retain the H8 tags for Mission Draco traceability
+      const finalMarkdown = parseResult.cleanedMarkdown
       const combinedEntitiesByType = parseResult.entitiesByType || {}
+
+      // 6.7.5. POST-PROCESSING: Multi-Scale Context Compaction (Asynchronous)
+      // Recursive compression into 80/60/40/20 density tiers while preserving H8 entities.
+      setImmediate(() => {
+        CompactorService.generateMultiScaleSummaries(finalMarkdown, request.projectId, docId)
+          .catch(err => logger.error(`[AGENT] Post-processing compactor failed for ${docId}:`, err))
+      })
+
+      // 6.8. AGENTIC PHASE 6: Unified Final Compilation & Multi-Scale Compression
+      // Generate clean, narrative-focused summaries at 20/40/60/80% levels
+      // and the final polished 100% document in a single call.
+      logger.info(`[AGENT] Phase 6: Final Compilation & Context Compaction...`)
+      if (request.jobId) await updateJobStatus(request.jobId, "processing", 88)
+      
+      let finalSnapshots: Record<string, any> = {}
+      try {
+        const finalizationSchema = z.object({
+          summary80: z.string().describe("A compressed version containing exactly ~80% of the density, preserving all core metrics."),
+          summary60: z.string().describe("A tighter compression containing exactly ~60% of the density, preserving critical entities."),
+          summary40: z.string().describe("A dense context snapshot containing exactly ~40% of the density, focusing on structural boundaries."),
+          summary20: z.string().describe("A high-density core capsule containing exactly ~20% of the text length, optimized for token-starved injections.")
+        })
+
+        // Improved scrubbing: Remove H8 tags including multi-line JSON blobs to prevent summarizer confusion.
+        const scrubbedMarkdown = markdown
+          .replace(/^#{8}\s+[a-zA-Z0-9_-]+:[\s\S]*?(?=\n#{8}|\n#|\n$)/gm, "")
+          .replace(/\n{3,}/g, "\n\n")
+          .trim()
+
+        // Sample the scrubbed document if it's too large for efficient summarization
+        const MAX_SUMMARY_INPUT_CHARS = 100000
+        const summarySample = scrubbedMarkdown.length > MAX_SUMMARY_INPUT_CHARS
+          ? scrubbedMarkdown.substring(0, MAX_SUMMARY_INPUT_CHARS / 2) + 
+            "\n\n[... content omitted for summarization efficiency ...]\n\n" + 
+            scrubbedMarkdown.substring(scrubbedMarkdown.length - (MAX_SUMMARY_INPUT_CHARS / 2))
+          : scrubbedMarkdown
+
+        const prompt = `You are the Final Compilation & Governance Agent for Mission Draco.
+Your task is to take the provided draft and generate four recursive context compression tiers.
+
+### CORE MANDATES:
+1. **Recursive Summaries (80/60/40/20)**: 
+   - ELIMINATE narrative fluff and structural filler.
+   - PRESERVE H8 Entity Framework terminology (but omit the ######## tags in these summaries).
+   - FOCUS on strategic logic, technical milestones, and engineering definitions.
+   - INCREASE information density: every word must carry semantic weight.
+
+### INPUT DRAFT${scrubbedMarkdown.length > MAX_SUMMARY_INPUT_CHARS ? ` (sampled - full doc is ${scrubbedMarkdown.length} chars)` : ""}:
+---
+${summarySample}
+---`
+
+        const compilationResult = await unifiedAIService.generateStructuredObject({
+          prompt,
+          provider: request.provider,
+          model: request.model,
+          temperature: 0.2,
+          schema: finalizationSchema,
+          max_tokens: 16000, // Large budget for summaries
+          traceName: 'agentic-doc-finalization-compaction'
+        })
+
+        const payload = compilationResult.object
+
+        // Record the compaction result in the job monitor
+        await this.recordLLMPromptSnapshot(request.jobId, {
+          phase: 'compacting',
+          label: 'Final Compilation & Multi-Scale Compression',
+          traceName: 'agentic-doc-finalization-compaction',
+          provider: request.provider,
+          model: request.model,
+          temperature: 0.2,
+          prompt,
+          response: JSON.stringify(payload, null, 2)
+        })
+
+        finalSnapshots = {
+          p20: { summary: payload.summary20, timestamp: new Date().toISOString() },
+          p40: { summary: payload.summary40, timestamp: new Date().toISOString() },
+          p60: { summary: payload.summary60, timestamp: new Date().toISOString() },
+          p80: { summary: payload.summary80, timestamp: new Date().toISOString() }
+        }
+      } catch (sumErr) {
+        logger.error(`[AGENT] Unified compilation failed, falling back to original markdown:`, sumErr)
+      }
 
       // Global Deduplication and Context Adherence Scoring
       const finalUniqueCounts: Record<string, number> = {}
@@ -363,7 +582,8 @@ class DocumentGenerationService {
         let uniqueCount = 0
         
         for (const entity of entities) {
-          const name = (entity.name || entity.title || entity.item_name || entity.description || "").toString().toLowerCase().trim()
+          if (!entity) continue;
+          const name = String(entity.name || entity.title || entity.item_name || entity.description || "").toLowerCase().trim()
           if (!name) continue;
 
           if (!seenNames.has(name)) {
@@ -374,16 +594,23 @@ class DocumentGenerationService {
             const normalizedExtracted = name.replace(/[^\w\s]/g, '').replace(/\s+/g, ' ')
             
             const match = providedEntities.find(p => {
-              const normalizedProvided = p.name.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim()
-              return p.type === type && (normalizedProvided === normalizedExtracted || normalizedProvided.includes(normalizedExtracted) || normalizedExtracted.includes(normalizedProvided))
+              if (!p) return false;
+              const pName = String(p.name || "").trim();
+              if (!pName) return false;
+              
+              const normalizedProvided = pName.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ')
+              return String(p.type || "").toLowerCase() === type.toLowerCase() && 
+                     (normalizedProvided === normalizedExtracted || 
+                      normalizedProvided.includes(normalizedExtracted) || 
+                      normalizedExtracted.includes(normalizedProvided))
             })
 
-            if (match) {
-              const exactMatch = match.name.toLowerCase().trim() === name
+            if (match && match.name) {
+              const exactMatch = String(match.name).toLowerCase().trim() === name
               reusedEntityIdentities.push({
-                name: match.name,
-                type: match.type,
-                matchConfidence: exactMatch ? 100 : 85 // High confidence for fuzzy/normalized matches
+                name: String(match.name),
+                type: String(match.type || type),
+                matchConfidence: exactMatch ? 100 : 85 
               })
             }
           }
@@ -391,52 +618,105 @@ class DocumentGenerationService {
         finalUniqueCounts[type] = uniqueCount
       }
 
-      // Calculate overall Context Reuse Score
-      const contextMatchingScore = providedEntities.length > 0 
-        ? Math.round((reusedEntityIdentities.length / providedEntities.length) * 100)
-        : 100 // 100% if no context was provided to adhere to
+      // ─── Phase 3: Weighted Scoring Engine (CUR) ───────────────────────────
+      // Calculate Context Utilization Rate (CUR) using strict weighting matrix
+      // and Hallucination Penalty (Decision: Keep entities but degrade score)
+      
+      const weights: Record<string, number> = {
+        'STAKEHOLDER': 0.30,
+        'TECHNOLOGY': 0.25,
+        'DELIVERABLE': 0.25,
+        'CONSTRAINT': 0.25,
+        'REQUIREMENT': 0.25,
+        'ACTIVITY': 0.20,
+        'WORK_ITEM': 0.20,
+      }
 
-      const appliedContextEntities = reusedEntityIdentities
+      // Helper to map extraction types to scoring categories
+      const getScoringCategory = (type: string): string => {
+        const t = type.toUpperCase()
+        if (t.includes('STAKEHOLDER')) return 'STAKEHOLDER'
+        if (t.includes('TECH')) return 'TECHNOLOGY'
+        if (t.includes('DELIVERABLE') || t.includes('MILESTONE')) return 'DELIVERABLE'
+        if (t.includes('CONSTRAINT')) return 'CONSTRAINT'
+        if (t.includes('REQUIREMENT')) return 'REQUIREMENT'
+        if (t.includes('ACTIVITY')) return 'ACTIVITY'
+        if (t.includes('WORK_ITEM')) return 'WORK_ITEM'
+        return 'OTHER'
+      }
 
-      // 6.5. AGENTIC PHASE 4 & 5: Autonomous Auditing and Patching Loop
-      logger.info(`[AGENT] Phase 4: Commencing Policy Audit Loop...`)
-      let currentScore = 100
-      let attempts = 0
-      const MAX_RETRIES = 3
-      const auditLog: any[] = []
+      // Group provided context by category
+      const contextByCategory: Record<string, Set<string>> = {}
+      providedEntities.forEach(p => {
+        const cat = getScoringCategory(p.type || "")
+        if (!contextByCategory[cat]) contextByCategory[cat] = new Set()
+        const name = (p.name || "").toLowerCase().trim()
+        if (name) contextByCategory[cat].add(name)
+      })
 
-      while (attempts < MAX_RETRIES) {
-        const auditResult = await this.auditDocumentAgainstPolicies(markdown, template?.name, request.provider, request.model)
-        currentScore = auditResult.score
-        
-        if (currentScore >= 90) {
-          logger.info(`[AGENT] Document passed compliance audit with score ${currentScore}%`)
-          break
+      // Group reused and hallucinated entities by category
+      const reuseByCategory: Record<string, number> = {}
+      const hallucinationPenaltyByCategory: Record<string, number> = {}
+      
+      for (const [type, entities] of Object.entries(combinedEntitiesByType)) {
+        const cat = getScoringCategory(type)
+        if (!reuseByCategory[cat]) reuseByCategory[cat] = 0
+        if (!hallucinationPenaltyByCategory[cat]) hallucinationPenaltyByCategory[cat] = 0
+
+        const seenInThisRun = new Set<string>()
+        for (const entity of entities) {
+          if (!entity) continue;
+          const name = String(entity.name || entity.title || entity.item_name || "").toLowerCase().trim()
+          if (!name || seenInThisRun.has(name)) continue
+          seenInThisRun.add(name)
+
+          const isReused = contextByCategory[cat]?.has(name)
+          if (isReused) {
+            reuseByCategory[cat]++
+          } else if (cat !== 'OTHER') {
+            // Hallucination Penalty: Deduct 5% from this category's score layer
+            hallucinationPenaltyByCategory[cat] += 0.05
+            logger.warn(`[MISSION-DRACO] Hallucination detected in ${cat}: "${name}". Applying penalty.`)
+          }
         }
-        
-        logger.warn(`[AGENT] Document failed audit (Score: ${currentScore}%). Initiating Phase 5: Patch Agent (Attempt ${attempts + 1}/${MAX_RETRIES})`)
-        
-        // Phase 5: The Patch Agent
-        markdown = await this.patchDocument(markdown, auditResult.failedRules, request.provider, request.model)
-        attempts++
-        auditLog.push({ attempt: attempts, score: currentScore, failedRules: auditResult.failedRules })
       }
 
-      if (currentScore < 90) {
-        logger.warn(`[AGENT] Document failed compliance audit after ${MAX_RETRIES} attempts. Human approval required.`)
+      let weightedCUR = 0
+      let totalWeight = 0
+
+      for (const [cat, weight] of Object.entries(weights)) {
+        const totalInContext = contextByCategory[cat]?.size || 0
+        if (totalInContext === 0) continue // Skip weight if no context provided for this category
+
+        const utilization = Math.min(reuseByCategory[cat] / totalInContext, 1.0)
+        const penalty = hallucinationPenaltyByCategory[cat] || 0
+        const categoryScore = Math.max(utilization - penalty, 0)
+
+        weightedCUR += categoryScore * weight
+        totalWeight += weight
       }
+
+      // Normalize if some categories were missing context
+      const finalCUR = totalWeight > 0 
+        ? Math.round((weightedCUR / totalWeight) * 100)
+        : 100
+
+      const contextMatchingScore = finalCUR
 
       // 7. Return structured result
+      logger.info(`[MISSION-DRACO] Generation Complete. Document: ${docId}, CUR Score: ${finalCUR}%, Chars: ${finalMarkdown.length}`)
+      
       return {
-        content: markdown,
+        content: finalMarkdown,
         documentId: docId,
         entityCounts: finalUniqueCounts,
+        summaries: finalSnapshots,
         metadata: {
           provider: request.provider,
           model: request.model || 'default',
-          tokens_used: totalTokensUsed, // Aggregate of all parallel calls
+          tokens_used: totalTokensUsed, 
           contextMatchingScore,
-          appliedContextEntities,
+          appliedContextEntities: reusedEntityIdentities,
           context: {
             projectName: project.name,
             framework: project.framework,
@@ -612,8 +892,9 @@ Based on the type of error encountered, please follow these steps to resolve the
     } else {
       const docType = params.template?.name || "unstructured document"
       plannerPrompt += `### Document Type: ${docType}\n`
-      plannerPrompt += `No pre-defined template structure is specified. You MUST design a logical structure of 3 to 6 distinct sections/paragraphs to fulfill the request. `
-      plannerPrompt += `Choose logical headings appropriate for a ${params.project.framework} document, covering background, main components/requirements, implementation/next steps, and constraints.`
+      plannerPrompt += `No pre-defined template structure is specified. Design a comprehensive, logical structure with as many sections as the document type and user request require. `
+      plannerPrompt += `For a Project Charter, Business Case, or similar governance document, aim for 10–18 sections covering all standard components. `
+      plannerPrompt += `Choose logical headings appropriate for a ${params.project.framework} document, covering background, objectives, scope, stakeholders, risks, budget, timeline, governance, and any other relevant areas.`
       plannerPrompt += `\n\n`
     }
 
@@ -851,6 +1132,10 @@ Based on the type of error encountered, please follow these steps to resolve the
 
     sectionPrompt += `\n---\n\n`
     sectionPrompt += `Output the Markdown for your assigned section starting exactly with ${params.task.heading}.\n\n`
+    sectionPrompt += `### IMPORTANT: CONCISENESS & COMPLETION MANDATE\n`
+    sectionPrompt += `1. **Density over Volume**: This section MUST be high-signal technical content. Avoid repetitive explanations.\n`
+    sectionPrompt += `2. **Strict Limit**: Aim for under 4,000 words. If you are approaching the limit, wrap up the section immediately and ensure all H8 tags and code blocks are closed.\n`
+    sectionPrompt += `3. **No Truncation**: Do NOT stop mid-sentence or mid-JSON-block. Your response MUST be a complete, finished Markdown block.\n\n`
 
     // Explicit Instruction for entity schema alignment
     sectionPrompt += `### IMPORTANT: Entity Schema Alignment Instruction\n`
@@ -874,20 +1159,25 @@ Based on the type of error encountered, please follow these steps to resolve the
     let tokensUsed: number = 0;
     
     try {
-      const aiResponse = await unifiedAIService.generate({
-        prompt: sectionPrompt,
-        provider: params.provider,
-        model: params.model,
-        temperature, // Slightly lower temperature for drafting facts
-        traceName,
-        projectId: params.projectId,
-        userId: params.userId,
-        template_id: params.templateId,
-      })
+      const aiResponse = await this.retryOnRateLimit(
+        () => unifiedAIService.generate({
+          prompt: sectionPrompt,
+          provider: params.provider,
+          model: params.model,
+          temperature,
+          max_tokens: 32000,
+          traceName,
+          projectId: params.projectId,
+          userId: params.userId,
+          template_id: params.templateId,
+        }),
+        3,
+        `Draft Section ${params.order + 1} (${params.task.heading})`
+      )
       responseMarkdown = aiResponse.content;
       tokensUsed = aiResponse.usage?.total_tokens || 0;
     } catch (e: any) {
-      logger.error(`Failed to draft section ${params.task.heading}`, e);
+      logger.error(`Failed to draft section ${params.task.heading} after retries`, e);
       responseMarkdown = `Error generating section: ${e instanceof Error ? e.message : String(e)}`;
     }
 
@@ -1070,7 +1360,7 @@ Based on the type of error encountered, please follow these steps to resolve the
    * AGENTIC PHASE 4: Policy Auditing
    * Evaluates the document against the Active policy library.
    */
-  private async auditDocumentAgainstPolicies(markdown: string, documentType?: string, provider?: string, model?: string): Promise<{ score: number, failedRules: any[] }> {
+  private async auditDocumentAgainstPolicies(markdown: string, documentType?: string, provider?: string, model?: string, jobId?: string): Promise<{ score: number, failedRules: any[] }> {
     const queryParams: any[] = ['ACTIVE']
     let query = `
       SELECT rule_code, title, description, execution_schema
@@ -1114,18 +1404,53 @@ Based on the type of error encountered, please follow these steps to resolve the
       `- Rule [${p.rule_code}]: ${p.title}\n  Description: ${p.description}\n  Execution Schema: ${JSON.stringify(p.execution_schema)}`
     ).join('\n\n')
 
-    const prompt = `You are a strict Enterprise Governance Auditor. 
+    // Sample the document intelligently: take from the beginning, middle, and end
+    // so the auditor sees the full document structure even for very large outputs.
+    const MAX_AUDIT_CHARS = 40000
+    let auditSample = markdown
+    if (markdown.length > MAX_AUDIT_CHARS) {
+      const third = Math.floor(MAX_AUDIT_CHARS / 3)
+      const midStart = Math.floor(markdown.length / 2) - Math.floor(third / 2)
+      const endStart = markdown.length - third
+      auditSample =
+        markdown.substring(0, third) +
+        `\n\n[... middle section of document — ${markdown.length - MAX_AUDIT_CHARS} chars omitted for brevity ...]\n\n` +
+        markdown.substring(midStart, midStart + third) +
+        `\n\n[... final section sample ...]\n\n` +
+        markdown.substring(endStart)
+    }
+
+    const prompt = `You are a strict Enterprise Governance Auditor for Mission Draco. 
 Evaluate the following project document against the following ACTIVE compliance policies:
 
 ${policiesText}
 
+### MANDATORY REQUIREMENT: H8 Traceability Markers
+The document contains H8 Entity Tags (e.g., ######## entity_type: {...}). 
+1. These tags are MANDATORY high-integrity tokens for system traceability. 
+2. DO NOT mark their presence as a failure or noise.
+3. DO NOT recommend their removal.
+4. Ensure the Patch Agent preserves them verbatim.
+
 Return a compliance score (0-100) based on how well the document adheres to these specific policies.
 If the document fails ANY policy, add it to the failedRules array with a precise rationale and a recommended text patch to fix it.
 
-Document:
+Document${markdown.length > MAX_AUDIT_CHARS ? ` (sampled — full document is ${markdown.length} characters)` : ''}:
 ---
-${markdown.substring(0, 8000)}
+${auditSample}
 ---`
+
+    // Record audit prompt in the job monitor before calling the LLM
+    await this.recordLLMPromptSnapshot(jobId, {
+      phase: 'auditing',
+      label: `Audit Document (${documentType || 'Any'}) — ${activePolicies.length} policies`,
+      traceName: 'agentic-policy-audit',
+      provider: provider || 'default',
+      model,
+      temperature: 0.1,
+      prompt,
+      heading: `Document sampled: ${markdown.length > MAX_AUDIT_CHARS ? `${MAX_AUDIT_CHARS} of ${markdown.length} chars` : `${markdown.length} chars (full)`}`,
+    })
 
     try {
       const result = await unifiedAIService.generateStructuredObject({
@@ -1154,6 +1479,18 @@ ${markdown.substring(0, 8000)}
         }
       }
 
+      // Update the snapshot with the response (score + failed rules summary)
+      await this.recordLLMPromptSnapshot(jobId, {
+        phase: 'auditing',
+        label: `Audit Result — Score: ${payload.score}% | ${payload.failedRules?.length || 0} failed rule(s)`,
+        traceName: 'agentic-policy-audit-result',
+        provider: provider || 'default',
+        model,
+        temperature: 0.1,
+        prompt: `Audit Score: ${payload.score}/100\n\nFailed Rules:\n${(payload.failedRules || []).map((r: any) => `- [${r.ruleCode}] ${r.severity}: ${r.rationale}`).join('\n') || 'None — document passed all policies.'}`,
+        response: JSON.stringify({ score: payload.score, failedRules: payload.failedRules }, null, 2)
+      })
+
       return { score: payload.score, failedRules: payload.failedRules || [] }
     } catch (e) {
       logger.error('Failed to audit document, defaulting to pass', e)
@@ -1165,29 +1502,123 @@ ${markdown.substring(0, 8000)}
    * AGENTIC PHASE 5: The Patch Agent
    * Re-writes the document to fix policy violations.
    */
-  private async patchDocument(markdown: string, failedRules: any[], provider?: string, model?: string): Promise<string> {
-    const prompt = `You are an AI Patch Agent. The following document failed compliance audits.
-    
+  private async patchDocument(markdown: string, failedRules: any[], provider?: string, model?: string, jobId?: string): Promise<string> {
+    const patchSchema = z.object({
+      patches: z.array(z.object({
+        search: z.string().describe("The exact text block from the original document that needs to be replaced. Must match the original document text, including whitespace and formatting, exactly."),
+        replace: z.string().describe("The corrected/compliant text block to replace the search block with.")
+      })).describe("List of search-and-replace blocks to apply to the document. Keep the search blocks unique and as small as possible to cover the changes.")
+    })
+
+    // Sample the document intelligently (start, middle, end) to give the Patch Agent
+    // visibility across the entire document structure while staying within context limits.
+    const MAX_PATCH_EMBED_CHARS = 100000
+    let patchDocSample = markdown
+    if (markdown.length > MAX_PATCH_EMBED_CHARS) {
+      const third = Math.floor(MAX_PATCH_EMBED_CHARS / 3)
+      const midStart = Math.floor(markdown.length / 2) - Math.floor(third / 2)
+      const endStart = markdown.length - third
+      patchDocSample =
+        markdown.substring(0, third) +
+        `\n\n[... middle section omitted — ${markdown.length - MAX_PATCH_EMBED_CHARS} total chars hidden ...]\n\n` +
+        markdown.substring(midStart, midStart + third) +
+        `\n\n[... final section sample ...]\n\n` +
+        markdown.substring(endStart)
+    }
+
+    const prompt = `You are a Senior AI Patch Agent for Mission Draco.
+The following document failed specific governance compliance rules and requires high-integrity remediation.
+
+### TASK
+Instead of rewriting the entire document, you must specify precise search-and-replace patches to resolve the compliance issues.
+
+For each failed rule, identify the section or metadata block that needs modification, and output a search block (the original text) and a replace block (the corrected text).
+
+### RULES FOR PATCHING:
+1. The 'search' block MUST match the original text EXACTLY, including all indentation, newlines, and spacing.
+2. The 'replace' block must integrate the correction seamlessly.
+3. Keep each search block unique and as concise as possible.
+4. Ensure all H8 Entity Tags (######## entity_type: {...}) are preserved and not altered unless they are specifically related to the failed rule.
+5. IMPORTANT: Only generate patches for content you can see in the sample provided below. If a fix is needed in an omitted section, provide the fix but mark it clearly.
+
 Failed Rules to correct:
 ${failedRules.map((f: any) => `- [${f.ruleCode}]: ${f.rationale}\n  Recommended fix: ${f.recommendedPatch}`).join('\n')}
 
-Rewrite the document to explicitly satisfy these rules and fix the gaps seamlessly. Maintain original engineering depth while expanding text where required. 
-Return ONLY the fully corrected Markdown without markdown wrappers.
-
-Original Document:
+Original Document${markdown.length > MAX_PATCH_EMBED_CHARS ? ` (smart sample — full document is ${markdown.length} chars)` : ''} (DO NOT REWRITE ENTIRELY, ONLY GENERATE THE SEARCH/REPLACE JSON):
 ---
-${markdown}
+${patchDocSample}
 ---`
 
+    // Record patch prompt in the job monitor
+    await this.recordLLMPromptSnapshot(jobId, {
+      phase: 'patching',
+      label: `Patch Agent — Fixing ${failedRules.length} rule(s)`,
+      traceName: 'agentic-policy-patch',
+      provider: provider || 'default',
+      model,
+      temperature: 0.1,
+      prompt,
+      heading: `Document: ${markdown.length > MAX_PATCH_EMBED_CHARS ? `${MAX_PATCH_EMBED_CHARS} of ${markdown.length} chars (sampled)` : `${markdown.length} chars (full)`}`,
+    })
+
     try {
-      const result = await unifiedAIService.generate({
+      const result = await unifiedAIService.generateStructuredObject({
         prompt,
         provider: provider || 'default',
         model,
-        temperature: 0.3,
+        temperature: 0.1,
+        schema: patchSchema,
+        max_tokens: 16000, // Large budget for patches
         traceName: 'agentic-policy-patch'
       })
-      return this.validateAndCleanMarkdown(result.content || markdown)
+
+      const payload = result.object
+      let patched = markdown
+      
+      if (payload?.patches && Array.isArray(payload.patches)) {
+        for (const patch of payload.patches) {
+          if (!patch.search) continue;
+
+          // Per-patch safety guard: skip patches where the replacement content is suspiciously
+          // short compared to the search block — this is a sign the LLM truncated the output
+          // and would silently delete significant document content.
+          const replaceLen = (patch.replace || '').length
+          const searchLen = patch.search.length
+          if (searchLen > 200 && replaceLen < searchLen * 0.3) {
+            logger.warn(`[PATCH-AGENT] Skipping potentially destructive patch — search(${searchLen} chars) >> replace(${replaceLen} chars). Likely LLM truncation: ${patch.search.substring(0, 80)}...`)
+            continue
+          }
+          
+          if (patched.includes(patch.search)) {
+            patched = patched.replace(patch.search, patch.replace || '')
+            logger.info(`[PATCH-AGENT] Applied patch successfully for search block: ${patch.search.substring(0, 50)}...`)
+          } else {
+            logger.warn(`[PATCH-AGENT] Search block not found in document: ${JSON.stringify(patch.search)}`)
+            // Fallback: Try regex-based whitespace-insensitive match
+            const normalizedSearch = patch.search.replace(/\s+/g, ' ').trim()
+            if (normalizedSearch) {
+              logger.warn(`[PATCH-AGENT] Exact match failed, trying normalized match...`)
+              const escapedSearch = patch.search.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').replace(/\s+/g, '\\s+')
+              // eslint-disable-next-line security/detect-non-literal-regexp
+              const regex = new RegExp(escapedSearch, 'g')
+              if (regex.test(patched)) {
+                patched = patched.replace(regex, patch.replace || '')
+                logger.info(`[PATCH-AGENT] Applied patch successfully using regex normalization fallback.`)
+              }
+            }
+          }
+        }
+      }
+
+      // Content-integrity guard: if patching caused the document to shrink by more than 20%,
+      // the patches were destructive (LLM generated bad search/replace from a truncated view).
+      // Discard ALL patches and return the original document unchanged.
+      if (patched.length < markdown.length * 0.8) {
+        logger.error(`[PATCH-AGENT] 🚨 Content integrity violation — patched doc (${patched.length} chars) is <80% of original (${markdown.length} chars). Discarding all patches to preserve full document.`)
+        return markdown
+      }
+      
+      return this.validateAndCleanMarkdown(patched)
     } catch (e) {
       logger.error('Failed to patch document', e)
       return markdown

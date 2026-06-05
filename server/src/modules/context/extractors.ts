@@ -118,15 +118,23 @@ export class DocumentContextExtractor {
 
       const row = result.rows[0]
       let content = row.content
+      const snapshots = row.context_snapshots
 
-      // Process content based on options
-      if (options.include_content && content) {
-        if (options.content_format === 'summary') {
-          content = this.summarizeContent(content, options.max_content_length)
-        } else if (options.content_format === 'outline') {
-          content = this.extractOutline(content)
-        } else if (options.max_content_length) {
-          content = this.truncateContent(content, options.max_content_length)
+      // Process content based on options and adaptive routing
+      if (options.include_content) {
+        if (snapshots && options.token_budget) {
+          // Adaptive Routing: Pick the best summary based on budget
+          // Since it's a single document, we use a percentage of the total context budget
+          // dedicated to this specific document request.
+          content = this.selectOptimalSnapshot(snapshots, row.content, options.token_budget)
+        } else if (content) {
+          if (options.content_format === 'summary') {
+            content = this.summarizeContent(content, options.max_content_length)
+          } else if (options.content_format === 'outline') {
+            content = this.extractOutline(content)
+          } else if (options.max_content_length) {
+            content = this.truncateContent(content, options.max_content_length)
+          }
         }
       } else if (!options.include_content) {
         content = undefined
@@ -137,6 +145,7 @@ export class DocumentContextExtractor {
         project_id: row.project_id,
         name: row.name,
         content,
+        context_snapshots: snapshots,
         template_id: row.template_id,
         version: row.version,
         status: row.status,
@@ -171,17 +180,28 @@ export class DocumentContextExtractor {
         LIMIT 20
       `, [projectId, userId])
 
-      return result.rows.map(row => {
-        let content = row.content
+      const rows = result.rows
+      const docCount = rows.length
+      const perDocBudget = options.token_budget && docCount > 0 
+        ? Math.floor(options.token_budget / docCount) 
+        : undefined
 
-        // Process content based on options
-        if (options.include_content && content) {
-          if (options.content_format === 'summary') {
-            content = this.summarizeContent(content, options.max_content_length)
-          } else if (options.content_format === 'outline') {
-            content = this.extractOutline(content)
-          } else if (options.max_content_length) {
-            content = this.truncateContent(content, options.max_content_length)
+      return rows.map(row => {
+        let content = row.content
+        const snapshots = row.context_snapshots
+
+        // Process content based on options and adaptive routing
+        if (options.include_content) {
+          if (snapshots && perDocBudget) {
+            content = this.selectOptimalSnapshot(snapshots, row.content, perDocBudget)
+          } else if (content) {
+            if (options.content_format === 'summary') {
+              content = this.summarizeContent(content, options.max_content_length)
+            } else if (options.content_format === 'outline') {
+              content = this.extractOutline(content)
+            } else if (options.max_content_length) {
+              content = this.truncateContent(content, options.max_content_length)
+            }
           }
         } else if (!options.include_content) {
           content = undefined
@@ -192,6 +212,7 @@ export class DocumentContextExtractor {
           project_id: row.project_id,
           name: row.name,
           content,
+          context_snapshots: snapshots,
           template_id: row.template_id,
           version: row.version,
           status: row.status,
@@ -229,17 +250,28 @@ export class DocumentContextExtractor {
         ORDER BY d.updated_at DESC
       `, [userId, ...documentIds])
 
-      return result.rows.map(row => {
-        let content = row.content
+      const rows = result.rows
+      const docCount = rows.length
+      const perDocBudget = options.token_budget && docCount > 0 
+        ? Math.floor(options.token_budget / docCount) 
+        : undefined
 
-        // Process content based on options
-        if (options.include_content && content) {
-          if (options.content_format === 'summary') {
-            content = this.summarizeContent(content, options.max_content_length)
-          } else if (options.content_format === 'outline') {
-            content = this.extractOutline(content)
-          } else if (options.max_content_length) {
-            content = this.truncateContent(content, options.max_content_length)
+      return rows.map(row => {
+        let content = row.content
+        const snapshots = row.context_snapshots
+
+        // Process content based on options and adaptive routing
+        if (options.include_content) {
+          if (snapshots && perDocBudget) {
+            content = this.selectOptimalSnapshot(snapshots, row.content, perDocBudget)
+          } else if (content) {
+            if (options.content_format === 'summary') {
+              content = this.summarizeContent(content, options.max_content_length)
+            } else if (options.content_format === 'outline') {
+              content = this.extractOutline(content)
+            } else if (options.max_content_length) {
+              content = this.truncateContent(content, options.max_content_length)
+            }
           }
         } else if (!options.include_content) {
           content = undefined
@@ -250,6 +282,7 @@ export class DocumentContextExtractor {
           project_id: row.project_id,
           name: row.name,
           content,
+          context_snapshots: snapshots,
           template_id: row.template_id,
           version: row.version,
           status: row.status,
@@ -265,6 +298,22 @@ export class DocumentContextExtractor {
       logger.error('Failed to extract documents context by IDs:', error)
       throw new Error(`Documents context extraction failed: ${error}`)
     }
+  }
+
+  /**
+   * Adaptive Context Router: Picks the optimal snapshot based on token budget.
+   */
+  private static selectOptimalSnapshot(snapshots: any, fullContent: string, budget: number): string {
+    // Budget tiers for adaptive selection (per-document estimates)
+    // Note: These are tuned for per-document budget allocation
+    if (budget > 3000 && snapshots.p80) return snapshots.p80.summary || snapshots.p80
+    if (budget > 1500 && snapshots.p60) return snapshots.p60.summary || snapshots.p60
+    if (budget > 800 && snapshots.p40) return snapshots.p40.summary || snapshots.p40
+    if (snapshots.p20) return snapshots.p20.summary || snapshots.p20
+
+    // Fallback: Smart truncation of full content
+    const { TokenManager } = require('./token-manager')
+    return TokenManager.truncateToTokenLimit(fullContent, budget)
   }
 
   private static summarizeContent(content: any, maxLength?: number): any {

@@ -66,7 +66,7 @@ export class ContextInjector {
       )
 
       // Extract context data
-      const contextData = await this.extractContextData(request, fullConfig)
+      const contextData = await this.extractContextData(request, fullConfig, contextTokenLimit)
 
       // Prioritize and select context sections
       const priorityConfig = request.priority_config || this.getDefaultPriorityConfig()
@@ -156,13 +156,14 @@ export class ContextInjector {
   /**
    * Extract context data from various sources
    */
-  private static async extractContextData(request: ContextRequest, config: ContextConfig): Promise<ContextData> {
+  private static async extractContextData(request: ContextRequest, config: ContextConfig, tokenBudget: number): Promise<ContextData> {
     const contextData: ContextData = {}
     const extractionOptions: ExtractionOptions = {
       include_content: true,
       include_metadata: config.include_metadata,
       max_content_length: 2000,
-      content_format: 'summary'
+      content_format: 'summary',
+      token_budget: tokenBudget
     }
 
     try {

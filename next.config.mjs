@@ -4,6 +4,10 @@ import { withSentryConfig } from '@sentry/nextjs';
 
 const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 
+const isCI = process.env.CI === 'true' || process.env.CI === '1';
+/** C# Adpa.Orchestrator (RPAS rituals). Set when running Aspire or orchestrator alone. */
+const orchestratorUrl = process.env.ORCHESTRATOR_URL?.replace(/\/$/, '');
+
 /** Next.js distDir must be relative to the project root (no absolute C:\ paths in .env). */
 function distDirFromEnv() {
   const raw = process.env.NEXT_DIST_DIR?.trim();
@@ -110,10 +114,14 @@ const nextConfig = {
                 source: '/api/Ritual/:path*',
                 destination: `${orchestratorUrl}/api/Ritual/:path*`,
               },
+              {
+                source: '/api/ritual/:path*',
+                destination: `${orchestratorUrl}/api/Ritual/:path*`,
+              },
             ]
           : []),
         {
-          source: '/api/:path((?!morphic|auth|chat|genui|openui-chat|keepalive|Ritual).*)',
+          source: '/api/:path((?!morphic|auth|chat|genui|openui-chat|keepalive|[Rr]itual).*)',
           destination: `${process.env.BACKEND_URL || 'https://adpa.onrender.com'}/api/:path*`,
         },
       ],
@@ -158,11 +166,6 @@ const sentryConfig = {
     },
   },
 };
-
-const isCI = process.env.CI === 'true' || process.env.CI === '1';
-
-/** C# Adpa.Orchestrator (RPAS rituals). Set when running Aspire or orchestrator alone. */
-const orchestratorUrl = process.env.ORCHESTRATOR_URL?.replace(/\/$/, '');
 
 export default isCI
   ? withSentryConfig(nextConfig, sentryConfig)

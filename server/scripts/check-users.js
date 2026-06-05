@@ -1,27 +1,28 @@
-require('dotenv').config();
-const dbModule = require('./src/lib/db')
-const db = dbModule.default || dbModule
+const { Pool } = require('pg');
+const path = require('path');
+const dotenv = require('dotenv');
 
-async function showUsers() {
+dotenv.config({ path: path.join(__dirname, '../.env') });
+
+console.log('Database URL:', process.env.DATABASE_URL);
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
+});
+
+async function main() {
   try {
-    await db.initDb()
-    const res = await db.query('SELECT id, email, role, created_at FROM users ORDER BY created_at DESC LIMIT 5')
-    console.log('\n🔍 Existing users in database:');
-    if (res.rows.length === 0) {
-      console.log('  ❌ No users found. You need to register first!');
-      console.log('  👉 Go to: http://localhost:3000/auth/register');
-    } else {
-      res.rows.forEach(u => {
-        console.log(`  ✅ ${u.email} (${u.role}) - Created: ${u.created_at.toISOString().split('T')[0]}`);
-      });
-      console.log(`\n  Total: ${res.rows.length} user(s)`);
-    }
+    const res = await pool.query('SELECT tablename FROM pg_tables WHERE schemaname = \'public\'');
+    console.log('Tables in public schema:', res.rows.map(r => r.tablename));
+
+    const usersRes = await pool.query('SELECT id, email, name, role, is_active FROM users LIMIT 10');
+    console.log('Users in database:', usersRes.rows);
   } catch (err) {
-    console.error('❌ Error:', err.message);
+    console.error('Error querying database:', err);
   } finally {
-    await db.end();
+    await pool.end();
   }
 }
 
-showUsers();
-
+main();

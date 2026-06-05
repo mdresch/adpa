@@ -115,10 +115,11 @@ function formatAuditListEntry(entry: AuditListEntry): string {
     .join("; ")
 }
 
-function ScoreRing({ score, size = 56, color }: { score: number; size?: number; color: string }) {
+function ScoreRing({ score, size = 56, color }: { score: number | null; size?: number; color: string }) {
   const r = (size - 8) / 2
   const circ = 2 * Math.PI * r
-  const offset = circ - (score / 100) * circ
+  const isValid = score !== null && !isNaN(score)
+  const offset = isValid ? circ - (score / 100) * circ : circ
   return (
     <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
       <svg width={size} height={size} className="-rotate-90">
@@ -127,7 +128,7 @@ function ScoreRing({ score, size = 56, color }: { score: number; size?: number; 
           strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round" className="transition-all duration-1000" />
       </svg>
       <div className="absolute inset-0 flex items-center justify-center">
-        <span className="text-xs font-bold text-white">{Math.round(score)}</span>
+        <span className="text-xs font-bold text-white">{isValid ? Math.round(score) : 'NA'}</span>
       </div>
     </div>
   )
@@ -363,11 +364,11 @@ export function TemplateAuditsPanel({ templateId }: { templateId: string }) {
                     {audit.status === 'completed' && (
                       <div className="hidden md:flex items-center gap-4 text-xs text-slate-400">
                         <div className="text-center">
-                          <p className="font-semibold text-white">{audit.governance_score}</p>
+                          <p className="font-semibold text-white">{audit.governance_score ?? 'NA'}</p>
                           <p className="text-[10px] text-slate-500">Governance</p>
                         </div>
                         <div className="text-center">
-                          <p className="font-semibold text-white">{audit.resilience_score}</p>
+                          <p className="font-semibold text-white">{audit.resilience_score ?? 'NA'}</p>
                           <p className="text-[10px] text-slate-500">Resilience</p>
                         </div>
                       </div>

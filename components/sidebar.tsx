@@ -9,6 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/contexts/AuthContext"
 import { apiClient } from "@/lib/api"
+import { SidebarActivity } from "./sidebar-activity"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   LayoutDashboard,
@@ -227,6 +228,9 @@ export function Sidebar({ className }: SidebarProps) {
               )
             })}
         </nav>
+
+        {/* Sidebar Activity Section */}
+        {!collapsed && <SidebarActivity />}
       </ScrollArea>
 
       {/* User Profile */}
