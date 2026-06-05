@@ -464,7 +464,8 @@ export class EntityAuditService {
       const entries = lineage.map(entry => ({
         snapshot_hash: entry.snapshot_hash,
         chain_hash: entry.chain_hash,
-        previous_version_id: entry.previous_version_id
+        previous_version_id: entry.previous_version_id,
+        version: entry.version
       }));
 
       return verifyAuditChain(entries);

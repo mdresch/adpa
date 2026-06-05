@@ -53,14 +53,21 @@ export function verifyAuditChain(
     snapshot_hash: string;
     chain_hash: string;
     previous_version_id: string | null;
+    version?: number;
   }>
 ): boolean {
   if (entries.length === 0) return true;
 
   // Sort by version to ensure correct order
   const sorted = [...entries].sort((a, b) => {
-    // In a real implementation, you'd have version numbers
-    // For now, we assume entries are already in order
+    // Sort by version if available
+    if (a.version !== undefined && b.version !== undefined) {
+      return a.version - b.version;
+    }
+    // Fallback: entries with no previous version come first
+    if (!a.previous_version_id) return -1;
+    if (!b.previous_version_id) return 1;
+    // Maintain relative order for entries without version
     return 0;
   });
 
