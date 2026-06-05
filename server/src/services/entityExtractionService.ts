@@ -565,9 +565,7 @@ ${content.substring(0, 15000)}` // Limit content to avoid token limits
         // Check if entity with same type and name already exists in project
         // We use a flexible SQL check for common variations
         const existingResult = await pool.query(
-          `SELECT id, entity_name, entity_data, extraction_confidence, document_id, is_verified,
-                  status, project_id, entity_type, extraction_method, ai_provider, ai_model,
-                  related_entity_ids, verified_at, created_at
+          `SELECT id, entity_name, entity_data, extraction_confidence, document_id, is_verified 
            FROM entity_extractions 
            WHERE project_id = $1 
            AND entity_type = $2 
@@ -587,27 +585,31 @@ ${content.substring(0, 15000)}` // Limit content to avoid token limits
           const existingRow = existingResult.rows[0]
           entityId = existingRow.id
           
-          const existingData = typeof existingRow.entity_data === 'string'
-            ? JSON.parse(existingRow.entity_data)
-            : existingRow.entity_data || {}
+          // Load full row for audit trail snapshot (existingResult selects only a subset)
+          const fullRowRes = await pool.query(`SELECT * FROM entity_extractions WHERE id = $1`, [existingRow.id])
+          const fullRow = fullRowRes.rows[0] || existingRow
+          
+          const existingData = typeof fullRow.entity_data === 'string'
+            ? JSON.parse(fullRow.entity_data)
+            : fullRow.entity_data || {}
           
           // Get current state for audit trail
           const existingFullState = {
-            id: existingRow.id,
-            project_id: existingRow.project_id,
-            document_id: existingRow.document_id,
-            entity_type: existingRow.entity_type,
+            id: fullRow.id,
+            project_id: fullRow.project_id,
+            document_id: fullRow.document_id,
+            entity_type: fullRow.entity_type,
             entity_data: existingData,
-            entity_name: existingRow.entity_name,
-            extraction_confidence: existingRow.extraction_confidence || 50,
-            extraction_method: existingRow.extraction_method,
-            ai_provider: existingRow.ai_provider,
-            ai_model: existingRow.ai_model,
-            related_entity_ids: existingRow.related_entity_ids || [],
-            status: existingRow.status || 'active',
-            is_verified: existingRow.is_verified || false,
-            verified_at: existingRow.verified_at,
-            created_at: existingRow.created_at
+            entity_name: fullRow.entity_name,
+            extraction_confidence: fullRow.extraction_confidence || 50,
+            extraction_method: fullRow.extraction_method,
+            ai_provider: fullRow.ai_provider,
+            ai_model: fullRow.ai_model,
+            related_entity_ids: fullRow.related_entity_ids || [],
+            status: fullRow.status || 'active',
+            is_verified: fullRow.is_verified || false,
+            verified_at: fullRow.verified_at,
+            created_at: fullRow.created_at
           };
             
           // Merge entity_data properties
