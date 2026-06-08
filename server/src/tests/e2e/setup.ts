@@ -156,6 +156,8 @@ export function waitFor(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
+import { randomUUID } from 'crypto'
+
 // Helper function to generate unique test IDs
 export function generateTestId(prefix: string = 'test'): string {
   return `${prefix}_${randomUUID()}`

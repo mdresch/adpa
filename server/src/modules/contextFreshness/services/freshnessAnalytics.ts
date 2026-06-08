@@ -3,6 +3,7 @@
  * Provides analytics and insights for context freshness management
  */
 
+import { randomUUID } from 'crypto'
 import { logger } from '@/utils/logger'
 import type { 
   FreshnessMetrics,

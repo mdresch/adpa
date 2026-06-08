@@ -3,6 +3,7 @@
  * Manages and evaluates context freshness policies
  */
 
+import { randomUUID } from 'crypto'
 import { logger } from '../../../utils/logger'
 import type { 
   IFreshnessPolicyEngine, 

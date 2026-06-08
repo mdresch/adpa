@@ -1617,6 +1617,8 @@ ${auditSample}
     while (true) {
       const span = this.findFlexibleWhitespaceSpan(result, parts)
       if (!span) break
+      const matchedText = result.slice(span.start, span.end)
+      if (matchedText === replacement) break
       result = result.slice(0, span.start) + replacement + result.slice(span.end)
       replacedAny = true
     }

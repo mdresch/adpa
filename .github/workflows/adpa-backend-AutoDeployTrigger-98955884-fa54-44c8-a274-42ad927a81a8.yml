@@ -33,7 +33,7 @@ jobs:
 
       - name: Build and push container image to registry
         run: |
-          docker login adparepo.azurecr.io -u "${{ secrets.ADPABACKEND_REGISTRY_USERNAME }}" -p "${{ secrets.ADPABACKEND_REGISTRY_PASSWORD }}"
+          echo "${{ secrets.ADPABACKEND_REGISTRY_PASSWORD }}" | docker login adparepo.azurecr.io -u "${{ secrets.ADPABACKEND_REGISTRY_USERNAME }}" --password-stdin
           docker build -t adparepo.azurecr.io/adpa-backend:${{ github.sha }} ./server
           docker push adparepo.azurecr.io/adpa-backend:${{ github.sha }}
 

@@ -3,6 +3,7 @@
  * Manages role-based access control for context data retrieval
  */
 
+import { randomUUID } from 'crypto'
 import { logger } from '../../utils/logger'
 import { pool } from '../../database/connection'
 import { AccessControlEngine } from './services/accessControlEngine'

@@ -12,7 +12,7 @@ import { Progress } from '@/components/ui/progress'
 import { Loader2, Sparkles, CheckCircle, XCircle, Clock, TrendingUp, AlertTriangle, Info, Zap, Code, FileText, ArrowRight } from 'lucide-react'
 import { toast } from '@/lib/notify'
 import { SideBySideDiff } from '@/components/drift/SideBySideDiff'
-import { getApiBaseUrl } from '@/lib/api-url'
+import { getApiBaseUrl, getApiUrl } from '@/lib/api-url'
 
 interface TemplateSuggestion {
   id: string
@@ -181,16 +181,12 @@ export function TemplateRecommendations({ templateId }: { templateId: string }) 
     try {
       setApplyingOptimization(true)
 
-      const apiBase = new URL(getApiBaseUrl())
-      if (apiBase.protocol !== 'http:' && apiBase.protocol !== 'https:') {
-        throw new Error('Unsupported API base URL protocol')
-      }
       // Use different endpoint for regular suggestions vs AI optimizations
       const endpoint = isRegularSuggestion
-        ? new URL(`/quality-audits/template-improvements/${encodeURIComponent(suggestionId)}/implement`, apiBase)
-        : new URL(`/quality-audits/template-optimization/${encodeURIComponent(suggestionId)}/apply`, apiBase)
+        ? getApiUrl(`/quality-audits/template-improvements/${encodeURIComponent(suggestionId)}/implement`)
+        : getApiUrl(`/quality-audits/template-optimization/${encodeURIComponent(suggestionId)}/apply`)
 
-      const response = await fetch(endpoint.toString(), {
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
