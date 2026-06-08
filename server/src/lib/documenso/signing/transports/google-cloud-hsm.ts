@@ -1,11 +1,9 @@
 import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 
 import { signWithGCloud } from '@documenso/pdf-sign';
 
 import { env } from '../../utils/env';
-import { isPathContained } from '../../../../utils/pathSecurity';
+import { ensureGoogleApplicationCredentialsFile } from '../../../../utils/pathSecurity';
 import { addSigningPlaceholder } from '../helpers/add-signing-placeholder';
 import { updateSigningPlaceholder } from '../helpers/update-signing-placeholder';
 
@@ -27,24 +25,9 @@ export const signWithGoogleCloudHSM = async ({ pdf }: SignWithGoogleCloudHSMOpti
   // To handle hosting in serverless environments like Vercel we can supply the base64 encoded
   // application credentials as an environment variable and write it to a file if it doesn't exist
   if (googleApplicationCredentialsContents) {
-    const credentialsDir = path.join(os.tmpdir(), 'adpa-documenso');
-    const credentialsPath = path.join(credentialsDir, 'google-application-credentials.json');
-
-    // Security check: ensure credentials path stays within temp directory
-    const resolvedCredentialsPath = path.resolve(credentialsPath);
-    const resolvedTmpDir = path.resolve(os.tmpdir());
-    
-    if (!isPathContained(resolvedCredentialsPath, resolvedTmpDir)) {
-      throw new Error('Invalid credentials path: path traversal detected');
-    }
-
-    if (!fs.existsSync(credentialsPath)) {
-      const contents = new Uint8Array(Buffer.from(googleApplicationCredentialsContents, 'base64'));
-      fs.mkdirSync(credentialsDir, { recursive: true, mode: 0o700 });
-      fs.writeFileSync(credentialsPath, contents, { mode: 0o600 });
-    }
-
-    process.env.GOOGLE_APPLICATION_CREDENTIALS = credentialsPath;
+    process.env.GOOGLE_APPLICATION_CREDENTIALS = ensureGoogleApplicationCredentialsFile(
+      googleApplicationCredentialsContents,
+    );
   }
 
   const { pdf: pdfWithPlaceholder, byteRange } = updateSigningPlaceholder({

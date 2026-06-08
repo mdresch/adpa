@@ -12,7 +12,7 @@ import fs from 'fs/promises'
 import { adobePdfService } from '../services/adobePdfService'
 import { authMiddleware } from '../middleware/auth'
 import { logger, childLogger } from '../utils/logger'
-import { sanitizeFilename, isPathContained } from '../utils/pathSecurity'
+import { createSafePath } from '../utils/pathSecurity'
 
 const router = Router()
 
@@ -395,24 +395,15 @@ router.get('/download/:filename',
       }
 
       const { filename } = req.params
-      const sanitized = sanitizeFilename(filename)
-      if (!sanitized) {
+      const outputDir = process.env.ADOBE_OUTPUT_DIR || './generated-documents/adobe-pdf'
+      const resolvedPath = createSafePath(path.resolve(outputDir), filename)
+      if (!resolvedPath) {
         return res.status(400).json({
           success: false,
           error: 'Invalid filename: contains forbidden characters or path traversal'
         })
       }
-      const outputDir = process.env.ADOBE_OUTPUT_DIR || './generated-documents/adobe-pdf'
-      const resolvedPath = path.resolve(outputDir, sanitized)
-      const resolvedOutputDir = path.resolve(outputDir)
-
-      // Security check: ensure resolved path stays within output directory
-      if (!isPathContained(resolvedPath, resolvedOutputDir)) {
-        return res.status(403).json({
-          success: false,
-          error: 'Access denied: path traversal detected'
-        })
-      }
+      const safeFilename = path.basename(resolvedPath)
 
       // Check if file exists
       try {
@@ -425,6 +416,8 @@ router.get('/download/:filename',
       }
 
       // Get file stats
+      // nosemgrep: javascript.express.security.audit.path-traversal.path-traversal, javascript.node.security.path-traversal
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
       const stats = await fs.stat(resolvedPath)
       const fileExtension = path.extname(safeFilename).toLowerCase()
 
@@ -460,6 +453,8 @@ router.get('/download/:filename',
       res.setHeader('Content-Length', stats.size)
       res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`)
 
+      // nosemgrep: javascript.express.security.audit.path-traversal.path-traversal, javascript.node.security.path-traversal
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
       const stream = createReadStream(resolvedPath)
       stream.on('error', (streamError) => {
         const log = childLogger({ requestId: (req as any).requestId })

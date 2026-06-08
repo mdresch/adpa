@@ -1,8 +1,9 @@
 import db from "../lib/db"
 import { readFileSync, readdirSync, statSync } from "fs"
-import { join, extname, resolve } from "path"
+import path from "path"
+import { extname } from "path"
 import { logger } from "../utils/logger"
-import { isPathContained } from "../utils/pathSecurity"
+import { isPathContained, resolveSafeChildPath } from "../utils/pathSecurity"
 
 // Uses shared DB singleton via `server/src/lib/db.ts`
 
@@ -160,12 +161,20 @@ async function findOrCreateAdpaProject(): Promise<string> {
 
 function getAllMarkdownFiles(dir: string, baseDir: string = dir): string[] {
   const files: string[] = []
-  const items = readdirSync(dir)
+  // nosemgrep: javascript.express.security.audit.path-traversal.path-traversal, javascript.node.security.path-traversal
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  const rootPath = path.resolve(baseDir)
+  // nosemgrep: javascript.express.security.audit.path-traversal.path-traversal, javascript.node.security.path-traversal
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  const currentDir = path.resolve(dir)
+  if (!isPathContained(currentDir, rootPath)) {
+    return files
+  }
+  const items = readdirSync(currentDir)
 
   for (const item of items) {
-    const rootPath = resolve(dir)
-    const fullPath = resolve(dir, item)
-    if (!isPathContained(fullPath, rootPath)) {
+    const fullPath = resolveSafeChildPath(currentDir, item)
+    if (!fullPath || !isPathContained(fullPath, rootPath)) {
       continue
     }
     const stat = statSync(fullPath)
@@ -244,7 +253,9 @@ async function seedAdpaDocuments() {
     const projectId = await findOrCreateAdpaProject()
 
     // Get generated documents directory
-    const documentsDir = join(process.cwd(), "..", "generated-documents")
+    // nosemgrep: javascript.express.security.audit.path-traversal.path-traversal, javascript.node.security.path-traversal
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    const documentsDir = path.join(process.cwd(), "..", "generated-documents")
 
     logger.info(`Looking for documents in: ${documentsDir}`)
 
