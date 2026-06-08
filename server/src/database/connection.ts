@@ -265,14 +265,12 @@ function patchPoolQuery(p: Pool) {
           throw new DatabaseCircuitOpenError()
         }
 
-        let lastErr: unknown
         for (let attempt = 0; attempt <= POOL_QUERY_MAX_RETRIES; attempt++) {
           try {
             const res = await orig(text, params)
             dbBreaker.recordSuccess()
             return res
           } catch (err: any) {
-            lastErr = err
             if (attempt < POOL_QUERY_MAX_RETRIES && isTransientPoolError(err)) {
               logger.warn('[DB-GUARD] Transient pool error, retrying query', {
                 attempt: attempt + 1,
@@ -291,7 +289,6 @@ function patchPoolQuery(p: Pool) {
             throw err
           }
         }
-        throw lastErr
       }
   } catch (err) {
     // ignore
