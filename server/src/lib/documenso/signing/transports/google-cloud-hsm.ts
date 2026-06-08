@@ -5,7 +5,7 @@ import path from 'node:path';
 import { signWithGCloud } from '@documenso/pdf-sign';
 
 import { env } from '../../utils/env';
-import { isPathContained } from '../../../utils/pathSecurity';
+import { isPathContained } from '../../../../utils/pathSecurity';
 import { addSigningPlaceholder } from '../helpers/add-signing-placeholder';
 import { updateSigningPlaceholder } from '../helpers/update-signing-placeholder';
 

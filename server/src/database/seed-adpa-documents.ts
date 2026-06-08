@@ -1,6 +1,6 @@
 import db from "../lib/db"
 import { readFileSync, readdirSync, statSync } from "fs"
-import { join, extname, resolve, sep } from "path"
+import { join, extname, resolve } from "path"
 import { logger } from "../utils/logger"
 import { isPathContained } from "../utils/pathSecurity"
 
