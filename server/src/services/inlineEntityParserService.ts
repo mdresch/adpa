@@ -231,7 +231,7 @@ export class InlineEntityParserService {
    */
   public static async parseAndProcess(params: {
     projectId: string;
-    userId: string;
+    userId: string | null;
     documentId?: string;
     markdown: string;
     providedEntities?: Array<{ name: string; type: string }>;
@@ -373,6 +373,8 @@ export class InlineEntityParserService {
       i++;
     }
 
+    const persistFailures: string[] = [];
+
     if (persist) {
       // Ensure registry is initialized
       const { extractionRegistry, initializeRegistry } = await import('./extraction/ExtractionRegistry');
@@ -391,6 +393,9 @@ export class InlineEntityParserService {
           try {
             await saveSingleEntityType(projectId, userId, entityType, entities);
           } catch (err) {
+            const message =
+              err instanceof Error ? err.message : String(err);
+            persistFailures.push(`${entityType}: ${message}`);
             console.error(`Failed to save inline entities of type ${entityType}:`, err);
           }
         }
@@ -452,6 +457,7 @@ export class InlineEntityParserService {
       entitiesByType: entityGroups,
       contextConsistencyStats,
       entityExtractionQuality,
+      persistFailures,
     };
   }
 

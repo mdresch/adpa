@@ -666,7 +666,7 @@ export class DocumentsController {
             const { enqueueEntityPersistence } = await import('../../services/jobs/enqueueEntityPersistence');
             await enqueueEntityPersistence({
                 projectId: document.project_id,
-                userId: req.user?.id || 'system',
+                userId: req.user?.id ?? null,
                 documentId: document.id,
                 content: document.content,
                 triggeredBy: 'document-create',

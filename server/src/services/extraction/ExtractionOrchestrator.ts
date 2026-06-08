@@ -211,7 +211,7 @@ export async function extractSingleEntityTypeDetailed(
  */
 export async function saveSingleEntityType(
   projectId: string,
-  userId: string,
+  userId: string | null,
   entityType: string,
   entities: any[],
   correlationId?: string

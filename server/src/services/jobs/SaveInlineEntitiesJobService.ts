@@ -77,12 +77,19 @@ export class SaveInlineEntitiesJobService {
 
     const parseResult = await InlineEntityParserService.parseAndProcess({
       projectId,
-      userId: userId || 'system',
+      userId,
       documentId,
       markdown,
       providedEntities,
       persist: true,
     })
+
+    if (parseResult.persistFailures.length > 0) {
+      const errorMessage = `Domain persistence failed for ${parseResult.persistFailures.length} entity type(s): ${parseResult.persistFailures.join('; ')}`
+      logger.error(`[SAVE-INLINE-ENTITIES] ${errorMessage}`, { jobId, documentId, projectId })
+      await updateJobStatus(jobId, 'failed', 100, workerId, 'ai-processing', errorMessage)
+      throw new Error(errorMessage)
+    }
 
     const counts = parseResult.extractedCountByType || {}
     if (parseResult.extractedCount > 0) {

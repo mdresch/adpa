@@ -357,7 +357,10 @@ export default function DocumentEntitiesPage() {
     try {
       setLoading(true)
       const authToken = token || localStorage.getItem('auth_token')
-      if (!authToken) return
+      if (!authToken) {
+        setLoading(false)
+        return
+      }
 
       const apiUrl = getApiUrl(`/project-data-extraction/document/${docId}/entities`)
 

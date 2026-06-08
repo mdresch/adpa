@@ -14,7 +14,10 @@ async function main() {
     `SELECT id, name, project_id, template_id, created_at,
             length(content) AS content_len,
             entity_counts,
-            generation_metadata->>'jobId' AS job_id
+            COALESCE(
+              generation_metadata->>'job_id',
+              generation_metadata->'generation'->>'job_id'
+            ) AS job_id
      FROM documents
      WHERE template_id = $1 AND deleted_at IS NULL
      ORDER BY created_at DESC

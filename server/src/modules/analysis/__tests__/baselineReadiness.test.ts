@@ -58,6 +58,29 @@ describe('baselineReadiness', () => {
     expect(docs.hasSchedulePlan).toBe(true);
   });
 
+  it('recognizes canonical singular/PMBOK8 entity_count keys for triple constraint', () => {
+    expect(
+      assessTripleConstraint({
+        is_approved: true,
+        entity_count: {
+          scope_item: 4,
+          schedule_activities: 12,
+          budget_baselines: 2,
+        },
+      })
+    ).toBe(true);
+
+    expect(
+      assessTripleConstraint({
+        is_approved: true,
+        entity_count: {
+          scope_item: 4,
+          schedule_activities: 12,
+        },
+      })
+    ).toBe(false);
+  });
+
   it('requires approval for triple constraint assessment', () => {
     expect(
       assessTripleConstraint({

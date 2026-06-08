@@ -591,7 +591,7 @@ export class AIGenerationJobService {
             const { enqueueEntityPersistence } = await import('../jobs/enqueueEntityPersistence')
             const entityJobId = await enqueueEntityPersistence({
               projectId: projectIdForDoc,
-              userId: userId || undefined,
+              userId: userId ?? null,
               documentId: createdDocumentId,
               content: docContent,
               parentJobId: jobId,
@@ -692,6 +692,7 @@ export class AIGenerationJobService {
     const finalSourceDocuments = sourceDocuments || []
 
     return {
+      job_id: jobId,
       aiProcessing: {
         provider: result?.provider || provider,
         model: result?.model || model,

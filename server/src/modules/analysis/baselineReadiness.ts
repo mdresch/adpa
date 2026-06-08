@@ -48,6 +48,65 @@ export interface BaselineReadinessResult {
 const MIN_ENTITIES = 350;
 const MIN_COVERAGE = 60;
 
+/** Legacy plural keys and canonical singular/PMBOK8 keys written by inline extraction. */
+const SCOPE_BASELINE_COUNT_KEYS = [
+  'scope_items',
+  'scope_item',
+  'deliverables',
+  'deliverable',
+  'requirements',
+  'requirement',
+  'scope_baselines',
+  'scope_baseline',
+  'wbs_nodes',
+  'wbs_node',
+  'scope_change_requests',
+  'scope_change_request',
+  'requirements_traceability',
+  'scope_verification',
+] as const;
+
+const SCHEDULE_BASELINE_COUNT_KEYS = [
+  'milestones',
+  'milestone',
+  'phases',
+  'phase',
+  'activities',
+  'activity',
+  'schedule_activities',
+  'schedule_activity',
+  'schedule_baselines',
+  'schedule_baseline',
+  'critical_path_activities',
+  'critical_path_activity',
+  'schedule_variances',
+  'schedule_variance',
+  'schedule_forecasts',
+  'schedule_forecast',
+] as const;
+
+const COST_BASELINE_COUNT_KEYS = [
+  'budget_items',
+  'budget_item',
+  'budget_baselines',
+  'budget_baseline',
+  'cost_estimates',
+  'cost_estimate',
+  'cost_actuals',
+  'cost_actual',
+  'financial_entities',
+  'financial_entity',
+  'earned_value_metrics',
+  'earned_value_metric',
+] as const;
+
+function sumEntityCounts(
+  counts: Record<string, number>,
+  keys: readonly string[]
+): number {
+  return keys.reduce((sum, key) => sum + (Number(counts[key]) || 0), 0);
+}
+
 function normalizeTitle(doc: DocumentTitleRef): string {
   return (doc.title || doc.name || '').toLowerCase();
 }
@@ -80,18 +139,9 @@ export function assessTripleConstraint(
   }
 
   const counts = activeBaseline.entity_count || {};
-  const scopeCount =
-    (counts.scope_items || 0) +
-    (counts.deliverables || 0) +
-    (counts.requirements || 0);
-  const scheduleCount =
-    (counts.milestones || 0) +
-    (counts.phases || 0) +
-    (counts.activities || 0);
-  const costCount =
-    (counts.budget_items || 0) +
-    (counts.cost_estimates || 0) +
-    (counts.financial_entities || 0);
+  const scopeCount = sumEntityCounts(counts, SCOPE_BASELINE_COUNT_KEYS);
+  const scheduleCount = sumEntityCounts(counts, SCHEDULE_BASELINE_COUNT_KEYS);
+  const costCount = sumEntityCounts(counts, COST_BASELINE_COUNT_KEYS);
 
   return scopeCount > 0 && scheduleCount > 0 && costCount > 0;
 }

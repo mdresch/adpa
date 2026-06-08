@@ -49,7 +49,7 @@ async function main() {
 
   const jobId = await enqueueEntityPersistence({
     projectId: row.project_id,
-    userId: row.created_by || 'system',
+    userId: row.created_by ?? null,
     documentId: docId!,
     content,
     triggeredBy: 'manual-backfill',

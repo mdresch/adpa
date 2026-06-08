@@ -12,7 +12,7 @@ import { addJob } from '../queueService'
 
 export interface EnqueueEntityPersistenceOptions {
   projectId: string
-  userId: string
+  userId: string | null
   documentId: string
   /** Document markdown; loaded from DB when omitted */
   content?: string
