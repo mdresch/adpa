@@ -6,7 +6,7 @@ import { getContextForStrategy } from "./gkg"
 import { z } from "zod"
 import { buildInlineEntityExtractionPrompt } from "./inlineEntityExtractionPrompt"
 import { v4 as uuidv4 } from "uuid"
-import { updateJobStatus } from "./queueService"
+import { updateJobStatus, updateJobLlmProgress, type LlmProgressStep } from "./queueService"
 import { CompactorService } from "./compactorService"
 
 export interface DocumentGenerationRequest {
@@ -329,6 +329,22 @@ class DocumentGenerationService {
 
       // 3. AGENTIC PHASE 1: Plan Document Structure (Research Plan)
       logger.info(`[AGENT] Phase 1: Planning Document Structure...`)
+      if (request.jobId) {
+        await updateJobLlmProgress(request.jobId, {
+          userId: request.userId,
+          currentStep: `Planning document structure (${request.provider}${request.model ? ` / ${request.model}` : ''})…`,
+          progress: 15,
+          llmProgressSteps: [{
+            id: 'planning',
+            phase: 'planning',
+            label: 'Plan document structure',
+            status: 'running',
+            provider: request.provider,
+            model: request.model,
+            startedAt: new Date().toISOString(),
+          }],
+        })
+      }
       const generationPlan = await this.planDocumentStructure({
         jobId: request.jobId,
         userPrompt: request.userPrompt,
@@ -346,6 +362,35 @@ class DocumentGenerationService {
       }
 
       logger.info(`[AGENT] Plan returned ${generationPlan.sections.length} required sections to draft.`)
+
+      if (request.jobId) {
+        const draftSteps: LlmProgressStep[] = generationPlan.sections.map((section, index) => ({
+          id: `draft-${index}`,
+          phase: 'drafting',
+          label: `Draft section ${index + 1}`,
+          heading: section.heading,
+          status: 'pending',
+          provider: request.provider,
+          model: request.model,
+        }))
+        await updateJobLlmProgress(request.jobId, {
+          userId: request.userId,
+          currentStep: `Planned ${generationPlan.sections.length} sections — drafting…`,
+          progress: 55,
+          llmProgressSteps: [
+            {
+              id: 'planning',
+              phase: 'planning',
+              label: 'Plan document structure',
+              status: 'completed',
+              provider: request.provider,
+              model: request.model,
+              completedAt: new Date().toISOString(),
+            },
+            ...draftSteps,
+          ],
+        })
+      }
 
       // 4. Extract global reference materials once
       const customContextItems = await this.fetchContextItems(request.projectId)
@@ -471,7 +516,7 @@ class DocumentGenerationService {
       // 6.7. FINAL PHASE: Entity Extraction & Synchronization (Post-Patching)
       // We run this AFTER the audit loop to ensure the final document contains the tags 
       // and the database reflects the final state of the document.
-      logger.info(`[AGENT] Final Phase: Syncing H8 Entities to Knowledge Graph...`)
+      logger.info(`[AGENT] Final Phase: Parsing H8 entities and queueing save-inline-entities job...`)
       if (request.jobId) await updateJobStatus(request.jobId, "processing", 85)
 
       const { InlineEntityParserService } = await import('./inlineEntityParserService')
@@ -480,8 +525,21 @@ class DocumentGenerationService {
         userId: request.userId,
         documentId: docId,
         markdown: markdown,
-        providedEntities: project.existing_entities || []
+        providedEntities: project.existing_entities || [],
+        templateName: template?.name || documentType,
+        templateCategory: template?.category || project.framework,
+        wordCount: markdown.split(/\s+/).filter(Boolean).length,
+        persist: false,
       })
+
+      // Entity persistence is enqueued after the document row is saved (AIGenerationJobService.createDocument)
+      // so extract-project-data reads final content from the DB. Parsing here is for CUR / quality metrics only.
+      if (parseResult.extractedCount === 0) {
+        logger.info(`[AGENT] No parseable H8 entities in draft — post-save enqueue will route to inline save or LLM extract`, {
+          documentId: docId,
+          hasRawH8Tags: markdown.split(/\r?\n/).some((l) => /^#{8}\s+/.test(l)),
+        })
+      }
 
       // The final markdown must retain the H8 tags for Mission Draco traceability
       const finalMarkdown = parseResult.cleanedMarkdown
@@ -701,10 +759,18 @@ ${summarySample}
         ? Math.round((weightedCUR / totalWeight) * 100)
         : 100
 
+      const contextConsistencyStats = parseResult.contextConsistencyStats
+      const entityExtractionQuality = parseResult.entityExtractionQuality
       const contextMatchingScore = finalCUR
+      const occurrenceConsistencyScore = contextConsistencyStats.occurrenceConsistencyScore
 
       // 7. Return structured result
-      logger.info(`[MISSION-DRACO] Generation Complete. Document: ${docId}, CUR Score: ${finalCUR}%, Chars: ${finalMarkdown.length}`)
+      logger.info(
+        `[MISSION-DRACO] Generation Complete. Document: ${docId}, CUR: ${finalCUR}%, ` +
+        `Consistency Wins: ${contextConsistencyStats.consistencyWins}/${contextConsistencyStats.totalOccurrences} tags, ` +
+        `Extraction Fit: ${entityExtractionQuality.overallFitScore}% (type ${entityExtractionQuality.typeFitScore}%, grounded ${entityExtractionQuality.contextGroundedScore}%), ` +
+        `Chars: ${finalMarkdown.length}`
+      )
       
       return {
         content: finalMarkdown,
@@ -716,6 +782,9 @@ ${summarySample}
           model: request.model || 'default',
           tokens_used: totalTokensUsed, 
           contextMatchingScore,
+          occurrenceConsistencyScore,
+          contextConsistencyStats,
+          entityExtractionQuality,
           appliedContextEntities: reusedEntityIdentities,
           context: {
             projectName: project.name,
@@ -1154,9 +1223,30 @@ Based on the type of error encountered, please follow these steps to resolve the
 
     const traceName = `agentic-doc-gen-draft-${params.order + 1}`
     const temperature = params.temperature || 0.5
+    const stepId = `draft-${params.order}`
+
+    if (params.jobId) {
+      await updateJobLlmProgress(params.jobId, {
+        userId: params.userId,
+        currentStep: `Drafting: ${params.task.heading} (${params.provider}${params.model ? ` / ${params.model}` : ''})…`,
+        patchStep: {
+          id: stepId,
+          patch: {
+            phase: 'drafting',
+            label: `Draft section ${params.order + 1}`,
+            heading: params.task.heading,
+            status: 'running',
+            provider: params.provider,
+            model: params.model,
+            startedAt: new Date().toISOString(),
+          },
+        },
+      })
+    }
 
     let responseMarkdown: string = "";
     let tokensUsed: number = 0;
+    let draftFailed = false;
     
     try {
       const aiResponse = await this.retryOnRateLimit(
@@ -1177,6 +1267,7 @@ Based on the type of error encountered, please follow these steps to resolve the
       responseMarkdown = aiResponse.content;
       tokensUsed = aiResponse.usage?.total_tokens || 0;
     } catch (e: any) {
+      draftFailed = true
       logger.error(`Failed to draft section ${params.task.heading} after retries`, e);
       responseMarkdown = `Error generating section: ${e instanceof Error ? e.message : String(e)}`;
     }
@@ -1194,6 +1285,20 @@ Based on the type of error encountered, please follow these steps to resolve the
       heading: params.task.heading,
       goal: params.task.goal,
     })
+
+    if (params.jobId) {
+      await updateJobLlmProgress(params.jobId, {
+        userId: params.userId,
+        patchStep: {
+          id: stepId,
+          patch: {
+            status: draftFailed ? 'failed' : 'completed',
+            completedAt: new Date().toISOString(),
+            ...(draftFailed ? { error: responseMarkdown } : {}),
+          },
+        },
+      })
+    }
 
     return {
       order: params.order,

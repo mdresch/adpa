@@ -12,6 +12,7 @@
  */
 export type JobType =
   | 'ai-generate'
+  | 'save-inline-entities'
   | 'document-convert'
   | 'baseline-extract'
   | 'extract-project-data'
@@ -63,6 +64,19 @@ export interface AIGenerationJobData extends BaseJobData {
   use_context?: boolean
   include_integrations?: boolean
   custom_context?: Record<string, unknown>
+}
+
+/**
+ * Save Inline Entities Job Data (H8 parse + persist, no LLM)
+ */
+export interface SaveInlineEntitiesJobData extends BaseJobData {
+  projectId: string
+  documentId: string
+  markdown?: string
+  parentJobId?: string
+  triggeredBy?: string
+  autoTriggered?: boolean
+  providedEntities?: Array<{ name: string; type: string }>
 }
 
 /**
@@ -205,6 +219,7 @@ export interface GkgReconcileJobData extends BaseJobData {
  */
 export type JobData =
   | AIGenerationJobData
+  | SaveInlineEntitiesJobData
   | DocumentConversionJobData
   | BaselineExtractionJobData
   | ProjectDataExtractionJobData

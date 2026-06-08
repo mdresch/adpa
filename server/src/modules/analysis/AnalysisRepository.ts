@@ -245,7 +245,10 @@ export class AnalysisRepository {
     const query = `
       SELECT * FROM entity_extractions
       WHERE status != 'deleted'
-      AND document_id = $1
+      AND (
+        document_id = $1
+        OR entity_data->'source_document_ids' ? $1::text
+      )
       ORDER BY entity_type ASC, extraction_confidence DESC
     `;
     

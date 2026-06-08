@@ -41,6 +41,26 @@ export const aiGenerationJobDataSchema = baseJobDataSchema.keys({
 })
 
 /**
+ * Save Inline Entities Job Data Schema
+ */
+export const saveInlineEntitiesJobDataSchema = baseJobDataSchema.keys({
+  projectId: Joi.string().uuid().required(),
+  documentId: Joi.string().uuid().required(),
+  markdown: Joi.string().allow('').optional(),
+  parentJobId: Joi.string().uuid().optional(),
+  triggeredBy: Joi.string().max(100).optional(),
+  autoTriggered: Joi.boolean().optional(),
+  providedEntities: Joi.array()
+    .items(
+      Joi.object({
+        name: Joi.string().required(),
+        type: Joi.string().required(),
+      })
+    )
+    .optional(),
+})
+
+/**
  * Document Conversion Job Data Schema
  */
 export const documentConversionJobDataSchema = baseJobDataSchema.keys({
@@ -92,6 +112,9 @@ export const projectDataExtractionJobDataSchema = baseJobDataSchema.keys({
   fallbackProvider: Joi.string().optional(),
   fallbackModel: Joi.string().optional(),
   documentIds: Joi.array().items(Joi.string().uuid()).optional(),
+  sourceDocumentId: Joi.string().uuid().optional(),
+  autoTriggered: Joi.boolean().optional(),
+  triggeredBy: Joi.string().max(100).optional(),
   domains: Joi.array()
     .items(Joi.string().valid(...PMBOK_DOMAINS))
     .max(PMBOK_DOMAINS.length)
@@ -200,6 +223,7 @@ export const gkgReconcileJobDataSchema = baseJobDataSchema.keys({
  */
 const jobTypeSchemaMap: Partial<Record<JobType, Joi.ObjectSchema>> = {
   'ai-generate': aiGenerationJobDataSchema,
+  'save-inline-entities': saveInlineEntitiesJobDataSchema,
   'document-convert': documentConversionJobDataSchema,
   'baseline-extract': baselineExtractionJobDataSchema,
   'extract-project-data': projectDataExtractionJobDataSchema,
@@ -343,6 +367,7 @@ export function validateJobType(type: string): JobType {
 
   const validTypes: JobType[] = [
     'ai-generate',
+    'save-inline-entities',
     'document-convert',
     'baseline-extract',
     'extract-project-data',

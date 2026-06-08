@@ -39,7 +39,18 @@ Context is retrieved based on:
 - **Primary**: Entities belonging to source documents defined in the document's `generation_metadata.source_documents` array.
 - **Fallback**: If no source documents are defined, context defaults to all other active entities in the same project, excluding the current document's own entities.
 
-### 3. Match Metadata
+### 3. Occurrence-Level Consistency Wins
+Each H8 inline tag that fuzzy-matches a provided context entity counts as **one consistency win** (not just the first unique mention). A stakeholder tagged 5× in one CMP yields **5 wins** — celebrating that the LLM found multiple use cases for the same context entity.
+
+`InlineEntityParserService` returns `contextConsistencyStats` on every parse:
+- `consistencyWins` — matched H8 tag count
+- `totalOccurrences` — all H8 tags
+- `occurrenceConsistencyScore` — wins ÷ totalOccurrences × 100
+- `winsByEntity[]` — per-entity occurrence breakdown (e.g. `{ name, occurrences: 5 }`)
+
+Persisted in `documents.generation_metadata.contextConsistencyStats` alongside weighted CUR (`contextMatchingScore`).
+
+### 4. Match Metadata
 Match details are recorded inside the JSONB block `entity_data.context_match` during insertions/updates:
 ```json
 {
@@ -53,7 +64,7 @@ Match details are recorded inside the JSONB block `entity_data.context_match` du
 }
 ```
 
-### 4. Retirement Loop
+### 5. Retirement Loop
 Whenever a document is processed or soft-deleted:
 - Stale references to the `documentId` are removed from `source_document_ids` inside the entities' `entity_data`.
 - If an entity's references drop to 0, it transitions to `'retired'` status and its `extraction_confidence` degrades to `0`.

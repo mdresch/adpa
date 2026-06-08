@@ -14,6 +14,29 @@ import { v4 as uuidv4 } from 'uuid'
 
 export type EntityType = string
 
+const ENTITY_EXTRACTION_ROW_STATUSES = new Set([
+  'active',
+  'deleted',
+  'retired',
+  'archived',
+  'pending',
+  'pending_review',
+])
+
+/** Row status for entity_extractions — review flags like PENDING_REVIEW live in entity_data._status only. */
+function normalizeEntityExtractionRowStatus(status: unknown): string {
+  const normalized = String(status ?? 'active').toLowerCase().trim()
+  return ENTITY_EXTRACTION_ROW_STATUSES.has(normalized) ? normalized : 'active'
+}
+
+function isEntityPendingReview(entity: ExtractedEntity): boolean {
+  const dataStatus = entity.entity_data?._status
+  if (typeof dataStatus === 'string' && dataStatus.toUpperCase() === 'PENDING_REVIEW') {
+    return true
+  }
+  return String(entity.status ?? '').toUpperCase() === 'PENDING_REVIEW'
+}
+
 export interface ExtractedEntity {
   id?: string
   entity_type: EntityType
@@ -528,7 +551,7 @@ ${content.substring(0, 15000)}` // Limit content to avoid token limits
     for (const entity of entities) {
       try {
         const confidence = entity.extraction_confidence || 50
-        const isVerified = this.shouldAutoVerify(confidence)
+        const isVerified = isEntityPendingReview(entity) ? false : this.shouldAutoVerify(confidence)
         const entityName = entity.entity_name ? entity.entity_name.trim() : 'Unnamed Entity'
         const entityType = entity.entity_type
 
@@ -713,7 +736,7 @@ ${content.substring(0, 15000)}` // Limit content to avoid token limits
             ai_provider: options.aiProvider || 'openai',
             ai_model: options.aiModel || 'gpt-4',
             related_entity_ids: entity.related_entity_ids || [],
-            status: entity.status || 'active',
+            status: normalizeEntityExtractionRowStatus(entity.status),
             is_verified: isVerified,
             verified_at: isVerified ? new Date().toISOString() : null,
             created_at: new Date().toISOString()
@@ -739,7 +762,7 @@ ${content.substring(0, 15000)}` // Limit content to avoid token limits
               options.aiProvider || 'openai',
               options.aiModel || 'gpt-4',
               entity.related_entity_ids || [],
-              entity.status || 'active',
+              normalizeEntityExtractionRowStatus(entity.status),
               isVerified,
               isVerified ? new Date() : null
             ]
@@ -792,7 +815,7 @@ ${content.substring(0, 15000)}` // Limit content to avoid token limits
          FROM entity_extractions 
          WHERE project_id = $1 
          AND status = 'active'
-         AND (document_id = $2 OR entity_data->'source_document_ids' ? $2)
+         AND (document_id = $2 OR entity_data->'source_document_ids' ? $2::text)
          AND NOT (id = ANY($3::uuid[]))`,
         [projectId, documentId, storedEntityIds.length > 0 ? storedEntityIds : ['00000000-0000-0000-0000-000000000000']]
       );
@@ -932,7 +955,7 @@ ${content.substring(0, 15000)}` // Limit content to avoid token limits
          FROM entity_extractions 
          WHERE project_id = $1 
          AND status = 'active'
-         AND (document_id = $2 OR entity_data->'source_document_ids' ? $2)`,
+         AND (document_id = $2 OR entity_data->'source_document_ids' ? $2::text)`,
         [projectId, documentId]
       );
 

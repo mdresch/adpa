@@ -21,6 +21,9 @@ At the **very end** of your section output, tag any entities you have introduced
 1. **Zero Synonym Tolerance**: You MUST use the EXACT names provided in the "Semantic Knowledge Graph" or "Existing Project Entities" sections. 
 2. **No Code Blocks**: Do NOT wrap H8 tags in triple backticks (\`\`\`). Emit them as plain text lines.
 3. **Flat Schema**: Do not add extra levels of nesting to the JSON objects.
+4. **One tag per line**: Every entity MUST be on its own line starting with exactly eight hash characters (\`########\`). NEVER omit the prefix. NEVER chain tags with backslashes (\\).
+5. **Invalid (will not parse)**: \`stakeholders: {"name":"A"}\\resources: {"name":"B"}\`
+6. **Valid**: \`######## stakeholders: {"name":"A"}\` then on the next line \`######## resources: {"name":"B"}\`
 
 Format:
 ######## entity_type: {"field": "value", ...}

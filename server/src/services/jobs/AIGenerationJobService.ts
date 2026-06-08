@@ -299,6 +299,10 @@ export class AIGenerationJobService {
         gkg_context_snapshot: agenticResult.gkg_context_snapshot,
         summaries: agenticResult.summaries,
         contextMatchingScore: agenticResult.metadata.contextMatchingScore,
+        occurrenceConsistencyScore: agenticResult.metadata.occurrenceConsistencyScore,
+        contextConsistencyStats: agenticResult.metadata.contextConsistencyStats,
+        entityExtractionQuality: agenticResult.metadata.entityExtractionQuality,
+        appliedContextEntities: agenticResult.metadata.appliedContextEntities,
         audit_log: agenticResult.audit_log,
         compliance_status: agenticResult.compliance_status,
         compliance_score: agenticResult.compliance_score
@@ -483,8 +487,39 @@ export class AIGenerationJobService {
       const totalTokens = result?.usage?.total_tokens || (inputTokens + outputTokens)
       const estimatedCost = AIGenerationJobService.calculateAICost(provider || 'openai', model || 'unknown', inputTokens, outputTokens)
 
-      const jobStartTime = jobData.started_at ? new Date(jobData.started_at) : new Date(jobData.timestamp || Date.now())
-      const processingTimeSec = ((new Date().getTime() - jobStartTime.getTime()) / 1000).toFixed(2)
+      let processingTimeMs = 0
+      const actualJobId = jobId || jobData.jobId
+      try {
+        if (actualJobId) {
+          const timingResult = await db.query(
+            `SELECT created_at, started_at, processing_started_at, completed_at FROM jobs WHERE id = $1`,
+            [actualJobId]
+          )
+          const row = timingResult.rows[0]
+          const startRaw = row?.started_at || row?.processing_started_at || row?.created_at || jobData.started_at
+          const endRaw = row?.completed_at
+          if (startRaw && endRaw) {
+            processingTimeMs = new Date(endRaw).getTime() - new Date(startRaw).getTime()
+          } else if (startRaw) {
+            processingTimeMs = Date.now() - new Date(startRaw).getTime()
+          }
+        }
+      } catch {
+        // Non-fatal — fall back below
+      }
+
+      if (processingTimeMs < 1000) {
+        const fallbackStart = jobData.started_at
+          ? new Date(jobData.started_at)
+          : jobData.timestamp
+            ? new Date(jobData.timestamp)
+            : null
+        if (fallbackStart) {
+          processingTimeMs = Date.now() - fallbackStart.getTime()
+        }
+      }
+
+      const processingTimeSec = (Math.max(processingTimeMs, 0) / 1000).toFixed(2)
 
       const generationMetadata = AIGenerationJobService.buildGenerationMetadata({
         result,
@@ -495,7 +530,7 @@ export class AIGenerationJobService {
         outputTokens,
         totalTokens,
         estimatedCost,
-        processingTimeMs: new Date().getTime() - jobStartTime.getTime(),
+        processingTimeMs: Math.max(processingTimeMs, 0),
         processingTimeSec,
         wordCount,
         characterCount,
@@ -504,7 +539,12 @@ export class AIGenerationJobService {
         qualityMetrics,
         jobId,
         sourceDocuments,
-        contextStats
+        contextStats,
+        contextMatchingScore: result?.contextMatchingScore,
+        occurrenceConsistencyScore: result?.occurrenceConsistencyScore,
+        contextConsistencyStats: result?.contextConsistencyStats,
+        entityExtractionQuality: result?.entityExtractionQuality,
+        appliedContextEntities: result?.appliedContextEntities,
       })
 
       const insertResult = await db.query(
@@ -545,6 +585,27 @@ export class AIGenerationJobService {
 
       if (insertResult.rows.length > 0) {
         createdDocumentId = insertResult.rows[0].id
+
+        if (projectIdForDoc && docContent.trim()) {
+          try {
+            const { enqueueEntityPersistence } = await import('../jobs/enqueueEntityPersistence')
+            const entityJobId = await enqueueEntityPersistence({
+              projectId: projectIdForDoc,
+              userId: userId || undefined,
+              documentId: createdDocumentId,
+              content: docContent,
+              parentJobId: jobId,
+              triggeredBy: 'ai-generate',
+              autoTriggered: true,
+            })
+            if (entityJobId) {
+              log.info(`[AI-JOB] Enqueued entity persistence ${entityJobId} for document ${createdDocumentId}`)
+            }
+          } catch (enqueueErr) {
+            log.error(`[AI-JOB] Failed to enqueue entity persistence for ${createdDocumentId}`, enqueueErr)
+          }
+        }
+
         if (template_id) {
           await AIGenerationJobService.incrementTemplateUsage(template_id, deps)
           await AIGenerationJobService.trackTemplateUsage({
@@ -621,7 +682,12 @@ export class AIGenerationJobService {
   }
 
   private static buildGenerationMetadata(options: any): any {
-    const { result, provider, model, temperature, inputTokens, outputTokens, totalTokens, estimatedCost, processingTimeMs, processingTimeSec, wordCount, characterCount, sentenceCount, paragraphCount, qualityMetrics, jobId, sourceDocuments, contextStats } = options
+    const {
+      result, provider, model, temperature, inputTokens, outputTokens, totalTokens, estimatedCost,
+      processingTimeMs, processingTimeSec, wordCount, characterCount, sentenceCount, paragraphCount,
+      qualityMetrics, jobId, sourceDocuments, contextStats, contextMatchingScore,
+      occurrenceConsistencyScore, contextConsistencyStats, entityExtractionQuality, appliedContextEntities,
+    } = options
 
     const finalSourceDocuments = sourceDocuments || []
 
@@ -635,10 +701,21 @@ export class AIGenerationJobService {
         processingTimeMs
       },
       generation: { generated_at: new Date().toISOString(), job_id: jobId, status: 'completed' },
-      contentMetrics: { wordCount, characterCount, sentenceCount, paragraphCount },
+      contentMetrics: {
+        wordCount,
+        characterCount,
+        sentenceCount,
+        paragraphCount,
+        readingTime: wordCount > 0 ? Math.ceil(wordCount / 250) : 0,
+      },
       qualityMetrics,
       source_documents: finalSourceDocuments,
-      context_stats: contextStats || null
+      context_stats: contextStats || null,
+      contextMatchingScore: contextMatchingScore ?? result?.contextMatchingScore ?? 0,
+      occurrenceConsistencyScore: occurrenceConsistencyScore ?? result?.occurrenceConsistencyScore ?? 0,
+      contextConsistencyStats: contextConsistencyStats ?? result?.contextConsistencyStats ?? null,
+      entityExtractionQuality: entityExtractionQuality ?? result?.entityExtractionQuality ?? null,
+      appliedContextEntities: appliedContextEntities ?? result?.appliedContextEntities ?? [],
     }
   }
 

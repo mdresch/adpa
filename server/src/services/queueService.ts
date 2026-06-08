@@ -199,6 +199,97 @@ export async function updateJobStatus(
   }
 }
 
+export type LlmProgressStepStatus = 'pending' | 'running' | 'completed' | 'failed'
+
+export interface LlmProgressStep {
+  id: string
+  phase: string
+  label: string
+  heading?: string
+  status: LlmProgressStepStatus
+  provider?: string
+  model?: string
+  startedAt?: string
+  completedAt?: string
+  error?: string
+}
+
+/** Updates AI generation progress steps and emits job:step-update for the Job Monitor. */
+export async function updateJobLlmProgress(
+  jobId: string,
+  update: {
+    userId?: string
+    currentStep?: string
+    progress?: number
+    llmProgressSteps?: LlmProgressStep[]
+    patchStep?: { id: string; patch: Partial<LlmProgressStep> }
+  }
+): Promise<void> {
+  if (!pool) return
+
+  try {
+    const row = await pool.query(
+      `SELECT created_by, progress, data FROM jobs WHERE id = $1`,
+      [jobId]
+    )
+    if (row.rows.length === 0) return
+
+    const job = row.rows[0]
+    const data = (job.data && typeof job.data === 'object') ? job.data : {}
+    let steps: LlmProgressStep[] = Array.isArray(data.llmProgressSteps) ? [...data.llmProgressSteps] : []
+
+    if (update.llmProgressSteps) {
+      steps = update.llmProgressSteps
+    } else if (update.patchStep) {
+      const idx = steps.findIndex((s) => s.id === update.patchStep!.id)
+      if (idx >= 0) {
+        steps[idx] = { ...steps[idx], ...update.patchStep.patch }
+      } else {
+        steps.push({
+          id: update.patchStep.id,
+          phase: update.patchStep.patch.phase || 'drafting',
+          label: update.patchStep.patch.label || update.patchStep.id,
+          status: update.patchStep.patch.status || 'running',
+          ...update.patchStep.patch,
+        })
+      }
+    }
+
+    const llmRequestCount = Array.isArray(data.llm_insights?.requests)
+      ? data.llm_insights.requests.length
+      : (typeof data.llmRequestCount === 'number' ? data.llmRequestCount : 0)
+
+    const nextData = {
+      ...data,
+      llmProgressSteps: steps,
+      llmRequestCount,
+      ...(update.currentStep !== undefined ? { currentStep: update.currentStep } : {}),
+    }
+
+    const nextProgress = update.progress ?? job.progress ?? 0
+
+    await pool.query(
+      `UPDATE jobs SET data = $1::jsonb, progress = $2 WHERE id = $3`,
+      [JSON.stringify(nextData), nextProgress, jobId]
+    )
+
+    const userId = update.userId || job.created_by
+    io.emit('job:step-update', {
+      jobId,
+      userId,
+      currentStep: update.currentStep ?? data.currentStep,
+      progress: nextProgress,
+      llmProgressSteps: steps,
+      llmRequestCount,
+    })
+  } catch (error) {
+    logger.warn('Failed to update LLM progress steps for job monitor', {
+      jobId,
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
+}
+
 export function getQueueService() {
   return getQueueServiceInstance()
 }
@@ -256,6 +347,18 @@ aiQueue.process("ai-generate", QUEUE_PREFETCH, async (job) => {
 })
 
 logger.info(`[QUEUE] Registered ai-generate processor on aiQueue (Rabbit) with worker ID: ${WORKER_ID}`)
+
+aiQueue.process("save-inline-entities", QUEUE_PREFETCH, async (job) => {
+  const { SaveInlineEntitiesJobService } = await import("./jobs/SaveInlineEntitiesJobService")
+  const deps = await getQueueServiceDependencies()
+  return await SaveInlineEntitiesJobService.processJob(job as any, {
+    workerId: WORKER_ID,
+    updateJobStatus,
+    dependencies: deps,
+  })
+})
+
+logger.info(`[QUEUE] Registered save-inline-entities processor on aiQueue (Rabbit) with worker ID: ${WORKER_ID}`)
 
 // Document convert
 import("./jobs/DocumentConversionJobService").then(({ DocumentConversionJobService }) => {

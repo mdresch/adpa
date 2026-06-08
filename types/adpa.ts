@@ -20,12 +20,19 @@ export interface AIProcessing {
 }
 
 export interface ContentMetrics {
+  /** Legacy display format (locale-formatted string) */
   words?: string | number
   characters?: string | number
   sentences?: string | number
   paragraphs?: string | number
   avgWordsPerSentence?: string | number
+  averageWordsPerSentence?: string | number
   readingTime?: number
+  /** Canonical numeric fields from job / route metadata */
+  wordCount?: number
+  characterCount?: number
+  sentenceCount?: number
+  paragraphCount?: number
 }
 
 export interface QualityMetrics {
@@ -39,6 +46,7 @@ export interface QualityMetrics {
   contextRelevance?: number
   professionalQuality?: number
   standardsCompliance?: number
+  complexityScore?: number
 }
 
 export interface QualityGateCriterion {
@@ -74,6 +82,50 @@ export interface ContextStats {
   custom_metadata_included?: number | string
 }
 
+export interface ContextConsistencyWin {
+  name: string
+  type: string
+  occurrences: number
+  matchScore: number
+  method?: string
+  matchedContextName?: string
+}
+
+export interface ContextConsistencyStats {
+  totalOccurrences: number
+  consistencyWins: number
+  uniqueEntitiesTagged: number
+  uniqueContextEntitiesReused: number
+  occurrenceConsistencyScore: number
+  winsByEntity: ContextConsistencyWin[]
+}
+
+export type ExtractionConcern = 'too_many' | 'wrong_types' | 'off_context' | 'under_extracted'
+
+export type VolumeStatus = 'appropriate' | 'elevated' | 'high' | 'very_high' | 'low' | 'unknown'
+
+export interface EntityExtractionQuality {
+  typeFitScore: number
+  contextGroundedScore: number
+  volumeScore: number
+  overallFitScore: number
+  documentProfile: string | null
+  documentProfileLabel: string | null
+  extractedTypeCount: number
+  matchedTypeCount: number
+  totalEntityCount: number
+  unexpectedTypes: string[]
+  missingExpectedTypes: string[]
+  contextBackedTagCount: number
+  novelTagCount: number
+  totalTagCount: number
+  entitiesPer1000Words: number | null
+  volumeStatus: VolumeStatus
+  concerns: ExtractionConcern[]
+  diagnosisHeadline: string
+  diagnosisDetail: string
+}
+
 export interface GenerationMetadata {
   aiProcessing?: AIProcessing
   contentMetrics?: ContentMetrics
@@ -84,6 +136,10 @@ export interface GenerationMetadata {
   sourceDocuments?: any[]
   source_documents?: any[]
   context_stats?: ContextStats
+  contextConsistencyStats?: ContextConsistencyStats | null
+  entityExtractionQuality?: EntityExtractionQuality | null
+  contextMatchingScore?: number
+  occurrenceConsistencyScore?: number
   framework?: string
   wordCount?: number
   characterCount?: number
@@ -93,6 +149,9 @@ export interface GenerationMetadata {
   generation?: {
     durationFormatted?: string
     duration?: number
+    job_id?: string
+    status?: string
+    generated_at?: string
   }
   provider?: string
   model?: string
@@ -154,6 +213,7 @@ export interface ADPADocument {
   quality_audit_id?: string
   confluence_page_url?: string
   generation_metadata?: GenerationMetadata
+  context_snapshots?: Record<string, { summary?: string; timestamp?: string | null }>
   compression_ratio?: number
   original_size?: string
   compressed_size?: string

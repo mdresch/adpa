@@ -91,7 +91,11 @@ export async function initializeServerWithDependencyGraph(
       `[Bootstrap] ⚠️  Startup dependencies failed: ${initError?.message}. ` +
       `Server will keep running and retry DB connection in background.`
     )
-    startBackgroundDbRetry(startupManager)
+    const retryMs =
+      process.env.NODE_ENV === 'development'
+        ? Number(process.env.DB_BACKGROUND_RETRY_MS || 10_000)
+        : 30_000
+    startBackgroundDbRetry(startupManager, retryMs)
 
     // Skip jobs that require a working DB — they can't run yet
     return

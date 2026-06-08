@@ -141,7 +141,7 @@ const getPriorityColor = (priority: string) => {
 
 export default function JobMonitorPage() {
   const searchParams = useSearchParams()
-  const { user, hasPermission } = useAuth()
+  const { user, hasPermission, loading: authLoading, isAuthenticated } = useAuth()
   const { isConnected } = useWebSocket()
   const jobUpdates = useJobUpdates()
 
@@ -155,9 +155,42 @@ export default function JobMonitorPage() {
   const [workers, setWorkers] = React.useState<any[]>([])
   const [metrics, setMetrics] = React.useState<any>({})
   const [loading, setLoading] = React.useState(true)
+  const [jobsLoadError, setJobsLoadError] = React.useState<string | null>(null)
   const [loadingQueues, setLoadingQueues] = React.useState(true)
   const [loadingWorkers, setLoadingWorkers] = React.useState(true)
+  const [loadingLlmInsightsJobId, setLoadingLlmInsightsJobId] = React.useState<string | null>(null)
   const didScrollToQueryJobRef = React.useRef(false)
+
+  const loadLlmInsightsIfNeeded = React.useCallback(async (jobId: string) => {
+    let alreadyLoaded = false
+    setJobs((prev) => {
+      const current = prev.find((j) => j.id === jobId)
+      if (Array.isArray((current as any)?.metadata?.llmInsights?.requests)) {
+        alreadyLoaded = true
+      }
+      return prev
+    })
+    if (alreadyLoaded) return
+
+    setLoadingLlmInsightsJobId(jobId)
+    try {
+      const detail = await apiClient.getJob(jobId)
+      const llmInsights = (detail as any).metadata?.llmInsights
+      if (!llmInsights) return
+      setJobs((prev) =>
+        prev.map((j) =>
+          j.id === jobId
+            ? { ...j, metadata: { ...(j.metadata || {}), llmInsights } }
+            : j
+        )
+      )
+    } catch (error) {
+      console.error("Failed to load job LLM insights:", error)
+      toast.error("Failed to load LLM payload snapshots")
+    } finally {
+      setLoadingLlmInsightsJobId((id) => (id === jobId ? null : id))
+    }
+  }, [])
 
   const copyToClipboard = React.useCallback(async (text: string, label: string) => {
     try {
@@ -169,55 +202,83 @@ export default function JobMonitorPage() {
     }
   }, [])
 
-  // Fetch aggregate metrics
-  React.useEffect(() => {
-    const fetchJobs = async () => {
-      try {
-        // Check if user is admin/super_admin - if so, fetch all jobs
-        const userRole = user?.role?.toLowerCase()
-        const isAdminOrSuperAdmin = userRole === 'admin' || userRole === 'super_admin'
-        const canViewAllJobs = isAdminOrSuperAdmin || hasPermission('jobs.admin')
+  const canViewAllJobs = React.useMemo(() => {
+    const userRole = user?.role?.toLowerCase()
+    const isAdminOrSuperAdmin = userRole === "admin" || userRole === "super_admin"
+    return isAdminOrSuperAdmin || hasPermission("jobs.admin")
+  }, [user?.role, hasPermission])
 
-        const response = await apiClient.getJobs({
-          limit: 50,
-          allUsers: canViewAllJobs // Use admin endpoint if user has permission
-        })
-        const mappedJobs = response.jobs.map((job: any) => ({
-          ...job, // Spread all job fields first
-          name: job.name ?? "", // Then set defaults only if missing
-          priority: job.priority ?? "medium",
-          queue: job.queue ?? "",
-          logs: job.logs ?? [],
-          // Map error_message to error for consistency
-          error: job.error || job.error_message || job.metadata?.error_message || null,
-          // Extract project and document names from metadata to top level
-          projectName: job.metadata?.project_name || job.projectName,
-          documentName: job.metadata?.document_name || job.documentName,
-          metadata: {
-            ...(job.metadata || {}), // Preserve existing metadata
-            // Ensure progress fields are included
-            currentStep: job.metadata?.currentStep,
-            compressionProgress: job.metadata?.compressionProgress,
-            currentDocument: job.metadata?.currentDocument,
-            providerAssignments: job.metadata?.providerAssignments || []
-          }
-        }))
+  const fetchJobs = React.useCallback(async (options?: { silent?: boolean }) => {
+    if (authLoading) return
 
-        setJobs(mappedJobs)
-      } catch (error) {
-        console.error("Failed to fetch jobs:", error)
-        toast.error("Failed to load jobs")
-      } finally {
-        setLoading(false)
-      }
+    if (!isAuthenticated) {
+      setJobs([])
+      setJobsLoadError(null)
+      setLoading(false)
+      return
     }
 
-    fetchJobs()
+    try {
+      setJobsLoadError(null)
+      const response = await apiClient.getJobs({
+        limit: 50,
+        allUsers: canViewAllJobs,
+      })
+      const mappedJobs = (response.jobs ?? []).map((job: any) => ({
+        ...job,
+        name: job.name ?? "",
+        priority: job.priority ?? "medium",
+        queue: job.queue ?? "",
+        logs: job.logs ?? [],
+        error: job.error || job.error_message || job.metadata?.error_message || null,
+        projectName: job.metadata?.project_name || job.projectName,
+        documentName: job.metadata?.document_name || job.documentName,
+        metadata: {
+          ...(job.metadata || {}),
+          currentStep: job.metadata?.currentStep,
+          compressionProgress: job.metadata?.compressionProgress,
+          currentDocument: job.metadata?.currentDocument,
+          providerAssignments: job.metadata?.providerAssignments || [],
+          llmProgressSteps: job.metadata?.llmProgressSteps || [],
+          llmRequestCount: job.metadata?.llmRequestCount ?? 0,
+        },
+      }))
+      setJobs(mappedJobs)
+    } catch (error) {
+      console.error("Failed to fetch jobs:", error)
+      const status = (error as { status?: number })?.status
+      const message =
+        status === 401 || status === 403
+          ? "Sign in to view jobs"
+          : status === 503
+            ? "Database temporarily unavailable — try again shortly"
+            : "Failed to load jobs"
+      setJobsLoadError(message)
+      if (!options?.silent) {
+        if (status === 401 || status === 403) {
+          toast.error("Sign in to view jobs")
+        } else if (status === 503) {
+          toast.error("Database temporarily unavailable — retrying shortly")
+        } else {
+          toast.error("Failed to load jobs")
+        }
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [authLoading, isAuthenticated, canViewAllJobs])
 
-    // Refresh every 30 seconds
-    const interval = setInterval(fetchJobs, 30000)
+  React.useEffect(() => {
+    if (authLoading) return
+
+    setLoading(true)
+    void fetchJobs({ silent: true })
+
+    const interval = setInterval(() => {
+      void fetchJobs({ silent: true })
+    }, 30000)
     return () => clearInterval(interval)
-  }, [])
+  }, [authLoading, fetchJobs])
 
   // Deep-link: /jobs?jobId=<uuid> (e.g. after queuing document generation)
   React.useEffect(() => {
@@ -242,14 +303,15 @@ export default function JobMonitorPage() {
     })
   }, [searchParams, jobs])
 
-  // Fetch worker statistics
+  // Queue overview — auth-gated; slower poll to reduce DB load (7 queues × 2 queries each)
   React.useEffect(() => {
+    if (authLoading || !isAuthenticated) return
+
     const fetchQueues = async () => {
       try {
         const response = await apiClient.request<{ queues?: any[] }>('/queue-stats/overview', { suppressNotFoundError: true } as any)
         setQueues(response.queues || [])
       } catch (error: any) {
-        // Log error but don't fallback to mock data - show empty state instead
         if (error?.status !== 404 && error?.message !== 'Failed to fetch') {
           console.error("Failed to fetch queue stats:", error)
         }
@@ -259,21 +321,21 @@ export default function JobMonitorPage() {
       }
     }
 
-    fetchQueues()
+    void fetchQueues()
 
-    // Refresh every 10 seconds (more frequent for queue stats)
-    const interval = setInterval(fetchQueues, 10000)
+    const interval = setInterval(fetchQueues, 30000)
     return () => clearInterval(interval)
-  }, [])
+  }, [authLoading, isAuthenticated])
 
-  // Fetch aggregate metrics
+  // Worker stats — auth-gated; aligned with jobs refresh cadence
   React.useEffect(() => {
+    if (authLoading || !isAuthenticated) return
+
     const fetchWorkers = async () => {
       try {
         const response = await apiClient.request<{ workers?: any[] }>('/queue-stats/workers', { suppressNotFoundError: true } as any)
         setWorkers(response.workers || [])
       } catch (error: any) {
-        // Log error but don't fallback to mock data - show empty state instead
         if (error?.status !== 404 && error?.message !== 'Failed to fetch') {
           console.error("Failed to fetch worker stats:", error)
         }
@@ -283,33 +345,31 @@ export default function JobMonitorPage() {
       }
     }
 
-    fetchWorkers()
+    void fetchWorkers()
 
-    // Refresh every 5 seconds (real-time worker status)
-    const interval = setInterval(fetchWorkers, 5000)
+    const interval = setInterval(fetchWorkers, 30000)
     return () => clearInterval(interval)
-  }, [])
+  }, [authLoading, isAuthenticated])
 
-  // Update jobs with real-time data from WebSocket
   React.useEffect(() => {
+    if (authLoading || !isAuthenticated) return
+
     const fetchMetrics = async () => {
       try {
         const response = await apiClient.request('/queue-stats/metrics', { suppressNotFoundError: true } as any)
         setMetrics(response)
       } catch (error: any) {
-        // Gracefully handle unavailable metrics endpoint
         if (error?.status !== 404 && error?.message !== 'Failed to fetch') {
           console.error("Failed to fetch queue metrics:", error)
         }
       }
     }
 
-    fetchMetrics()
+    void fetchMetrics()
 
-    // Refresh every 15 seconds
-    const interval = setInterval(fetchMetrics, 15000)
+    const interval = setInterval(fetchMetrics, 30000)
     return () => clearInterval(interval)
-  }, [])
+  }, [authLoading, isAuthenticated])
 
   // Listen for real-time job progress updates
   React.useEffect(() => {
@@ -417,7 +477,9 @@ export default function JobMonitorPage() {
               currentDocument: data.currentDocument,
               activeDocuments: data.activeDocuments || [],
               providerAssignments: data.providerAssignments || [],
-              parallelCount: data.parallelCount || 0
+              parallelCount: data.parallelCount || 0,
+              llmProgressSteps: data.llmProgressSteps ?? job.metadata?.llmProgressSteps,
+              llmRequestCount: data.llmRequestCount ?? job.metadata?.llmRequestCount,
             }
           }
           : job
@@ -767,6 +829,28 @@ return (
                     </TabsList>
 
                     <TabsContent value="jobs" className="space-y-4">
+                      {jobsLoadError && !loading && jobs.length === 0 ? (
+                        <Card className="border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20">
+                          <CardContent className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 py-4">
+                            <div className="flex items-start gap-2 text-red-700 dark:text-red-300">
+                              <AlertCircle className="h-5 w-5 mt-0.5 shrink-0" />
+                              <p className="text-sm">{jobsLoadError}</p>
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setLoading(true)
+                                void fetchJobs()
+                              }}
+                            >
+                              <RefreshCw className="h-4 w-4 mr-1" />
+                              Retry
+                            </Button>
+                          </CardContent>
+                        </Card>
+                      ) : null}
+
                       {/* Pending Jobs Alert */}
                       {pendingJobs.length > 0 && (
                         <Card className="border-yellow-500/50 bg-yellow-50/50 dark:bg-yellow-900/10">
@@ -965,6 +1049,65 @@ return (
                                           )}
                                         </p>
 
+                                        {Array.isArray((job.metadata as any)?.llmProgressSteps) &&
+                                          (job.metadata as any).llmProgressSteps.length > 0 && (
+                                          <div className="mt-3 space-y-2 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/80 dark:bg-amber-900/20 p-3">
+                                            <div className="flex items-center justify-between text-xs">
+                                              <span className="font-semibold text-amber-900 dark:text-amber-100">
+                                                LLM generation steps
+                                              </span>
+                                              <span className="text-muted-foreground">
+                                                {(job.metadata as any).llmRequestCount ?? 0} request
+                                                {((job.metadata as any).llmRequestCount ?? 0) === 1 ? "" : "s"} captured
+                                              </span>
+                                            </div>
+                                            <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                                              {(job.metadata as any).llmProgressSteps.map((step: any) => {
+                                                const status = step.status || "pending"
+                                                const statusColor =
+                                                  status === "completed"
+                                                    ? "text-green-600 dark:text-green-400"
+                                                    : status === "running"
+                                                      ? "text-blue-600 dark:text-blue-400"
+                                                      : status === "failed"
+                                                        ? "text-red-600 dark:text-red-400"
+                                                        : "text-muted-foreground"
+                                                const statusIcon =
+                                                  status === "completed"
+                                                    ? "✓"
+                                                    : status === "running"
+                                                      ? "…"
+                                                      : status === "failed"
+                                                        ? "✗"
+                                                        : "○"
+                                                return (
+                                                  <div
+                                                    key={step.id}
+                                                    className={`flex items-start gap-2 text-xs p-2 rounded-md border ${
+                                                      status === "running"
+                                                        ? "border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/30"
+                                                        : "border-transparent bg-white/50 dark:bg-slate-950/30"
+                                                    }`}
+                                                  >
+                                                    <span className={`font-mono shrink-0 ${statusColor}`}>{statusIcon}</span>
+                                                    <div className="min-w-0 flex-1">
+                                                      <p className="font-medium truncate">{step.label}</p>
+                                                      {step.heading ? (
+                                                        <p className="text-muted-foreground truncate">{step.heading}</p>
+                                                      ) : null}
+                                                      <div className="flex flex-wrap gap-x-2 text-[10px] text-muted-foreground mt-0.5">
+                                                        {step.phase ? <span>{step.phase}</span> : null}
+                                                        {step.provider ? <span>{step.provider}</span> : null}
+                                                        {step.model ? <span>{step.model}</span> : null}
+                                                      </div>
+                                                    </div>
+                                                  </div>
+                                                )
+                                              })}
+                                            </div>
+                                          </div>
+                                        )}
+
                                         {/* Show compression progress for process-flow jobs */}
                                         {(job.metadata as any)?.compressionProgress && (
                                           <div className="mt-2 space-y-2">
@@ -1122,7 +1265,7 @@ return (
                                         <FileText className="h-4 w-4 mr-2" />
                                         View Logs
                                       </DropdownMenuItem>
-                                      {(job.status === "failed" || job.status === "processing" || job.status === "cancelled") && (
+                                      {(job.status === "failed" || job.status === "stuck" || job.status === "processing" || job.status === "cancelled") && (
                                         <DropdownMenuItem
                                           onSelect={async (e) => {
                                             e.preventDefault()
@@ -1136,7 +1279,7 @@ return (
                                           }}
                                         >
                                           <RefreshCw className="h-4 w-4 mr-2" />
-                                          {job.status === "processing" ? "Retry Stuck Job" : job.status === "cancelled" ? "Retry Cancelled Job" : "Retry Job"}
+                                          {job.status === "stuck" || job.status === "processing" ? "Retry Stuck Job" : job.status === "cancelled" ? "Retry Cancelled Job" : "Retry Job"}
                                         </DropdownMenuItem>
                                       )}
                                       {(job.status === "pending" || job.status === "processing") && (
@@ -1359,105 +1502,132 @@ return (
                                 )}
 
                                 {(() => {
+                                  const llmRequestCount = (job as any).metadata?.llmRequestCount ?? 0
                                   const llmRequests = Array.isArray((job as any).metadata?.llmInsights?.requests)
                                     ? (job as any).metadata.llmInsights.requests
                                     : []
 
-                                  if (llmRequests.length === 0) return null
+                                  if (llmRequestCount === 0 && llmRequests.length === 0) return null
+
+                                  const isLoadingLlm = loadingLlmInsightsJobId === job.id
+                                  const hasLoadedLlm = llmRequests.length > 0
+                                  const requestCount = llmRequestCount || llmRequests.length
 
                                   return (
-                                    <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
-                                      <h5 className="text-sm font-semibold mb-2">LLM Payload Sent</h5>
-                                      <p className="text-xs text-muted-foreground mb-3">
-                                        Full prompt snapshots captured after context assembly and before the provider request.
-                                      </p>
-                                      <div className="space-y-3">
-                                        {llmRequests.map((request: any, index: number) => {
-                                          const prompt = typeof request.prompt === "string" ? request.prompt : ""
-                                          const label = request.label || `${request.phase || "LLM"} request ${index + 1}`
+                                    <details
+                                      className="mb-4 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 group"
+                                      onToggle={(e) => {
+                                        if ((e.currentTarget as HTMLDetailsElement).open) {
+                                          void loadLlmInsightsIfNeeded(job.id)
+                                        }
+                                      }}
+                                    >
+                                      <summary className="cursor-pointer list-none p-3 text-sm font-semibold flex items-center gap-2 hover:bg-amber-100/50 dark:hover:bg-amber-900/30 rounded-lg transition-colors">
+                                        <span className="transition-transform duration-200 group-open:rotate-90 text-amber-700 dark:text-amber-300">▶</span>
+                                        LLM Payload Sent
+                                        <span className="text-xs font-normal text-muted-foreground">
+                                          ({requestCount} request{requestCount === 1 ? "" : "s"} — expand to load)
+                                        </span>
+                                      </summary>
+                                      <div className="px-3 pb-3">
+                                        <p className="text-xs text-muted-foreground mb-3">
+                                          Full prompt snapshots captured after context assembly and before the provider request.
+                                        </p>
+                                        {isLoadingLlm && !hasLoadedLlm ? (
+                                          <div className="text-sm text-muted-foreground py-2">
+                                            Loading LLM payload snapshots…
+                                          </div>
+                                        ) : !hasLoadedLlm ? (
+                                          <div className="text-sm text-muted-foreground py-2">
+                                            Expand this section to load prompt snapshots.
+                                          </div>
+                                        ) : (
+                                          <div className="space-y-3">
+                                            {llmRequests.map((request: any, index: number) => {
+                                              const prompt = typeof request.prompt === "string" ? request.prompt : ""
+                                              const label = request.label || `${request.phase || "LLM"} request ${index + 1}`
 
-                                          return (
-                                            <div key={`${request.traceName || request.phase || "llm"}-${index}`} className="rounded-md border border-amber-200 dark:border-amber-800 bg-white/70 dark:bg-slate-950/40 p-3">
-                                              <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                                                <div>
-                                                  <p className="text-sm font-medium">{label}</p>
-                                                  <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                                                    <span>Phase: {request.phase || "-"}</span>
-                                                    <span>Provider: {request.provider || "-"}</span>
-                                                    <span>Model: {request.model || "-"}</span>
-                                                    <span>Temperature: {request.temperature ?? "-"}</span>
-                                                    <span>{request.characterCount ?? prompt.length} chars</span>
-                                                  </div>
-                                                  {request.heading && (
-                                                    <p className="mt-1 text-xs text-muted-foreground">Section: {request.heading}</p>
-                                                  )}
-                                                </div>
-                                                <Button
-                                                  type="button"
-                                                  variant="outline"
-                                                  size="sm"
-                                                  className="h-8 shrink-0"
-                                                  onClick={() => copyToClipboard(prompt, label)}
-                                                >
-                                                  <Copy className="mr-2 h-3 w-3" />
-                                                  Copy
-                                                </Button>
-                                              </div>
-                                              <details className="mt-3" open={index === 0}>
-                                                <summary className="cursor-pointer text-xs font-medium text-amber-800 dark:text-amber-200 mb-2">
-                                                  Show full prompt & response
-                                                </summary>
-                                                <div className="space-y-4 pt-2">
-                                                  {/* Prompt Panel */}
-                                                  <div className="rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
-                                                    <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 px-3 py-2">
-                                                      <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider">System Prompt Payload</span>
-                                                      <Button
-                                                        type="button"
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        className="h-6 px-2 text-[10px] hover:bg-slate-200 dark:hover:bg-slate-700"
-                                                        onClick={() => copyToClipboard(prompt, "System Prompt")}
-                                                      >
-                                                        <Copy className="h-3 w-3 mr-1.5" /> Copy
-                                                      </Button>
-                                                    </div>
-                                                    <div className="p-3 bg-slate-50/50 dark:bg-slate-950/50">
-                                                      <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-slate-700 dark:text-slate-300">
-                                                        {prompt || "No prompt captured."}
-                                                      </pre>
-                                                    </div>
-                                                  </div>
-                                                  
-                                                  {/* Response Panel */}
-                                                  <div className="rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
-                                                    <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 px-3 py-2">
-                                                      <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider">AI Provider Response</span>
-                                                      {request.response && (
-                                                        <Button
-                                                          type="button"
-                                                          variant="ghost"
-                                                          size="sm"
-                                                          className="h-6 px-2 text-[10px] hover:bg-slate-200 dark:hover:bg-slate-700"
-                                                          onClick={() => copyToClipboard(request.response, "AI Response")}
-                                                        >
-                                                          <Copy className="h-3 w-3 mr-1.5" /> Copy
-                                                        </Button>
+                                              return (
+                                                <div key={`${request.traceName || request.phase || "llm"}-${index}`} className="rounded-md border border-amber-200 dark:border-amber-800 bg-white/70 dark:bg-slate-950/40 p-3">
+                                                  <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                                                    <div>
+                                                      <p className="text-sm font-medium">{label}</p>
+                                                      <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                                                        <span>Phase: {request.phase || "-"}</span>
+                                                        <span>Provider: {request.provider || "-"}</span>
+                                                        <span>Model: {request.model || "-"}</span>
+                                                        <span>Temperature: {request.temperature ?? "-"}</span>
+                                                        <span>{request.characterCount ?? prompt.length} chars</span>
+                                                      </div>
+                                                      {request.heading && (
+                                                        <p className="mt-1 text-xs text-muted-foreground">Section: {request.heading}</p>
                                                       )}
                                                     </div>
-                                                    <div className="p-3 bg-slate-50/50 dark:bg-slate-950/50">
-                                                      <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-slate-700 dark:text-slate-300">
-                                                        {request.response || "No response recorded (generation may have failed or is in progress)."}
-                                                      </pre>
-                                                    </div>
+                                                    <Button
+                                                      type="button"
+                                                      variant="outline"
+                                                      size="sm"
+                                                      className="h-8 shrink-0"
+                                                      onClick={() => copyToClipboard(prompt, label)}
+                                                    >
+                                                      <Copy className="mr-2 h-3 w-3" />
+                                                      Copy
+                                                    </Button>
                                                   </div>
+                                                  <details className="mt-3">
+                                                    <summary className="cursor-pointer text-xs font-medium text-amber-800 dark:text-amber-200 mb-2">
+                                                      Show full prompt & response
+                                                    </summary>
+                                                    <div className="space-y-4 pt-2">
+                                                      <div className="rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                                                        <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 px-3 py-2">
+                                                          <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider">System Prompt Payload</span>
+                                                          <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            className="h-6 px-2 text-[10px] hover:bg-slate-200 dark:hover:bg-slate-700"
+                                                            onClick={() => copyToClipboard(prompt, "System Prompt")}
+                                                          >
+                                                            <Copy className="h-3 w-3 mr-1.5" /> Copy
+                                                          </Button>
+                                                        </div>
+                                                        <div className="p-3 bg-slate-50/50 dark:bg-slate-950/50">
+                                                          <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-slate-700 dark:text-slate-300">
+                                                            {prompt || "No prompt captured."}
+                                                          </pre>
+                                                        </div>
+                                                      </div>
+                                                      <div className="rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                                                        <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 px-3 py-2">
+                                                          <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider">AI Provider Response</span>
+                                                          {request.response && (
+                                                            <Button
+                                                              type="button"
+                                                              variant="ghost"
+                                                              size="sm"
+                                                              className="h-6 px-2 text-[10px] hover:bg-slate-200 dark:hover:bg-slate-700"
+                                                              onClick={() => copyToClipboard(request.response, "AI Response")}
+                                                            >
+                                                              <Copy className="h-3 w-3 mr-1.5" /> Copy
+                                                            </Button>
+                                                          )}
+                                                        </div>
+                                                        <div className="p-3 bg-slate-50/50 dark:bg-slate-950/50">
+                                                          <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-slate-700 dark:text-slate-300">
+                                                            {request.response || "No response recorded (generation may have failed or is in progress)."}
+                                                          </pre>
+                                                        </div>
+                                                      </div>
+                                                    </div>
+                                                  </details>
                                                 </div>
-                                              </details>
-                                            </div>
-                                          )
-                                        })}
+                                              )
+                                            })}
+                                          </div>
+                                        )}
                                       </div>
-                                    </div>
+                                    </details>
                                   )
                                 })()}
 

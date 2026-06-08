@@ -12,6 +12,8 @@ import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { PageTransition } from "@/components/page-transition"
 import { AnimatedLayout, AnimatedCard } from "@/components/animated-layout"
+import { EntityExtractionQualityCard } from "@/components/documents/EntityExtractionQualityCard"
+import type { EntityExtractionQuality } from "@/types/adpa"
 import { motion } from "framer-motion"
 import { 
   trackEntityExtraction, 
@@ -274,7 +276,17 @@ export default function DocumentEntitiesPage() {
   const [primaryKnowledgeDomain, setPrimaryKnowledgeDomain] = useState<KnowledgeDomainKey | null>(null)
   const [secondaryKnowledgeDomains, setSecondaryKnowledgeDomains] = useState<KnowledgeDomainKey[]>([])
   const [contextMatchingScore, setContextMatchingScore] = useState<number | null>(null)
+  const [occurrenceConsistencyScore, setOccurrenceConsistencyScore] = useState<number | null>(null)
+  const [contextConsistencyStats, setContextConsistencyStats] = useState<{
+    totalOccurrences: number
+    consistencyWins: number
+    uniqueEntitiesTagged: number
+    uniqueContextEntitiesReused: number
+    occurrenceConsistencyScore: number
+    winsByEntity: Array<{ name: string; type: string; occurrences: number; matchScore: number }>
+  } | null>(null)
   const [appliedContextEntities, setAppliedContextEntities] = useState<any[]>([])
+  const [entityExtractionQuality, setEntityExtractionQuality] = useState<EntityExtractionQuality | null>(null)
   const [isExtracting, setIsExtracting] = useState(false)
   const [retiredExpanded, setRetiredExpanded] = useState(false)
 
@@ -287,6 +299,8 @@ export default function DocumentEntitiesPage() {
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const pollTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const statusClearTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const entitiesFetchAbortRef = useRef<AbortController | null>(null)
+  const lastEntitiesErrorToastRef = useRef<string | null>(null)
 
   // Cleanup function to clear both interval and timeout
   const cleanupPolling = () => {
@@ -309,57 +323,84 @@ export default function DocumentEntitiesPage() {
       router.push("/auth/login")
       return
     }
+
     void fetchDocumentEntities()
-    
-    // Track page engagement
+
     const startTime = Date.now()
     let interactionCount = 0
-    
+
     const handleInteraction = () => {
       interactionCount++
     }
-    
+
     document.addEventListener('click', handleInteraction)
     document.addEventListener('scroll', handleInteraction)
-    
+
     return () => {
-      // Calculate engagement when page unloads
+      entitiesFetchAbortRef.current?.abort()
+      entitiesFetchAbortRef.current = null
+      cleanupPolling()
+
       const timeSpent = Math.floor((Date.now() - startTime) / 1000)
       trackPageEngagement(`/projects/${projectId}/documents/${docId}/entities`, timeSpent, interactionCount)
-      
+
       document.removeEventListener('click', handleInteraction)
       document.removeEventListener('scroll', handleInteraction)
     }
-    
-    // Cleanup polling on unmount to prevent memory leaks and stale state updates
-    return () => {
-      cleanupPolling()
-    }
-  }, [docId, isAuthenticated, projectId])
+  }, [docId, isAuthenticated, projectId, token])
 
   const fetchDocumentEntities = async () => {
+    entitiesFetchAbortRef.current?.abort()
+    const abortController = new AbortController()
+    entitiesFetchAbortRef.current = abortController
+
     try {
       setLoading(true)
-      const apiUrl = getApiUrl(`/analysis/document/${docId}/entities`)
-      
-      const response = await fetch(apiUrl, {
-        headers: {
-          'Authorization': `Bearer ${token || localStorage.getItem('auth_token')}`
-        }
-      })
+      const authToken = token || localStorage.getItem('auth_token')
+      if (!authToken) return
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.error || `Failed to fetch entities (${response.status})`)
+      const apiUrl = getApiUrl(`/project-data-extraction/document/${docId}/entities`)
+
+      let response: Response | null = null
+      for (let attempt = 0; attempt <= 1; attempt++) {
+        response = await fetch(apiUrl, {
+          signal: abortController.signal,
+          headers: {
+            Authorization: `Bearer ${authToken}`,
+          },
+        })
+
+        const retriable =
+          !response.ok &&
+          (response.status >= 502 || response.status === 503 || response.status === 500)
+
+        if (response.ok || !retriable || attempt === 1) break
+
+        await new Promise((resolve) => setTimeout(resolve, 3000))
+        if (abortController.signal.aborted) return
+      }
+
+      if (!response?.ok) {
+        const errorData = await response!.json().catch(() => ({}))
+        const message =
+          typeof errorData.error === 'string'
+            ? errorData.error
+            : response!.status >= 502 || response!.status === 503
+              ? 'Backend is starting up — retry in a moment'
+              : `Failed to fetch entities (${response!.status})`
+        throw new Error(message)
       }
 
       const data = await response.json()
-      
+      lastEntitiesErrorToastRef.current = null
       setDocumentName(data.documentName || "Document")
       setEntityCounts(data.entityCounts || {})
       setEntityData(data.entities || {})
       setTotalEntities(data.totalEntities || 0)
       setContextMatchingScore(data.contextMatchingScore ?? null)
+      setOccurrenceConsistencyScore(data.occurrenceConsistencyScore ?? null)
+      setContextConsistencyStats(data.contextConsistencyStats ?? null)
+      setEntityExtractionQuality(data.entityExtractionQuality ?? null)
       setAppliedContextEntities(data.appliedContextEntities || [])
 
 
@@ -389,11 +430,21 @@ export default function DocumentEntitiesPage() {
       } else {
         setSecondaryKnowledgeDomains([])
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      if (error instanceof DOMException && error.name === 'AbortError') return
+
+      const message =
+        error instanceof Error ? error.message : 'Failed to load document entities'
       console.error('[DocumentEntities] Failed to fetch document entities:', error)
-      toast.error(error.message || 'Failed to load document entities')
+
+      if (lastEntitiesErrorToastRef.current !== message) {
+        lastEntitiesErrorToastRef.current = message
+        toast.error(message)
+      }
     } finally {
-      setLoading(false)
+      if (entitiesFetchAbortRef.current === abortController) {
+        setLoading(false)
+      }
     }
   }
 
@@ -872,6 +923,8 @@ export default function DocumentEntitiesPage() {
                     </CardContent>
                   </AnimatedCard>
 
+                  <EntityExtractionQualityCard quality={entityExtractionQuality} />
+
                   {/* Context Consistency Card */}
                   <AnimatedCard>
                     <CardHeader>
@@ -893,9 +946,13 @@ export default function DocumentEntitiesPage() {
                           const docIds = e.source_document_ids || (e.source_document_id ? [e.source_document_id] : [])
                           return docIds.length >= 2
                         }).length
-                        const consistencyScore = activeEntities.length > 0 
-                          ? Math.round((reusedCount / activeEntities.length) * 100) 
-                          : 0
+                        const consistencyWins = contextConsistencyStats?.consistencyWins ?? 0
+                        const totalTagOccurrences = contextConsistencyStats?.totalOccurrences ?? totalEntities
+                        const consistencyScore = occurrenceConsistencyScore
+                          ?? contextConsistencyStats?.occurrenceConsistencyScore
+                          ?? (activeEntities.length > 0
+                            ? Math.round((reusedCount / activeEntities.length) * 100)
+                            : 0)
                         
                         const radius = 36
                         const circumference = 2 * Math.PI * radius
@@ -928,21 +985,33 @@ export default function DocumentEntitiesPage() {
                                 </svg>
                                 <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
                                   <span className="text-lg font-bold">{consistencyScore}%</span>
-                                  <span className="text-[8px] text-muted-foreground uppercase tracking-wide">Reuse</span>
+                                  <span className="text-[8px] text-muted-foreground uppercase tracking-wide">Tag Reuse</span>
                                 </div>
                               </div>
                               <div>
                                 <h4 className="text-sm font-semibold">Consistency Score</h4>
                                 <p className="text-xs text-muted-foreground mt-1">
-                                  Percentage of reuse and matches against previous source documents.
+                                  Each H8 tag that reuses project context counts as a win — more mentions mean stronger consistency.
                                 </p>
+                                {contextMatchingScore != null && contextMatchingScore > 0 ? (
+                                  <p className="text-[10px] text-muted-foreground mt-1">
+                                    CUR (unique entities): {contextMatchingScore}%
+                                  </p>
+                                ) : null}
                               </div>
                             </div>
 
-                            <div className="grid grid-cols-3 gap-2 pt-3 border-t">
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-3 border-t">
+                              <div className="text-center p-2 bg-emerald-500/10 rounded border border-emerald-500/20">
+                                <div className="text-base font-bold text-emerald-600 dark:text-emerald-400">{consistencyWins}</div>
+                                <div className="text-[9px] text-muted-foreground uppercase font-medium">Consistency Wins</div>
+                                {totalTagOccurrences > 0 ? (
+                                  <div className="text-[8px] text-muted-foreground">of {totalTagOccurrences} tags</div>
+                                ) : null}
+                              </div>
                               <div className="text-center p-2 bg-muted/40 rounded">
                                 <div className="text-base font-bold text-emerald-600 dark:text-emerald-400">{reusedCount}</div>
-                                <div className="text-[9px] text-muted-foreground uppercase font-medium">Reused Context</div>
+                                <div className="text-[9px] text-muted-foreground uppercase font-medium">Unique Reused</div>
                               </div>
                               <div className="text-center p-2 bg-muted/40 rounded">
                                 <div className="text-base font-bold text-blue-600 dark:text-blue-400">{newCount}</div>
@@ -953,6 +1022,20 @@ export default function DocumentEntitiesPage() {
                                 <div className="text-[9px] text-muted-foreground uppercase font-medium">Core Candidates</div>
                               </div>
                             </div>
+
+                            {contextConsistencyStats?.winsByEntity && contextConsistencyStats.winsByEntity.length > 0 ? (
+                              <div className="pt-3 border-t space-y-1">
+                                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Top consistency wins</p>
+                                {contextConsistencyStats.winsByEntity.slice(0, 5).map((win) => (
+                                  <div key={`${win.type}-${win.name}`} className="flex items-center justify-between text-xs">
+                                    <span className="truncate pr-2">{win.name}</span>
+                                    <Badge variant="outline" className="shrink-0 border-emerald-500 text-emerald-700 dark:text-emerald-300">
+                                      {win.occurrences}× win
+                                    </Badge>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
                           </div>
                         )
                       })()}
@@ -1053,14 +1136,30 @@ export default function DocumentEntitiesPage() {
                           const activeForType = entitiesForType.filter(e => e.status !== 'retired')
                           const retiredForType = entitiesForType.filter(e => e.status === 'retired')
 
-                          const renderEntityCard = (entity: any, index: number) => (
+                          const winsByName = new Map(
+                            (contextConsistencyStats?.winsByEntity ?? []).map((w) => [
+                              w.name.toLowerCase().trim(),
+                              w.occurrences,
+                            ])
+                          )
+
+                          const renderEntityCard = (entity: any, index: number) => {
+                            const entityLabel = entity.name || entity.title || entity.description?.substring(0, 50) || `${getEntityTypeLabel(selectedEntityType)} #${index + 1}`
+                            const winCount = winsByName.get(String(entityLabel).toLowerCase().trim())
+
+                            return (
                             <Card key={entity.id || index} className="overflow-hidden border-l-4 border-l-primary">
                               <CardHeader className="pb-3">
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                   <CardTitle className="text-base">
-                                    {entity.name || entity.title || entity.description?.substring(0, 50) || `${getEntityTypeLabel(selectedEntityType)} #${index + 1}`}
+                                    {entityLabel}
                                   </CardTitle>
                                   <div className="flex flex-wrap gap-1">
+                                    {winCount && winCount > 1 ? (
+                                      <Badge variant="outline" className="border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-300 font-semibold">
+                                        {winCount}× Context Win
+                                      </Badge>
+                                    ) : null}
                                     {entity.status === 'retired' && (
                                       <Badge variant="secondary" className="bg-red-100 text-red-800 dark:bg-red-950/20 dark:text-red-300">
                                         Retired
@@ -1121,7 +1220,8 @@ export default function DocumentEntitiesPage() {
                                   })}
                               </CardContent>
                             </Card>
-                          )
+                            )
+                          }
 
                           return (
                             <>

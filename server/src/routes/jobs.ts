@@ -16,6 +16,7 @@ const router = express.Router()
 function getQueueNameFromType(jobType: string): string {
   const queueMap: Record<string, string> = {
     'ai-generate': 'ai-processing',
+    'save-inline-entities': 'ai-processing',
     'document-convert': 'document-processing',
     'pipeline-processing': 'pipeline-processing',
     'baseline-extract': 'baseline-processing',
@@ -79,6 +80,95 @@ function getQueueNameFromType(jobType: string): string {
   return jobType + '-queue'
 }
 
+function parseJobData(raw: unknown): Record<string, unknown> {
+  if (!raw) return {}
+  if (typeof raw === "string") {
+    try {
+      return JSON.parse(raw) as Record<string, unknown>
+    } catch {
+      return {}
+    }
+  }
+  if (typeof raw === "object") return raw as Record<string, unknown>
+  return {}
+}
+
+/** List endpoints only — omits large blobs (prompts, context, generated content). */
+const SLIM_JOB_DATA_SQL = `jsonb_build_object(
+  'childJobIds', CASE WHEN jsonb_typeof(j.data->'childJobIds') = 'array' THEN j.data->'childJobIds' ELSE '[]'::jsonb END,
+  'name', j.data->'name',
+  'documentName', j.data->'documentName',
+  'document_name', j.data->'document_name',
+  'template_name', j.data->'template_name',
+  'variables', jsonb_build_object(
+    'template_name', j.data->'variables'->'template_name',
+    'project_name', j.data->'variables'->'project_name',
+    'project_id', j.data->'variables'->'project_id'
+  ),
+  'projectName', j.data->'projectName',
+  'priority', j.data->'priority',
+  'provider', j.data->'provider',
+  'model', j.data->'model',
+  'temperature', j.data->'temperature',
+  'template_id', j.data->'template_id',
+  'projectId', j.data->'projectId',
+  'documentId', j.data->'documentId',
+  'document_id', j.data->'document_id',
+  'tokens', j.data->'tokens',
+  'llmRequestCount', COALESCE(jsonb_array_length(j.data->'llm_insights'->'requests'), 0),
+  'llmProgressSteps', COALESCE(j.data->'llmProgressSteps', '[]'::jsonb),
+  'worker_id', j.data->'worker_id',
+  'worker', j.data->'worker',
+  'currentStep', j.data->'currentStep',
+  'compressionProgress', j.data->'compressionProgress',
+  'currentDocument', j.data->'currentDocument',
+  'stepProgress', j.data->'stepProgress',
+  'activeDocuments', j.data->'activeDocuments',
+  'providerAssignments', j.data->'providerAssignments'
+) AS job_data`
+
+// Lightweight recent-activity feed for sidebar (no document joins / child-job fan-out)
+router.get(
+  "/activity",
+  authenticateToken,
+  validateQuery(
+    Joi.object({
+      limit: Joi.number().integer().min(1).max(20).default(5),
+      type: Joi.string().default("ai-generate"),
+    })
+  ),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { limit = 5, type = "ai-generate" } = req.query
+      const result = await pool.query(
+        `SELECT
+          j.id,
+          j.type,
+          j.status,
+          j.created_at AT TIME ZONE 'UTC' AS created_at,
+          COALESCE(j.project_name, j.data->>'projectName', j.data->'variables'->>'project_name') AS project_name,
+          COALESCE(j.template_name, j.data->>'template_name', j.data->'variables'->>'template_name') AS template_name,
+          COALESCE(j.document_name, j.data->>'documentName', j.data->>'name') AS document_name,
+          COALESCE(j.project_id::text, j.data->>'projectId', j.data->'variables'->>'project_id') AS project_id,
+          COALESCE(j.data->>'documentId', j.data->>'sourceDocumentId', j.data->'documentIds'->>0) AS document_id
+        FROM jobs j
+        WHERE j.created_by = $1 AND j.type = $2
+        ORDER BY j.created_at DESC
+        LIMIT $3`,
+        [req.user?.id, type, limit]
+      )
+      res.json({ jobs: result.rows })
+    } catch (error) {
+      log.error("Get job activity error:", error)
+      const message = error instanceof Error ? error.message : String(error)
+      const status =
+        message.includes("circuit open") || message.includes("temporarily unavailable") ? 503 : 500
+      res.status(status).json({ error: message })
+    }
+  }
+)
+
 // Get user's jobs
 router.get("/", 
   authenticateToken,
@@ -104,8 +194,7 @@ router.get("/",
           j.started_at AT TIME ZONE 'UTC' AS started_at, 
           j.completed_at AT TIME ZONE 'UTC' AS completed_at, 
           j.created_at AT TIME ZONE 'UTC' AS created_at,
-          j.data as job_data,
-          j.result,
+          ${SLIM_JOB_DATA_SQL},
           j.worker_id,
           j.worker_process_id,
           j.queue_name,
@@ -131,7 +220,7 @@ router.get("/",
           (CASE WHEN j.data->>'sourceDocumentId' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->>'sourceDocumentId')::uuid ELSE NULL END),
           (CASE WHEN j.data->'documentIds' IS NOT NULL AND jsonb_typeof(j.data->'documentIds') = 'array' AND jsonb_array_length(j.data->'documentIds') > 0 AND (j.data->'documentIds'->>0) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->'documentIds'->>0)::uuid ELSE NULL END)
         )
-        LEFT JOIN documents d2 ON d2.generation_metadata @> jsonb_build_object('job_id', j.id::text)
+        LEFT JOIN documents d2 ON d2.generation_metadata->>'job_id' = j.id::text
         LEFT JOIN users u ON j.created_by = u.id
         WHERE j.created_by = $1 AND NOT j.type LIKE 'extract-entity-%'
       `
@@ -159,7 +248,7 @@ router.get("/",
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       const allChildJobIds: string[] = []
       result.rows.forEach(job => {
-        const jobData = typeof job.job_data === 'string' ? JSON.parse(job.job_data) : (job.job_data || {})
+        const jobData = parseJobData(job.job_data)
         if (Array.isArray(jobData.childJobIds)) {
           // Limit to prevent OOM on massive child job arrays
           let count = 0;
@@ -215,7 +304,7 @@ router.get("/",
 
       // Format jobs with enriched data
       const enrichedJobs = result.rows.map(job => {
-        const jobData = job.job_data || {}
+        const jobData = parseJobData(job.job_data)
         
         // Build descriptive job name: "Document Name - Project Name" or fallback to template/type
         let jobName = ''
@@ -293,8 +382,11 @@ router.get("/",
             project_name: job.project_name || jobData.projectName || jobData.variables?.project_name,
             document_id: job.document_id,
             document_name: docName,
-            tokens: jobData.tokens || job.result?.usage,
-            llmInsights: jobData.llm_insights || null,
+            tokens: jobData.tokens,
+            llmRequestCount: typeof jobData.llmRequestCount === "number"
+              ? jobData.llmRequestCount
+              : (Array.isArray(jobData.llm_insights?.requests) ? jobData.llm_insights.requests.length : 0),
+            llmProgressSteps: Array.isArray(jobData.llmProgressSteps) ? jobData.llmProgressSteps : [],
             // Worker and queue information
             worker_id: job.worker_id,
             worker_process_id: job.worker_process_id,
@@ -308,6 +400,7 @@ router.get("/",
             currentDocument: jobData.currentDocument,
             stepProgress: jobData.stepProgress,
             activeDocuments: jobData.activeDocuments || [],
+            providerAssignments: jobData.providerAssignments || [],
             parallelCount: jobData.activeDocuments?.length || 0
           }
         }
@@ -324,7 +417,9 @@ router.get("/",
       })
     } catch (error) {
       log.error("Get jobs error:", error)
-      res.status(500).json({ error: error instanceof Error ? error.message : String(error) })
+      const message = error instanceof Error ? error.message : String(error)
+      const status = message.includes("circuit open") || message.includes("temporarily unavailable") ? 503 : 500
+      res.status(status).json({ error: message })
     }
   }
 )
@@ -414,7 +509,7 @@ router.get("/:id",
           (CASE WHEN j.data->>'sourceDocumentId' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->>'sourceDocumentId')::uuid ELSE NULL END),
           (CASE WHEN j.data->'documentIds' IS NOT NULL AND jsonb_typeof(j.data->'documentIds') = 'array' AND jsonb_array_length(j.data->'documentIds') > 0 AND (j.data->'documentIds'->>0) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->'documentIds'->>0)::uuid ELSE NULL END)
         )
-        LEFT JOIN documents d2 ON d2.generation_metadata @> jsonb_build_object('job_id', j.id::text)
+        LEFT JOIN documents d2 ON d2.generation_metadata->>'job_id' = j.id::text
         WHERE j.id = $1
       `,
         [id]
@@ -646,7 +741,6 @@ router.get("/admin/all",
     user_id: Joi.string().uuid().optional(),
   })),
   async (req: any, res: any) => {
-    console.log("HIT /admin/all route with query:", req.query);
     try {
       const { page = 1, limit = 10, status, type, user_id } = req.query
       const offset = (Number(page) - 1) * Number(limit)
@@ -658,16 +752,15 @@ router.get("/admin/all",
           j.status,
           j.progress,
           j.error_message,
-          j.data,
-          j.result,
+          ${SLIM_JOB_DATA_SQL},
           j.worker_id,
           j.worker_process_id,
           j.queue_name,
           j.queue_position,
           j.project_id,
-          COALESCE(j.project_name, p.name) as project_name,
-          j.template_name,
-          COALESCE(j.document_name, d1.name, d2.name) as document_name,
+          COALESCE(j.project_name, j.data->>'projectName', j.data->'variables'->>'project_name') as project_name,
+          COALESCE(j.template_name, j.data->>'template_name', j.data->'variables'->>'template_name') as template_name,
+          COALESCE(j.document_name, j.data->>'documentName', j.data->>'name') as document_name,
           j.created_by,
           j.started_at AT TIME ZONE 'UTC' AS started_at,
           j.completed_at AT TIME ZONE 'UTC' AS completed_at,
@@ -678,17 +771,6 @@ router.get("/admin/all",
           u.email as created_by_email
         FROM jobs j
         LEFT JOIN users u ON j.created_by = u.id
-        LEFT JOIN projects p ON p.id = COALESCE(
-          j.project_id,
-          (CASE WHEN j.data->>'projectId' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->>'projectId')::uuid ELSE NULL END),
-          (CASE WHEN j.data->'variables'->>'project_id' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->'variables'->>'project_id')::uuid ELSE NULL END)
-        )
-        LEFT JOIN documents d1 ON d1.id = COALESCE(
-          (CASE WHEN j.data->>'documentId' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->>'documentId')::uuid ELSE NULL END),
-          (CASE WHEN j.data->>'sourceDocumentId' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->>'sourceDocumentId')::uuid ELSE NULL END),
-          (CASE WHEN j.data->'documentIds' IS NOT NULL AND jsonb_typeof(j.data->'documentIds') = 'array' AND jsonb_array_length(j.data->'documentIds') > 0 AND (j.data->'documentIds'->>0) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (j.data->'documentIds'->>0)::uuid ELSE NULL END)
-        )
-        LEFT JOIN documents d2 ON d2.generation_metadata @> jsonb_build_object('job_id', j.id::text)
         WHERE NOT j.type LIKE 'extract-entity-%'
       `
 
@@ -716,13 +798,39 @@ router.get("/admin/all",
       query += ` ORDER BY j.created_at DESC LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`
       params.push(limit, offset)
 
-      const result = await pool.query(query, params)
+      let countQuery = "SELECT COUNT(*) FROM jobs j WHERE NOT j.type LIKE 'extract-entity-%'"
+      const countParams: any[] = []
+      let countParamCount = 0
+
+      if (status) {
+        countParamCount++
+        countQuery += ` AND j.status = $${countParamCount}`
+        countParams.push(status)
+      }
+
+      if (type) {
+        countParamCount++
+        countQuery += ` AND j.type = $${countParamCount}`
+        countParams.push(type)
+      }
+
+      if (user_id) {
+        countParamCount++
+        countQuery += ` AND j.created_by = $${countParamCount}`
+        countParams.push(user_id)
+      }
+
+      const [result, countResult] = await Promise.all([
+        pool.query(query, params),
+        pool.query(countQuery, countParams),
+      ])
+      const total = Number.parseInt(countResult.rows[0].count)
 
       // Fetch child jobs if any are referenced
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       const allChildJobIds: string[] = []
       result.rows.forEach(job => {
-        const jobData = typeof job.data === 'string' ? JSON.parse(job.data) : (job.data || {})
+        const jobData = parseJobData(job.job_data)
         if (Array.isArray(jobData.childJobIds)) {
           // Limit to prevent OOM on massive child job arrays
           let count = 0;
@@ -756,42 +864,17 @@ router.get("/admin/all",
         })
       }
 
-      // Get total count
-      let countQuery = "SELECT COUNT(*) FROM jobs j WHERE NOT j.type LIKE 'extract-entity-%'"
-      const countParams: any[] = []
-      let countParamCount = 0
-
-      if (status) {
-        countParamCount++
-        countQuery += ` AND j.status = $${countParamCount}`
-        countParams.push(status)
-      }
-
-      if (type) {
-        countParamCount++
-        countQuery += ` AND j.type = $${countParamCount}`
-        countParams.push(type)
-      }
-
-      if (user_id) {
-        countParamCount++
-        countQuery += ` AND j.created_by = $${countParamCount}`
-        countParams.push(user_id)
-      }
-
-      const countResult = await pool.query(countQuery, countParams)
-      const total = Number.parseInt(countResult.rows[0].count)
-
       // Enrich jobs with queue names (same logic as regular endpoint)
       const enrichedJobs = result.rows.map((job: any) => {
-        const jobData = typeof job.data === 'string' ? JSON.parse(job.data) : (job.data || {})
+        const jobData = parseJobData(job.job_data)
+        const variables = (jobData.variables ?? {}) as Record<string, unknown>
         
         // Build descriptive job name
         let jobName = ''
         const docName = job.document_name || jobData.documentName || jobData.document_name || jobData.name
-        const templateName = job.template_name || jobData.template_name || jobData.variables?.template_name
+        const templateName = job.template_name || jobData.template_name || variables.template_name
         const genericName = jobData.name || `${job.type} Job`
-        const projectName = job.project_name || jobData.projectName || jobData.variables?.project_name
+        const projectName = job.project_name || jobData.projectName || variables.project_name
         
         if (docName && projectName) {
           jobName = `${docName} - ${projectName}`
@@ -851,12 +934,15 @@ router.get("/admin/all",
             temperature: jobData.temperature,
             template_id: jobData.template_id,
             template_name: templateName,
-            project_id: jobData.projectId || jobData.variables?.project_id,
+            project_id: jobData.projectId || variables.project_id,
             project_name: projectName,
             document_id: jobData.documentId || jobData.document_id,
             document_name: docName,
-            tokens: jobData.tokens || job.result?.usage,
-            llmInsights: jobData.llm_insights || null,
+            tokens: jobData.tokens,
+            llmRequestCount: typeof jobData.llmRequestCount === "number"
+              ? jobData.llmRequestCount
+              : (Array.isArray(jobData.llm_insights?.requests) ? jobData.llm_insights.requests.length : 0),
+            llmProgressSteps: Array.isArray(jobData.llmProgressSteps) ? jobData.llmProgressSteps : [],
             worker_id: job.worker_id,
             worker_process_id: job.worker_process_id,
             queue_name: job.queue_name,
@@ -868,7 +954,8 @@ router.get("/admin/all",
             currentDocument: jobData.currentDocument,
             stepProgress: jobData.stepProgress,
             activeDocuments: jobData.activeDocuments || [],
-            parallelCount: jobData.activeDocuments?.length || 0
+            providerAssignments: jobData.providerAssignments || [],
+            parallelCount: Array.isArray(jobData.activeDocuments) ? jobData.activeDocuments.length : 0
           }
         }
       })
@@ -883,10 +970,11 @@ router.get("/admin/all",
         },
       })
     } catch (error) {
-      require('fs').writeFileSync('crash.log', String(error) + '\n' + (error.stack || ''));
       const log = childLogger({ requestId: (req as any).requestId })
       log.error("Get all jobs error:", error)
-      res.status(500).json({ error: error instanceof Error ? error.message : String(error) })
+      const message = error instanceof Error ? error.message : String(error)
+      const status = message.includes("circuit open") || message.includes("temporarily unavailable") ? 503 : 500
+      res.status(status).json({ error: message })
     }
   }
 )
@@ -928,8 +1016,8 @@ router.post(
       
       const job = jobResult.rows[0]
       
-      // Can retry failed jobs, stuck processing jobs, cancelled jobs, or orphaned pending jobs
-      if (!['failed', 'processing', 'cancelled', 'pending'].includes(job.status)) {
+      // Can retry failed, stuck, processing, cancelled, or orphaned pending jobs
+      if (!['failed', 'stuck', 'processing', 'cancelled', 'pending'].includes(job.status)) {
         return res.status(400).json({ error: "Can only retry failed, stuck, cancelled, or orphaned pending jobs" })
       }
       
