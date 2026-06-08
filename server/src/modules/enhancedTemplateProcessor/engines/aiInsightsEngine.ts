@@ -4,6 +4,7 @@
  */
 
 import { logger } from '../../../utils/logger'
+import { randomUUID } from 'crypto'
 import type { DocumentTemplate, ContextBundle, AIInsight } from '../types'
 
 export class AIInsightsEngine {
@@ -14,7 +15,7 @@ export class AIInsightsEngine {
       // Stub implementation - would integrate with actual AI service
       const insights: AIInsight[] = [
         {
-          insight_id: `insight_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          insight_id: `insight_${randomUUID()}`,
           insight_type: 'content_improvement',
           insight_title: 'Content Structure Optimization',
           insight_description: 'Template could benefit from improved content structure',
@@ -50,7 +51,7 @@ export class AIInsightsEngine {
         enhanced_at: new Date(),
         insights_applied: insights.length,
         enhancement_metadata: {
-          enhancement_id: `enhancement_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          enhancement_id: `enhancement_${randomUUID()}`,
           enhancement_timestamp: new Date(),
           insights_used: insights.map(i => i.insight_id)
         }
@@ -77,7 +78,7 @@ export class AIInsightsEngine {
       
       // Stub implementation - would apply specific enhancements
       const enhancements = insights.map(insight => ({
-        enhancement_id: `enhancement_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        enhancement_id: `enhancement_${randomUUID()}`,
         insight_id: insight.insight_id,
         enhancement_type: insight.insight_type,
         enhancement_description: `Applied ${insight.insight_title}`,

@@ -1,4 +1,6 @@
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 import { signWithGCloud } from '@documenso/pdf-sign';
 
@@ -17,19 +19,23 @@ export const signWithGoogleCloudHSM = async ({ pdf }: SignWithGoogleCloudHSMOpti
     throw new Error('No certificate path provided for Google Cloud HSM signing');
   }
 
-  const googleApplicationCredentials = env('GOOGLE_APPLICATION_CREDENTIALS');
   const googleApplicationCredentialsContents = env(
     'NEXT_PRIVATE_SIGNING_GCLOUD_APPLICATION_CREDENTIALS_CONTENTS',
   );
 
   // To handle hosting in serverless environments like Vercel we can supply the base64 encoded
   // application credentials as an environment variable and write it to a file if it doesn't exist
-  if (googleApplicationCredentials && googleApplicationCredentialsContents) {
-    if (!fs.existsSync(googleApplicationCredentials)) {
-      const contents = new Uint8Array(Buffer.from(googleApplicationCredentialsContents, 'base64'));
+  if (googleApplicationCredentialsContents) {
+    const credentialsDir = path.join(os.tmpdir(), 'adpa-documenso');
+    const credentialsPath = path.join(credentialsDir, 'google-application-credentials.json');
 
-      fs.writeFileSync(googleApplicationCredentials, contents);
+    if (!fs.existsSync(credentialsPath)) {
+      const contents = new Uint8Array(Buffer.from(googleApplicationCredentialsContents, 'base64'));
+      fs.mkdirSync(credentialsDir, { recursive: true, mode: 0o700 });
+      fs.writeFileSync(credentialsPath, contents, { mode: 0o600 });
     }
+
+    process.env.GOOGLE_APPLICATION_CREDENTIALS = credentialsPath;
   }
 
   const { pdf: pdfWithPlaceholder, byteRange } = updateSigningPlaceholder({

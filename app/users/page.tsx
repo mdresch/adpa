@@ -443,34 +443,28 @@ export default function UsersAndRoles() {
       
       // Helper to safely extract string from nested object
       const extractString = (obj: any, ...paths: string[]): string | null => {
-        // Defensive helper to walk known-safe paths on error objects
-        const isDangerousKey = (key: string) =>
-          key === "__proto__" || key === "prototype" || key === "constructor"
+        const candidateValueForPath = (path: string): unknown => {
+          switch (path) {
+            case 'response.data.message':
+              return obj?.response?.data?.message
+            case 'response.data.error':
+              return obj?.response?.data?.error
+            case 'data.message':
+              return obj?.data?.message
+            case 'data.error':
+              return obj?.data?.error
+            case 'message':
+              return obj?.message
+            case 'error':
+              return obj?.error
+            default:
+              return null
+          }
+        }
 
         for (const path of paths) {
-          const keys = path.split(".")
-          let value: unknown = obj
-
-          for (const key of keys) {
-            if (isDangerousKey(key)) {
-              value = null
-              break
-            }
-
-            if (
-              value &&
-              typeof value === "object" &&
-              Object.prototype.hasOwnProperty.call(value, key)
-            ) {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              value = (value as any)[key]
-            } else {
-              value = null
-              break
-            }
-          }
-
-          if (typeof value === "string" && value) {
+          const value = candidateValueForPath(path)
+          if (typeof value === 'string' && value) {
             return value
           }
         }

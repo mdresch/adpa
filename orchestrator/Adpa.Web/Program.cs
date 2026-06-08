@@ -40,7 +40,8 @@ builder.Services.AddIdentityCore<IdentityUser>(options => options.SignIn.Require
 
 builder.Services.AddHttpClient("api", client => 
 {
-    client.BaseAddress = new Uri("http://apiservice"); // Aspire Service Discovery
+    var apiServiceBaseUrl = builder.Configuration["ApiService:BaseUrl"] ?? "https://apiservice";
+    client.BaseAddress = new Uri(apiServiceBaseUrl, UriKind.Absolute); // Aspire Service Discovery
 });
 
 // ---------------------------------------------------------------------------

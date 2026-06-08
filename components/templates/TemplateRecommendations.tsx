@@ -181,13 +181,16 @@ export function TemplateRecommendations({ templateId }: { templateId: string }) 
     try {
       setApplyingOptimization(true)
 
-      const API_BASE_URL = getApiBaseUrl()
+      const apiBase = new URL(getApiBaseUrl())
+      if (apiBase.protocol !== 'http:' && apiBase.protocol !== 'https:') {
+        throw new Error('Unsupported API base URL protocol')
+      }
       // Use different endpoint for regular suggestions vs AI optimizations
       const endpoint = isRegularSuggestion
-        ? `${API_BASE_URL}/quality-audits/template-improvements/${suggestionId}/implement`
-        : `${API_BASE_URL}/quality-audits/template-optimization/${suggestionId}/apply`
+        ? new URL(`/quality-audits/template-improvements/${encodeURIComponent(suggestionId)}/implement`, apiBase)
+        : new URL(`/quality-audits/template-optimization/${encodeURIComponent(suggestionId)}/apply`, apiBase)
 
-      const response = await fetch(endpoint, {
+      const response = await fetch(endpoint.toString(), {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,

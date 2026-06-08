@@ -3,6 +3,7 @@
  * Manages audit logging and access monitoring
  */
 
+import { randomUUID } from 'crypto'
 import { logger } from '../../../utils/logger'
 import { pool } from '../../../database/connection'
 import type {
@@ -187,7 +188,7 @@ export class AuditManager {
     try {
       logger.info('Generating access report', { timeframe })
 
-      const reportId = `report_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      const reportId = `report_${randomUUID()}`
       const generatedAt = new Date()
 
       // Get access data for the timeframe
@@ -268,7 +269,7 @@ export class AuditManager {
     try {
       logger.info('Monitoring access patterns')
 
-      const analysisId = `analysis_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      const analysisId = `analysis_${randomUUID()}`
       const analyzedAt = new Date()
 
       // Get recent access data
@@ -755,7 +756,7 @@ export class AuditManager {
 
     for (const access of suspiciousAccesses) {
       incidents.push({
-        incident_id: `incident_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        incident_id: `incident_${randomUUID()}`,
         incident_type: 'Suspicious Access Attempt',
         severity: 'medium',
         description: 'Long duration denied access attempt',
@@ -931,7 +932,7 @@ export class AuditManager {
     for (const [userId, count] of Object.entries(userAccessCounts)) {
       if (count > averageAccesses * 3) {
         anomalies.push({
-          anomaly_id: `anomaly_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          anomaly_id: `anomaly_${randomUUID()}`,
           anomaly_type: 'Unusual Access Frequency',
           severity: 'medium',
           description: `User ${userId} has unusually high access frequency: ${count} accesses`,

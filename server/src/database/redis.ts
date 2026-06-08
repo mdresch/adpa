@@ -24,6 +24,7 @@ export async function getRedisClient(): Promise<Redis> {
     try {
       const isUpstash = url.includes('upstash.io')
       const isSecure = url.startsWith('rediss://')
+      const allowInsecureTls = process.env.ADPA_ALLOW_INSECURE_TLS === 'true'
       
       logger.info(`[REDIS] Attempting connection via ${isUpstash ? 'Upstash' : 'Primary/Local'}: ${url.replace(/:[^:@]+@/, ':***@')}`)
 
@@ -40,7 +41,7 @@ export async function getRedisClient(): Promise<Redis> {
           return true
         },
         // Secure options for Upstash/TLS
-        tls: isSecure ? { rejectUnauthorized: false } : undefined
+        tls: isSecure ? { rejectUnauthorized: !allowInsecureTls } : undefined
       })
 
       // Wait for connection to be ready or fail

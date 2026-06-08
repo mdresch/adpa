@@ -102,8 +102,8 @@ function formatConnectionLogTarget(poolConfig: {
 
 export function buildSslConfig(target?: string) {
   if (isTrustedPoolingProvider(target)) {
-    // Supabase/Azure with PgBouncer: certificate chain cannot be validated in dev environments
-    return { rejectUnauthorized: false }
+    // Keep TLS verification enabled by default; only relax when explicitly allowed.
+    return { rejectUnauthorized: shouldRejectUnauthorized() }
   }
 
   // Disable SSL for local connections

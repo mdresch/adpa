@@ -66,6 +66,12 @@ class ProcessFlowService {
   private pool: Pool
   private db: Pool
 
+  private secureRandomInRange(min: number, max: number): number {
+    const precision = 10000
+    const randomUnit = crypto.randomInt(0, precision + 1) / precision
+    return min + (max - min) * randomUnit
+  }
+
   constructor(pool: Pool) {
     this.pool = pool
     this.db = pool
@@ -1967,11 +1973,11 @@ class ProcessFlowService {
     const daysDiff = (now.getTime() - docDate.getTime()) / (1000 * 60 * 60 * 24)
     
     // Score decreases over time, with recent documents getting higher scores
-    if (daysDiff <= 7) return 0.9 + (Math.random() * 0.1)
-    if (daysDiff <= 30) return 0.7 + (Math.random() * 0.2)
-    if (daysDiff <= 90) return 0.5 + (Math.random() * 0.2)
-    if (daysDiff <= 365) return 0.3 + (Math.random() * 0.2)
-    return 0.1 + (Math.random() * 0.2)
+    if (daysDiff <= 7) return this.secureRandomInRange(0.9, 1.0)
+    if (daysDiff <= 30) return this.secureRandomInRange(0.7, 0.9)
+    if (daysDiff <= 90) return this.secureRandomInRange(0.5, 0.7)
+    if (daysDiff <= 365) return this.secureRandomInRange(0.3, 0.5)
+    return this.secureRandomInRange(0.1, 0.3)
   }
 
   /**
@@ -1990,7 +1996,7 @@ class ProcessFlowService {
     if (doc.version > 1) score += 0.1
     
     // Add some randomness
-    score += (Math.random() - 0.5) * 0.15
+    score += this.secureRandomInRange(-0.075, 0.075)
     
     return Math.max(0, Math.min(1, score))
   }

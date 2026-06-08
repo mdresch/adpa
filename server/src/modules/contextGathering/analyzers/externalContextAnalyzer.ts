@@ -4,6 +4,7 @@
  */
 
 import { logger } from '@/utils/logger'
+import { randomUUID } from 'crypto'
 import type { ExternalContextData, ContextSource } from '../types'
 import { ContextRetrievalService } from '@/modules/contextRetrieval/contextRetrievalService'
 
@@ -300,7 +301,7 @@ export class ExternalContextAnalyzer {
           try {
             const integrationResult = await this.gatherIntegrationDataForSource(source, projectId)
             integrationData.push({
-              integration_id: `integration_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+              integration_id: `integration_${randomUUID()}`,
               platform: source.source_config.platform || '',
               integration_data: integrationResult,
               integration_timestamp: new Date(),
@@ -335,7 +336,7 @@ export class ExternalContextAnalyzer {
           try {
             const thirdPartyResult = await this.gatherThirdPartyDataForSource(source, projectId)
             thirdPartyData.push({
-              third_party_id: `third_party_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+              third_party_id: `third_party_${randomUUID()}`,
               service: source.source_config.service || '',
               third_party_data: thirdPartyResult,
               data_timestamp: new Date(),

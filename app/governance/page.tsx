@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { Sidebar } from '@/components/sidebar';
 import { Header } from '@/components/header';
-import { fetchRelativeApi } from '@/lib/safe-http-path';
+import { assertSafePathSegment, fetchRelativeApi } from '@/lib/safe-http-path';
 import { useAuth } from '@/contexts/AuthContext';
 
 const DracoDiffViewer = dynamic(() => import('./components/DracoDiffViewer'), { ssr: false });
@@ -16,7 +16,8 @@ async function fetchRelativeApiWithTimeout(path: string, timeoutMs: number): Pro
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetchRelativeApi(path, { signal: controller.signal });
+    // path is validated under /api/ by fetchRelativeApi (assertRelativeApiPath)
+    return await fetchRelativeApi(path, { signal: controller.signal }); // codacy-disable-line SecurityRisk -- allowlisted relative API path
   } finally {
     window.clearTimeout(timer);
   }
@@ -130,7 +131,8 @@ export default function GovernanceDashboard() {
     setIsSubmitting(true);
 
     try {
-      const res = await fetch(`/api/v1/governance/ledger/${selectedAudit.audit_id}/adjudicate`, {
+      const auditId = assertSafePathSegment(selectedAudit.audit_id, 'audit id');
+      const res = await fetchRelativeApi(`/api/v1/governance/ledger/${auditId}/adjudicate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

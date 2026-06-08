@@ -310,7 +310,7 @@ export class FreshnessPolicyEngine implements IFreshnessPolicyEngine {
       evaluationScore = Math.max(0, Math.min(1, evaluationScore))
 
       const evaluationResult: PolicyEvaluationResult = {
-        evaluation_id: `eval_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        evaluation_id: `eval_${randomUUID()}`,
         policy_id: policy.policy_id,
         evaluation_timestamp: new Date(),
         evaluation_status: evaluationScore >= 0.7 ? 'completed' : evaluationScore >= 0.4 ? 'completed' : 'failed',
@@ -458,7 +458,7 @@ export class FreshnessPolicyEngine implements IFreshnessPolicyEngine {
       }
 
       const healthStatus: FreshnessHealthStatus = {
-        health_id: `health_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        health_id: `health_${randomUUID()}`,
         policy_id: policy.policy_id,
         health_score: healthScore,
         health_status: healthScore >= 0.8 ? 'healthy' : healthScore >= 0.6 ? 'warning' : 'critical',

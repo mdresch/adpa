@@ -7,6 +7,7 @@ import { Router, Request, Response } from 'express'
 import { body, param, query, validationResult } from 'express-validator'
 import multer from 'multer'
 import path from 'path'
+import { createReadStream } from 'fs'
 import fs from 'fs/promises'
 import { adobePdfService } from '../services/adobePdfService'
 import { authMiddleware } from '../middleware/auth'
@@ -393,14 +394,22 @@ router.get('/download/:filename',
       }
 
       const { filename } = req.params
+      const safeFilename = path.basename(filename)
+      if (!safeFilename || safeFilename !== filename || !/^[a-zA-Z0-9._-]+$/.test(safeFilename)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid filename'
+        })
+      }
       const outputDir = process.env.ADOBE_OUTPUT_DIR || './generated-documents/adobe-pdf'
-      const filePath = path.join(outputDir, filename)
+      const filePath = path.join(outputDir, safeFilename)
 
       // Security check: ensure file is within output directory
       const resolvedPath = path.resolve(filePath)
       const resolvedOutputDir = path.resolve(outputDir)
       
-      if (!resolvedPath.startsWith(resolvedOutputDir)) {
+      const outputRootWithSep = resolvedOutputDir.endsWith(path.sep) ? resolvedOutputDir : `${resolvedOutputDir}${path.sep}`
+      if (resolvedPath !== resolvedOutputDir && !resolvedPath.startsWith(outputRootWithSep)) {
         return res.status(403).json({
           success: false,
           error: 'Access denied'
@@ -409,7 +418,7 @@ router.get('/download/:filename',
 
       // Check if file exists
       try {
-        await fs.access(filePath)
+        await fs.access(resolvedPath)
       } catch (error) {
         return res.status(404).json({
           success: false,
@@ -418,8 +427,8 @@ router.get('/download/:filename',
       }
 
       // Get file stats
-      const stats = await fs.stat(filePath)
-      const fileExtension = path.extname(filename).toLowerCase()
+      const stats = await fs.stat(resolvedPath)
+      const fileExtension = path.extname(safeFilename).toLowerCase()
 
       // Set appropriate content type
       let contentType = 'application/octet-stream'
@@ -451,11 +460,19 @@ router.get('/download/:filename',
       // Set headers
       res.setHeader('Content-Type', contentType)
       res.setHeader('Content-Length', stats.size)
-      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+      res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`)
 
-      // Stream file
-      const fileStream = await fs.readFile(filePath)
-      res.send(fileStream)
+      const stream = createReadStream(resolvedPath)
+      stream.on('error', (streamError) => {
+        const log = childLogger({ requestId: (req as any).requestId })
+        log.error('Adobe PDF file stream failed:', streamError)
+        if (!res.headersSent) {
+          res.status(500).json({ success: false, error: 'Internal server error' })
+        } else {
+          res.end()
+        }
+      })
+      stream.pipe(res)
 
     } catch (error) {
       const log = childLogger({ requestId: (req as any).requestId })

@@ -22,6 +22,17 @@ export function BaselineGanttChart({ baseline, viewMode = 'Month' }: BaselineGan
   const ganttContainerRef = useRef<HTMLDivElement | null>(null)
   const ganttInstance = useRef<any>(null)
 
+  const renderContainerMessage = (message: string, tone: 'error' | 'neutral' = 'neutral') => {
+    const container = ganttContainerRef.current
+    if (!container) return
+
+    container.replaceChildren()
+    const messageNode = document.createElement('div')
+    messageNode.className = `p-8 text-center ${tone === 'error' ? 'text-red-500' : 'text-gray-500'}`
+    messageNode.textContent = message
+    container.appendChild(messageNode)
+  }
+
   useEffect(() => {
     if (!ganttContainerRef.current || !baseline?.timeline_baseline) return
 
@@ -36,7 +47,7 @@ export function BaselineGanttChart({ baseline, viewMode = 'Month' }: BaselineGan
 
     // Clear the container completely
     if (ganttContainerRef.current) {
-      ganttContainerRef.current.innerHTML = ''
+      ganttContainerRef.current.replaceChildren()
     }
 
     try {
@@ -254,9 +265,10 @@ export function BaselineGanttChart({ baseline, viewMode = 'Month' }: BaselineGan
       }, 200)
     } catch (error) {
       console.error('Error creating Gantt chart:', error)
-      if (ganttContainerRef.current) {
-        ganttContainerRef.current.innerHTML = `<div class="p-8 text-center text-red-500">Error rendering timeline: ${error instanceof Error ? error.message : 'Unknown error'}</div>`
-      }
+      renderContainerMessage(
+        `Error rendering timeline: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'error'
+      )
     }
 
     // Cleanup

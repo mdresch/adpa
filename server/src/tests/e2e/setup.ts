@@ -158,7 +158,7 @@ export function waitFor(ms: number): Promise<void> {
 
 // Helper function to generate unique test IDs
 export function generateTestId(prefix: string = 'test'): string {
-  return `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+  return `${prefix}_${randomUUID()}`
 }
 
 // Helper function to create mock context data

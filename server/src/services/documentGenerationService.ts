@@ -1604,6 +1604,57 @@ ${auditSample}
   }
 
   /**
+   * Replace `search` in `text` allowing flexible whitespace between tokens.
+   * Avoids dynamic RegExp (ReDoS-safe) while matching the old \s+ fallback behavior.
+   */
+  private replaceWithFlexibleWhitespace(text: string, search: string, replacement: string): string | null {
+    const parts = search.trim().split(/\s+/).filter((part) => part.length > 0)
+    if (parts.length === 0) return null
+
+    let result = text
+    let replacedAny = false
+
+    while (true) {
+      const span = this.findFlexibleWhitespaceSpan(result, parts)
+      if (!span) break
+      result = result.slice(0, span.start) + replacement + result.slice(span.end)
+      replacedAny = true
+    }
+
+    return replacedAny ? result : null
+  }
+
+  private findFlexibleWhitespaceSpan(
+    text: string,
+    parts: string[]
+  ): { start: number; end: number } | null {
+    const [firstPart, ...rest] = parts
+    let searchFrom = 0
+
+    while (searchFrom <= text.length - firstPart.length) {
+      const firstIdx = text.indexOf(firstPart, searchFrom)
+      if (firstIdx === -1) return null
+
+      let cursor = firstIdx + firstPart.length
+      let matched = true
+
+      for (const part of rest) {
+        while (cursor < text.length && /\s/.test(text[cursor])) cursor++
+        if (!text.startsWith(part, cursor)) {
+          matched = false
+          break
+        }
+        cursor += part.length
+      }
+
+      if (matched) return { start: firstIdx, end: cursor }
+      searchFrom = firstIdx + 1
+    }
+
+    return null
+  }
+
+  /**
    * AGENTIC PHASE 5: The Patch Agent
    * Re-writes the document to fix policy violations.
    */
@@ -1702,13 +1753,15 @@ ${patchDocSample}
             // Fallback: Try regex-based whitespace-insensitive match
             const normalizedSearch = patch.search.replace(/\s+/g, ' ').trim()
             if (normalizedSearch) {
-              logger.warn(`[PATCH-AGENT] Exact match failed, trying normalized match...`)
-              const escapedSearch = patch.search.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').replace(/\s+/g, '\\s+')
-              // eslint-disable-next-line security/detect-non-literal-regexp
-              const regex = new RegExp(escapedSearch, 'g')
-              if (regex.test(patched)) {
-                patched = patched.replace(regex, patch.replace || '')
-                logger.info(`[PATCH-AGENT] Applied patch successfully using regex normalization fallback.`)
+              logger.warn(`[PATCH-AGENT] Exact match failed, trying whitespace-flexible match...`)
+              const flexReplaced = this.replaceWithFlexibleWhitespace(
+                patched,
+                patch.search,
+                patch.replace || ''
+              )
+              if (flexReplaced !== null) {
+                patched = flexReplaced
+                logger.info(`[PATCH-AGENT] Applied patch successfully using whitespace-flexible fallback.`)
               }
             }
           }

@@ -688,6 +688,15 @@ export default function SharePointIntegrationPage() {
                             <Building className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                             <h3 className="text-lg font-semibold mb-2">No Sites Found</h3>
                             <p className="text-muted-foreground">
+
+                                const buildSharePointApiUrl = (...segments: string[]) => {
+                                  const base = new URL(getApiBaseUrl())
+                                  if (base.protocol !== 'http:' && base.protocol !== 'https:') {
+                                    throw new Error('Unsupported API base URL protocol')
+                                  }
+                                  const safePath = segments.map((segment) => encodeURIComponent(String(segment))).join('/')
+                                  return new URL(`/integrations/sharepoint/${safePath}`, base).toString()
+                                }
                               {integration?.is_active
                                 ? "No SharePoint sites are accessible with the current configuration."
                                 : "Configure the integration to view sites."
@@ -725,7 +734,7 @@ export default function SharePointIntegrationPage() {
                               {drives.map((drive) => (
                                 <DriveCard
                                   key={drive.id}
-                                  drive={drive}
+                                    const response = await fetch(buildSharePointApiUrl(integrationId, 'sites'))
                                   onSelect={setSelectedDrive}
                                   onViewFiles={(driveId) => {
                                     setSelectedDrive(driveId)
@@ -740,7 +749,7 @@ export default function SharePointIntegrationPage() {
                               <div className="mt-6">
                                 <h3 className="text-lg font-semibold mb-4">Files in Selected Library</h3>
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                  {files.map((file) => (
+                                    const response = await fetch(buildSharePointApiUrl(integration.id, 'sites', siteId, 'drives'))
                                     <FileCard
                                       key={file.id}
                                       file={file}
@@ -755,9 +764,9 @@ export default function SharePointIntegrationPage() {
                         ) : (
                           <div className="text-center py-8">
                             <HardDrive className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                            <h3 className="text-lg font-semibold mb-2">No Document Libraries Found</h3>
-                            <p className="text-muted-foreground">
-                              {selectedSite
+                                    const url = new URL(buildSharePointApiUrl(integration.id, 'drives', driveId, 'files'))
+                                    url.searchParams.set('folderId', folderId)
+                                    const response = await fetch(url.toString())
                                 ? "No document libraries found in the selected site."
                                 : "Select a site to view its document libraries."
                               }

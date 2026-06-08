@@ -288,10 +288,12 @@ export class FileContentStrategy {
     // Try to find the variable in the text
     const lines = fileContent.split('\n')
     for (const line of lines) {
-      if (line.toLowerCase().includes(variableName)) {
-        // Extract the value after the variable name
-        const match = line.match(new RegExp(`${variableName}[\\s:=]+([^\\n]+)`, 'i'))
-        if (match) {
+      const lowerLine = line.toLowerCase()
+      const variableIndex = lowerLine.indexOf(variableName)
+      if (variableIndex >= 0) {
+        const remainder = line.slice(variableIndex + variableName.length)
+        const match = remainder.match(/^[\s:=]+([^\n]+)/i)
+        if (match?.[1]) {
           return match[1].trim()
         }
       }

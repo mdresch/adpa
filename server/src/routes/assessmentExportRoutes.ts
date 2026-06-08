@@ -687,7 +687,8 @@ router.get(
 
         res.setHeader('Content-Type', result.mimeType);
         res.setHeader('Content-Disposition', `attachment; filename="${assessmentExportFilename(row.id, format)}"`);
-        res.send(result.buffer);
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.end(result.buffer);
         break;
       }
 
@@ -704,15 +705,17 @@ router.get(
           'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
         );
         res.setHeader('Content-Disposition', `attachment; filename="${assessmentExportFilename(row.id, 'docx')}"`);
-        res.send(docxBuffer);
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.end(docxBuffer);
         break;
       }
 
       case 'csv': {
         const csv = assessmentReportService.exportAssessmentCSV(reportData);
-        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
         res.setHeader('Content-Disposition', `attachment; filename="${assessmentExportFilename(row.id, 'csv')}"`);
-        res.send(csv);
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.end(Buffer.from(csv, 'utf8'));
         break;
       }
 

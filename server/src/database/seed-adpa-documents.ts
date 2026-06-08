@@ -1,6 +1,6 @@
 import db from "../lib/db"
 import { readFileSync, readdirSync, statSync } from "fs"
-import { join, extname } from "path"
+import { join, extname, resolve, sep } from "path"
 import { logger } from "../utils/logger"
 
 // Uses shared DB singleton via `server/src/lib/db.ts`
@@ -162,7 +162,11 @@ function getAllMarkdownFiles(dir: string, baseDir: string = dir): string[] {
   const items = readdirSync(dir)
 
   for (const item of items) {
-    const fullPath = join(dir, item)
+    const rootPath = resolve(dir)
+    const fullPath = resolve(dir, item)
+    if (!fullPath.startsWith(`${rootPath}${sep}`) && fullPath !== rootPath) {
+      continue
+    }
     const stat = statSync(fullPath)
 
     if (stat.isDirectory()) {

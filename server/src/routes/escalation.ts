@@ -217,22 +217,19 @@ router.get(
         userId: req.user?.id
       })
 
-      let query = 'SELECT * FROM escalation_matrix WHERE 1=1'
-      const params: any[] = []
+      const driftTypeFilter = typeof driftType === 'string' && driftType.trim().length > 0 ? driftType.trim() : null
+      const isActiveFilter = isActive === undefined ? null : isActive === 'true'
 
-      if (driftType) {
-        params.push(driftType)
-        query += ` AND drift_type = $${params.length}`
-      }
-
-      if (isActive !== undefined) {
-        params.push(isActive === 'true')
-        query += ` AND is_active = $${params.length}`
-      }
-
-      query += ' ORDER BY drift_type, priority DESC, threshold_min ASC'
-
-      const result = await pool.query(query, params)
+      const result = await pool.query(
+        `
+        SELECT *
+        FROM escalation_matrix
+        WHERE ($1::text IS NULL OR drift_type = $1)
+          AND ($2::boolean IS NULL OR is_active = $2)
+        ORDER BY drift_type, priority DESC, threshold_min ASC
+        `,
+        [driftTypeFilter, isActiveFilter]
+      )
 
       res.json({
         success: true,

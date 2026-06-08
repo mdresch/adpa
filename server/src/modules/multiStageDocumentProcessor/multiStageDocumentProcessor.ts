@@ -4,6 +4,7 @@
  */
 
 import { logger } from '../../utils/logger'
+import { randomUUID } from 'crypto'
 import { pool } from '../../database/connection'
 import { ContextGatheringStage } from './stages/contextGatheringStage'
 import { TemplateProcessingStage } from './stages/templateProcessingStage'
@@ -116,7 +117,7 @@ export class MultiStageDocumentProcessor implements IMultiStageDocumentProcessor
       await this.metricsCollector.recordProcessingMetrics(request, stageResults, processingTime)
 
       const result: DocumentProcessingResult = {
-        result_id: `result_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        result_id: `result_${randomUUID()}`,
         request_id: request.request_id,
         status: {
           status: 'completed',
@@ -618,7 +619,7 @@ export class MultiStageDocumentProcessor implements IMultiStageDocumentProcessor
     const overallScore = stageResults.reduce((sum, stage) => sum + stage.output.quality_score, 0) / stageResults.length
     
     return {
-      report_id: `quality_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      report_id: `quality_${randomUUID()}`,
       document_id: finalDocument.document_id,
       overall_score: overallScore,
       assessments: [],
@@ -715,7 +716,7 @@ export class MultiStageDocumentProcessor implements IMultiStageDocumentProcessor
       await this.jobManager.failJob(jobId, {
         status: 'failed',
         error: {
-          error_id: `error_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          error_id: `error_${randomUUID()}`,
           error_type: 'PROCESSING_ERROR',
           error_message: error.message,
           error_code: 'PROCESSING_FAILED',
@@ -753,7 +754,7 @@ export class MultiStageDocumentProcessor implements IMultiStageDocumentProcessor
       await this.jobManager.failStageJob(jobId, {
         status: 'failed',
         error: {
-          error_id: `error_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          error_id: `error_${randomUUID()}`,
           error_type: 'STAGE_ERROR',
           error_message: error.message,
           error_code: 'STAGE_FAILED',

@@ -10,6 +10,14 @@ import path from 'path'
 
 async function demonstrateFormatConversion() {
   const engine = MultiFormatOutputEngine.getInstance()
+  const outputRoot = path.resolve(process.cwd(), 'output', 'format-examples')
+  const safeOutputPath = (filename: string) => {
+    const outputPath = path.resolve(outputRoot, path.basename(filename))
+    if (!outputPath.startsWith(`${outputRoot}${path.sep}`) && outputPath !== outputRoot) {
+      throw new Error('Invalid output path')
+    }
+    return outputPath
+  }
 
   // Sample markdown content
   const sampleMarkdown = `# ADPA Framework Document
@@ -85,7 +93,7 @@ The ADPA Framework provides a robust, scalable solution for automated document p
     console.log('🚀 Starting Multi-Format Output Engine Demonstration\n')
 
     // Create output directory
-    const outputDir = path.join(process.cwd(), 'output', 'format-examples')
+    const outputDir = outputRoot
     await fs.mkdir(outputDir, { recursive: true })
 
     // Define conversion options
@@ -123,7 +131,7 @@ The ADPA Framework provides a robust, scalable solution for automated document p
 
         // Save to file
         const filename = `sample-document.${format}`
-        const filepath = path.join(outputDir, filename)
+        const filepath = safeOutputPath(filename)
         
         if (Buffer.isBuffer(result.content)) {
           await fs.writeFile(filepath, result.content)
@@ -155,7 +163,7 @@ The ADPA Framework provides a robust, scalable solution for automated document p
         conversionOptions
       )
 
-      const pdfPath = path.join(outputDir, 'sample-document.pdf')
+      const pdfPath = safeOutputPath('sample-document.pdf')
       await fs.writeFile(pdfPath, pdfResult.content)
 
       console.log('   ✅ PDF conversion completed')
@@ -179,7 +187,7 @@ The ADPA Framework provides a robust, scalable solution for automated document p
         conversionOptions
       )
 
-      const docxPath = path.join(outputDir, 'sample-document.docx')
+      const docxPath = safeOutputPath('sample-document.docx')
       await fs.writeFile(docxPath, docxResult.content)
 
       console.log('   ✅ DOCX conversion completed')

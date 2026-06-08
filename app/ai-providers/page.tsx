@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useRouter } from 'next/navigation'
 import { toast } from '@/lib/notify'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -45,6 +46,7 @@ const googleProviderStub = {
 }
 
 export default function AIProviders() {
+  const router = useRouter()
   const apiUrl = (path: string) => getApiUrlUtil(path)
 
   // Initialize API client with token
@@ -1202,7 +1204,7 @@ export default function AIProviders() {
                                     className="h-auto p-0 text-xs"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      window.location.href = `/ai-providers/${provider.id}#discover`;
+                                      router.push(`/ai-providers/${encodeURIComponent(provider.id)}#discover`);
                                     }}
                                   >
                                     Discover
