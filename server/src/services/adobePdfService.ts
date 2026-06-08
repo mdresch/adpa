@@ -7,6 +7,7 @@ import { AdobePDFService, AdobePDFConfig, PDFGenerationOptions, PDFConversionRes
 import { logger } from '../utils/logger'
 import path from 'path'
 import fs from 'fs/promises'
+import { sanitizeFilename, isPathContained } from '../utils/pathSecurity'
 
 export interface AdobePDFServiceConfig extends AdobePDFConfig {
   outputDirectory: string
@@ -21,8 +22,8 @@ export interface PremiumPDFOptions extends PDFGenerationOptions {
 function resolveAdobeDirectory(dir: string, label: string): string {
   const resolved = path.resolve(dir)
   const workspaceRoot = path.resolve(process.cwd())
-  const rootWithSep = workspaceRoot.endsWith(path.sep) ? workspaceRoot : `${workspaceRoot}${path.sep}`
-  if (resolved !== workspaceRoot && !resolved.startsWith(rootWithSep)) {
+  
+  if (!isPathContained(resolved, workspaceRoot)) {
     throw new Error(`Adobe PDF ${label} directory must stay within the application root`)
   }
   return resolved
@@ -42,12 +43,16 @@ export class AdobePDFServiceWrapper {
   }
 
   private resolveSafeOutputPath(filename: string): string {
-    const sanitizedFilename = path.basename(filename).replace(/[^a-zA-Z0-9._-]/g, '_')
+    const sanitized = sanitizeFilename(filename)
+    if (!sanitized) {
+      throw new Error('Invalid filename: contains forbidden characters or path traversal')
+    }
+    
     const outputRoot = path.resolve(this.config.outputDirectory)
-    const outputPath = path.resolve(outputRoot, sanitizedFilename)
+    const outputPath = path.resolve(outputRoot, sanitized)
 
-    if (!outputPath.startsWith(`${outputRoot}${path.sep}`) && outputPath !== outputRoot) {
-      throw new Error('Invalid output filename')
+    if (!isPathContained(outputPath, outputRoot)) {
+      throw new Error('Invalid output filename: path traversal detected')
     }
 
     return outputPath

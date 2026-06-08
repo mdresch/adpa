@@ -12,6 +12,7 @@ import fs from 'fs/promises'
 import { adobePdfService } from '../services/adobePdfService'
 import { authMiddleware } from '../middleware/auth'
 import { logger, childLogger } from '../utils/logger'
+import { sanitizeFilename, isPathContained } from '../utils/pathSecurity'
 
 const router = Router()
 
@@ -394,25 +395,22 @@ router.get('/download/:filename',
       }
 
       const { filename } = req.params
-      const safeFilename = path.basename(filename)
-      if (!safeFilename || safeFilename !== filename || !/^[a-zA-Z0-9._-]+$/.test(safeFilename)) {
+      const sanitized = sanitizeFilename(filename)
+      if (!sanitized) {
         return res.status(400).json({
           success: false,
-          error: 'Invalid filename'
+          error: 'Invalid filename: contains forbidden characters or path traversal'
         })
       }
       const outputDir = process.env.ADOBE_OUTPUT_DIR || './generated-documents/adobe-pdf'
-      const filePath = path.join(outputDir, safeFilename)
-
-      // Security check: ensure file is within output directory
-      const resolvedPath = path.resolve(filePath)
+      const resolvedPath = path.resolve(outputDir, sanitized)
       const resolvedOutputDir = path.resolve(outputDir)
-      
-      const outputRootWithSep = resolvedOutputDir.endsWith(path.sep) ? resolvedOutputDir : `${resolvedOutputDir}${path.sep}`
-      if (resolvedPath !== resolvedOutputDir && !resolvedPath.startsWith(outputRootWithSep)) {
+
+      // Security check: ensure resolved path stays within output directory
+      if (!isPathContained(resolvedPath, resolvedOutputDir)) {
         return res.status(403).json({
           success: false,
-          error: 'Access denied'
+          error: 'Access denied: path traversal detected'
         })
       }
 

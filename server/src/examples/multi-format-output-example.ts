@@ -7,14 +7,19 @@ import { MultiFormatOutputEngine, FormatConversionOptions } from '../modules/mul
 import { logger } from '../utils/logger'
 import fs from 'fs/promises'
 import path from 'path'
+import { sanitizeFilename, isPathContained } from '../utils/pathSecurity'
 
 async function demonstrateFormatConversion() {
   const engine = MultiFormatOutputEngine.getInstance()
   const outputRoot = path.resolve(process.cwd(), 'output', 'format-examples')
   const safeOutputPath = (filename: string) => {
-    const outputPath = path.resolve(outputRoot, path.basename(filename))
-    if (!outputPath.startsWith(`${outputRoot}${path.sep}`) && outputPath !== outputRoot) {
-      throw new Error('Invalid output path')
+    const sanitized = sanitizeFilename(filename)
+    if (!sanitized) {
+      throw new Error('Invalid filename: contains forbidden characters or path traversal')
+    }
+    const outputPath = path.resolve(outputRoot, sanitized)
+    if (!isPathContained(outputPath, outputRoot)) {
+      throw new Error('Invalid output path: path traversal detected')
     }
     return outputPath
   }

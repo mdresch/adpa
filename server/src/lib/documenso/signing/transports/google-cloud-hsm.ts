@@ -5,6 +5,7 @@ import path from 'node:path';
 import { signWithGCloud } from '@documenso/pdf-sign';
 
 import { env } from '../../utils/env';
+import { isPathContained } from '../../../utils/pathSecurity';
 import { addSigningPlaceholder } from '../helpers/add-signing-placeholder';
 import { updateSigningPlaceholder } from '../helpers/update-signing-placeholder';
 
@@ -28,6 +29,14 @@ export const signWithGoogleCloudHSM = async ({ pdf }: SignWithGoogleCloudHSMOpti
   if (googleApplicationCredentialsContents) {
     const credentialsDir = path.join(os.tmpdir(), 'adpa-documenso');
     const credentialsPath = path.join(credentialsDir, 'google-application-credentials.json');
+
+    // Security check: ensure credentials path stays within temp directory
+    const resolvedCredentialsPath = path.resolve(credentialsPath);
+    const resolvedTmpDir = path.resolve(os.tmpdir());
+    
+    if (!isPathContained(resolvedCredentialsPath, resolvedTmpDir)) {
+      throw new Error('Invalid credentials path: path traversal detected');
+    }
 
     if (!fs.existsSync(credentialsPath)) {
       const contents = new Uint8Array(Buffer.from(googleApplicationCredentialsContents, 'base64'));

@@ -2,6 +2,7 @@ import db from "../lib/db"
 import { readFileSync, readdirSync, statSync } from "fs"
 import { join, extname, resolve, sep } from "path"
 import { logger } from "../utils/logger"
+import { isPathContained } from "../utils/pathSecurity"
 
 // Uses shared DB singleton via `server/src/lib/db.ts`
 
@@ -164,7 +165,7 @@ function getAllMarkdownFiles(dir: string, baseDir: string = dir): string[] {
   for (const item of items) {
     const rootPath = resolve(dir)
     const fullPath = resolve(dir, item)
-    if (!fullPath.startsWith(`${rootPath}${sep}`) && fullPath !== rootPath) {
+    if (!isPathContained(fullPath, rootPath)) {
       continue
     }
     const stat = statSync(fullPath)
