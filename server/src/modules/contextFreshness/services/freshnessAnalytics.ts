@@ -3,6 +3,7 @@
  * Provides analytics and insights for context freshness management
  */
 
+import { randomUUID } from 'crypto'
 import { logger } from '@/utils/logger'
 import type { 
   FreshnessMetrics,
@@ -21,7 +22,7 @@ export class FreshnessAnalyticsService {
       logger.debug('Generating freshness report', { policyId, timeRange })
 
       const report = {
-        report_id: `report_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        report_id: `report_${randomUUID()}`,
         policy_id: policyId,
         time_range: timeRange,
         summary: await this.generateSummary(policyId, timeRange),
@@ -49,7 +50,7 @@ export class FreshnessAnalyticsService {
       logger.debug('Analyzing freshness trends', { policyId, timeRange })
 
       const trends = {
-        trend_id: `trend_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        trend_id: `trend_${randomUUID()}`,
         policy_id: policyId,
         time_range: timeRange,
         freshness_trend: await this.calculateFreshnessTrend(policyId, timeRange),
@@ -79,7 +80,7 @@ export class FreshnessAnalyticsService {
       logger.debug('Generating performance insights', { policyId })
 
       const insights = {
-        insight_id: `insight_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        insight_id: `insight_${randomUUID()}`,
         policy_id: policyId,
         performance_metrics: await this.calculatePerformanceMetrics(policyId),
         bottleneck_analysis: await this.analyzeBottlenecks(policyId),

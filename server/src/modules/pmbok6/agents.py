@@ -1,6 +1,6 @@
 # PMBOK 6 Process Agent Types and Dependency Graph
 
-from typing import List, Dict, Callable, Any
+from typing import List, Dict, Any
 
 class PMBOKProcessAgent:
     def __init__(self, code: str, name: str, description: str, inputs: List[str], tools: List[str], outputs: List[str]):

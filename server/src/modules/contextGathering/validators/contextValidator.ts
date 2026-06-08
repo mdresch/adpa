@@ -3,6 +3,7 @@
  * Validates context data quality and completeness
  */
 
+import { randomUUID } from 'crypto'
 import { logger } from '@/utils/logger'
 import type { ContextGap, ContextValidationResult } from '../types'
 
@@ -16,7 +17,7 @@ export class ContextValidator {
       // Check for missing project context
       if (!contextData.project_context || !contextData.project_context.project_id) {
         contextGaps.push({
-          gap_id: `gap_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          gap_id: `gap_${randomUUID()}`,
           gap_type: 'missing_data',
           gap_description: 'Project context is missing or incomplete',
           gap_severity: 'high',
@@ -24,7 +25,7 @@ export class ContextValidator {
           gap_cause: 'Project context not properly gathered',
           gap_solutions: [
             {
-              solution_id: `solution_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+              solution_id: `solution_${randomUUID()}`,
               solution_type: 'data_collection',
               solution_description: 'Gather complete project context data',
               solution_effort: 'medium',
@@ -42,7 +43,7 @@ export class ContextValidator {
       // Check for missing user profile context
       if (!contextData.user_profile_context || !contextData.user_profile_context.user_id) {
         contextGaps.push({
-          gap_id: `gap_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          gap_id: `gap_${randomUUID()}`,
           gap_type: 'missing_data',
           gap_description: 'User profile context is missing or incomplete',
           gap_severity: 'medium',
@@ -50,7 +51,7 @@ export class ContextValidator {
           gap_cause: 'User profile context not properly gathered',
           gap_solutions: [
             {
-              solution_id: `solution_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+              solution_id: `solution_${randomUUID()}`,
               solution_type: 'data_collection',
               solution_description: 'Gather complete user profile context data',
               solution_effort: 'low',
@@ -68,7 +69,7 @@ export class ContextValidator {
       // Check for missing template context
       if (!contextData.template_context || !contextData.template_context.template_id) {
         contextGaps.push({
-          gap_id: `gap_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          gap_id: `gap_${randomUUID()}`,
           gap_type: 'missing_data',
           gap_description: 'Template context is missing or incomplete',
           gap_severity: 'critical',
@@ -76,7 +77,7 @@ export class ContextValidator {
           gap_cause: 'Template context not properly gathered',
           gap_solutions: [
             {
-              solution_id: `solution_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+              solution_id: `solution_${randomUUID()}`,
               solution_type: 'data_collection',
               solution_description: 'Gather complete template context data',
               solution_effort: 'low',
@@ -144,7 +145,7 @@ export class ContextValidator {
         valid = false
         validationScore -= 0.3
         validationErrors.push({
-          error_id: `error_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          error_id: `error_${randomUUID()}`,
           error_type: 'missing_context',
           error_message: 'Project context is missing',
           error_severity: 'high',
@@ -165,7 +166,7 @@ export class ContextValidator {
       } else {
         validationScore -= 0.15
         validationWarnings.push({
-          warning_id: `warning_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          warning_id: `warning_${randomUUID()}`,
           warning_type: 'missing_context',
           warning_message: 'User profile context is missing',
           warning_impact: 'Document personalization may be limited',
@@ -189,7 +190,7 @@ export class ContextValidator {
         valid = false
         validationScore -= 0.3
         validationErrors.push({
-          error_id: `error_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          error_id: `error_${randomUUID()}`,
           error_type: 'missing_context',
           error_message: 'Template context is missing',
           error_severity: 'critical',
@@ -257,7 +258,7 @@ export class ContextValidator {
     // Check project context quality
     if (contextData.project_context?.metadata?.analysis_confidence < 0.7) {
       qualityGaps.push({
-        gap_id: `gap_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        gap_id: `gap_${randomUUID()}`,
         gap_type: 'low_quality_data',
         gap_description: 'Project context has low quality score',
         gap_severity: 'medium',
@@ -265,7 +266,7 @@ export class ContextValidator {
         gap_cause: 'Incomplete or inaccurate project data',
         gap_solutions: [
           {
-            solution_id: `solution_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            solution_id: `solution_${randomUUID()}`,
             solution_type: 'data_improvement',
             solution_description: 'Improve project data quality',
             solution_effort: 'medium',
@@ -283,7 +284,7 @@ export class ContextValidator {
     // Check user profile context quality
     if (contextData.user_profile_context?.metadata?.analysis_confidence < 0.7) {
       qualityGaps.push({
-        gap_id: `gap_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        gap_id: `gap_${randomUUID()}`,
         gap_type: 'low_quality_data',
         gap_description: 'User profile context has low quality score',
         gap_severity: 'low',
@@ -291,7 +292,7 @@ export class ContextValidator {
         gap_cause: 'Incomplete or inaccurate user profile data',
         gap_solutions: [
           {
-            solution_id: `solution_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            solution_id: `solution_${randomUUID()}`,
             solution_type: 'data_improvement',
             solution_description: 'Improve user profile data quality',
             solution_effort: 'low',
@@ -320,7 +321,7 @@ export class ContextValidator {
       
       if (hoursDiff > 24) {
         freshnessGaps.push({
-          gap_id: `gap_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          gap_id: `gap_${randomUUID()}`,
           gap_type: 'outdated_data',
           gap_description: 'Project context data is outdated',
           gap_severity: 'medium',
@@ -328,7 +329,7 @@ export class ContextValidator {
           gap_cause: 'Project context not refreshed recently',
           gap_solutions: [
             {
-              solution_id: `solution_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+              solution_id: `solution_${randomUUID()}`,
               solution_type: 'data_refresh',
               solution_description: 'Refresh project context data',
               solution_effort: 'low',
@@ -353,7 +354,7 @@ export class ContextValidator {
     // Check if project context has essential fields
     if (contextData.project_context && !contextData.project_context.stakeholders?.length) {
       completenessGaps.push({
-        gap_id: `gap_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        gap_id: `gap_${randomUUID()}`,
         gap_type: 'incomplete_data',
         gap_description: 'Project context missing stakeholder information',
         gap_severity: 'medium',
@@ -361,7 +362,7 @@ export class ContextValidator {
         gap_cause: 'Stakeholder data not gathered',
         gap_solutions: [
           {
-            solution_id: `solution_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            solution_id: `solution_${randomUUID()}`,
             solution_type: 'data_collection',
             solution_description: 'Gather stakeholder information',
             solution_effort: 'medium',
@@ -379,7 +380,7 @@ export class ContextValidator {
     // Check if user profile context has essential fields
     if (contextData.user_profile_context && !contextData.user_profile_context.user_preferences?.length) {
       completenessGaps.push({
-        gap_id: `gap_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        gap_id: `gap_${randomUUID()}`,
         gap_type: 'incomplete_data',
         gap_description: 'User profile context missing preferences',
         gap_severity: 'low',
@@ -387,7 +388,7 @@ export class ContextValidator {
         gap_cause: 'User preferences not gathered',
         gap_solutions: [
           {
-            solution_id: `solution_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            solution_id: `solution_${randomUUID()}`,
             solution_type: 'data_collection',
             solution_description: 'Gather user preferences',
             solution_effort: 'low',
@@ -415,7 +416,7 @@ export class ContextValidator {
     if (!projectContext.project_id) {
       valid = false
       errors.push({
-        error_id: `error_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        error_id: `error_${randomUUID()}`,
         error_type: 'missing_field',
         error_message: 'Project ID is required',
         error_severity: 'critical',
@@ -427,7 +428,7 @@ export class ContextValidator {
 
     if (!projectContext.project_name) {
       warnings.push({
-        warning_id: `warning_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        warning_id: `warning_${randomUUID()}`,
         warning_type: 'missing_field',
         warning_message: 'Project name is missing',
         warning_impact: 'Document may lack project identification',
@@ -440,7 +441,7 @@ export class ContextValidator {
     // Validate data quality
     if (projectContext.metadata?.analysis_confidence < 0.8) {
       suggestions.push({
-        suggestion_id: `suggestion_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        suggestion_id: `suggestion_${randomUUID()}`,
         suggestion_type: 'quality_improvement',
         suggestion_message: 'Consider improving project data quality',
         suggestion_impact: 'Better document generation results',
@@ -463,7 +464,7 @@ export class ContextValidator {
     if (!userProfileContext.user_id) {
       valid = false
       errors.push({
-        error_id: `error_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        error_id: `error_${randomUUID()}`,
         error_type: 'missing_field',
         error_message: 'User ID is required',
         error_severity: 'critical',
@@ -476,7 +477,7 @@ export class ContextValidator {
     // Validate data completeness
     if (!userProfileContext.user_preferences?.length) {
       warnings.push({
-        warning_id: `warning_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        warning_id: `warning_${randomUUID()}`,
         warning_type: 'incomplete_data',
         warning_message: 'User preferences are missing',
         warning_impact: 'Limited personalization options',
@@ -499,7 +500,7 @@ export class ContextValidator {
     if (!templateContext.template_id) {
       valid = false
       errors.push({
-        error_id: `error_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        error_id: `error_${randomUUID()}`,
         error_type: 'missing_field',
         error_message: 'Template ID is required',
         error_severity: 'critical',
@@ -511,7 +512,7 @@ export class ContextValidator {
 
     if (!templateContext.template_name) {
       warnings.push({
-        warning_id: `warning_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        warning_id: `warning_${randomUUID()}`,
         warning_type: 'missing_field',
         warning_message: 'Template name is missing',
         warning_impact: 'Document may lack template identification',
@@ -524,7 +525,7 @@ export class ContextValidator {
     // Validate template variables
     if (!templateContext.template_variables?.length) {
       warnings.push({
-        warning_id: `warning_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        warning_id: `warning_${randomUUID()}`,
         warning_type: 'incomplete_data',
         warning_message: 'Template variables are missing',
         warning_impact: 'Limited template customization',
@@ -546,7 +547,7 @@ export class ContextValidator {
     // Document history is optional, so no critical errors
     if (!documentHistoryContext.document_history?.length) {
       suggestions.push({
-        suggestion_id: `suggestion_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        suggestion_id: `suggestion_${randomUUID()}`,
         suggestion_type: 'data_enhancement',
         suggestion_message: 'Consider gathering document history for better context',
         suggestion_impact: 'Improved document generation based on historical patterns',
@@ -568,7 +569,7 @@ export class ContextValidator {
     // External context is optional, so no critical errors
     if (!externalContext.external_sources?.length) {
       suggestions.push({
-        suggestion_id: `suggestion_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        suggestion_id: `suggestion_${randomUUID()}`,
         suggestion_type: 'data_enhancement',
         suggestion_message: 'Consider gathering external context for richer information',
         suggestion_impact: 'Enhanced document content with external insights',

@@ -15,13 +15,19 @@ import type { PersistenceResult } from '../../base/Persistence'
 
 export interface RiskReview {
   review_date?: string
+  review_type?: string
   risk_id?: string
   risk_title?: string
   status_before?: string
   status_after?: string
   actions?: string[]
   reviewer?: string
+  risks_reviewed?: number
+  new_risks_identified?: number
+  risks_closed?: number
+  risks_escalated?: number
   notes?: string
+  key_findings?: string
   source_document?: string
   source_document_id?: string
 }
@@ -197,6 +203,25 @@ function toStringArray(value: unknown): string[] {
   return [String(value)]
 }
 
+function toInteger(value: unknown, defaultValue = 0): number {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.round(value)
+  }
+  const parsed = Number.parseInt(String(value ?? ''), 10)
+  return Number.isNaN(parsed) ? defaultValue : parsed
+}
+
+function normalizeReviewDate(value: unknown): string {
+  const str = typeof value === 'string' ? value.trim() : ''
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    return str
+  }
+  if (str && !Number.isNaN(Date.parse(str))) {
+    return new Date(str).toISOString().slice(0, 10)
+  }
+  return new Date().toISOString().slice(0, 10)
+}
+
 export async function saveRiskReviews(
   client: PoolClient,
   projectId: string,
@@ -226,50 +251,82 @@ export async function saveRiskReviews(
       return null
     }
 
+    const reviewIdColumn = pickColumn(['review_id'])
     const reviewDateColumn = pickColumn(['review_date', 'reviewed_at', 'review_timestamp'])
-    const riskIdColumn = pickColumn(['risk_id', 'risk_identifier'])
-    const riskTitleColumn = pickColumn(['risk_title', 'risk_name', 'title'])
-    const statusBeforeColumn = pickColumn(['status_before', 'previous_status'])
-    const statusAfterColumn = pickColumn(['status_after', 'current_status'])
-    const actionsColumn = pickColumn(['actions', 'follow_up_actions', 'action_items'])
-    const reviewerColumn = pickColumn(['reviewer', 'reviewed_by', 'reviewer_name'])
-    const notesColumn = pickColumn(['notes', 'summary', 'review_notes', 'key_findings'])
+    const reviewTypeColumn = pickColumn(['review_type'])
+    const newRisksColumn = pickColumn(['new_risks_identified'])
+    const risksClosedColumn = pickColumn(['risks_closed'])
+    const risksEscalatedColumn = pickColumn(['risks_escalated'])
+    const statusChangesColumn = pickColumn(['status_changes'])
+    const keyFindingsColumn = pickColumn(['key_findings', 'notes', 'summary', 'review_notes'])
+    const actionItemsColumn = pickColumn(['action_items', 'actions', 'follow_up_actions'])
+    const reviewedByColumn = pickColumn(['reviewed_by', 'reviewer', 'reviewer_name'])
     const sourceDocumentColumn = pickColumn(['source_document_id'])
     const createdByColumn = pickColumn(['created_by'])
 
-    const columnOrder: Array<{ name: string; value: (entity: RiskReview) => any }> = [
+    const columnOrder: Array<{ name: string; value: (entity: RiskReview, index: number) => unknown }> = [
       { name: 'project_id', value: () => projectId }
     ]
 
+    if (reviewIdColumn) {
+      columnOrder.push({
+        name: reviewIdColumn,
+        value: (e, index) => safeReviewId(e.review_date || '', e.risk_id || e.risk_title, index)
+      })
+    }
     if (reviewDateColumn) {
-      columnOrder.push({ name: reviewDateColumn, value: (e) => e.review_date || new Date().toISOString() })
+      columnOrder.push({ name: reviewDateColumn, value: (e) => normalizeReviewDate(e.review_date) })
     }
-    if (riskIdColumn) {
-      columnOrder.push({ name: riskIdColumn, value: (e) => e.risk_id || null })
+    if (reviewTypeColumn) {
+      columnOrder.push({
+        name: reviewTypeColumn,
+        value: (e) => e.review_type || (e.risk_id || e.risk_title ? 'risk_status' : 'periodic')
+      })
     }
-    if (riskTitleColumn) {
-      columnOrder.push({ name: riskTitleColumn, value: (e) => e.risk_title || null })
+    if (newRisksColumn) {
+      columnOrder.push({ name: newRisksColumn, value: (e) => toInteger(e.new_risks_identified) })
     }
-    if (statusBeforeColumn) {
-      columnOrder.push({ name: statusBeforeColumn, value: (e) => e.status_before || null })
+    if (risksClosedColumn) {
+      columnOrder.push({ name: risksClosedColumn, value: (e) => toInteger(e.risks_closed) })
     }
-    if (statusAfterColumn) {
-      columnOrder.push({ name: statusAfterColumn, value: (e) => e.status_after || null })
+    if (risksEscalatedColumn) {
+      columnOrder.push({ name: risksEscalatedColumn, value: (e) => toInteger(e.risks_escalated) })
     }
-    if (actionsColumn) {
-      columnOrder.push({ name: actionsColumn, value: (e) => e.actions || [] })
+    if (statusChangesColumn) {
+      columnOrder.push({
+        name: statusChangesColumn,
+        value: (e) => {
+          if (!e.status_before && !e.status_after) return []
+          return [{
+            risk_id: e.risk_id || null,
+            risk_title: e.risk_title || null,
+            status_before: e.status_before || null,
+            status_after: e.status_after || null
+          }]
+        }
+      })
     }
-    if (reviewerColumn) {
-      columnOrder.push({ name: reviewerColumn, value: (e) => e.reviewer || null })
+    if (keyFindingsColumn) {
+      columnOrder.push({
+        name: keyFindingsColumn,
+        value: (e) => e.key_findings || e.notes || null
+      })
     }
-    if (notesColumn) {
-      columnOrder.push({ name: notesColumn, value: (e) => e.notes || null })
+    if (actionItemsColumn) {
+      columnOrder.push({ name: actionItemsColumn, value: (e) => e.actions || [] })
+    }
+    if (reviewedByColumn) {
+      columnOrder.push({ name: reviewedByColumn, value: (e) => e.reviewer || null })
     }
     if (sourceDocumentColumn) {
       columnOrder.push({ name: sourceDocumentColumn, value: (e) => e.source_document_id || null })
     }
     if (createdByColumn) {
       columnOrder.push({ name: createdByColumn, value: () => userId })
+    }
+
+    if (!reviewIdColumn || !reviewDateColumn) {
+      throw new Error('risk_reviews table is missing required columns (review_id, review_date)')
     }
 
     if (columnOrder.length <= 1) {
@@ -286,7 +343,7 @@ export async function saveRiskReviews(
       const rowPlaceholders = columnOrder.map((_, columnIndex) => `$${offset + columnIndex + 1}`)
       placeholders.push(`(${rowPlaceholders.join(', ')})`)
       columnOrder.forEach(column => {
-        let value = column.value(e)
+        let value = column.value(e, index)
         const meta = columnMeta.get(column.name)
 
         if (meta?.udt_name === 'uuid') {
@@ -296,14 +353,16 @@ export async function saveRiskReviews(
           value = uuidValues
         } else if (meta?.data_type === 'ARRAY') {
           value = toStringArray(value)
+        } else if (meta?.data_type === 'json' || meta?.udt_name === 'jsonb') {
+          value = value ?? []
         } else if (meta?.data_type === 'date') {
-          const str = typeof value === 'string' ? value : ''
-          const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(str)
-            ? str
-            : (str && !Number.isNaN(Date.parse(str))
-              ? new Date(str).toISOString().slice(0, 10)
-              : new Date().toISOString().slice(0, 10))
-          value = dateOnly
+          value = normalizeReviewDate(value)
+        } else if (
+          meta?.data_type === 'integer' ||
+          meta?.data_type === 'bigint' ||
+          meta?.data_type === 'smallint'
+        ) {
+          value = toInteger(value)
         }
 
         values.push(value)

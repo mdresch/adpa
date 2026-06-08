@@ -10,9 +10,10 @@ export async function runMigrations(): Promise<void> {
     console.log('🚀 Forwarding to unified migration runner...');
     
     const runnerPath = path.resolve(__dirname, '../../scripts/run-migrations.ts');
-    const child = spawn('npx', ['tsx', runnerPath], {
+    const npxCmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+    const child = spawn(npxCmd, ['tsx', runnerPath], {
       stdio: 'inherit',
-      shell: true
+      shell: false,
     });
 
     child.on('close', (code) => {

@@ -7,6 +7,7 @@ import { AdobePDFService, AdobePDFConfig, PDFGenerationOptions, PDFConversionRes
 import { logger } from '../utils/logger'
 import path from 'path'
 import fs from 'fs/promises'
+import { createSafePath, isPathContained } from '../utils/pathSecurity'
 
 export interface AdobePDFServiceConfig extends AdobePDFConfig {
   outputDirectory: string
@@ -18,13 +19,37 @@ export interface PremiumPDFOptions extends PDFGenerationOptions {
   fallbackToPuppeteer?: boolean
 }
 
+function resolveAdobeDirectory(dir: string, label: string): string {
+  // nosemgrep: javascript.express.security.audit.path-traversal.path-traversal, javascript.node.security.path-traversal
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  const resolved = path.resolve(dir)
+  const workspaceRoot = path.resolve(process.cwd())
+
+  if (!isPathContained(resolved, workspaceRoot)) {
+    throw new Error(`Adobe PDF ${label} directory must stay within the application root`)
+  }
+  return resolved
+}
+
 export class AdobePDFServiceWrapper {
   private adobePDFService: AdobePDFService
   private config: AdobePDFServiceConfig
 
   constructor(config: AdobePDFServiceConfig) {
-    this.config = config
-    this.adobePDFService = new AdobePDFService(config)
+    this.config = {
+      ...config,
+      outputDirectory: resolveAdobeDirectory(config.outputDirectory, 'output'),
+      tempDirectory: resolveAdobeDirectory(config.tempDirectory, 'temp'),
+    }
+    this.adobePDFService = new AdobePDFService(this.config)
+  }
+
+  private resolveSafeOutputPath(filename: string): string {
+    const outputPath = createSafePath(this.config.outputDirectory, filename)
+    if (!outputPath) {
+      throw new Error('Invalid filename: contains forbidden characters or path traversal')
+    }
+    return outputPath
   }
 
   /**
@@ -57,7 +82,7 @@ export class AdobePDFServiceWrapper {
     options?: PremiumPDFOptions
   ): Promise<PDFConversionResult> {
     try {
-      const outputPath = path.join(this.config.outputDirectory, filename)
+      const outputPath = this.resolveSafeOutputPath(filename)
       
       // Ensure output directory exists
       await fs.mkdir(path.dirname(outputPath), { recursive: true })
@@ -100,7 +125,7 @@ export class AdobePDFServiceWrapper {
     options?: PremiumPDFOptions
   ): Promise<PDFConversionResult> {
     try {
-      const outputPath = path.join(this.config.outputDirectory, outputFilename)
+      const outputPath = this.resolveSafeOutputPath(outputFilename)
       
       // Ensure output directory exists
       await fs.mkdir(path.dirname(outputPath), { recursive: true })
@@ -138,7 +163,7 @@ export class AdobePDFServiceWrapper {
     format: 'docx' | 'pptx' | 'xlsx' | 'rtf' | 'jpeg' | 'png'
   ): Promise<PDFOperationResult> {
     try {
-      const outputPath = path.join(this.config.outputDirectory, outputFilename)
+      const outputPath = this.resolveSafeOutputPath(outputFilename)
       
       // Ensure output directory exists
       await fs.mkdir(path.dirname(outputPath), { recursive: true })
@@ -171,7 +196,7 @@ export class AdobePDFServiceWrapper {
     outputFilename: string
   ): Promise<PDFOperationResult> {
     try {
-      const outputPath = path.join(this.config.outputDirectory, outputFilename)
+      const outputPath = this.resolveSafeOutputPath(outputFilename)
       
       // Ensure output directory exists
       await fs.mkdir(path.dirname(outputPath), { recursive: true })

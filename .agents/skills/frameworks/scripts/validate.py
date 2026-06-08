@@ -7,7 +7,6 @@ Category: general
 import os
 import sys
 import yaml
-import json
 from pathlib import Path
 
 
@@ -77,15 +76,15 @@ def validate_skill_structure(skill_path: str) -> dict:
             errors.append(f"Missing required file: {file}")
 
     # Check required directories
-    for dir in required_dirs:
-        dir_path = os.path.join(skill_path, dir)
+    for directory in required_dirs:
+        dir_path = os.path.join(skill_path, directory)
         if not os.path.isdir(dir_path):
-            errors.append(f"Missing required directory: {dir}/")
+            errors.append(f"Missing required directory: {directory}/")
         else:
             # Check for real content (not just .gitkeep)
             files = [f for f in os.listdir(dir_path) if f != '.gitkeep']
             if not files:
-                errors.append(f"Directory {dir}/ has no real content")
+                errors.append(f"Directory {directory}/ has no real content")
 
     return {
         "valid": len(errors) == 0,
@@ -98,7 +97,7 @@ def main():
     """Main validation entry point."""
     skill_path = Path(__file__).parent.parent
 
-    print(f"Validating frameworks skill...")
+    print("Validating frameworks skill...")
     print(f"Path: {skill_path}")
 
     # Validate structure

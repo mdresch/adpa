@@ -3,6 +3,7 @@
  * Integrates context data from multiple sources
  */
 
+import { randomUUID } from 'crypto'
 import { logger } from '@/utils/logger'
 import type { IntegratedContextData } from '../types'
 
@@ -195,7 +196,7 @@ export class ContextIntegrator {
       // Create cross-references between project and user data
       if (contextData.project_context && contextData.user_profile_context) {
         crossReferences.push({
-          reference_id: `cross_ref_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          reference_id: `cross_ref_${randomUUID()}`,
           source_id: 'project_context',
           target_id: 'user_profile_context',
           reference_type: 'user_project_association',
@@ -209,7 +210,7 @@ export class ContextIntegrator {
       // Create cross-references between template and document history
       if (contextData.template_context && contextData.document_history_context) {
         crossReferences.push({
-          reference_id: `cross_ref_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          reference_id: `cross_ref_${randomUUID()}`,
           source_id: 'template_context',
           target_id: 'document_history_context',
           reference_type: 'template_usage_history',
@@ -223,7 +224,7 @@ export class ContextIntegrator {
       // Create cross-references between external and project data
       if (contextData.external_context && contextData.project_context) {
         crossReferences.push({
-          reference_id: `cross_ref_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          reference_id: `cross_ref_${randomUUID()}`,
           source_id: 'external_context',
           target_id: 'project_context',
           reference_type: 'external_project_relevance',
@@ -251,7 +252,7 @@ export class ContextIntegrator {
       // Identify stakeholder-requirement relationships
       if (contextData.project_context?.stakeholders && contextData.project_context?.requirements) {
         dataRelationships.push({
-          relationship_id: `rel_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          relationship_id: `rel_${randomUUID()}`,
           relationship_type: 'stakeholder_requirement',
           source_entity: 'stakeholders',
           target_entity: 'requirements',
@@ -265,7 +266,7 @@ export class ContextIntegrator {
       // Identify user-expertise relationships
       if (contextData.user_profile_context?.user_expertise) {
         dataRelationships.push({
-          relationship_id: `rel_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          relationship_id: `rel_${randomUUID()}`,
           relationship_type: 'user_expertise',
           source_entity: 'user_profile',
           target_entity: 'expertise_areas',
@@ -279,7 +280,7 @@ export class ContextIntegrator {
       // Identify template-variable relationships
       if (contextData.template_context?.template_variables) {
         dataRelationships.push({
-          relationship_id: `rel_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          relationship_id: `rel_${randomUUID()}`,
           relationship_type: 'template_variable',
           source_entity: 'template',
           target_entity: 'variables',
@@ -379,7 +380,7 @@ export class ContextIntegrator {
       // Identify template dependencies
       if (contextData.template_context?.template_dependencies) {
         contextDependencies.push({
-          dependency_id: `dep_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          dependency_id: `dep_${randomUUID()}`,
           dependency_type: 'template_dependency',
           source_context: 'template_context',
           target_context: 'external_context',
@@ -394,7 +395,7 @@ export class ContextIntegrator {
       // Identify user preference dependencies
       if (contextData.user_profile_context?.user_preferences) {
         contextDependencies.push({
-          dependency_id: `dep_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          dependency_id: `dep_${randomUUID()}`,
           dependency_type: 'user_preference_dependency',
           source_context: 'user_profile_context',
           target_context: 'template_context',
@@ -423,7 +424,7 @@ export class ContextIntegrator {
       // Detect conflicts between user preferences and project requirements
       if (contextData.user_profile_context?.user_preferences && contextData.project_context?.requirements) {
         contextConflicts.push({
-          conflict_id: `conflict_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          conflict_id: `conflict_${randomUUID()}`,
           conflict_type: 'preference_requirement_conflict',
           source_context: 'user_profile_context',
           target_context: 'project_context',
@@ -439,7 +440,7 @@ export class ContextIntegrator {
       // Detect conflicts between template variables and available data
       if (contextData.template_context?.template_variables && contextData.external_context?.external_sources) {
         contextConflicts.push({
-          conflict_id: `conflict_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          conflict_id: `conflict_${randomUUID()}`,
           conflict_type: 'variable_data_conflict',
           source_context: 'template_context',
           target_context: 'external_context',
@@ -469,7 +470,7 @@ export class ContextIntegrator {
       // Identify gaps in external data
       if (contextData.external_context?.external_sources?.length === 0) {
         contextGaps.push({
-          gap_id: `gap_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          gap_id: `gap_${randomUUID()}`,
           gap_type: 'missing_external_data',
           gap_context: 'external_context',
           gap_description: 'No external data sources available',
@@ -484,7 +485,7 @@ export class ContextIntegrator {
       // Identify gaps in user expertise
       if (contextData.user_profile_context?.user_expertise?.length === 0) {
         contextGaps.push({
-          gap_id: `gap_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          gap_id: `gap_${randomUUID()}`,
           gap_type: 'missing_user_expertise',
           gap_context: 'user_profile_context',
           gap_description: 'No user expertise information available',
@@ -513,7 +514,7 @@ export class ContextIntegrator {
       // Detect overlaps between project and external data
       if (contextData.project_context && contextData.external_context) {
         contextOverlaps.push({
-          overlap_id: `overlap_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          overlap_id: `overlap_${randomUUID()}`,
           overlap_type: 'project_external_overlap',
           source_context: 'project_context',
           target_context: 'external_context',
@@ -544,7 +545,7 @@ export class ContextIntegrator {
         const sourceData = contextData[sourceKey]
         if (sourceData) {
           qualityScores.push({
-            score_id: `quality_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            score_id: `quality_${randomUUID()}`,
             context_source: sourceKey,
             quality_score: this.calculateSourceQuality(sourceData),
             quality_factors: this.identifyQualityFactors(sourceData),
@@ -574,7 +575,7 @@ export class ContextIntegrator {
         const sourceData = contextData[sourceKey]
         if (sourceData) {
           freshnessScores.push({
-            score_id: `freshness_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            score_id: `freshness_${randomUUID()}`,
             context_source: sourceKey,
             freshness_score: this.calculateSourceFreshness(sourceData),
             freshness_timestamp: new Date(),
@@ -604,7 +605,7 @@ export class ContextIntegrator {
         const sourceData = contextData[sourceKey]
         if (sourceData) {
           relevanceScores.push({
-            score_id: `relevance_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            score_id: `relevance_${randomUUID()}`,
             context_source: sourceKey,
             relevance_score: this.calculateSourceRelevance(sourceData),
             relevance_factors: this.identifyRelevanceFactors(sourceData),
@@ -633,7 +634,7 @@ export class ContextIntegrator {
         const sourceData = contextData[sourceKey]
         if (sourceData) {
           confidenceScores.push({
-            score_id: `confidence_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            score_id: `confidence_${randomUUID()}`,
             context_source: sourceKey,
             confidence_score: this.calculateSourceConfidence(sourceData),
             confidence_factors: this.identifyConfidenceFactors(sourceData),
@@ -659,7 +660,7 @@ export class ContextIntegrator {
 
       // Generate insights based on integrated context
       integratedInsights.push({
-        insight_id: `insight_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        insight_id: `insight_${randomUUID()}`,
         insight_type: 'context_integration',
         insight_title: 'Context Integration Success',
         insight_description: 'Successfully integrated context from multiple sources',
@@ -673,7 +674,7 @@ export class ContextIntegrator {
       const overallQuality = this.calculateOverallQuality(contextData)
       if (overallQuality < 0.7) {
         integratedInsights.push({
-          insight_id: `insight_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          insight_id: `insight_${randomUUID()}`,
           insight_type: 'quality_concern',
           insight_title: 'Context Quality Concern',
           insight_description: 'Overall context quality is below threshold',
@@ -700,7 +701,7 @@ export class ContextIntegrator {
 
       // Generate recommendations based on integrated context
       integratedRecommendations.push({
-        recommendation_id: `rec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        recommendation_id: `rec_${randomUUID()}`,
         recommendation_type: 'context_optimization',
         recommendation_title: 'Optimize Context Integration',
         recommendation_description: 'Continue optimizing context integration processes',

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { getApiBaseUrl } from '@/lib/api-url'
+import { assertSafePathSegment, fetchRelativeApi } from '@/lib/safe-http-path'
 
 interface PipelineJob {
   jobId: string
@@ -36,6 +36,33 @@ interface PipelineRequest {
   }
 }
 
+const PIPELINE_EXPORT_FORMATS = new Set(['json', 'csv', 'markdown', 'html', 'xml'])
+
+function pipelineApiPath(suffix: string, query?: Record<string, string>): string {
+  const normalized = suffix.startsWith('/') ? suffix : `/${suffix}`
+  let path = `/api/pipeline${normalized}`
+  if (query) {
+    const params = new URLSearchParams()
+    for (const [key, value] of Object.entries(query)) {
+      params.set(key, value)
+    }
+    const qs = params.toString()
+    if (qs) path += `?${qs}`
+  }
+  return path
+}
+
+function fetchPipeline(suffix: string, init?: RequestInit, query?: Record<string, string>): Promise<Response> {
+  return fetchRelativeApi(pipelineApiPath(suffix, query), init)
+}
+
+function authHeaders(token: string | null, extra?: Record<string, string>): Record<string, string> {
+  return {
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...extra,
+  }
+}
+
 export function usePipelineAPI() {
   const [jobs, setJobs] = useState<PipelineJob[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -48,12 +75,9 @@ export function usePipelineAPI() {
 
     try {
       const token = localStorage.getItem('auth_token')
-      const response = await fetch(`${getApiBaseUrl()}/pipeline/start`, {
+      const response = await fetchPipeline('/start', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: authHeaders(token, { 'Content-Type': 'application/json' }),
         body: JSON.stringify(request),
       })
 
@@ -86,10 +110,9 @@ export function usePipelineAPI() {
   const getJobStatus = useCallback(async (jobId: string): Promise<PipelineJob> => {
     try {
       const token = localStorage.getItem('auth_token')
-      const response = await fetch(`${getApiBaseUrl()}/pipeline/job/${jobId}/status`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+      const safeJobId = assertSafePathSegment(jobId, 'jobId')
+      const response = await fetchPipeline(`/job/${safeJobId}/status`, {
+        headers: authHeaders(token),
       })
       
       if (!response.ok) {
@@ -120,11 +143,10 @@ export function usePipelineAPI() {
   const cancelJob = useCallback(async (jobId: string): Promise<void> => {
     try {
       const token = localStorage.getItem('auth_token')
-      const response = await fetch(`${getApiBaseUrl()}/pipeline/job/${jobId}/cancel`, {
+      const safeJobId = assertSafePathSegment(jobId, 'jobId')
+      const response = await fetchPipeline(`/job/${safeJobId}/cancel`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        headers: authHeaders(token),
       })
 
       if (!response.ok) {
@@ -152,10 +174,8 @@ export function usePipelineAPI() {
 
     try {
       const token = localStorage.getItem('auth_token')
-      const response = await fetch(`${getApiBaseUrl()}/pipeline/jobs`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+      const response = await fetchPipeline('/jobs', {
+        headers: authHeaders(token),
       })
       
       if (!response.ok) {
@@ -189,10 +209,8 @@ export function usePipelineAPI() {
   const getPipelineMetrics = useCallback(async () => {
     try {
       const token = localStorage.getItem('auth_token')
-      const response = await fetch(`${getApiBaseUrl()}/pipeline/metrics`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+      const response = await fetchPipeline('/metrics', {
+        headers: authHeaders(token),
       })
       
       if (!response.ok) {
@@ -212,10 +230,10 @@ export function usePipelineAPI() {
   const getStageDetails = useCallback(async (jobId: string, stageId: string) => {
     try {
       const token = localStorage.getItem('auth_token')
-      const response = await fetch(`${getApiBaseUrl()}/pipeline/job/${jobId}/stage/${stageId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+      const safeJobId = assertSafePathSegment(jobId, 'jobId')
+      const safeStageId = assertSafePathSegment(stageId, 'stageId')
+      const response = await fetchPipeline(`/job/${safeJobId}/stage/${safeStageId}`, {
+        headers: authHeaders(token),
       })
       
       if (!response.ok) {
@@ -235,11 +253,11 @@ export function usePipelineAPI() {
   const retryStage = useCallback(async (jobId: string, stageId: string): Promise<void> => {
     try {
       const token = localStorage.getItem('auth_token')
-      const response = await fetch(`${getApiBaseUrl()}/pipeline/job/${jobId}/stage/${stageId}/retry`, {
+      const safeJobId = assertSafePathSegment(jobId, 'jobId')
+      const safeStageId = assertSafePathSegment(stageId, 'stageId')
+      const response = await fetchPipeline(`/job/${safeJobId}/stage/${safeStageId}/retry`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        headers: authHeaders(token),
       })
 
       if (!response.ok) {
@@ -260,10 +278,9 @@ export function usePipelineAPI() {
   const getJobLogs = useCallback(async (jobId: string) => {
     try {
       const token = localStorage.getItem('auth_token')
-      const response = await fetch(`${getApiBaseUrl()}/pipeline/job/${jobId}/logs`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+      const safeJobId = assertSafePathSegment(jobId, 'jobId')
+      const response = await fetchPipeline(`/job/${safeJobId}/logs`, {
+        headers: authHeaders(token),
       })
       
       if (!response.ok) {
@@ -283,10 +300,10 @@ export function usePipelineAPI() {
   const getStageLogs = useCallback(async (jobId: string, stageId: string) => {
     try {
       const token = localStorage.getItem('auth_token')
-      const response = await fetch(`${getApiBaseUrl()}/pipeline/job/${jobId}/stage/${stageId}/logs`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+      const safeJobId = assertSafePathSegment(jobId, 'jobId')
+      const safeStageId = assertSafePathSegment(stageId, 'stageId')
+      const response = await fetchPipeline(`/job/${safeJobId}/stage/${safeStageId}/logs`, {
+        headers: authHeaders(token),
       })
       
       if (!response.ok) {
@@ -305,12 +322,18 @@ export function usePipelineAPI() {
   // Export job results
   const exportJobResults = useCallback(async (jobId: string, format: string = 'json') => {
     try {
+      const normalizedFormat = String(format).toLowerCase()
+      if (!PIPELINE_EXPORT_FORMATS.has(normalizedFormat)) {
+        throw new Error('Invalid export format')
+      }
+
       const token = localStorage.getItem('auth_token')
-      const response = await fetch(`${getApiBaseUrl()}/pipeline/job/${jobId}/export?format=${format}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
+      const safeJobId = assertSafePathSegment(jobId, 'jobId')
+      const response = await fetchPipeline(
+        `/job/${safeJobId}/export`,
+        { headers: authHeaders(token) },
+        { format: normalizedFormat }
+      )
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
@@ -320,7 +343,7 @@ export function usePipelineAPI() {
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `pipeline-job-${jobId}.${format}`
+      a.download = `pipeline-job-${safeJobId}.${normalizedFormat}`
       document.body.appendChild(a)
       a.click()
       window.URL.revokeObjectURL(url)
@@ -372,4 +395,3 @@ export function usePipelineAPI() {
     pollJobStatus,
   }
 }
-

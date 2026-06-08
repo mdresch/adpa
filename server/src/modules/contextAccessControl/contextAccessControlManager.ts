@@ -3,6 +3,7 @@
  * Manages role-based access control for context data retrieval
  */
 
+import { randomUUID } from 'crypto'
 import { logger } from '../../utils/logger'
 import { pool } from '../../database/connection'
 import { AccessControlEngine } from './services/accessControlEngine'
@@ -83,7 +84,7 @@ export class ContextAccessControlManager implements IContextAccessControlManager
 
       // Log access attempt
       await this.logAccessAttempt({
-        attempt_id: `attempt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        attempt_id: `attempt_${randomUUID()}`,
         user_id: userId,
         context_id: contextId,
         action: action as any,

@@ -8,8 +8,12 @@ async function runOpenAIEnhancedMigration() {
   try {
     logger.info('Starting OpenAI enhanced features migration...')
 
-  // Read the migration SQL file
-  const migrationPath = path.join(__dirname, 'migrations', 'add_openai_enhanced_fields.sql')
+  // Read the migration SQL file from the expected migrations directory only
+  const migrationsDir = path.resolve(__dirname, 'migrations')
+  const migrationPath = path.resolve(migrationsDir, 'add_openai_enhanced_fields.sql')
+  if (!migrationPath.startsWith(`${migrationsDir}${path.sep}`)) {
+    throw new Error('Resolved migration path escapes migrations directory')
+  }
   const migrationSQL = fs.readFileSync(migrationPath, 'utf8')
 
     // Execute the migration

@@ -4,6 +4,7 @@
  */
 
 import { logger } from '../../../utils/logger'
+import { randomUUID } from 'crypto'
 import type { DocumentTemplate, TemplateQualityAssessment, ValidationResult } from '../types'
 
 export class TemplateQualityEngine {
@@ -13,7 +14,7 @@ export class TemplateQualityEngine {
       
       // Stub implementation - would perform comprehensive quality assessment
       const qualityAssessment: TemplateQualityAssessment = {
-        assessment_id: `quality_assessment_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        assessment_id: `quality_assessment_${randomUUID()}`,
         template_id: template.id,
         overall_score: 0.8,
         structure_quality: 0.85,
@@ -29,7 +30,7 @@ export class TemplateQualityEngine {
             findings: [],
             recommendations: [
               {
-                recommendation_id: `rec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                recommendation_id: `rec_${randomUUID()}`,
                 recommendation_type: 'structure_improvement',
                 recommendation_title: 'Add more detailed sections',
                 recommendation_description: 'Consider adding more detailed sections to improve clarity',

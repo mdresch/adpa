@@ -10,7 +10,7 @@ import {
   Loader2, Search, ClipboardList, Clock, User, Calendar,
   AlertCircle, CheckCircle2, XCircle, AlertTriangle
 } from '@/components/ui/icons-shim'
-import { getApiUrl } from '@/lib/api-url'
+import { assertSafePathSegment, fetchRelativeApi } from '@/lib/safe-http-path'
 import { toast } from '@/lib/notify'
 
 interface ChecklistItemWithResource {
@@ -58,15 +58,22 @@ export function ChecklistItemsTab() {
       const token = localStorage.getItem('auth_token')
       const params = new URLSearchParams()
       
-      if (projectFilter !== 'all') params.append('project_id', projectFilter)
-      if (userFilter !== 'all') params.append('user_id', userFilter)
+      if (projectFilter !== 'all') {
+        params.append('project_id', assertSafePathSegment(projectFilter, 'projectId'))
+      }
+      if (userFilter !== 'all') {
+        params.append('user_id', assertSafePathSegment(userFilter, 'userId'))
+      }
       if (completionFilter === 'completed') params.append('is_completed', 'true')
       if (completionFilter === 'pending') params.append('is_completed', 'false')
       
-      const response = await fetch(
-        getApiUrl(`/resource-capacity/checklist?${params.toString()}`),
-        { headers: { 'Authorization': `Bearer ${token}` } }
-      )
+      const query = params.toString()
+      const path = query
+        ? `/api/resource-capacity/checklist?${query}`
+        : '/api/resource-capacity/checklist'
+      const response = await fetchRelativeApi(path, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
       
       if (response.ok) {
         const data = await response.json()
@@ -85,8 +92,8 @@ export function ChecklistItemsTab() {
   const fetchProjects = async () => {
     try {
       const token = localStorage.getItem('auth_token')
-      const response = await fetch(getApiUrl('/projects'), {
-        headers: { 'Authorization': `Bearer ${token}` }
+      const response = await fetchRelativeApi('/api/projects', {
+        headers: { Authorization: `Bearer ${token}` },
       })
       if (response.ok) {
         const data = await response.json()
@@ -100,8 +107,8 @@ export function ChecklistItemsTab() {
   const fetchUsers = async () => {
     try {
       const token = localStorage.getItem('auth_token')
-      const response = await fetch(getApiUrl('/users'), {
-        headers: { 'Authorization': `Bearer ${token}` }
+      const response = await fetchRelativeApi('/api/users', {
+        headers: { Authorization: `Bearer ${token}` },
       })
       if (response.ok) {
         const data = await response.json()
@@ -132,11 +139,12 @@ export function ChecklistItemsTab() {
   const toggleCompletion = async (itemId: string, currentStatus: boolean) => {
     try {
       const token = localStorage.getItem('auth_token')
-      const response = await fetch(
-        getApiUrl(`/resource-capacity/checklist/${itemId}/toggle`),
+      const safeItemId = assertSafePathSegment(itemId, 'itemId')
+      const response = await fetchRelativeApi(
+        `/api/resource-capacity/checklist/${safeItemId}/toggle`,
         {
           method: 'POST',
-          headers: { 'Authorization': `Bearer ${token}` }
+          headers: { Authorization: `Bearer ${token}` },
         }
       )
       

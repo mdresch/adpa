@@ -4,6 +4,7 @@
  */
 
 import { logger } from '../../utils/logger'
+import { randomUUID } from 'crypto'
 import { pool } from '../../database/connection'
 import { AIInsightsEngine } from './engines/aiInsightsEngine'
 import { MethodologyAlignmentEngine } from './engines/methodologyAlignmentEngine'
@@ -106,7 +107,7 @@ export class EnhancedTemplateProcessor implements IEnhancedTemplateProcessor {
       const processingMetrics = await this.calculateProcessingMetrics(request, processingTime, qualityAssessment)
 
       const result: EnhancedTemplateResult = {
-        result_id: `result_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        result_id: `result_${randomUUID()}`,
         request_id: request.request_id,
         enhanced_template: {
           template_id: request.template_id,
@@ -118,7 +119,7 @@ export class EnhancedTemplateProcessor implements IEnhancedTemplateProcessor {
           quality_improvements: [],
           performance_optimizations: [],
           enhancement_metadata: {
-            enhancement_id: `enhancement_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            enhancement_id: `enhancement_${randomUUID()}`,
             enhancement_timestamp: new Date(),
             enhancement_duration: processingTime,
             enhancement_strategies: ['ai_insights', 'methodology_alignment', 'quality_optimization'],
@@ -169,7 +170,7 @@ export class EnhancedTemplateProcessor implements IEnhancedTemplateProcessor {
       })
 
       // Create async job
-      const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      const jobId = `job_${randomUUID()}`
       const job: TemplateProcessingJob = {
         job_id: jobId,
         request_id: request.request_id,
@@ -275,7 +276,7 @@ export class EnhancedTemplateProcessor implements IEnhancedTemplateProcessor {
         quality_improvements: [],
         performance_optimizations: [],
         enhancement_metadata: {
-          enhancement_id: `ai_enhancement_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          enhancement_id: `ai_enhancement_${randomUUID()}`,
           enhancement_timestamp: new Date(),
           enhancement_duration: processingTime,
           enhancement_strategies: ['ai_insights', 'content_enhancement'],
@@ -356,7 +357,7 @@ export class EnhancedTemplateProcessor implements IEnhancedTemplateProcessor {
         quality_improvements: [],
         performance_optimizations: [],
         enhancement_metadata: {
-          enhancement_id: `alignment_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          enhancement_id: `alignment_${randomUUID()}`,
           enhancement_timestamp: new Date(),
           enhancement_duration: processingTime,
           enhancement_strategies: ['methodology_alignment'],
@@ -747,7 +748,7 @@ export class EnhancedTemplateProcessor implements IEnhancedTemplateProcessor {
         WHERE job_id = $1
         `,
         [jobId, JSON.stringify({
-          error_id: `error_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          error_id: `error_${randomUUID()}`,
           error_type: 'TEMPLATE_PROCESSING_ERROR',
           error_message: error.message,
           error_code: 'PROCESSING_FAILED',
@@ -771,7 +772,7 @@ export class EnhancedTemplateProcessor implements IEnhancedTemplateProcessor {
     // Check template structure
     if (!template.content || Object.keys(template.content).length === 0) {
       recommendations.push({
-        recommendation_id: `rec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        recommendation_id: `rec_${randomUUID()}`,
         recommendation_type: 'structure_improvement',
         recommendation_title: 'Add Template Content',
         recommendation_description: 'Template lacks content sections',
@@ -792,7 +793,7 @@ export class EnhancedTemplateProcessor implements IEnhancedTemplateProcessor {
     // Check content quality
     if (!template.description || template.description.length < 50) {
       recommendations.push({
-        recommendation_id: `rec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        recommendation_id: `rec_${randomUUID()}`,
         recommendation_type: 'content_enhancement',
         recommendation_title: 'Enhance Template Description',
         recommendation_description: 'Template description is too short',
@@ -813,7 +814,7 @@ export class EnhancedTemplateProcessor implements IEnhancedTemplateProcessor {
     // Check methodology alignment
     if (template.framework && !template.system_prompt) {
       recommendations.push({
-        recommendation_id: `rec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        recommendation_id: `rec_${randomUUID()}`,
         recommendation_type: 'methodology_alignment',
         recommendation_title: 'Add Methodology System Prompt',
         recommendation_description: `Template uses ${template.framework} framework but lacks system prompt`,
@@ -834,7 +835,7 @@ export class EnhancedTemplateProcessor implements IEnhancedTemplateProcessor {
     // Check quality indicators
     if (!template.variables || template.variables.length === 0) {
       recommendations.push({
-        recommendation_id: `rec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        recommendation_id: `rec_${randomUUID()}`,
         recommendation_type: 'quality_improvement',
         recommendation_title: 'Add Template Variables',
         recommendation_description: 'Template lacks variables for dynamic content',
@@ -855,7 +856,7 @@ export class EnhancedTemplateProcessor implements IEnhancedTemplateProcessor {
     // Check performance indicators
     if (template.content && JSON.stringify(template.content).length > 100000) {
       recommendations.push({
-        recommendation_id: `rec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        recommendation_id: `rec_${randomUUID()}`,
         recommendation_type: 'performance_optimization',
         recommendation_title: 'Optimize Template Size',
         recommendation_description: 'Template content is very large and may impact performance',

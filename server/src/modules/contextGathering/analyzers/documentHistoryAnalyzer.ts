@@ -3,6 +3,7 @@
  * Analyzes document history for context gathering
  */
 
+import { randomUUID } from 'crypto'
 import { logger } from '@/utils/logger'
 import { pool } from '@/database/connection'
 import { ContextRetrievalService } from '@/modules/contextRetrieval/contextRetrievalService'
@@ -193,7 +194,7 @@ export class DocumentHistoryAnalyzer {
       `, [templateId, projectId])
 
       return result.rows.map(row => ({
-        pattern_id: `pattern_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        pattern_id: `pattern_${randomUUID()}`,
         pattern_type: 'daily_usage',
         pattern_description: `Daily usage pattern for template ${templateId}`,
         pattern_frequency: row.usage_count,
@@ -232,7 +233,7 @@ export class DocumentHistoryAnalyzer {
       `, [templateId, projectId])
 
       return result.rows.map(row => ({
-        trend_id: `trend_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        trend_id: `trend_${randomUUID()}`,
         metric_name: 'quality_score',
         trend_data: [
           {
@@ -400,7 +401,7 @@ export class DocumentHistoryAnalyzer {
       `, [templateId, projectId])
 
       return result.rows.map(row => ({
-        pattern_id: `gen_pattern_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        pattern_id: `gen_pattern_${randomUUID()}`,
         pattern_type: 'generation_timing',
         pattern_description: `Generation patterns for template ${templateId}`,
         pattern_frequency: parseInt(row.generation_count),
@@ -438,7 +439,7 @@ export class DocumentHistoryAnalyzer {
       `, [templateId, projectId])
 
       return result.rows.map(row => ({
-        interaction_id: `interaction_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        interaction_id: `interaction_${randomUUID()}`,
         user_id: row.created_by,
         interaction_type: 'document_generation',
         interaction_count: parseInt(row.interaction_count),

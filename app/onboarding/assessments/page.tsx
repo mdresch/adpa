@@ -120,6 +120,15 @@ export default function AssessmentsListPage() {
   const [filterDocCountMin, setFilterDocCountMin] = React.useState<number | ''>('');
   const [filterDocCountMax, setFilterDocCountMax] = React.useState<number | ''>('');
 
+  const getSafeApiUrl = React.useCallback((path: string) => {
+    const candidate = getApiUrl(path);
+    const parsed = new URL(candidate, window.location.origin);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      throw new Error('Unsupported API URL protocol');
+    }
+    return parsed.toString();
+  }, []);
+
   // Require authentication - redirect to login if not authenticated
   React.useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -133,7 +142,7 @@ export default function AssessmentsListPage() {
 
     try {
       const token = localStorage.getItem('auth_token');
-      const apiUrl = getApiUrl('/assessment/list');
+      const apiUrl = getSafeApiUrl('/assessment/list');
       console.log('[Assessments] Fetching from:', apiUrl);
 
       const response = await fetch(apiUrl, {
@@ -223,7 +232,7 @@ export default function AssessmentsListPage() {
   const handleExport = async (assessmentId: string, format: 'pdf' | 'csv') => {
     try {
       const token = localStorage.getItem('auth_token');
-      const apiUrl = getApiUrl(`/assessment/${assessmentId}/export?format=${format}`);
+      const apiUrl = getSafeApiUrl(`/assessment/${assessmentId}/export?format=${format}`);
       const response = await fetch(apiUrl, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -316,7 +325,7 @@ export default function AssessmentsListPage() {
 
       for (const assessmentId of selectedAssessments) {
         try {
-          const response = await fetch(getApiUrl(`/assessment/${assessmentId}/export?format=${format}`), {
+          const response = await fetch(getSafeApiUrl(`/assessment/${assessmentId}/export?format=${format}`), {
             headers: {
               'Authorization': `Bearer ${token}`
             },
@@ -375,7 +384,7 @@ export default function AssessmentsListPage() {
 
       for (const assessmentId of selectedAssessments) {
         try {
-          const response = await fetch(getApiUrl(`/assessment/${assessmentId}`), {
+          const response = await fetch(getSafeApiUrl(`/assessment/${assessmentId}`), {
             method: 'DELETE',
             headers: {
               'Authorization': `Bearer ${token}`

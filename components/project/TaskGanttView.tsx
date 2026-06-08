@@ -27,6 +27,29 @@ export function TaskGanttView({ tasks, onViewTask }: TaskGanttViewProps) {
   const ganttInstance = useRef<any>(null)
   const [viewMode, setViewMode] = useState<'Quarter Day' | 'Half Day' | 'Day' | 'Week' | 'Month'>('Month')
 
+  const renderContainerMessage = (title: string, detail?: string) => {
+    const container = ganttContainerRef.current
+    if (!container) return
+
+    container.replaceChildren()
+    const wrapper = document.createElement('div')
+    wrapper.className = 'p-8 text-center'
+
+    const titleNode = document.createElement('p')
+    titleNode.className = detail ? 'text-red-500 mb-2' : 'text-gray-500'
+    titleNode.textContent = title
+    wrapper.appendChild(titleNode)
+
+    if (detail) {
+      const detailNode = document.createElement('p')
+      detailNode.className = 'text-sm text-gray-500'
+      detailNode.textContent = detail
+      wrapper.appendChild(detailNode)
+    }
+
+    container.appendChild(wrapper)
+  }
+
   // Filter tasks that have dates (at least estimated or scheduled from assignments)
   const tasksWithDates = tasks.filter(
     (task) =>
@@ -57,7 +80,7 @@ export function TaskGanttView({ tasks, onViewTask }: TaskGanttViewProps) {
     if (tasksWithDates.length === 0) {
       // Clear container if no tasks
       console.log('No tasks with dates, clearing container')
-      ganttContainerRef.current.innerHTML = '<div class="p-8 text-center text-gray-500">No tasks with dates available</div>'
+      renderContainerMessage('No tasks with dates available')
       return
     }
 
@@ -75,7 +98,7 @@ export function TaskGanttView({ tasks, onViewTask }: TaskGanttViewProps) {
 
     // Clear the container completely
     if (ganttContainerRef.current) {
-      ganttContainerRef.current.innerHTML = ''
+      ganttContainerRef.current.replaceChildren()
     }
 
     try {
@@ -600,14 +623,7 @@ export function TaskGanttView({ tasks, onViewTask }: TaskGanttViewProps) {
       }, 300)
     } catch (error) {
       console.error('Error creating Gantt chart:', error)
-      if (ganttContainerRef.current) {
-        ganttContainerRef.current.innerHTML = `
-          <div class="p-8 text-center">
-            <p class="text-red-500 mb-2">Error loading Gantt chart</p>
-            <p class="text-sm text-gray-500">${error instanceof Error ? error.message : 'Unknown error'}</p>
-          </div>
-        `
-      }
+      renderContainerMessage('Error loading Gantt chart', error instanceof Error ? error.message : 'Unknown error')
     }
 
     // Cleanup function

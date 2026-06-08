@@ -27,7 +27,7 @@ export class ExternalApiRetriever extends BaseContextRetriever {
       logger.debug('Fetching data from external API', { endpoint, parameters })
 
       // Build URL with parameters
-      const url = this.buildUrl(endpoint, parameters)
+      const url = this.validateAndNormalizeUrl(this.buildUrl(endpoint, parameters))
       
       // Make API request
       const response = await this.makeApiRequest(url, parameters)
@@ -177,6 +177,35 @@ export class ExternalApiRetriever extends BaseContextRetriever {
 
       throw error
     }
+  }
+
+  private validateAndNormalizeUrl(url: string): string {
+    let parsed: URL
+
+    try {
+      parsed = new URL(url)
+    } catch {
+      throw new Error('Invalid external API URL')
+    }
+
+    const isHttp = parsed.protocol === 'http:'
+    const isHttps = parsed.protocol === 'https:'
+    if (!isHttp && !isHttps) {
+      throw new Error('Unsupported URL protocol for external API source')
+    }
+
+    if (isHttp) {
+      const isLoopbackHost =
+        parsed.hostname === 'localhost' ||
+        parsed.hostname === '127.0.0.1' ||
+        parsed.hostname === '::1'
+
+      if (!isLoopbackHost) {
+        throw new Error('Insecure HTTP is only allowed for loopback addresses')
+      }
+    }
+
+    return parsed.toString()
   }
 
   private calculateApiRelevance(data: any, source: ContextSource, request: ContextInjectionRequest): number {

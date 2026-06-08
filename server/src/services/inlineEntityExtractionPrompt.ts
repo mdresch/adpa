@@ -5,9 +5,11 @@
  * Each entity type maps exactly to its TypeScript interface so the LLM
  * produces field names that the InlineEntityParserService can save directly.
  *
- * RULE: Return the full, unrestricted set of all 61 entity types until
- *       registry/profile mappings are established over time.
+ * When a document profile is resolved (e.g. Risk Management Plan), only entity
+ * types expected for that profile are included in the section prompt.
  */
+
+import { resolveDocumentEntityProfile } from '../modules/analysis/entityExtractionQuality'
 
 export const INLINE_ENTITY_EXTRACTION_PROMPT = `
 
@@ -404,12 +406,103 @@ Fields: title* (string), category* (working_hours|communication|decision_making|
 5. Do not tag source_document or source_document_id — these are set automatically
 `
 
+const INLINE_ENTITY_RULES_MARKER = '**Rules:**'
+
+function parseEntityTypeBlocks(fullPrompt: string): Map<string, string> {
+  const blocks = new Map<string, string>()
+  const lines = fullPrompt.split('\n')
+  let currentType: string | null = null
+  let currentLines: string[] = []
+
+  const flush = () => {
+    if (currentType && currentLines.length > 0) {
+      blocks.set(currentType, currentLines.join('\n').trim())
+    }
+  }
+
+  for (const line of lines) {
+    if (line.startsWith(INLINE_ENTITY_RULES_MARKER)) {
+      flush()
+      currentType = null
+      currentLines = []
+      break
+    }
+
+    const match = line.match(/^\*\*([a-z0-9_]+)\*\* —/)
+    if (match) {
+      flush()
+      currentType = match[1]
+      currentLines = [line]
+    } else if (currentType) {
+      currentLines.push(line)
+    }
+  }
+
+  flush()
+  return blocks
+}
+
+function extractPromptIntro(fullPrompt: string): string {
+  const rulesIndex = fullPrompt.indexOf(INLINE_ENTITY_RULES_MARKER)
+  const body = rulesIndex >= 0 ? fullPrompt.slice(0, rulesIndex) : fullPrompt
+  const firstEntity = body.search(/^\*\*[a-z0-9_]+\*\* —/m)
+  if (firstEntity < 0) return body.trim()
+  return body.slice(0, firstEntity).trim()
+}
+
+function extractPromptRules(fullPrompt: string): string {
+  const rulesIndex = fullPrompt.indexOf(INLINE_ENTITY_RULES_MARKER)
+  if (rulesIndex < 0) return ''
+  return fullPrompt.slice(rulesIndex).trim()
+}
+
+function buildProfileScopedPrompt(profileLabel: string, allowedTypes: string[]): string {
+  const blocks = parseEntityTypeBlocks(INLINE_ENTITY_EXTRACTION_PROMPT)
+  const intro = extractPromptIntro(INLINE_ENTITY_EXTRACTION_PROMPT)
+  const rules = extractPromptRules(INLINE_ENTITY_EXTRACTION_PROMPT)
+
+  const allowedSet = new Set(allowedTypes.map((t) => t.toLowerCase()))
+  const selectedBlocks = allowedTypes
+    .map((type) => blocks.get(type))
+    .filter((block): block is string => Boolean(block))
+
+  const missingFromPrompt = allowedTypes.filter((type) => !blocks.has(type))
+  const profileMandate = [
+    `### Document profile: ${profileLabel}`,
+    `Tag **only** these entity types in H8 lines: ${allowedTypes.join(', ')}.`,
+    'Do **not** tag activities, deliverables, requirements, constraints, stakeholders, governance, schedule, or finance types unless they appear in the allowed list above — even when the narrative mentions them.',
+    'When a section covers assessments, triggers, response plans, contingency reserves, or the probability/impact matrix, include at least one matching H8 tag before finishing the section.',
+    missingFromPrompt.length > 0
+      ? `(Profile types without inline examples in this build: ${missingFromPrompt.join(', ')} — still use standard field names from the registry.)`
+      : '',
+  ]
+    .filter(Boolean)
+    .join('\n')
+
+  return [
+    intro,
+    '',
+    profileMandate,
+    '',
+    `### Allowed entity types (${profileLabel})`,
+    '',
+    ...selectedBlocks,
+    '',
+    rules,
+    '',
+    `6. **Profile lock**: Only emit H8 tags for: ${[...allowedSet].join(', ')}.`,
+  ].join('\n')
+}
+
 export function buildInlineEntityExtractionPrompt(options: {
   templateName?: string
   category?: string
   userPrompt?: string
 }): string {
-  // Always return the full unrestricted prompt to ensure all possible entities are captured
-  // without hardcoded template-specific restrictions in the service code.
+  const profile = resolveDocumentEntityProfile(options.templateName, options.category)
+  if (profile?.types?.length) {
+    return buildProfileScopedPrompt(profile.label, profile.types)
+  }
+
   return INLINE_ENTITY_EXTRACTION_PROMPT
 }

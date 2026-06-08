@@ -3,6 +3,7 @@
  * Optimizes context data for document generation
  */
 
+import { randomUUID } from 'crypto'
 import { logger } from '@/utils/logger'
 import type { OptimizedContextData, ContextSourcePriority } from '../types'
 
@@ -176,7 +177,7 @@ export class ContextOptimizer {
       if (integratedContext.context_quality_scores) {
         for (const qualityScore of integratedContext.context_quality_scores) {
           contextPriorities.push({
-            priority_id: `priority_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            priority_id: `priority_${randomUUID()}`,
             context_source: qualityScore.context_source,
             priority_level: this.calculatePriorityLevel(qualityScore.quality_score),
             priority_score: qualityScore.quality_score,
@@ -191,7 +192,7 @@ export class ContextOptimizer {
       if (integratedContext.context_relevance_scores) {
         for (const relevanceScore of integratedContext.context_relevance_scores) {
           contextPriorities.push({
-            priority_id: `priority_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            priority_id: `priority_${randomUUID()}`,
             context_source: relevanceScore.context_source,
             priority_level: this.calculatePriorityLevel(relevanceScore.relevance_score),
             priority_score: relevanceScore.relevance_score,
@@ -220,7 +221,7 @@ export class ContextOptimizer {
       if (integratedContext.context_confidence_scores) {
         for (const confidenceScore of integratedContext.context_confidence_scores) {
           contextWeights.push({
-            weight_id: `weight_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            weight_id: `weight_${randomUUID()}`,
             context_source: confidenceScore.context_source,
             weight_value: confidenceScore.confidence_score,
             weight_factors: ['confidence_score'],
@@ -251,7 +252,7 @@ export class ContextOptimizer {
         for (const qualityScore of integratedContext.context_quality_scores) {
           if (qualityScore.quality_score >= qualityThreshold) {
             contextFilters.push({
-              filter_id: `filter_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+              filter_id: `filter_${randomUUID()}`,
               context_source: qualityScore.context_source,
               filter_type: 'quality_threshold',
               filter_value: qualityThreshold,
@@ -261,7 +262,7 @@ export class ContextOptimizer {
             })
           } else {
             contextFilters.push({
-              filter_id: `filter_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+              filter_id: `filter_${randomUUID()}`,
               context_source: qualityScore.context_source,
               filter_type: 'quality_threshold',
               filter_value: qualityThreshold,
@@ -292,7 +293,7 @@ export class ContextOptimizer {
       
       for (const [sourceType, sources] of Object.entries(sourceTypes)) {
         contextAggregations.push({
-          aggregation_id: `aggregation_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          aggregation_id: `aggregation_${randomUUID()}`,
           aggregation_type: 'source_type',
           aggregation_key: sourceType,
           aggregation_value: sources,
@@ -319,7 +320,7 @@ export class ContextOptimizer {
       if (integratedContext.integrated_sources) {
         for (const source of integratedContext.integrated_sources) {
           contextSummaries.push({
-            summary_id: `summary_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            summary_id: `summary_${randomUUID()}`,
             context_source: source.source_id,
             summary_type: 'source_summary',
             summary_content: this.generateSourceSummary(source),
@@ -392,7 +393,7 @@ export class ContextOptimizer {
       if (integratedContext.context_conflicts) {
         for (const conflict of integratedContext.context_conflicts) {
           contextActionItems.push({
-            action_id: `action_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            action_id: `action_${randomUUID()}`,
             action_type: 'conflict_resolution',
             action_title: `Resolve ${conflict.conflict_type}`,
             action_description: conflict.conflict_description,
@@ -409,7 +410,7 @@ export class ContextOptimizer {
       if (integratedContext.context_gaps) {
         for (const gap of integratedContext.context_gaps) {
           contextActionItems.push({
-            action_id: `action_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            action_id: `action_${randomUUID()}`,
             action_type: 'gap_resolution',
             action_title: `Address ${gap.gap_type}`,
             action_description: gap.gap_description,
@@ -440,7 +441,7 @@ export class ContextOptimizer {
       if (integratedContext.context_conflicts) {
         for (const conflict of integratedContext.context_conflicts) {
           contextRisks.push({
-            risk_id: `risk_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            risk_id: `risk_${randomUUID()}`,
             risk_type: 'context_conflict',
             risk_title: `Risk from ${conflict.conflict_type}`,
             risk_description: conflict.conflict_description,
@@ -457,7 +458,7 @@ export class ContextOptimizer {
       if (integratedContext.context_gaps) {
         for (const gap of integratedContext.context_gaps) {
           contextRisks.push({
-            risk_id: `risk_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            risk_id: `risk_${randomUUID()}`,
             risk_type: 'context_gap',
             risk_title: `Risk from ${gap.gap_type}`,
             risk_description: gap.gap_description,
@@ -488,7 +489,7 @@ export class ContextOptimizer {
       if (integratedContext.context_overlaps) {
         for (const overlap of integratedContext.context_overlaps) {
           contextOpportunities.push({
-            opportunity_id: `opportunity_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            opportunity_id: `opportunity_${randomUUID()}`,
             opportunity_type: 'context_overlap',
             opportunity_title: `Opportunity from ${overlap.overlap_type}`,
             opportunity_description: overlap.overlap_description,
@@ -518,7 +519,7 @@ export class ContextOptimizer {
       if (integratedContext.context_conflicts) {
         for (const conflict of integratedContext.context_conflicts) {
           contextDecisions.push({
-            decision_id: `decision_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            decision_id: `decision_${randomUUID()}`,
             decision_type: 'conflict_resolution',
             decision_title: `Decision for ${conflict.conflict_type}`,
             decision_description: conflict.conflict_description,
@@ -549,7 +550,7 @@ export class ContextOptimizer {
       if (integratedContext.context_gaps) {
         for (const gap of integratedContext.context_gaps) {
           contextAssumptions.push({
-            assumption_id: `assumption_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            assumption_id: `assumption_${randomUUID()}`,
             assumption_type: 'gap_assumption',
             assumption_title: `Assumption for ${gap.gap_type}`,
             assumption_description: gap.gap_description,
@@ -578,7 +579,7 @@ export class ContextOptimizer {
       if (integratedContext.context_conflicts) {
         for (const conflict of integratedContext.context_conflicts) {
           contextConstraints.push({
-            constraint_id: `constraint_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            constraint_id: `constraint_${randomUUID()}`,
             constraint_type: 'conflict_constraint',
             constraint_title: `Constraint from ${conflict.conflict_type}`,
             constraint_description: conflict.conflict_description,
@@ -608,7 +609,7 @@ export class ContextOptimizer {
         for (const qualityScore of integratedContext.context_quality_scores) {
           if (qualityScore.quality_score >= 0.8) {
             contextSuccessFactors.push({
-              factor_id: `factor_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+              factor_id: `factor_${randomUUID()}`,
               factor_type: 'quality_success',
               factor_title: `Quality Success Factor: ${qualityScore.context_source}`,
               factor_description: `High quality context from ${qualityScore.context_source}`,
@@ -754,7 +755,7 @@ export class ContextOptimizer {
     
     if (source.source_quality >= 0.8) {
       highlights.push({
-        highlight_id: `highlight_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        highlight_id: `highlight_${randomUUID()}`,
         context_source: source.source_id,
         highlight_type: 'quality_highlight',
         highlight_content: `High quality data from ${source.source_name}`,
@@ -765,7 +766,7 @@ export class ContextOptimizer {
     
     if (source.source_relevance >= 0.8) {
       highlights.push({
-        highlight_id: `highlight_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        highlight_id: `highlight_${randomUUID()}`,
         context_source: source.source_id,
         highlight_type: 'relevance_highlight',
         highlight_content: `Highly relevant data from ${source.source_name}`,
@@ -781,7 +782,7 @@ export class ContextOptimizer {
     const keyPoints: any[] = []
     
     keyPoints.push({
-      key_point_id: `key_point_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      key_point_id: `key_point_${randomUUID()}`,
       context_source: source.source_id,
       key_point_type: 'source_characteristics',
       key_point_content: `Source: ${source.source_name}, Type: ${source.source_type}`,
@@ -791,7 +792,7 @@ export class ContextOptimizer {
     
     if (source.source_quality) {
       keyPoints.push({
-        key_point_id: `key_point_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        key_point_id: `key_point_${randomUUID()}`,
         context_source: source.source_id,
         key_point_type: 'quality_metric',
         key_point_content: `Quality Score: ${source.source_quality.toFixed(2)}`,

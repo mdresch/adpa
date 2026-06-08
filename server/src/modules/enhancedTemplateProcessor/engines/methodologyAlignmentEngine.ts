@@ -3,6 +3,7 @@
  * Ensures templates align with specific methodologies and frameworks
  */
 
+import { randomUUID } from 'crypto'
 import { logger } from '../../../utils/logger'
 import type { DocumentTemplate, MethodologyEnhancement, MethodologyComplianceValidation } from '../types'
 
@@ -14,7 +15,7 @@ export class MethodologyAlignmentEngine {
       // Stub implementation - would apply framework-specific enhancements
       const enhancements: MethodologyEnhancement[] = [
         {
-          enhancement_id: `methodology_enhancement_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          enhancement_id: `methodology_enhancement_${randomUUID()}`,
           framework: framework,
           enhancement_type: 'structure_alignment',
           enhancement_description: `Aligned template structure with ${framework} methodology`,
@@ -52,7 +53,7 @@ export class MethodologyAlignmentEngine {
         aligned_framework: framework,
         alignment_timestamp: new Date(),
         structure_metadata: {
-          alignment_id: `structure_alignment_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          alignment_id: `structure_alignment_${randomUUID()}`,
           framework: framework,
           alignment_score: 0.85,
           compliance_level: 'high'
@@ -82,7 +83,7 @@ export class MethodologyAlignmentEngine {
       // Stub implementation - would apply framework-specific best practices
       const bestPractices = [
         {
-          practice_id: `best_practice_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          practice_id: `best_practice_${randomUUID()}`,
           practice_type: 'content_organization',
           practice_description: `Applied ${framework} content organization best practice`,
           practice_impact: 0.7,
@@ -118,7 +119,7 @@ export class MethodologyAlignmentEngine {
       
       // Stub implementation - would validate compliance with framework requirements
       const complianceValidation: MethodologyComplianceValidation = {
-        validation_id: `compliance_validation_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        validation_id: `compliance_validation_${randomUUID()}`,
         framework: framework,
         compliance_score: 0.85,
         compliance_level: 'high',

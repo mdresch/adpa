@@ -133,10 +133,22 @@ export function hasInlineH8EntityTags(markdown: string | null | undefined): bool
 
 function getEntityName(entity: any, type: string): string {
   if (!entity) return `Unnamed ${type}`;
-  
-  const rawName = entity.name || entity.title || entity.item_name || entity.description || '';
+
+  const rawName =
+    entity.name ||
+    entity.title ||
+    entity.item_name ||
+    entity.reserve_name ||
+    entity.risk_title ||
+    entity.plan_name ||
+    entity.metric_name ||
+    entity.checklist_name ||
+    entity.tranche_name ||
+    entity.policy_name ||
+    entity.description ||
+    '';
   const stringName = String(rawName).trim();
-  
+
   if (stringName.length > 0) return stringName;
   return `Unnamed ${type}`;
 }

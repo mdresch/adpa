@@ -158,6 +158,64 @@
                     </div>
                 }
 
+                @if (activeTab == "workflow")
+                {
+                    <h4 class="fw-bold mb-3">CSR-42 Phase 0 Flow</h4>
+                    <p class="text-muted small">Ingest ideation into the governance ledger, then generate a business case from the summary.</p>
+
+                    <div class="row g-4">
+                        <div class="col-md-6">
+                            <div class="card border-0 bg-light p-4 h-100">
+                                <h6 class="fw-bold x-small text-uppercase mb-3">Ideation Ingestion</h6>
+                                <div class="mb-3">
+                                    <label class="form-label x-small fw-bold text-uppercase">Filename</label>
+                                    <input type="text" class="form-control border-0 shadow-sm" @bind="ideationTitle" placeholder="e.g. Infrastructure_Expansion_2026" />
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label x-small fw-bold text-uppercase">Content</label>
+                                    <textarea class="form-control border-0 shadow-sm" @bind="ideationContent" rows="5" placeholder="Paste ideation markdown or notes..."></textarea>
+                                </div>
+                                <button class="btn btn-primary w-100" @onclick="RunIdeation" disabled="@isExecuting">
+                                    @if (isExecuting) { <span class="spinner-border spinner-border-sm me-2"></span> }
+                                    Ingest Ideation
+                                </button>
+                                @if (ideationResult != null)
+                                {
+                                    <div class="alert alert-success border-0 shadow-sm mt-3 mb-0 x-small">
+                                        <div class="fw-bold">Ingested: @ideationResult.Title</div>
+                                        <div class="opacity-75">ID: @ideationResult.Id</div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card border-0 bg-light p-4 h-100">
+                                <h6 class="fw-bold x-small text-uppercase mb-3">Business Case</h6>
+                                <div class="mb-3">
+                                    <label class="form-label x-small fw-bold text-uppercase">Ideation Title</label>
+                                    <input type="text" class="form-control border-0 shadow-sm" @bind="selectedIdeationTitle" placeholder="Title from ledger or ingestion" />
+                                </div>
+                                <button class="btn btn-outline-primary w-100" @onclick="RunBusinessCase" disabled="@(isExecuting || string.IsNullOrWhiteSpace(selectedIdeationTitle))">
+                                    @if (isExecuting) { <span class="spinner-border spinner-border-sm me-2"></span> }
+                                    Generate Business Case
+                                </button>
+                                @if (bcResult != null)
+                                {
+                                    <div class="alert alert-info border-0 shadow-sm mt-3 mb-0 x-small">
+                                        <div class="fw-bold">Case ready: @bcResult.Id</div>
+                                        <div class="opacity-75">@bcResult.ExecutiveSummary</div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(errorMessage))
+                    {
+                        <div class="alert alert-danger border-0 shadow-sm mt-4 mb-0 x-small">@errorMessage</div>
+                    }
+                }
+
                 @if (activeTab == "integrity")
                 {
                     <h4 class="fw-bold mb-3">AEV Mechanical Integrity</h4>
@@ -332,6 +390,7 @@
     // Workflow State
     private IdeationSummary? ideationResult;
     private BusinessCase? bcResult;
+    private string selectedIdeationTitle = "";
 
     // Ledger State
     private List<IdeationSummary>? ledgerSummaries;
@@ -362,6 +421,63 @@
             var client = HttpClientFactory.CreateClient("api");
             ledgerSummaries = await client.GetFromJsonAsync<List<IdeationSummary>>("/api/ritual/ledger/ideation");
         } catch (Exception) { /* Handled in UI */ }
+    }
+
+    private async Task RunIdeation()
+    {
+        if (string.IsNullOrEmpty(ideationTitle) || string.IsNullOrEmpty(ideationContent)) {
+            errorMessage = "Filename and content are required for ideation ingestion.";
+            return;
+        }
+
+        isExecuting = true;
+        errorMessage = null;
+        ideationResult = null;
+
+        try {
+            var client = HttpClientFactory.CreateClient("api");
+            var payload = new { filename = ideationTitle, content = ideationContent };
+            var response = await client.PostAsJsonAsync("/api/ritual/phase0/ingest", payload);
+
+            if (response.IsSuccessStatusCode) {
+                ideationResult = await response.Content.ReadFromJsonAsync<IdeationSummary>();
+                selectedIdeationTitle = ideationResult?.Title ?? ideationTitle;
+                await RefreshLedger();
+            } else {
+                errorMessage = await response.Content.ReadAsStringAsync();
+            }
+        } catch (Exception ex) {
+            errorMessage = ex.Message;
+        } finally {
+            isExecuting = false;
+        }
+    }
+
+    private async Task RunBusinessCase()
+    {
+        if (string.IsNullOrWhiteSpace(selectedIdeationTitle)) {
+            errorMessage = "Select an ideation title before generating a business case.";
+            return;
+        }
+
+        isExecuting = true;
+        errorMessage = null;
+        bcResult = null;
+
+        try {
+            var client = HttpClientFactory.CreateClient("api");
+            var response = await client.PostAsJsonAsync("/api/ritual/phase0/business-case", selectedIdeationTitle);
+
+            if (response.IsSuccessStatusCode) {
+                bcResult = await response.Content.ReadFromJsonAsync<BusinessCase>();
+            } else {
+                errorMessage = await response.Content.ReadAsStringAsync();
+            }
+        } catch (Exception ex) {
+            errorMessage = ex.Message;
+        } finally {
+            isExecuting = false;
+        }
     }
 
     private async Task RunMsrfValidation()

@@ -7,6 +7,7 @@
 import * as PDFServicesSDK from '@adobe/pdfservices-node-sdk'
 import fs from 'fs/promises'
 import fsSync from 'fs'
+import os from 'os'
 import path from 'path'
 import { logger } from '../utils/logger'
 
@@ -132,8 +133,9 @@ export class AdobePDFService {
         throw new Error('Adobe PDF Services not initialized')
       }
 
-      // Create temporary HTML file
-      const tempHtmlPath = path.join(path.dirname(outputPath), `temp-${Date.now()}.html`)
+      // Create temporary HTML file in an isolated OS temp directory
+      const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'adpa-adobe-pdf-'))
+      const tempHtmlPath = path.join(tempDir, 'input.html')
       await fs.writeFile(tempHtmlPath, htmlContent, 'utf8')
 
       try {
@@ -205,7 +207,7 @@ export class AdobePDFService {
       } finally {
         // Clean up temporary file
         try {
-          await fs.unlink(tempHtmlPath)
+          await fs.rm(path.dirname(tempHtmlPath), { recursive: true, force: true })
         } catch (error) {
           logger.warn('Failed to clean up temporary HTML file:', error)
         }
@@ -475,8 +477,15 @@ export class AdobePDFService {
 
       const resultAsset = pdfServicesResponse.result.asset
       const streamAsset = await this.pdfServices.getContent({ asset: resultAsset })
-      
-      await fs.writeFile(outputPath, streamAsset.readStream)
+
+      await new Promise<void>((resolve, reject) => {
+        const writeStream = fsSync.createWriteStream(outputPath)
+        const readStream = streamAsset.readStream
+        readStream.on('error', (err: any) => reject(err))
+        writeStream.on('error', (err: any) => reject(err))
+        writeStream.on('finish', () => resolve())
+        readStream.pipe(writeStream)
+      })
 
       return {
         success: true,
@@ -518,8 +527,15 @@ export class AdobePDFService {
 
       const resultAsset = pdfServicesResponse.result.asset
       const streamAsset = await this.pdfServices.getContent({ asset: resultAsset })
-      
-      await fs.writeFile(outputPath, streamAsset.readStream)
+
+      await new Promise<void>((resolve, reject) => {
+        const writeStream = fsSync.createWriteStream(outputPath)
+        const readStream = streamAsset.readStream
+        readStream.on('error', (err: any) => reject(err))
+        writeStream.on('error', (err: any) => reject(err))
+        writeStream.on('finish', () => resolve())
+        readStream.pipe(writeStream)
+      })
 
       return {
         success: true,

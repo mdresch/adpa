@@ -18,7 +18,7 @@ export const firebaseAuthDependency: Dependency = {
   name: "Firebase Auth Provider",
   critical: process.env.NODE_ENV !== "development",
   timeout: 10000,
-  dependsOn: ["Database"],
+  dependsOn: [],
   init: async () => {
     const isDev = process.env.NODE_ENV === "development"
 

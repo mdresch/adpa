@@ -1,11 +1,19 @@
 {
   "main": "server.js",
   "dependencies": {
+    "cookie": "^0.7.0",
+    "firebase-admin": "^13.8.0",
     "firebase-frameworks": "^0.11.0",
-    "firebase-functions": "^6.0.1",
-    "firebase-admin": "^13.8.0"
+    "firebase-functions": "^6.0.1"
   },
   "engines": {
     "node": "24"
+  },
+  "overrides": {
+    "cookie": "^0.7.0",
+    "firebase-frameworks": {
+      "cookie": "^0.7.0"
+    },
+    "uuid": "11.1.1"
   }
 }

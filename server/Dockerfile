@@ -49,10 +49,11 @@ COPY --from=builder /app/types ./types
 # Install production dependencies only
 RUN pnpm install --no-frozen-lockfile --prod --filter server...
 
-EXPOSE 5000
+# Drop privileges for runtime security
+RUN chown -R node:node /app
+USER node
 
-# Use non-root user for security if possible, though Render handles some of this
-# USER node
+EXPOSE 5000
 
 WORKDIR /app/server
 CMD ["node", "-r", "tsconfig-paths/register", "dist/server/src/server.js"]

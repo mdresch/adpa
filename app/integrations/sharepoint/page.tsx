@@ -120,6 +120,12 @@ export default function SharePointIntegrationPage() {
     syncInterval: 60,
   })
 
+  const buildSharePointApiUrl = (...segments: string[]): string => {
+    const base = new URL(getApiBaseUrl())
+    const safePath = segments.map((segment) => encodeURIComponent(String(segment))).join('/')
+    return new URL(`/integrations/sharepoint/${safePath}`, base).toString()
+  }
+
   React.useEffect(() => {
     fetchIntegration()
   }, [])
@@ -755,7 +761,6 @@ export default function SharePointIntegrationPage() {
                         ) : (
                           <div className="text-center py-8">
                             <HardDrive className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                            <h3 className="text-lg font-semibold mb-2">No Document Libraries Found</h3>
                             <p className="text-muted-foreground">
                               {selectedSite
                                 ? "No document libraries found in the selected site."

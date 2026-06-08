@@ -17,7 +17,8 @@ export async function GET() {
   const backendUrl = (process.env.BACKEND_URL || 'http://127.0.0.1:5000').replace(/\/$/, '')
 
   try {
-    const liveness = await fetch(`${backendUrl}/api/health`, {
+    // BACKEND_URL is server env (dev probe), not user-controlled
+    const liveness = await fetch(`${backendUrl}/api/health`, { // codacy-disable-line SecurityRisk -- dev-only env BACKEND_URL
       cache: 'no-store',
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
     })
@@ -37,7 +38,7 @@ export async function GET() {
     const livenessBody = await liveness.json().catch(() => ({}))
 
     // Liveness passes before the readiness gate opens (DB still connecting).
-    const readiness = await fetch(`${backendUrl}/api/health/ready`, {
+    const readiness = await fetch(`${backendUrl}/api/health/ready`, { // codacy-disable-line SecurityRisk -- dev-only env BACKEND_URL
       cache: 'no-store',
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
     })

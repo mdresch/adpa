@@ -32,18 +32,17 @@ jobs:
           subscription-id: ${{ secrets.ADPABACKEND_AZURE_SUBSCRIPTION_ID }}
 
       - name: Build and push container image to registry
-        uses: azure/container-apps-deploy-action@v2
-        with:
-          appSourcePath: ${{ github.workspace }}/server
-          _dockerfilePathKey_: _dockerfilePath_
-          _targetLabelKey_: _targetLabel_
-          registryUrl: adparepo.azurecr.io
-          registryUsername: ${{ secrets.ADPABACKEND_REGISTRY_USERNAME }}
-          registryPassword: ${{ secrets.ADPABACKEND_REGISTRY_PASSWORD }}
-          containerAppName: adpa-backend
-          resourceGroup: rg-ADPA
-          imageToBuild: adparepo.azurecr.io/adpa-backend:${{ github.sha }}
-          _buildArgumentsKey_: |
-            _buildArgumentsValues_
+        run: |
+          echo "${{ secrets.ADPABACKEND_REGISTRY_PASSWORD }}" | docker login adparepo.azurecr.io -u "${{ secrets.ADPABACKEND_REGISTRY_USERNAME }}" --password-stdin
+          docker build -t adparepo.azurecr.io/adpa-backend:${{ github.sha }} ./server
+          docker push adparepo.azurecr.io/adpa-backend:${{ github.sha }}
+
+      - name: Deploy container app image
+        run: |
+          az extension add --name containerapp --upgrade
+          az containerapp update \
+            --name adpa-backend \
+            --resource-group rg-ADPA \
+            --image adparepo.azurecr.io/adpa-backend:${{ github.sha }}
 
 
