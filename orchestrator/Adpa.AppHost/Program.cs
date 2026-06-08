@@ -18,12 +18,6 @@ var postgres = builder.AddPostgres("postgres-server")
 // Explicitly add the database - Aspire will ensure it's created on the server
 var governanceDb = postgres.AddDatabase("governance-ledger");
 
-var governanceApi = builder.AddProject("governance-api", "../../rpas-governance/RPAS.Governance.Api/RPAS.Governance.Api.csproj")
-    .WithReference(governanceDb)
-    .WithEndpoint("http", endpoint => endpoint.Port = 5005)
-    .WithEnvironment("Governance__SkipEfMigrations", "true")
-    .WithEnvironment("Governance__RpasLawMode", "Enforced");
-
 var messaging = builder.AddRabbitMQ("messaging");
 
 // ---------------------------------------------------------------------------
@@ -64,10 +58,9 @@ apiservice.WithReference(governanceDb);
 apiservice.WithReference(messaging);
 apiservice.WithReference(intelligence.GetEndpoint("api")); // Using GetEndpoint to resolve generic variance in Aspire 13.x
 apiservice.WithEnvironment("INTELLIGENCE_URL", intelligence.GetEndpoint("api"));
-apiservice.WithReference(governanceApi);
-apiservice.WithEnvironment("Governance__SovereignApiRequired", "true");
-apiservice.WithEnvironment("Governance__ApprovalsEnforced", "true");
-apiservice.WithEnvironment("RPAS_GOVERNANCE_URL", governanceApi.GetEndpoint("http"));
+// Local Aspire: orchestrator uses in-process governance fallback (no external RPAS.Governance.Api repo).
+apiservice.WithEnvironment("Governance__SovereignApiRequired", "false");
+apiservice.WithEnvironment("Governance__ApprovalsEnforced", "false");
 
 // ---------------------------------------------------------------------------
 // 4. Application Tier (Root Express Backend)

@@ -1,38 +1,34 @@
-name: Orchestrator RPAS governance build
-
-on:
-  push:
-    branches: [main, develop, adpa-project-charter]
-    paths:
-      - 'orchestrator/**'
-      - 'rpas-governance/**'
-      - '.github/workflows/orchestrator-governance.yml'
-  pull_request:
-    branches: [main, develop, adpa-project-charter]
-    paths:
-      - 'orchestrator/**'
-      - 'rpas-governance/**'
-      - '.github/workflows/orchestrator-governance.yml'
-  workflow_dispatch:
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
-jobs:
-  dotnet-build:
-    name: dotnet build (orchestrator + RPAS law wiring)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
-
-      - name: Restore and build orchestrator
-        run: dotnet build "orchestrator/Adpa.sln" -c Debug --no-incremental
-
-      - name: Build RPAS.Governance.Api
-        run: dotnet build "rpas-governance/RPAS.Governance.Api/RPAS.Governance.Api.csproj" -c Debug --no-incremental
+name: Orchestrator build
+
+on:
+  push:
+    branches: [main, develop, adpa-project-charter]
+    paths:
+      - 'orchestrator/**'
+      - '.github/workflows/orchestrator-governance.yml'
+  pull_request:
+    branches: [main, develop, adpa-project-charter]
+    paths:
+      - 'orchestrator/**'
+      - '.github/workflows/orchestrator-governance.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dotnet-build:
+    name: dotnet build (orchestrator)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore and build orchestrator
+        run: dotnet build "orchestrator/Adpa.sln" -c Debug --no-incremental
+
