@@ -212,7 +212,27 @@ export function getInternalPool(): Pool | null {
 }
 
 // Circuit breaker for DB to avoid hammering DB when it's unstable
-const dbBreaker = new CircuitBreaker(3, 30000) // open after 3 failures, reset after 30s
+const dbBreaker = new CircuitBreaker(5, 30000) // open after 5 failures, reset after 30s
+
+const POOL_QUERY_MAX_RETRIES = 2
+
+function isTransientPoolError(err: unknown): boolean {
+  const message = String((err as { message?: string })?.message ?? "")
+  const code = String((err as { code?: string })?.code ?? "")
+  return (
+    message.includes("Connection terminated unexpectedly") ||
+    message.includes("Connection terminated due to connection timeout") ||
+    message.includes("ECONNRESET") ||
+    message.includes("ETIMEDOUT") ||
+    message.includes("connection timeout") ||
+    code === "ECONNRESET" ||
+    code === "57P01" ||
+    code === "57P02" ||
+    code === "57P03" ||
+    code === "08006" ||
+    code === "08003"
+  )
+}
 
 function attachPoolErrorHandler(p: Pool) {
   try {
@@ -245,16 +265,29 @@ function patchPoolQuery(p: Pool) {
           throw new DatabaseCircuitOpenError()
         }
 
-        try {
-          const res = await orig(text, params)
-          // record success on any successful query
-          dbBreaker.recordSuccess()
-          return res
-        } catch (err: any) {
-          logger.error('[DB-GUARD] Unhandled pool.query error', { sql: text, params, message: err?.message, stack: err?.stack })
-          // record failure and possibly open circuit
-          dbBreaker.recordFailure()
-          throw err // Re-throw to allow callers (like migration runner) to catch it
+        for (let attempt = 0; attempt <= POOL_QUERY_MAX_RETRIES; attempt++) {
+          try {
+            const res = await orig(text, params)
+            dbBreaker.recordSuccess()
+            return res
+          } catch (err: any) {
+            if (attempt < POOL_QUERY_MAX_RETRIES && isTransientPoolError(err)) {
+              logger.warn('[DB-GUARD] Transient pool error, retrying query', {
+                attempt: attempt + 1,
+                message: err?.message,
+              })
+              await new Promise((resolve) => setTimeout(resolve, 150 * (attempt + 1)))
+              continue
+            }
+            logger.error('[DB-GUARD] Unhandled pool.query error', {
+              sql: text,
+              params,
+              message: err?.message,
+              stack: err?.stack,
+            })
+            dbBreaker.recordFailure()
+            throw err
+          }
         }
       }
   } catch (err) {
@@ -399,8 +432,11 @@ async function connectDatabaseInternal(): Promise<void> {
         }
       }
 
-      // Optimize pool size for Supabase (default 20 is safer for shared clusters)
-      poolConfig.max = Number(process.env.PG_MAX) || 20
+      // Transaction pooler (Supabase :6543) shares a small server-side pool — keep client max low.
+      const usesTransactionPooler =
+        currentDbUrl.includes(':6543') || currentDbUrl.includes('pooler.supabase.com')
+      const poolerDefaultMax = usesTransactionPooler ? 5 : 20
+      poolConfig.max = Number(process.env.PG_MAX) || poolerDefaultMax
 
       const testPool = new Pool(poolConfig)
 

@@ -22,6 +22,8 @@ pnpm dev
 
 **Slow first page load (Windows / F: drive)**: `✓ Ready` only means the dev server is listening. The **first browser request** still compiles instrumentation and the route (often several minutes on a slow filesystem). Until the terminal shows `GET /… 200`, the tab may spin. Proxied API checks can work earlier: `http://localhost:3000/api/health` → backend.
 
+**Backend restart heads-up (dev)**: Nodemon restarts the Express server on every `server/` code change. While the backend is down, the Next.js UI stays up but proxied `/api/*` calls fail (502/500, toasts, empty panels). In development, a **top-of-screen banner** polls `/api/dev/backend-health` and shows *Backend is restarting* vs *not reachable*. **Agents:** before editing `server/` files, tell the user the backend will reload and API errors are expected for ~30s–2m; after applying server changes, note that nodemon may still be starting and they should wait for `All dependencies initialized successfully` in the backend terminal before re-testing features.
+
 **Faster Turbopack cache on Windows** (do not put `C:\...` in `NEXT_DIST_DIR` — Next treats `distDir` as relative and will error). One-time setup, then use `dev:cache`:
 
 ```powershell

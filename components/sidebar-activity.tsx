@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { FileText, Clock, ChevronRight, Activity, Zap } from "lucide-react"
 import { apiClient } from "@/lib/api"
+import { useAuth } from "@/contexts/AuthContext"
 import { cn } from "@/lib/utils"
 
 interface ActivityItem {
@@ -25,29 +26,41 @@ interface ActivityItem {
 
 export function SidebarActivity() {
   const router = useRouter()
+  const { isAuthenticated, loading: authLoading } = useAuth()
   const [activities, setActivities] = useState<ActivityItem[]>([])
   const [loading, setLoading] = useState(true)
 
   const fetchRecentActivity = async () => {
+    if (!isAuthenticated) {
+      setActivities([])
+      setLoading(false)
+      return
+    }
+
     try {
-      // Fetch latest completed/failed generation jobs as "Activity"
-      const response = await apiClient.get<any>('/jobs?limit=5&type=ai-generate')
+      const response = await apiClient.get<{ jobs: ActivityItem[] }>(
+        "/jobs/activity?limit=5&type=ai-generate",
+        { suppressAllErrors: true }
+      )
       if (response.jobs) {
         setActivities(response.jobs)
       }
-    } catch (error) {
-      console.error("Failed to fetch sidebar activity:", error)
+    } catch {
+      // Non-critical sidebar poll — keep last known activity
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
+    if (authLoading) return
+
     fetchRecentActivity()
-    // Poll for new activity every 60 seconds
+    if (!isAuthenticated) return
+
     const interval = setInterval(fetchRecentActivity, 60000)
     return () => clearInterval(interval)
-  }, [])
+  }, [authLoading, isAuthenticated])
 
   if (loading && activities.length === 0) {
     return (

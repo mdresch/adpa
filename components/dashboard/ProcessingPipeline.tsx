@@ -12,8 +12,8 @@ export function ProcessingPipeline({ jobs = [] }: { jobs?: Job[] }) {
     // Map stage ranges to job types
     // Stage 1: Ingestion
     if (stageIndex === 0) {
-      const active = jobs.some(j => j.status === 'processing' && (j.type === 'document-convert' || j.type === 'extract-project-data'))
-      const completed = jobs.some(j => j.status === 'completed' && (j.type === 'document-convert' || j.type === 'extract-project-data'))
+      const active = jobs.some(j => j.status === 'processing' && (j.type === 'document-convert' || j.type === 'extract-project-data' || j.type === 'save-inline-entities'))
+      const completed = jobs.some(j => j.status === 'completed' && (j.type === 'document-convert' || j.type === 'extract-project-data' || j.type === 'save-inline-entities'))
       return active ? 'active' : (completed ? 'completed' : 'idle')
     }
     // Stages 2-6: Intelligence Pipeline
@@ -23,8 +23,9 @@ export function ProcessingPipeline({ jobs = [] }: { jobs?: Job[] }) {
     }
     // Stage 7: AI Generation
     if (stageIndex === 6) {
-      const active = jobs.some(j => j.status === 'processing' && (j.type === 'ai-generate' || j.type === 'document-regeneration'))
-      return active ? 'active' : 'idle'
+      const active = jobs.some(j => j.status === 'processing' && (j.type === 'ai-generate' || j.type === 'document-regeneration' || j.type === 'save-inline-entities'))
+      const completed = jobs.some(j => j.status === 'completed' && (j.type === 'save-inline-entities'))
+      return active ? 'active' : (completed ? 'completed' : 'idle')
     }
     // Stage 8: Quality
     if (stageIndex === 7) {

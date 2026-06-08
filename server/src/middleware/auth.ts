@@ -22,6 +22,20 @@ interface AuthRequest extends Request {
   }
 }
 
+/** Firebase ID tokens carry a `kid` in the JWT header; legacy ADPA JWTs do not. */
+function isFirebaseIdToken(token: string): boolean {
+  try {
+    const headerPart = token.split(".")[0]
+    if (!headerPart) return false
+    const normalized = headerPart.replace(/-/g, "+").replace(/_/g, "/")
+    const padded = normalized + "=".repeat((4 - (normalized.length % 4)) % 4)
+    const header = JSON.parse(Buffer.from(padded, "base64").toString("utf8")) as { kid?: string }
+    return Boolean(header.kid)
+  } catch {
+    return false
+  }
+}
+
 export const authenticateToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
   const authHeader = req.headers["authorization"]
 
@@ -52,42 +66,39 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
     return res.status(401).json({ error: "Invalid token format" })
   }
 
-  // DUAL-AUTH: Verify JWT first and handle token-specific errors separately
+  // DUAL-AUTH: route by token type — skip Firebase round-trip for legacy JWTs (no `kid` header)
   let decoded: any
   try {
-    // Attempt Firebase verification first
-    try {
-      const firebaseUser = await admin.auth().verifyIdToken(token)
-      // Map Firebase user to our internal format
-      decoded = { 
-        fromFirebase: true, 
-        email: firebaseUser.email, 
-        firebaseUid: firebaseUser.uid 
+    if (isFirebaseIdToken(token)) {
+      try {
+        const firebaseUser = await admin.auth().verifyIdToken(token)
+        decoded = {
+          fromFirebase: true,
+          email: firebaseUser.email,
+          firebaseUid: firebaseUser.uid,
+        }
+      } catch (fbError: any) {
+        logger.warn("Firebase token verification failed:", {
+          message: fbError.message,
+          code: fbError.code,
+          tokenPrefix: token.substring(0, 10),
+        })
+        return res.status(401).json({
+          error: "Invalid token",
+          details: process.env.NODE_ENV === "production" ? "Authentication failed" : fbError.message,
+        })
       }
-    } catch (fbError: any) {
-      // Log the specific Firebase error for diagnostics
-      logger.warn("Firebase token verification failed:", {
-        message: fbError.message,
-        code: fbError.code,
-        tokenPrefix: token.substring(0, 10)
-      })
-      
-      // Fallback to legacy JWT if Firebase fails
+    } else {
       try {
         decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key") as any
       } catch (jwtError: any) {
-        // Log both errors if they both fail
-        logger.error("Token verification failed (Both Firebase and Legacy JWT failed):", {
-          firebaseError: fbError.message,
-          jwtError: jwtError.message,
-          tokenLength: token.length
+        logger.warn("Legacy JWT verification failed:", {
+          message: jwtError.message,
+          tokenLength: token.length,
         })
-        
-        return res.status(401).json({ 
-          error: "Invalid token", 
-          details: process.env.NODE_ENV === 'production' 
-            ? "Authentication failed" 
-            : `Firebase: ${fbError.message} | JWT: ${jwtError.message}`
+        return res.status(401).json({
+          error: "Invalid token",
+          details: process.env.NODE_ENV === "production" ? "Authentication failed" : jwtError.message,
         })
       }
     }

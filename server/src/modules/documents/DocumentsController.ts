@@ -20,18 +20,17 @@ import { DocumentRepository } from './DocumentRepository';
 import { AuthRepository } from '../auth/AuthRepository';
 import { ProjectRepository } from '../projects/ProjectRepository';
 import { childLogger } from '../../utils/logger';
-import { asyncLocalStorage } from '../../infrastructure/logger';
 import { cache } from '../../utils/redis';
 import { trackActivity } from '../../middleware/analyticsMiddleware';
 import AuditService from '../../services/auditService';
 import { unifiedPdfService } from '../../services/pdfService';
 import { documentConversionService } from '../../services/documentConversionService';
-import { extractionQueue } from '../../services/queueService';
 import { DocxService, type GenerateDocxOptions } from '../../services/docxService';
 import { pool } from '../../database/connection';
 import { storageArchivalService } from '../../services/storageArchivalService';
 import { buildCombinedDocxExport } from './bulkDocxExport';
 import { entityExtractionService } from '../../services/entityExtractionService';
+import { enrichDocumentExtractionQuality } from '../analysis/entityExtractionQuality';
 
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -163,6 +162,7 @@ export class DocumentsController {
             if (document.generation_metadata && typeof document.generation_metadata === 'string') {
                 try { document.generation_metadata = JSON.parse(document.generation_metadata); } catch (e) { }
             }
+            enrichDocumentExtractionQuality(document);
 
             await cache.set(cacheKey, document, 1800);
             if (req.user?.id) trackActivity.viewDocument(req.user.id, document.id, document.project_id);
@@ -662,13 +662,17 @@ export class DocumentsController {
 
     private static async triggerSideEffects(document: any, req: Request) {
         const log = childLogger({ requestId: (req as any).requestId });
-        const correlationId = asyncLocalStorage.getStore();
         try {
-            const jobData = { projectId: document.project_id, documentIds: [document.id], autoTriggered: true, correlationId };
-            const jobRes = await pool.query(`INSERT INTO jobs (type, status, data, created_by, project_id) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-                ['project-data-extraction', 'pending', JSON.stringify(jobData), req.user?.id, document.project_id]);
-            await extractionQueue.add('extract-project-data', { jobId: jobRes.rows[0].id, ...jobData, userId: req.user?.id, correlationId }, { jobId: jobRes.rows[0].id });
-        } catch (e) { log.error('Side effects extraction fail', e); }
+            const { enqueueEntityPersistence } = await import('../../services/jobs/enqueueEntityPersistence');
+            await enqueueEntityPersistence({
+                projectId: document.project_id,
+                userId: req.user?.id ?? null,
+                documentId: document.id,
+                content: document.content,
+                triggeredBy: 'document-create',
+                autoTriggered: true,
+            });
+        } catch (e) { log.error('Side effects entity persistence fail', e); }
 
         storageArchivalService.archiveDocument({
             projectId: document.project_id, documentId: document.id, fileName: document.name,

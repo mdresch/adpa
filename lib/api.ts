@@ -983,14 +983,21 @@ export class ApiClient {
             ? errorDetails
             : (nativeError?.message || JSON.stringify(errorDetails))
 
-        console.error(`API request failed: ${endpoint}`, {
-          url,
-          status: statusCode,
-          networkError: isNetworkError,
-          message: errorMessage,
-          errorName: nativeError?.name,
-          error
-        })
+        const isStartupUnavailable =
+          statusCode === 503 &&
+          typeof errorMessage === 'string' &&
+          errorMessage.includes('initializing dependencies')
+
+        if (!isStartupUnavailable) {
+          console.error(`API request failed: ${endpoint}`, {
+            url,
+            status: statusCode,
+            networkError: isNetworkError,
+            message: errorMessage,
+            errorName: nativeError?.name,
+            error
+          })
+        }
       }
       throw error
     }

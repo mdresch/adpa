@@ -183,6 +183,7 @@ export class QueueService {
       // Determine which queue to use based on job type
       switch (validatedType) {
         case "ai-generate":
+        case "save-inline-entities":
           queueName = "ai-processing"
           break
         case "document-convert":

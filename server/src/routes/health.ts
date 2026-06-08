@@ -105,8 +105,8 @@ router.get("/", async (req: Request, res: Response) => {
   const uptime = process.uptime();
   const timestamp = new Date().toISOString();
 
-  // Fire-and-forget logging (awaited for deterministic tests)
-  await logHealthCheck(status, { uptime, caller: req.ip });
+  // Non-blocking — avoid DB contention when health is polled frequently
+  void logHealthCheck(status, { uptime, caller: req.ip });
 
   res.status(200).json({
     status,

@@ -12,6 +12,7 @@ import { AuthProvider } from "@/contexts/AuthContext"
 import { WebSocketProvider } from "@/contexts/WebSocketContext"
 import RoomStatusList from "@/components/room-status-list"
 import { ClarityProvider } from "@/components/analytics/ClarityProvider"
+import { BackendConnectivityBanner } from "@/components/dev/BackendConnectivityBanner"
 
 const inter = Inter({
   subsets: ["latin"],
@@ -45,6 +46,7 @@ export default function RootLayout({
           <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
             <AuthProvider>
               <WebSocketProvider>
+                <BackendConnectivityBanner />
                 <Suspense fallback={null}>
                   <RouteProgress />
                 </Suspense>

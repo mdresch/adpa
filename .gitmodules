@@ -1,0 +1,9 @@
+[submodule "AI-Foundry-Projects"]
+	path = AI-Foundry-Projects
+	url = https://github.com/mdresch/AI-Foundry-Projects.git
+[submodule "langfuse-repo"]
+	path = langfuse-repo
+	url = https://github.com/mdresch/langfuse.git
+[submodule "open-webui-repo"]
+	path = open-webui-repo
+	url = https://github.com/mdresch/open-webui.git

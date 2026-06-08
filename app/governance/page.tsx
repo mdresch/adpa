@@ -1,8 +1,26 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import DracoDiffViewer from './components/DracoDiffViewer';
+import React, { useState, useEffect, useCallback } from 'react';
+import dynamic from 'next/dynamic';
+import { Sidebar } from '@/components/sidebar';
+import { Header } from '@/components/header';
+import { fetchRelativeApi } from '@/lib/safe-http-path';
 import { useAuth } from '@/contexts/AuthContext';
+
+const DracoDiffViewer = dynamic(() => import('./components/DracoDiffViewer'), { ssr: false });
+
+const LEDGER_FETCH_TIMEOUT_MS = 20_000;
+const LOADING_SAFETY_MS = 25_000;
+
+async function fetchRelativeApiWithTimeout(path: string, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetchRelativeApi(path, { signal: controller.signal });
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
 
 interface AuditRecord {
   audit_id: string;
@@ -34,35 +52,49 @@ export default function GovernanceDashboard() {
   const [rationale, setRationale] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Fetch all pending and recent audits from the ledger api
-  const fetchLedger = async () => {
+  const fetchLedger = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
     try {
-      const res = await fetch('/api/v1/governance/ledger');
-      if (!res.ok) throw new Error('Failed to fetch ledger');
+      const res = await fetchRelativeApiWithTimeout(
+        '/api/v1/governance/ledger',
+        LEDGER_FETCH_TIMEOUT_MS,
+      );
+      if (!res.ok) throw new Error(`Ledger request failed (${res.status})`);
       const data = await res.json();
       setAudits(data);
-      
-      // Keep selected audit in sync if it exists in the new data
-      if (selectedAudit) {
-        const updatedSelected = data.find((a: AuditRecord) => a.audit_id === selectedAudit.audit_id);
-        if (updatedSelected) {
-          setSelectedAudit(updatedSelected);
+
+      setSelectedAudit((current) => {
+        if (current) {
+          const updatedSelected = data.find((a: AuditRecord) => a.audit_id === current.audit_id);
+          return updatedSelected ?? current;
         }
-      } else if (data.length > 0) {
-        setSelectedAudit(data[0]);
-      }
+        return data.length > 0 ? data[0] : null;
+      });
     } catch (err) {
+      const message =
+        err instanceof DOMException && err.name === 'AbortError'
+          ? 'Ledger sync timed out. The backend may be waking up — try again.'
+          : err instanceof Error
+            ? err.message
+            : 'Failed to load governance ledger';
       console.error('Failed to poll ADPA ledger data streams:', err);
+      setLoadError(message);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   // Fetch all active policies from the policy library
-  const fetchPolicies = async () => {
+  const fetchPolicies = useCallback(async () => {
     try {
-      const res = await fetch('/api/v1/policy-library');
+      const res = await fetchRelativeApiWithTimeout(
+        '/api/v1/policy-library',
+        LEDGER_FETCH_TIMEOUT_MS,
+      );
       if (res.ok) {
         const data = await res.json();
         setPolicies(data);
@@ -70,11 +102,26 @@ export default function GovernanceDashboard() {
     } catch (err) {
       console.error('Failed to fetch policies:', err);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchLedger();
-    fetchPolicies();
+    void fetchLedger();
+    void fetchPolicies();
+  }, [fetchLedger, fetchPolicies]);
+
+  // Never leave the SSR spinner up indefinitely if the client fetch stalls
+  useEffect(() => {
+    const safety = window.setTimeout(() => {
+      setLoading((prev) => {
+        if (prev) {
+          setLoadError((current) =>
+            current ?? 'Ledger sync is taking longer than expected. Try refreshing.',
+          );
+        }
+        return false;
+      });
+    }, LOADING_SAFETY_MS);
+    return () => window.clearTimeout(safety);
   }, []);
 
   // Handle the atomic state mutation transaction
@@ -116,11 +163,39 @@ export default function GovernanceDashboard() {
     window.open(`/api/v1/governance/ledger/${selectedAudit.audit_id}/export`, '_blank');
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-900 text-slate-400 font-mono flex items-center justify-center">
-        📡 Syncing ADPA Governance Ledger Streams...
+  const shell = (content: React.ReactNode) => (
+    <div className="flex h-screen bg-slate-900">
+      <Sidebar />
+      <div className="flex flex-1 flex-col min-w-0">
+        <Header />
+        <div className="flex-1 overflow-auto">{content}</div>
       </div>
+    </div>
+  );
+
+  if (loading) {
+    return shell(
+      <div className="min-h-full text-slate-400 font-mono flex items-center justify-center p-8">
+        📡 Syncing ADPA Governance Ledger Streams...
+      </div>,
+    );
+  }
+
+  if (loadError) {
+    return shell(
+      <div className="min-h-full text-slate-300 flex flex-col items-center justify-center gap-4 p-8 text-center">
+        <p className="font-mono text-sm text-amber-400">⚠️ {loadError}</p>
+        <button
+          type="button"
+          onClick={() => {
+            void fetchLedger();
+            void fetchPolicies();
+          }}
+          className="px-4 py-2 rounded-md border border-slate-700 bg-slate-800 hover:bg-slate-700 text-sm font-mono"
+        >
+          Retry sync
+        </button>
+      </div>,
     );
   }
 
@@ -128,8 +203,8 @@ export default function GovernanceDashboard() {
   const activePolicy = policies.find(p => p.rule_code === selectedAudit?.rule_code);
   const oldText = activePolicy ? activePolicy.description : '';
 
-  return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 font-sans p-8">
+  return shell(
+    <div className="min-h-full text-slate-100 font-sans p-8">
       {/* ─── TITLE HEAD HEADER ────────────────────────────────────────────────── */}
       <header className="border-b border-slate-800 pb-4 mb-8 flex justify-between items-center">
         <div>
@@ -327,6 +402,6 @@ export default function GovernanceDashboard() {
           )}
         </section>
       </main>
-    </div>
+    </div>,
   );
 }

@@ -7,6 +7,7 @@ dotenv.config({ path: path.join(__dirname, '../.env') })
 function getQueueNameFromType(jobType: string): string {
   const queueMap: Record<string, string> = {
     'ai-generate': 'ai-processing',
+    'save-inline-entities': 'ai-processing',
     'document-convert': 'document-processing',
     'pipeline-processing': 'pipeline-processing',
     'baseline-extract': 'baseline-processing',

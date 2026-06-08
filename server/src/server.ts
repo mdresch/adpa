@@ -304,11 +304,14 @@ app.use("/api/integrations", integrationNeo4jRoutes)
 if (integrationsModuleRoutes && integrationsModuleRoutes[0]) app.use("/api/integrations", integrationsModuleRoutes[0].router)
 if (documentModuleRoutes && documentModuleRoutes[0]) app.use("/api/documents", documentModuleRoutes[0].router)
 if (analysisModuleRoutes && analysisModuleRoutes[0]) {
-  app.use("/api/project-data-extraction", (req, res, next) => {
+  const mountAnalysisRoutes = (req: express.Request, res: express.Response, next: express.NextFunction) => {
     const summaryMatch = req.url.match(/^\/([^/]+)\/summary$/)
     if (summaryMatch) req.url = `/summary/${summaryMatch[1]}`
     next()
-  }, analysisModuleRoutes[0].router)
+  }
+  app.use("/api/project-data-extraction", mountAnalysisRoutes, analysisModuleRoutes[0].router)
+  // Legacy alias — some clients call /api/analysis/* (v1 modular path is /api/v1/analysis/*)
+  app.use("/api/analysis", mountAnalysisRoutes, analysisModuleRoutes[0].router)
 }
 
 app.use("/api/document-generation", documentGenerationRoutes)

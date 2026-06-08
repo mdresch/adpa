@@ -836,44 +836,41 @@ export class DocumentGeneratorService {
     user: AuthenticatedUser
   ): Promise<void> {
     try {
-      // Extract project ID from request data if available
       const projectId = request.data?.project_id
       if (!projectId) {
-        logger.info('Skipping entity extraction - no project_id found in request data')
+        logger.info('Skipping entity persistence - no project_id found in request data')
         return
       }
 
-      // Enqueue entity extraction job
-      const { addJob } = await import('../../services/queueService')
-      const jobId = await addJob(
-        'extract-project-data',
-        {
-          projectId,
-          userId: user.id,
-          documentId: response.id,
-          triggeredBy: 'document-generation',
-          generationId: response.id
-        },
-        {
-          attempts: 3,
-          backoff: {
-            type: 'exponential',
-            delay: 5000
-          },
-          timeout: 300000 // 5 minutes
+      let content = ''
+      if (request.output_format === OutputFormat.MARKDOWN && response.file_path) {
+        try {
+          content = await fs.readFile(response.file_path, 'utf-8')
+        } catch {
+          content = ''
         }
-      )
+      }
 
-      logger.info(`Enqueued entity extraction job ${jobId} for document ${response.id}`, {
+      const { enqueueEntityPersistence } = await import('../../services/jobs/enqueueEntityPersistence')
+      const jobId = await enqueueEntityPersistence({
         projectId,
-        documentId: response.id,
         userId: user.id,
-        generationId: response.id
+        documentId: response.id,
+        content,
+        triggeredBy: 'legacy-document-generation',
+        autoTriggered: true,
       })
 
+      if (jobId) {
+        logger.info(`Enqueued entity persistence job ${jobId} for generation ${response.id}`, {
+          projectId,
+          documentId: response.id,
+          userId: user.id,
+        })
+      }
+
     } catch (error) {
-      // Don't fail document generation if entity extraction fails to enqueue
-      logger.error('Failed to enqueue entity extraction job', {
+      logger.error('Failed to enqueue entity persistence job', {
         error: error.message,
         documentId: response.id,
         userId: user.id

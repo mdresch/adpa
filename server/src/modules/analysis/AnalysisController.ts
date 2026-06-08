@@ -17,6 +17,8 @@ import { ENTITY_DOMAIN_WEIGHTS, getEntityWeights } from '../../types/entity-doma
 import { createInitialBatchProgressMeta, normalizeBatchingConfig } from '../../services/extraction/batchPlanner';
 import { ENTITY_COUNT_TABLES, ENTITY_CAMEL_KEY_TO_TABLE } from './entityTypeTables';
 import { PMBOK6_PROCESS_MAP, PMBOK6_DELIVERABLE_MAP } from '../../types/pmbok6-mapping';
+import { CHARTER_TEMPLATE_IDS, computeBaselineReadiness } from './baselineReadiness';
+import { computeEntityExtractionQuality, enrichDocumentExtractionQuality } from './entityExtractionQuality';
 
 function getDefaultContextWindow(modelId: string, providerType: string): number {
   const contextWindows: Record<string, Record<string, number>> = {
@@ -448,12 +450,7 @@ export class AnalysisController {
         processes: processCompliance
       };
 
-      // 4. Calculate High-Integrity Baseline Readiness
-      const CHARTER_TEMPLATE_IDS = [
-        'ffbcf898-0486-46fa-939f-e5629737de0e', 
-        '27788b37-2aa2-473f-accc-5a9e7eec7c48'
-      ];
-      
+      // 4. Lifecycle-aware baseline readiness (distinct from extraction data maturity)
       const pmbokThresholds: Record<string, number> = {
         stakeholders: 25, team: 15, developmentApproach: 5, planning: 30,
         projectWork: 20, delivery: 20, measurement: 15, uncertainty: 20
@@ -466,27 +463,47 @@ export class AnalysisController {
 
       const coveragePercent = Math.round((domainsMet / 8) * 100);
 
-      const charterDocRes = await this.repository.query(`
-        SELECT id FROM documents 
-        WHERE project_id = $1 
-        AND template_id = ANY($2)
-        AND status IN ('published', 'review', 'draft', 'generated')
-        AND (word_count IS NULL OR word_count > 100)
-        LIMIT 1
-      `, [projectId, CHARTER_TEMPLATE_IDS]);
+      const [charterDocRes, projectDocsRes, activeBaselineRes] = await Promise.all([
+        this.repository.query(`
+          SELECT id FROM documents 
+          WHERE project_id = $1 
+          AND template_id = ANY($2)
+          AND status IN ('published', 'review', 'draft', 'generated')
+          AND (word_count IS NULL OR word_count > 100)
+          LIMIT 1
+        `, [projectId, CHARTER_TEMPLATE_IDS]),
+        this.repository.query(`
+          SELECT title, name FROM documents
+          WHERE project_id = $1
+          AND status IN ('published', 'review', 'draft', 'generated')
+        `, [projectId]),
+        this.repository.query(`
+          SELECT is_approved, entity_count
+          FROM project_entity_baselines
+          WHERE project_id = $1 AND status = 'active'
+          ORDER BY baseline_version DESC
+          LIMIT 1
+        `, [projectId]),
+      ]);
 
       const hasCharter = charterDocRes.rows.length > 0;
+      const activeBaselineRow = activeBaselineRes.rows[0] ?? null;
 
-      const baselineReadiness = {
-        isReady: hasCharter && coveragePercent >= 60 && totalEntities >= 350,
-        coveragePercent,
+      const baselineReadiness = computeBaselineReadiness({
         hasCharter,
+        coveragePercent,
         totalEntities,
-        requirements: { minEntities: 350, minCoverage: 60, requiresCharter: true },
-        missingReason: !hasCharter ? 'Project Charter missing' : 
-                       coveragePercent < 60 ? `Insufficient domain coverage (${coveragePercent}% < 60%)` :
-                       totalEntities < 350 ? `Insufficient entity density (${totalEntities} < 350)` : null
-      };
+        documents: projectDocsRes.rows,
+        activeBaseline: activeBaselineRow
+          ? {
+              is_approved: activeBaselineRow.is_approved,
+              entity_count:
+                typeof activeBaselineRow.entity_count === 'string'
+                  ? JSON.parse(activeBaselineRow.entity_count)
+                  : activeBaselineRow.entity_count,
+            }
+          : null,
+      });
 
       res.json({ 
         success: true, 
@@ -644,6 +661,19 @@ export class AnalysisController {
       };
 
       entities.forEach(entity => {
+        if (!entity.entity_type) return;
+
+        const entityData =
+          typeof entity.entity_data === 'string'
+            ? (() => {
+                try {
+                  return JSON.parse(entity.entity_data);
+                } catch {
+                  return {};
+                }
+              })()
+            : entity.entity_data || {};
+
         const typeKey = entity.entity_type.toLowerCase();
         const mappedType = singularToPluralMap[typeKey] || typeKey;
         const camelKey = TABLE_TO_CAMEL[mappedType] || TABLE_TO_CAMEL[mappedType + 's'] || entity.entity_type;
@@ -653,24 +683,43 @@ export class AnalysisController {
           entityCounts[camelKey] = 0;
         }
         groupedEntities[camelKey].push({
-          id: entity.id, name: entity.entity_name, ...entity.entity_data,
+          id: entity.id, name: entity.entity_name, ...entityData,
           extraction_confidence: entity.extraction_confidence,
           is_verified: entity.is_verified, created_at: entity.created_at,
           source_document_id: entity.document_id,
           status: entity.status,
-          context_match: entity.entity_data?.context_match
+          context_match: entityData?.context_match
         });
         entityCounts[camelKey]++;
       });
 
-      const metadata = typeof document.generation_metadata === 'string'
-        ? JSON.parse(document.generation_metadata)
-        : document.generation_metadata || {};
+      const metadata = (() => {
+        const raw = document.generation_metadata;
+        if (!raw) return {};
+        if (typeof raw === 'string') {
+          try {
+            return JSON.parse(raw) as Record<string, unknown>;
+          } catch {
+            return {};
+          }
+        }
+        return (raw as Record<string, unknown>) || {};
+      })();
 
       res.json({
         success: true, documentId: docId, documentName: document.name, projectId: document.project_id,
         entityCounts, entities: groupedEntities, totalEntities: entities.length,
         contextMatchingScore: metadata.contextMatchingScore || 0,
+        occurrenceConsistencyScore: metadata.occurrenceConsistencyScore || 0,
+        contextConsistencyStats: metadata.contextConsistencyStats || null,
+        entityExtractionQuality: metadata.entityExtractionQuality ?? (() => {
+          enrichDocumentExtractionQuality({
+            name: document.name,
+            entity_counts: entityCounts,
+            generation_metadata: metadata,
+          });
+          return metadata.entityExtractionQuality;
+        })(),
         appliedContextEntities: metadata.appliedContextEntities || []
       });
     } catch (error) {

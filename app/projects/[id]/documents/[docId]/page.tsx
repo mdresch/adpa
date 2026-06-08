@@ -16,6 +16,26 @@ import { PageTransition } from "@/components/page-transition"
 import { AnimatedLayout, AnimatedCard } from "@/components/animated-layout"
 import { motion } from "framer-motion"
 import {
+  calculateProductivityGain,
+  calculateReadingRoi,
+  computeComplexityScore,
+  estimateManualDocumentEffort,
+  formatContextCompactionSummary,
+  formatEffortHours,
+  formatHourRange,
+  formatProcessingTimeDisplay,
+  resolveAvgWordsPerSentence,
+  resolveCharacterCount,
+  resolveContextCompactionTiers,
+  resolveEffectiveProcessingTimeMs,
+  resolveGenerationJobId,
+  resolveParagraphCount,
+  resolveReadingTimeMinutes,
+  resolveSentenceCount,
+  resolveSourceDocuments,
+  resolveWordCount,
+} from "@/lib/documents/generationMetadataMetrics"
+import {
   FileText,
   Edit,
   MessageSquare,
@@ -100,6 +120,8 @@ import {
 } from "@/components/ui/icons-shim"
 import { FileSignature } from "lucide-react"
 import { SignatureRequestDialog, SignatureStatusBadge } from "@/components/signature"
+import { ContextConsistencyCard } from "@/components/documents/ContextConsistencyCard"
+import { EntityExtractionQualityCard } from "@/components/documents/EntityExtractionQualityCard"
 import {
   Dialog,
   DialogContent,
@@ -125,7 +147,7 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
 import { useAuth } from "@/contexts/AuthContext"
-import { apiClient, Project, Template } from "@/lib/api"
+import { apiClient, Job, Project, Template } from "@/lib/api"
 import { toast } from '@/lib/notify'
 import {
   getDocumentSignPath,
@@ -163,6 +185,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
   const { isAuthenticated, user, token } = useAuth()
 
   const [documentData, setDocumentData] = useState<ADPADocument | null>(null)
+  const [generationJobTiming, setGenerationJobTiming] = useState<Job | null>(null)
   const [project, setProject] = useState<Project | null>(null)
   const [templates, setTemplates] = useState<Template[]>([])
   const [loading, setLoading] = useState(true)
@@ -406,6 +429,18 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
       console.log('[METADATA-PAGE] Source documentDatas array:', JSON.stringify(sourceDocs, null, 2))
 
       setDocumentData(fetchedDocument as any)
+      setGenerationJobTiming(null)
+
+      const generationJobId = resolveGenerationJobId(genMetadata)
+      if (generationJobId) {
+        try {
+          const job = await apiClient.getJob(generationJobId)
+          setGenerationJobTiming(job)
+        } catch (jobError) {
+          console.warn('[METADATA-PAGE] Could not load generation job timing:', jobError)
+        }
+      }
+
       await fetchSignatureRequest()
 
       // Fetch template category if template_id exists
@@ -1120,11 +1155,7 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">Word Count</Label>
                           <p className="text-sm">
-                            {(
-                              documentData?.word_count ||
-                              documentData?.generation_metadata?.contentMetrics?.words ||
-                              0
-                            ).toLocaleString()}
+                            {resolveWordCount(documentData).toLocaleString()}
                           </p>
                         </div>
                         <div>
@@ -1469,6 +1500,19 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-4">
+                        {(() => {
+                          const aiTimeMs = resolveEffectiveProcessingTimeMs(
+                            documentData?.generation_metadata,
+                            generationJobTiming
+                          )
+                          const compactionTiers = resolveContextCompactionTiers(
+                            documentData?.context_snapshots
+                          )
+                          const compactionSummary = formatContextCompactionSummary(compactionTiers)
+                          const tiersReady = compactionTiers.filter((tier) => tier.available).length
+
+                          return (
+                            <>
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-muted-foreground">AI Model</span>
                           <span className="text-sm font-medium">
@@ -1480,28 +1524,31 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-muted-foreground">Processing Time</span>
                           <span className="text-sm font-medium">
-                            {(() => {
-                              // Try formatted version first
-                              const formatted = documentData?.generation_metadata?.aiProcessing?.processingTime ||
-                                documentData?.generation_metadata?.generation?.durationFormatted
-                              if (formatted) return formatted
-
-                              // Fall back to raw milliseconds and format
-                              const rawMs = documentData?.generation_metadata?.aiProcessing?.processingTimeMs ||
-                                documentData?.generation_metadata?.generation?.duration ||
-                                documentData?.metadata?.processing_time
-
-                              if (typeof rawMs === 'number' && rawMs > 0) {
-                                return (rawMs / 1000).toFixed(1) + 's'
-                              }
-
-                              return "N/A"
-                            })()}
+                            {formatProcessingTimeDisplay(aiTimeMs)}
                           </span>
                         </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-muted-foreground">Compression Ratio</span>
-                          <span className="text-sm font-medium">{documentData?.metadata?.compression_ratio || 0}%</span>
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-center gap-2">
+                            <span className="text-sm text-muted-foreground">Context Summaries</span>
+                            <span className="text-sm font-medium text-right">{compactionSummary}</span>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {compactionTiers.map((tier) => (
+                              <Badge
+                                key={tier.key}
+                                variant={tier.available ? "secondary" : "outline"}
+                                className={tier.available ? "" : "text-muted-foreground opacity-60"}
+                                title={tier.label}
+                              >
+                                {tier.shortLabel}{tier.available ? " ✓" : ""}
+                              </Badge>
+                            ))}
+                          </div>
+                          {tiersReady > 0 ? (
+                            <p className="text-[11px] text-muted-foreground leading-snug">
+                              Multi-scale compaction tiers (20/40/60/80%) preserve H8 entity terminology for context injection.
+                            </p>
+                          ) : null}
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-muted-foreground">Tokens Used</span>
@@ -1515,6 +1562,9 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                             {documentData?.generation_metadata?.aiProcessing?.tokens?.cost || `$${documentData?.metadata?.generation_stats?.cost || "0.00"}`}
                           </span>
                         </div>
+                            </>
+                          )
+                        })()}
                       </div>
                     </CardContent>
                   </AnimatedCard>
@@ -1531,26 +1581,12 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                       <CardContent>
                         <div className="space-y-3">
                           {(() => {
-                            // Extract raw word count (handle both number and formatted string)
-                            let wordCount = 0
-
-                            // Priority 1: Use raw word_count from top-level column
-                            if (documentData?.word_count) {
-                              wordCount = documentData.word_count
-                            }
-                            // Priority 2: Use generation_metadata.wordCount if available
-                            else if (documentData?.generation_metadata?.wordCount) {
-                              wordCount = documentData.generation_metadata.wordCount
-                            }
-                            // Priority 3: Parse contentMetrics.words (formatted string)
-                            else if (documentData?.generation_metadata?.contentMetrics) {
-                              const wordsValue = documentData.generation_metadata.contentMetrics.words;
-                              wordCount = typeof wordsValue === 'string'
-                                ? (parseInt(wordsValue.replace(/[,\\.]/g, ''), 10) || 0)
-                                : (typeof wordsValue === 'number' ? wordsValue : 0);
-                            }
-
-                            const readingTimeMinutes = wordCount > 0 ? Math.round((wordCount / 250) * 10) / 10 : 0
+                            const wordCount = resolveWordCount(documentData)
+                            const readingTimeMinutes = resolveReadingTimeMinutes(documentData)
+                            const charCount = resolveCharacterCount(documentData)
+                            const sentenceCount = resolveSentenceCount(documentData)
+                            const paragraphCount = resolveParagraphCount(documentData)
+                            const avgWordsPerSentence = resolveAvgWordsPerSentence(documentData)
 
                             return (
                               <>
@@ -1563,78 +1599,28 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                                 <div className="flex justify-between items-center">
                                   <span className="text-sm text-muted-foreground">Characters:</span>
                                   <span className="text-sm font-medium">
-                                    {(() => {
-                                      let charCount = 0
-                                      // Priority 1: Use raw character_count from top-level column
-                                      if (documentData?.character_count) {
-                                        charCount = documentData.character_count
-                                      }
-                                      // Priority 2: Use generation_metadata.characterCount if available
-                                      else if (documentData?.generation_metadata?.characterCount) {
-                                        charCount = documentData.generation_metadata.characterCount
-                                      }
-                                      // Priority 3: Parse contentMetrics.characters (formatted string)
-                                      else if (documentData?.generation_metadata?.contentMetrics?.characters) {
-                                        const charsValue = documentData.generation_metadata.contentMetrics.characters
-                                        if (typeof charsValue === 'string') {
-                                          // Remove both commas AND periods as thousands separators
-                                          charCount = parseInt(charsValue.replace(/[,\.]/g, ''), 10) || 0
-                                        } else {
-                                          charCount = charsValue
-                                        }
-                                      }
-                                      return charCount > 0 ? charCount.toLocaleString('en-US') : "N/A"
-                                    })()}
+                                    {charCount > 0 ? charCount.toLocaleString('en-US') : "N/A"}
                                   </span>
                                 </div>
                                 <div className="flex justify-between items-center">
                                   <span className="text-sm text-muted-foreground">Sentences:</span>
                                   <span className="text-sm font-medium">
-                                    {(() => {
-                                      // Priority 1: Use raw sentence_count from top-level column
-                                      const rawSentenceCount = documentData?.sentence_count ||
-                                        documentData?.generation_metadata?.contentMetrics?.sentences ||
-                                        0
-                                      const sentenceCount = Number(rawSentenceCount) || 0
-                                      return sentenceCount > 0 ? sentenceCount.toLocaleString('en-US') : "N/A"
-                                    })()}
+                                    {sentenceCount > 0 ? sentenceCount.toLocaleString('en-US') : "N/A"}
                                   </span>
                                 </div>
                                 <div className="flex justify-between items-center">
                                   <span className="text-sm text-muted-foreground">Paragraphs:</span>
                                   <span className="text-sm font-medium">
-                                    {(() => {
-                                      // Priority 1: Use raw paragraph_count from top-level column
-                                      const rawParagraphCount = documentData?.paragraph_count ||
-                                        documentData?.generation_metadata?.contentMetrics?.paragraphs ||
-                                        0
-                                      const paragraphCount = Number(rawParagraphCount) || 0
-                                      return paragraphCount > 0 ? paragraphCount.toLocaleString('en-US') : "N/A"
-                                    })()}
+                                    {paragraphCount > 0 ? paragraphCount.toLocaleString('en-US') : "N/A"}
                                   </span>
                                 </div>
                                 <div className="flex justify-between items-center">
                                   <span className="text-sm text-muted-foreground">Avg Words/Sentence:</span>
                                   <span className="text-sm font-medium">
-                                    {(() => {
-                                      // Try generation_metadata first (most accurate)
-                                      const avgFromMeta = documentData?.generation_metadata?.contentMetrics?.avgWordsPerSentence
-                                      if (avgFromMeta) return avgFromMeta
-
-                                      // Calculate from actual values as fallback
-                                      const wc = documentData?.word_count ||
-                                        documentData?.generation_metadata?.contentMetrics?.words ||
-                                        0
-                                      const sc = documentData?.sentence_count ||
-                                        documentData?.generation_metadata?.contentMetrics?.sentences ||
-                                        0
-                                      const avg = (wc > 0 && sc > 0) ? Math.round(wc / sc) : null
-                                      return avg ? avg : "N/A"
-                                    })()}
+                                    {avgWordsPerSentence ? avgWordsPerSentence : "N/A"}
                                   </span>
                                 </div>
 
-                                {/* Reading Time */}
                                 {wordCount > 0 && (
                                   <div className="flex justify-between items-center pt-2 border-t">
                                     <span className="text-sm font-medium text-muted-foreground">⏱️ Reading Time:</span>
@@ -1649,6 +1635,26 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                         </div>
                       </CardContent>
                     </AnimatedCard>
+                  )}
+
+                  {/* Context Consistency (H8 tag reuse vs project context) */}
+                  {(documentData?.generation_metadata?.contextConsistencyStats ||
+                    documentData?.generation_metadata?.occurrenceConsistencyScore != null) && (
+                    <ContextConsistencyCard
+                      stats={documentData.generation_metadata?.contextConsistencyStats}
+                      occurrenceConsistencyScore={
+                        documentData.generation_metadata?.occurrenceConsistencyScore ??
+                        documentData.generation_metadata?.contextConsistencyStats?.occurrenceConsistencyScore
+                      }
+                      contextMatchingScore={documentData.generation_metadata?.contextMatchingScore}
+                      entitiesPageHref={`/projects/${projectId}/documents/${docId}/entities`}
+                    />
+                  )}
+
+                  {documentData?.generation_metadata?.entityExtractionQuality && (
+                    <EntityExtractionQualityCard
+                      quality={documentData.generation_metadata.entityExtractionQuality}
+                    />
                   )}
 
                   {/* Quality Gates Section */}
@@ -2177,39 +2183,21 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
 
                         <div className="space-y-2">
                           {(() => {
-                            // Calculate complexity score for display (same logic as below)
-                            // Handle both snake_case (source_documentDatas) and camelCase (sourceDocuments) for backward compatibility
-                            const sourceDocuments = documentData?.generation_metadata?.source_documentDatas || documentData?.generation_metadata?.sourceDocuments || []
-                            const wordCount = documentData?.generation_metadata?.contentMetrics?.words || 0
-                            const paragraphs = documentData?.generation_metadata?.contentMetrics?.paragraphs || 0
+                            const sourceDocuments = resolveSourceDocuments(documentData?.generation_metadata)
+                            const wordCount = resolveWordCount(documentData)
+                            const paragraphs = resolveParagraphCount(documentData)
                             const framework = documentData?.generation_metadata?.framework || documentData?.template_framework
                             const overallQuality = documentData?.generation_metadata?.qualityMetrics?.overallQuality || 0
+                            const storedComplexity = documentData?.generation_metadata?.qualityMetrics?.complexityScore
 
-                            let complexity = 0
-                            if (wordCount > 5000) complexity += 30
-                            else if (wordCount > 3000) complexity += 25
-                            else if (wordCount > 1500) complexity += 20
-                            else if (wordCount > 800) complexity += 15
-                            else complexity += 10
-
-                            const avgWordsPerParagraph = paragraphs > 0 ? wordCount / paragraphs : 0
-                            if (avgWordsPerParagraph > 100) complexity += 25
-                            else if (avgWordsPerParagraph > 70) complexity += 20
-                            else if (avgWordsPerParagraph > 50) complexity += 15
-                            else complexity += 10
-
-                            if (sourceDocuments.length > 10) complexity += 20
-                            else if (sourceDocuments.length > 5) complexity += 15
-                            else if (sourceDocuments.length > 3) complexity += 10
-                            else if (sourceDocuments.length > 0) complexity += 5
-
-                            if (framework && framework !== 'Not specified') complexity += 15
-
-                            if (overallQuality > 85) complexity += 10
-                            else if (overallQuality > 70) complexity += 7
-                            else if (overallQuality > 50) complexity += 5
-
-                            complexity = Math.min(100, Math.max(0, complexity))
+                            const complexity = computeComplexityScore({
+                              storedScore: storedComplexity,
+                              wordCount,
+                              paragraphs,
+                              sourceDocCount: sourceDocuments.length,
+                              framework,
+                              overallQuality,
+                            })
 
                             return (
                               <div className="flex justify-between items-center p-2 bg-gradient-to-r from-red-50 to-orange-50 rounded-lg border border-red-200">
@@ -2229,202 +2217,164 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
 
                           {/* Complexity Time Estimate with Research Breakdown */}
                           {(() => {
-                            // Get source documentDatas from generation_metadata
-                            // Handle both snake_case (source_documentDatas) and camelCase (sourceDocuments) for backward compatibility
-                            const sourceDocuments = documentData?.generation_metadata?.source_documentDatas || documentData?.generation_metadata?.sourceDocuments || []
+                            const sourceDocuments = resolveSourceDocuments(documentData?.generation_metadata) as Array<Record<string, unknown>>
                             const sourceDocCount = sourceDocuments.length
+                            const wordCount = resolveWordCount(documentData)
+                            const paragraphs = resolveParagraphCount(documentData)
+                            const readingTimeMinutes = resolveReadingTimeMinutes(documentData)
 
-                            // Calculate total words in source documentDatas
-                            const totalSourceWords = sourceDocuments.reduce((sum: number, doc: any) => {
-                              // Estimate words from tokens (1 token ≈ 0.75 words)
-                              const estimatedWords = Math.round((doc.originalTokens || 0) * 0.75)
-                              return sum + estimatedWords
-                            }, 0)
-
-                            // Calculate reading time (250 words/min average)
-                            const readingTimeMinutes = Math.round(totalSourceWords / 250)
-                            const readingTimeHours = Math.round(readingTimeMinutes / 60 * 10) / 10
-
-                            // Get generated documentData metrics
-                            const wordCount = documentData?.generation_metadata?.contentMetrics?.words || 0
-                            const sentences = documentData?.generation_metadata?.contentMetrics?.sentences || 0
-                            const paragraphs = documentData?.generation_metadata?.contentMetrics?.paragraphs || 0
-
-                            // Calculate complexity score based on documentData characteristics
-                            let complexity = 0
-
-                            // Base complexity from word count (0-30 points)
-                            if (wordCount > 5000) complexity += 30
-                            else if (wordCount > 3000) complexity += 25
-                            else if (wordCount > 1500) complexity += 20
-                            else if (wordCount > 800) complexity += 15
-                            else complexity += 10
-
-                            // Structure complexity (0-25 points)
-                            const avgWordsPerParagraph = paragraphs > 0 ? wordCount / paragraphs : 0
-                            if (avgWordsPerParagraph > 100) complexity += 25 // Very long paragraphs = complex
-                            else if (avgWordsPerParagraph > 70) complexity += 20
-                            else if (avgWordsPerParagraph > 50) complexity += 15
-                            else complexity += 10
-
-                            // Source documentData complexity (0-20 points)
-                            if (sourceDocCount > 10) complexity += 20
-                            else if (sourceDocCount > 5) complexity += 15
-                            else if (sourceDocCount > 3) complexity += 10
-                            else if (sourceDocCount > 0) complexity += 5
-
-                            // Framework compliance adds complexity (0-15 points)
                             const framework = documentData?.generation_metadata?.framework || documentData?.template_framework
-                            if (framework && framework !== 'Not specified') complexity += 15
-
-                            // Quality metrics contribution (0-10 points)
                             const overallQuality = documentData?.generation_metadata?.qualityMetrics?.overallQuality || 0
-                            if (overallQuality > 85) complexity += 10
-                            else if (overallQuality > 70) complexity += 7
-                            else if (overallQuality > 50) complexity += 5
+                            const storedComplexity = documentData?.generation_metadata?.qualityMetrics?.complexityScore
 
-                            // Ensure complexity is 0-100
-                            complexity = Math.min(100, Math.max(0, complexity))
+                            const complexity = computeComplexityScore({
+                              storedScore: storedComplexity,
+                              wordCount,
+                              paragraphs,
+                              sourceDocCount,
+                              framework,
+                              overallQuality,
+                            })
 
-                            // Determine complexity level and writing time estimate
-                            let level = 'Simple'
-                            let writingTimeMin = 2
-                            let writingTimeMax = 4
-                            let color = 'text-green-600'
-                            let bgColor = 'bg-green-50'
-                            let borderColor = 'border-green-200'
+                            const effort = estimateManualDocumentEffort({
+                              outputWordCount: wordCount,
+                              complexityScore: complexity,
+                              sourceDocuments,
+                            })
 
-                            if (complexity >= 76) {
-                              level = 'Very Complex'
-                              writingTimeMin = 16
-                              writingTimeMax = 32
-                              color = 'text-red-600'
-                              bgColor = 'bg-red-50'
-                              borderColor = 'border-red-200'
-                            } else if (complexity >= 51) {
-                              level = 'Complex'
-                              writingTimeMin = 8
-                              writingTimeMax = 16
-                              color = 'text-orange-600'
-                              bgColor = 'bg-orange-50'
-                              borderColor = 'border-orange-200'
-                            } else if (complexity >= 26) {
-                              level = 'Moderate'
-                              writingTimeMin = 4
-                              writingTimeMax = 8
-                              color = 'text-yellow-600'
-                              bgColor = 'bg-yellow-50'
-                              borderColor = 'border-yellow-200'
+                            const levelStyles: Record<
+                              typeof effort.level,
+                              { color: string; bgColor: string; borderColor: string }
+                            > = {
+                              Simple: {
+                                color: 'text-green-600',
+                                bgColor: 'bg-green-50',
+                                borderColor: 'border-green-200',
+                              },
+                              Moderate: {
+                                color: 'text-yellow-600',
+                                bgColor: 'bg-yellow-50',
+                                borderColor: 'border-yellow-200',
+                              },
+                              Complex: {
+                                color: 'text-orange-600',
+                                bgColor: 'bg-orange-50',
+                                borderColor: 'border-orange-200',
+                              },
+                              'Very Complex': {
+                                color: 'text-red-600',
+                                bgColor: 'bg-red-50',
+                                borderColor: 'border-red-200',
+                              },
                             }
 
-                            const writingTime = writingTimeMax >= 16
-                              ? `${writingTimeMin / 8}-${writingTimeMax / 8} days (${writingTimeMin}-${writingTimeMax} hours)`
-                              : `${writingTimeMin}-${writingTimeMax} hours`
-
-                            // Format reading time display
-                            const readingTimeDisplay = readingTimeHours >= 8
-                              ? `${Math.round(readingTimeHours / 8 * 10) / 10} day${readingTimeHours >= 16 ? 's' : ''}`
-                              : `${readingTimeHours} hour${readingTimeHours !== 1 ? 's' : ''}`
-
-                            // Calculate total manual effort
-                            const totalManualHours = readingTimeHours + (writingTimeMin + writingTimeMax) / 2
-                            const totalManualDisplay = totalManualHours >= 8
-                              ? `${Math.round(totalManualHours / 8 * 10) / 10} days`
-                              : `${Math.round(totalManualHours * 10) / 10} hours`
+                            const { color, bgColor, borderColor } = levelStyles[effort.level]
+                            const compositionMin = Math.round(effort.compositionHours * 0.9 * 10) / 10
+                            const compositionMax = Math.round(effort.compositionHours * 1.1 * 10) / 10
+                            const writingTime = formatHourRange(compositionMin, compositionMax)
+                            const contextResearchDisplay = formatEffortHours(effort.contextResearchHours)
+                            const totalManualHours = effort.totalHours
+                            const totalManualDisplay = formatEffortHours(totalManualHours)
 
                             return (
                               <div className={`p-3 ${bgColor} rounded-lg border ${borderColor}`}>
                                 <div className="flex justify-between items-center mb-2">
                                   <span className="text-xs text-muted-foreground">Complexity Level:</span>
-                                  <span className={`text-sm font-semibold ${color}`}>{level}</span>
+                                  <span className={`text-sm font-semibold ${color}`}>{effort.level}</span>
                                 </div>
 
-                                {sourceDocCount > 0 && (
-                                  <>
-                                    <Separator className="my-2" />
-                                    <div className="space-y-2 mb-2">
-                                      <div className="flex justify-between items-center text-xs">
-                                        <span className="text-muted-foreground">📚 Context Research:</span>
-                                        <span className={`font-medium ${color}`}>
-                                          {sourceDocCount} doc{sourceDocCount !== 1 ? 's' : ''} (~{readingTimeDisplay})
-                                        </span>
-                                      </div>
-                                      <div className="flex justify-between items-center text-xs">
-                                        <span className="text-muted-foreground">✍️ Writing Time:</span>
-                                        <span className={`font-medium ${color}`}>{writingTime}</span>
-                                      </div>
+                                <Separator className="my-2" />
+                                <div className="space-y-2 mb-2">
+                                  <div className="flex justify-between items-center text-xs">
+                                    <span className="text-muted-foreground">📚 Context Research:</span>
+                                    <span className={`font-medium ${color}`}>
+                                      {sourceDocCount > 0
+                                        ? `${sourceDocCount} doc${sourceDocCount !== 1 ? 's' : ''} (~${contextResearchDisplay})`
+                                        : `~${contextResearchDisplay}`}
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between items-center text-xs">
+                                    <span className="text-muted-foreground">✍️ Drafting ({wordCount.toLocaleString()} words):</span>
+                                    <span className={`font-medium ${color}`}>{writingTime}</span>
+                                  </div>
+                                  {effort.reviewHours > 0 && (
+                                    <div className="flex justify-between items-center text-xs">
+                                      <span className="text-muted-foreground">📝 Review &amp; polish:</span>
+                                      <span className={`font-medium ${color}`}>
+                                        ~{formatEffortHours(effort.reviewHours)}
+                                      </span>
                                     </div>
-                                  </>
-                                )}
+                                  )}
+                                </div>
 
                                 <Separator className="my-2" />
                                 <div className="flex justify-between items-center">
                                   <span className="text-xs font-medium text-muted-foreground">Total Manual Effort:</span>
                                   <span className={`text-sm font-bold ${color}`}>{totalManualDisplay}</span>
                                 </div>
+                                <p className="text-[11px] text-muted-foreground mt-2 leading-snug">
+                                  Based on expert drafting speed for {effort.level.toLowerCase()} governance content
+                                  (~{Math.round(wordCount / (effort.compositionHours || 1)).toLocaleString()} words/hr incl. reasoning).
+                                  Output reading time alone is ~{readingTimeMinutes} min.
+                                </p>
 
                                 {(() => {
-                                  // Get AI generation time (formatted)
-                                  const aiTime = documentData?.generation_metadata?.aiProcessing?.processingTime ||
-                                    documentData?.generation_metadata?.generation?.durationFormatted
+                                  const aiTimeMs = resolveEffectiveProcessingTimeMs(
+                                    documentData?.generation_metadata,
+                                    generationJobTiming
+                                  )
+                                  const displayTime = formatProcessingTimeDisplay(aiTimeMs)
+                                  const speedup = calculateProductivityGain(totalManualHours, aiTimeMs)
+                                  const readingTimeDisplay = readingTimeMinutes >= 60
+                                    ? `${Math.round(readingTimeMinutes / 60 * 10) / 10} hours`
+                                    : `${readingTimeMinutes} minutes`
+                                  const roi = calculateReadingRoi(totalManualHours, readingTimeMinutes)
 
-                                  // Get raw milliseconds for speedup calculation
-                                  const aiTimeMs = documentData?.generation_metadata?.aiProcessing?.processingTimeMs ||
-                                    documentData?.generation_metadata?.generation?.duration || 0
-
-                                  if (aiTime || aiTimeMs) {
-                                    const displayTime = aiTime || (aiTimeMs > 0 ? `${(aiTimeMs / 1000).toFixed(1)}s` : 'N/A')
-
-                                    // Calculate speedup
-                                    const aiHours = aiTimeMs / 1000 / 60 / 60
-                                    const speedup = totalManualHours > 0 && aiHours > 0
-                                      ? Math.round(totalManualHours / aiHours)
-                                      : 0
-
+                                  if (aiTimeMs === null) {
                                     return (
                                       <div className="mt-2 pt-2 border-t space-y-1">
                                         <div className="flex justify-between items-center text-xs">
                                           <span className="text-muted-foreground">⚡ AI Generation Time:</span>
-                                          <span className="font-bold text-green-600">{displayTime}</span>
+                                          <span className="font-medium text-muted-foreground">N/A</span>
                                         </div>
-                                        {speedup > 0 && (
-                                          <div className="flex justify-between items-center text-xs">
-                                            <span className="text-muted-foreground">🚀 Productivity Gain:</span>
-                                            <span className="font-bold text-blue-600">{speedup}x faster</span>
-                                          </div>
-                                        )}
                                         {totalManualHours > 0 && (
-                                          <>
-                                            <div className="text-xs text-muted-foreground italic mt-1">
-                                              💰 Saved ~{Math.round(totalManualHours * 10) / 10} hours of expert time
-                                            </div>
-                                            {(() => {
-                                              // Get reading time from content metrics
-                                              const readingTimeMin = documentData?.generation_metadata?.contentMetrics?.readingTime ||
-                                                Math.ceil(wordCount / 250)
-                                              const readingTimeDisplay = readingTimeMin >= 60
-                                                ? `${Math.round(readingTimeMin / 60 * 10) / 10} hours`
-                                                : `${readingTimeMin} minutes`
-
-                                              const roi = Math.round((totalManualHours * 60) / readingTimeMin)
-
-                                              return (
-                                                <div className="text-xs font-medium text-purple-600 mt-1">
-                                                  📖 Result reading time: ~{readingTimeDisplay}
-                                                  {roi > 0 && (
-                                                    <span className="ml-1 text-purple-500">
-                                                      ({roi}x ROI)
-                                                    </span>
-                                                  )}
-                                                </div>
-                                              )
-                                            })()}
-                                          </>
+                                          <div className="text-xs text-muted-foreground italic mt-1">
+                                            Estimated manual effort: ~{Math.round(totalManualHours * 10) / 10} hours
+                                          </div>
                                         )}
                                       </div>
                                     )
                                   }
-                                  return null
+
+                                  return (
+                                    <div className="mt-2 pt-2 border-t space-y-1">
+                                      <div className="flex justify-between items-center text-xs">
+                                        <span className="text-muted-foreground">⚡ AI Generation Time:</span>
+                                        <span className="font-bold text-green-600">{displayTime}</span>
+                                      </div>
+                                      {speedup !== null && (
+                                        <div className="flex justify-between items-center text-xs">
+                                          <span className="text-muted-foreground">🚀 Productivity Gain:</span>
+                                          <span className="font-bold text-blue-600">{speedup.toLocaleString()}x faster</span>
+                                        </div>
+                                      )}
+                                      {totalManualHours > 0 && (
+                                        <>
+                                          <div className="text-xs text-muted-foreground italic mt-1">
+                                            💰 Saved ~{Math.round(totalManualHours * 10) / 10} hours of expert time
+                                          </div>
+                                          <div className="text-xs font-medium text-purple-600 mt-1">
+                                            📖 Result reading time: ~{readingTimeDisplay}
+                                            {roi !== null && (
+                                              <span className="ml-1 text-purple-500">
+                                                ({roi.toLocaleString()}x ROI)
+                                              </span>
+                                            )}
+                                          </div>
+                                        </>
+                                      )}
+                                    </div>
+                                  )
                                 })()}
                               </div>
                             )

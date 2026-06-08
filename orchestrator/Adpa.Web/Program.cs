@@ -4,6 +4,14 @@ using Adpa.Web.Components;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Kestrel defaults to :5000, which conflicts with adpa-backend under Aspire AppHost.
+// Aspire injects ASPNETCORE_HTTP_PORTS; when absent, bind the AppHost-assigned port.
+if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ASPNETCORE_HTTP_PORTS"))
+    && string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ASPNETCORE_URLS")))
+{
+    builder.WebHost.UseUrls("http://127.0.0.1:5006");
+}
+
 // ---------------------------------------------------------------------------
 // 1. Aspire Service Defaults & Observability
 // ---------------------------------------------------------------------------

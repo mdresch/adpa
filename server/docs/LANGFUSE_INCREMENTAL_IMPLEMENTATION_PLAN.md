@@ -4,6 +4,8 @@
 
 Implement Langfuse in small, production-safe increments instead of one large rollout. Each increment must be independently testable, reversible, and documented.
 
+**Related:** Platform architecture and ingest scope — [API / Worker Split, Langfuse Observability, and Lazy PDF Export](../../docs/plans/2026/API_WORKER_SPLIT_AND_OBSERVABILITY_PLAN.md) (§3.0: **AI provider messages only**; Langfuse DB at capacity — no OTLP or non-LLM telemetry until storage is restored).
+
 ## Delivery Principles
 
 - One feature slice at a time.

@@ -8,6 +8,11 @@ const isCI = process.env.CI === 'true' || process.env.CI === '1';
 /** C# Adpa.Orchestrator (RPAS rituals). Set when running Aspire or orchestrator alone. */
 const orchestratorUrl = process.env.ORCHESTRATOR_URL?.replace(/\/$/, '');
 
+/** Local dev must not fall through to Render — missing BACKEND_URL causes 401/500 on every API call. */
+const backendUrl =
+  process.env.BACKEND_URL?.replace(/\/$/, '') ||
+  (process.env.NODE_ENV === 'development' ? 'http://127.0.0.1:5000' : 'https://adpa.onrender.com');
+
 /** Next.js distDir must be relative to the project root (no absolute C:\ paths in .env). */
 function distDirFromEnv() {
   const raw = process.env.NEXT_DIST_DIR?.trim();
@@ -121,8 +126,8 @@ const nextConfig = {
             ]
           : []),
         {
-          source: '/api/:path((?!morphic|auth|chat|genui|openui-chat|keepalive|[Rr]itual).*)',
-          destination: `${process.env.BACKEND_URL || 'https://adpa.onrender.com'}/api/:path*`,
+          source: '/api/:path((?!morphic|auth|chat|genui|openui-chat|keepalive|dev|[Rr]itual).*)',
+          destination: `${backendUrl}/api/:path*`,
         },
       ],
     };
