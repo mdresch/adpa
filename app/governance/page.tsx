@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { Sidebar } from '@/components/sidebar';
 import { Header } from '@/components/header';
-import { getApiBaseUrl } from '@/lib/api-url';
+import { fetchRelativeApi } from '@/lib/safe-http-path';
 import { useAuth } from '@/contexts/AuthContext';
 
 const DracoDiffViewer = dynamic(() => import('./components/DracoDiffViewer'), { ssr: false });
@@ -12,11 +12,11 @@ const DracoDiffViewer = dynamic(() => import('./components/DracoDiffViewer'), { 
 const LEDGER_FETCH_TIMEOUT_MS = 20_000;
 const LOADING_SAFETY_MS = 25_000;
 
-async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Response> {
+async function fetchRelativeApiWithTimeout(path: string, timeoutMs: number): Promise<Response> {
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetch(url, { signal: controller.signal });
+    return await fetchRelativeApi(path, { signal: controller.signal });
   } finally {
     window.clearTimeout(timer);
   }
@@ -54,15 +54,13 @@ export default function GovernanceDashboard() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const apiBase = getApiBaseUrl();
-
   // Fetch all pending and recent audits from the ledger api
   const fetchLedger = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
     try {
-      const res = await fetchWithTimeout(
-        `${apiBase}/v1/governance/ledger`,
+      const res = await fetchRelativeApiWithTimeout(
+        '/api/v1/governance/ledger',
         LEDGER_FETCH_TIMEOUT_MS,
       );
       if (!res.ok) throw new Error(`Ledger request failed (${res.status})`);
@@ -88,13 +86,13 @@ export default function GovernanceDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [apiBase]);
+  }, []);
 
   // Fetch all active policies from the policy library
   const fetchPolicies = useCallback(async () => {
     try {
-      const res = await fetchWithTimeout(
-        `${apiBase}/v1/policy-library`,
+      const res = await fetchRelativeApiWithTimeout(
+        '/api/v1/policy-library',
         LEDGER_FETCH_TIMEOUT_MS,
       );
       if (res.ok) {
@@ -104,7 +102,7 @@ export default function GovernanceDashboard() {
     } catch (err) {
       console.error('Failed to fetch policies:', err);
     }
-  }, [apiBase]);
+  }, []);
 
   useEffect(() => {
     void fetchLedger();
