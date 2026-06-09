@@ -1901,6 +1901,7 @@ export class ApiClient {
     includeDocuments?: boolean
     customContext?: string
     async?: boolean
+    allowMultiple?: boolean
   }): Promise<{ document: Document; generation: any } | { jobId: string; async: true; message: string }> {
     const response = await this.request<{ document: Document; generation: any } | { jobId: string; async: true; message: string }>("/document-generation/generate", {
       method: "POST",
