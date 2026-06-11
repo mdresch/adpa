@@ -6,7 +6,7 @@ import { updateDependencyHealth } from "../../routes/health"
 export const pineconeDependency: Dependency = {
   name: "Pinecone",
   critical: false,
-  timeout: 10000,
+  timeout: 30000, // init + validate each call describeIndexStats; allow headroom under parallel startup
   init: async () => {
     // PineconeService is a singleton that initializes in its constructor.
     // We just test the connection here.

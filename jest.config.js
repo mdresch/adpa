@@ -2,7 +2,13 @@
 const config = {
   preset: 'ts-jest',
   testEnvironment: 'node',
-  roots: ['<rootDir>/__tests__', '<rootDir>/components', '<rootDir>/server/src/__tests__', '<rootDir>/server/src/modules/ai/tests'],
+  roots: [
+    '<rootDir>/__tests__',
+    '<rootDir>/components',
+    '<rootDir>/lib',
+    '<rootDir>/server/src/__tests__',
+    '<rootDir>/server/src/modules/ai/tests',
+  ],
   testMatch: [
     '**/__tests__/**/*.test.ts',
     '**/__tests__/**/*.test.tsx',

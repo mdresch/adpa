@@ -60,7 +60,33 @@ cd server && npx jest --testPathPattern="<pattern>" --no-coverage
 
 # Full test suite (117 files, takes several minutes)
 cd server && npm test
+
+# Governed feature packets (Level 5 — fast unit tests, no DB)
+cd server && npm run test:features
+cd server && npm run verify:governed-features
 ```
+
+### Governed Feature Development
+
+All **non-trivial** backend features MUST follow the ADPA governed feature loop:
+
+1. Load `.agents/skills/adpa-governed-feature-loop/SKILL.md`
+2. Create a **feature packet**: spec → initial SKILL (intent) → Jest tests (RED) → refined SKILL → code (GREEN)
+3. Define **interaction rules** and **overlap guards** (`validate*Contract`) when a feature depends on another
+4. Register in `server/governed-features.manifest.json` (`testPathPattern` and optional `testModuleDir`); `npm run test:features` runs all manifest entries automatically
+5. Add `testModuleDir` under `server/src/__tests__/modules/<dir>/`
+
+Before commit:
+
+- Run `cd server && npm run test:features` (and any affected feature scripts)
+- Run `cd server && npm run verify:governed-features`
+- Pass `adpa-aev-workflow` validation gates
+
+**Canonical reference:** RAG — `adpa-rag-context-injection` + `adpa-rag-dynamic-fallback` → `npm run test:rag-features` (13 tests). CI: `.github/workflows/adpa-feature-validation.yml`.
+
+Adding `server/src/__tests__/modules/<new>/` without updating `governed-features.manifest.json` **fails CI**.
+
+**Level 5.5:** `npm run verify:governed-features` enforces manifest entries, SKILL presence, `test:features` → `scripts/run-governed-features.mjs`, overlap guards for multi-skill module features; warns on missing spec / `REQ-xxx` traceability. Single feature: `npm run test:features -- <id>` or legacy `npm run test:rag-features` / `test:doc-gen`.
 
 ### Lint
 

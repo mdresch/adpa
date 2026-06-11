@@ -3,6 +3,7 @@ import {
   hasInlineH8EntityTags,
   normalizeInlineEntityMarkdown,
   repairInlineEntityJson,
+  stripInlineH8TagsForExport,
 } from '../../services/inlineEntityParserService';
 import { saveSingleEntityType } from '../../services/extraction/ExtractionOrchestrator';
 
@@ -19,6 +20,38 @@ describe('InlineEntityParserService', () => {
     expect(hasInlineH8EntityTags('######## stakeholders: {"name":"A"}')).toBe(true);
     expect(hasInlineH8EntityTags('# Heading only\nBody text')).toBe(false);
     expect(hasInlineH8EntityTags('')).toBe(false);
+  });
+
+  it('stripInlineH8TagsForExport removes H8 lines but keeps narrative markdown', () => {
+    const markdown = [
+      '# Schedule Overview',
+      'The project follows a phased approach.',
+      '######## milestones: {"name":"Phase Gate 1","date":"2026-06-01"}',
+      '######## activities: {"name":"Kickoff","duration_days":1}',
+      '',
+      '## Next Steps',
+      'Review baseline with the PMO.',
+    ].join('\n');
+
+    const stripped = stripInlineH8TagsForExport(markdown);
+
+    expect(stripped).toContain('# Schedule Overview');
+    expect(stripped).toContain('The project follows a phased approach.');
+    expect(stripped).toContain('## Next Steps');
+    expect(stripped).not.toContain('########');
+    expect(stripped).not.toContain('milestones:');
+  });
+
+  it('stripInlineH8TagsForExport removes loose chained entity tags', () => {
+    const loose =
+      'Intro paragraph.\nresources: {"name": "Analyst", "type": "human"}\\stakeholders: {"name": "Sponsor", "role": "Exec"}\nClosing paragraph.';
+
+    const stripped = stripInlineH8TagsForExport(loose);
+
+    expect(stripped).toContain('Intro paragraph.');
+    expect(stripped).toContain('Closing paragraph.');
+    expect(stripped).not.toContain('resources:');
+    expect(stripped).not.toContain('stakeholders:');
   });
 
   it('hasInlineH8EntityTags detects backslash-chained loose tags without ######## prefix', () => {

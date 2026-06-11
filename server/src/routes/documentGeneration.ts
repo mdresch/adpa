@@ -113,6 +113,7 @@ const generateDocumentSchema = Joi.object({
   includeDocuments: Joi.boolean().default(true),
   customContext: Joi.string().max(5000).optional(),
   async: Joi.boolean().default(false), // Force async/background mode
+  allowMultiple: Joi.boolean().default(false), // Bypass conflict checks
 })
 
 // Generate document with AI
@@ -136,6 +137,7 @@ router.post("/generate",
         includeStakeholders,
         includeDocuments,
         customContext,
+        allowMultiple,
       } = req.body
 
       log.info(`Generating document for project ${projectId}`)
@@ -155,7 +157,7 @@ router.post("/generate",
       }
 
       // 🔍 Check for template conflicts without creating a placeholder document.
-      if (templateId) {
+      if (templateId && !allowMultiple) {
         const existing = await findExistingTemplateDocument(pool, projectId, templateId)
 
         if (existing) {

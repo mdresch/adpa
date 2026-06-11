@@ -1202,22 +1202,30 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
           }
 
           // Create new document with modified name
-          const newName = `${documentName} (Alternative)`
+          const template = templates.find(t => t.id === conflictData.generationData.templateId)
+          const baseName = documentName.trim() || template?.name || 'Document'
+          const newName = `${baseName} (Alternative)`
           const separateResult: any = await apiClient.generateDocument({
             projectId: conflictData.generationData.projectId,
             name: newName,
             description: documentDescription?.trim() || undefined,
             templateId: conflictData.generationData.templateId,
             userPrompt: separatePrompt,
-            provider: conflictData.generationData.provider,
-            model: conflictData.generationData.model,
-            temperature: conflictData.generationData.temperature,
+            provider: conflictData.generationData.provider || selectedProvider,
+            model: conflictData.generationData.model || selectedModel,
+            temperature: conflictData.generationData.temperature || aiTemperature,
             includeStakeholders: true,
             includeDocuments: true,
+            allowMultiple: true, // skip template conflict checks
           })
 
-          toast.success("Separate document created successfully!")
-          console.log('✅ [CONFLICT-RESOLUTION] Separate document created')
+          if (separateResult?.async === true && separateResult?.jobId) {
+            console.log('⏳ [CONFLICT-RESOLUTION] Separate document generation enqueued. Job ID:', separateResult.jobId)
+            toast.info("Document generation started")
+          } else {
+            toast.success("Separate document created successfully!")
+            console.log('✅ [CONFLICT-RESOLUTION] Separate document created')
+          }
           break
 
         case 'view-existing':

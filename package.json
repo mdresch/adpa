@@ -26,6 +26,8 @@
     "test:gemini-langsmith": "tsx scripts/test-gemini-langsmith.ts",
     "test:vercel-ai-langsmith": "tsx scripts/test-vercel-ai-langsmith.ts",
     "chunk:documents": "tsx scripts/chunk-documents.ts",
+    "audit:test-reach": "node scripts/audit-test-reach.mjs",
+    "audit:test-reach:all": "node scripts/audit-test-reach.mjs && node server/scripts/audit-test-reach.mjs",
     "postinstall": "node scripts/ensure-zod-v4-exports.mjs"
   },
   "dependencies": {

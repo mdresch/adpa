@@ -463,7 +463,7 @@ export async function searchTodos(
 // Initialize ContextRetrievalService with default config
 // Include Qdrant if configured
 const qdrantConfig = getQdrantConfig()
-const contextRetrieval = new ContextRetrievalService(
+export const contextRetrieval = new ContextRetrievalService(
   {
     model: 'text-embedding-ada-002',
     embeddingDimensions: 1536,

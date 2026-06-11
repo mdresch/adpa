@@ -19,6 +19,12 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Separator } from '@/components/ui/separator'
 import {
+  formatQualityScore,
+  isQualityAuditPerformed,
+  QUALITY_AUDIT_NOT_GRADE,
+  QUALITY_AUDIT_NOT_LEVEL,
+} from '@/lib/quality-audit'
+import {
   CheckCircle,
   AlertTriangle,
   XCircle,
@@ -77,15 +83,16 @@ interface QualityAudit {
   document_type: string
   framework_used?: string
   document_content?: string
-  overall_score: number
-  overall_grade: string
-  quality_level: string
-  completeness_score: number
-  consistency_score: number
-  professional_quality_score: number
-  standards_compliance_score: number
-  accuracy_score: number
-  context_relevance_score: number
+  audit_performed?: boolean
+  overall_score: number | null
+  overall_grade: string | null
+  quality_level: string | null
+  completeness_score: number | null
+  consistency_score: number | null
+  professional_quality_score: number | null
+  standards_compliance_score: number | null
+  accuracy_score: number | null
+  context_relevance_score: number | null
   findings: Record<string, string>
   issues: QualityIssue[]
   recommendations: string[]
@@ -231,17 +238,28 @@ export function QualityAuditModal({ documentId, onClose }: QualityAuditModalProp
 
         {audit && (
           <div className="space-y-6">
+            {!isQualityAuditPerformed(audit) && (
+              <Alert>
+                <HelpCircle className="h-4 w-4" />
+                <AlertDescription>
+                  The AI quality audit did not complete. No scores were recorded — manual review is recommended.
+                </AlertDescription>
+              </Alert>
+            )}
+
             {/* Overall Score */}
             <div className="text-center bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-8 border border-blue-200">
-              <div className={`text-7xl font-bold ${getScoreColor(audit.overall_score)} mb-2`}>
-                {audit.overall_score}%
+              <div className={`text-7xl font-bold ${isQualityAuditPerformed(audit) ? getScoreColor(audit.overall_score!) : 'text-gray-500'} mb-2`}>
+                {formatQualityScore(audit.overall_score)}
               </div>
               <div className="flex items-center justify-center gap-3 mb-2">
-                <Badge className={`${getGradeColor(audit.overall_grade)} text-2xl px-4 py-2`}>
-                  Grade {audit.overall_grade}
+                <Badge className={`${isQualityAuditPerformed(audit) ? getGradeColor(audit.overall_grade!) : 'bg-gray-500 text-white'} text-2xl px-4 py-2`}>
+                  {isQualityAuditPerformed(audit) ? `Grade ${audit.overall_grade}` : `Grade ${QUALITY_AUDIT_NOT_GRADE}`}
                 </Badge>
               </div>
-              <div className="text-xl font-semibold text-gray-700">{audit.quality_level}</div>
+              <div className="text-xl font-semibold text-gray-700">
+                {isQualityAuditPerformed(audit) ? audit.quality_level : QUALITY_AUDIT_NOT_LEVEL}
+              </div>
               <div className="text-sm text-gray-500 mt-2">{audit.document_title}</div>
             </div>
 
@@ -267,8 +285,8 @@ export function QualityAuditModal({ documentId, onClose }: QualityAuditModalProp
                 {/* Overall Score Breakdown */}
                 <div className="p-6 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200 mb-6">
                   <div className="text-center mb-4">
-                    <div className={`text-4xl font-bold ${getScoreColor(audit.overall_score)} mb-2`}>
-                      {audit.overall_score}%
+                    <div className={`text-4xl font-bold ${isQualityAuditPerformed(audit) ? getScoreColor(audit.overall_score!) : 'text-gray-500'} mb-2`}>
+                      {formatQualityScore(audit.overall_score)}
                     </div>
                     <div className="text-lg font-semibold text-gray-700">Overall Quality Score</div>
                     <p className="text-sm text-gray-600 mt-2">
@@ -276,10 +294,13 @@ export function QualityAuditModal({ documentId, onClose }: QualityAuditModalProp
                     </p>
                   </div>
                   
-                  {/* Overall Score Breakdown */}
-                  <OverallQualityBreakdown 
-                    audit={audit}
-                  />
+                  {isQualityAuditPerformed(audit) ? (
+                    <OverallQualityBreakdown audit={audit} />
+                  ) : (
+                    <p className="text-sm text-gray-600 text-center">
+                      Score breakdown is unavailable because the AI audit did not complete.
+                    </p>
+                  )}
                 </div>
                 
                 <QualityMetricCard
@@ -654,7 +675,7 @@ function QualityMetricCard({
 }: {
   name: string
   description: string
-  score: number
+  score: number | null
   weight: string
   finding?: string
   documentContent?: string
@@ -662,6 +683,7 @@ function QualityMetricCard({
 }) {
   const [isExpanded, setIsExpanded] = useState(false)
   const [breakdown, setBreakdown] = useState<QualityDimensionBreakdown | null>(null)
+  const hasScore = score !== null && score !== undefined
 
   const getScoreColor = (score: number) => {
     if (score >= 90) return 'text-green-600'
@@ -680,12 +702,12 @@ function QualityMetricCard({
   }
 
   const handleExpand = () => {
-    if (!isExpanded && documentContent) {
+    if (!isExpanded && documentContent && hasScore) {
       // Calculate breakdown on demand
       const calculatedBreakdown = calculateQualityDimensionBreakdown(
         dimensionType,
         documentContent,
-        score,
+        score as number,
         weight
       )
       setBreakdown(calculatedBreakdown)
@@ -722,17 +744,19 @@ function QualityMetricCard({
             <p className="text-xs text-gray-500">{description}</p>
           </div>
           <div className="text-right ml-4">
-            <div className={`text-2xl font-bold ${getScoreColor(score)}`}>
-              {score}%
+            <div className={`text-2xl font-bold ${hasScore ? getScoreColor(score as number) : 'text-gray-500'}`}>
+              {formatQualityScore(score)}
             </div>
             <div className="text-xs text-gray-500">Weight: {weight}</div>
-            <div className="text-xs text-gray-400">
-              Contribution: {(score * weightValue).toFixed(1)}%
-            </div>
+            {hasScore ? (
+              <div className="text-xs text-gray-400">
+                Contribution: {((score as number) * weightValue).toFixed(1)}%
+              </div>
+            ) : null}
           </div>
         </div>
         
-        <Progress value={score} className="h-2" />
+        <Progress value={hasScore ? (score as number) : 0} className="h-2" />
         
         {finding && (
           <p className="text-sm text-gray-600 mt-3 italic">{finding}</p>

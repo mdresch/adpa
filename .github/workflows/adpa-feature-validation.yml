@@ -1,0 +1,53 @@
+name: ADPA Feature Validation
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'server/**'
+      - '.agents/skills/**'
+      - 'docs/superpowers/**'
+      - '.github/workflows/adpa-feature-validation.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'server/**'
+      - '.agents/skills/**'
+      - 'docs/superpowers/**'
+      - '.github/workflows/adpa-feature-validation.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  governed-features:
+    name: Governed feature tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.32.1 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify governed feature manifest
+        working-directory: server
+        run: npm run verify:governed-features
+
+      - name: Run governed feature tests
+        working-directory: server
+        run: npm run test:features

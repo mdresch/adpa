@@ -1,10 +1,16 @@
 import type { DocumentChunk } from '../types/rag';
+import type { RagSourceType } from './mongoRagText';
 
 export type MongoChunkWriteInput = {
   documentId: string;
   content: string;
   embedding: number[];
   projectId?: string | null;
+  programId?: string | null;
+  portfolioId?: string | null;
+  sourceType?: RagSourceType;
+  entityId?: string | null;
+  templateId?: string | null;
   metadata?: Record<string, unknown>;
   chunkIndex?: number;
 };
@@ -20,7 +26,12 @@ export function buildMongoChunkDocument(
 ): DocumentChunk & {
   document_id: string;
   project_id: string | null;
+  program_id: string | null;
+  portfolio_id: string | null;
   chunk_index: number;
+  source_type: RagSourceType;
+  entity_id: string | null;
+  template_id: string | null;
 } {
   const chunkIndex =
     typeof input.chunkIndex === 'number'
@@ -30,6 +41,12 @@ export function buildMongoChunkDocument(
         : 0;
 
   const projectId = input.projectId ?? (input.metadata?.projectId as string | undefined) ?? null;
+  const programId = input.programId ?? (input.metadata?.programId as string | undefined) ?? null;
+  const portfolioId =
+    input.portfolioId ?? (input.metadata?.portfolioId as string | undefined) ?? null;
+  const sourceType = input.sourceType ?? (input.metadata?.sourceType as RagSourceType | undefined) ?? 'document';
+  const entityId = input.entityId ?? (input.metadata?.entityId as string | undefined) ?? null;
+  const templateId = input.templateId ?? (input.metadata?.templateId as string | undefined) ?? null;
 
   const metadata = {
     chunkIndex,
@@ -37,7 +54,12 @@ export function buildMongoChunkDocument(
     endPosition: (input.metadata?.endPosition as number) ?? input.content.length,
     tokenCount: (input.metadata?.tokenCount as number) ?? 0,
     ...(input.metadata ?? {}),
+    portfolioId,
+    programId,
     projectId,
+    sourceType,
+    entityId,
+    templateId,
   };
 
   return {
@@ -47,7 +69,12 @@ export function buildMongoChunkDocument(
     content: input.content,
     embedding: input.embedding,
     project_id: projectId,
+    program_id: programId,
+    portfolio_id: portfolioId,
     chunk_index: chunkIndex,
+    source_type: sourceType,
+    entity_id: entityId,
+    template_id: templateId,
     metadata,
     createdAt,
   };

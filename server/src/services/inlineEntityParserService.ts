@@ -131,6 +131,58 @@ export function hasInlineH8EntityTags(markdown: string | null | undefined): bool
   );
 }
 
+/**
+ * Removes H8 inline entity tags from markdown for stakeholder-facing exports (Word/DOCX).
+ * Stored document content is unchanged; only the export pipeline uses this.
+ */
+export function stripInlineH8TagsForExport(markdown: string | null | undefined): string {
+  if (!markdown) return '';
+
+  let content = markdown.replace(
+    /^```(?:json|markdown|md)?\s*\n(#{8}\s+[a-zA-Z0-9_-]+:(?:(?!```)[\s\S])*?)\n\s*```$/gm,
+    ''
+  );
+
+  content = normalizeInlineEntityMarkdown(content);
+
+  const lines = content.split(/\r?\n/);
+  const kept: string[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+    const match = line.match(INLINE_H8_ENTITY_LINE_REGEX);
+
+    if (match) {
+      let jsonStr = match[2].trim();
+      if (jsonStr.endsWith('\\')) jsonStr = jsonStr.slice(0, -1).trim();
+
+      let consumedLines = 0;
+      while (i + consumedLines < lines.length) {
+        if (parseInlineEntityJson(jsonStr)) break;
+        consumedLines++;
+        if (i + consumedLines >= lines.length) break;
+        let nextLine = lines[i + consumedLines];
+        if (nextLine.endsWith('\\')) nextLine = nextLine.slice(0, -1);
+        jsonStr += '\n' + nextLine;
+      }
+
+      i += consumedLines + 1;
+      continue;
+    }
+
+    if (lineHasLooseEntityTags(line)) {
+      i++;
+      continue;
+    }
+
+    kept.push(line);
+    i++;
+  }
+
+  return kept.join('\n').replace(/\n{3,}/g, '\n\n');
+}
+
 function getEntityName(entity: any, type: string): string {
   if (!entity) return `Unnamed ${type}`;
 

@@ -2,11 +2,11 @@
 
 import React, { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import { AnimatePresence, motion } from "framer-motion"
 import { useAuth } from "@/contexts/AuthContext"
-import { useWebSocket, useJobUpdates } from "@/contexts/WebSocketContext"
 import { apiClient, type Job } from "@/lib/api"
 import { useReducedMotion } from "@/hooks/use-reduced-motion"
-import { SkeletonStats } from "@/components/ui/skeleton"
+import { SkeletonStats, DashboardGridSkeleton } from "@/components/ui/skeleton"
 
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
@@ -54,15 +54,55 @@ interface DashboardData {
   } | null
 }
 
+/** Shape returned by `/api/ai-providers` and consumed by dashboard widgets. */
+export interface DashboardAIProvider {
+  id?: string
+  name: string
+  is_active?: boolean
+  success_rate?: number
+  requestCount?: number
+  usage_stats?: {
+    total_requests?: number
+  }
+}
+
+/** Shape returned by `/api/integrations` and consumed by IntegrationHealth. */
+export interface DashboardIntegration {
+  id?: string
+  name: string
+  status?: string
+  lastSync?: string
+  enabled?: boolean
+}
+
+const EMPTY_DASHBOARD_DATA: DashboardData = {
+  projects: {
+    total_projects: 0,
+    active_projects: 0,
+    completed_projects: 0,
+    projects_last_30d: 0,
+  },
+  documents: {
+    total_documents: 0,
+    published_documents: 0,
+    documents_last_30d: 0,
+  },
+  ai: {
+    total_generations: 0,
+    generations_last_30d: 0,
+  },
+  recent_activity: [],
+  ai_performance: null,
+}
+
 export default function Dashboard() {
   const { user, isAuthenticated, loading: authLoading } = useAuth()
-  const { isConnected } = useWebSocket()
-  const jobUpdates = useJobUpdates()
   const router = useRouter()
+
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
-  const [aiProviders, setAiProviders] = useState<any[]>([])
+  const [aiProviders, setAiProviders] = useState<DashboardAIProvider[]>([])
   const [recentJobs, setRecentJobs] = useState<Job[]>([])
-  const [integrations, setIntegrations] = useState<any[]>([])
+  const [integrations, setIntegrations] = useState<DashboardIntegration[]>([])
   const [loading, setLoading] = useState(true)
   const prefersReducedMotion = useReducedMotion()
 
@@ -76,13 +116,13 @@ export default function Dashboard() {
           apiClient.getDashboardAnalytics(),
           apiClient.getAIProviders(),
           apiClient.getJobs({ limit: 5 }),
-          apiClient.getIntegrations()
+          apiClient.getIntegrations(),
         ])
 
         setDashboardData(analytics)
-        setAiProviders(providers)
+        setAiProviders(providers as DashboardAIProvider[])
         setRecentJobs(jobs.jobs)
-        setIntegrations(integrationsRes)
+        setIntegrations(integrationsRes as DashboardIntegration[])
       } catch (err) {
         console.error("Error fetching dashboard data:", err)
       } finally {
@@ -90,9 +130,7 @@ export default function Dashboard() {
       }
     }
 
-    if (isAuthenticated) {
-      fetchDashboardData()
-    }
+    fetchDashboardData()
   }, [isAuthenticated])
 
   if (authLoading) {
@@ -107,6 +145,8 @@ export default function Dashboard() {
     return <LandingPage />
   }
 
+  const resolvedDashboard = dashboardData ?? EMPTY_DASHBOARD_DATA
+
   return (
     <AnimatedLayout>
       <div className="flex h-screen bg-slate-50/50 dark:bg-slate-950/50 overflow-hidden text-slate-900 dark:text-slate-100">
@@ -117,43 +157,59 @@ export default function Dashboard() {
 
           <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 space-y-8 scrollbar-custom">
             <PageTransition>
-              <DashboardHero 
-                user={user} 
-                prefersReducedMotion={prefersReducedMotion} 
-              />
+              <DashboardHero user={user} prefersReducedMotion={prefersReducedMotion} />
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div className="lg:col-span-2 space-y-8">
-                  <StatsOverview
-                    isConnected={isConnected}
-                    recentJobs={recentJobs ?? []}
-                    jobUpdates={jobUpdates ?? {}}
-                    dashboardData={dashboardData ?? {}}
-                  />
-                  <IntelligenceShowcase />
-                  <ProcessingPipeline jobs={recentJobs} />
-                  <KnowledgeCompression />
-                </div>
+              <AnimatePresence mode="wait">
+                {loading ? (
+                  <motion.div
+                    key="dashboard-skeleton"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <DashboardGridSkeleton />
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="dashboard-content"
+                    initial={{ opacity: 0, y: 15 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.4, ease: "easeOut" }}
+                    className="grid grid-cols-1 lg:grid-cols-3 gap-8"
+                  >
+                    <div className="lg:col-span-2 space-y-8">
+                      <StatsOverview
+                        recentJobs={recentJobs}
+                        dashboardData={resolvedDashboard}
+                      />
+                      <IntelligenceShowcase />
+                      <ProcessingPipeline jobs={recentJobs} />
+                      <KnowledgeCompression />
+                    </div>
 
-                <div className="space-y-8">
-                  <QuickActions quickActions={[]} />
-                  <RecentActivity activities={dashboardData?.recent_activity || []} />
-                  <AIProviderStatus
-                    aiProviders={aiProviders}
-                    performance={dashboardData?.ai_performance}
-                    prefersReducedMotion={prefersReducedMotion}
-                    onProviderClick={() => router.push('/settings?tab=ai')}
-                  />
-                  <IntegrationHealth
-                    integrations={integrations}
-                    prefersReducedMotion={prefersReducedMotion}
-                  />
-                  <SystemPerformanceMetrics
-                    dashboardData={dashboardData ?? {}}
-                    aiProviders={aiProviders ?? []}
-                  />
-                </div>
-              </div>
+                    <div className="space-y-8">
+                      <QuickActions quickActions={[]} />
+                      <RecentActivity activities={dashboardData?.recent_activity || []} />
+                      <AIProviderStatus
+                        aiProviders={aiProviders}
+                        performance={dashboardData?.ai_performance}
+                        prefersReducedMotion={prefersReducedMotion}
+                        onProviderClick={() => router.push("/settings?tab=ai")}
+                      />
+                      <IntegrationHealth
+                        integrations={integrations}
+                        prefersReducedMotion={prefersReducedMotion}
+                      />
+                      <SystemPerformanceMetrics
+                        dashboardData={resolvedDashboard}
+                        aiProviders={aiProviders}
+                      />
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </PageTransition>
           </main>
         </div>

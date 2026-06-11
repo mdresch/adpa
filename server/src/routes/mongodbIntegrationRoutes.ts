@@ -11,6 +11,7 @@ import {
     readMongoSyncProgress,
 } from '../services/mongoDBSyncService';
 import { searchMongoChunks } from '../services/mongoRagService';
+import { supabaseService } from '../services/supabaseService';
 
 const router = express.Router();
 const log = childLogger({ component: 'mongodbIntegrationRoutes' });
@@ -41,6 +42,7 @@ function buildMongoCapabilityFlags(stats: {
     configured: boolean;
     embeddedChunks: number;
     indexStatus: string;
+    refreshing?: boolean;
 }) {
     const voyageConfigured = Boolean(process.env.VOYAGE_API_KEY);
     const embeddingMode = (process.env.MONGODB_EMBEDDING_MODE || 'atlas').toLowerCase();
@@ -55,7 +57,7 @@ function buildMongoCapabilityFlags(stats: {
         setupHint = 'Set MONGODB_URI on the API server, then restart the backend.';
     } else if (!voyageConfigured) {
         setupHint = 'Set VOYAGE_API_KEY on the API server for semantic search embeddings.';
-    } else if (stats.embeddedChunks === 0) {
+    } else if (stats.embeddedChunks === 0 && !stats.refreshing) {
         setupHint =
             embeddingMode === 'server'
                 ? 'Run a MongoDB sync from the Integrations overview (embeddings are generated during sync).'
@@ -72,6 +74,10 @@ async function handleStats(_req: Request, res: Response) {
         if (!mongoVectorStore.isMongoConfigured()) {
             const payload = {
                 documents: 0,
+                portfolios: 0,
+                programs: 0,
+                projects: 0,
+                entities: 0,
                 chunks: 0,
                 embeddedChunks: 0,
                 embeddingPercentage: 0,
@@ -111,6 +117,55 @@ router.get(
     authenticateToken,
     requireIntegrationReadAccess,
     handleStats
+);
+
+router.get(
+    '/:integrationId/supabase/stats',
+    authenticateToken,
+    requireIntegrationReadAccess,
+    async (req: Request, res: Response) => {
+        const { integrationId } = req.params;
+        try {
+            const integrationType = await getIntegrationType(integrationId);
+            if (!integrationType) {
+                return res.status(404).json({ error: 'Integration not found' });
+            }
+            if (integrationType !== 'supabase') {
+                return res.status(400).json({
+                    error: 'Invalid integration type',
+                    message: `Expected supabase integration, got ${integrationType}`,
+                });
+            }
+
+            const [database, edgeFunctions] = await Promise.all([
+                supabaseService.getDatabaseStats(integrationId),
+                supabaseService.getEdgeFunctionStats(),
+            ]);
+
+            return res.json({
+                database: {
+                    totalTables: database.totalTables,
+                    totalRows: database.totalRows,
+                    ragDocuments: database.ragDocuments,
+                    entities: database.entities,
+                    databaseSize: database.databaseSize,
+                    tables: database.tables,
+                },
+                edgeFunctions: {
+                    totalFunctions: edgeFunctions.totalFunctions,
+                    deployedFunctions: edgeFunctions.deployedFunctions,
+                    functions: edgeFunctions.functions,
+                },
+                mcpTools: {},
+            });
+        } catch (error) {
+            log.error('Supabase stats failed', error);
+            return res.status(503).json({
+                error: 'Supabase stats unavailable',
+                message: (error as Error).message,
+            });
+        }
+    }
 );
 
 router.get(

@@ -1,16 +1,45 @@
+"use client"
+
 import type React from "react"
+import { useMemo } from "react"
 import { motion } from "framer-motion"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { ArrowUpRight, Wifi, WifiOff, Clock, FileText, Brain } from "lucide-react"
+import { useWebSocket, useJobUpdates } from "@/contexts/WebSocketContext"
+import type { Job } from "@/lib/api"
 
-interface StatsOverviewProps {
-  isConnected: boolean
-  recentJobs: any[]
-  jobUpdates: any
-  dashboardData: any
+interface DashboardDataSlice {
+  projects?: {
+    total_projects?: number
+    active_projects?: number
+    projects_last_30d?: number
+  }
+  ai?: {
+    total_generations?: number
+    generations_last_30d?: number
+  }
 }
 
-export function StatsOverview({ isConnected, recentJobs, jobUpdates, dashboardData }: StatsOverviewProps) {
+interface StatsOverviewProps {
+  recentJobs: Job[]
+  dashboardData: DashboardDataSlice
+}
+
+export function StatsOverview({ recentJobs, dashboardData }: StatsOverviewProps) {
+  const { isConnected } = useWebSocket()
+  const jobUpdates = useJobUpdates()
+
+  const jobsForStats = useMemo(() => {
+    const byId = new Map(recentJobs.map((job) => [job.id, job]))
+    for (const [jobId, update] of Object.entries(jobUpdates)) {
+      const existing = byId.get(jobId)
+      if (existing) {
+        byId.set(jobId, { ...existing, ...update, status: update.status ?? existing.status })
+      }
+    }
+    return Array.from(byId.values())
+  }, [recentJobs, jobUpdates])
+
   const statsData = [
     {
       title: "Connection Status",
@@ -23,8 +52,8 @@ export function StatsOverview({ isConnected, recentJobs, jobUpdates, dashboardDa
     },
     {
       title: "Active Jobs",
-      value: recentJobs.filter(job => job.status === "processing").length.toString(),
-      description: `${recentJobs.length} total jobs`,
+      value: jobsForStats.filter((job) => job.status === "processing").length.toString(),
+      description: `${jobsForStats.length} total jobs`,
       icon: Clock,
       color: "text-blue-500",
       bgColor: "bg-blue-50 dark:bg-blue-900/20",

@@ -69,18 +69,25 @@ export class DocumentsController {
             const isSuperAdmin = user.role?.toLowerCase() === 'super_admin';
             const userCompanyId = user.role?.toLowerCase() === 'admin' ? user.company_id : null;
 
-            const { rows: documents, total } = await DocumentsController.documentRepository.findAll({
-                limit: Number(limit),
-                offset,
+            const listFilters = {
                 userId: user.id,
                 isSuperAdmin,
                 userCompanyId,
-                status: status as string,
                 search: search as string,
                 template: template as string,
                 framework: framework as string,
-                grade: grade as string
-            });
+                grade: grade as string,
+            };
+
+            const [{ rows: documents, total }, statusCounts] = await Promise.all([
+                DocumentsController.documentRepository.findAll({
+                    limit: Number(limit),
+                    offset,
+                    ...listFilters,
+                    status: status as string,
+                }),
+                DocumentsController.documentRepository.findAllStatusCounts(listFilters),
+            ]);
 
             const parsedDocuments = documents.map(doc => {
                 if (doc.generation_metadata && typeof doc.generation_metadata === 'string') {
@@ -91,7 +98,8 @@ export class DocumentsController {
 
             res.json({
                 documents: parsedDocuments,
-                pagination: { page: Number(page), limit: Number(limit), total, pages: Math.ceil(total / Number(limit)) }
+                pagination: { page: Number(page), limit: Number(limit), total, pages: Math.ceil(total / Number(limit)) },
+                meta: { counts: statusCounts },
             });
         } catch (error) {
             log.error("Get all documents error:", error);

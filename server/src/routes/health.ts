@@ -122,18 +122,15 @@ router.get("/", async (req: Request, res: Response) => {
  */
 router.get("/ready", async (req: Request, res: Response) => {
   try {
-    // Check critical dependencies (align with Issue 608 AC: Database, Redis, Neo4j)
-    const criticalDeps = ["Database", "Redis", "Neo4j"]
+    // Only startup-graph critical deps block readiness (see startup/dependencies/*.ts).
+    // Redis, Neo4j, Pinecone, etc. are optional — reported on /health/dependencies only.
+    const criticalDeps = ["Database"]
     let allHealthy = true
     const failedDeps: string[] = []
 
     for (const dep of criticalDeps) {
       const depStatus = dependencyHealth.get(dep)
       if (!depStatus || depStatus.status !== "healthy") {
-        // Neo4j might be allowed to be unhealthy if not configured - check that specifically
-        if (dep === "Neo4j" && depStatus?.error?.includes("Not configured")) {
-          continue
-        }
         allHealthy = false
         failedDeps.push(dep)
       }

@@ -14,6 +14,8 @@ import {
     AlertCircle,
     Clock,
     Activity,
+    FolderKanban,
+    Boxes,
 } from "lucide-react"
 import { toast } from "sonner"
 import { Database } from "@/components/ui/icons-shim"
@@ -21,6 +23,10 @@ import { apiClient } from "@/lib/api"
 
 interface MongoDBStats {
     documents: number
+    portfolios: number
+    programs: number
+    projects: number
+    entities: number
     chunks: number
     embeddedChunks: number
     embeddingPercentage: number
@@ -31,6 +37,9 @@ interface MongoDBStats {
     embeddingMode?: string
     searchReady?: boolean
     setupHint?: string
+    stale?: boolean
+    refreshing?: boolean
+    updatedAt?: string
 }
 
 interface MongoDBDashboardProps {
@@ -71,6 +80,7 @@ export function MongoDBDashboard({ integrationId }: MongoDBDashboardProps) {
     }, [fetchStats])
 
     const showSetup = loadState === "ready" && stats && (!stats.configured || stats.setupHint)
+    const coveragePending = Boolean(stats?.refreshing && stats.embeddedChunks === 0)
 
     return (
         <div className="space-y-6">
@@ -117,15 +127,53 @@ export function MongoDBDashboard({ integrationId }: MongoDBDashboardProps) {
                 </Alert>
             )}
 
-            {showSetup && stats?.setupHint && (
+            {loadState === "ready" && coveragePending ? (
+                <Alert>
+                    <Clock className="h-4 w-4" />
+                    <AlertTitle>Refreshing embedding coverage</AlertTitle>
+                    <AlertDescription>
+                        Document and chunk totals load immediately. Full embedding counts are
+                        computed in the background (large Atlas collections can take a minute).
+                        Click Refresh to update.
+                    </AlertDescription>
+                </Alert>
+            ) : null}
+
+            {showSetup && stats?.setupHint ? (
                 <Alert>
                     <AlertCircle className="h-4 w-4" />
                     <AlertTitle>Setup required</AlertTitle>
                     <AlertDescription>{stats.setupHint}</AlertDescription>
                 </Alert>
-            )}
+            ) : null}
 
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Portfolios</CardTitle>
+                        <FolderKanban className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">
+                            {loadState === "loading" ? "…" : stats?.portfolios ?? "—"}
+                        </div>
+                        <p className="text-xs text-muted-foreground">Portfolio governance</p>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Programs</CardTitle>
+                        <FolderKanban className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">
+                            {loadState === "loading" ? "…" : stats?.programs ?? "—"}
+                        </div>
+                        <p className="text-xs text-muted-foreground">Programs under portfolios</p>
+                    </CardContent>
+                </Card>
+
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Total Documents</CardTitle>
@@ -136,6 +184,32 @@ export function MongoDBDashboard({ integrationId }: MongoDBDashboardProps) {
                             {loadState === "loading" ? "…" : stats?.documents ?? "—"}
                         </div>
                         <p className="text-xs text-muted-foreground">In RAG collection</p>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Projects</CardTitle>
+                        <FolderKanban className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">
+                            {loadState === "loading" ? "…" : stats?.projects ?? "—"}
+                        </div>
+                        <p className="text-xs text-muted-foreground">Project catalog + chunks</p>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Entities</CardTitle>
+                        <Boxes className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">
+                            {loadState === "loading" ? "…" : stats?.entities ?? "—"}
+                        </div>
+                        <p className="text-xs text-muted-foreground">Verified entity extractions</p>
                     </CardContent>
                 </Card>
 
@@ -163,10 +237,15 @@ export function MongoDBDashboard({ integrationId }: MongoDBDashboardProps) {
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">
-                            {loadState === "loading" ? "…" : `${stats?.embeddingPercentage ?? 0}%`}
+                            {loadState === "loading" || coveragePending
+                                ? "…"
+                                : `${stats?.embeddingPercentage ?? 0}%`}
                         </div>
                         <div className="mt-2">
-                            <Progress value={stats?.embeddingPercentage ?? 0} className="h-2" />
+                            <Progress
+                                value={coveragePending ? 0 : (stats?.embeddingPercentage ?? 0)}
+                                className="h-2"
+                            />
                         </div>
                     </CardContent>
                 </Card>
@@ -221,9 +300,16 @@ export function MongoDBDashboard({ integrationId }: MongoDBDashboardProps) {
                         <span className="font-mono">{stats?.database ?? "—"}</span>
                     </div>
                     <div className="flex justify-between">
+                        <span className="text-muted-foreground">Projects / Entities:</span>
+                        <span>
+                            {stats?.projects ?? "—"} / {stats?.entities ?? "—"}
+                        </span>
+                    </div>
+                    <div className="flex justify-between">
                         <span className="text-muted-foreground">Embedded Chunks:</span>
                         <span>
-                            {stats?.embeddedChunks ?? "—"} / {stats?.chunks ?? "—"}
+                            {coveragePending ? "…" : (stats?.embeddedChunks ?? "—")} /{" "}
+                            {stats?.chunks ?? "—"}
                         </span>
                     </div>
                     <div className="flex justify-between">

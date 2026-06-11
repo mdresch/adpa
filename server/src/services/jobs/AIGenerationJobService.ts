@@ -278,6 +278,7 @@ export class AIGenerationJobService {
         userId: userId as string,
         documentId: docId,
         name: jobData.name || undefined,
+        sourceDocumentIds: documentIds?.length ? documentIds : undefined,
       })
 
       // Mission Draco: Integrity Check Log
@@ -630,7 +631,25 @@ export class AIGenerationJobService {
           } catch (err) { }
         }
         if (projectIdForDoc && docContent.trim() && createdDocumentId) {
-          // Sync logic handled concurrently in documentGenerationService
+          setImmediate(async () => {
+            if (!process.env.VOYAGE_API_KEY) return
+            try {
+              const { ragService } = await import('../ragService')
+              const ingestIds = new Set<string>([createdDocumentId])
+              if (documentIds?.length) {
+                documentIds.forEach((id) => ingestIds.add(id))
+              }
+              for (const id of ingestIds) {
+                try {
+                  await ragService.ingestDocument(id)
+                } catch (ingestErr) {
+                  log.warn(`[AI-JOB] Post-save RAG ingest failed for ${id} (non-fatal)`, ingestErr)
+                }
+              }
+            } catch (importErr) {
+              log.warn('[AI-JOB] RAG ingest skipped (non-fatal)', importErr)
+            }
+          })
         }
       }
 

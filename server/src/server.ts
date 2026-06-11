@@ -62,7 +62,7 @@ import { correlationIdMiddleware } from "./middleware/correlationId";
 import { logger } from "./utils/logger";
 import pinoHttp from "pino-http";
 import jwt from "jsonwebtoken"
-import { pool } from "./database/connection"
+import { pool, databaseUrlEndpointLabel } from "./database/connection"
 import { safeQuery } from './services/jobs/dbGuards'
 import { initializeServerWithDependencyGraph } from "./startup/serverBootstrap"
 
@@ -252,10 +252,26 @@ app.use("/health", healthRoutes)
 app.use("/api/health", healthRoutes)
 
 app.get("/api/debug-env", (req, res) => {
+  const databaseUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL
   res.json({
     NEO4J_URI: process.env.NEO4J_URI,
     NODE_ENV: process.env.NODE_ENV,
-    TIMESTAMP: new Date().toISOString()
+    TIMESTAMP: new Date().toISOString(),
+    databaseConfigured: Boolean(databaseUrl),
+    databaseEndpoint: databaseUrl ? databaseUrlEndpointLabel(databaseUrl) : null,
+    databasePoolerMode:
+      databaseUrl?.includes("pooler.supabase.com") || databaseUrl?.includes(":6543")
+        ? "transaction"
+        : databaseUrl
+          ? "direct-or-unknown"
+          : null,
+    adpaAllowInsecureTls: process.env.ADPA_ALLOW_INSECURE_TLS === "true",
+    firebaseCredentialsPresent: Boolean(
+      process.env.FIREBASE_SERVICE_ACCOUNT_BASE64 ||
+        process.env.FIREBASE_SERVICE_ACCOUNT ||
+        (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL)
+    ),
+    startupReady: startupManager?.isReady?.() ?? false,
   })
 })
 

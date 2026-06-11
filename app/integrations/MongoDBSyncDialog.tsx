@@ -22,7 +22,6 @@ import { Badge } from "@/components/ui/badge"
 import { Loader2, CheckCircle2, XCircle } from "lucide-react"
 import { Database } from "@/components/ui/icons-shim"
 import { toast } from "sonner"
-import { apiClient } from "@/lib/api"
 
 interface Project {
     id: string
@@ -140,14 +139,21 @@ export function MongoDBSyncDialog({
             setPolling(true)
 
             const bodyProjectId = projectId === "all" ? null : projectId
+            const token = localStorage.getItem("auth_token") || localStorage.getItem("token")
 
-            const data = await apiClient.post<{ success: boolean; message?: string }>(
-                `/api/integrations/${integrationId}/sync`,
-                { projectId: bodyProjectId }
-            )
+            const response = await fetch(`/api/integrations/${integrationId}/sync`, {
+                method: "POST",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/json",
+                },
+                credentials: "include",
+                body: JSON.stringify({ projectId: bodyProjectId }),
+            })
 
-            if (!data.success) {
-                throw new Error(data.message || "Sync failed to start")
+            const data = (await response.json()) as { success?: boolean; message?: string }
+            if (!response.ok || !data.success) {
+                throw new Error(data.message || `Sync failed to start (${response.status})`)
             }
 
             toast.success("Sync started")

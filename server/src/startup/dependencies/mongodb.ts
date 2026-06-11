@@ -6,7 +6,7 @@ import { updateDependencyHealth } from "../../routes/health"
 export const mongodbDependency: Dependency = {
   name: "MongoDB Atlas",
   critical: false,
-  timeout: 15000, // 15 seconds
+  timeout: 30000, // parallel startup + Atlas TLS can exceed 15s
   init: async () => {
     const startTime = Date.now()
     try {
@@ -16,6 +16,7 @@ export const mongodbDependency: Dependency = {
         return
       }
       await mongoVectorStore.connect()
+      mongoVectorStore.scheduleStatsRefresh()
       const latency = Date.now() - startTime
       updateDependencyHealth("MongoDB Atlas", "healthy", latency)
     } catch (err) {

@@ -1509,7 +1509,18 @@ export class ApiClient {
     status?: string
     framework?: string
     projectId?: string
-  }): Promise<{ documents: Document[]; pagination?: any }> {
+  }): Promise<{
+    documents: Document[]
+    pagination?: { page: number; limit: number; total: number; pages: number }
+    meta?: {
+      counts: {
+        published: number
+        reviewed: number
+        draft: number
+        archived: number
+      }
+    }
+  }> {
     const queryParams = new URLSearchParams()
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
@@ -1520,8 +1531,7 @@ export class ApiClient {
         }
       })
     }
-    const response = await this.request<{ documents: Document[]; pagination?: any }>(`/documents?${queryParams}`)
-    return response
+    return this.request(`/documents?${queryParams}`)
   }
 
   // Users endpoints
@@ -1901,6 +1911,7 @@ export class ApiClient {
     includeDocuments?: boolean
     customContext?: string
     async?: boolean
+    allowMultiple?: boolean
   }): Promise<{ document: Document; generation: any } | { jobId: string; async: true; message: string }> {
     const response = await this.request<{ document: Document; generation: any } | { jobId: string; async: true; message: string }>("/document-generation/generate", {
       method: "POST",

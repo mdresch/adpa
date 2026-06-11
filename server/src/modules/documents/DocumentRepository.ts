@@ -326,6 +326,114 @@ export class DocumentRepository {
   }
 
   /**
+   * Fleet-wide status counts for the document library, using the same access and
+   * filter scope as findAll (search, framework, template, grade) but excluding
+   * the status filter so KPI cards reflect the full ledger slice.
+   */
+  async findAllStatusCounts(
+    options: {
+      userId: string;
+      isSuperAdmin: boolean;
+      userCompanyId: string | null;
+      search?: string;
+      template?: string;
+      framework?: string;
+      grade?: string;
+    },
+    client?: PoolClient
+  ): Promise<{ published: number; reviewed: number; draft: number; archived: number }> {
+    const db = client || this.db;
+    const { userId, isSuperAdmin, userCompanyId, search, template, framework, grade } = options;
+
+    const buildFilters = (useCompanyFallback: boolean) => {
+      let filterPart = `
+        WHERE d.deleted_at IS NULL AND d.parent_document_id IS NULL
+      `;
+      const params: unknown[] = [];
+      let paramCount = 0;
+
+      if (!isSuperAdmin && userCompanyId && !useCompanyFallback) {
+        paramCount++;
+        filterPart += ` AND p.company_id = $${paramCount}`;
+        params.push(userCompanyId);
+      } else if (!isSuperAdmin) {
+        paramCount++;
+        filterPart += ` AND (p.owner_id = $${paramCount} OR p.team_members ? $${paramCount}::text)`;
+        params.push(userId);
+      }
+
+      if (search) {
+        paramCount++;
+        filterPart += ` AND d.name ILIKE $${paramCount}`;
+        params.push(`%${search}%`);
+      }
+
+      if (template) {
+        paramCount++;
+        filterPart += ` AND t.name = $${paramCount}`;
+        params.push(template);
+      }
+
+      if (framework) {
+        paramCount++;
+        filterPart += ` AND t.framework = $${paramCount}`;
+        params.push(framework);
+      }
+
+      if (grade) {
+        if (grade === 'not_audited') {
+          filterPart += ` AND d.quality_score IS NULL`;
+        } else if (grade === 'A') {
+          filterPart += ` AND d.quality_score >= 90`;
+        } else if (grade === 'B') {
+          filterPart += ` AND d.quality_score >= 80 AND d.quality_score < 90`;
+        } else if (grade === 'C') {
+          filterPart += ` AND d.quality_score >= 70 AND d.quality_score < 80`;
+        } else if (grade === 'D') {
+          filterPart += ` AND d.quality_score >= 60 AND d.quality_score < 70`;
+        } else if (grade === 'F') {
+          filterPart += ` AND d.quality_score < 60 AND d.quality_score IS NOT NULL`;
+        }
+      }
+
+      return { filterPart, params };
+    };
+
+    const runCounts = async (useCompanyFallback: boolean) => {
+      const { filterPart, params } = buildFilters(useCompanyFallback);
+      const countsQuery = `
+        SELECT
+          COUNT(*) FILTER (WHERE LOWER(COALESCE(d.status, 'draft')) = 'published')::int AS published,
+          COUNT(*) FILTER (WHERE LOWER(d.status) IN ('reviewed', 'review'))::int AS reviewed,
+          COUNT(*) FILTER (WHERE d.status IS NULL OR LOWER(d.status) = 'draft')::int AS draft,
+          COUNT(*) FILTER (WHERE LOWER(d.status) = 'archived')::int AS archived
+        FROM documents d
+        LEFT JOIN templates t ON d.template_id = t.id
+        JOIN projects p ON d.project_id = p.id
+        ${filterPart}
+      `;
+      const result = await db.query(countsQuery, params);
+      const row = result.rows[0] ?? {};
+      return {
+        published: Number(row.published) || 0,
+        reviewed: Number(row.reviewed) || 0,
+        draft: Number(row.draft) || 0,
+        archived: Number(row.archived) || 0,
+      };
+    };
+
+    try {
+      return await runCounts(false);
+    } catch (err: unknown) {
+      const pgErr = err as { message?: string; code?: string };
+      if (pgErr.message?.includes('column "company_id"') || pgErr.code === '42703') {
+        return runCounts(true);
+      }
+      throw err;
+    }
+  }
+
+  /**
    * Retrieves document statistics for a project.
    */
   async getStats(projectId: string, client?: PoolClient): Promise<QueryResult<any>> {

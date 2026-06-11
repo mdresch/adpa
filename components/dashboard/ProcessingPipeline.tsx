@@ -1,35 +1,50 @@
 "use client"
 
 import type React from "react"
+import { useMemo } from "react"
 import { motion } from "framer-motion"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
 import { Activity as ActivityIcon } from "lucide-react"
+import { useJobUpdates } from "@/contexts/WebSocketContext"
 
 import { Job } from "@/lib/api"
 
 export function ProcessingPipeline({ jobs = [] }: { jobs?: Job[] }) {
+  const jobUpdates = useJobUpdates()
+
+  const mergedJobs = useMemo(() => {
+    const byId = new Map(jobs.map((job) => [job.id, job]))
+    for (const [jobId, update] of Object.entries(jobUpdates)) {
+      const existing = byId.get(jobId)
+      if (existing) {
+        byId.set(jobId, { ...existing, ...update, status: update.status ?? existing.status })
+      }
+    }
+    return Array.from(byId.values())
+  }, [jobs, jobUpdates])
+
   const getStageStatus = (stageIndex: number) => {
     // Map stage ranges to job types
     // Stage 1: Ingestion
     if (stageIndex === 0) {
-      const active = jobs.some(j => j.status === 'processing' && (j.type === 'document-convert' || j.type === 'extract-project-data' || j.type === 'save-inline-entities'))
-      const completed = jobs.some(j => j.status === 'completed' && (j.type === 'document-convert' || j.type === 'extract-project-data' || j.type === 'save-inline-entities'))
+      const active = mergedJobs.some(j => j.status === 'processing' && (j.type === 'document-convert' || j.type === 'extract-project-data' || j.type === 'save-inline-entities'))
+      const completed = mergedJobs.some(j => j.status === 'completed' && (j.type === 'document-convert' || j.type === 'extract-project-data' || j.type === 'save-inline-entities'))
       return active ? 'active' : (completed ? 'completed' : 'idle')
     }
     // Stages 2-6: Intelligence Pipeline
     if (stageIndex >= 1 && stageIndex <= 5) {
-      const active = jobs.some(j => j.status === 'processing' && j.type === 'pipeline-processing')
+      const active = mergedJobs.some(j => j.status === 'processing' && j.type === 'pipeline-processing')
       return active ? 'active' : 'idle'
     }
     // Stage 7: AI Generation
     if (stageIndex === 6) {
-      const active = jobs.some(j => j.status === 'processing' && (j.type === 'ai-generate' || j.type === 'document-regeneration' || j.type === 'save-inline-entities'))
-      const completed = jobs.some(j => j.status === 'completed' && (j.type === 'save-inline-entities'))
+      const active = mergedJobs.some(j => j.status === 'processing' && (j.type === 'ai-generate' || j.type === 'document-regeneration' || j.type === 'save-inline-entities'))
+      const completed = mergedJobs.some(j => j.status === 'completed' && (j.type === 'save-inline-entities'))
       return active ? 'active' : (completed ? 'completed' : 'idle')
     }
     // Stage 8: Quality
     if (stageIndex === 7) {
-      const active = jobs.some(j => j.status === 'processing' && j.type === 'quality-audit')
+      const active = mergedJobs.some(j => j.status === 'processing' && j.type === 'quality-audit')
       return active ? 'active' : 'idle'
     }
     return 'idle'

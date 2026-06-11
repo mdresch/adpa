@@ -93,6 +93,38 @@ export function SkeletonChart({ className, ...props }: React.HTMLAttributes<HTML
   )
 }
 
+/** Matches the main dashboard `lg:grid-cols-3` layout to prevent layout shift after auth. */
+export function DashboardGridSkeleton() {
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 min-h-[720px]">
+      <div className="lg:col-span-2 space-y-8">
+        <SkeletonStats />
+        <SkeletonChart className="h-44" />
+        <SkeletonChart className="h-72" />
+        <SkeletonCard />
+      </div>
+      <div className="space-y-8">
+        <SkeletonCard />
+        <SkeletonList items={4} />
+        <SkeletonCard />
+        <SkeletonCard />
+        <SkeletonCard />
+      </div>
+    </div>
+  )
+}
+
+/** Matches `/projects` card grid (`md:grid-cols-2 lg:grid-cols-3`) for lazy workspace load. */
+export function ProjectsGridSkeleton({ items = 6 }: { items?: number }) {
+  return (
+    <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+      {Array.from({ length: items }).map((_, i) => (
+        <SkeletonCard key={i} />
+      ))}
+    </div>
+  )
+}
+
 export function SkeletonTable({ rows = 5 }: { rows?: number }) {
   return (
     <div className="glass border-0 shadow-lg rounded-xl p-6 space-y-4">

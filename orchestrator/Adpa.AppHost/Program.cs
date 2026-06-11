@@ -74,8 +74,8 @@ var backend = builder.AddNpmApp("adpa-backend", "../../server", "dev")
 // 5. Experience Tier (Management Interface)
 // ---------------------------------------------------------------------------
 
+// launchSettings.json already defines http://localhost:5006 — do not add a second endpoint named "http".
 var web = builder.AddProject<Projects.Adpa_Web>("webfrontend")
-    .WithHttpEndpoint(port: 5006, name: "http")
     .WithEnvironment("ASPNETCORE_HTTP_PORTS", "5006");
 web.WithExternalHttpEndpoints();
 web.WithReference(apiservice);
