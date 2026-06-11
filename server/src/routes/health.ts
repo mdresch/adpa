@@ -79,6 +79,13 @@ export function updateDependencyHealth(
   })
 }
 
+/** Readiness probes use this to avoid overwriting a dependency that already reported health. */
+export function getDependencyHealthStatus(
+  name: string
+): "healthy" | "unhealthy" | "unknown" | undefined {
+  return dependencyHealth.get(name)?.status
+}
+
 /**
  * Persist health check result to database
  */
@@ -124,24 +131,26 @@ router.get("/ready", async (req: Request, res: Response) => {
   try {
     // Only startup-graph critical deps block readiness (see startup/dependencies/*.ts).
     // Redis, Neo4j, Pinecone, etc. are optional — reported on /health/dependencies only.
-    const criticalDeps = ["Database"]
-    let allHealthy = true
     const failedDeps: string[] = []
+    let allHealthy = true
 
-    for (const dep of criticalDeps) {
-      const depStatus = dependencyHealth.get(dep)
-      if (!depStatus || depStatus.status !== "healthy") {
-        allHealthy = false
-        failedDeps.push(dep)
-      }
-    }
+    const dbRegistryStatus = getDependencyHealthStatus("Database")
+    const startTime = Date.now()
+    const queryResult = await safeQuery(pool, "SELECT 1")
+    const latency = Date.now() - startTime
 
-    // Try a quick database query
-    try {
-      await safeQuery(pool, "SELECT 1")
-    } catch (err) {
+    if (queryResult === null) {
       allHealthy = false
+      failedDeps.push("Database")
       failedDeps.push("database-query")
+      updateDependencyHealth("Database", "unhealthy", 0, "SELECT 1 failed or pool unavailable")
+    } else if (dbRegistryStatus === "unhealthy") {
+      allHealthy = false
+      failedDeps.push("Database")
+    } else {
+      if (dbRegistryStatus !== "healthy") {
+        updateDependencyHealth("Database", "healthy", latency)
+      }
     }
 
     if (allHealthy) {
