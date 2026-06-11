@@ -90,6 +90,8 @@ const nextConfig = {
     'sequelize'
   ],
 
+  allowedDevOrigins: ['192.168.178.64'],
+
   // Legacy URL — canonical OpenUI advisor lives at /openui-chat (query string preserved)
   async redirects() {
     return [
