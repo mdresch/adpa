@@ -1,4 +1,5 @@
 import { Pool } from 'pg'
+import { buildSslConfig, stripLibpqSslQueryParams } from '../../database/connection'
 import { childLogger } from "../../utils/logger"
 
 /**
@@ -163,13 +164,13 @@ export class MorphicRepository {
             const isRemote = (morphicUrl.includes('rlwy.net') || morphicUrl.includes('supabase') || morphicUrl.includes('pooler.supabase.com') || morphicUrl.includes('azure')) && 
                              !morphicUrl.includes('localhost') && !morphicUrl.includes('127.0.0.1');
 
-            const sslConfig = (isRemote || (process.env.MORPHIC_DB_SSL === 'true')) 
-                ? { rejectUnauthorized: false } 
-                : false;
-            
+            const sslConfig = isRemote || process.env.MORPHIC_DB_SSL === 'true'
+                ? buildSslConfig(morphicUrl)
+                : false
+
             try {
                 MorphicRepository._pool = new Pool({
-                    connectionString: morphicUrl,
+                    connectionString: stripLibpqSslQueryParams(morphicUrl),
                     ssl: sslConfig,
                     max: 10,
                     idleTimeoutMillis: 10000,
@@ -182,9 +183,10 @@ export class MorphicRepository {
         }
 
         if (mainUrl) {
+            const trimmedMainUrl = mainUrl.replace(/^["']|["']$/g, '')
             MorphicRepository._pool = new Pool({
-                connectionString: mainUrl.replace(/^["']|["']$/g, ''),
-                ssl: { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED === 'false' ? false : true },
+                connectionString: stripLibpqSslQueryParams(trimmedMainUrl),
+                ssl: buildSslConfig(trimmedMainUrl),
                 max: 5
             });
             this.log.info('Morphic repository using main database as fallback');
