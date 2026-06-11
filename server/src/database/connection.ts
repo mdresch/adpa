@@ -41,11 +41,24 @@ const connectionMethods = [
 ]
 
 const isTrustedPoolingProvider = (target?: string) =>
-  !!target && (target.includes("supabase.co") || target.includes("supabase.com") || target.includes("azure"))
+  !!target &&
+  (target.includes("supabase.co") ||
+    target.includes("supabase.com") ||
+    target.includes("pooler.supabase.com") ||
+    target.includes("rlwy.net") ||
+    target.includes("azure"))
 
 const shouldRejectUnauthorized = () => {
-  // Default to strict TLS unless explicitly disabled for custom databases
-  return process.env.ADPA_ALLOW_INSECURE_TLS === "true" ? false : true
+  if (process.env.ADPA_ALLOW_INSECURE_TLS === "true") return false
+  if (process.env.DATABASE_SSL_REJECT_UNAUTHORIZED === "false") return false
+  if (process.env.DB_SSL_REJECT_UNAUTHORIZED === "false") return false
+  return true
+}
+
+/** Supabase/Railway poolers on PaaS often present chains Node rejects unless verification is relaxed. */
+function rejectUnauthorizedForTrustedPooler(): boolean {
+  if (process.env.ADPA_STRICT_SUPABASE_TLS === "true") return true
+  return false
 }
 
 /**
@@ -53,7 +66,7 @@ const shouldRejectUnauthorized = () => {
  * object on the Pool, which breaks Supabase pooler TLS on some hosts (SELF_SIGNED_CERT_IN_CHAIN).
  * @see https://github.com/brianc/node-postgres/issues/2375
  */
-function stripLibpqSslQueryParams(connectionUrl: URL): string {
+export function stripLibpqSslQueryParams(connectionUrl: URL | string): string {
   const u = new URL(connectionUrl.toString())
   for (const k of ["sslmode", "sslcert", "sslkey", "sslrootcert", "sslcrl"]) {
     u.searchParams.delete(k)
@@ -106,8 +119,7 @@ function formatConnectionLogTarget(poolConfig: {
 
 export function buildSslConfig(target?: string) {
   if (isTrustedPoolingProvider(target)) {
-    // Keep TLS verification enabled by default; only relax when explicitly allowed.
-    return { rejectUnauthorized: shouldRejectUnauthorized() }
+    return { rejectUnauthorized: rejectUnauthorizedForTrustedPooler() }
   }
 
   // Disable SSL for local connections
