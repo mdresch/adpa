@@ -10,6 +10,51 @@ export interface RAGDocument {
     updatedAt: Date;
 }
 
+export interface RAGPortfolio {
+    id: string;
+    name: string;
+    description?: string;
+    status?: string;
+    metadata: Record<string, unknown>;
+    createdAt: Date;
+    updatedAt: Date;
+}
+
+export interface RAGProgram {
+    id: string;
+    name: string;
+    description?: string;
+    status?: string;
+    portfolioId?: string | null;
+    metadata: Record<string, unknown>;
+    createdAt: Date;
+    updatedAt: Date;
+}
+
+export interface RAGProject {
+    id: string;
+    name: string;
+    description?: string;
+    framework?: string;
+    status?: string;
+    programId?: string | null;
+    portfolioId?: string | null;
+    metadata: Record<string, unknown>;
+    createdAt: Date;
+    updatedAt: Date;
+}
+
+export interface RAGEntity {
+    id: string;
+    projectId: string;
+    entityType: string;
+    entityName: string;
+    documentId?: string | null;
+    metadata: Record<string, unknown>;
+    createdAt: Date;
+    updatedAt: Date;
+}
+
 export interface DocumentChunk {
     id: string;
     documentId: string;

@@ -111,3 +111,21 @@ Return 503. Do not fall back to synchronous generation. Surface a clear error to
 > "Job queue is unavailable — please try again in a moment."
 
 This is better UX than a cryptic `socket hang up` after 2 minutes of waiting.
+
+## Governed feature packet (`doc-gen`)
+
+Registered in `server/governed-features.manifest.json` with `testPathPattern: documentGenerationService`. Paired skill: `adpa-template-driven-generation`. Load `adpa-governed-feature-loop` when adding new doc-gen tests or registering another packet.
+
+```powershell
+cd server
+npm run test:features -- doc-gen
+npm run test:doc-gen          # alias
+npm run verify:governed-features
+```
+
+Key test files:
+
+| File | Covers |
+| ---- | ------ |
+| `server/src/__tests__/documentGenerationService.rag.test.ts` | Section-scoped RAG, `sourceDocumentIds`, entity JSON in prompts |
+| `server/src/__tests__/documentGenerationService.templateParagraphs.test.ts` | Template paragraphs, concurrency, job resumption, LLM snapshots |

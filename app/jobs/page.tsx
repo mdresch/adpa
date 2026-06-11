@@ -1559,6 +1559,36 @@ return (
                                                         <span>Temperature: {request.temperature ?? "-"}</span>
                                                         <span>{request.characterCount ?? prompt.length} chars</span>
                                                       </div>
+                                                      {request.context_metrics && (
+                                                        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 p-2 rounded-md bg-blue-50/50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/50">
+                                                          <div className="flex items-center gap-1.5 text-[10px] font-semibold text-blue-700 dark:text-blue-300 uppercase tracking-tight">
+                                                            <Activity className="h-3 w-3" />
+                                                            Context Injection
+                                                          </div>
+                                                          <div className="flex flex-wrap gap-2">
+                                                            {request.context_metrics.rag_strategy && (
+                                                              <Badge variant="outline" className="text-[10px] h-4 px-1.5 border-blue-200 dark:border-blue-800 bg-blue-100/50 dark:bg-blue-900/30">
+                                                                RAG: {request.context_metrics.rag_strategy.replace('-', ' ')}
+                                                              </Badge>
+                                                            )}
+                                                            {request.context_metrics.rag_chunks_found !== undefined && (
+                                                              <Badge variant="outline" className="text-[10px] h-4 px-1.5 border-blue-200 dark:border-blue-800">
+                                                                Chunks: {request.context_metrics.rag_chunks_found}
+                                                              </Badge>
+                                                            )}
+                                                            {request.context_metrics.entities_injected !== undefined && (
+                                                              <Badge variant="outline" className="text-[10px] h-4 px-1.5 border-blue-200 dark:border-blue-800">
+                                                                Entities: {request.context_metrics.entities_injected}
+                                                              </Badge>
+                                                            )}
+                                                            {request.context_metrics.baseline_entities_injected !== undefined && request.context_metrics.baseline_entities_injected > 0 && (
+                                                              <Badge variant="outline" className="text-[10px] h-4 px-1.5 border-blue-200 dark:border-blue-800">
+                                                                Baseline: {request.context_metrics.baseline_entities_injected}
+                                                              </Badge>
+                                                            )}
+                                                          </div>
+                                                        </div>
+                                                      )}
                                                       {request.heading && (
                                                         <p className="mt-1 text-xs text-muted-foreground">Section: {request.heading}</p>
                                                       )}

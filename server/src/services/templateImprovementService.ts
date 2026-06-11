@@ -419,6 +419,8 @@ Identify 3-5 structural improvements. Focus on:
        JOIN documents d ON qa.document_id = d.id
        WHERE d.template_id = $1
        AND qa.audited_at > NOW() - ($2 * INTERVAL '1 day')
+       AND COALESCE(qa.audit_performed, true) = true
+       AND qa.overall_score IS NOT NULL
        ORDER BY qa.audited_at DESC`,
       [templateId, days]
     )
@@ -430,31 +432,49 @@ Identify 3-5 structural improvements. Focus on:
    * Calculate aggregate quality metrics from audit history
    */
   private calculateAggregateMetrics(auditHistory: AuditHistoryItem[]): TemplateQualityMetrics {
-    const count = auditHistory.length
+    const scoredAudits = auditHistory.filter(
+      (a) => a.overall_score != null && a.audit_performed !== false
+    )
+    const count = scoredAudits.length
+    if (count === 0) {
+      return {
+        avgQuality: 0,
+        avgCompleteness: 0,
+        avgConsistency: 0,
+        avgProfessionalQuality: 0,
+        avgStandardsCompliance: 0,
+        avgAccuracy: 0,
+        avgContextRelevance: 0,
+        documentCount: 0,
+        lowestScore: 0,
+        highestScore: 0,
+        standardDeviation: 0,
+      }
+    }
 
-    const scores = auditHistory.map(a => a.overall_score)
+    const scores = scoredAudits.map((a) => a.overall_score as number)
 
     return {
       avgQuality: Math.round(
-        auditHistory.reduce((sum, a) => sum + a.overall_score, 0) / count
+        scoredAudits.reduce((sum, a) => sum + (a.overall_score as number), 0) / count
       ),
       avgCompleteness: Math.round(
-        auditHistory.reduce((sum, a) => sum + a.completeness_score, 0) / count
+        scoredAudits.reduce((sum, a) => sum + (a.completeness_score ?? 0), 0) / count
       ),
       avgConsistency: Math.round(
-        auditHistory.reduce((sum, a) => sum + a.consistency_score, 0) / count
+        scoredAudits.reduce((sum, a) => sum + (a.consistency_score ?? 0), 0) / count
       ),
       avgProfessionalQuality: Math.round(
-        auditHistory.reduce((sum, a) => sum + a.professional_quality_score, 0) / count
+        scoredAudits.reduce((sum, a) => sum + (a.professional_quality_score ?? 0), 0) / count
       ),
       avgStandardsCompliance: Math.round(
-        auditHistory.reduce((sum, a) => sum + a.standards_compliance_score, 0) / count
+        scoredAudits.reduce((sum, a) => sum + (a.standards_compliance_score ?? 0), 0) / count
       ),
       avgAccuracy: Math.round(
-        auditHistory.reduce((sum, a) => sum + a.accuracy_score, 0) / count
+        scoredAudits.reduce((sum, a) => sum + (a.accuracy_score ?? 0), 0) / count
       ),
       avgContextRelevance: Math.round(
-        auditHistory.reduce((sum, a) => sum + a.context_relevance_score, 0) / count
+        scoredAudits.reduce((sum, a) => sum + (a.context_relevance_score ?? 0), 0) / count
       ),
       documentCount: count,
       lowestScore: Math.min(...scores),

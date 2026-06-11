@@ -69,6 +69,8 @@ router.get(
         FROM quality_audits qa
         JOIN documents d ON qa.document_id = d.id
         WHERE qa.audited_at > NOW() - ($1 * INTERVAL '1 day')
+          AND COALESCE(qa.audit_performed, true) = true
+          AND qa.overall_score IS NOT NULL
       `, [days])
 
       // Calculate SLA compliance (% of audits >= 85%)
@@ -78,6 +80,8 @@ router.get(
           COUNT(CASE WHEN overall_score >= 85 THEN 1 END) as compliant
         FROM quality_audits
         WHERE audited_at > NOW() - ($1 * INTERVAL '1 day')
+          AND COALESCE(audit_performed, true) = true
+          AND overall_score IS NOT NULL
       `, [days])
 
       const slaCompliance = slaResult.rows[0].total > 0
@@ -101,6 +105,8 @@ router.get(
         FROM quality_audits qa
         JOIN documents d ON qa.document_id = d.id
         WHERE qa.audited_at > NOW() - ($1 * INTERVAL '1 day')
+          AND COALESCE(qa.audit_performed, true) = true
+          AND qa.overall_score IS NOT NULL
         GROUP BY DATE(qa.audited_at)
         ORDER BY date ASC
       `, [days])
@@ -126,6 +132,8 @@ router.get(
           JOIN documents d ON qa.document_id = d.id
           JOIN templates t ON d.template_id = t.id
           WHERE qa.audited_at > NOW() - ($1 * INTERVAL '1 day')
+            AND COALESCE(qa.audit_performed, true) = true
+            AND qa.overall_score IS NOT NULL
           GROUP BY d.template_id, t.name, t.framework
         )
         SELECT 
@@ -155,6 +163,9 @@ router.get(
         FROM quality_audits qa
         WHERE qa.audited_at > NOW() - ($1 * INTERVAL '1 day')
         AND qa.ai_provider IS NOT NULL
+        AND qa.ai_provider != 'none'
+        AND COALESCE(qa.audit_performed, true) = true
+        AND qa.overall_score IS NOT NULL
         GROUP BY qa.ai_provider, qa.ai_model
         ORDER BY avg_quality DESC
       `, [days])
@@ -292,6 +303,8 @@ router.get(
           COUNT(CASE WHEN overall_score >= $1 THEN 1 END) as compliant
         FROM quality_audits
         WHERE audited_at > NOW() - INTERVAL '30 days'
+          AND COALESCE(audit_performed, true) = true
+          AND overall_score IS NOT NULL
       `, [thresholds.critical])
 
       const overallCompliance = overallResult.rows[0].total > 0
@@ -311,6 +324,8 @@ router.get(
         JOIN documents d ON qa.document_id = d.id
         JOIN templates t ON d.template_id = t.id
         WHERE qa.audited_at > NOW() - INTERVAL '30 days'
+        AND COALESCE(qa.audit_performed, true) = true
+        AND qa.overall_score IS NOT NULL
         AND qa.overall_score < $1
         GROUP BY t.id, t.name, t.framework
         ORDER BY violation_count DESC, current_quality ASC
@@ -325,6 +340,8 @@ router.get(
           ROUND((COUNT(CASE WHEN overall_score >= $1 THEN 1 END)::numeric / COUNT(*)::numeric) * 100) as compliance_rate
         FROM quality_audits
         WHERE audited_at > NOW() - INTERVAL '7 days'
+          AND COALESCE(audit_performed, true) = true
+          AND overall_score IS NOT NULL
         GROUP BY DATE(audited_at)
         ORDER BY date ASC
       `, [thresholds.critical])

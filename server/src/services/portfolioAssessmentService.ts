@@ -297,6 +297,8 @@ async function gatherAuditData(client: any, projectId: string): Promise<any[]> {
     FROM quality_audits qa
     JOIN documents d ON d.id = qa.document_id
     WHERE d.project_id = $1
+      AND COALESCE(qa.audit_performed, true) = true
+      AND qa.overall_score IS NOT NULL
     ORDER BY qa.overall_score DESC
   `;
 
@@ -312,15 +314,21 @@ async function gatherAuditData(client: any, projectId: string): Promise<any[]> {
  * Calculate overall portfolio metrics
  */
 function calculatePortfolioMetrics(auditData: any[]): PortfolioMetrics {
-  const totalDocs = auditData.length;
-  const avgScore = auditData.reduce((sum, audit) => sum + audit.overall_score, 0) / totalDocs;
+  const scoredAudits = auditData.filter(
+    (audit) => audit.overall_score !== null && audit.overall_score !== undefined
+  );
+  const totalDocs = scoredAudits.length;
+  const avgScore =
+    totalDocs > 0
+      ? scoredAudits.reduce((sum, audit) => sum + audit.overall_score, 0) / totalDocs
+      : 0;
 
   // Calculate grade distribution
-  const grades = auditData.map(a => a.grade);
+  const grades = scoredAudits.map(a => a.grade);
   const avgGrade = calculateAverageGrade(grades);
 
   // Calculate maturity level
-  const maturityLevel = calculateMaturityLevel(avgScore, auditData);
+  const maturityLevel = calculateMaturityLevel(avgScore, scoredAudits);
   const maturityLabel = getMaturityLabel(maturityLevel);
 
   return {

@@ -1,5 +1,15 @@
 export const GOOGLE_PRIMARY_MODEL = 'gemini-2.5-flash'
 export const GOOGLE_LOW_COST_MODEL = 'gemini-3.1-flash-lite'
+/** Quality audits: separate quota pool from doc-gen (2.5 Flash) */
+export const GOOGLE_QUALITY_AUDIT_MODEL = GOOGLE_LOW_COST_MODEL
+
+export function getQualityAuditGoogleModel(): string {
+  const envOverride = process.env.QUALITY_AUDIT_GOOGLE_MODEL?.trim()
+  if (envOverride) {
+    return normalizeGoogleModelId(envOverride)
+  }
+  return GOOGLE_QUALITY_AUDIT_MODEL
+}
 
 export const GOOGLE_SUPPORTED_MODELS = [
   GOOGLE_PRIMARY_MODEL,

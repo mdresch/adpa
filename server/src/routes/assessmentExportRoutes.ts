@@ -219,6 +219,8 @@ router.get('/batch/:batchId', authenticate, async (req: Request, res: Response, 
           FROM quality_audits qa
           JOIN documents d ON qa.document_id = d.id
           WHERE d.project_id = $1
+            AND COALESCE(qa.audit_performed, true) = true
+            AND qa.overall_score IS NOT NULL
         `;
         const auditResult = await pool.query(auditQuery, [projectId]);
         logger.info('Fetched quality audits', { 
@@ -438,7 +440,15 @@ router.get('/batch/:batchId/documents', authenticate, async (req: Request, res: 
         qa.recommendations,
         qa.audited_at
       FROM documents d
-      LEFT JOIN quality_audits qa ON d.id = qa.document_id
+      LEFT JOIN LATERAL (
+        SELECT *
+        FROM quality_audits qa_inner
+        WHERE qa_inner.document_id = d.id
+          AND COALESCE(qa_inner.audit_performed, true) = true
+          AND qa_inner.overall_score IS NOT NULL
+        ORDER BY qa_inner.audited_at DESC
+        LIMIT 1
+      ) qa ON true
       WHERE d.project_id = $1
         AND COALESCE(d.framework, d.template_category, 'General') = $2
       ORDER BY qa.overall_score DESC NULLS LAST, d.created_at DESC

@@ -78,6 +78,19 @@ export class IntegrationRepository {
     return parseInt(result.rows[0].count);
   }
 
+  async findByType(type: string, client?: PoolClient) {
+    const db = client || this.pool;
+    const query = `
+      SELECT i.*, u.name as created_by_name
+      FROM integrations i
+      LEFT JOIN users u ON i.created_by = u.id
+      WHERE i.type = $1
+      ORDER BY i.is_active DESC, i.last_sync DESC NULLS LAST, i.updated_at DESC
+    `;
+    const result = await db.query(query, [type]);
+    return result.rows;
+  }
+
   async findById(id: string, client?: PoolClient) {
     const db = client || this.pool;
     const query = `

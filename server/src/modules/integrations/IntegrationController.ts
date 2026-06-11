@@ -50,6 +50,18 @@ export class IntegrationController {
   create = async (req: Request, res: Response) => {
     try {
       const { name, type, configuration, credentials, is_active } = req.body;
+      const singletonTypes = new Set(["mongodb", "pinecone", "supabase", "neo4j"]);
+      if (singletonTypes.has(type)) {
+        const existing = await this.repository.findByType(type);
+        if (existing.length > 0) {
+          return res.status(409).json({
+            error: "Integration already exists",
+            message: `A ${type} integration already exists. Enable or update the existing record instead of creating another.`,
+            integration: existing[0],
+          });
+        }
+      }
+
       const encryptedCredentials = Buffer.from(JSON.stringify(credentials)).toString("base64");
       
       const integration = await this.repository.create({

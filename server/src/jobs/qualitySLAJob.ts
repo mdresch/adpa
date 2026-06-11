@@ -44,6 +44,8 @@ export async function runSLAMonitoring() {
       JOIN documents d ON qa.document_id = d.id
       JOIN templates t ON d.template_id = t.id
       WHERE qa.audited_at > NOW() - INTERVAL '24 hours'
+      AND COALESCE(qa.audit_performed, true) = true
+      AND qa.overall_score IS NOT NULL
       AND qa.overall_score < $1
       GROUP BY t.id, t.name, t.framework
       HAVING AVG(qa.overall_score) < $1
@@ -113,6 +115,8 @@ export async function runSLAMonitoring() {
         ROUND((COUNT(CASE WHEN overall_score >= $1 THEN 1 END)::numeric / COUNT(*)::numeric) * 100) as compliance_rate
       FROM quality_audits
       WHERE audited_at > NOW() - INTERVAL '30 days'
+        AND COALESCE(audit_performed, true) = true
+        AND overall_score IS NOT NULL
     `, [SLA_THRESHOLDS.CRITICAL])
 
     const compliance = complianceResult.rows[0]

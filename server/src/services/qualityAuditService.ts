@@ -4,7 +4,7 @@
  * 
  * Features:
  * - Multi-dimensional quality analysis (6 dimensions)
- * - AI-powered assessment using Gemini Flash
+ * - AI-powered assessment using Gemini 3.1 Flash Lite (dedicated quota from doc-gen)
  * - Automatic audit after document generation
  * - Quality metadata storage
  * - Grade assignment (A-F)
@@ -13,15 +13,25 @@
 import { pool } from '../database/connection'
 import { aiService } from './aiService'
 import { logger } from '../utils/logger'
+import { getQualityAuditGoogleModel } from '../utils/googleModelConfig'
 
 interface QualityDimensionalScores {
-  completeness: number
-  consistency: number
-  professionalQuality: number
-  standardsCompliance: number
-  accuracy: number
-  contextRelevance: number
+  completeness: number | null
+  consistency: number | null
+  professionalQuality: number | null
+  standardsCompliance: number | null
+  accuracy: number | null
+  contextRelevance: number | null
 }
+
+export const QUALITY_AUDIT_NOT_GRADE = 'N/A'
+export const QUALITY_AUDIT_NOT_LEVEL = 'Not Audited'
+
+/** Audits included in AVG/COUNT quality metrics */
+export const QUALITY_AUDIT_SCORED_FILTER = `
+  COALESCE(audit_performed, true) = true
+  AND overall_score IS NOT NULL
+`
 
 interface QualityIssue {
   severity: 'critical' | 'major' | 'minor'
@@ -36,6 +46,7 @@ interface QualityAuditResult {
   overallGrade: string | null
   qualityLevel: string | null
   dimensionalScores: QualityDimensionalScores
+  auditPerformed?: boolean
   findings: Record<string, string>
   issues: QualityIssue[]
   recommendations: string[]
@@ -55,13 +66,19 @@ interface QualityAuditTraceContext {
   templateVersion: string | number | null
 }
 
-const NO_AUDIT_DIMENSIONAL_SCORES: QualityDimensionalScores = {
-  completeness: 70,
-  consistency: 70,
-  professionalQuality: 70,
-  standardsCompliance: 70,
-  accuracy: 80,
-  contextRelevance: 80
+const NULL_DIMENSIONAL_SCORES: QualityDimensionalScores = {
+  completeness: null,
+  consistency: null,
+  professionalQuality: null,
+  standardsCompliance: null,
+  accuracy: null,
+  contextRelevance: null
+}
+
+export function shouldSkipClosedLoopTemplateAudit(
+  recentDocumentFailureAudits: { id: string }[]
+): boolean {
+  return recentDocumentFailureAudits.length > 0
 }
 
 class QualityAuditService {
@@ -130,6 +147,48 @@ class QualityAuditService {
     documentContent: string,
     documentType: string,
     projectContext: Record<string, unknown>,
+    userId: string,
+    options?: { allowDuplicate?: boolean }
+  ): Promise<QualityAuditResult> {
+    const allowDuplicate = options?.allowDuplicate ?? false
+    const lockKey = `quality-audit:${documentId}`
+
+    const client = await pool.connect()
+    try {
+      await client.query('SELECT pg_advisory_lock(hashtext($1))', [lockKey])
+
+      if (!allowDuplicate) {
+        const existing = await this.getDocumentAudit(documentId)
+        if (existing) {
+          logger.info('[QUALITY-AUDIT] Skipping duplicate audit; existing result returned', {
+            documentId,
+            auditId: existing.id
+          })
+          return this.rowToQualityAuditResult(existing)
+        }
+      }
+
+      return await this.runAuditDocument(
+        documentId,
+        documentContent,
+        documentType,
+        projectContext,
+        userId
+      )
+    } finally {
+      try {
+        await client.query('SELECT pg_advisory_unlock(hashtext($1))', [lockKey])
+      } finally {
+        client.release()
+      }
+    }
+  }
+
+  private async runAuditDocument(
+    documentId: string,
+    documentContent: string,
+    documentType: string,
+    projectContext: Record<string, unknown>,
     userId: string
   ): Promise<QualityAuditResult> {
     const startTime = Date.now()
@@ -168,9 +227,13 @@ class QualityAuditService {
       // 3. Calculate overall score (weighted average)
       const auditPerformed = analysisResults.audit_performed !== false
       const dimensionalScores = this.extractDimensionalScores(analysisResults, auditPerformed)
-      const overallScore = this.calculateOverallScore(dimensionalScores)
-      const overallGrade = this.calculateGrade(overallScore)
-      const qualityLevel = this.getQualityLevel(overallScore)
+      const overallScore = auditPerformed
+        ? this.calculateOverallScore(dimensionalScores)
+        : null
+      const overallGrade =
+        overallScore !== null ? this.calculateGrade(overallScore) : null
+      const qualityLevel =
+        overallScore !== null ? this.getQualityLevel(overallScore) : null
 
       // 4. Extract findings, issues, and recommendations
       const findings = this.extractFindings(analysisResults)
@@ -268,10 +331,15 @@ class QualityAuditService {
         recommendations,
         complianceMetrics, // Include compliance metrics
         existingQualityGates, // Include existing quality gates if found
-        aiProvider: (analysisResults.provider as string) || 'google',
-        aiModel: (analysisResults.model as string) || 'gemini-2.5-flash',
-        analysisTokens: (analysisResults.tokens as number) || 0,
-        analysisCost: (analysisResults.cost as number) || 0,
+        auditPerformed,
+        aiProvider: auditPerformed
+          ? ((analysisResults.provider as string) || 'google')
+          : 'none',
+        aiModel: auditPerformed
+          ? ((analysisResults.model as string) || getQualityAuditGoogleModel())
+          : 'none',
+        analysisTokens: auditPerformed ? ((analysisResults.tokens as number) || 0) : 0,
+        analysisCost: auditPerformed ? ((analysisResults.cost as number) || 0) : 0,
         analysisTime
       })
 
@@ -296,14 +364,16 @@ class QualityAuditService {
       )
       const templateId = docResult.rows[0]?.template_id
 
-      if (templateId && auditPerformed) {
-        // Get previous audit for same template
+      if (templateId && auditPerformed && overallScore !== null) {
+        // Get previous scored audit for same template
         const previousAudit = await pool.query(
           `SELECT qa.*
            FROM quality_audits qa
            JOIN documents d ON qa.document_id = d.id
            WHERE d.template_id = $1
            AND qa.id != $2
+           AND COALESCE(qa.audit_performed, true) = true
+           AND qa.overall_score IS NOT NULL
            AND qa.audited_at < (SELECT audited_at FROM quality_audits WHERE id = $2)
            ORDER BY qa.audited_at DESC
            LIMIT 1`,
@@ -312,7 +382,7 @@ class QualityAuditService {
 
         // Detect quality regression (5%+ drop)
         if (previousAudit.rows.length > 0) {
-          const prevScore = previousAudit.rows[0].overall_score
+          const prevScore = previousAudit.rows[0].overall_score as number
           const qualityDrop = prevScore - overallScore
 
           if (qualityDrop >= 5) {
@@ -350,7 +420,7 @@ class QualityAuditService {
         }
 
         // Closed-loop trigger: if document quality audit score is < 70, trigger template audit
-        if (overallScore < 70) {
+        if (overallScore !== null && overallScore < 70) {
           logger.info(`[QUALITY-AUDIT] 📉 Document score ${overallScore} is < 70. Triggering closed-loop template audit for template ${templateId}`, {
             documentId,
             templateId
@@ -393,8 +463,10 @@ class QualityAuditService {
         }
 
         // 9. Also trigger regular template analysis if quality is below 90%
-        if (overallScore < 90) {
-          const hasLowScore = Object.values(dimensionalScores).some(score => score < 80)
+        if (overallScore !== null && overallScore < 90) {
+          const hasLowScore = Object.values(dimensionalScores).some(
+            (score) => score !== null && score < 80
+          )
           
           if (hasLowScore) {
             logger.info('[QUALITY-AUDIT] Triggering automatic template analysis', {
@@ -428,7 +500,8 @@ class QualityAuditService {
         aiModel: (analysisResults.model as string) || undefined,
         analysisTokens: (analysisResults.tokens as number) || undefined,
         analysisCost: (analysisResults.cost as number) || undefined,
-        analysisTime
+        analysisTime,
+        auditPerformed
       }
     } catch (error) {
       logger.error('[QUALITY-AUDIT] Audit failed', {
@@ -459,19 +532,22 @@ class QualityAuditService {
 
     const systemPrompt = this.getSystemPrompt()
 
+    const auditModel = getQualityAuditGoogleModel()
+
     logger.info('[QUALITY-AUDIT] Calling AI for quality analysis', {
       traceName,
       documentType,
       contentLength: documentContent.length,
       provider: 'google',
-      model: 'gemini-2.5-flash',
+      model: auditModel,
       traceContext
     })
 
     try {
-      // Use automatic failover system - tries providers in priority order from database
+      // Pin to Gemini 3.1 Flash Lite to avoid sharing 2.5 Flash quota with doc-gen
       const result = await aiService.generateWithFallback({
-        provider: 'auto', // Let system choose based on database configuration
+        provider: 'google',
+        model: auditModel,
         prompt: analysisPrompt, // User prompt (required)
         system_prompt: systemPrompt, // System prompt (optional, snake_case)
         temperature: 0.3, // Lower temperature for consistent analysis
@@ -530,8 +606,8 @@ class QualityAuditService {
 
       return {
         ...analysisData,
-        provider: 'google',
-        model: 'gemini-2.5-flash',
+        provider: result.provider || 'google',
+        model: result.model || auditModel,
         tokens: totalTokens,
         cost: estimatedCost
       }
@@ -784,27 +860,30 @@ Remember: Your audit helps improve future document generation, so be detailed an
     auditPerformed = true
   ): QualityDimensionalScores {
     if (!auditPerformed) {
-      return { ...NO_AUDIT_DIMENSIONAL_SCORES }
+      return { ...NULL_DIMENSIONAL_SCORES }
     }
 
     return {
-      completeness: this.validateScore(analysisResults.completeness, 70),
-      consistency: this.validateScore(analysisResults.consistency, 70),
-      professionalQuality: this.validateScore(analysisResults.professional_quality, 70),
-      standardsCompliance: this.validateScore(analysisResults.standards_compliance, 70),
-      accuracy: this.validateScore(analysisResults.accuracy, 80),
-      contextRelevance: this.validateScore(analysisResults.context_relevance, 80)
+      completeness: this.validateScore(analysisResults.completeness),
+      consistency: this.validateScore(analysisResults.consistency),
+      professionalQuality: this.validateScore(analysisResults.professional_quality),
+      standardsCompliance: this.validateScore(analysisResults.standards_compliance),
+      accuracy: this.validateScore(analysisResults.accuracy),
+      contextRelevance: this.validateScore(analysisResults.context_relevance)
     }
   }
 
   /**
-   * Validate score is in valid range, with fallback
+   * Validate score is in valid range; missing/invalid scores stay null (no fabricated defaults).
    */
-  private validateScore(score: unknown, fallback: number): number {
+  private validateScore(score: unknown): number | null {
+    if (score === null || score === undefined || score === '') {
+      return null
+    }
     const num = parseInt(String(score), 10)
     if (isNaN(num) || num < 0 || num > 100) {
-      logger.warn('[QUALITY-AUDIT] Invalid score, using fallback', { score, fallback })
-      return fallback
+      logger.warn('[QUALITY-AUDIT] Invalid score, treating as not scored', { score })
+      return null
     }
     return num
   }
@@ -812,7 +891,12 @@ Remember: Your audit helps improve future document generation, so be detailed an
   /**
    * Calculate weighted overall score
    */
-  private calculateOverallScore(scores: QualityDimensionalScores): number {
+  private calculateOverallScore(scores: QualityDimensionalScores): number | null {
+    const values = Object.values(scores)
+    if (values.some((value) => value === null)) {
+      return null
+    }
+
     const weights = {
       completeness: 0.20,
       consistency: 0.15,
@@ -823,12 +907,12 @@ Remember: Your audit helps improve future document generation, so be detailed an
     }
 
     const weightedScore =
-      scores.completeness * weights.completeness +
-      scores.consistency * weights.consistency +
-      scores.professionalQuality * weights.professionalQuality +
-      scores.standardsCompliance * weights.standardsCompliance +
-      scores.accuracy * weights.accuracy +
-      scores.contextRelevance * weights.contextRelevance
+      (scores.completeness as number) * weights.completeness +
+      (scores.consistency as number) * weights.consistency +
+      (scores.professionalQuality as number) * weights.professionalQuality +
+      (scores.standardsCompliance as number) * weights.standardsCompliance +
+      (scores.accuracy as number) * weights.accuracy +
+      (scores.contextRelevance as number) * weights.contextRelevance
 
     return Math.round(weightedScore)
   }
@@ -836,7 +920,8 @@ Remember: Your audit helps improve future document generation, so be detailed an
   /**
    * Calculate letter grade from score
    */
-  private calculateGrade(score: number): string {
+  private calculateGrade(score: number | null): string {
+    if (score === null) return QUALITY_AUDIT_NOT_GRADE
     if (score >= 90) return 'A'
     if (score >= 80) return 'B'
     if (score >= 70) return 'C'
@@ -847,7 +932,8 @@ Remember: Your audit helps improve future document generation, so be detailed an
   /**
    * Get quality level description
    */
-  private getQualityLevel(score: number): string {
+  private getQualityLevel(score: number | null): string {
+    if (score === null) return QUALITY_AUDIT_NOT_LEVEL
     if (score >= 90) return 'Excellent'
     if (score >= 80) return 'Good'
     if (score >= 70) return 'Acceptable'
@@ -981,21 +1067,25 @@ Remember: Your audit helps improve future document generation, so be detailed an
     analysisTokens?: number
     analysisCost?: number
     analysisTime: number
+    auditPerformed?: boolean
     userId?: string
   }): Promise<string> {
+    const auditPerformed = auditData.auditPerformed !== false
+
     const result = await pool.query(
       `INSERT INTO quality_audits (
-        document_id, audit_job_id, overall_score, overall_grade, quality_level,
+        document_id, audit_job_id, audit_performed, overall_score, overall_grade, quality_level,
         completeness_score, consistency_score, professional_quality_score,
         standards_compliance_score, accuracy_score, context_relevance_score,
         findings, issues, recommendations, 
         ai_provider, ai_model, analysis_tokens, analysis_cost, analysis_time,
         audited_by
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
       RETURNING id`,
       [
         auditData.documentId,
         auditData.auditJobId,
+        auditPerformed,
         auditData.overallScore,
         auditData.overallGrade,
         auditData.qualityLevel,
@@ -1247,13 +1337,19 @@ Remember: Your audit helps improve future document generation, so be detailed an
   private async updateDocumentQualityStatus(
     documentId: string,
     auditId: string,
-    score: number,
-    grade: string
+    score: number | null,
+    grade: string | null
   ): Promise<void> {
     let status: string
-    if (score >= 85) status = 'passed'
-    else if (score >= 70) status = 'warning'
-    else status = 'failed'
+    if (score === null) {
+      status = 'not_audited'
+    } else if (score >= 85) {
+      status = 'passed'
+    } else if (score >= 70) {
+      status = 'warning'
+    } else {
+      status = 'failed'
+    }
 
     await pool.query(
       `UPDATE documents 
@@ -1328,7 +1424,8 @@ Remember: Your audit helps improve future document generation, so be detailed an
     }
 
     const audit = result.rows[0]
-    
+    this.normalizeAuditForResponse(audit)
+
     // Extract compliance metrics and EU AI Act compliance from generation_metadata if available
     if (audit.generation_metadata) {
       try {
@@ -1430,6 +1527,93 @@ Remember: Your audit helps improve future document generation, so be detailed an
   }
 
   /**
+   * Infer not-performed audits and mask legacy fabricated scores in API responses.
+   */
+  private rowToQualityAuditResult(row: Record<string, unknown>): QualityAuditResult {
+    this.normalizeAuditForResponse(row)
+
+    const parseJsonField = <T>(value: unknown): T => {
+      if (typeof value === 'string') {
+        return JSON.parse(value) as T
+      }
+      return value as T
+    }
+
+    return {
+      overallScore: (row.overall_score as number | null) ?? null,
+      overallGrade: (row.overall_grade as string | null) ?? null,
+      qualityLevel: (row.quality_level as string | null) ?? null,
+      dimensionalScores: {
+        completeness: (row.completeness_score as number | null) ?? null,
+        consistency: (row.consistency_score as number | null) ?? null,
+        professionalQuality: (row.professional_quality_score as number | null) ?? null,
+        standardsCompliance: (row.standards_compliance_score as number | null) ?? null,
+        accuracy: (row.accuracy_score as number | null) ?? null,
+        contextRelevance: (row.context_relevance_score as number | null) ?? null
+      },
+      findings: row.findings ? parseJsonField<Record<string, string>>(row.findings) : {},
+      issues: row.issues ? parseJsonField<QualityIssue[]>(row.issues) : [],
+      recommendations: row.recommendations
+        ? parseJsonField<string[]>(row.recommendations)
+        : [],
+      aiProvider: (row.ai_provider as string) || undefined,
+      aiModel: (row.ai_model as string) || undefined,
+      analysisTokens: (row.analysis_tokens as number) || undefined,
+      analysisCost: (row.analysis_cost as number) || undefined,
+      analysisTime: (row.analysis_time as number) || undefined,
+      auditPerformed: row.audit_performed !== false
+    }
+  }
+
+  private normalizeAuditForResponse(audit: Record<string, unknown>): void {
+    const performed = this.inferAuditPerformed(audit)
+    audit.audit_performed = performed
+    audit.auditPerformed = performed
+
+    if (performed) {
+      return
+    }
+
+    audit.overall_score = null
+    audit.overall_grade = QUALITY_AUDIT_NOT_GRADE
+    audit.quality_level = QUALITY_AUDIT_NOT_LEVEL
+    audit.completeness_score = null
+    audit.consistency_score = null
+    audit.professional_quality_score = null
+    audit.standards_compliance_score = null
+    audit.accuracy_score = null
+    audit.context_relevance_score = null
+  }
+
+  private inferAuditPerformed(audit: Record<string, unknown>): boolean {
+    if (audit.audit_performed === false) return false
+    if (audit.audit_performed === true) return true
+    if (audit.ai_provider === 'none' || audit.ai_model === 'none') return false
+    if (audit.overall_score === null || audit.overall_score === undefined) return false
+
+    let findings: Record<string, string> | null = null
+    try {
+      findings =
+        typeof audit.findings === 'string'
+          ? (JSON.parse(audit.findings) as Record<string, string>)
+          : (audit.findings as Record<string, string>)
+    } catch {
+      findings = null
+    }
+
+    const completenessFinding = findings?.completeness ?? ''
+    if (
+      typeof completenessFinding === 'string' &&
+      (completenessFinding.includes('AI analysis unavailable') ||
+        completenessFinding.includes('no audit performed'))
+    ) {
+      return false
+    }
+
+    return true
+  }
+
+  /**
    * Get quality statistics (30-day rolling average)
    */
   async getQualityStats(): Promise<any> {
@@ -1450,6 +1634,7 @@ Remember: Your audit helps improve future document generation, so be detailed an
         AVG(context_relevance_score)::integer as avg_context_relevance
       FROM quality_audits
       WHERE audited_at > NOW() - INTERVAL '30 days'
+      AND ${QUALITY_AUDIT_SCORED_FILTER}
     `)
 
     return result.rows[0]
@@ -1472,6 +1657,8 @@ Remember: Your audit helps improve future document generation, so be detailed an
       FROM quality_audits
       WHERE audited_at > NOW() - INTERVAL '30 days'
       AND ai_provider IS NOT NULL
+      AND ai_provider != 'none'
+      AND ${QUALITY_AUDIT_SCORED_FILTER}
       GROUP BY ai_provider, ai_model
       ORDER BY avg_quality DESC
     `)
@@ -1491,6 +1678,7 @@ Remember: Your audit helps improve future document generation, so be detailed an
         COUNT(*) as frequency
       FROM quality_audits, jsonb_array_elements(issues) as issue
       WHERE audited_at > NOW() - INTERVAL '30 days'
+      AND ${QUALITY_AUDIT_SCORED_FILTER}
       GROUP BY dimension, description, severity
       ORDER BY frequency DESC
       LIMIT $1

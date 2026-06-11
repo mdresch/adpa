@@ -1425,8 +1425,8 @@ class AIService {
             logger.info(`[AI-SERVICE] Resilient Map: ${requestedModel} -> ${modelName} (CSR-43 Governance)`)
           }
 
-          // Environment-specific override (e.g. if 1.5 is 404/503)
-          if (process.env.GEMINI_MODEL_OVERRIDE) {
+          // Global override only when caller did not request a specific model
+          if (process.env.GEMINI_MODEL_OVERRIDE && !request.model) {
             logger.warn(`[AI-SERVICE] Explicit Model Override active: ${process.env.GEMINI_MODEL_OVERRIDE}`)
             modelName = process.env.GEMINI_MODEL_OVERRIDE
           }

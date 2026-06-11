@@ -8,6 +8,7 @@ import { buildInlineEntityExtractionPrompt } from "./inlineEntityExtractionPromp
 import { v4 as uuidv4 } from "uuid"
 import { updateJobStatus, updateJobLlmProgress, type LlmProgressStep } from "./queueService"
 import { CompactorService } from "./compactorService"
+import { contextRetrieval } from "./searchService"
 
 export interface DocumentGenerationRequest {
   jobId?: string
@@ -20,6 +21,8 @@ export interface DocumentGenerationRequest {
   userId: string
   documentId?: string
   name?: string
+  /** Source documents whose chunks and extracted entities supply section context */
+  sourceDocumentIds?: string[]
 }
 
 import { ProjectContext } from '@root-types/adpa'
@@ -54,6 +57,14 @@ interface LLMPromptSnapshot {
   order?: number
   heading?: string
   goal?: string
+  /** Metrics about the context injection for this specific snapshot */
+  context_metrics?: {
+    rag_query?: string
+    rag_chunks_found?: number
+    rag_strategy?: string
+    entities_injected?: number
+    baseline_entities_injected?: number
+  }
 }
 
 class DocumentGenerationService {
@@ -183,6 +194,151 @@ class DocumentGenerationService {
       : ['Requirement', 'Risk', 'Stakeholder', 'Milestone', 'Constraint', 'Deliverable']
   }
 
+  private getRelevantEntitiesForSection(
+    existingEntities: Array<{ name: string; type: string; data?: any }>,
+    heading: string,
+    informationalNeeds: string,
+    sectionChunks: Array<{ content: string }>,
+    signals: { budget: boolean; schedule: boolean; team: boolean; stakeholders: boolean; risks: boolean; scope: boolean }
+  ): Array<{ name: string; type: string; data?: any }> {
+    const textToMatch = `${heading} ${informationalNeeds}`.toLowerCase()
+    
+    const relevantTypes = new Set<string>()
+    if (signals.stakeholders || signals.team) {
+      relevantTypes.add('stakeholders')
+      relevantTypes.add('roles_and_responsibilities')
+      relevantTypes.add('team_availability')
+    }
+    if (signals.risks) {
+      relevantTypes.add('risks')
+      relevantTypes.add('risk_responses')
+      relevantTypes.add('risk_assessments')
+      relevantTypes.add('issue_log')
+    }
+    if (signals.schedule) {
+      relevantTypes.add('milestones')
+      relevantTypes.add('schedule_activities')
+      relevantTypes.add('phases')
+    }
+    if (signals.scope) {
+      relevantTypes.add('requirements')
+      relevantTypes.add('scope_items')
+      relevantTypes.add('deliverables')
+      relevantTypes.add('wbs_nodes')
+      relevantTypes.add('scope_baseline')
+    }
+    if (signals.budget) {
+      relevantTypes.add('budget_baseline')
+      relevantTypes.add('cost_estimates')
+      relevantTypes.add('cost_actuals')
+      relevantTypes.add('funding_tranches')
+    }
+
+    const matchedEntities = new Map<string, { name: string; type: string; data?: any }>()
+
+    for (const ent of existingEntities) {
+      if (!ent.name) continue
+      
+      const normalizedName = ent.name.toLowerCase().trim()
+      if (!normalizedName) continue
+
+      let isRelevant = false
+
+      // 1. Direct type match via signals
+      if (ent.type && relevantTypes.has(ent.type.toLowerCase())) {
+        isRelevant = true
+      }
+      
+      // 2. Mentioned in heading or informational needs
+      if (!isRelevant && textToMatch.includes(normalizedName)) {
+        isRelevant = true
+      }
+
+      // 3. Mentioned in any retrieved RAG chunks
+      if (!isRelevant && sectionChunks && sectionChunks.length > 0) {
+        for (const chunk of sectionChunks) {
+          if (chunk.content && chunk.content.toLowerCase().includes(normalizedName)) {
+            isRelevant = true
+            break
+          }
+        }
+      }
+
+      if (isRelevant) {
+        matchedEntities.set(`${ent.type}:${normalizedName}`, ent)
+      }
+    }
+
+    return Array.from(matchedEntities.values())
+  }
+
+  /** Resolve source document IDs for RAG + entity context (project-scoped). */
+  private async resolveSourceDocumentIds(
+    projectId: string,
+    explicitIds: string[] | undefined,
+    excludeDocumentId?: string
+  ): Promise<string[]> {
+    const unique = [...new Set((explicitIds ?? []).filter(Boolean))]
+    if (unique.length > 0) {
+      const validated = await pool.query(
+        `SELECT id FROM documents
+         WHERE project_id = $1 AND id = ANY($2::uuid[])
+           AND content IS NOT NULL AND length(trim(content)) > 0`,
+        [projectId, unique]
+      )
+      return validated.rows.map((r: { id: string }) => r.id)
+    }
+
+    const fallback = await pool.query(
+      `SELECT id FROM documents
+       WHERE project_id = $1
+         AND content IS NOT NULL AND length(trim(content)) > 0
+         AND ($2::uuid IS NULL OR id != $2)
+       ORDER BY updated_at DESC
+       LIMIT 5`,
+      [projectId, excludeDocumentId ?? null]
+    )
+    return fallback.rows.map((r: { id: string }) => r.id)
+  }
+
+  /** Entities extracted from specific source documents within a project. */
+  private async getEntitiesForSourceDocuments(
+    projectId: string,
+    documentIds: string[]
+  ): Promise<Array<{ name: string; type: string; data?: unknown; document_id?: string }>> {
+    if (documentIds.length === 0) return []
+
+    const entitiesResult = await pool.query(
+      `SELECT entity_name as name, entity_type as type, entity_data as data, document_id
+       FROM entity_extractions
+       WHERE project_id = $1
+         AND document_id = ANY($2::uuid[])
+         AND status = 'active'
+         AND (is_verified = true OR extraction_confidence >= 80)
+       ORDER BY extraction_confidence DESC
+       LIMIT 50`,
+      [projectId, documentIds]
+    )
+    return entitiesResult.rows
+  }
+
+  /** Ensure source documents are chunked for per-section RAG (non-fatal if ingest fails). */
+  private async ensureSourceDocumentsIngested(documentIds: string[]): Promise<void> {
+    if (!documentIds.length || !process.env.VOYAGE_API_KEY) return
+
+    const { ragService } = await import('./ragService')
+    for (const documentId of documentIds) {
+      try {
+        const result = await ragService.ingestDocument(documentId)
+        logger.info(`[DOC-GEN] RAG ingest for source document ${documentId}: ${result.chunks} chunks`)
+      } catch (err) {
+        logger.warn(`[DOC-GEN] RAG ingest failed for source document ${documentId} (non-fatal)`, {
+          error: err instanceof Error ? err.message : String(err),
+        })
+      }
+    }
+  }
+
   private async mapWithConcurrency<T, R>(
     items: T[],
     concurrency: number,
@@ -243,6 +399,28 @@ class DocumentGenerationService {
       const project = await this.getProjectContext(request.projectId)
       logger.info(`Project context fetched: ${project.name}`)
 
+      const sourceDocumentIds = await this.resolveSourceDocumentIds(
+        request.projectId,
+        request.sourceDocumentIds,
+        request.documentId
+      )
+      const sourceEntities = await this.getEntitiesForSourceDocuments(
+        request.projectId,
+        sourceDocumentIds
+      )
+      
+      // Merge project-wide entities with source-document entities, deduplicating by type:name
+      const entityMap = new Map<string, any>()
+      if (project.existing_entities) {
+        project.existing_entities.forEach(e => entityMap.set(`${e.type}:${e.name.toLowerCase().trim()}`, e))
+      }
+      sourceEntities.forEach(e => entityMap.set(`${e.type}:${e.name.toLowerCase().trim()}`, e))
+      project.existing_entities = Array.from(entityMap.values())
+
+      logger.info(`[DOC-GEN] Context scoped to ${sourceDocumentIds.length} source document(s), ${project.existing_entities.length} total entities available`)
+
+      await this.ensureSourceDocumentsIngested(sourceDocumentIds)
+
       // 2. Fetch template (if provided)
       const template = request.templateId
         ? await this.getTemplate(request.templateId)
@@ -268,6 +446,54 @@ class DocumentGenerationService {
         ]
       )
       isDocumentCreated = true;
+
+      // Load existing job data to check if this is a retry or has existing progress
+      let existingRequests: any[] = []
+      if (request.jobId) {
+        try {
+          const jobResult = await pool.query(
+            `SELECT data FROM jobs WHERE id = $1`,
+            [request.jobId]
+          )
+          if (jobResult.rows.length > 0) {
+            const jobData = jobResult.rows[0].data || {}
+            existingRequests = jobData.llm_insights?.requests || []
+            
+            // If the current job has no snapshots but is a retry of a previous job,
+            // load the previous job's snapshots instead
+            const retryOf = jobData.retryOf
+            if (existingRequests.length === 0 && retryOf) {
+              const prevJobResult = await pool.query(
+                `SELECT data FROM jobs WHERE id = $1`,
+                [retryOf]
+              )
+              if (prevJobResult.rows.length > 0) {
+                const prevJobData = prevJobResult.rows[0].data || {}
+                const prevRequests = prevJobData.llm_insights?.requests || []
+                if (prevRequests.length > 0) {
+                  logger.info(`[DOC-GEN] Loading progress from previous failed/stuck job ${retryOf} for retry job ${request.jobId}`)
+                  existingRequests = prevRequests
+                  
+                  // Pre-populate the current retry job's requests with the previous successful requests
+                  await pool.query(
+                    `UPDATE jobs
+                     SET data = jsonb_set(
+                       COALESCE(data, '{}'::jsonb),
+                       '{llm_insights}',
+                       jsonb_build_object('requests', $1::jsonb),
+                       true
+                     )
+                     WHERE id = $2`,
+                    [JSON.stringify(prevRequests), request.jobId]
+                  )
+                }
+              }
+            }
+          }
+        } catch (err) {
+          logger.warn(`Failed to check existing job progress for jobId ${request.jobId}`, err)
+        }
+      }
 
       // 2.2. The Strict Hard Enforcement Barrier Check
       const documentType = template?.name || 'Unknown Document Type';
@@ -329,33 +555,53 @@ class DocumentGenerationService {
 
       // 3. AGENTIC PHASE 1: Plan Document Structure (Research Plan)
       logger.info(`[AGENT] Phase 1: Planning Document Structure...`)
-      if (request.jobId) {
-        await updateJobLlmProgress(request.jobId, {
+      let generationPlan: any = null
+      
+      const existingPlanReq = existingRequests.find(
+        (r: any) => r.phase === 'planning' && r.response && !r.response.startsWith('Error')
+      )
+      
+      if (existingPlanReq) {
+        try {
+          const parsed = JSON.parse(existingPlanReq.response)
+          if (parsed && Array.isArray(parsed.sections) && parsed.sections.length > 0) {
+            logger.info(`[DOC-GEN] Resuming from existing planning snapshot for job ${request.jobId}`)
+            generationPlan = parsed
+          }
+        } catch (e) {
+          logger.warn(`[DOC-GEN] Failed to parse existing planning snapshot, re-planning`, e)
+        }
+      }
+      
+      if (!generationPlan) {
+        if (request.jobId) {
+          await updateJobLlmProgress(request.jobId, {
+            userId: request.userId,
+            currentStep: `Planning document structure (${request.provider}${request.model ? ` / ${request.model}` : ''})…`,
+            progress: 15,
+            llmProgressSteps: [{
+              id: 'planning',
+              phase: 'planning',
+              label: 'Plan document structure',
+              status: 'running',
+              provider: request.provider,
+              model: request.model,
+              startedAt: new Date().toISOString(),
+            }],
+          })
+        }
+        generationPlan = await this.planDocumentStructure({
+          jobId: request.jobId,
+          userPrompt: request.userPrompt,
+          project,
+          template,
+          provider: request.provider,
+          model: request.model,
+          projectId: request.projectId,
           userId: request.userId,
-          currentStep: `Planning document structure (${request.provider}${request.model ? ` / ${request.model}` : ''})…`,
-          progress: 15,
-          llmProgressSteps: [{
-            id: 'planning',
-            phase: 'planning',
-            label: 'Plan document structure',
-            status: 'running',
-            provider: request.provider,
-            model: request.model,
-            startedAt: new Date().toISOString(),
-          }],
+          templateId: request.templateId,
         })
       }
-      const generationPlan = await this.planDocumentStructure({
-        jobId: request.jobId,
-        userPrompt: request.userPrompt,
-        project,
-        template,
-        provider: request.provider,
-        model: request.model,
-        projectId: request.projectId,
-        userId: request.userId,
-        templateId: request.templateId,
-      })
 
       if (!generationPlan || !generationPlan.sections || generationPlan.sections.length === 0) {
         throw new Error("AI failed to return a valid document structure plan.")
@@ -364,18 +610,29 @@ class DocumentGenerationService {
       logger.info(`[AGENT] Plan returned ${generationPlan.sections.length} required sections to draft.`)
 
       if (request.jobId) {
-        const draftSteps: LlmProgressStep[] = generationPlan.sections.map((section, index) => ({
-          id: `draft-${index}`,
-          phase: 'drafting',
-          label: `Draft section ${index + 1}`,
-          heading: section.heading,
-          status: 'pending',
-          provider: request.provider,
-          model: request.model,
-        }))
+        const draftSteps: LlmProgressStep[] = generationPlan.sections.map((section, index) => {
+          const isDrafted = existingRequests.some(
+            (r: any) => r.phase === 'drafting' && r.order === index && r.response && !r.response.startsWith('Error')
+          )
+          return {
+            id: `draft-${index}`,
+            phase: 'drafting',
+            label: `Draft section ${index + 1}`,
+            heading: section.heading,
+            status: isDrafted ? 'completed' : 'pending',
+            provider: request.provider,
+            model: request.model,
+            ...(isDrafted ? { completedAt: new Date().toISOString() } : {})
+          }
+        })
+        
+        const isResuming = existingRequests.some((r: any) => r.phase === 'drafting' && r.response && !r.response.startsWith('Error'))
+        
         await updateJobLlmProgress(request.jobId, {
           userId: request.userId,
-          currentStep: `Planned ${generationPlan.sections.length} sections — drafting…`,
+          currentStep: isResuming 
+            ? `Resuming document generation — drafting remaining sections…` 
+            : `Planned ${generationPlan.sections.length} sections — drafting…`,
           progress: 55,
           llmProgressSteps: [
             {
@@ -404,7 +661,21 @@ class DocumentGenerationService {
       // content that belongs to a sibling section (Improvement D — anti-duplication).
       const allPlannedSections = generationPlan.sections.map(s => ({ heading: s.heading, goal: s.goal }))
 
-      const draftedSections = await this.mapWithConcurrency(generationPlan.sections, draftConcurrency, async (sectionTask, index) => {
+      const draftedSections = await this.mapWithConcurrency(generationPlan.sections, draftConcurrency, async (sectionTask: any, index) => {
+        // Check if this section is already successfully drafted
+        const existingDraft = existingRequests.find(
+          (r: any) => r.phase === 'drafting' && r.order === index && r.response && !r.response.startsWith('Error')
+        )
+        
+        if (existingDraft) {
+          logger.info(`[DOC-GEN] Reusing drafted section ${index + 1} (${sectionTask.heading}) from snapshot`)
+          return {
+            order: index,
+            markdown: existingDraft.response,
+            tokensUsed: existingDraft.tokensUsed || Math.ceil(existingDraft.response.length / 4)
+          }
+        }
+
         const sectionResult = await this.draftSection({
           task: sectionTask,
           order: index,
@@ -422,6 +693,7 @@ class DocumentGenerationService {
           templateCategory: template?.category,
           templateSystemPrompt: template?.system_prompt,
           allPlannedSections,
+          sourceDocumentIds,
         })
         
         // Incremental progress during drafting
@@ -1051,8 +1323,43 @@ Based on the type of error encountered, please follow these steps to resolve the
     templateSystemPrompt?: string;
     /** Full list of all planned sections — used to prevent cross-section content duplication */
     allPlannedSections?: Array<{ heading: string; goal: string }>;
+    /** Source documents whose chunks and extracted entities supply section context */
+    sourceDocumentIds?: string[];
   }) {
     const draftProj = params.project as any
+
+    // ─── Section-Specific RAG Retrieval (with Fallback) ──────────────────────
+    let sectionChunks: any[] = []
+    let ragStrategy = 'scoped'
+    const ragQuery = `${params.task.heading} ${params.task.informational_needs}`
+    
+    try {
+      // 1. Primary: Scoped to source documents
+      sectionChunks = await contextRetrieval.searchChunks({
+        projectId: params.projectId,
+        documentIds: params.sourceDocumentIds,
+        query: ragQuery,
+        topK: 5,
+        templateId: (params.sourceDocumentIds?.length ?? 0) === 0 ? (params.templateId || undefined) : undefined,
+      })
+
+      // 2. Fallback: Project-wide (if scoped returns nothing and source docs were provided)
+      if (sectionChunks.length === 0 && (params.sourceDocumentIds?.length ?? 0) > 0) {
+        logger.info(`[DOC-GEN] Scoped RAG returned 0 chunks for ${params.task.heading}, falling back to project-wide search.`)
+        sectionChunks = await contextRetrieval.searchChunks({
+          projectId: params.projectId,
+          query: ragQuery,
+          topK: 5,
+          documentIds: undefined,
+        })
+        ragStrategy = 'project-fallback'
+      } else {
+        logger.info(`[DOC-GEN] Retrieved ${sectionChunks.length} RAG chunks for section: ${params.task.heading}`)
+      }
+    } catch (ragErr) {
+      logger.warn(`[DOC-GEN] Failed to fetch RAG chunks for section: ${params.task.heading}`, ragErr)
+      ragStrategy = 'error'
+    }
 
     // ─── Role & Mission ───────────────────────────────────────────────────────
     let sectionPrompt = `You are an expert technical writer drafting a specific section of a ${params.project.framework} governance document.\n\n`
@@ -1067,9 +1374,6 @@ Based on the type of error encountered, please follow these steps to resolve the
     sectionPrompt += `Informational needs: ${params.task.informational_needs}\n`
 
     // ─── Per-Section Template Writing Guidance ────────────────────────────────
-    // section_guidance is the prompt_guidance from the template paragraph —
-    // the most specific instruction for this exact section. It takes precedence
-    // over all general guidance and must be followed strictly.
     if (params.task.section_guidance) {
       sectionPrompt += `\n### Section Writing Guidance (MUST FOLLOW)\n`
       sectionPrompt += `${params.task.section_guidance}\n`
@@ -1077,8 +1381,6 @@ Based on the type of error encountered, please follow these steps to resolve the
     sectionPrompt += `\n`
 
     // ─── Document Structure Awareness (Anti-Duplication) ─────────────────────
-    // Each section receives the full planned structure so it knows what SIBLING
-    // sections will cover — preventing narrative duplication across the document.
     if (params.allPlannedSections && params.allPlannedSections.length > 1) {
       const otherSections = params.allPlannedSections.filter(s => s.heading !== params.task.heading)
       sectionPrompt += `### Document Structure — Sections Covered Elsewhere (Do NOT Duplicate)\n`
@@ -1100,8 +1402,6 @@ Based on the type of error encountered, please follow these steps to resolve the
     }
 
     // ─── Signal-Based Context Injection ──────────────────────────────────────
-    // Derive context signals from the section's informational needs + heading.
-    // This replaces the brittle 2-keyword filter with a full regex signal map.
     const needsText = (params.task.informational_needs + ' ' + params.task.heading).toLowerCase()
 
     const signals = {
@@ -1132,27 +1432,23 @@ Based on the type of error encountered, please follow these steps to resolve the
 
     if (params.project.stakeholders?.length) {
       if (signals.stakeholders) {
-        // Full stakeholder list when the section explicitly needs them
         sectionPrompt += `\n**Key Stakeholders:**\n`
         params.project.stakeholders.forEach(sh => {
           sectionPrompt += `- ${sh.name} (${sh.role}) — Influence: ${sh.influence_level}, Interest: ${sh.interest_level}\n`
         })
       } else {
-        // Abbreviated list for all other sections (naming consistency + authority context)
         const topNames = params.project.stakeholders.slice(0, 4).map(s => `${s.name} (${s.role})`).join(', ')
         sectionPrompt += `\n**Primary Stakeholders (naming reference):** ${topNames}\n`
       }
     }
 
     // ─── GKG Context (Section-Scoped) ────────────────────────────────────────
-    // Filter the GKG markdown to only entity types relevant to this section,
-    // reducing token waste and preventing the model from picking irrelevant facts.
     if (params.gkgContext?.markdown) {
       const relevantGkgTypes = this.resolveGkgEntityTypesForSection(params.task.heading, params.task.informational_needs)
       const gkgLines = params.gkgContext.markdown.split('\n')
 
       const filteredGkgLines = gkgLines.filter(line => {
-        if (!line.startsWith('- **')) return true // keep header lines
+        if (!line.startsWith('- **')) return true
         return relevantGkgTypes.some(type => line.startsWith(`- **${type}**`))
       })
 
@@ -1162,17 +1458,42 @@ Based on the type of error encountered, please follow these steps to resolve the
     }
 
     // ─── Existing Entity Registry (Deduplication) ─────────────────────────────
-    if (params.project.existing_entities && params.project.existing_entities.length > 0) {
+    const relevantEntities = this.getRelevantEntitiesForSection(
+      params.project.existing_entities || [],
+      params.task.heading,
+      params.task.informational_needs,
+      sectionChunks || [],
+      signals
+    )
+
+    // Always include a baseline of verified project entities (e.g. top 10) to ensure LLM has a consistent vocabulary
+    const baselineEntities = (params.project.existing_entities || [])
+      .filter(e => !relevantEntities.some(re => re.name === e.name && re.type === e.type))
+      .slice(0, 10)
+
+    if (relevantEntities.length > 0 || baselineEntities.length > 0) {
       sectionPrompt += `\n**Existing Project Entities (REUSE THESE NAMES EXACTLY):**\n`
-      params.project.existing_entities.forEach(ent => {
-        sectionPrompt += `- [${ent.type}] ${ent.name}\n`
-      })
+      
+      if (relevantEntities.length > 0) {
+        sectionPrompt += `#### Specifically Relevant for this Section:\n`
+        relevantEntities.forEach(ent => {
+          const details = ent.data ? ` — Details: ${JSON.stringify(ent.data)}` : ''
+          sectionPrompt += `- [${ent.type}] ${ent.name}${details}\n`
+        })
+      }
+      
+      if (baselineEntities.length > 0) {
+        sectionPrompt += `\n#### Global Project Registry (Naming Reference):\n`
+        baselineEntities.forEach(ent => {
+          const details = ent.data ? ` — Details: ${JSON.stringify(ent.data)}` : ''
+          sectionPrompt += `- [${ent.type}] ${ent.name}${details}\n`
+        })
+      }
+      
       sectionPrompt += `\n*Instruction: When referencing any entity above, use the EXACT name shown. Do not create synonyms or alternate spellings.*\n`
     }
 
     // ─── Reference Materials (Relevance-Scored) ───────────────────────────────
-    // Score each context item against the section's informational needs and take
-    // the top 5 (was 3), giving more content budget to high-relevance items.
     if (params.contextItems && params.contextItems.length > 0) {
       const needsWords = params.task.informational_needs.toLowerCase().split(/\W+/).filter((w: string) => w.length > 3)
 
@@ -1190,7 +1511,6 @@ Based on the type of error encountered, please follow these steps to resolve the
       if (scored.length > 0) {
         sectionPrompt += `\n**Reference Materials:**\n`
         scored.forEach((item: any) => {
-          // Give more content to highly relevant items
           const charLimit = item._score >= 3 ? 2000 : 800
           const content = (item.content || '').substring(0, charLimit)
           const ellipsis = (item.content?.length || 0) > charLimit ? '...' : ''
@@ -1199,21 +1519,21 @@ Based on the type of error encountered, please follow these steps to resolve the
       }
     }
 
+    // ─── Section-Specific RAG Chunks ──────────────────────────────────────────
+    if (sectionChunks && sectionChunks.length > 0) {
+      sectionPrompt += `\n**Section-Specific Reference Materials (Retrieved via RAG):**\n`
+      sectionChunks.forEach((chunk: any) => {
+        const title = chunk.title || `Document Chunk (${chunk.document_id})`
+        sectionPrompt += `[${title}]: ${chunk.content}\n`
+      })
+    }
+
     sectionPrompt += `\n---\n\n`
     sectionPrompt += `Output the Markdown for your assigned section starting exactly with ${params.task.heading}.\n\n`
     sectionPrompt += `### IMPORTANT: CONCISENESS & COMPLETION MANDATE\n`
     sectionPrompt += `1. **Density over Volume**: This section MUST be high-signal technical content. Avoid repetitive explanations.\n`
-    sectionPrompt += `2. **Strict Limit**: Aim for under 4,000 words. If you are approaching the limit, wrap up the section immediately and ensure all H8 tags and code blocks are closed.\n`
+    sectionPrompt += `2. **Strict Limit**: Aim for under 4,000 words.\n`
     sectionPrompt += `3. **No Truncation**: Do NOT stop mid-sentence or mid-JSON-block. Your response MUST be a complete, finished Markdown block.\n\n`
-
-    // Explicit Instruction for entity schema alignment
-    sectionPrompt += `### IMPORTANT: Entity Schema Alignment Instruction\n`
-    sectionPrompt += `Ensure that all extracted entities wrapped in H8 formats exactly match the property fields defined in the database 'template_extracted_entities' table schema.\n`
-    sectionPrompt += `Specifically, for each entity type:\n`
-    sectionPrompt += `- 'stakeholders' MUST map to the 'STAKEHOLDER' entity_type, using the 'name' field as the main identifier (stored as 'extracted_name') and must contain 'role', 'interest_level', and 'influence_level' in the JSON body.\n`
-    sectionPrompt += `- 'requirements' MUST map to the 'REQUIREMENT' entity_type, using the 'title' field as the main identifier (stored as 'extracted_name') and must contain 'description', 'type', and 'priority' in the JSON body.\n`
-    sectionPrompt += `- 'constraints' MUST map to the 'CONSTRAINT' entity_type, using the 'title' field as the main identifier (stored as 'extracted_name') and must contain 'description' and 'type' in the JSON body.\n`
-    sectionPrompt += `All generated JSON values under the H8 tags will be parsed and stored directly in the 'structural_payload' column of the 'template_extracted_entities' table. Do not add unstructured wrapper properties or nesting levels to the JSON objects.\n\n`
 
     sectionPrompt += buildInlineEntityExtractionPrompt({
       templateName: params.templateName,
@@ -1284,6 +1604,13 @@ Based on the type of error encountered, please follow these steps to resolve the
       order: params.order,
       heading: params.task.heading,
       goal: params.task.goal,
+      context_metrics: {
+        rag_query: ragQuery,
+        rag_chunks_found: sectionChunks.length,
+        rag_strategy: ragStrategy,
+        entities_injected: relevantEntities.length,
+        baseline_entities_injected: baselineEntities.length,
+      }
     })
 
     if (params.jobId) {
@@ -1361,7 +1688,7 @@ Based on the type of error encountered, please follow these steps to resolve the
       // Fetch existing high-confidence/verified entities for deduplication awareness
       // Increased limit from 30 → 50 so the LLM has a richer deduplication registry
       const entitiesResult = await pool.query(
-        `SELECT entity_name as name, entity_type as type
+        `SELECT entity_name as name, entity_type as type, entity_data as data
          FROM entity_extractions
          WHERE project_id = $1 AND status = 'active' AND (is_verified = true OR extraction_confidence >= 80)
          ORDER BY extraction_confidence DESC

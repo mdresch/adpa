@@ -1169,7 +1169,15 @@ export async function getBatchStatus(batchId: string): Promise<BatchStatusRespon
       ) as files
     FROM upload_batches ub
     LEFT JOIN documents d ON (d.metadata->>'upload_batch_id')::uuid = ub.id
-    LEFT JOIN quality_audits qa ON qa.document_id = d.id
+    LEFT JOIN LATERAL (
+      SELECT qa.overall_score
+      FROM quality_audits qa
+      WHERE qa.document_id = d.id
+        AND COALESCE(qa.audit_performed, true) = true
+        AND qa.overall_score IS NOT NULL
+      ORDER BY qa.audited_at DESC
+      LIMIT 1
+    ) qa ON true
     WHERE ub.id = $1
     GROUP BY ub.id
   `;
@@ -1205,9 +1213,17 @@ export async function getUploadedDocuments(projectId: string): Promise<any[]> {
       d.id, d.title, d.original_filename, d.detected_type,
       d.original_format, d.created_at, 
       (d.metadata->>'upload_batch_id')::uuid as upload_batch_id,
-      qa.overall_score, qa.grade
+      qa.overall_score, qa.overall_grade
     FROM documents d
-    LEFT JOIN quality_audits qa ON qa.document_id = d.id
+    LEFT JOIN LATERAL (
+      SELECT qa.overall_score, qa.overall_grade
+      FROM quality_audits qa
+      WHERE qa.document_id = d.id
+        AND COALESCE(qa.audit_performed, true) = true
+        AND qa.overall_score IS NOT NULL
+      ORDER BY qa.audited_at DESC
+      LIMIT 1
+    ) qa ON true
     WHERE d.project_id = $1 AND d.source = 'uploaded'
     ORDER BY d.created_at DESC
   `;

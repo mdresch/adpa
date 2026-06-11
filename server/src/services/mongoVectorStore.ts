@@ -2,8 +2,16 @@
 import { randomUUID } from 'node:crypto';
 import { MongoClient, Db, Collection } from 'mongodb';
 import { logger } from '../utils/logger';
-import { RAGDocument, DocumentChunk } from '../types/rag';
+import {
+    RAGDocument,
+    RAGEntity,
+    RAGPortfolio,
+    RAGProgram,
+    RAGProject,
+    DocumentChunk,
+} from '../types/rag';
 import { buildMongoChunkDocument, type MongoChunkWriteInput } from '../lib/mongoChunkSchema';
+import type { RagSourceType } from '../lib/mongoRagText';
 import {
     findOneByRagDocumentId,
     ragChunkByDocumentIdFilter,
@@ -13,7 +21,35 @@ import {
 } from '../lib/mongoQuerySafety';
 
 const DOCUMENTS_COLLECTION = 'documents';
+const PORTFOLIOS_COLLECTION = 'portfolios';
+const PROGRAMS_COLLECTION = 'programs';
+const PROJECTS_COLLECTION = 'projects';
+const ENTITIES_COLLECTION = 'entities';
 const CHUNKS_COLLECTION = 'chunks';
+const METADATA_COLLECTION = 'rag_metadata';
+const STATS_CACHE_DOC_ID = 'vector_store_stats';
+
+/** In-memory freshness for repeated dashboard polls. */
+const MEMORY_STATS_TTL_MS = 30_000;
+/** Persisted stats older than this are marked stale (background refresh still runs). */
+const PERSISTED_STATS_STALE_MS = 10 * 60 * 1000;
+
+export type VectorStoreStats = {
+    documents: number;
+    portfolios: number;
+    programs: number;
+    projects: number;
+    entities: number;
+    chunks: number;
+    embeddedChunks: number;
+    embeddingPercentage: number;
+    indexStatus: string;
+    database: string;
+    configured: boolean;
+    updatedAt?: string;
+    stale?: boolean;
+    refreshing?: boolean;
+};
 
 /** Read at runtime — module may load before server dotenv.config(). */
 function getMongoUri(): string | undefined {
@@ -30,6 +66,8 @@ export class MongoVectorStore {
     private isConnected: boolean = false;
     /** Single in-flight connect; prevents concurrent callers from opening duplicate clients. */
     private connectPromise: Promise<void> | null = null;
+    private memoryStatsCache: { data: VectorStoreStats; fetchedAt: number } | null = null;
+    private statsRefreshPromise: Promise<VectorStoreStats> | null = null;
 
     get db(): Db {
         this.ensureConnected();
@@ -129,6 +167,26 @@ export class MongoVectorStore {
         return this._db.collection(CHUNKS_COLLECTION);
     }
 
+    get portfoliosCollection(): Collection<RAGPortfolio> {
+        this.ensureConnected();
+        return this._db.collection(PORTFOLIOS_COLLECTION);
+    }
+
+    get programsCollection(): Collection<RAGProgram> {
+        this.ensureConnected();
+        return this._db.collection(PROGRAMS_COLLECTION);
+    }
+
+    get projectsCollection(): Collection<RAGProject> {
+        this.ensureConnected();
+        return this._db.collection(PROJECTS_COLLECTION);
+    }
+
+    get entitiesCollection(): Collection<RAGEntity> {
+        this.ensureConnected();
+        return this._db.collection(ENTITIES_COLLECTION);
+    }
+
     async upsertDocument(
         document: Omit<RAGDocument, 'createdAt' | 'updatedAt'> & { id: string }
     ): Promise<string> {
@@ -168,6 +226,105 @@ export class MongoVectorStore {
     async getDocument(id: string): Promise<RAGDocument | null> {
         this.ensureConnected();
         return (await findOneByRagDocumentId(this.documentsCollection, id)) as RAGDocument | null;
+    }
+
+    async upsertPortfolio(
+        portfolio: Omit<RAGPortfolio, 'createdAt' | 'updatedAt'> & { id: string }
+    ): Promise<string> {
+        this.ensureConnected();
+        const { filter: idFilter, id: portfolioId } = ragDocumentIdReplaceFilter(portfolio.id);
+        const now = new Date();
+        const existing = (await findOneByRagDocumentId(
+            this.portfoliosCollection,
+            portfolio.id
+        )) as RAGPortfolio | null;
+        const record: RAGPortfolio = {
+            ...portfolio,
+            id: portfolioId,
+            metadata: portfolio.metadata ?? {},
+            createdAt: existing?.createdAt ?? now,
+            updatedAt: now,
+        };
+        await this.portfoliosCollection.replaceOne(idFilter, record as RAGPortfolio, {
+            upsert: true,
+        });
+        return portfolioId;
+    }
+
+    async upsertProgram(
+        program: Omit<RAGProgram, 'createdAt' | 'updatedAt'> & { id: string }
+    ): Promise<string> {
+        this.ensureConnected();
+        const { filter: idFilter, id: programId } = ragDocumentIdReplaceFilter(program.id);
+        const now = new Date();
+        const existing = (await findOneByRagDocumentId(
+            this.programsCollection,
+            program.id
+        )) as RAGProgram | null;
+        const record: RAGProgram = {
+            ...program,
+            id: programId,
+            metadata: program.metadata ?? {},
+            createdAt: existing?.createdAt ?? now,
+            updatedAt: now,
+        };
+        await this.programsCollection.replaceOne(idFilter, record as RAGProgram, { upsert: true });
+        return programId;
+    }
+
+    async upsertProject(
+        project: Omit<RAGProject, 'createdAt' | 'updatedAt'> & { id: string }
+    ): Promise<string> {
+        this.ensureConnected();
+        const { filter: idFilter, id: projectId } = ragDocumentIdReplaceFilter(project.id);
+        const now = new Date();
+        const existing = (await findOneByRagDocumentId(
+            this.projectsCollection,
+            project.id
+        )) as RAGProject | null;
+        const record: RAGProject = {
+            ...project,
+            id: projectId,
+            metadata: project.metadata ?? {},
+            createdAt: existing?.createdAt ?? now,
+            updatedAt: now,
+        };
+        await this.projectsCollection.replaceOne(idFilter, record as RAGProject, { upsert: true });
+        return projectId;
+    }
+
+    async upsertEntity(
+        entity: Omit<RAGEntity, 'createdAt' | 'updatedAt'> & { id: string }
+    ): Promise<string> {
+        this.ensureConnected();
+        const { filter: idFilter, id: entityId } = ragDocumentIdReplaceFilter(entity.id);
+        const now = new Date();
+        const existing = (await findOneByRagDocumentId(
+            this.entitiesCollection,
+            entity.id
+        )) as RAGEntity | null;
+        const record: RAGEntity = {
+            ...entity,
+            id: entityId,
+            metadata: entity.metadata ?? {},
+            createdAt: existing?.createdAt ?? now,
+            updatedAt: now,
+        };
+        await this.entitiesCollection.replaceOne(idFilter, record as RAGEntity, { upsert: true });
+        return entityId;
+    }
+
+    async deleteChunksForSource(sourceId: string, sourceType: RagSourceType): Promise<void> {
+        this.ensureConnected();
+        const safeId = toMongoEqualityId(sourceId, 'sourceId');
+        await this.chunksCollection.deleteMany({
+            $and: [
+                {
+                    $or: [{ documentId: { $eq: safeId } }, { document_id: { $eq: safeId } }],
+                },
+                { source_type: { $eq: sourceType } },
+            ],
+        });
     }
 
     async createChunks(chunks: MongoChunkWriteInput[]): Promise<string[]> {
@@ -231,6 +388,9 @@ export class MongoVectorStore {
                 document_id: 1,
                 metadata: 1,
                 project_id: 1,
+                program_id: 1,
+                portfolio_id: 1,
+                source_type: 1,
                 createdAt: 1,
                 score: { $meta: 'vectorSearchScore' },
             },
@@ -249,37 +409,169 @@ export class MongoVectorStore {
         }
     }
 
-    async getStats(): Promise<{
-        documents: number;
-        chunks: number;
-        embeddedChunks: number;
-        embeddingPercentage: number;
-        indexStatus: string;
-        database: string;
-        configured: boolean;
-    }> {
+    /**
+     * Recomputes counts from Atlas (slow on large collections) and persists to rag_metadata.
+     * Safe to call in the background after connect or sync.
+     */
+    async refreshStatsCache(): Promise<VectorStoreStats> {
         if (!this.isMongoConfigured()) {
-            return {
-                documents: 0,
-                chunks: 0,
-                embeddedChunks: 0,
-                embeddingPercentage: 0,
-                indexStatus: 'not_configured',
-                database: getMongoDbName(),
-                configured: false,
-            };
+            return this.notConfiguredStats();
+        }
+
+        await this.connect();
+        const core = await this.fetchStatsFromMongo();
+        await this.writePersistedStats(core);
+        const stats: VectorStoreStats = { ...core, stale: false, refreshing: false };
+        this.memoryStatsCache = { data: stats, fetchedAt: Date.now() };
+        logger.info('MongoDB vector store stats refreshed', {
+            documents: stats.documents,
+            chunks: stats.chunks,
+            embeddedChunks: stats.embeddedChunks,
+            indexStatus: stats.indexStatus,
+        });
+        return stats;
+    }
+
+    scheduleStatsRefresh(): void {
+        if (!this.isMongoConfigured() || this.statsRefreshPromise) {
+            return;
+        }
+        this.statsRefreshPromise = this.refreshStatsCache()
+            .catch((error) => {
+                logger.warn('Background MongoDB stats refresh failed', {
+                    error: (error as Error).message,
+                });
+                return this.memoryStatsCache?.data ?? this.notConfiguredStats();
+            })
+            .finally(() => {
+                this.statsRefreshPromise = null;
+            });
+    }
+
+    async getStats(): Promise<VectorStoreStats> {
+        if (!this.isMongoConfigured()) {
+            return this.notConfiguredStats();
         }
 
         await this.connect();
 
-        const docCount = await this.documentsCollection.countDocuments();
-        const chunkCount = await this.chunksCollection.countDocuments();
+        const now = Date.now();
+        if (
+            this.memoryStatsCache &&
+            now - this.memoryStatsCache.fetchedAt < MEMORY_STATS_TTL_MS
+        ) {
+            return this.memoryStatsCache.data;
+        }
 
-        const embeddedChunkCount = await this.chunksCollection.countDocuments({
+        const persisted = await this.readPersistedStats();
+        if (persisted) {
+            const updatedAtMs = persisted.updatedAt
+                ? Date.parse(persisted.updatedAt)
+                : 0;
+            const ageMs = updatedAtMs > 0 ? now - updatedAtMs : Number.POSITIVE_INFINITY;
+            const stats: VectorStoreStats = {
+                ...persisted,
+                stale: ageMs > PERSISTED_STATS_STALE_MS,
+                refreshing: persisted.embeddedChunks === 0,
+            };
+            this.memoryStatsCache = { data: stats, fetchedAt: now };
+            this.scheduleStatsRefresh();
+            return stats;
+        }
+
+        const quick = await this.fetchQuickStats();
+        const stats: VectorStoreStats = { ...quick, stale: true, refreshing: true };
+        this.memoryStatsCache = { data: stats, fetchedAt: now };
+        this.scheduleStatsRefresh();
+        return stats;
+    }
+
+    private notConfiguredStats(): VectorStoreStats {
+        return {
+            documents: 0,
+            portfolios: 0,
+            programs: 0,
+            projects: 0,
+            entities: 0,
+            chunks: 0,
+            embeddedChunks: 0,
+            embeddingPercentage: 0,
+            indexStatus: 'not_configured',
+            database: getMongoDbName(),
+            configured: false,
+        };
+    }
+
+    private async fetchQuickStats(): Promise<VectorStoreStats> {
+        const [docCount, portfolioCount, programCount, chunkCount, projectCount, entityCount, indexStatus] =
+            await Promise.all([
+            this.documentsCollection.estimatedDocumentCount(),
+            this.portfoliosCollection.estimatedDocumentCount(),
+            this.programsCollection.estimatedDocumentCount(),
+            this.chunksCollection.estimatedDocumentCount(),
+            this.projectsCollection.estimatedDocumentCount(),
+            this.entitiesCollection.estimatedDocumentCount(),
+            this.resolveIndexStatus(),
+        ]);
+
+        return {
+            documents: docCount,
+            portfolios: portfolioCount,
+            programs: programCount,
+            projects: projectCount,
+            entities: entityCount,
+            chunks: chunkCount,
+            embeddedChunks: 0,
+            embeddingPercentage: 0,
+            indexStatus,
+            database: getMongoDbName(),
+            configured: true,
+        };
+    }
+
+    private async fetchStatsFromMongo(): Promise<VectorStoreStats> {
+        const embeddedFilter = {
             embedding: { $exists: true, $not: { $size: 0 } },
-        });
+        };
 
-        let indexStatus = 'unknown';
+        const [
+            docCount,
+            portfolioCount,
+            programCount,
+            projectCount,
+            entityCount,
+            chunkCount,
+            embeddedChunkCount,
+            indexStatus,
+        ] = await Promise.all([
+                this.documentsCollection.estimatedDocumentCount(),
+                this.portfoliosCollection.estimatedDocumentCount(),
+                this.programsCollection.estimatedDocumentCount(),
+                this.projectsCollection.estimatedDocumentCount(),
+                this.entitiesCollection.estimatedDocumentCount(),
+                this.chunksCollection.estimatedDocumentCount(),
+                this.chunksCollection.countDocuments(embeddedFilter),
+                this.resolveIndexStatus(),
+            ]);
+
+        return {
+            documents: docCount,
+            portfolios: portfolioCount,
+            programs: programCount,
+            projects: projectCount,
+            entities: entityCount,
+            chunks: chunkCount,
+            embeddedChunks: embeddedChunkCount,
+            embeddingPercentage:
+                chunkCount > 0 ? Math.round((embeddedChunkCount / chunkCount) * 100) : 0,
+            indexStatus,
+            database: getMongoDbName(),
+            configured: true,
+            updatedAt: new Date().toISOString(),
+        };
+    }
+
+    private async resolveIndexStatus(): Promise<string> {
         try {
             const listSearchIndexes = (this.chunksCollection as unknown as {
                 listSearchIndexes: () => { toArray: () => Promise<Array<Record<string, unknown>>> };
@@ -292,24 +584,78 @@ export class MongoVectorStore {
                 (idx) => typeof idx.name === 'string' && idx.name === indexName
             );
             if (vectorIndex) {
-                indexStatus = vectorIndex.queryable === true ? 'active' : 'building';
-            } else {
-                indexStatus = 'missing';
+                return vectorIndex.queryable === true ? 'active' : 'building';
             }
+            return 'missing';
         } catch (err) {
             logger.warn('Failed to list search indexes', { error: (err as Error).message });
-            indexStatus = 'unavailable';
+            return 'unavailable';
         }
+    }
 
+    private async readPersistedStats(): Promise<VectorStoreStats | null> {
+        const doc = await this._db.collection(METADATA_COLLECTION).findOne({
+            _id: STATS_CACHE_DOC_ID,
+        });
+        if (!doc || typeof doc !== 'object') {
+            return null;
+        }
+        const row = doc as Record<string, unknown>;
+        if (
+            typeof row.documents !== 'number' ||
+            typeof row.chunks !== 'number' ||
+            typeof row.embeddedChunks !== 'number'
+        ) {
+            return null;
+        }
+        const chunks = row.chunks as number;
+        const embeddedChunks = row.embeddedChunks as number;
         return {
-            documents: docCount,
-            chunks: chunkCount,
-            embeddedChunks: embeddedChunkCount,
-            embeddingPercentage: chunkCount > 0 ? Math.round((embeddedChunkCount / chunkCount) * 100) : 0,
-            indexStatus,
-            database: getMongoDbName(),
+            documents: row.documents as number,
+            portfolios: typeof row.portfolios === 'number' ? (row.portfolios as number) : 0,
+            programs: typeof row.programs === 'number' ? (row.programs as number) : 0,
+            projects: typeof row.projects === 'number' ? (row.projects as number) : 0,
+            entities: typeof row.entities === 'number' ? (row.entities as number) : 0,
+            chunks,
+            embeddedChunks,
+            embeddingPercentage:
+                typeof row.embeddingPercentage === 'number'
+                    ? (row.embeddingPercentage as number)
+                    : chunks > 0
+                      ? Math.round((embeddedChunks / chunks) * 100)
+                      : 0,
+            indexStatus: typeof row.indexStatus === 'string' ? row.indexStatus : 'unknown',
+            database: typeof row.database === 'string' ? row.database : getMongoDbName(),
             configured: true,
+            updatedAt:
+                typeof row.updatedAt === 'string'
+                    ? row.updatedAt
+                    : row.updatedAt instanceof Date
+                      ? row.updatedAt.toISOString()
+                      : undefined,
         };
+    }
+
+    private async writePersistedStats(stats: VectorStoreStats): Promise<void> {
+        await this._db.collection(METADATA_COLLECTION).updateOne(
+            { _id: STATS_CACHE_DOC_ID },
+            {
+                $set: {
+                    documents: stats.documents,
+                    portfolios: stats.portfolios,
+                    programs: stats.programs,
+                    projects: stats.projects,
+                    entities: stats.entities,
+                    chunks: stats.chunks,
+                    embeddedChunks: stats.embeddedChunks,
+                    embeddingPercentage: stats.embeddingPercentage,
+                    indexStatus: stats.indexStatus,
+                    database: stats.database,
+                    updatedAt: stats.updatedAt ?? new Date().toISOString(),
+                },
+            },
+            { upsert: true }
+        );
     }
 
     async ping(): Promise<boolean> {

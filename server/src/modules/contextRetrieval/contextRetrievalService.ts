@@ -5,6 +5,12 @@
 
 import { logger } from '../../utils/logger'
 import { pool } from '../../database/connection'
+import {
+  retrieveChunksWithFallback,
+  RagRetrievalError,
+  type RawChunkCandidate,
+  type RagFallbackParams,
+} from '../rag/ragDynamicFallback'
 import { SemanticSearchEngine } from './engines/semanticSearchEngine'
 import { KeywordSearchEngine } from './engines/keywordSearchEngine'
 import { RelevanceScoringEngine } from './engines/relevanceScoringEngine'
@@ -93,48 +99,151 @@ export class ContextRetrievalService implements IContextRetrievalService {
   /**
    * Search precomputed document chunks (RAG) using hybrid strategy
    */
+  private ftsQueryText(query: string): string {
+    return query.split(/\s+/).filter(Boolean).slice(0, 12).join(' ')
+  }
+
+  private async searchFtsCandidates(
+    params: RagFallbackParams & { limit: number }
+  ): Promise<RawChunkCandidate[]> {
+    const { projectId, query, templateId, documentIds, limit } = params
+    const scopedDocumentIds = documentIds?.filter(Boolean) ?? []
+    const ftsQuery = this.ftsQueryText(query)
+    const sqlParams: unknown[] = [ftsQuery, projectId]
+    let docFilterSql = ''
+    let templateFilterSql = ''
+
+    if (scopedDocumentIds.length > 0) {
+      sqlParams.push(scopedDocumentIds)
+      docFilterSql = `AND document_id = ANY($${sqlParams.length}::uuid[])`
+    } else if (templateId) {
+      sqlParams.push(templateId)
+      templateFilterSql = `AND template_id = $${sqlParams.length}`
+    }
+
+    sqlParams.push(limit)
+    const limitParam = sqlParams.length
+
+    const keywordRes = await pool.query(
+      `
+      SELECT id, document_id, title, content,
+             ts_rank(to_tsvector('english', coalesce(title,'') || ' ' || coalesce(content,'')), plainto_tsquery('english', $1)) AS kw_rank
+      FROM document_chunks
+      WHERE project_id = $2
+        ${docFilterSql}
+        ${templateFilterSql}
+        AND to_tsvector('english', coalesce(title,'') || ' ' || coalesce(content,'')) @@ plainto_tsquery('english', $1)
+      ORDER BY kw_rank DESC
+      LIMIT $${limitParam}
+      `,
+      sqlParams
+    )
+
+    return keywordRes.rows as RawChunkCandidate[]
+  }
+
+  private async searchSequentialCandidates(
+    params: RagFallbackParams & { limit: number }
+  ): Promise<RawChunkCandidate[]> {
+    const scopedDocumentIds = params.documentIds?.filter(Boolean) ?? []
+    if (!scopedDocumentIds.length) return []
+
+    const fallbackRes = await pool.query(
+      `
+      SELECT id, document_id, title, content, 0.1::float AS kw_rank
+      FROM document_chunks
+      WHERE project_id = $1 AND document_id = ANY($2::uuid[])
+      ORDER BY document_id, chunk_index ASC
+      LIMIT $3
+      `,
+      [params.projectId, scopedDocumentIds, params.limit]
+    )
+    return fallbackRes.rows as RawChunkCandidate[]
+  }
+
+  private async searchVectorCandidates(
+    params: RagFallbackParams & { limit: number }
+  ): Promise<RawChunkCandidate[]> {
+    const { ragService } = await import('../../services/ragService')
+    const scopedDocumentIds = params.documentIds?.filter(Boolean) ?? []
+    const filter: Record<string, string> = { project_id: params.projectId }
+    if (scopedDocumentIds.length === 1) {
+      filter.document_id = scopedDocumentIds[0]
+    }
+
+    const rows = await ragService.query(params.query, params.limit, filter)
+    return rows
+      .filter((row: { document_id?: string }) =>
+        scopedDocumentIds.length === 0 ||
+        scopedDocumentIds.includes(String(row.document_id))
+      )
+      .map((row: { id: string; document_id: string; content: string; similarity?: number; metadata?: { title?: string } }) => ({
+        id: String(row.id),
+        document_id: String(row.document_id),
+        title: row.metadata?.title ?? null,
+        content: row.content,
+        similarity: Number(row.similarity) || 0,
+      }))
+  }
+
+  private async scoreChunkCandidates(
+    query: string,
+    candidates: RawChunkCandidate[]
+  ): Promise<Array<{ id: string; document_id: string; title: string | null; content: string; score: number }>> {
+    const semanticScored: Array<{ id: string; document_id: string; title: string | null; content: string; score: number }> = []
+    const topKw = candidates[0]?.kw_rank ?? 1
+
+    for (const c of candidates) {
+      const similarity =
+        c.similarity != null
+          ? c.similarity
+          : await this.relevanceScoringEngine.calculateSemanticRelevance(query, c.content)
+      const kw = Number(c.kw_rank) || 0
+      const kwNorm = isFinite(kw) && topKw ? Math.min(1, kw / Number(topKw)) : 0
+      const score = c.similarity != null ? similarity : 0.6 * similarity + 0.4 * kwNorm
+      semanticScored.push({ id: c.id, document_id: c.document_id, title: c.title, content: c.content, score })
+    }
+
+    return semanticScored
+  }
+
   async searchChunks(params: {
     projectId: string
     query: string
     topK?: number
     templateId?: string
+    /** When set, restrict chunks to these source documents within the project */
+    documentIds?: string[]
   }): Promise<Array<{ id: string; document_id: string; title: string | null; content: string; score: number }>> {
-    const { projectId, query, topK = 20, templateId } = params
+    const { projectId, query, topK = 20, templateId, documentIds } = params
+
     try {
-      // Keyword pre-filter using full text search
-      const keywordRes = await pool.query(
-        `
-        SELECT id, document_id, title, content,
-               ts_rank(to_tsvector('english', coalesce(title,'') || ' ' || coalesce(content,'')), plainto_tsquery('english', $1)) AS kw_rank
-        FROM document_chunks
-        WHERE project_id = $2
-          AND to_tsvector('english', coalesce(title,'') || ' ' || coalesce(content,'')) @@ plainto_tsquery('english', $1)
-          ${templateId ? 'AND template_id = $3' : ''}
-        ORDER BY kw_rank DESC
-        LIMIT $${templateId ? 4 : 3}
-        `,
-        templateId ? [query, projectId, templateId, Math.max(topK * 3, 50)] : [query, projectId, Math.max(topK * 3, 50)]
+      const useVector = Boolean(process.env.VOYAGE_API_KEY)
+      const result = await retrieveChunksWithFallback(
+        { projectId, query, topK, templateId, documentIds },
+        {
+          searchFts: (p) => this.searchFtsCandidates(p),
+          searchSequential: (p) => this.searchSequentialCandidates(p),
+          searchVector: useVector ? (p) => this.searchVectorCandidates(p) : undefined,
+          scoreChunks: (q, candidates) => this.scoreChunkCandidates(q, candidates),
+        }
       )
 
-      const preCandidates = keywordRes.rows as Array<{ id: string; document_id: string; title: string | null; content: string; kw_rank: number }>
-
-      // If no candidates, return empty
-      if (preCandidates.length === 0) return []
-
-      // Semantic rerank: compute similarity between query and candidate content
-      const semanticScored: Array<{ id: string; document_id: string; title: string | null; content: string; score: number }> = []
-      for (const c of preCandidates) {
-        const similarity = await this.relevanceScoringEngine.calculateSemanticRelevance(query, c.content)
-        // Simple hybrid score: 0.6 semantic + 0.4 normalized kw
-        const kw = Number(c.kw_rank) || 0
-        const kwNorm = isFinite(kw) ? Math.min(1, kw / (preCandidates[0]?.kw_rank || 1)) : 0
-        const score = 0.6 * similarity + 0.4 * kwNorm
-        semanticScored.push({ id: c.id, document_id: c.document_id, title: c.title, content: c.content, score })
-      }
-
-      // Sort and topK
-      return semanticScored.sort((a, b) => b.score - a.score).slice(0, topK)
+      return result.chunks.map(({ id, document_id, title, content, score }) => ({
+        id,
+        document_id,
+        title,
+        content,
+        score,
+      }))
     } catch (error: any) {
+      if (error instanceof RagRetrievalError) {
+        logger.warn('searchChunks: all retrieval strategies failed', {
+          attempted: error.attempted,
+          projectId,
+        })
+        return []
+      }
       logger.error('searchChunks failed', { error: error.message })
       return []
     }

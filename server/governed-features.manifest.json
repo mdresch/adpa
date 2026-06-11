@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "description": "Governed feature packets (Level 5). Add a feature here with testPathPattern (and optional testModuleDir for modules/* layout). All entries run via npm run test:features. legacyModuleDirs are pre-governance tests — migrate into features[] over time.",
+  "legacyModuleDirs": ["analysis", "documents", "openuiChat"],
+  "features": [
+    {
+      "id": "rag",
+      "description": "Scoped RAG context injection + dynamic retrieval fallback",
+      "skills": [
+        "adpa-rag-context-injection",
+        "adpa-rag-dynamic-fallback"
+      ],
+      "spec": "docs/superpowers/specs/2026-06-08-rag-context-scoping-design.md",
+      "testModuleDir": "rag",
+      "testPathPattern": "modules/rag"
+    },
+    {
+      "id": "doc-gen",
+      "description": "Document generation — section-specific RAG context, template paragraphs, job resumption",
+      "skills": [
+        "adpa-doc-gen-queue",
+        "adpa-template-driven-generation"
+      ],
+      "overlapGuard": false,
+      "spec": "docs/superpowers/specs/2026-06-08-rag-context-scoping-design.md",
+      "testPathPattern": "documentGenerationService"
+    }
+  ]
+}

@@ -271,12 +271,13 @@ export interface ADPADocument {
 }
 
 export interface QualityAudit {
-  overall_score: number
-  overall_grade: string
-  quality_level: string
-  completeness_score: number
-  consistency_score: number
-  standards_compliance_score: number
+  audit_performed?: boolean
+  overall_score: number | null
+  overall_grade: string | null
+  quality_level: string | null
+  completeness_score: number | null
+  consistency_score: number | null
+  standards_compliance_score: number | null
   compliance_metrics?: {
     overallComplianceRating: number
     pmbokGuide?: number

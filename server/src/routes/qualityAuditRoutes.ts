@@ -146,7 +146,8 @@ router.get(
  * Manually trigger quality audit for a document
  */
 const triggerAuditSchema = Joi.object({
-  documentId: Joi.string().uuid().required()
+  documentId: Joi.string().uuid().required(),
+  force: Joi.boolean().optional()
 })
 
 router.post(
@@ -155,7 +156,7 @@ router.post(
   validate(triggerAuditSchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { documentId } = req.body
+      const { documentId, force } = req.body as { documentId: string; force?: boolean }
       const userId = (req as any).user?.id
       const userRole = (req as any).user?.role?.toLowerCase()
       const isSuperAdmin = userRole === 'super_admin'
@@ -294,10 +295,27 @@ router.post(
         })
       }
 
+      if (!force) {
+        const existingAudit = await qualityAuditService.getDocumentAudit(documentId)
+        if (existingAudit) {
+          logger.info('[QUALITY-AUDIT-API] Audit already exists, skipping duplicate trigger', {
+            documentId,
+            userId,
+            auditId: existingAudit.id
+          })
+          return res.json({
+            success: true,
+            audit: existingAudit,
+            message: 'Quality audit already exists for this document'
+          })
+        }
+      }
+
       // Trigger audit
-      logger.info('[QUALITY-AUDIT-API] Manual audit triggered', {
+      logger.info('[QUALITY-AUDIT-API] Audit triggered', {
         documentId,
         userId,
+        force: !!force,
         timestamp: new Date().toISOString(),
         contentLength: document.content.length
       })
@@ -310,7 +328,8 @@ router.post(
           document.content,
           document.document_type || document.title || 'Document',
           projectResult.rows[0],
-          userId
+          userId,
+          { allowDuplicate: !!force }
         )
       } catch (auditError: any) {
         logger.error('[QUALITY-AUDIT-API] Audit service failed', {

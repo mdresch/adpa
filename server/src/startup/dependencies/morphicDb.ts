@@ -10,6 +10,8 @@ export const morphicDbDependency: Dependency = {
   name: "Morphic DB",
   critical: false, // Not critical for the main ADPA system
   timeout: 30000,
+  // Uses DATABASE_URL fallback when MORPHIC_DATABASE_URL is unset — wait for main DB first.
+  dependsOn: ["Database"],
   init: async () => {
     const startTime = Date.now()
     try {
@@ -30,18 +32,20 @@ export const morphicDbDependency: Dependency = {
     }
   },
   validate: async () => {
+    const startTime = Date.now()
     try {
-      // Re-verify the most critical table exists
       const success = await morphicRepo.ensureSchema()
+      const latency = Date.now() - startTime
       if (!success) {
         // Morphic DB is optional; do not fail overall startup validation.
-        updateDependencyHealth("Morphic DB", "unhealthy", 0, "Validation returned false")
+        updateDependencyHealth("Morphic DB", "unhealthy", latency, "Validation returned false")
         return true
       }
+      updateDependencyHealth("Morphic DB", "healthy", latency)
       return true
     } catch (error) {
       logger.error("Morphic DB validation failed:", error)
-      updateDependencyHealth("Morphic DB", "unhealthy", 0, String(error))
+      updateDependencyHealth("Morphic DB", "unhealthy", Date.now() - startTime, String(error))
       // Morphic DB is optional; do not fail overall startup validation.
       return true
     }

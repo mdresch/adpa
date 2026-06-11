@@ -1,7 +1,7 @@
 import { StartupManager } from "./startupManager"
 import { logger } from "../utils/logger"
 import { pool } from "../database/connection"
-import { initializeDependencyHealthTracking } from "../routes/health"
+import { initializeDependencyHealthTracking, updateDependencyHealth } from "../routes/health"
 import { connectDatabase } from "../database/connection"
 
 // Export the startupManager instance so other modules can access it.
@@ -25,7 +25,9 @@ function startBackgroundDbRetry(manager: StartupManager, intervalMs = 30_000): v
       logger.info('[Bootstrap] ✅ Background DB retry succeeded — opening readiness gate')
       manager.forceReady()
     } catch (err: any) {
-      logger.warn(`[Bootstrap] Background DB retry failed: ${err?.message} — will retry in ${intervalMs / 1000}s`)
+      const message = err?.message || String(err)
+      updateDependencyHealth("Database", "unhealthy", 0, message)
+      logger.warn(`[Bootstrap] Background DB retry failed: ${message} — will retry in ${intervalMs / 1000}s`)
       setTimeout(attempt, intervalMs)
     }
   }

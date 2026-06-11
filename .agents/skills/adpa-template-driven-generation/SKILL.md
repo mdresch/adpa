@@ -66,3 +66,17 @@ The engine automatically pulls these fields during generation:
 > **NO HARDCODING**: Never use template IDs or Names inside `documentGenerationService.ts` or `inlineEntityExtractionPrompt.ts`.
 > **DATABASE FIRST**: If a template needs to change its "mind" or "style", change its record in the database.
 > **PRESERVE ENGINES**: Code changes should only be made to improve the robustness of parsing, rendering, or the generic drafting prompt framework.
+
+---
+
+## Governed feature packet (`doc-gen`)
+
+This skill is registered with `adpa-doc-gen-queue` under manifest id `doc-gen` (`server/governed-features.manifest.json`). Template-paragraph and job-resumption behavior is covered by `documentGenerationService.templateParagraphs.test.ts`.
+
+```powershell
+cd server
+npm run test:features -- doc-gen
+npm run verify:governed-features
+```
+
+When adding template-engine tests, extend `testPathPattern: documentGenerationService` files — no new `package.json` script required. See `adpa-governed-feature-loop` for manifest registration.

@@ -36,6 +36,13 @@ import {
   resolveWordCount,
 } from "@/lib/documents/generationMetadataMetrics"
 import {
+  formatQualityScore,
+  isQualityAuditPerformed,
+  postQualityAuditTrigger,
+  QUALITY_AUDIT_NOT_GRADE,
+  QUALITY_AUDIT_NOT_LEVEL,
+} from "@/lib/quality-audit"
+import {
   FileText,
   Edit,
   MessageSquare,
@@ -209,8 +216,6 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
   const [loadingAudit, setLoadingAudit] = useState(false)
   // Ref to store timeout ID for quality audit refresh to prevent stale state updates
   const qualityAuditTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  // Ref to prevent duplicate automatic quality audit triggers
-  const hasTriggeredAuditRef = useRef<boolean>(false)
 
   // Document regeneration hook
   const { regenerate, progress, isRegenerating, error: regenerationError, result, reset: resetRegeneration } = useDocumentRegeneration()
@@ -269,8 +274,10 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
     }
   }
 
-  // Fetch quality audit data
-  const fetchQualityAudit = async () => {
+  // Fetch quality audit data; autoTrigger only on initial page load (not poll refreshes)
+  const fetchQualityAudit = async (options?: { autoTrigger?: boolean }) => {
+    const autoTrigger = options?.autoTrigger ?? false
+
     try {
       setLoadingAudit(true)
       const { getApiBaseUrl } = await import('@/lib/api-url')
@@ -281,7 +288,6 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
         return
       }
 
-      // First, check if quality audit exists
       const response = await fetch(`${API_BASE_URL}/quality-audits/document/${docId}`, {
         headers: {
           'Authorization': `Bearer ${authToken}`,
@@ -292,40 +298,37 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
       if (response.ok) {
         const data = await response.json()
         if (data.success && data.audit) {
-          console.log('[QUALITY-AUDIT] Existing audit found:', { docId, overallScore: data.audit.overallScore })
+          console.log('[QUALITY-AUDIT] Existing audit found:', {
+            docId,
+            overallScore: data.audit.overall_score ?? data.audit.overallScore
+          })
           setQualityAudit(data.audit)
           return
         }
       }
 
-      // If no audit exists (404 or no data), automatically trigger one
-      if (response.status === 404 || !response.ok) {
-        if (hasTriggeredAuditRef.current) {
-          console.log('[QUALITY-AUDIT] Quality audit already triggered in this session, skipping duplicate trigger')
-          return
-        }
-        
-        console.log('[QUALITY-AUDIT] No audit found, automatically triggering quality audit for document:', docId)
-        hasTriggeredAuditRef.current = true
+      if (!autoTrigger) {
+        return
+      }
 
-        // Automatically trigger quality audit
-        // The backend will fetch the document content itself, so we don't need to check it here
+      if (response.status === 404 || !response.ok) {
+        console.log('[QUALITY-AUDIT] No audit found, automatically triggering quality audit for document:', docId)
+
         try {
-          const triggerResponse = await fetch(`${API_BASE_URL}/quality-audits/trigger`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${authToken}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ documentId: docId })
-          })
+          const triggerResponse = await postQualityAuditTrigger(
+            API_BASE_URL,
+            docId,
+            authToken
+          )
 
           if (triggerResponse.ok) {
             const triggerData = await triggerResponse.json()
             if (triggerData.success) {
+              if (triggerData.audit) {
+                setQualityAudit(triggerData.audit)
+              }
               console.log('[QUALITY-AUDIT] Auto-triggered successfully, will refresh in 5 seconds')
               toast.success("Quality audit started automatically. Results will appear shortly.")
-              // Wait a bit longer for audit to complete (quality audits can take 10-30 seconds)
               setTimeout(async () => {
                 await fetchQualityAudit()
               }, 5000)
@@ -340,19 +343,16 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
               ? (errorObj.message || JSON.stringify(errorObj))
               : (typeof errorObj === 'string' ? errorObj : triggerResponse.statusText || "")
             console.error('[QUALITY-AUDIT] Auto-trigger failed:', errorData.error || triggerResponse.statusText)
-            // Only show toast if it's not a "no content" error (which is expected for some documents)
             if (typeof errorMessage === 'string' && !errorMessage.toLowerCase().includes('no content')) {
               toast.warning("Quality audit could not be started automatically. You can trigger it manually.")
             }
           }
         } catch (triggerError) {
           console.error('[QUALITY-AUDIT] Error auto-triggering audit:', triggerError)
-          // Don't show error toast - user can trigger manually if needed
         }
       }
     } catch (error) {
       console.error("Failed to fetch quality audit:", error)
-      // Don't show error toast - audit might not exist yet
     } finally {
       setLoadingAudit(false)
     }
@@ -564,17 +564,12 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
 
       try {
         console.log('[QUALITY-AUDIT] Sending request to:', `${API_BASE_URL}/quality-audits/trigger`)
-        response = await fetch(`${API_BASE_URL}/quality-audits/trigger`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${authToken}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            documentId: docId
-          }),
-          signal: controller.signal
-        })
+        response = await postQualityAuditTrigger(
+          API_BASE_URL,
+          docId,
+          authToken,
+          { force: true, signal: controller.signal }
+        )
 
         console.log('[QUALITY-AUDIT] Response received:', { status: response.status, statusText: response.statusText, ok: response.ok })
 
@@ -919,7 +914,12 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
     console.log('[METADATA-PAGE] useEffect triggered - fetching data:', { docId, projectId, isAuthenticated })
     setLoading(true)
 
-    Promise.all([fetchDocument(), fetchProject(), fetchTemplates(), fetchQualityAudit()]).then(() => {
+    Promise.all([
+      fetchDocument(),
+      fetchProject(),
+      fetchTemplates(),
+      fetchQualityAudit({ autoTrigger: true }),
+    ]).then(() => {
       if (isMounted) {
         setLoading(false)
         console.log('[METADATA-PAGE] All data loaded successfully')
@@ -1814,43 +1814,61 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                         <div className="space-y-4">
                           {/* Overall Score */}
                           <div className="text-center p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
-                            <div className={`text-4xl font-bold ${qualityAudit.overall_score >= 90 ? 'text-green-600' :
-                                qualityAudit.overall_score >= 80 ? 'text-blue-600' :
-                                  qualityAudit.overall_score >= 70 ? 'text-yellow-600' :
-                                    qualityAudit.overall_score >= 60 ? 'text-orange-600' :
-                                      'text-red-600'
-                              }`}>
-                              {qualityAudit.overall_score}%
-                            </div>
+                            {isQualityAuditPerformed(qualityAudit) ? (
+                              <div className={`text-4xl font-bold ${(qualityAudit.overall_score ?? 0) >= 90 ? 'text-green-600' :
+                                  (qualityAudit.overall_score ?? 0) >= 80 ? 'text-blue-600' :
+                                    (qualityAudit.overall_score ?? 0) >= 70 ? 'text-yellow-600' :
+                                      (qualityAudit.overall_score ?? 0) >= 60 ? 'text-orange-600' :
+                                        'text-red-600'
+                                }`}>
+                                {formatQualityScore(qualityAudit.overall_score)}
+                              </div>
+                            ) : (
+                              <div className="text-4xl font-bold text-gray-500">
+                                {formatQualityScore(null)}
+                              </div>
+                            )}
                             <div className="flex items-center justify-center gap-2 mt-2">
-                              <Badge className={`${qualityAudit.overall_grade === 'A' ? 'bg-green-500' :
-                                  qualityAudit.overall_grade === 'B' ? 'bg-blue-500' :
-                                    qualityAudit.overall_grade === 'C' ? 'bg-yellow-500' :
-                                      qualityAudit.overall_grade === 'D' ? 'bg-orange-500' :
-                                        'bg-red-500'
-                                } text-white`}>
-                                Grade {qualityAudit.overall_grade}
-                              </Badge>
-                              <span className="text-sm text-gray-600">{qualityAudit.quality_level}</span>
+                              {isQualityAuditPerformed(qualityAudit) ? (
+                                <>
+                                  <Badge className={`${qualityAudit.overall_grade === 'A' ? 'bg-green-500' :
+                                      qualityAudit.overall_grade === 'B' ? 'bg-blue-500' :
+                                        qualityAudit.overall_grade === 'C' ? 'bg-yellow-500' :
+                                          qualityAudit.overall_grade === 'D' ? 'bg-orange-500' :
+                                            'bg-red-500'
+                                    } text-white`}>
+                                    Grade {qualityAudit.overall_grade}
+                                  </Badge>
+                                  <span className="text-sm text-gray-600">{qualityAudit.quality_level}</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Badge className="bg-gray-500 text-white">
+                                    Grade {QUALITY_AUDIT_NOT_GRADE}
+                                  </Badge>
+                                  <span className="text-sm text-gray-600">{QUALITY_AUDIT_NOT_LEVEL}</span>
+                                </>
+                              )}
                             </div>
                           </div>
 
                           {/* Key Dimensions */}
+                          {isQualityAuditPerformed(qualityAudit) ? (
                           <div className="space-y-2">
                             <div className="flex justify-between items-center">
                               <span className="text-sm text-muted-foreground">Completeness</span>
                               <div className="flex items-center space-x-2">
                                 <div className="w-20 bg-gray-200 rounded-full h-2">
                                   <div
-                                    className={`h-2 rounded-full ${qualityAudit.completeness_score >= 90 ? 'bg-green-500' :
-                                        qualityAudit.completeness_score >= 80 ? 'bg-blue-500' :
-                                          qualityAudit.completeness_score >= 70 ? 'bg-yellow-500' :
+                                    className={`h-2 rounded-full ${(qualityAudit.completeness_score ?? 0) >= 90 ? 'bg-green-500' :
+                                        (qualityAudit.completeness_score ?? 0) >= 80 ? 'bg-blue-500' :
+                                          (qualityAudit.completeness_score ?? 0) >= 70 ? 'bg-yellow-500' :
                                             'bg-orange-500'
                                       }`}
-                                    style={{ width: `${qualityAudit.completeness_score}%` }}
+                                    style={{ width: `${qualityAudit.completeness_score ?? 0}%` }}
                                   />
                                 </div>
-                                <span className="text-sm font-medium w-12 text-right">{qualityAudit.completeness_score}%</span>
+                                <span className="text-sm font-medium w-12 text-right">{formatQualityScore(qualityAudit.completeness_score)}</span>
                               </div>
                             </div>
                             <div className="flex justify-between items-center">
@@ -1858,15 +1876,15 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                               <div className="flex items-center space-x-2">
                                 <div className="w-20 bg-gray-200 rounded-full h-2">
                                   <div
-                                    className={`h-2 rounded-full ${qualityAudit.consistency_score >= 90 ? 'bg-green-500' :
-                                        qualityAudit.consistency_score >= 80 ? 'bg-blue-500' :
-                                          qualityAudit.consistency_score >= 70 ? 'bg-yellow-500' :
+                                    className={`h-2 rounded-full ${(qualityAudit.consistency_score ?? 0) >= 90 ? 'bg-green-500' :
+                                        (qualityAudit.consistency_score ?? 0) >= 80 ? 'bg-blue-500' :
+                                          (qualityAudit.consistency_score ?? 0) >= 70 ? 'bg-yellow-500' :
                                             'bg-orange-500'
                                       }`}
-                                    style={{ width: `${qualityAudit.consistency_score}%` }}
+                                    style={{ width: `${qualityAudit.consistency_score ?? 0}%` }}
                                   />
                                 </div>
-                                <span className="text-sm font-medium w-12 text-right">{qualityAudit.consistency_score}%</span>
+                                <span className="text-sm font-medium w-12 text-right">{formatQualityScore(qualityAudit.consistency_score)}</span>
                               </div>
                             </div>
                             <div className="flex justify-between items-center">
@@ -1874,18 +1892,23 @@ export default function DocumentMetadataPage({ params }: { params: Promise<{ id:
                               <div className="flex items-center space-x-2">
                                 <div className="w-20 bg-gray-200 rounded-full h-2">
                                   <div
-                                    className={`h-2 rounded-full ${qualityAudit.standards_compliance_score >= 90 ? 'bg-green-500' :
-                                        qualityAudit.standards_compliance_score >= 80 ? 'bg-blue-500' :
-                                          qualityAudit.standards_compliance_score >= 70 ? 'bg-yellow-500' :
+                                    className={`h-2 rounded-full ${(qualityAudit.standards_compliance_score ?? 0) >= 90 ? 'bg-green-500' :
+                                        (qualityAudit.standards_compliance_score ?? 0) >= 80 ? 'bg-blue-500' :
+                                          (qualityAudit.standards_compliance_score ?? 0) >= 70 ? 'bg-yellow-500' :
                                             'bg-orange-500'
                                       }`}
-                                    style={{ width: `${qualityAudit.standards_compliance_score}%` }}
+                                    style={{ width: `${qualityAudit.standards_compliance_score ?? 0}%` }}
                                   />
                                 </div>
-                                <span className="text-sm font-medium w-12 text-right">{qualityAudit.standards_compliance_score}%</span>
+                                <span className="text-sm font-medium w-12 text-right">{formatQualityScore(qualityAudit.standards_compliance_score)}</span>
                               </div>
                             </div>
                           </div>
+                          ) : (
+                            <p className="text-sm text-muted-foreground text-center py-2">
+                              Dimension scores are not available because the AI audit did not complete.
+                            </p>
+                          )}
 
                           {/* Compliance Metrics Summary */}
                           {qualityAudit.compliance_metrics && (

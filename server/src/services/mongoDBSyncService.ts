@@ -5,6 +5,8 @@ import { logger } from '../utils/logger';
 import { documentProcessor } from './documentProcessor';
 import { mongoDBEmbeddingService } from './mongoDBEmbeddings';
 import { mongoVectorStore } from './mongoVectorStore';
+import { withRagLineage } from '../lib/mongoRagHierarchy';
+import { syncRagCatalogToMongo } from './mongoRagCatalogSync';
 import type { MongoChunkWriteInput } from '../lib/mongoChunkSchema';
 
 export interface SyncResult {
@@ -13,6 +15,10 @@ export interface SyncResult {
         totalDocuments: number;
         syncedDocuments: number;
         skippedDocuments: number;
+        syncedPortfolios: number;
+        syncedPrograms: number;
+        syncedProjects: number;
+        syncedEntities: number;
         errors: string[];
     };
 }
@@ -50,14 +56,21 @@ export async function persistMongoSyncProgress(
               ? 'completed'
               : 'failed';
 
+    const touchLastSync = syncStatus === 'completed' || syncStatus === 'failed';
+
     await pool.query(
         `UPDATE integrations
          SET sync_status = $2,
              configuration = COALESCE(configuration, '{}'::jsonb) || jsonb_build_object('mongodb_sync_progress', $3::jsonb),
-             last_sync = CASE WHEN $2 IN ('completed', 'failed') THEN CURRENT_TIMESTAMP ELSE last_sync END,
+             last_sync = CASE WHEN $4 THEN CURRENT_TIMESTAMP ELSE last_sync END,
              updated_at = CURRENT_TIMESTAMP
          WHERE id = $1`,
-        [integrationId, syncStatus, JSON.stringify({ ...progress, updatedAt: new Date().toISOString() })]
+        [
+            integrationId,
+            syncStatus,
+            JSON.stringify({ ...progress, updatedAt: new Date().toISOString() }),
+            touchLastSync,
+        ]
     );
 }
 
@@ -94,6 +107,10 @@ export class MongoDBSyncService {
                 totalDocuments: 0,
                 syncedDocuments: 0,
                 skippedDocuments: 0,
+                syncedPortfolios: 0,
+                syncedPrograms: 0,
+                syncedProjects: 0,
+                syncedEntities: 0,
                 errors: [],
             },
         };
@@ -109,17 +126,24 @@ export class MongoDBSyncService {
             await mongoVectorStore.connect();
 
             let query = `
-                SELECT id, COALESCE(NULLIF(TRIM(title), ''), name) AS title, content, project_id
-                FROM documents
-                WHERE content IS NOT NULL
-                AND length(content) > 50
-                AND deleted_at IS NULL
+                SELECT d.id,
+                       COALESCE(NULLIF(TRIM(d.title), ''), d.name) AS title,
+                       d.content,
+                       d.project_id,
+                       p.program_id,
+                       pr.portfolio_id
+                FROM documents d
+                LEFT JOIN projects p ON d.project_id = p.id
+                LEFT JOIN programs pr ON p.program_id = pr.id
+                WHERE d.content IS NOT NULL
+                AND length(d.content) > 50
+                AND d.deleted_at IS NULL
             `;
             const params: Array<string | number> = [];
 
             if (projectId) {
                 params.push(projectId);
-                query += ` AND project_id = $${params.length}`;
+                query += ` AND d.project_id = $${params.length}`;
             }
 
             if (limit) {
@@ -143,10 +167,6 @@ export class MongoDBSyncService {
                     errors: 0,
                     status: 'syncing',
                 });
-            }
-
-            if (documents.length === 0) {
-                return result;
             }
 
             for (const doc of documents) {
@@ -177,7 +197,11 @@ export class MongoDBSyncService {
                         content: preview,
                         type: 'markdown',
                         source: doc.title || doc.id,
-                        metadata: { projectId: doc.project_id },
+                        metadata: {
+                            projectId: doc.project_id,
+                            programId: doc.program_id,
+                            portfolioId: doc.portfolio_id,
+                        },
                     });
 
                     const processedChunks = await documentProcessor.processDocument(
@@ -201,17 +225,30 @@ export class MongoDBSyncService {
                                 'document'
                             );
 
-                            const chunkObjects: MongoChunkWriteInput[] = batch.map((chunk, idx) => ({
-                                documentId: doc.id,
-                                content: chunk.content,
-                                embedding: embeddings[idx] ?? [],
-                                projectId: doc.project_id,
-                                chunkIndex: chunk.metadata?.chunkIndex ?? i + idx,
-                                metadata: {
-                                    ...chunk.metadata,
-                                    projectId: doc.project_id,
-                                },
-                            }));
+                            const chunkObjects: MongoChunkWriteInput[] = batch.map((chunk, idx) =>
+                                withRagLineage(
+                                    {
+                                        documentId: doc.id,
+                                        content: chunk.content,
+                                        embedding: embeddings[idx] ?? [],
+                                        projectId: doc.project_id,
+                                        programId: doc.program_id,
+                                        portfolioId: doc.portfolio_id,
+                                        sourceType: 'document',
+                                        chunkIndex: chunk.metadata?.chunkIndex ?? i + idx,
+                                        metadata: {
+                                            ...chunk.metadata,
+                                            sourceType: 'document',
+                                        },
+                                    },
+                                    {
+                                        portfolioId: doc.portfolio_id,
+                                        programId: doc.program_id,
+                                        projectId: doc.project_id,
+                                        documentId: doc.id,
+                                    }
+                                )
+                            );
 
                             await mongoVectorStore.createChunks(chunkObjects);
 
@@ -222,17 +259,30 @@ export class MongoDBSyncService {
                     } else {
                         for (let i = 0; i < processedChunks.length; i += INSERT_BATCH_SIZE) {
                             const batch = processedChunks.slice(i, i + INSERT_BATCH_SIZE);
-                            const chunkObjects: MongoChunkWriteInput[] = batch.map((chunk, idx) => ({
-                                documentId: doc.id,
-                                content: chunk.content,
-                                embedding: [],
-                                projectId: doc.project_id,
-                                chunkIndex: chunk.metadata?.chunkIndex ?? i + idx,
-                                metadata: {
-                                    ...chunk.metadata,
-                                    projectId: doc.project_id,
-                                },
-                            }));
+                            const chunkObjects: MongoChunkWriteInput[] = batch.map((chunk, idx) =>
+                                withRagLineage(
+                                    {
+                                        documentId: doc.id,
+                                        content: chunk.content,
+                                        embedding: [],
+                                        projectId: doc.project_id,
+                                        programId: doc.program_id,
+                                        portfolioId: doc.portfolio_id,
+                                        sourceType: 'document',
+                                        chunkIndex: chunk.metadata?.chunkIndex ?? i + idx,
+                                        metadata: {
+                                            ...chunk.metadata,
+                                            sourceType: 'document',
+                                        },
+                                    },
+                                    {
+                                        portfolioId: doc.portfolio_id,
+                                        programId: doc.program_id,
+                                        projectId: doc.project_id,
+                                        documentId: doc.id,
+                                    }
+                                )
+                            );
                             await mongoVectorStore.createChunks(chunkObjects);
                         }
                     }
@@ -244,6 +294,15 @@ export class MongoDBSyncService {
                 }
             }
 
+            const catalog = await syncRagCatalogToMongo(projectId, embeddingMode);
+            result.details.syncedPortfolios = catalog.portfolios;
+            result.details.syncedPrograms = catalog.programs;
+            result.details.syncedProjects = catalog.projects;
+            result.details.syncedEntities = catalog.entities;
+            if (catalog.errors.length > 0) {
+                result.details.errors.push(...catalog.errors);
+            }
+
             if (onProgress) {
                 await onProgress({
                     total: documents.length,
@@ -253,6 +312,8 @@ export class MongoDBSyncService {
                     status: 'completed',
                 });
             }
+
+            mongoVectorStore.scheduleStatsRefresh();
         } catch (error) {
             logger.error('Full sync failed', error);
             result.success = false;

@@ -24,7 +24,11 @@ const getDatabaseUrl = () => process.env.DATABASE_URL || process.env.POSTGRES_UR
 // timeouts and retry defaults can be configured via environment variables
 const DEFAULT_DB_CONN_TIMEOUT_MS = parseInt(process.env.DB_CONN_TIMEOUT_MS || '60000', 10)
 const DEFAULT_DB_QUERY_TIMEOUT_MS = parseInt(process.env.DB_QUERY_TIMEOUT_MS || '15000', 10)
-const DEFAULT_DB_MAX_RETRIES_PER_METHOD = parseInt(process.env.DB_MAX_RETRIES_PER_METHOD || '1', 10)
+const DEFAULT_DB_MAX_RETRIES_PER_METHOD = parseInt(
+  process.env.DB_MAX_RETRIES_PER_METHOD ||
+    (process.env.NODE_ENV === 'production' ? '5' : '1'),
+  10
+)
 // Later code may bump these values when making manual connection attempts
 
 // Connection methods for **non-DATABASE_URL** environments.

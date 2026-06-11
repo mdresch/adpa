@@ -65,8 +65,12 @@ export class RagService {
         try {
             logger.info(`[RagService] Ingesting document ${documentId}`)
 
-            // 1. Fetch document
-            const docRes = await pool.query("SELECT content, metadata FROM documents WHERE id = $1", [documentId])
+            // 1. Fetch document (project/template/name required for scoped RAG retrieval)
+            const docRes = await pool.query(
+                `SELECT content, metadata, project_id, template_id, name
+                 FROM documents WHERE id = $1`,
+                [documentId]
+            )
             if (docRes.rows.length === 0) {
                 throw new Error("Document not found")
             }
@@ -118,8 +122,14 @@ export class RagService {
                         content: chunk.text,
                         embedding: `[${item.embedding.join(',')}]`, // pgvector string format
                         chunk_index: chunkIndex,
+                        project_id: document.project_id ?? null,
+                        template_id: document.template_id ?? null,
+                        title: document.name ?? null,
                         metadata: {
                             source: 'rag-service-node',
+                            project_id: document.project_id ?? null,
+                            document_id: documentId,
+                            template_id: document.template_id ?? null,
                             start_char_idx: chunk.start,
                             end_char_idx: chunk.end
                         }
@@ -138,8 +148,11 @@ export class RagService {
                 // Insert new
                 if (allVectors.length > 0) {
                     const query = `
-                        INSERT INTO document_chunks (document_id, content, embedding, chunk_index, metadata)
-                        VALUES ($1, $2, $3::vector, $4, $5)
+                        INSERT INTO document_chunks (
+                          document_id, content, embedding, chunk_index, metadata,
+                          project_id, template_id, title
+                        )
+                        VALUES ($1, $2, $3::vector, $4, $5, $6, $7, $8)
                     `
 
                     for (const v of allVectors) {
@@ -148,7 +161,10 @@ export class RagService {
                             v.content,
                             v.embedding,
                             v.chunk_index,
-                            v.metadata
+                            v.metadata,
+                            v.project_id,
+                            v.template_id,
+                            v.title,
                         ])
                     }
                 }

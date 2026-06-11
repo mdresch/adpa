@@ -38,6 +38,11 @@ import { MongoDBDashboard } from "./MongoDBDashboard"
 import { PineconeDashboard } from "./PineconeDashboard"
 import { SupabaseDashboard } from "./SupabaseDashboard"
 import { Neo4jDashboard } from "./Neo4jDashboard"
+import {
+  countSingletonDuplicates,
+  dedupeSingletonIntegrations,
+  pickCanonicalIntegration,
+} from "@/lib/integrationSingletons"
 
 export default function Integrations() {
   const { user } = useAuth()
@@ -280,6 +285,14 @@ export default function Integrations() {
           break
 
         case "mongodb":
+          if (pickCanonicalIntegration(allIntegrations, "mongodb")) {
+            toast.error(
+              "MongoDB Vector Store already exists. Use the Overview toggle to enable it."
+            )
+            setCreatingIntegration(false)
+            return
+          }
+          configData.name = "MongoDB Vector Store"
           configData.configuration = {
             source: "manual-add-integration",
           }
@@ -407,11 +420,19 @@ export default function Integrations() {
         return
       }
 
-      setRealIntegrations(backendIntegrations)
       setAllIntegrations(backendIntegrations)
+      const canonicalIntegrations = dedupeSingletonIntegrations(backendIntegrations)
+      setRealIntegrations(canonicalIntegrations)
+
+      const mongoDuplicateCount = countSingletonDuplicates(backendIntegrations, "mongodb")
+      if (mongoDuplicateCount > 0) {
+        console.warn(
+          `Found ${mongoDuplicateCount + 1} MongoDB integration records; showing canonical "MongoDB Vector Store" only.`
+        )
+      }
 
       // Process integrations for display
-      const processedIntegrations = backendIntegrations.map((integration: any) => {
+      const processedIntegrations = canonicalIntegrations.map((integration: any) => {
         const baseIntegration = {
           id: integration.id,
           name: integration.name,
@@ -1292,23 +1313,47 @@ export default function Integrations() {
   const handleToggleIntegration = async (integration: any, enabled: boolean) => {
     console.log("Toggling integration:", integration.name, "to", enabled)
     try {
-      // Handle MongoDB default integration auto-creation
-      if (integration.id === "mongodb-default" && enabled) {
-        try {
-          await apiClient.createIntegration({
-            name: "MongoDB Vector Store",
-            type: "mongodb",
-            configuration: {},
-            credentials: {}, // No credentials needed for server-side configured mongo
+      // MongoDB: reuse canonical record instead of creating duplicates
+      if (integration.type === "mongodb" && enabled) {
+        const existingMongo =
+          pickCanonicalIntegration(allIntegrations, "mongodb") ??
+          (integration.id !== "mongodb-default" ? realIntegrations.find((i) => i.id === integration.id) : undefined)
+
+        if (existingMongo && existingMongo.id !== "mongodb-default") {
+          await apiClient.updateIntegration(existingMongo.id, {
+            ...existingMongo,
             is_active: true,
           })
-          toast.success("MongoDB integration enabled")
+          toast.success("MongoDB Vector Store enabled")
           await loadExistingIntegrations()
           return
-        } catch (error: any) {
-          console.error("Failed to enable MongoDB integration:", error)
-          toast.error(`Failed to enable: ${error.message || "Unknown error"}`)
-          return
+        }
+
+        if (integration.id === "mongodb-default") {
+          try {
+            await apiClient.createIntegration({
+              name: "MongoDB Vector Store",
+              type: "mongodb",
+              configuration: {},
+              credentials: {},
+              is_active: true,
+            })
+            toast.success("MongoDB Vector Store enabled")
+            await loadExistingIntegrations()
+            return
+          } catch (error: any) {
+            const status = error?.status ?? error?.response?.status
+            const existing = error?.data?.integration ?? error?.response?.data?.integration
+            if (status === 409 && existing?.id) {
+              await apiClient.updateIntegration(existing.id, { ...existing, is_active: true })
+              toast.success("MongoDB Vector Store enabled")
+              await loadExistingIntegrations()
+              return
+            }
+            console.error("Failed to enable MongoDB integration:", error)
+            toast.error(`Failed to enable: ${error.message || "Unknown error"}`)
+            return
+          }
         }
       }
 
@@ -1740,6 +1785,13 @@ export default function Integrations() {
                     <CardContent className="text-xs">
                       <p>Integrations loaded: {integrations.length}</p>
                       <p>Real integrations: {realIntegrations.length}</p>
+                      <p>
+                        MongoDB records in DB:{" "}
+                        {allIntegrations.filter((i) => i.type === "mongodb").length}
+                        {countSingletonDuplicates(allIntegrations, "mongodb") > 0
+                          ? ` (${countSingletonDuplicates(allIntegrations, "mongodb")} duplicate hidden)`
+                          : ""}
+                      </p>
                       <p>Loading: {loading.toString()}</p>
                       <p>SharePoint config: {JSON.stringify({
                         tenantId: sharepointConfig.tenantId ? "***" : "empty",
@@ -1749,6 +1801,19 @@ export default function Integrations() {
                     </CardContent>
                   </Card>
                 )}
+
+                {countSingletonDuplicates(allIntegrations, "mongodb") > 0 ? (
+                  <Card className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30">
+                    <CardContent className="pt-4 text-sm text-amber-950 dark:text-amber-100">
+                      Multiple MongoDB integration records exist in the database (
+                      {allIntegrations.filter((i) => i.type === "mongodb").length} rows). The
+                      Overview shows one canonical{" "}
+                      <strong>MongoDB Vector Store</strong> card; sync and analysis use the most
+                      recently active record. Extra rows are ignored and new duplicates cannot be
+                      created.
+                    </CardContent>
+                  </Card>
+                ) : null}
 
                 <div className="grid gap-4">
                   {integrations.map((integration) => (
@@ -2905,24 +2970,24 @@ export default function Integrations() {
               </TabsContent>
               <TabsContent value="mongodb-analysis" className="space-y-4">
                 <MongoDBDashboard
-                  integrationId={realIntegrations.find(i => i.type === "mongodb")?.id || null}
+                  integrationId={pickCanonicalIntegration(realIntegrations, "mongodb")?.id || null}
                 />
               </TabsContent>
               <TabsContent value="pinecone-analysis" className="space-y-4">
                 <PineconeDashboard
-                  integrationId={realIntegrations.find(i => i.type === "pinecone")?.id || null}
+                  integrationId={pickCanonicalIntegration(realIntegrations, "pinecone")?.id || null}
                 />
               </TabsContent>
 
               <TabsContent value="supabase-management" className="space-y-4">
                 <SupabaseDashboard
-                  integrationId={realIntegrations.find(i => i.type === "supabase")?.id || null}
+                  integrationId={pickCanonicalIntegration(realIntegrations, "supabase")?.id || null}
                 />
               </TabsContent>
 
               <TabsContent value="neo4j-analysis" className="space-y-4">
                 <Neo4jDashboard
-                  integrationId={realIntegrations.find(i => i.type === "neo4j")?.id || null}
+                  integrationId={pickCanonicalIntegration(realIntegrations, "neo4j")?.id || null}
                 />
               </TabsContent>
             </Tabs>
