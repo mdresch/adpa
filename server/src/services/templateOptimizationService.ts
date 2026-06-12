@@ -852,7 +852,7 @@ The suggested system prompt should preserve the template's purpose while adding 
       )
 
       // Clear template cache so UI shows updated version immediately
-      const { cache } = await import('../utils/redis')
+      const { cache } = await Promise.resolve().then(() => require())
       await cache.del(`template:${suggestion.template_id}`)
 
       // 🔄 CONTINUOUS IMPROVEMENT CYCLE: Trigger quality audits on recent documents
@@ -875,7 +875,7 @@ The suggested system prompt should preserve the template's purpose while adding 
         )
 
         if (recentDocsResult.rows.length > 0) {
-          const { getQueueService } = await import('./queueService')
+          const { getQueueService } = await Promise.resolve().then(() => require())
           const { v4: uuidv4 } = await import('uuid')
 
           // Get project context for each document

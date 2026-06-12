@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node -r tsconfig-paths/register dist/server/src/server.js",
     "predev": "node ../scripts/ensure-zod-v4-exports.mjs",
-    "dev": "nodemon --exec tsx src/server.ts",
+    "dev": "nodemon --exec \"tsx --expose-gc\" src/server.ts",
     "lint": "eslint .",
     "build": "node scripts/build-production.mjs && tsc-alias -p tsconfig.json",
     "test": "jest",

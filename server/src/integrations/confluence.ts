@@ -124,7 +124,7 @@ export class ConfluenceIntegration implements IntegrationProvider {
       
       try {
         if (doc.project_id) {
-          const { pool } = await import('../database/connection')
+          const { pool } = await Promise.resolve().then(() => require())
           const settingsResult = await pool.query(
             `SELECT 
               confluence_enabled,
@@ -150,7 +150,7 @@ export class ConfluenceIntegration implements IntegrationProvider {
             parentPageId = settings.confluence_parent_page_id_override || settings.confluence_parent_page_id || null
           } else {
             // Fallback to old project_integrations mapping
-            const { getByProjectId } = await import('../database/projectIntegrations')
+            const { getByProjectId } = await Promise.resolve().then(() => require())
             const mapping = await getByProjectId(doc.project_id)
             if (mapping?.confluence_space_key) {
               spaceKey = mapping.confluence_space_key

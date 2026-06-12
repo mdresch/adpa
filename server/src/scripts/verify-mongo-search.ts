@@ -6,7 +6,7 @@ import path from 'path';
 dotenv.config({ path: path.join(__dirname, '../../.env') });
 
 async function verifyMongoSearch() {
-    const { mongoVectorStore } = await import('../services/mongoVectorStore');
+    const { mongoVectorStore } = await Promise.resolve().then(() => require());
     console.log('Verifying MongoDB Vector Search Configurability...');
 
     try {

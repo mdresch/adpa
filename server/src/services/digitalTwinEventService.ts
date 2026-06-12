@@ -41,7 +41,7 @@ export async function ingestEvent(data: DigitalTwinEventInput) {
     // Trigger Rule Evaluation
     // We process asynchronously so we don't block the ingestion response
     try {
-      const { evaluateTriggerRules } = await import('./digitalTwinTriggerService')
+      const { evaluateTriggerRules } = await Promise.resolve().then(() => require())
       // Fire and forget (or could await if critical)
       evaluateTriggerRules(event.asset_id, event.asset_id, event.id, event.event_type)
         .catch(err => logger.error({ error: err.message, eventId: event.id }, 'Failed to evaluate triggers'))
@@ -118,7 +118,7 @@ export async function processEvent(eventId: string) {
 
     await updateEventStatus(eventId, 'processing');
 
-    const { evaluateTriggerRules } = await import('./digitalTwinTriggerService');
+    const { evaluateTriggerRules } = await Promise.resolve().then(() => require());
     await evaluateTriggerRules(event.asset_id, event.asset_id, event.id, event.event_type);
 
     await updateEventStatus(eventId, 'completed');

@@ -164,7 +164,7 @@ export class ContextRetrievalService implements IContextRetrievalService {
   private async searchVectorCandidates(
     params: RagFallbackParams & { limit: number }
   ): Promise<RawChunkCandidate[]> {
-    const { ragService } = await import('../../services/ragService')
+    const { ragService } = await Promise.resolve().then(() => require())
     const scopedDocumentIds = params.documentIds?.filter(Boolean) ?? []
     const filter: Record<string, string> = { project_id: params.projectId }
     if (scopedDocumentIds.length === 1) {

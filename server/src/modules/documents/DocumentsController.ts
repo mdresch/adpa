@@ -671,7 +671,7 @@ export class DocumentsController {
     private static async triggerSideEffects(document: any, req: Request) {
         const log = childLogger({ requestId: (req as any).requestId });
         try {
-            const { enqueueEntityPersistence } = await import('../../services/jobs/enqueueEntityPersistence');
+            const { enqueueEntityPersistence } = await Promise.resolve().then(() => require());
             await enqueueEntityPersistence({
                 projectId: document.project_id,
                 userId: req.user?.id ?? null,

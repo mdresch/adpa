@@ -217,7 +217,7 @@ Please generate a comprehensive, updated version that incorporates all recent pr
 
       // Calculate next version using the VersioningService
       // Use actualVersionType (may be upgraded to 'major' if template changed)
-      const { VersioningService } = await import('./document/VersioningService');
+      const { VersioningService } = await Promise.resolve().then(() => require());
       const versioningService = new VersioningService();
 
       const currentVersion = await versioningService.getCurrentVersion(params.documentId);
@@ -412,7 +412,7 @@ Please generate a comprehensive, updated version that incorporates all recent pr
 
       // 🔥 Trigger quality audit after AI regeneration
       try {
-        const { qualityAuditService } = await import('./qualityAuditService')
+        const { qualityAuditService } = await Promise.resolve().then(() => require())
 
         log.info('[AI-REGENERATION] Triggering quality audit after version increment', {
           documentId: newDocumentId,
@@ -432,7 +432,7 @@ Please generate a comprehensive, updated version that incorporates all recent pr
         const projectContext = projectQuery.rows[0] || { id: projectId, name: 'Project' }
 
         // Enqueue quality audit job (async, non-blocking)
-        const { getQueueService } = await import('./queueService')
+        const { getQueueService } = await Promise.resolve().then(() => require())
         const auditJobId = uuidv4()
 
         getQueueService().addJob('quality-audit', {

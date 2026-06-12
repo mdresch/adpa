@@ -246,4 +246,18 @@ export class ProjectRepository {
     const result = await this.db.query('SELECT owner_id FROM projects WHERE id = $1', [id]);
     return result.rows[0]?.owner_id || null;
   }
+
+  /**
+   * Retrieves team members for a project.
+   */
+  async getTeamMembers(projectId: string): Promise<QueryResult<any>> {
+    return this.db.query(
+      `SELECT u.id, u.name, u.email, u.role, u.avatar_url
+       FROM users u
+       JOIN projects p ON p.id = $1
+       WHERE p.team_members IS NOT NULL AND jsonb_typeof(p.team_members) = 'array'
+       AND u.id::text = ANY(SELECT jsonb_array_elements_text(p.team_members))`,
+      [projectId]
+    );
+  }
 }

@@ -360,4 +360,47 @@ export class ProjectsController {
       res.status(500).json({ error: "Internal server error" });
     }
   }
+
+  /**
+   * GET /api/v1/projects/:id/team-members
+   * Retrieves team members for a specific project.
+   */
+  public static async getTeamMembers(req: Request, res: Response) {
+    const log = childLogger({ requestId: (req as any).requestId });
+    try {
+      const { id } = req.params;
+      if (!id || !UUID_RE.test(id)) {
+        return res.status(400).json({ error: 'Invalid project ID' });
+      }
+
+      const userId = (req as any).user?.id;
+      const userRole = (req as any).user?.role;
+
+      const projectResult = await ProjectsController.projectRepository.findById(id);
+
+      if (projectResult.rows.length === 0) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+
+      const project = projectResult.rows[0];
+
+      // Access control
+      const hasAccess =
+        userRole === "super_admin" ||
+        userRole === "admin" ||
+        project.owner_id === userId ||
+        (project.team_members && project.team_members.includes(userId));
+
+      if (!hasAccess) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const result = await ProjectsController.projectRepository.getTeamMembers(id);
+
+      res.json({ success: true, data: result.rows });
+    } catch (error) {
+      log.error("GetTeamMembers error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
 }

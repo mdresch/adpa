@@ -899,9 +899,9 @@ ${content.substring(0, 15000)}` // Limit content to avoid token limits
     // Recompute document entity counts and update template profile
     if (documentId && storedEntities.length > 0) {
       try {
-        const { default: DocumentPurposeService } = await import('./documentPurposeService')
-        const { default: TemplateAnalyticsService } = await import('./templateAnalyticsService')
-        const { documentTemplateService } = await import('../modules/documentTemplates/service')
+        const { default: DocumentPurposeService } = await Promise.resolve().then(() => require())
+        const { default: TemplateAnalyticsService } = await Promise.resolve().then(() => require())
+        const { documentTemplateService } = await Promise.resolve().then(() => require())
 
         // 1. Rebuild all document entity counts & inferred domains in the project
         logger.info(`[ENTITY-EXTRACTION] Rebuilding document purposes for project ${projectId}`)

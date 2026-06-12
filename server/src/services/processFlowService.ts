@@ -1504,7 +1504,7 @@ class ProcessFlowService {
   private async generateDocumentWithAI(contextContent: string, template: any, config: WorkflowConfiguration): Promise<any> {
     try {
       // Import aiService dynamically to avoid circular dependencies
-      const { aiService } = await import('./aiService')
+      const { aiService } = await Promise.resolve().then(() => require())
       
       // Get the first available active AI provider with its type
       const activeProviderResult = await this.db.query(
@@ -1786,7 +1786,7 @@ class ProcessFlowService {
       // Calculate quality and compliance metrics
       let docQuality: any = null;
       try {
-        const metadataUtils = await import('../utils/documentMetadata')
+        const metadataUtils = await Promise.resolve().then(() => require())
         const analyzeDocFunc = (metadataUtils as any).analyzeDocumentQuality
         const tempMetadata = {
           wordCount,
@@ -1904,7 +1904,7 @@ class ProcessFlowService {
         })
         
         // Enqueue quality audit job (async, non-blocking)
-        const { getQueueService } = await import('./queueService')
+        const { getQueueService } = await Promise.resolve().then(() => require())
         const { v4: uuidv4 } = await import('uuid')
         const auditJobId = uuidv4()
         

@@ -71,7 +71,7 @@ export class PublishToConfluenceJobService {
       // Persist on document if provided
       if (url && job.data.documentId) {
         try {
-          const { pool } = await import('../../database/connection')
+          const { pool } = await Promise.resolve().then(() => require())
           await pool.query(
             `UPDATE documents SET confluence_page_url = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
             [url, job.data.documentId]

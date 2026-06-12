@@ -441,7 +441,7 @@ export class InlineEntityParserService {
 
     if (persist) {
       // Ensure registry is initialized
-      const { extractionRegistry, initializeRegistry } = await import('./extraction/ExtractionRegistry');
+      const { extractionRegistry, initializeRegistry } = await Promise.resolve().then(() => require());
       if (extractionRegistry.getRegisteredEntities().length === 0) {
         await initializeRegistry();
       }
@@ -468,7 +468,7 @@ export class InlineEntityParserService {
       // Sync entities to the central entity_extractions table
       if (documentId) {
         try {
-          const { entityExtractionService } = await import('./entityExtractionService');
+          const { entityExtractionService } = await Promise.resolve().then(() => require());
           const extractedEntities: any[] = [];
 
           for (const [entityType, entities] of Object.entries(entityGroups)) {

@@ -814,7 +814,7 @@ export class DriftDetectionService {
   private async createJiraIssueForDrift(drift: DriftDetection): Promise<void> {
     try {
       // Import Jira linkage service
-      const { jiraLinkageService } = await import('./jiraLinkageService')
+      const { jiraLinkageService } = await Promise.resolve().then(() => require())
 
       const issueDescription = `${drift.description}\n\nDrift Type: ${drift.drift_type}\nSeverity: ${drift.severity}\nAffected Entities: ${drift.affected_entity_ids.length}`
 

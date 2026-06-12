@@ -147,7 +147,7 @@ export class AIGenerationJobService {
         
         // Phase 6: Multi-Level Summary Register
         if (createdDocumentId && result.content) {
-          const { DocumentSummarizationService } = await import('../documentSummarizationService')
+          const { DocumentSummarizationService } = await Promise.resolve().then(() => require())
           
           const summaries = result.summaries
           const hasSummaries = summaries && (Array.isArray(summaries) ? summaries.length > 0 : Object.keys(summaries).length > 0)
@@ -263,7 +263,7 @@ export class AIGenerationJobService {
       })
 
       // Lazy import to avoid circular dependency at module load time
-      const { documentGenerationService } = await import('../documentGenerationService')
+      const { documentGenerationService } = await Promise.resolve().then(() => require())
 
       const docId = uuidv4()
 
@@ -589,7 +589,7 @@ export class AIGenerationJobService {
 
         if (projectIdForDoc && docContent.trim()) {
           try {
-            const { enqueueEntityPersistence } = await import('../jobs/enqueueEntityPersistence')
+            const { enqueueEntityPersistence } = await Promise.resolve().then(() => require())
             const entityJobId = await enqueueEntityPersistence({
               projectId: projectIdForDoc,
               userId: userId ?? null,
@@ -619,7 +619,7 @@ export class AIGenerationJobService {
           }, deps);
           
           try {
-            const { TemplateAnalyticsService } = await import('../templateAnalyticsService')
+            const { TemplateAnalyticsService } = await Promise.resolve().then(() => require())
             setImmediate(async () => {
               try {
                 await TemplateAnalyticsService.updateTemplateEntityProfile(template_id)
@@ -634,7 +634,7 @@ export class AIGenerationJobService {
           setImmediate(async () => {
             if (!process.env.VOYAGE_API_KEY) return
             try {
-              const { ragService } = await import('../ragService')
+              const { ragService } = await Promise.resolve().then(() => require())
               const ingestIds = new Set<string>([createdDocumentId])
               if (documentIds?.length) {
                 documentIds.forEach((id) => ingestIds.add(id))
@@ -670,7 +670,7 @@ export class AIGenerationJobService {
   }
 
   private static async calculateQualityMetrics(content: string, metadata: any): Promise<any> {
-    const { analyzeDocumentQuality } = await import('../../utils/documentMetadata')
+    const { analyzeDocumentQuality } = await Promise.resolve().then(() => require())
     const safeContent = String(content || '')
     const tempMetadata = {
       ...metadata,
@@ -801,7 +801,7 @@ export class AIGenerationJobService {
     const projectId = (jobData.projectId || jobData.variables?.project_id) as string
     if (!projectId) return
     try {
-      const { baselineService } = await import('../baselineService')
+      const { baselineService } = await Promise.resolve().then(() => require())
       const docContent = (typeof result.content === 'string' ? result.content : JSON.stringify(result.content || result)) || ''
       const drifts = await baselineService.validateDocumentAgainstBaseline(projectId, documentId, docContent, jobData.name || 'Document')
       if (drifts.length > 0) {
@@ -842,6 +842,14 @@ export class AIGenerationJobService {
     log.error(`AI generation job failed: ${jobId}`, error)
     await db.query(`UPDATE jobs SET status = 'failed', error_message = $1, failed_at = CURRENT_TIMESTAMP WHERE id = $2`, [errorMessage, jobId])
     ws.emit("job:failed", { jobId, userId: jobData.userId, status: "failed", error: errorMessage, projectId: jobData.projectId || jobData.variables?.project_id })
+    
+    // Explicitly free memory upon failing document generation if GC is exposed
+    if (global.gc) {
+      log.info(`[WORKER] Freeing memory after failed document generation for job ${jobId}`);
+      global.gc();
+    } else {
+      log.warn(`[WORKER] Memory freeing requested for job ${jobId} but global.gc is not available. Try starting node with --expose-gc`);
+    }
   }
 
   private static startProgressHeartbeat(

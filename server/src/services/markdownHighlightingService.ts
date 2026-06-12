@@ -117,7 +117,7 @@ This simple approach provides visual highlighting without complex position track
       const enhancedPrompt = this.buildMarkdownWrappingPrompt(prompt)
 
       // Use AI service (reuse existing logic)
-      const { aiService } = await import('./aiService')
+      const { aiService } = await Promise.resolve().then(() => require())
       const response = await aiService.generateWithFallback({
         prompt: enhancedPrompt,
         provider: options.aiProvider || 'openai',

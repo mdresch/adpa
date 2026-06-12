@@ -641,7 +641,7 @@ export class ExtractionOrchestrationService {
         ; (job.data as ExtendedExtractionJobData).domainRunIds = domainRunIds
 
       // Use queue service to persist DB rows and create child jobs with canonical UUID jobIds
-      const { addJob, getQueueService } = await import('../queueService')
+      const { addJob, getQueueService } = await Promise.resolve().then(() => require())
       const queueSvc = getQueueService()
 
       // Create child jobs for each entity type via QueueService.addJob (creates DB row + enqueues)
@@ -1423,8 +1423,8 @@ export class ExtractionOrchestrationService {
       // template_entity_profile using the helper views.
       // This runs best-effort; failures here should not break the main extraction job.
       try {
-        const { default: DocumentPurposeService } = await import('../documentPurposeService')
-        const { default: TemplateAnalyticsService } = await import('../templateAnalyticsService')
+        const { default: DocumentPurposeService } = await Promise.resolve().then(() => require())
+        const { default: TemplateAnalyticsService } = await Promise.resolve().then(() => require())
 
         log.info(`[EXTRACTION-PARENT] Rebuilding document purposes for project ${projectId}`)
 

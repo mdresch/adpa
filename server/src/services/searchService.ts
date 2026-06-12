@@ -648,7 +648,7 @@ export async function searchDocuments(
 ): Promise<SearchResult[]> {
   try {
     if (request.useSemanticSearch !== false) {
-      const { isMongoRagEnabled, searchDocumentsViaMongo } = await import('./mongoRagService')
+      const { isMongoRagEnabled, searchDocumentsViaMongo } = await Promise.resolve().then(() => require())
       if (isMongoRagEnabled()) {
         try {
           const mongoResults = await searchDocumentsViaMongo(

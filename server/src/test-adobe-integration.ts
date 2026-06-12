@@ -20,8 +20,8 @@ async function testIntegration() {
 
     // Test 1: Import modules
     console.log('📦 Testing module imports...')
-    const { AdobePDFService } = await import('./integrations/adobe-pdf')
-    const { adobePdfService } = await import('./services/adobePdfService')
+    const { AdobePDFService } = await Promise.resolve().then(() => require())
+    const { adobePdfService } = await Promise.resolve().then(() => require())
     console.log('✅ Module imports successful\n')
 
     // Test 2: Service configuration

@@ -30,7 +30,7 @@ describe('PMBOK 8 Domain Extraction Integration', () => {
 
   beforeAll(async () => {
     // Import app after mocks are set up
-    const { default: createApp } = await import('../../server')
+    const { default: createApp } = await Promise.resolve().then(() => require())
     app = createApp()
 
     // Create test user
@@ -164,7 +164,7 @@ describe('PMBOK 8 Domain Extraction Integration', () => {
   describe('Domain Run Registration', () => {
     it('should register domain runs in database', async () => {
       // Manually register domain runs (simulating queue service)
-      const { registerDomainRuns } = await import('../../services/queueService')
+      const { registerDomainRuns } = await Promise.resolve().then(() => require())
       
       const jobResult = await pool.query(`
         INSERT INTO jobs (type, status, data, created_by, project_id)
@@ -208,7 +208,7 @@ describe('PMBOK 8 Domain Extraction Integration', () => {
 
   describe('Entity Type Resolution', () => {
     it('should resolve correct entity types for selected domains', async () => {
-      const { resolveEntityTypesForDomains, normalizeDomains } = await import('../../services/queueService')
+      const { resolveEntityTypesForDomains, normalizeDomains } = await Promise.resolve().then(() => require())
       
       const selectedDomains = normalizeDomains(['stakeholders', 'planning'])
       const entityTypes = (resolveEntityTypesForDomains as any)(selectedDomains)

@@ -41,6 +41,7 @@ router.post(
 
 // Core CRUD Operations
 router.get('/', authenticateToken, ProjectsController.getAll);
+router.get('/:id/team-members', authenticateToken, ProjectsController.getTeamMembers);
 router.get('/:id', authenticateToken, ProjectsController.getById);
 router.post('/', authenticateToken, ProjectsController.create);
 router.put('/:id', authenticateToken, ProjectsController.update);

@@ -90,7 +90,7 @@ export class TemplateAnalyticsService {
     }
 
     // Log diagnostic info
-    const { pool } = await import('../database/connection');
+    const { pool } = await Promise.resolve().then(() => require());
     if (templateId) {
       const docCheck = await pool.query(
         `SELECT COUNT(*) as count, COUNT(CASE WHEN entity_counts != '{}'::jsonb THEN 1 END) as with_counts

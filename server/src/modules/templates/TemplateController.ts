@@ -495,7 +495,7 @@ export class TemplateController {
       const projectIds = projectsRes.rows.map((row) => row.project_id as string);
       
       if (projectIds.length > 0) {
-        const { default: DocumentPurposeService } = await import('../../services/documentPurposeService');
+        const { default: DocumentPurposeService } = await Promise.resolve().then(() => require());
         for (const projectId of projectIds) {
           await DocumentPurposeService.rebuildForProject(projectId);
         }
@@ -516,7 +516,7 @@ export class TemplateController {
   rebuildDocumentPurposes = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { projectId } = req.params;
-      const { default: DocumentPurposeService } = await import('../../services/documentPurposeService');
+      const { default: DocumentPurposeService } = await Promise.resolve().then(() => require());
       await DocumentPurposeService.rebuildForProject(projectId);
       res.json({ message: 'Document purposes rebuilt successfully for project', projectId });
     } catch (error) {
@@ -528,7 +528,7 @@ export class TemplateController {
     try {
       const { projectId } = req.body;
       if (projectId) {
-        const { default: DocumentPurposeService } = await import('../../services/documentPurposeService');
+        const { default: DocumentPurposeService } = await Promise.resolve().then(() => require());
         await DocumentPurposeService.rebuildForProject(projectId);
         
         const templatesRes = await pool.query(

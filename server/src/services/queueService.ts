@@ -335,7 +335,7 @@ export async function getQueueServiceDependencies(): Promise<QueueServiceDepende
 
 aiQueue.process("ai-generate", QUEUE_PREFETCH, async (job) => {
   logger.info(`[WORKER] AI generation worker ${WORKER_ID} picked up job: ${job.id}`)
-  const { AIGenerationJobService } = await import("./jobs/AIGenerationJobService")
+  const { AIGenerationJobService } = require("./jobs/AIGenerationJobService")
   const deps = await getQueueServiceDependencies()
   const actualJobId = (job.data as any)?.jobId || job.id.toString()
   logger.info(`[WORKER] Processing AI generation job with ID: ${actualJobId} using worker: ${WORKER_ID}`)
@@ -349,7 +349,7 @@ aiQueue.process("ai-generate", QUEUE_PREFETCH, async (job) => {
 logger.info(`[QUEUE] Registered ai-generate processor on aiQueue (Rabbit) with worker ID: ${WORKER_ID}`)
 
 aiQueue.process("save-inline-entities", QUEUE_PREFETCH, async (job) => {
-  const { SaveInlineEntitiesJobService } = await import("./jobs/SaveInlineEntitiesJobService")
+  const { SaveInlineEntitiesJobService } = require("./jobs/SaveInlineEntitiesJobService")
   const deps = await getQueueServiceDependencies()
   return await SaveInlineEntitiesJobService.processJob(job as any, {
     workerId: WORKER_ID,
@@ -361,41 +361,38 @@ aiQueue.process("save-inline-entities", QUEUE_PREFETCH, async (job) => {
 logger.info(`[QUEUE] Registered save-inline-entities processor on aiQueue (Rabbit) with worker ID: ${WORKER_ID}`)
 
 // Document convert
-import("./jobs/DocumentConversionJobService").then(({ DocumentConversionJobService }) => {
-  documentQueue.process("document-convert", QUEUE_PREFETCH, async (job) => {
-    const deps = await getQueueServiceDependencies()
-    return await DocumentConversionJobService.processJob(job as any, {
-      workerId: WORKER_ID,
-      updateJobStatus,
-      dependencies: deps,
-    }, deps)
-  })
+documentQueue.process("document-convert", QUEUE_PREFETCH, async (job) => {
+  const { DocumentConversionJobService } = require("./jobs/DocumentConversionJobService")
+  const deps = await getQueueServiceDependencies()
+  return await DocumentConversionJobService.processJob(job as any, {
+    workerId: WORKER_ID,
+    updateJobStatus,
+    dependencies: deps,
+  }, deps)
 })
 
 // Document upload
-import("./documentUploadService").then(({ processUploadedFile }) => {
-  documentUploadQueue.process("file-process", QUEUE_PREFETCH, async (job) => {
-    logger.info(`[WORKER] document-upload worker ${WORKER_ID} picked up job: ${job.id}`)
-    try {
-      return await processUploadedFile(job as any)
-    } catch (err) {
-      logger.error(err, "[WORKER] document-upload processing error")
-      throw err
-    }
-  })
-  logger.info(`[QUEUE] Registered document-upload processor on documentUploadQueue (Rabbit) with worker ID: ${WORKER_ID}`)
+documentUploadQueue.process("file-process", QUEUE_PREFETCH, async (job) => {
+  const { processUploadedFile } = require("./documentUploadService")
+  logger.info(`[WORKER] document-upload worker ${WORKER_ID} picked up job: ${job.id}`)
+  try {
+    return await processUploadedFile(job as any)
+  } catch (err) {
+    logger.error(err, "[WORKER] document-upload processing error")
+    throw err
+  }
 })
+logger.info(`[QUEUE] Registered document-upload processor on documentUploadQueue (Rabbit) with worker ID: ${WORKER_ID}`)
 
 // Baseline extraction
-import("./jobs/BaselineExtractionJobService").then(({ BaselineExtractionJobService }) => {
-  baselineQueue.process("baseline-extract", QUEUE_PREFETCH, async (job) => {
-    const deps = await getQueueServiceDependencies()
-    return await BaselineExtractionJobService.processJob(job as any, {
-      workerId: WORKER_ID,
-      updateJobStatus,
-      dependencies: deps,
-    }, deps)
-  })
+baselineQueue.process("baseline-extract", QUEUE_PREFETCH, async (job) => {
+  const { BaselineExtractionJobService } = require("./jobs/BaselineExtractionJobService")
+  const deps = await getQueueServiceDependencies()
+  return await BaselineExtractionJobService.processJob(job as any, {
+    workerId: WORKER_ID,
+    updateJobStatus,
+    dependencies: deps,
+  }, deps)
 })
 
 // Process Flow
@@ -403,7 +400,7 @@ processFlowQueue.process("process-flow", QUEUE_PREFETCH, async (job) => {
   const { jobId, userId, config } = job.data as any
   let dbPool = pool
   try {
-    const { getDatabasePool, connectDatabase } = await import("../database/connection")
+    const { getDatabasePool, connectDatabase } = require("../database/connection")
     if (!dbPool) {
       try {
         dbPool = getDatabasePool()
@@ -549,7 +546,7 @@ regenerationQueue.process("document-regeneration", QUEUE_PREFETCH, async (job) =
   try {
     await updateJobStatus(jobId, "processing", 10, WORKER_ID, "document-regeneration")
     logger.info(`Starting document regeneration job ${jobId} for document ${documentId}`)
-    const { DocumentRegenerationService } = await import("./documentRegenerationService")
+    const { DocumentRegenerationService } = require("./documentRegenerationService")
     await DocumentRegenerationService.executeRegenerationJob({ documentId, templateId, provider, model, versionType, temperature, userId, jobId })
     await updateJobStatus(jobId, "completed", 100, WORKER_ID, "document-regeneration")
     logger.info(`Document regeneration job completed: ${jobId}`)
@@ -571,7 +568,7 @@ regenerationQueue.on("failed", (job, err) => {
 // Confluence publishing
 confluenceQueue.process("publish-to-confluence", QUEUE_PREFETCH, async (job) => {
   try {
-    const { PublishToConfluenceJobService } = await import("./jobs/PublishToConfluenceJobService")
+    const { PublishToConfluenceJobService } = require("./jobs/PublishToConfluenceJobService")
     return await PublishToConfluenceJobService.processJob(job as any)
   } catch (error) {
     logger.error(error, `[PUBLISH-CONFLUENCE] Job failed: ${job.id}`)
@@ -592,7 +589,7 @@ qualityAuditQueue.process("quality-audit", QUEUE_PREFETCH, async (job) => {
   try {
     await updateJobStatus(jobId, "processing", 10, WORKER_ID, "quality-audit")
     logger.info(`[QUALITY-AUDIT-JOB] Starting quality audit job ${jobId} for document ${documentId}`)
-    const { qualityAuditService } = await import("./qualityAuditService")
+    const { qualityAuditService } = require("./qualityAuditService")
     const auditResult = await qualityAuditService.auditDocument(documentId, documentContent, documentType, projectContext, userId)
     await updateJobStatus(jobId, "completed", 100, WORKER_ID, "quality-audit")
     logger.info(`[QUALITY-AUDIT-JOB] Quality audit completed: ${jobId}`, { overallScore: (auditResult as any).overallScore, grade: (auditResult as any).overallGrade })
@@ -609,7 +606,7 @@ qualityAuditQueue.on("failed", (job, err) => logger.error(err, `Quality audit jo
 
 // Project Data Extraction parent
 extractionQueue.process("extract-project-data", QUEUE_PREFETCH, async (job) => {
-  const { ExtractionOrchestrationService } = await import("./jobs/ExtractionOrchestrationService")
+  const { ExtractionOrchestrationService } = require("./jobs/ExtractionOrchestrationService")
   const deps = await getQueueServiceDependencies()
   return await ExtractionOrchestrationService.processJob(job as any, { workerId: WORKER_ID, updateJobStatus }, deps)
 })
@@ -617,8 +614,8 @@ extractionQueue.process("extract-project-data", QUEUE_PREFETCH, async (job) => {
   // Child entity extractors - Register immediately using async IIFE
   if (process.env.NODE_ENV !== 'test') {
   ; (async () => {
-    const { extractSingleEntityType, saveSingleEntityType } = await import("./extraction/ExtractionOrchestrator")
-    const { initializeRegistry } = await import("./extraction/ExtractionRegistry")
+    const { extractSingleEntityType, saveSingleEntityType } = require("./extraction/ExtractionOrchestrator")
+    const { initializeRegistry } = require("./extraction/ExtractionRegistry")
     await initializeRegistry()
 
     const ENTITY_TYPES = [
@@ -716,8 +713,8 @@ extractionQueue.process("extract-project-data", QUEUE_PREFETCH, async (job) => {
 
 // Digital Twin Event Processing
 if (process.env.NODE_ENV !== 'test') {
-import("./digitalTwinEventService").then(({ processEvent }) => {
   digitalTwinEventQueue.process("process-event", QUEUE_PREFETCH, async (job) => {
+    const { processEvent } = require("./digitalTwinEventService")
     const { eventId } = job.data as { eventId: string }
     logger.info(`[WORKER] Digital Twin event worker ${WORKER_ID} processing event: ${eventId}`)
     try {
@@ -730,13 +727,12 @@ import("./digitalTwinEventService").then(({ processEvent }) => {
     }
   })
   logger.info(`[QUEUE] Registered process-event processor on digitalTwinEventQueue (Rabbit) with worker ID: ${WORKER_ID}`)
-})
 }
 
 // Digital Twin Document Trigger Processing
 if (process.env.NODE_ENV !== 'test') {
-import("./digitalTwinTriggerService").then(({ processDocumentTrigger }) => {
   digitalTwinTriggerQueue.process("process-trigger", QUEUE_PREFETCH, async (job) => {
+    const { processDocumentTrigger } = require("./digitalTwinTriggerService")
     const { triggerId } = job.data as { triggerId: string }
     logger.info(`[WORKER] Digital Twin trigger worker ${WORKER_ID} processing trigger: ${triggerId}`)
     try {
@@ -749,7 +745,6 @@ import("./digitalTwinTriggerService").then(({ processDocumentTrigger }) => {
     }
   })
   logger.info(`[QUEUE] Registered process-trigger processor on digitalTwinTriggerQueue (Rabbit) with worker ID: ${WORKER_ID}`)
-})
 }
 
   // GKG sync processing

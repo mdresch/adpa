@@ -26,7 +26,7 @@ async function getProjectDocuments(
 ): Promise<ExtractionDocument[]> {
   try {
     if (!pool) {
-      const { connectDatabase } = await import('../../database/connection')
+      const { connectDatabase } = await Promise.resolve().then(() => require())
       await connectDatabase()
     }
 

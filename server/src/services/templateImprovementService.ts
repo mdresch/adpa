@@ -1063,7 +1063,7 @@ Focus on the most impactful improvements. Be specific and actionable.`
       )
 
       if (recentDocsResult.rows.length > 0) {
-        const { getQueueService } = await import('./queueService')
+        const { getQueueService } = await Promise.resolve().then(() => require())
         const { v4: uuidv4 } = await import('uuid')
 
         // Get project context for each document

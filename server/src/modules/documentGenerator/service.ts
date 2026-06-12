@@ -767,7 +767,7 @@ export class DocumentGeneratorService {
       }
 
       // Check if project has Confluence mapping
-      const { getByProjectId } = await import('../../database/projectIntegrations')
+      const { getByProjectId } = await Promise.resolve().then(() => require())
       const mapping = await getByProjectId(projectId)
 
       if (!mapping || !mapping.confluence_space_key) {
@@ -790,7 +790,7 @@ export class DocumentGeneratorService {
       const title = `${templateName} - ${timestamp}`
 
       // Enqueue Confluence publishing job
-      const { addJob } = await import('../../services/queueService')
+      const { addJob } = await Promise.resolve().then(() => require())
       const jobId = await addJob(
         'publish-to-confluence',
         {
@@ -851,7 +851,7 @@ export class DocumentGeneratorService {
         }
       }
 
-      const { enqueueEntityPersistence } = await import('../../services/jobs/enqueueEntityPersistence')
+      const { enqueueEntityPersistence } = await Promise.resolve().then(() => require())
       const jobId = await enqueueEntityPersistence({
         projectId,
         userId: user.id,

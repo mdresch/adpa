@@ -4,7 +4,7 @@ describe('tracing configuration helpers', () => {
   })
 
   it('uses an explicit OTLP endpoint when provided', async () => {
-    const { buildLangfuseOtlpEndpoint } = await import('../tracing')
+    const { buildLangfuseOtlpEndpoint } = await Promise.resolve().then(() => require())
 
     expect(buildLangfuseOtlpEndpoint({
       langfuseOtlpEndpoint: 'https://otel.example.com/v1/traces',
@@ -13,7 +13,7 @@ describe('tracing configuration helpers', () => {
   })
 
   it('derives the OTLP endpoint from LANGFUSE_BASE_URL', async () => {
-    const { buildLangfuseOtlpEndpoint } = await import('../tracing')
+    const { buildLangfuseOtlpEndpoint } = await Promise.resolve().then(() => require())
 
     expect(buildLangfuseOtlpEndpoint({
       langfuseBaseUrl: 'https://langfuse.example.com/'
@@ -21,7 +21,7 @@ describe('tracing configuration helpers', () => {
   })
 
   it('uses an explicit auth header override when provided', async () => {
-    const { buildLangfuseOtlpAuthHeader } = await import('../tracing')
+    const { buildLangfuseOtlpAuthHeader } = await Promise.resolve().then(() => require())
 
     expect(buildLangfuseOtlpAuthHeader({
       otlpAuthHeader: 'Bearer custom-token',
@@ -31,7 +31,7 @@ describe('tracing configuration helpers', () => {
   })
 
   it('builds a basic auth header from Langfuse public and secret keys', async () => {
-    const { buildLangfuseOtlpAuthHeader } = await import('../tracing')
+    const { buildLangfuseOtlpAuthHeader } = await Promise.resolve().then(() => require())
 
     expect(buildLangfuseOtlpAuthHeader({
       publicKey: 'pk-test',
