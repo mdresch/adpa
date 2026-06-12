@@ -34,6 +34,7 @@ import {
   DollarSign,
   Users,
   FileText,
+  FlameKindling,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import {
@@ -178,23 +179,23 @@ export default function RisksPage() {
   const { isConnected } = useWebSocket()
 
   const [activeTab, setActiveTab] = useState<"registry" | "mitigation" | "summary" | "compliance">("registry")
-  
+
   // Registry data
   const [risks, setRisks] = useState<Risk[]>([])
   const [loadingRisks, setLoadingRisks] = useState(false)
-  
+
   // Mitigation report data
   const [mitigationPlans, setMitigationPlans] = useState<MitigationPlan[]>([])
   const [loadingMitigation, setLoadingMitigation] = useState(false)
-  
+
   // Summary data
   const [summary, setSummary] = useState<RiskSummary[]>([])
   const [loadingSummary, setLoadingSummary] = useState(false)
-  
+
   // Compliance data
   const [compliance, setCompliance] = useState<ReviewCompliance[]>([])
   const [loadingCompliance, setLoadingCompliance] = useState(false)
-  
+
   // Filters
   const [projectFilter, setProjectFilter] = useState<string>("")
   const [programFilter, setProgramFilter] = useState<string>("")
@@ -207,20 +208,20 @@ export default function RisksPage() {
     try {
       setLoadingRisks(true)
       const params = new URLSearchParams()
-      
+
       if (projectFilter) params.append('project_id', projectFilter)
       if (programFilter) params.append('program_id', programFilter)
       if (riskLevelFilter) params.append('risk_level', riskLevelFilter)
       if (statusFilter) params.append('status', statusFilter)
-      
+
       const response = await fetch(`${getApiUrl('/risks/registry')}?${params.toString()}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         }
       })
-      
+
       if (!response.ok) throw new Error('Failed to fetch risk registry')
-      
+
       const data = await response.json()
       setRisks(data.data || [])
     } catch (error) {
@@ -236,20 +237,20 @@ export default function RisksPage() {
     try {
       setLoadingMitigation(true)
       const params = new URLSearchParams()
-      
+
       if (projectFilter) params.append('project_id', projectFilter)
       if (programFilter) params.append('program_id', programFilter)
       if (statusFilter) params.append('status', statusFilter)
       if (overdueOnly) params.append('overdue_only', 'true')
-      
+
       const response = await fetch(`${getApiUrl('/risks/report')}?${params.toString()}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         }
       })
-      
+
       if (!response.ok) throw new Error('Failed to fetch mitigation report')
-      
+
       const data = await response.json()
       setMitigationPlans(data.data || [])
     } catch (error) {
@@ -265,17 +266,17 @@ export default function RisksPage() {
     try {
       setLoadingSummary(true)
       const params = new URLSearchParams()
-      
+
       if (programFilter) params.append('program_id', programFilter)
-      
+
       const response = await fetch(`${getApiUrl('/risks/summary')}?${params.toString()}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         }
       })
-      
+
       if (!response.ok) throw new Error('Failed to fetch risk summary')
-      
+
       const data = await response.json()
       setSummary(data.data || [])
     } catch (error) {
@@ -291,17 +292,17 @@ export default function RisksPage() {
     try {
       setLoadingCompliance(true)
       const params = new URLSearchParams()
-      
+
       if (programFilter) params.append('program_id', programFilter)
-      
+
       const response = await fetch(`${getApiUrl('/risks/review-compliance')}?${params.toString()}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         }
       })
-      
+
       if (!response.ok) throw new Error('Failed to fetch review compliance')
-      
+
       const data = await response.json()
       setCompliance(data.data || [])
     } catch (error) {
@@ -585,8 +586,8 @@ export default function RisksPage() {
                       <div className="space-y-4">
                         {risks.map((risk) => {
                           const severity = risk.probability === 'high' && risk.impact === 'high' ? 'critical' :
-                                          risk.probability === 'high' || risk.impact === 'high' ? 'high' :
-                                          risk.probability === 'medium' && risk.impact === 'medium' ? 'medium' : 'low'
+                            risk.probability === 'high' || risk.impact === 'high' ? 'high' :
+                              risk.probability === 'medium' && risk.impact === 'medium' ? 'medium' : 'low'
                           return (
                             <Card key={risk.id} className="hover:shadow-md transition-shadow">
                               <CardContent className="pt-6">
@@ -858,8 +859,8 @@ export default function RisksPage() {
                                 <Badge
                                   variant={
                                     c.compliance_status === 'compliant' ? 'default' :
-                                    c.compliance_status === 'mostly-compliant' ? 'secondary' :
-                                    c.compliance_status === 'overdue' ? 'destructive' : 'outline'
+                                      c.compliance_status === 'mostly-compliant' ? 'secondary' :
+                                        c.compliance_status === 'overdue' ? 'destructive' : 'outline'
                                   }
                                 >
                                   {c.compliance_status.replace('-', ' ')}
@@ -889,10 +890,9 @@ export default function RisksPage() {
                               </div>
                               <div className="mt-4 w-full bg-gray-200 rounded-full h-4">
                                 <div
-                                  className={`h-4 rounded-full transition-all ${
-                                    c.compliance_percentage >= 80 ? 'bg-green-500' :
-                                    c.compliance_percentage >= 60 ? 'bg-yellow-500' : 'bg-red-500'
-                                  }`}
+                                  className={`h-4 rounded-full transition-all ${c.compliance_percentage >= 80 ? 'bg-green-500' :
+                                      c.compliance_percentage >= 60 ? 'bg-yellow-500' : 'bg-red-500'
+                                    }`}
                                   style={{ width: `${c.compliance_percentage}%` }}
                                 />
                               </div>

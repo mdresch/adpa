@@ -400,8 +400,8 @@ async function connectDatabaseInternal(): Promise<void> {
           poolConfig.prepareThreshold = 0
         }
 
-        if (isDirectConnection) {
-          // Try to resolve to IPv4 for direct connections (Postgres port 5432)
+        if (isDirectConnection && isLocal) {
+          // Try to resolve to IPv4 for local direct connections to avoid ::1 vs 127.0.0.1 issues
           try {
             console.log(`🔧 Resolving direct connection ${dbUrl.hostname} via dns.lookup...`)
             const { address } = await dnsLookup(dbUrl.hostname, { family: 4 })
@@ -426,10 +426,10 @@ async function connectDatabaseInternal(): Promise<void> {
             // Fallback: use connection string directly in the catch-all below
           }
         } else {
-          // Transaction pooler (e.g. Supabase :6543 + pgbouncer): use the URL hostname as-is.
-          // Do NOT substitute IPv4 into `host` while also passing `connectionString` — node-postgres
-          // can end up with a broken TLS handshake (SELF_SIGNED_CERT_IN_CHAIN) on PaaS like Render.
-          console.log(`🔧 Pooler (${dbUrl.hostname}:${dbUrl.port}): using connection string as-is (no IPv4 substitution)`)
+          // Transaction pooler or Cloud DB (e.g. Supabase, Render, Neon): use the URL as-is.
+          // Do NOT substitute IPv4 into `host` — node-postgres will fail SNI routing (SELF_SIGNED_CERT_IN_CHAIN)
+          // or hang indefinitely on PaaS like Render.
+          console.log(`🔧 Cloud DB (${dbUrl.hostname}:${dbUrl.port}): using connection string as-is (no IPv4 substitution)`)
           poolConfig.connectionString = stripLibpqSslQueryParams(dbUrl)
           poolConfig.ssl = buildSslConfig(currentDbUrl)
         }
