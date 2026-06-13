@@ -23,7 +23,7 @@
       ],
       "overlapGuard": false,
       "spec": "docs/superpowers/specs/2026-06-08-rag-context-scoping-design.md",
-      "testPathPattern": "documentGenerationService"
+      "testPathPattern": "(documentGeneration|AIGenerationJobService|project-documents)"
     }
   ]
 }

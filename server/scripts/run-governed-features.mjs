@@ -61,10 +61,16 @@ for (const feature of selected) {
       'jest',
       '--config',
       'jest.config.unit.js',
-      `--testPathPattern=${pattern}`,
+      `--testPathPattern="${pattern}"`,
       '--no-coverage',
+      '--forceExit'
     ],
-    { cwd: serverRoot, stdio: 'inherit', shell: true }
+    { 
+      cwd: serverRoot, 
+      stdio: 'inherit', 
+      shell: true,
+      env: { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS || ''} --experimental-vm-modules`.trim() }
+    }
   )
 
   if (result.status !== 0) {

@@ -28,6 +28,7 @@ import { documentConversionService } from '../../services/documentConversionServ
 import { DocxService, type GenerateDocxOptions } from '../../services/docxService';
 import { pool } from '../../database/connection';
 import { storageArchivalService } from '../../services/storageArchivalService';
+import { approvalWorkflowService } from '../../services/approvalWorkflowService';
 import { buildCombinedDocxExport } from './bulkDocxExport';
 import { entityExtractionService } from '../../services/entityExtractionService';
 import { enrichDocumentExtractionQuality } from '../analysis/entityExtractionQuality';
@@ -173,7 +174,7 @@ export class DocumentsController {
             enrichDocumentExtractionQuality(document);
 
             await cache.set(cacheKey, document, 1800);
-            if (req.user?.id) trackActivity.viewDocument(req.user.id, document.id, document.project_id);
+            if (req.user?.id) trackActivity.viewDocument(req.user.id, document.id, document.project_id, document.name);
             
             await AuditService.log({
                 table: 'documents', rowId: document.id, action: 'read',
@@ -217,10 +218,24 @@ export class DocumentsController {
             });
 
             const document = result.rows[0];
+
+            // If generation_metadata contains author_id, it is an auto-generated document needing approval
+            if (generation_metadata?.author_id) {
+                // Fire and forget so we don't block the API response
+                approvalWorkflowService.registerDocumentApproval(
+                    projectId,
+                    document.id,
+                    name,
+                    generation_metadata
+                ).catch(e => log.error('Failed async approval registration:', e));
+            }
+
             await DocumentsController.documentRepository.saveVersion({
                 document_id: document.id, version: 1, semantic_version: '1.0.0', content: contentString,
                 author_id: req.user?.id || '', change_type: 'initial', change_description: 'Initial version', generation_metadata
             });
+            
+            if (req.user?.id) trackActivity.createDocument(req.user.id, document.id, document.project_id, document.name);
 
             setImmediate(() => DocumentsController.triggerSideEffects(document, req));
 
@@ -265,12 +280,16 @@ export class DocumentsController {
 
             const result = await DocumentsController.documentRepository.update(id, updateData);
             await cache.del(`document:${id}`);
-            if (req.user?.id) trackActivity.editDocument(req.user.id, id, doc.project_id);
+            if (req.user?.id) trackActivity.editDocument(req.user.id, id, doc.project_id, updateData.name || doc.name);
 
             await AuditService.log({
                 table: 'documents', rowId: id, action: 'update', oldValues: doc, newValues: result.rows[0],
                 ctx: { userId: req.user?.id, ip: req.ip, requestId: (req as any).requestId }
             });
+
+            if (content) {
+                setImmediate(() => DocumentsController.triggerSideEffects(result.rows[0], req, 'document-update'));
+            }
 
             res.json({ message: "Document updated successfully", document: result.rows[0] });
         } catch (error) {
@@ -295,6 +314,7 @@ export class DocumentsController {
 
             await DocumentsController.documentRepository.softDelete(id, req.user?.id || '');
             await cache.del(`document:${id}`);
+            if (req.user?.id) trackActivity.deleteDocument(req.user.id, id, doc.project_id, doc.name);
 
             // Clean up entity extractions on document deletion
             setImmediate(() => {
@@ -668,16 +688,16 @@ export class DocumentsController {
         return p.owner_id === user.id || (Array.isArray(p.team_members) && p.team_members.includes(user.id));
     }
 
-    private static async triggerSideEffects(document: any, req: Request) {
+    private static async triggerSideEffects(document: any, req: Request, triggeredBy: string = 'document-create') {
         const log = childLogger({ requestId: (req as any).requestId });
         try {
-            const { enqueueEntityPersistence } = await Promise.resolve().then(() => require());
+            const { enqueueEntityPersistence } = await Promise.resolve().then(() => require('../../services/jobs/enqueueEntityPersistence'));
             await enqueueEntityPersistence({
                 projectId: document.project_id,
                 userId: req.user?.id ?? null,
                 documentId: document.id,
                 content: document.content,
-                triggeredBy: 'document-create',
+                triggeredBy,
                 autoTriggered: true,
             });
         } catch (e) { log.error('Side effects entity persistence fail', e); }

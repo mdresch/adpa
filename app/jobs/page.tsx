@@ -224,26 +224,33 @@ export default function JobMonitorPage() {
         limit: 50,
         allUsers: canViewAllJobs,
       })
-      const mappedJobs = (response.jobs ?? []).map((job: any) => ({
-        ...job,
-        name: job.name ?? "",
-        priority: job.priority ?? "medium",
-        queue: job.queue ?? "",
-        logs: job.logs ?? [],
-        error: job.error || job.error_message || job.metadata?.error_message || null,
-        projectName: job.metadata?.project_name || job.projectName,
-        documentName: job.metadata?.document_name || job.documentName,
-        metadata: {
-          ...(job.metadata || {}),
-          currentStep: job.metadata?.currentStep,
-          compressionProgress: job.metadata?.compressionProgress,
-          currentDocument: job.metadata?.currentDocument,
-          providerAssignments: job.metadata?.providerAssignments || [],
-          llmProgressSteps: job.metadata?.llmProgressSteps || [],
-          llmRequestCount: job.metadata?.llmRequestCount ?? 0,
-        },
-      }))
-      setJobs(mappedJobs)
+      setJobs((prevJobs) => {
+        return (response.jobs ?? []).map((job: any) => {
+          const prevJob = prevJobs.find((j) => j.id === job.id)
+          const prevLlmInsights = prevJob?.metadata?.llmInsights
+
+          return {
+            ...job,
+            name: job.name ?? "",
+            priority: job.priority ?? "medium",
+            queue: job.queue ?? "",
+            logs: job.logs ?? [],
+            error: job.error || job.error_message || job.metadata?.error_message || null,
+            projectName: job.metadata?.project_name || job.projectName,
+            documentName: job.metadata?.document_name || job.documentName,
+            metadata: {
+              ...(job.metadata || {}),
+              currentStep: job.metadata?.currentStep,
+              compressionProgress: job.metadata?.compressionProgress,
+              currentDocument: job.metadata?.currentDocument,
+              providerAssignments: job.metadata?.providerAssignments || [],
+              llmProgressSteps: job.metadata?.llmProgressSteps || [],
+              llmRequestCount: job.metadata?.llmRequestCount ?? 0,
+              ...(prevLlmInsights ? { llmInsights: prevLlmInsights } : {}),
+            },
+          }
+        })
+      })
     } catch (error) {
       console.error("Failed to fetch jobs:", error)
       const status = (error as { status?: number })?.status

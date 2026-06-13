@@ -851,7 +851,7 @@ export class DocumentGeneratorService {
         }
       }
 
-      const { enqueueEntityPersistence } = await Promise.resolve().then(() => require())
+      const { enqueueEntityPersistence } = await Promise.resolve().then(() => require('../../services/jobs/enqueueEntityPersistence'))
       const jobId = await enqueueEntityPersistence({
         projectId,
         userId: user.id,

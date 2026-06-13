@@ -3,6 +3,8 @@
  *
  * These tests verify that the document creation, fetching, and management
  * features work correctly in the project detail page.
+ * 
+ * REQ-DOCGEN-001: Verify frontend-side document generation pipelines and dialog structures.
  */
 
 import { apiClient } from '../../lib/api';

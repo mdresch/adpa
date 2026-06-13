@@ -326,7 +326,7 @@ class DocumentGenerationService {
   private async ensureSourceDocumentsIngested(documentIds: string[]): Promise<void> {
     if (!documentIds.length || !process.env.VOYAGE_API_KEY) return
 
-    const { ragService } = await Promise.resolve().then(() => require())
+    const { ragService } = await Promise.resolve().then(() => require('./ragService'))
     for (const documentId of documentIds) {
       try {
         const result = await ragService.ingestDocument(documentId)
@@ -791,7 +791,7 @@ class DocumentGenerationService {
       logger.info(`[AGENT] Final Phase: Parsing H8 entities and queueing save-inline-entities job...`)
       if (request.jobId) await updateJobStatus(request.jobId, "processing", 85)
 
-      const { InlineEntityParserService } = await Promise.resolve().then(() => require())
+      const { InlineEntityParserService } = await Promise.resolve().then(() => require('./inlineEntityParserService'))
       const parseResult = await InlineEntityParserService.parseAndProcess({
         projectId: request.projectId,
         userId: request.userId,

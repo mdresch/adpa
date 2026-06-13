@@ -42,6 +42,9 @@ export class AnalyticsRepository {
         activity_type as action,
         description as details,
         created_at as time,
+        entity_id,
+        entity_type,
+        metadata,
         CASE 
           WHEN activity_category = 'success' THEN 'emerald'
           WHEN activity_category = 'info' THEN 'blue'
@@ -79,6 +82,9 @@ export class AnalyticsRepository {
         activity_type as action,
         description as details,
         created_at as time,
+        entity_id,
+        entity_type,
+        metadata,
         CASE 
           WHEN activity_category = 'success' THEN 'emerald'
           WHEN activity_category = 'info' THEN 'blue'

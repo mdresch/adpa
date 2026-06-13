@@ -167,13 +167,25 @@ afterEach(async () => {
 })
 
 afterAll(async () => {
-  if (shouldSkipDatabaseBootstrap) {
-    return
-  }
-
   if (testPool) {
     setInternalPool(null as any)
     await testPool.end()
     console.log(`[TEST-SETUP] Test pool closed.`)
+  }
+
+  try {
+    const { shutdownQueues } = await import('../services/queueService')
+    await shutdownQueues()
+    console.log(`[TEST-SETUP] RabbitMQ queues closed.`)
+  } catch (err) {
+    console.error(`[TEST-SETUP] Failed to shutdown RabbitMQ queues`, err)
+  }
+
+  try {
+    const { disconnectRedis } = await import('../utils/redis')
+    await disconnectRedis()
+    console.log("[TEST-SETUP] Redis disconnected.")
+  } catch (err) {
+    console.error("[TEST-SETUP] Failed to disconnect Redis", err)
   }
 })

@@ -60,8 +60,9 @@ export interface AIGenerationJobData extends BaseJobData {
   projectName?: string
   started_at?: string
   timestamp?: number
-  documentIds?: string[]
   use_context?: boolean
+  generation_metadata?: Record<string, any>
+  documentIds?: string[]
   include_integrations?: boolean
   custom_context?: Record<string, unknown>
 }

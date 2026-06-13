@@ -147,7 +147,7 @@ export class AIGenerationJobService {
         
         // Phase 6: Multi-Level Summary Register
         if (createdDocumentId && result.content) {
-          const { DocumentSummarizationService } = await Promise.resolve().then(() => require())
+          const { DocumentSummarizationService } = await Promise.resolve().then(() => require('../documentSummarizationService'))
           
           const summaries = result.summaries
           const hasSummaries = summaries && (Array.isArray(summaries) ? summaries.length > 0 : Object.keys(summaries).length > 0)
@@ -263,7 +263,7 @@ export class AIGenerationJobService {
       })
 
       // Lazy import to avoid circular dependency at module load time
-      const { documentGenerationService } = await Promise.resolve().then(() => require())
+      const { documentGenerationService } = await Promise.resolve().then(() => require('../documentGenerationService'))
 
       const docId = uuidv4()
 
@@ -522,7 +522,7 @@ export class AIGenerationJobService {
 
       const processingTimeSec = (Math.max(processingTimeMs, 0) / 1000).toFixed(2)
 
-      const generationMetadata = AIGenerationJobService.buildGenerationMetadata({
+      let generationMetadata = AIGenerationJobService.buildGenerationMetadata({
         result,
         provider: provider || 'openai',
         model: model || 'unknown',
@@ -547,6 +547,14 @@ export class AIGenerationJobService {
         entityExtractionQuality: result?.entityExtractionQuality,
         appliedContextEntities: result?.appliedContextEntities,
       })
+
+      // Merge any user-provided generation metadata
+      if (jobData.generation_metadata) {
+        generationMetadata = {
+          ...generationMetadata,
+          ...jobData.generation_metadata,
+        }
+      }
 
       const insertResult = await db.query(
         `
@@ -587,9 +595,37 @@ export class AIGenerationJobService {
       if (insertResult.rows.length > 0) {
         createdDocumentId = insertResult.rows[0].id
 
+        if (generationMetadata.compliance_status === 'PENDING_HUMAN_APPROVAL' || generationMetadata.compliance_status === 'PENDING_APPROVAL') {
+          try {
+            const approvalRequestId = uuidv4()
+            await db.query(
+              `INSERT INTO approval_requests (id, request_type, change_request_id, status, priority, severity, created_by)
+               VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+              [approvalRequestId, 'document_generation', createdDocumentId, 'pending', 'medium', 'low', userId || null]
+            )
+            
+            await db.query(`UPDATE documents SET status = 'pending_approval' WHERE id = $1`, [createdDocumentId])
+
+            const { notificationService } = await Promise.resolve().then(() => require('../notificationService'))
+            if (notificationService.sendNotification) {
+              await notificationService.sendNotification({
+                notification_type: 'APPROVAL_REQUEST',
+                reference_type: 'document',
+                reference_id: createdDocumentId,
+                project_id: projectIdForDoc,
+                recipients: [{ user_id: userId || undefined, destination: 'in_app', channel: 'in_app' }],
+                variables: { documentName: docName, approvalRequestId }
+              })
+            }
+            log.info(`[AI-JOB] Created approval request ${approvalRequestId} and sent notification for document ${createdDocumentId}`)
+          } catch (approvalErr) {
+            log.error(`[AI-JOB] Failed to create approval request for ${createdDocumentId}`, approvalErr)
+          }
+        }
+
         if (projectIdForDoc && docContent.trim()) {
           try {
-            const { enqueueEntityPersistence } = await Promise.resolve().then(() => require())
+            const { enqueueEntityPersistence } = await Promise.resolve().then(() => require('./enqueueEntityPersistence'))
             const entityJobId = await enqueueEntityPersistence({
               projectId: projectIdForDoc,
               userId: userId ?? null,
@@ -619,7 +655,7 @@ export class AIGenerationJobService {
           }, deps);
           
           try {
-            const { TemplateAnalyticsService } = await Promise.resolve().then(() => require())
+            const { TemplateAnalyticsService } = await Promise.resolve().then(() => require('../templateAnalyticsService'))
             setImmediate(async () => {
               try {
                 await TemplateAnalyticsService.updateTemplateEntityProfile(template_id)
@@ -634,7 +670,7 @@ export class AIGenerationJobService {
           setImmediate(async () => {
             if (!process.env.VOYAGE_API_KEY) return
             try {
-              const { ragService } = await Promise.resolve().then(() => require())
+              const { ragService } = await Promise.resolve().then(() => require('../ragService'))
               const ingestIds = new Set<string>([createdDocumentId])
               if (documentIds?.length) {
                 documentIds.forEach((id) => ingestIds.add(id))
@@ -670,7 +706,7 @@ export class AIGenerationJobService {
   }
 
   private static async calculateQualityMetrics(content: string, metadata: any): Promise<any> {
-    const { analyzeDocumentQuality } = await Promise.resolve().then(() => require())
+    const { analyzeDocumentQuality } = await Promise.resolve().then(() => require('../../utils/documentMetadata'))
     const safeContent = String(content || '')
     const tempMetadata = {
       ...metadata,
@@ -801,7 +837,7 @@ export class AIGenerationJobService {
     const projectId = (jobData.projectId || jobData.variables?.project_id) as string
     if (!projectId) return
     try {
-      const { baselineService } = await Promise.resolve().then(() => require())
+      const { baselineService } = await Promise.resolve().then(() => require('../baselineService'))
       const docContent = (typeof result.content === 'string' ? result.content : JSON.stringify(result.content || result)) || ''
       const drifts = await baselineService.validateDocumentAgainstBaseline(projectId, documentId, docContent, jobData.name || 'Document')
       if (drifts.length > 0) {

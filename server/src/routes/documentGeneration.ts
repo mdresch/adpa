@@ -109,6 +109,8 @@ const generateDocumentSchema = Joi.object({
   provider: Joi.string().required(),
   model: Joi.string().optional(),
   temperature: Joi.number().min(0).max(2).default(0.7),
+  max_tokens: Joi.number().optional(),
+  generation_metadata: Joi.object().optional().unknown(true),
   includeStakeholders: Joi.boolean().default(true),
   includeDocuments: Joi.boolean().default(true),
   customContext: Joi.string().max(5000).optional(),
@@ -203,6 +205,7 @@ router.post("/generate",
           description: description?.trim() || undefined,
           use_context: true,
           template_name: undefined as string | undefined,
+          generation_metadata: req.body.generation_metadata,
         }
 
         // Resolve template name for the job record (non-fatal if it fails)

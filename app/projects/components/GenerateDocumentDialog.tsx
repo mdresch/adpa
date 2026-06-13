@@ -48,9 +48,13 @@ export function GenerateDocumentDialog({
   onFormChange,
   onSubmit,
   generating,
-  progress
+  progress,
+  users = [],
+  aiProviders = []
 }: GenerateDocumentDialogProps) {
   const selectedTemplate = templates.find(t => t.id === form.template_id)
+  const selectedProviderData = aiProviders.find(p => p.name === form.provider || p.id === form.provider)
+  const models = selectedProviderData?.models || []
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -179,6 +183,118 @@ export function GenerateDocumentDialog({
                   )}
                 </div>
               )}
+            </div>
+
+            {/* AI Provider & Model Selection */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="provider-select" className="text-sm font-semibold">
+                  AI Provider
+                </Label>
+                <select
+                  id="provider-select"
+                  title="Select an AI Provider"
+                  className="flex h-10 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-background px-3 py-2 text-sm mt-2 focus:border-blue-500 transition-colors"
+                  value={form.provider}
+                  onChange={(e) => {
+                    const newProvider = e.target.value;
+                    const providerData = aiProviders.find(p => p.name === newProvider || p.id === newProvider);
+                    const defaultModel = providerData?.default_model || (providerData?.models && providerData.models.length > 0 ? providerData.models[0] : "");
+                    onFormChange({ ...form, provider: newProvider, model: defaultModel });
+                  }}
+                >
+                  <option value="">Select a Provider</option>
+                  {aiProviders.map((provider) => (
+                    <option key={provider.id || provider.name} value={provider.name || provider.id}>
+                      {provider.name || provider.id}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <Label htmlFor="model-select" className="text-sm font-semibold">
+                  Model
+                </Label>
+                <select
+                  id="model-select"
+                  title="Select a Model"
+                  className="flex h-10 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-background px-3 py-2 text-sm mt-2 focus:border-blue-500 transition-colors disabled:opacity-50"
+                  value={form.model}
+                  onChange={(e) => onFormChange({ ...form, model: e.target.value })}
+                  disabled={!form.provider || models.length === 0}
+                >
+                  <option value="">Select a Model</option>
+                  {models.map((model: string) => (
+                    <option key={model} value={model}>
+                      {model}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Document Metadata Section */}
+            <div className="space-y-4 rounded-lg border border-border bg-card p-4">
+              <h4 className="text-sm font-semibold text-foreground border-b pb-2">Document Metadata</h4>
+              
+              <div className="grid grid-cols-2 gap-4">
+                {/* Framework */}
+                <div>
+                  <Label className="text-xs text-muted-foreground">Framework</Label>
+                  <div className="mt-1 text-sm font-medium">
+                    {form.metadata?.framework || project?.framework || "Default"}
+                  </div>
+                </div>
+
+                {/* Due Date */}
+                <div>
+                  <Label htmlFor="due-date" className="text-xs text-muted-foreground">Approval Due Date</Label>
+                  <Input
+                    id="due-date"
+                    type="date"
+                    className="h-8 mt-1 text-sm"
+                    value={form.metadata?.due_date || ""}
+                    onChange={(e) => onFormChange({ 
+                      ...form, 
+                      metadata: { ...form.metadata, due_date: e.target.value } 
+                    })}
+                  />
+                </div>
+
+                {/* Author */}
+                <div>
+                  <Label className="text-xs text-muted-foreground">Author</Label>
+                  <div className="mt-1 text-sm font-medium truncate" title={users.find(u => u.id === form.metadata?.author_id)?.name || "Current User"}>
+                    {users.find(u => u.id === form.metadata?.author_id)?.name || "Current User"}
+                  </div>
+                </div>
+
+                {/* Reviewers */}
+                <div>
+                  <Label htmlFor="reviewers" className="text-xs text-muted-foreground">Reviewer (Override)</Label>
+                  <select
+                    id="reviewers"
+                    className="flex h-8 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-background px-2 py-1 text-sm mt-1 focus:border-blue-500 transition-colors"
+                    value={form.metadata?.reviewers?.[0] || ""}
+                    onChange={(e) => {
+                      const selectedId = e.target.value;
+                      onFormChange({
+                        ...form,
+                        metadata: { 
+                          ...form.metadata, 
+                          reviewers: selectedId ? [selectedId] : [] 
+                        }
+                      })
+                    }}
+                  >
+                    <option value={form.metadata?.author_id || ""}>Default (Author)</option>
+                    {users.filter(u => u.id !== form.metadata?.author_id).map(u => (
+                      <option key={u.id} value={u.id}>{u.name} ({u.email})</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
             </div>
 
             {/* Generation Prompt */}

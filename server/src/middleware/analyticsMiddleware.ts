@@ -84,7 +84,7 @@ export const trackActivity = {
   /**
    * Track document view
    */
-  viewDocument: async (userId: string, documentId: string, projectId: string, readTimeSeconds?: number) => {
+  viewDocument: async (userId: string, documentId: string, projectId: string, title?: string, readTimeSeconds?: number) => {
     // Track in user activity logs
     const activityPromise = AnalyticsTrackingService.trackUserActivity({
       userId,
@@ -92,7 +92,8 @@ export const trackActivity = {
       activityCategory: 'document',
       entityType: 'document',
       entityId: documentId,
-      description: 'Viewed document',
+      description: title ? `Viewed document: ${title}` : 'Viewed document',
+      metadata: { projectId },
     });
 
     // Track in document analytics
@@ -110,14 +111,15 @@ export const trackActivity = {
   /**
    * Track document edit
    */
-  editDocument: async (userId: string, documentId: string, projectId: string) => {
+  editDocument: async (userId: string, documentId: string, projectId: string, title?: string) => {
     const activityPromise = AnalyticsTrackingService.trackUserActivity({
       userId,
       activityType: 'edit_document',
       activityCategory: 'document',
       entityType: 'document',
       entityId: documentId,
-      description: 'Edited document',
+      description: title ? `Edited document: ${title}` : 'Edited document',
+      metadata: { projectId },
     });
 
     const analyticsPromise = AnalyticsTrackingService.trackDocumentAnalytics({
@@ -133,15 +135,30 @@ export const trackActivity = {
   /**
    * Track document creation
    */
-  createDocument: (userId: string, documentId: string, projectId: string, metadata?: any): Promise<any> => {
+  createDocument: (userId: string, documentId: string, projectId: string, title?: string, metadata?: any): Promise<any> => {
     return AnalyticsTrackingService.trackUserActivity({
       userId,
       activityType: 'create_document',
       activityCategory: 'document',
       entityType: 'document',
       entityId: documentId,
-      description: 'Created document',
-      metadata,
+      description: title ? `Created document: ${title}` : 'Created document',
+      metadata: { ...metadata, projectId },
+    });
+  },
+
+  /**
+   * Track document deletion
+   */
+  deleteDocument: (userId: string, documentId: string, projectId: string, title?: string): Promise<any> => {
+    return AnalyticsTrackingService.trackUserActivity({
+      userId,
+      activityType: 'delete_document',
+      activityCategory: 'document',
+      entityType: 'document',
+      entityId: documentId,
+      description: title ? `Deleted document: ${title}` : 'Deleted document',
+      metadata: { projectId },
     });
   },
 
@@ -237,28 +254,28 @@ export const trackActivity = {
   /**
    * Track template view
    */
-  viewTemplate: (userId: string, templateId: string): Promise<any> => {
+  viewTemplate: (userId: string, templateId: string, title?: string): Promise<any> => {
     return AnalyticsTrackingService.trackUserActivity({
       userId,
       activityType: 'view_template',
       activityCategory: 'template',
       entityType: 'template',
       entityId: templateId,
-      description: 'Viewed template',
+      description: title ? `Viewed template: ${title}` : 'Viewed template',
     });
   },
 
   /**
    * Track template creation
    */
-  createTemplate: (userId: string, templateId: string, metadata?: any): Promise<any> => {
+  createTemplate: (userId: string, templateId: string, title?: string, metadata?: any): Promise<any> => {
     return AnalyticsTrackingService.trackUserActivity({
       userId,
       activityType: 'create_template',
       activityCategory: 'template',
       entityType: 'template',
       entityId: templateId,
-      description: 'Created template',
+      description: title ? `Created template: ${title}` : 'Created template',
       metadata,
     });
   },
@@ -266,14 +283,14 @@ export const trackActivity = {
   /**
    * Track template update
    */
-  updateTemplate: (userId: string, templateId: string, metadata?: any): Promise<any> => {
+  updateTemplate: (userId: string, templateId: string, title?: string, metadata?: any): Promise<any> => {
     return AnalyticsTrackingService.trackUserActivity({
       userId,
       activityType: 'update_template',
       activityCategory: 'template',
       entityType: 'template',
       entityId: templateId,
-      description: 'Updated template',
+      description: title ? `Updated template: ${title}` : 'Updated template',
       metadata,
     });
   },
@@ -281,14 +298,14 @@ export const trackActivity = {
   /**
    * Track template deletion
    */
-  deleteTemplate: (userId: string, templateId: string): Promise<any> => {
+  deleteTemplate: (userId: string, templateId: string, title?: string): Promise<any> => {
     return AnalyticsTrackingService.trackUserActivity({
       userId,
       activityType: 'delete_template',
       activityCategory: 'template',
       entityType: 'template',
       entityId: templateId,
-      description: 'Deleted template',
+      description: title ? `Deleted template: ${title}` : 'Deleted template',
     });
   },
 };

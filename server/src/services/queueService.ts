@@ -22,13 +22,15 @@ const QUEUE_PREFETCH = parseInt(process.env.QUEUE_PREFETCH || "4", 10)
 
 const connection = createRabbitConnection(RABBIT_URL)
 
+const allQueues: RabbitQueueAdapter[] = []
+
 function createRabbitQueue(
   queueName: string,
   defaultAttempts: number,
   defaultBackoffMs: number,
   options?: { maxLength?: number; dlqMaxLength?: number }
 ) {
-  return new RabbitQueueAdapter({
+  const queue = new RabbitQueueAdapter({
     connection,
     queueName,
     prefetch: QUEUE_PREFETCH,
@@ -36,6 +38,8 @@ function createRabbitQueue(
     defaultBackoffMs,
     ...options,
   })
+  allQueues.push(queue)
+  return queue
 }
 
 export const aiQueue = createRabbitQueue("ai-processing", 3, 2000)
@@ -845,7 +849,7 @@ if (process.env.NODE_ENV !== 'test') {
       })
 
       logger.info(`[QUEUE] Registered GKG sync processors on gkgSyncQueue (Rabbit)`)
-      console.log("✅ GKG sync processors registered for queue: gkg-sync")
+      console.log("âœ… GKG sync processors registered for queue: gkg-sync")
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       logger.error({ error: msg }, "[GKG] Failed to register GKG sync processors")
@@ -882,7 +886,7 @@ if (process.env.NODE_ENV !== 'test') {
       })
 
       logger.info(`[QUEUE] Registered semantic processing processors on semanticProcessingQueue (Rabbit)`)
-      console.log("✅ Semantic processing processors registered for queue: semantic-processing")
+      console.log("âœ… Semantic processing processors registered for queue: semantic-processing")
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       logger.error({ error: msg }, "[SEMANTIC] Failed to register semantic processing processors")
@@ -893,3 +897,16 @@ if (process.env.NODE_ENV !== 'test') {
 
 // Export Redis client for legacy consumers
 export { redisClient }
+
+export async function shutdownQueues(): Promise<void> {
+  try {
+    for (const queue of allQueues) {
+      try {
+        await queue.close()
+      } catch (e) {}
+    }
+    await connection.close();
+  } catch (err) {
+    console.error('Failed to close rabbit connection', err);
+  }
+}

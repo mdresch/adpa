@@ -37,6 +37,12 @@ export interface DocumentGenerationForm {
   max_context_tokens: number
   context_priority: string
   custom_context: string
+  metadata?: {
+    framework?: string
+    author_id?: string
+    reviewers?: string[]
+    due_date?: string
+  }
 }
 
 /**
@@ -132,11 +138,13 @@ export interface GenerateDocumentDialogProps {
   onOpenChange: (open: boolean) => void
   project: Project | null
   templates: Template[]
+  users?: any[]
   form: DocumentGenerationForm
   onFormChange: (form: DocumentGenerationForm) => void
   onSubmit: (e: React.FormEvent) => void
   generating: boolean
   progress: GenerationProgress
+  aiProviders?: any[]
 }
 
 /**

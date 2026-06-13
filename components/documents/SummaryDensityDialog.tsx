@@ -33,6 +33,7 @@ interface SummaryDensityDialogProps {
   documentId: string;
   documentTitle: string;
   fullRawContent: string;
+  contextSnapshots?: Record<string, { summary?: string; timestamp?: string | null }>;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -42,53 +43,65 @@ export const SummaryDensityDialog: React.FC<SummaryDensityDialogProps> = ({
   documentId,
   documentTitle,
   fullRawContent,
+  contextSnapshots,
   open,
   onOpenChange
 }) => {
-  const [loading, setLoading] = useState<boolean>(false);
   const [snapshots, setSnapshots] = useState<Record<string, MilestoneData> | null>(null);
   const [densityLevel, setDensityLevel] = useState<number>(60); // Default middle ground core view
   const [activeText, setActiveText] = useState<string>('');
 
   useEffect(() => {
     if (!open) return;
+    
+    // Inject the full 100% text as the anchor point of our scale map
+    const mappedSnapshots: Record<string, MilestoneData> = {
+      p100: { summary: fullRawContent, timestamp: new Date().toISOString() }
+    };
 
-    async function fetchSnapshots() {
-      try {
-        setLoading(true);
-        const res = await fetch(`/api/projects/${projectId}/documents/${documentId}/versions`);
-        if (!res.ok) throw new Error('Failed to fetch versions');
-        const data: SummaryResponse = await res.json();
-        
-        // Inject the full 100% text as the anchor point of our scale map
-        setSnapshots({
-          ...data.milestones,
-          p100: { summary: fullRawContent, timestamp: new Date().toISOString() }
-        });
-      } catch (err) {
-        console.error('Failed loading multi-scale snapshots map:', err);
-        // Fallback to just the 100% version if API fails
-        setSnapshots({
-          p100: { summary: fullRawContent, timestamp: new Date().toISOString() }
-        } as any);
-      } finally {
-        setLoading(false);
-      }
+    // If the document already has pre-computed context snapshots from generation, merge them
+    if (contextSnapshots) {
+      if (contextSnapshots.p80?.summary) mappedSnapshots.p80 = { summary: contextSnapshots.p80.summary, timestamp: contextSnapshots.p80.timestamp || new Date().toISOString() };
+      if (contextSnapshots.p60?.summary) mappedSnapshots.p60 = { summary: contextSnapshots.p60.summary, timestamp: contextSnapshots.p60.timestamp || new Date().toISOString() };
+      if (contextSnapshots.p40?.summary) mappedSnapshots.p40 = { summary: contextSnapshots.p40.summary, timestamp: contextSnapshots.p40.timestamp || new Date().toISOString() };
+      if (contextSnapshots.p20?.summary) mappedSnapshots.p20 = { summary: contextSnapshots.p20.summary, timestamp: contextSnapshots.p20.timestamp || new Date().toISOString() };
     }
-    fetchSnapshots();
-  }, [projectId, documentId, fullRawContent, open]);
+
+    setSnapshots(mappedSnapshots);
+  }, [fullRawContent, contextSnapshots, open]);
+
+  // Simulated extraction logic to provide visual feedback if API snapshots fail
+  const getSimulatedSummary = (text: string, level: number) => {
+    if (!text || level >= 100) return text || '';
+    // Split into sentences roughly
+    const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+    if (sentences.length <= 1) return text;
+    
+    // Calculate how many sentences to keep based on density percentage
+    const targetCount = Math.max(1, Math.ceil(sentences.length * (level / 100)));
+    return sentences.slice(0, targetCount).join(' ');
+  };
 
   // Handle textual layout transitions whenever the density slider increments
   useEffect(() => {
     if (!snapshots) return;
 
     const level = densityLevel;
-    if (level <= 20) setActiveText(snapshots.p20?.summary || snapshots.p100?.summary || '');
-    else if (level <= 40) setActiveText(snapshots.p40?.summary || snapshots.p100?.summary || '');
-    else if (level <= 60) setActiveText(snapshots.p60?.summary || snapshots.p100?.summary || '');
-    else if (level <= 80) setActiveText(snapshots.p80?.summary || snapshots.p100?.summary || '');
-    else setActiveText(snapshots.p100?.summary || '');
-  }, [densityLevel, snapshots]);
+    
+    // Try to extract from the snapshot payload
+    let snapshotText = '';
+    if (level <= 20) snapshotText = snapshots.p20?.summary || '';
+    else if (level <= 40) snapshotText = snapshots.p40?.summary || '';
+    else if (level <= 60) snapshotText = snapshots.p60?.summary || '';
+    else if (level <= 80) snapshotText = snapshots.p80?.summary || '';
+    
+    // If the specific snapshot doesn't exist (e.g. API failed), simulate the compression locally
+    if (snapshotText && snapshotText !== fullRawContent) {
+      setActiveText(snapshotText);
+    } else {
+      setActiveText(getSimulatedSummary(fullRawContent, level));
+    }
+  }, [densityLevel, snapshots, fullRawContent]);
 
   const getCompressionLabel = (val: number) => {
     if (val <= 20) return { label: '20% Token-Optimized Capsule', variant: 'warning' as const };
@@ -121,18 +134,12 @@ export const SummaryDensityDialog: React.FC<SummaryDensityDialogProps> = ({
           </div>
         </DialogHeader>
 
-        {loading ? (
-          <div className="flex h-64 items-center justify-center space-x-2 text-zinc-400">
-            <RefreshCw className="h-5 w-5 animate-spin" />
-            <span>Compiling multi-scale summaries payload...</span>
-          </div>
-        ) : (
-          <>
-            {/* Control Module: The Context Compaction Slider */}
+        <>
+          {/* Control Module: The Context Compaction Slider */}
             <div className="space-y-4 bg-zinc-900/50 p-6 border border-zinc-800 rounded-xl shadow-inner">
               <div className="flex justify-between items-center text-xs text-zinc-400 font-mono">
                 <span className="flex items-center gap-1.5"><Layers className="h-4 w-4" /> Information Density State</span>
-                <span className="text-emerald-400 font-bold text-sm">{densityLevel}% Compression</span>
+                <span className="text-emerald-400 font-extrabold text-sm animate-in fade-in tabular-nums">{densityLevel}% Compression</span>
               </div>
               
               <Slider
@@ -154,30 +161,34 @@ export const SummaryDensityDialog: React.FC<SummaryDensityDialogProps> = ({
             </div>
 
             {/* Active Output Render Block */}
-            <div className="flex flex-col space-y-3 flex-1 overflow-hidden">
+            <div className="flex flex-col space-y-3 flex-1">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-mono text-zinc-500 flex items-center gap-1.5">
                   <Eye className="h-3.5 w-3.5" /> 
                   Runtime Output Content Payload:
                 </span>
-                {snapshots?.[`p${densityLevel}`]?.timestamp && (
-                  <span className="text-[10px] text-zinc-600 font-mono">
-                    Generated: {new Date(snapshots[`p${densityLevel}`].timestamp).toLocaleString()}
+                <div className="flex items-center gap-4">
+                  <span className="text-[10px] text-zinc-400 font-mono font-semibold tabular-nums">
+                    {activeText.length.toLocaleString()} characters
                   </span>
-                )}
+                  {snapshots?.[`p${densityLevel}`]?.timestamp && (
+                    <span className="text-[10px] text-zinc-600 font-mono">
+                      Generated: {new Date(snapshots[`p${densityLevel}`].timestamp).toLocaleString()}
+                    </span>
+                  )}
+                </div>
               </div>
               
-              <div className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden relative group">
-                <ScrollArea className="h-full max-h-[500px]">
-                  <div className="p-8 font-sans text-sm leading-relaxed whitespace-pre-wrap select-text selection:bg-emerald-500/30 text-zinc-300">
-                    {activeText || 'No text segment parsed for this scale barrier.'}
-                  </div>
-                </ScrollArea>
-                <div className="absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-zinc-900 to-transparent pointer-events-none" />
+              <div className="relative group w-full">
+                <textarea
+                  readOnly
+                  value={activeText}
+                  placeholder="No text segment parsed for this scale barrier."
+                  className="h-64 w-full resize-none overflow-y-auto border border-zinc-800 bg-zinc-900/50 p-6 font-sans text-sm leading-relaxed text-zinc-300 scrollbar-thin scrollbar-thumb-zinc-700 focus-visible:ring-0 focus-visible:outline-none rounded-xl"
+                />
               </div>
             </div>
           </>
-        )}
       </DialogContent>
     </Dialog>
   );

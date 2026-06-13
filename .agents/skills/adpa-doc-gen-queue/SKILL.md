@@ -21,6 +21,28 @@ The agentic document generation pipeline (plan → parallel section drafting →
 
 This was the exact failure mode that caused this rule to be written.
 
+## API Contract & Validation Schema
+
+The backend Express route (`POST /api/document-generation/generate`) enforces a strict validation schema via Joi. The schema defaults to stripping or rejecting unknown fields (`stripUnknown: false` effectively, meaning unlisted fields cause validation errors).
+
+**Required Payload Structure:**
+```typescript
+{
+  projectId: string; // Required (UUID)
+  name: string;      // Required
+  userPrompt: string; // Required (NOT "prompt")
+  provider: string;  // Required
+  templateId?: string; // Optional (NOT "template_id")
+  model?: string;
+  temperature?: number;
+  max_tokens?: number; // Permitted explicitly
+  generation_metadata?: object; // Permitted explicitly for additional job tracing context
+  async?: boolean; // Must be true for background queueing
+}
+```
+
+*Note: Frontend clients must use exactly these camelCase keys (e.g. `templateId`, not `template_id`) to avoid `400 Validation failed` errors before the job even reaches the queue.*
+
 ## Architecture (Do Not Change Without Good Reason)
 
 ```
@@ -104,6 +126,28 @@ return res.status(202).json({ jobId, async: true, message: '...' })
 The frontend modal subscribes to `job:status`, `job:completed`, `job:failed` events filtered by `jobId`. The WebSocket context (`contexts/WebSocketContext.tsx`) already broadcasts these globally. The component cleans up listeners on resolve/reject — no leaks.
 
 Do **not** poll `GET /api/jobs/:id` from the frontend for document generation progress. WebSocket events are the source of truth.
+
+## Avoiding Job Service Crash (The "id argument must be a string" error)
+
+Job services (like `AIGenerationJobService` and `BaselineExtractionJobService`) often need to lazy-load other complex services to break circular dependencies. 
+**NEVER** use dynamic string variables in `require()` calls inside job processors.
+
+**INCORRECT (will crash Webpack/Node):**
+```typescript
+const serviceName = '../documentGenerationService'
+const { documentGenerationService } = require(serviceName) // Crash: id argument must be of type string
+```
+
+**CORRECT:**
+```typescript
+const { documentGenerationService } = require('../documentGenerationService')
+```
+
+## Testing Document Generation Queues
+
+When writing Jest tests for governed features involving queues:
+1. Ensure `shutdownQueues()` from `queueService` and `disconnectRedis()` from `utils/redis` are executed in the global `afterAll` hook (`setup.ts`).
+2. Always pass `--forceExit` to `npm run test:features` to forcefully exit the worker. RabbitMQ heartbeats and underlying socket connections often outlive the Jest test completion threshold despite being correctly instructed to close.
 
 ## If RabbitMQ Is Down
 

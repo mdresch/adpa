@@ -2,11 +2,11 @@
 
 import React, { useState, useEffect } from "react"
 import { DocumentsTab } from "../DocumentsTab"
-import { apiClient, Document } from "@/lib/api"
+import { apiClient, Document, Project } from "@/lib/api"
 import { toast } from '@/lib/notify'
 import { useWebSocket } from "@/contexts/WebSocketContext"
 
-export default function DocumentsTabWrapper({ projectId }: { projectId: string }) {
+export default function DocumentsTabWrapper({ projectId, project }: { projectId: string, project?: Project }) {
   const [documents, setDocuments] = useState<Document[]>([])
   const [documentsLoading, setDocumentsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
@@ -169,6 +169,7 @@ export default function DocumentsTabWrapper({ projectId }: { projectId: string }
   return (
     <DocumentsTab
       projectId={projectId}
+      project={project}
       documentStats={documentStats}
       searchTerm={searchTerm}
       setSearchTerm={setSearchTerm}

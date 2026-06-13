@@ -72,7 +72,7 @@ export default function ProjectWorkspaceOrchestrator({ projectId }: Props) {
   const renderActiveTabContent = () => {
     switch (activeTab) {
       case "overview": return <TabOverview project={project} projectId={projectId} />
-      case "documents": return <TabDocuments projectId={projectId} />
+      case "documents": return <TabDocuments projectId={projectId} project={project} />
       case "stakeholders": return <TabStakeholders projectId={projectId} />
       case "context": return <TabContext projectId={projectId} />
       case "extraction": return <TabExtraction projectId={projectId} documents={[]} />

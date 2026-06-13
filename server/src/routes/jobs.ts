@@ -1023,8 +1023,8 @@ router.post(
       
       // Create new job with same data
       const { v4: uuidv4 } = await import('uuid')
-      const { addJob } = await Promise.resolve().then(() => require())
-      const { validateJobType } = await Promise.resolve().then(() => require())
+      const { addJob } = await Promise.resolve().then(() => require('../services/queueService'))
+      const { validateJobType } = await Promise.resolve().then(() => require('../services/jobs/validation'))
       
       const newJobId = uuidv4()
       const jobData = typeof job.data === 'string' ? JSON.parse(job.data) : job.data
@@ -1102,7 +1102,7 @@ router.post(
     
     try {
       const { v4: uuidv4 } = await import('uuid')
-      const { addJob } = await Promise.resolve().then(() => require())
+      const { addJob } = await Promise.resolve().then(() => require('../services/queueService'))
       
       // Get all failed jobs for user
       const jobsResult = await pool.query(
@@ -1267,7 +1267,7 @@ router.post(
         baselineQueue,
         regenerationQueue,
         extractionQueue
-      } = await Promise.resolve().then(() => require())
+      } = await Promise.resolve().then(() => require('../services/queueService'))
       
       const queueMap: Record<string, any> = {
         'ai-processing': aiQueue,

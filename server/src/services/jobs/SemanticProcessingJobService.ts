@@ -120,7 +120,7 @@ export async function processSemanticDocument(
     }
 
     if (!skipGkgSync) {
-      const { isNeo4jConfigured } = await Promise.resolve().then(() => require());
+      const { isNeo4jConfigured } = await Promise.resolve().then(() => require('../neo4jService'));
 
       let docState = await semanticProcessingService.getDocumentStatus(documentId);
       if (!docState) {
@@ -382,7 +382,7 @@ async function runLightweightExtraction(
     }
 
     // Use AI service to extract basic entities
-    const { aiService } = await Promise.resolve().then(() => require());
+    const { aiService } = await Promise.resolve().then(() => require('../aiService'));
     
     const prompt = `Extract key project management entities from this document.
 Return a JSON object with entity counts by type.
@@ -455,7 +455,7 @@ async function runGkgSync(
   const startTime = Date.now();
 
   try {
-    const { isNeo4jConfigured, getNeo4jDriver, getNeo4jDatabase } = await Promise.resolve().then(() => require());
+    const { isNeo4jConfigured, getNeo4jDriver, getNeo4jDatabase } = await Promise.resolve().then(() => require('../neo4jService'));
     
     if (!isNeo4jConfigured()) {
       return {
@@ -469,7 +469,7 @@ async function runGkgSync(
     const driver = getNeo4jDriver();
     
     // Use the existing syncProject function
-    const { runSyncProject } = await Promise.resolve().then(() => require());
+    const { runSyncProject } = await Promise.resolve().then(() => require('../../scripts/sync_project'));
     
     const result = await runSyncProject(pool, driver, getNeo4jDatabase(), projectId);
 
