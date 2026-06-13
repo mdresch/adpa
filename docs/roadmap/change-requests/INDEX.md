@@ -19,6 +19,7 @@
 | **CR-2026-003** | Hierarchical Project Mgmt | $600K | 8 months | 200-400% | ✅ Complete | ⭐ High |
 | **CR-2027-001** | Resource Allocation Intelligence | $200K | 5 months | 150-300% | ✅ Complete | Medium |
 | **CR-2026-005** | Supabase Realtime Migration | $50K | 6 weeks | N/A (Tech Debt) | ✅ Complete | Medium (Tech) |
+| **CMP-2026-CR-003** | ExpressRoute & Cryptographic Storage | - | Deployed | - | ✅ Approved | ⭐⭐ CRITICAL |
 
 **Total:** $1.66M investment | Expected annual value: $1.5M-$4.5M + $42K-$75K (RAG) + tech efficiency
 
@@ -742,6 +743,29 @@ Migrate from Socket.io-only architecture to hybrid approach using Supabase Realt
 
 ---
 
+### CMP-2026-CR-003: ExpressRoute Connectivity & Cryptographically Split Multi-Jurisdictional Storage ✅ APPROVED
+
+**File:** `CMP-2026-CR-003_ExpressRoute_MultiJurisdictional_Storage.md`
+
+**Executive Summary:**
+Provision dual geographically isolated 10 Gbps ExpressRoute circuits bypassing public internet for zero-latency telemetry ingestion, and implement a 2-of-3 threshold secret sharing scheme for key fragmentation across EU West (Frankfurt), US East (Virginia), and APAC South (Singapore) regions.
+
+**Key Benefits:**
+- Zero risk exposure from the public internet for ingestion pipeline
+- Ingestion latency guaranteed below 100ms SLA limit via QoS priority (CoS 5 / DSCP EF)
+- Complete GDPR, HIPAA, and data sovereignty compliance via threshold cryptography
+- Localized running hash chains via PostgreSQL to prevent tamper propagation
+
+**Investment:** N/A (Approved by Change Control Board)  
+**Timeline:** Executed/Deployed June 5, 2026  
+**Risk:** Low (network-level routing and threshold mathematics)  
+**Priority:** ⭐⭐ CRITICAL
+
+**Type:** Security & Infrastructure  
+**Category:** Private Peering, Threshold Cryptography, Data Sovereignty
+
+---
+
 ## 🔍 Review Process
 
 ### For Executive Sponsors
@@ -811,6 +835,7 @@ Migrate from Socket.io-only architecture to hybrid approach using Supabase Realt
 | CR-2026-002 | ☐ Pending | ☐ Approve ☐ Defer ☐ Reject | $ | |
 | CR-2026-003 | ☐ Pending | ☐ Approve ☐ Defer ☐ Reject | $ | |
 | CR-2027-001 | ☐ Pending | ☐ Approve ☐ Defer ☐ Reject | $ | |
+| CMP-2026-CR-003 | ✅ Approved | ☑ Approve | $0 | 2026-06-05 |
 
 **Total Approved:** $0 / $1.6M requested
 
