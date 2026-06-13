@@ -39,7 +39,7 @@ module.exports = {
     '**/__tests__/integration/documentGeneration.e2e.test.ts',
     '**/__tests__/integration/project-documents.test.ts',
   ],
-  // No globalSetup / setupFilesAfterEnv — these tests use mocks only
+  setupFilesAfterEnv: ['<rootDir>/src/__tests__/unitSetup.ts'],
   testTimeout: 30000,
   moduleNameMapper: {
     '^@/lib/(.*)$': '<rootDir>/../lib/$1',
