@@ -17,6 +17,7 @@
     "test:features": "node scripts/run-governed-features.mjs",
     "test:rag-features": "node scripts/run-governed-features.mjs rag",
     "test:doc-gen": "node scripts/run-governed-features.mjs doc-gen",
+    "test:codacy": "npm run test:features -- codacy",
     "test:coverage:features": "jest --config jest.config.coverage.unit.js --testPathPattern=modules/rag --collectCoverageFrom=src/modules/rag/**/*.ts --maxWorkers=2",
     "test:coverage:unit": "jest --config jest.config.coverage.unit.js --maxWorkers=50%",
     "report:coverage:unit": "node scripts/report-unit-coverage.mjs",

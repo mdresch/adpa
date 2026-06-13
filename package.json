@@ -22,6 +22,7 @@
     "test:mcp-sentry": "tsx scripts/test-mcp-sentry.ts",
     "rovo": "tsx scripts/rovo.ts",
     "gemini-cli": "tsx scripts/gemini-cli.ts",
+    "codacy": "tsx scripts/codacy.ts",
     "sync:prod": "npx tsx scripts/sync-supabase.ts",
     "sync:watch": "npx tsx scripts/sync-scheduler.ts",
     "test:gemini-langsmith": "tsx scripts/test-gemini-langsmith.ts",

@@ -34,6 +34,16 @@
       "spec": "docs/superpowers/specs/2026-06-13-test-teardown-guard-design.md",
       "testModuleDir": "test-teardown-guard",
       "testPathPattern": "modules/test-teardown-guard"
+    },
+    {
+      "id": "codacy",
+      "description": "ADPA Codacy CLI wrapper & testing integration",
+      "skills": [
+        "adpa-codacy"
+      ],
+      "spec": "docs/superpowers/specs/2026-06-13-codacy-integration-design.md",
+      "testModuleDir": "codacy",
+      "testPathPattern": "modules/codacy"
     }
   ]
 }
