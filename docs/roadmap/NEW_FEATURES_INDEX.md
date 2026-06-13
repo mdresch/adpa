@@ -169,6 +169,15 @@ PMI Compliance: 38% → 85% (certification-ready)
 
 ---
 
+## 📋 Wishlist & Future Enhancements
+
+12. **Off-Peak Autonomous Workload Wishlist**
+    - File: [WISHLIST.md](./future-enhancements/WISHLIST.md)
+    - Status: 📋 Wishlist (Future Enhancement)
+    - Value: Timezone-aware off-peak scheduled regeneration, template regression simulation, multi-region database sync, drift analysis.
+
+---
+
 ## 📊 Analysis & Planning Documents
 
 9. **PMBOK 8 Coverage Analysis**
