@@ -70,8 +70,17 @@ apiservice.WithEnvironment("Governance__ApprovalsEnforced", "false");
 // 4. Application Tier (Root Express Backend)
 // ---------------------------------------------------------------------------
 
+// Resolve Aspire OTLP/HTTP endpoint for local tracing (injected by Aspire dashboard).
+// AddExecutable resources do not get OTEL vars auto-injected (unlike AddProject),
+// so we forward DOTNET_DASHBOARD_OTLP_HTTP_ENDPOINT_URL explicitly.
+var otlpHttpEndpoint = builder.Configuration["DOTNET_DASHBOARD_OTLP_HTTP_ENDPOINT_URL"]
+    ?? "http://localhost:18889"; // Aspire default OTLP/HTTP port
+
 var backend = builder.AddExecutable("adpa-backend", "pnpm", "../../server", "run", "dev")
-    .WithHttpEndpoint(env: "PORT", port: 5000, name: "http");
+    .WithHttpEndpoint(env: "PORT", port: 5000, name: "http")
+    .WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", otlpHttpEndpoint)
+    .WithEnvironment("OTEL_SERVICE_NAME", "adpa-backend")
+    .WithEnvironment("TRACING_ENABLED", "true");
 
 // ---------------------------------------------------------------------------
 // 5. Experience Tier (Management Interface)
@@ -93,6 +102,8 @@ var researcher = builder.AddExecutable("adpa-frontend", "pnpm", "../../", "run",
     .WithEnvironment("BACKEND_URL", backend.GetEndpoint("http"))
     .WithEnvironment("NEXT_PUBLIC_API_URL", backend.GetEndpoint("http"))
     .WithEnvironment("ORCHESTRATOR_URL", apiservice.GetEndpoint("http"))
-    .WithEnvironment("NEXT_PUBLIC_ORCHESTRATOR_URL", apiservice.GetEndpoint("http"));
+    .WithEnvironment("NEXT_PUBLIC_ORCHESTRATOR_URL", apiservice.GetEndpoint("http"))
+    .WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", otlpHttpEndpoint)
+    .WithEnvironment("OTEL_SERVICE_NAME", "adpa-frontend");
 
 builder.Build().Run();

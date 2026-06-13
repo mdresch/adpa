@@ -79,12 +79,22 @@ export function buildLangfuseOtlpAuthHeader(options: {
   return undefined
 }
 
+// Resolve the OTLP endpoint:
+// 1. Langfuse cloud endpoint (when ENABLE_LANGFUSE_TRACING=true)
+// 2. Custom OTLP_ENDPOINT env var (manual override)
+// 3. Standard OTEL_EXPORTER_OTLP_ENDPOINT (auto-injected by Aspire for managed executables)
+// 4. Default localhost:4318 (standard OTLP HTTP port)
 const OTLP_ENDPOINT = ENABLE_LANGFUSE_OTLP
   ? buildLangfuseOtlpEndpoint({
       langfuseOtlpEndpoint: process.env.LANGFUSE_OTLP_ENDPOINT,
       langfuseBaseUrl: LANGFUSE_BASE_URL,
     })
-  : (process.env.OTLP_ENDPOINT || 'http://localhost:4318/v1/traces')
+  : (
+      process.env.OTLP_ENDPOINT ||
+      (process.env.OTEL_EXPORTER_OTLP_ENDPOINT
+        ? `${process.env.OTEL_EXPORTER_OTLP_ENDPOINT.replace(/\/+$/, '')}/v1/traces`
+        : 'http://localhost:4318/v1/traces')
+    )
 
 const SERVICE_NAME = process.env.SERVICE_NAME || 'adpa-backend'
 const SERVICE_VERSION = process.env.npm_package_version || process.env.SERVICE_VERSION || '1.0.0'
