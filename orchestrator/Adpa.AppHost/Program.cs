@@ -72,9 +72,12 @@ apiservice.WithEnvironment("Governance__ApprovalsEnforced", "false");
 
 // Resolve Aspire OTLP/HTTP endpoint for local tracing (injected by Aspire dashboard).
 // AddExecutable resources do not get OTEL vars auto-injected (unlike AddProject),
-// so we forward DOTNET_DASHBOARD_OTLP_HTTP_ENDPOINT_URL explicitly.
-var otlpHttpEndpoint = builder.Configuration["DOTNET_DASHBOARD_OTLP_HTTP_ENDPOINT_URL"]
-    ?? "http://localhost:18889"; // Aspire default OTLP/HTTP port
+// so we forward the dashboard OTLP/HTTP endpoint explicitly.
+// Key from launchSettings.json: ASPIRE_DASHBOARD_OTLP_HTTP_ENDPOINT_URL (HTTP/protobuf port 21335)
+var otlpHttpEndpoint =
+    builder.Configuration["ASPIRE_DASHBOARD_OTLP_HTTP_ENDPOINT_URL"]   // HTTP/protobuf (Node.js exporter)
+    ?? builder.Configuration["DOTNET_DASHBOARD_OTLP_ENDPOINT_URL"]      // gRPC fallback
+    ?? "http://localhost:21335"; // Aspire default OTLP/HTTP port
 
 var backend = builder.AddExecutable("adpa-backend", "pnpm", "../../server", "run", "dev")
     .WithHttpEndpoint(env: "PORT", port: 5000, name: "http")

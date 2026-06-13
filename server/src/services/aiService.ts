@@ -9,6 +9,7 @@ import { generateText, streamText } from "ai"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import * as dotenv from 'dotenv'
 import path from 'path'
+import { isTracingEnabled as isTracingEnabledFromConfig } from '../tracing'
 
 // Load environment variables early
 dotenv.config({ path: path.join(process.cwd(), '.env') })
@@ -94,10 +95,12 @@ const LOCAL_FALLBACK_PROVIDER = 'ollama'
 // Get pool at query time to ensure database is ready
 const getPool = () => getDatabasePoolSafe()
 
-// Import langfuse for tracing (optional, falls back gracefully)
+// Import langfuse for tracing (optional, falls back gracefully).
+// isTracingEnabled defaults to the config-level check from tracing.ts so that
+// experimental_telemetry is enabled for Aspire/OTLP even without Langfuse.
 let langfuse: any = null
 let isNativeLangfuseEnabled = () => false
-let isTracingEnabled = () => false
+let isTracingEnabled = isTracingEnabledFromConfig  // default: OTLP/Aspire-aware
 let tracedGenerateText = async (params: any) => {
   const { model, messages, prompt, temperature, maxOutputTokens } = params
   if (messages) {
@@ -121,11 +124,15 @@ try {
   const langfuseModule = runtimeRequire('../utils/langfuse')
   langfuse = langfuseModule.langfuse
   isNativeLangfuseEnabled = langfuseModule.isNativeLangfuseEnabled
-  isTracingEnabled = langfuseModule.isTracingEnabled
+  // Only override isTracingEnabled with Langfuse's version if Langfuse native tracing is active.
+  // Otherwise keep the config-level isTracingEnabled (which handles OTLP/Aspire).
+  if (langfuseModule.isNativeLangfuseEnabled()) {
+    isTracingEnabled = langfuseModule.isTracingEnabled
+  }
   tracedGenerateText = langfuseModule.tracedGenerateText
 } catch (e) {
   // Langfuse optional - continue without it
-  logger.debug('[AI-SERVICE] Langfuse not available, tracing disabled')
+  logger.debug('[AI-SERVICE] Langfuse not available, using OTLP/Aspire tracing config')
 }
 
 class AIService {
