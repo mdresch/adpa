@@ -141,8 +141,10 @@ To maximize the utilization of off-peak compute rates and clean grid periods, th
 *   **Trigger Events:**
     *   *Change Request Approval:* When a Change Request receives official approval from the Change Control Board (CCB), it updates the target baselines.
     *   *IP/Patent Advancements:* When the drift detection engine flags a novel technical approach that is verified as patentable, it registers the advancement in the technical asset directory.
-*   **Off-Peak Batch Scheduling:** Upon detecting a trigger event, the queue manager scans for all dependent documents (e.g., Communications Management Plans, Risk Registers, Technical Architecture Plans) and schedules them for regeneration. The tasks are automatically queued to execute exclusively during the local regional off-peak window (22:00 – 06:00 local time).
+*   **Traceability-Driven Dependency Resolution:** The dependency resolution engine uses the system's active **Traceability & Lineage Graph** (which tracks semantic links between requirements, templates, registries, and generated artifacts) to dynamically construct the cascading workload. If a parent baseline is altered, the system traces the graph to identify and flag all child documents requiring updates, guaranteeing complete semantic alignment across the project portfolio.
+*   **Off-Peak Batch Scheduling:** Upon detecting a trigger event, the queue manager scans for all dependent documents identified via the Traceability Graph and schedules them for regeneration. The tasks are automatically queued to execute exclusively during the local regional off-peak window (22:00 – 06:00 local time).
 *   **Cascading Review Gate:** To ensure governance compliance, regenerated documents are not automatically published. Instead, they are placed in `PENDING_HUMAN_APPROVAL` status, and the system triggers a cascading approval workflow. Stakeholders and Project Managers are notified and can review the clean diffs and sign off on updates when they log in the following morning.
+
 
 ######## policy_compliance: {"policy_name": "Multi-Region Cryptographic Splitting", "compliance_status": "compliant"}
 
