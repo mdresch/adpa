@@ -88,6 +88,23 @@ To safeguard user privacy and prevent data coercion or single-region systemic br
 | **Region B: US West (Oregon)** | Anonymized User Preference Hashes + Key Fragment Beta | Absolute encrypted field blocks; cannot reproduce matching user profiles alone. | Manages secondary failover computations; cannot unilaterally decrypt the audit trail database. |
 | **Region C: APAC Southeast (Sydney)** | Cryptographic Block Verification Chains + Key Fragment Gamma | Immutable hash blocks; requires explicit consensus to initialize key reconstruction keys. | Controls edge ingestion channels for regional endpoints; isolated from accessing raw Western data profiles. |
 
+##### 5.6.3 Localized Off-Peak Workload Orchestration (Temporal Shifting)
+To minimize energy cost volatility and ease regional grid congestion, delay-tolerant processes (e.g., background document compliance auditing, PostgreSQL hash ledger verification, and scheduled key fragment rotations) are deferred to execute exclusively during off-peak hours within each regional jurisdiction (typically between 10:00 PM and 6:00 AM local time).
+
+###### Regional Execution Schedules:
+*   **Region A: EU North (Stockholm)**
+    *   *Time Zone:* Central European Time (CET/CEST - UTC+1/UTC+2)
+    *   *Off-Peak Window:* 22:00 – 06:00 CET/CEST
+*   **Region B: US West (Oregon)**
+    *   *Time Zone:* Pacific Time (PST/PDT - UTC-8/UTC-7)
+    *   *Off-Peak Window:* 22:00 – 06:00 PST/PDT
+*   **Region C: APAC Southeast (Sydney)**
+    *   *Time Zone:* Australian Eastern Time (AEST/AEDT - UTC+10/UTC+11)
+    *   *Off-Peak Window:* 22:00 – 06:00 AEST/AEDT
+
+###### Queue-Based Deferred Execution Mechanics:
+*   **Timezone-Aware Queue Scheduling:** The background queue manager (`SaveInlineEntitiesJobService` / `AIGenerationJobService`) evaluates the target region's local time zone prior to processing deferred jobs. If the current time is outside the designated off-peak window, the job is automatically re-enqueued with a visibility timeout delaying its execution to the start of the regional off-peak window.
+*   **Grid Congestion & Spot Instances Integration:** In addition to time-shifting, background workers utilize Spot/Preemptible virtual instances during these off-peak windows, yielding up to a 90% compute cost reduction while operating safely under the scheme's fault-tolerant, state-replicated design.
 
 ---
 
