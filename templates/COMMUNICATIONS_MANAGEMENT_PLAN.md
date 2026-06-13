@@ -100,12 +100,12 @@ To safeguard user privacy and prevent data coercion or single-region systemic br
 (Secret Share 1)      (Secret Share 2)      (Secret Share 3)
        │                     │                     │
        ▼                     ▼                     ▼
-[Region A: EU West]   [Region B: US East]   [Region C: APAC South]
- (AWS Frankfurt)       (Azure Virginia)      (AWS Singapore)
+[Region A: EU North]  [Region B: US West]   [Region C: APAC Southeast]
+ (AWS Stockholm)       (Azure Oregon)        (AWS Sydney)
 ```
 
 #### 5.6.1 Decentralized Key Fragmentation & Splitting Mechanics
-*   **Asymmetric Key Splitting:** The system encrypts raw logs and immutable audit trails using a master data encryption key (DEK). The system then processes this DEK through a Shamir's Secret Sharing routine, splitting it into three unique cryptographic key fragments stored across independent geographic locations: Region A (EU West - Frankfurt), Region B (US East - Virginia), and Region C (APAC South - Singapore).
+*   **Asymmetric Key Splitting:** The system encrypts raw logs and immutable audit trails using a master data encryption key (DEK). The system then processes this DEK through a Shamir's Secret Sharing routine, splitting it into three unique cryptographic key fragments stored across independent geographic locations: Region A (EU North - Stockholm), Region B (US West - Oregon), and Region C (APAC Southeast - Sydney).
 *   **The 2-of-3 Threshold Mandate:** A single regional cloud enclave can neither decrypt the key fragment nor reconstruct the master DEK on its own. Reconstituting cleartext information or tracing user preference histories requires the simultaneous, authenticated cooperation of at least two out of the three isolated geographic storage clusters.
 *   **Immutable Hash Chaining via PostgreSQL:** Each region computes localized cryptographic block hashes of incoming telemetry using a running chain mechanism. To guarantee non-repudiation, the system broadcasts these hashes across the global ExpressRoute pipeline. If any single jurisdiction or bad actor alters historical records within its borders, the hash values will fail validation against the other regions, preserving the audit trail's integrity.
 
@@ -113,9 +113,9 @@ To safeguard user privacy and prevent data coercion or single-region systemic br
 
 | Geographic Location | Hosted Data Partition Element | Cryptographic State | Regional Authority Scope |
 | :--- | :--- | :--- | :--- |
-| **Region A: EU West (Frankfurt)** | Hashed Telemetry Event Stream + Key Fragment Alpha | Pseudonymized HMAC Text blocks; Key slice unreadable without Beta/Gamma additions. | Can only log incoming European events; cannot reconstruct global user profiles. |
-| **Region B: US East (Virginia)** | Anonymized User Preference Hashes + Key Fragment Beta | Absolute encrypted field blocks; cannot reproduce matching user profiles alone. | Manages secondary failover computations; cannot unilaterally decrypt the audit trail database. |
-| **Region C: APAC South (Singapore)** | Cryptographic Block Verification Chains + Key Fragment Gamma | Immutable hash blocks; requires explicit consensus to initialize key reconstruction keys. | Controls edge ingestion channels for Asian endpoints; isolated from accessing raw Western data profiles. |
+| **Region A: EU North (Stockholm)** | Hashed Telemetry Event Stream + Key Fragment Alpha | Pseudonymized HMAC Text blocks; Key slice unreadable without Beta/Gamma additions. | Can only log incoming European events; cannot reconstruct global user profiles. |
+| **Region B: US West (Oregon)** | Anonymized User Preference Hashes + Key Fragment Beta | Absolute encrypted field blocks; cannot reproduce matching user profiles alone. | Manages secondary failover computations; cannot unilaterally decrypt the audit trail database. |
+| **Region C: APAC Southeast (Sydney)** | Cryptographic Block Verification Chains + Key Fragment Gamma | Immutable hash blocks; requires explicit consensus to initialize key reconstruction keys. | Controls edge ingestion channels for regional endpoints; isolated from accessing raw Western data profiles. |
 
 ######## policy_compliance: {"policy_name": "Multi-Region Cryptographic Splitting", "compliance_status": "compliant"}
 

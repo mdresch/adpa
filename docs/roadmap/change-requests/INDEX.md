@@ -748,7 +748,7 @@ Migrate from Socket.io-only architecture to hybrid approach using Supabase Realt
 **File:** `CMP-2026-CR-003_ExpressRoute_MultiJurisdictional_Storage.md`
 
 **Executive Summary:**
-Provision dual geographically isolated 10 Gbps ExpressRoute circuits bypassing public internet for zero-latency telemetry ingestion, and implement a 2-of-3 threshold secret sharing scheme for key fragmentation across EU West (Frankfurt), US East (Virginia), and APAC South (Singapore) regions.
+Provision dual geographically isolated 10 Gbps ExpressRoute circuits bypassing public internet for zero-latency telemetry ingestion, and implement a 2-of-3 threshold secret sharing scheme for key fragmentation across EU North (Stockholm), US West (Oregon), and APAC Southeast (Sydney) regions.
 
 **Key Benefits:**
 - Zero risk exposure from the public internet for ingestion pipeline
