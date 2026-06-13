@@ -94,10 +94,10 @@ const TRACING_ENABLED = process.env.TRACING_ENABLED !== 'false'
 let sdk: NodeSDK | null = null
 
 /**
- * Check if Langfuse tracing is enabled
+ * Check if tracing is enabled
  */
 export function isTracingEnabled(): boolean {
-  return process.env.ENABLE_LANGFUSE_TRACING === 'true'
+  return process.env.TRACING_ENABLED !== 'false'
 }
 
 /**
@@ -117,14 +117,10 @@ export function initTracing(): void {
     return
   }
 
-  if (!ENABLE_LANGFUSE_OTLP) {
-    console.log('📊 OpenTelemetry OTLP tracing is disabled (native Langfuse SDK tracing remains available)')
-    return
-  }
-
   try {
     // Create span processors
     const spanProcessors: SpanProcessor[] = [new CorrelationIdProcessor()]
+    
     if (ENABLE_LANGFUSE_OTLP) {
       const authHeader = buildLangfuseOtlpAuthHeader({
         otlpAuthHeader: LANGFUSE_OTLP_AUTH_HEADER,
@@ -156,13 +152,26 @@ export function initTracing(): void {
           // Buffer size
           maxQueueSize: parseInt(process.env.OTLP_MAX_QUEUE_SIZE || '2048'),
         }))
-
-        // ConsoleSpanExporter disabled to reduce noise — enable with DEBUG_TRACING=true
-        if (process.env.DEBUG_TRACING === 'true') {
-          console.log('[Tracing]    ConsoleSpanExporter enabled for local debugging')
-          spanProcessors.push(new SimpleSpanProcessor(new ConsoleSpanExporter()))
-        }
       }
+    } else {
+      // Local/Aspire dashboard export (no auth header required)
+      console.log(`[Tracing] 📡 Configuring Local OTLP export (Aspire Dashboard):`)
+      console.log(`[Tracing]    Endpoint: ${OTLP_ENDPOINT}`)
+
+      spanProcessors.push(new BatchSpanProcessor(new OTLPTraceExporter({
+        url: OTLP_ENDPOINT,
+        timeoutMillis: parseInt(process.env.OTLP_TIMEOUT || '10000'),
+      }), {
+        scheduledDelayMillis: parseInt(process.env.OTLP_SCHEDULED_DELAY || '5000'),
+        maxExportBatchSize: parseInt(process.env.OTLP_MAX_BATCH_SIZE || '512'),
+        maxQueueSize: parseInt(process.env.OTLP_MAX_QUEUE_SIZE || '2048'),
+      }))
+    }
+
+    // ConsoleSpanExporter disabled to reduce noise — enable with DEBUG_TRACING=true
+    if (process.env.DEBUG_TRACING === 'true') {
+      console.log('[Tracing]    ConsoleSpanExporter enabled for local debugging')
+      spanProcessors.push(new SimpleSpanProcessor(new ConsoleSpanExporter()))
     }
 
     // Create resource with service information
@@ -190,6 +199,8 @@ export function initTracing(): void {
     if (ENABLE_LANGFUSE_OTLP) {
       const target = OTLP_ENDPOINT.includes('localhost') ? 'Local' : 'Cloud'
       console.log(`   Status: 🚀 Exporting to Langfuse ${target}`)
+    } else {
+      console.log(`   Status: 🚀 Exporting to Local Collector`)
     }
 
     // Graceful shutdown

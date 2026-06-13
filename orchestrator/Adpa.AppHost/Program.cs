@@ -12,6 +12,7 @@ var firebaseProjectId = builder.Configuration["FIREBASE_PROJECT_ID"] ?? "adpa-de
 var dbPassword = builder.AddParameter("db-password", "adpa-governance-2026", secret: true);
 
 var postgres = builder.AddPostgres("postgres-server")
+    .WithImage("postgres", "17")
     .WithPassword(dbPassword)
     .WithDataVolume("adpa-ledger-vol");
 
