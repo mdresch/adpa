@@ -106,6 +106,15 @@ To minimize energy cost volatility and ease regional grid congestion, delay-tole
 *   **Timezone-Aware Queue Scheduling:** The background queue manager (`SaveInlineEntitiesJobService` / `AIGenerationJobService`) evaluates the target region's local time zone prior to processing deferred jobs. If the current time is outside the designated off-peak window, the job is automatically re-enqueued with a visibility timeout delaying its execution to the start of the regional off-peak window.
 *   **Grid Congestion & Spot Instances Integration:** In addition to time-shifting, background workers utilize Spot/Preemptible virtual instances during these off-peak windows, yielding up to a 90% compute cost reduction while operating safely under the scheme's fault-tolerant, state-replicated design.
 
+#### 5.7 Autonomous Nighttime Regeneration and Cascading Review Workflow
+To maximize the utilization of off-peak compute rates and clean grid periods, the system supports autonomous event-driven document regeneration triggered by strategic baseline updates (such as approved Change Requests or verified Intellectual Property/patent advancements):
+
+*   **Trigger Events:**
+    *   *Change Request Approval:* When a Change Request receives official approval from the Change Control Board (CCB), it updates the target baselines.
+    *   *IP/Patent Advancements:* When the drift detection engine flags a novel technical approach that is verified as patentable, it registers the advancement in the technical asset directory.
+*   **Off-Peak Batch Scheduling:** Upon detecting a trigger event, the queue manager scans for all dependent documents (e.g., Communications Management Plans, Risk Registers, Technical Architecture Plans) and schedules them for regeneration. The tasks are automatically queued to execute exclusively during the local regional off-peak window (22:00 – 06:00 local time).
+*   **Cascading Review Gate:** To ensure governance compliance, regenerated documents are not automatically published. Instead, they are placed in `PENDING_HUMAN_APPROVAL` status, and the system triggers a cascading approval workflow. Stakeholders and Project Managers are notified and can review the clean diffs and sign off on updates when they log in the following morning.
+
 ---
 
 ## References
