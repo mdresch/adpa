@@ -20,6 +20,7 @@ import type { IQueueJob } from './queue/IQueue'
 import type { AIGenerationJobData, JobStatus, QueueName } from './types'
 // Phase 5: Dependency injection
 import type { QueueServiceDependencies } from './queue/QueueDependencies'
+import { TestAsyncTaskTracker } from '../../utils/testAsyncTaskTracker'
 
 interface ProcessJobOptions {
   workerId: string
@@ -162,32 +163,24 @@ export class AIGenerationJobService {
                 }))
 
             logger.info(`[SUMMARIZER] Saving ${summariesArray.length} in-band summaries for ${createdDocumentId}`)
-            setImmediate(async () => {
-              try {
-                await DocumentSummarizationService.saveSummaries(
-                  createdDocumentId!,
-                  result.content,
-                  summariesArray,
-                  jobData.provider || 'default',
-                  jobData.model || 'default'
-                )
-              } catch (saveError) {
-                logger.error(`[SUMMARIZER] Failed to save in-band summaries for ${createdDocumentId}`, saveError)
-              }
+            TestAsyncTaskTracker.runTrackedDeferred('SaveInBandSummaries', async () => {
+              await DocumentSummarizationService.saveSummaries(
+                createdDocumentId!,
+                result.content,
+                summariesArray,
+                jobData.provider || 'default',
+                jobData.model || 'default'
+              )
             })
           } else {
             // Fallback: Generate summaries in background if not provided in-band
             logger.info(`[SUMMARIZER] No in-band summaries found, triggering background generation for ${createdDocumentId}`)
-            setImmediate(async () => {
-              try {
-                await DocumentSummarizationService.generateMultiLevelSummaries(
-                  createdDocumentId!, 
-                  result.content, 
-                  jobData.userId || 'system'
-                )
-              } catch (sumError) {
-                logger.error(`[SUMMARIZER] Background summarization failed for ${createdDocumentId}`, sumError)
-              }
+            TestAsyncTaskTracker.runTrackedDeferred('GenerateMultiLevelSummaries', async () => {
+              await DocumentSummarizationService.generateMultiLevelSummaries(
+                createdDocumentId!, 
+                result.content, 
+                jobData.userId || 'system'
+              )
             })
           }
         }
@@ -656,34 +649,26 @@ export class AIGenerationJobService {
           
           try {
             const { TemplateAnalyticsService } = await Promise.resolve().then(() => require('../templateAnalyticsService'))
-            setImmediate(async () => {
-              try {
-                await TemplateAnalyticsService.updateTemplateEntityProfile(template_id)
-                log.info(`[AI-JOB] Template entity profile updated for ${template_id}`)
-              } catch (err) {
-                log.warn(`[AI-JOB] Failed to update template entity profile (non-fatal)`, { template_id, error: err })
-              }
+            TestAsyncTaskTracker.runTrackedDeferred('UpdateTemplateEntityProfile', async () => {
+              await TemplateAnalyticsService.updateTemplateEntityProfile(template_id)
+              log.info(`[AI-JOB] Template entity profile updated for ${template_id}`)
             })
           } catch (err) { }
         }
         if (projectIdForDoc && docContent.trim() && createdDocumentId) {
-          setImmediate(async () => {
+          TestAsyncTaskTracker.runTrackedDeferred('RAGIngestDocument', async () => {
             if (!process.env.VOYAGE_API_KEY) return
-            try {
-              const { ragService } = await Promise.resolve().then(() => require('../ragService'))
-              const ingestIds = new Set<string>([createdDocumentId])
-              if (documentIds?.length) {
-                documentIds.forEach((id) => ingestIds.add(id))
+            const { ragService } = await Promise.resolve().then(() => require('../ragService'))
+            const ingestIds = new Set<string>([createdDocumentId])
+            if (documentIds?.length) {
+              documentIds.forEach((id) => ingestIds.add(id))
+            }
+            for (const id of ingestIds) {
+              try {
+                await ragService.ingestDocument(id)
+              } catch (ingestErr) {
+                log.warn(`[AI-JOB] Post-save RAG ingest failed for ${id} (non-fatal)`, ingestErr)
               }
-              for (const id of ingestIds) {
-                try {
-                  await ragService.ingestDocument(id)
-                } catch (ingestErr) {
-                  log.warn(`[AI-JOB] Post-save RAG ingest failed for ${id} (non-fatal)`, ingestErr)
-                }
-              }
-            } catch (importErr) {
-              log.warn('[AI-JOB] RAG ingest skipped (non-fatal)', importErr)
             }
           })
         }

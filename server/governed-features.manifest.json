@@ -24,6 +24,16 @@
       "overlapGuard": false,
       "spec": "docs/superpowers/specs/2026-06-08-rag-context-scoping-design.md",
       "testPathPattern": "(documentGeneration|AIGenerationJobService|project-documents)"
+    },
+    {
+      "id": "test-teardown-guard",
+      "description": "Async background task tracking system to prevent Jest teardown leaks",
+      "skills": [
+        "adpa-test-teardown-guard"
+      ],
+      "spec": "docs/superpowers/specs/2026-06-13-test-teardown-guard-design.md",
+      "testModuleDir": "test-teardown-guard",
+      "testPathPattern": "modules/test-teardown-guard"
     }
   ]
 }

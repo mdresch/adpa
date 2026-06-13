@@ -1,6 +1,7 @@
 import dotenv from "dotenv"
 import { Pool, PoolClient } from "pg"
 import { setInternalPool } from "../database/connection"
+import { TestAsyncTaskTracker } from "../utils/testAsyncTaskTracker"
 
 // Load test environment variables
 dotenv.config({ path: ".env.test", override: true })
@@ -141,6 +142,7 @@ beforeAll(async () => {
 })
 
 beforeEach(async () => {
+  TestAsyncTaskTracker.reset()
   if (shouldSkipDatabaseBootstrap || !testPool) return
   currentClient = await testPool.connect()
   await currentClient.query("BEGIN")
@@ -148,6 +150,9 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
+  // Await and drain all pending background tasks before rolling back transaction and releasing client
+  await TestAsyncTaskTracker.awaitAllPending()
+
   if (shouldSkipDatabaseBootstrap) {
     currentClient = null
     return
