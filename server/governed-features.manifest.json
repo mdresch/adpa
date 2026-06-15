@@ -47,9 +47,10 @@
     },
     {
       "id": "infrastructure",
-      "description": "DB-GUARD Circuit Breaker and Pool Resilience",
+      "description": "DB-GUARD Circuit Breaker and Pool Resilience (Pillar 5)",
       "skills": [
-        "adpa-governed-feature-loop"
+        "adpa-governed-feature-loop",
+        "adpa-data-infrastructure-pillar5"
       ],
       "overlapGuard": false,
       "spec": "docs/superpowers/specs/2026-06-13-db-guard-circuit-breaker-hardening-design.md",
@@ -87,6 +88,16 @@
       "overlapGuard": false,
       "testModuleDir": "knowledge-graph",
       "testPathPattern": "modules/knowledge-graph"
+    },
+    {
+      "id": "compliance",
+      "description": "Security, Governance & Audit Layer (Pillar 4)",
+      "skills": [
+        "adpa-compliance-layer-pillar4"
+      ],
+      "overlapGuard": false,
+      "testModuleDir": "compliance",
+      "testPathPattern": "modules/compliance"
     }
   ]
 }
