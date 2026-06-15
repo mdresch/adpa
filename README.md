@@ -109,16 +109,21 @@ cd server && npm install && cd ..
 cp .env.local.example .env.local
 cp server/.env.example server/.env
 
-# 4. Start development servers
-# Frontend (terminal 1)
-pnpm dev
+# 4. Start Full Stack Orchestration (Recommended)
+# The ADPA framework uses .NET Aspire to orchestrate all services (Next.js, Express, DB, queues).
+# Using `watch run` enables Hot Reload for C# changes without needing a restart.
+dotnet watch run --project orchestrator/Adpa.AppHost
 
-# Backend (terminal 2)  
-cd server && npm run dev
+# Note on Commits and Builds (AEV Workflow):
+# Because running the orchestrator locks the `bin/Debug` files, the Atomic Execution & Validation (AEV) 
+# workflow mandates using `dotnet build -c Release` for compile-time validation before commits. 
+# This ensures the build integrity check can run safely in the background (`bin/Release`) without 
+# interrupting your active `dotnet watch` session.
 
 # 5. Access application
-# Frontend: http://localhost:3005
-# Backend:  http://localhost:5000/health
+# Aspire Dashboard: http://localhost:18888 (Use this to view logs, traces, and metrics for all services)
+# Frontend: http://localhost:3005 (managed by Aspire)
+# Backend:  http://localhost:5000/health (managed by Aspire)
 ```
 
 ### 🐳 Docker Services
