@@ -55,6 +55,17 @@
       "spec": "docs/superpowers/specs/2026-06-13-db-guard-circuit-breaker-hardening-design.md",
       "testModuleDir": "infrastructure",
       "testPathPattern": "modules/infrastructure"
+    },
+    {
+      "id": "inline-extraction",
+      "description": "Inline H8 Extraction and Dual-Store Persistence Guards",
+      "skills": [
+        "adpa-inline-entity-extraction"
+      ],
+      "overlapGuard": false,
+      "spec": "docs/superpowers/specs/2026-06-14-inline-h8-extraction-guards-design.md",
+      "testModuleDir": "inline-extraction",
+      "testPathPattern": "modules/inline-extraction"
     }
   ]
 }
