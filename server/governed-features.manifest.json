@@ -93,7 +93,8 @@
       "id": "compliance",
       "description": "Security, Governance & Audit Layer (Pillar 4)",
       "skills": [
-        "adpa-compliance-layer-pillar4"
+        "adpa-compliance-layer-pillar4",
+        "adpa-draco-escalation"
       ],
       "overlapGuard": false,
       "testModuleDir": "compliance",

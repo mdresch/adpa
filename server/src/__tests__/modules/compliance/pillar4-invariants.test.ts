@@ -40,4 +40,28 @@ describe('Pillar 4: Compliance & DRACO Invariants', () => {
     }))
     expect(result.status).toBe('APPROVED')
   })
+
+  it('should gracefully degrade to Advisory Mode if confidence is low or ambiguous', async () => {
+    // REQ-CMP-002: Advisory Escalation Matrix
+    const auditSpy = jest.spyOn(AuditLogger, 'persistLog')
+
+    const result = await DRACOEngine.executeHighRiskDocument({
+      documentId: 'DOC-999',
+      action: 'APPROVE_CONTRACT_BUDGET',
+      evaluationMetadata: {
+        confidenceScore: 0.60,
+        ambiguityFlag: true
+      }
+    })
+
+    // Invariant: Action must NOT throw, but rather return ADVISORY_APPROVED
+    expect(result.status).toBe('ADVISORY_APPROVED')
+    expect(result.warning).toContain('Advisory mode')
+
+    // Invariant: Must log the advisory escalation
+    expect(auditSpy).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'APPROVE_CONTRACT_BUDGET_ADVISORY_ESCALATION',
+      approverId: 'SYSTEM_ESCALATION'
+    }))
+  })
 })
