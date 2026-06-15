@@ -42,6 +42,7 @@ export interface RagFallbackParams {
   templateId?: string
   query: string
   topK?: number
+  maxTokens?: number
 }
 
 export interface RagFallbackDeps {
@@ -88,19 +89,19 @@ export async function retrieveChunksWithFallback(
   let scored: ScoredChunk[] | null = null
   let strategy: RagRetrievalStrategy = 'none'
 
-  scored = await tryStrategy('fts', () => deps.searchFts({ ...params, limit }))
-  if (scored?.length) {
-    strategy = 'fts'
+  if (!scored?.length && deps.searchVector) {
+    scored = await tryStrategy('vector', () => deps.searchVector!({ ...params, limit }))
+    if (scored?.length) strategy = 'vector'
+  }
+
+  if (!scored?.length) {
+    scored = await tryStrategy('fts', () => deps.searchFts({ ...params, limit }))
+    if (scored?.length) strategy = 'fts'
   }
 
   if (!scored?.length && scopedIds.length > 0) {
     scored = await tryStrategy('sequential', () => deps.searchSequential({ ...params, limit }))
     if (scored?.length) strategy = 'sequential'
-  }
-
-  if (!scored?.length && deps.searchVector) {
-    scored = await tryStrategy('vector', () => deps.searchVector!({ ...params, limit }))
-    if (scored?.length) strategy = 'vector'
   }
 
   if (!scored?.length) {
@@ -118,7 +119,12 @@ export async function retrieveChunksWithFallback(
     }
   }
 
-  const top = scored.sort((a, b) => b.score - a.score).slice(0, topK)
+  // Enforce Token Budgeting (Pillar 2)
+  const maxTokens = params.maxTokens ?? 4096;
+  const { enforceTokenBudget } = require('./tokenBudgeting');
+  const budgeted = enforceTokenBudget(scored, maxTokens);
+
+  const top = budgeted.slice(0, topK)
   const envelope = buildContextEnvelope({
     projectId: params.projectId,
     documentIds: scopedIds,

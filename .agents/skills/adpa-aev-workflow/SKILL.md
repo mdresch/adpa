@@ -56,6 +56,13 @@ Confirm invariants:
 - Phase transitions are explicit.
 - Human approval gates are intact.
 
+#### 🟢 Gate 5: Package Lock Integrity (Vercel Prevention)
+If `package.json` was modified in this change, ensure the lockfile is up to date and clean to prevent CI build failures:
+```powershell
+pnpm install --frozen-lockfile
+```
+*Wait for output.* If this fails with `ERR_PNPM_OUTDATED_LOCKFILE`, you must run `pnpm install`, add the updated `pnpm-lock.yaml` to your commit, and re-run this gate.
+
 ### 4. Certification
 Only if all gates pass:
 ```powershell

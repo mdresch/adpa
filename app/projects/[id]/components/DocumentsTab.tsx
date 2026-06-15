@@ -127,6 +127,10 @@ function useActiveGenerationJobs(projectId: string) {
 
       const jobs: ActiveJobInfo[] = allJobs
         .filter((j: any) => ['ai-generate', 'document-regeneration'].includes(j.type))
+        .filter((j: any) => {
+          const jobProjectId = j.metadata?.project_id || j.project_id || j.projectId;
+          return jobProjectId === projectId;
+        })
         .map((j: any) => ({
           jobId: j.id,
           documentId: j.metadata?.document_id || null,
