@@ -1,4 +1,8 @@
-import { buildSslConfig, stripLibpqSslQueryParams } from '../../database/connection'
+import {
+  buildSslConfig,
+  poolConfigFromDatabaseUrl,
+  stripLibpqSslQueryParams,
+} from '../../database/connection'
 
 describe('buildSslConfig', () => {
   const poolerUrl =
@@ -26,5 +30,19 @@ describe('buildSslConfig', () => {
     )
     expect(cleaned).not.toContain('sslmode=')
     expect(cleaned).toContain('pgbouncer=true')
+  })
+})
+
+describe('poolConfigFromDatabaseUrl', () => {
+  const poolerUrl =
+    'postgresql://postgres.xxx:secret@aws-1-us-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true'
+
+  it('uses discrete fields for Supabase pooler (avoids connectionString TLS override)', () => {
+    const config = poolConfigFromDatabaseUrl(poolerUrl)
+    expect(config.connectionString).toBeUndefined()
+    expect(config.host).toBe('aws-1-us-east-1.pooler.supabase.com')
+    expect(config.port).toBe(6543)
+    expect(config.ssl).toEqual({ rejectUnauthorized: false })
+    expect(config.prepareThreshold).toBe(0)
   })
 })

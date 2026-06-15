@@ -1,9 +1,8 @@
-import puppeteer, { Browser, PDFOptions } from 'puppeteer';
+import type { Browser, PDFOptions } from 'puppeteer';
 import { marked } from 'marked';
 import { logger } from '../utils/logger';
-import { adobePdfService, AdobePDFServiceWrapper } from './adobePdfService';
+import { adobePdfService } from './adobePdfService';
 import * as fs from 'fs/promises';
-import * as path from 'path';
 
 export interface UnifiedPdfOptions extends PDFOptions {
     useAdobe?: boolean;
@@ -26,9 +25,9 @@ export class UnifiedPdfService {
     }
 
     /**
-     * Initialize the Puppeteer browser instance
+     * Initialize the Puppeteer browser instance dynamically
      */
-    private async getBrowser(): Promise<Browser> {
+    public async getBrowser(): Promise<Browser> {
         if (this.browser) return this.browser;
 
         if (this.isInitializing) {
@@ -41,7 +40,10 @@ export class UnifiedPdfService {
 
         this.isInitializing = true;
         try {
-            logger.info('Initializing Puppeteer browser for UnifiedPdfService');
+            logger.info('Initializing Puppeteer browser dynamically for UnifiedPdfService');
+            
+            // Lazy dynamic import of puppeteer
+            const puppeteer = await import('puppeteer');
             
             const launchOptions: any = {
                 headless: true,
@@ -58,7 +60,7 @@ export class UnifiedPdfService {
                 launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
             }
 
-            this.browser = await puppeteer.launch(launchOptions);
+            this.browser = await puppeteer.launch(launchOptions) as unknown as Browser;
             
             // Handle browser disconnection
             this.browser.on('disconnected', () => {
@@ -68,7 +70,7 @@ export class UnifiedPdfService {
 
             return this.browser;
         } catch (error: any) {
-            logger.error('Failed to launch Puppeteer browser:', error);
+            logger.error('Failed to launch Puppeteer browser dynamically:', error);
             throw new Error(`PDF Engine initialization failed: ${error.message}`);
         } finally {
             this.isInitializing = false;
@@ -271,3 +273,4 @@ export class UnifiedPdfService {
 }
 
 export const unifiedPdfService = UnifiedPdfService.getInstance();
+export const pdfService = unifiedPdfService; // Alias for test compatibility

@@ -541,9 +541,13 @@ process.once('SIGUSR2', () => {
   });
 });
 
-if (shouldStartServerForArgv()) {
-  console.log("🚀 Starting server context...");
+import { shouldRunWebServer } from "./utils/processRole"
+
+if (shouldStartServerForArgv() && shouldRunWebServer()) {
+  console.log("🚀 Starting server context (API/WebServer)...");
   startServer().catch(err => { console.error("❌ Error during server startup:", err); });
+} else if (shouldStartServerForArgv()) {
+  console.log("ℹ️ Skipping server context (WebServer disabled via ADPA_PROCESS_ROLE)");
 }
 
 export { app, shouldStartServerForArgv }

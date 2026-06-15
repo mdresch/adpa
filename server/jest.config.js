@@ -26,7 +26,7 @@ module.exports = {
     '^uuid$': require.resolve('uuid'),
   },
   transformIgnorePatterns: [
-    'node_modules/(?!(uuid|\\.pnpm/.*uuid))',
+    'node_modules[\\\\/](?!(uuid|\\.pnpm[\\\\/].*uuid))',
   ],
   transform: {
     '^.+\\.(ts|tsx)$': ['ts-jest', {
