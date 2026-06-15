@@ -394,6 +394,41 @@ If you do enable OTLP export, the server derives the exporter URL from `LANGFUSE
 3. Add token to environment variables
 4. Connect repositories in the Integrations dashboard
 
+## Governance, Safety Guards, and Rails
+
+The ADPA Framework enforces strict governance and safety protocols to ensure that the codebase remains intact, secure, and aligned with architectural standards. All developers and AI agents operating within this repository **must** adhere to these guardrails.
+
+### 1. Atomic Execution & Validation (AEV) Workflow
+Every code change must be **atomic** (one logical change at a time) and must pass strict validation gates before being committed.
+- **Gate 1 (Mechanical Integrity):** Verify exact file changes via `git diff`.
+- **Gate 2 (Build Integrity):** The project must compile cleanly. Because the active orchestrator locks `bin/Debug` files, **you must use `dotnet build -c Release`** to validate builds locally without interrupting the hot-reload session.
+- **Gate 3 (Orchestration Integrity):** The application must boot successfully.
+- **Gate 4 (Governance Check):** Ensure no architectural invariants (e.g., ledger append-only rules) are broken.
+
+If any gate fails, the change must be rolled back (`git reset --hard HEAD`) and re-attempted from a clean slate. 
+
+### 2. Contract Guards (Advanced Jest Test Logic)
+We do not just write standard unit tests; we build **Contract Guards**. 
+- A Contract Guard is an executable representation of an architectural invariant defined in a feature's `SKILL.md` file.
+- **Contract Guards MUST be written *before* the implementation code** (Contract Guard-Driven Development).
+- If a developer breaks an invariant (e.g., modifying circuit breaker rules or removing a required dependency), the Contract Guard will fail and throw an **instructional error** (a `GOVERNANCE VIOLATION`) explaining exactly *why* the rule exists and *how* to fix the code to comply with the architecture.
+
+### 3. The Governed Feature Loop & Manifest
+Every major feature or architectural component is isolated into a "Feature Packet".
+- Feature packets are registered in `server/governed-features.manifest.json`.
+- Each packet requires a Design Spec, Contract Guards, a `SKILL.md` intent file, and the execution code.
+- You can test all governed features locally by running: `npm run test:features` inside the `server/` directory.
+
+### 4. Pre-Push Git Hooks (The Final Boundary)
+To ensure no broken code ever reaches the remote repository, a strict `.git/hooks/pre-push` hook is active.
+When you run `git push`, the system will automatically:
+1. Verify the manifest structure (`npm run verify:governed-features`).
+2. Execute all Contract Guards (`npm run test:features`).
+
+If any Contract Guard fails, the push is **rejected locally**, protecting the remote repository from regressions.
+
+---
+
 ## Contributing
 
 We welcome contributions to the ADPA Framework! Please follow these guidelines:
