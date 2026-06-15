@@ -2,6 +2,7 @@ import { Dependency } from "../dependencyGraph"
 import { logger } from "../../utils/logger"
 import { updateDependencyHealth } from "../../routes/health"
 import { startupManager } from "../serverBootstrap"
+import { shouldRunWorkers } from "../../utils/processRole"
 
 export const workersDependency: Dependency = {
   name: "Workers",
@@ -10,7 +11,6 @@ export const workersDependency: Dependency = {
   dependsOn: ['Database'],
   init: async () => {
     try {
-      // 3. Simple queue availability check
       const { addJob } = require("../../services/queueService")
       if (!addJob) {
         throw new Error("Job queue service not available")
@@ -19,13 +19,17 @@ export const workersDependency: Dependency = {
     } catch (error) {
       logger.warn("Worker initialization warning:", error)
       updateDependencyHealth("Workers", "unhealthy", 0, String(error))
-      // Allow continues - not critical for basic API functioning
     }
   },
   validate: async () => {
+    if (!shouldRunWorkers()) {
+      logger.info("Skipping worker monitoring and registration (Workers disabled via ADPA_PROCESS_ROLE)")
+      updateDependencyHealth("Workers", "healthy")
+      return true
+    }
+
     try {
       // 1. Start system and worker resource monitoring
-      // We do this in validate to ensure Database (dependency) is actually ready
       const { SystemMonitoring } = require("../../utils/systemMonitoring")
       const { WorkerMonitoring } = require("../../utils/workerMonitoring")
       

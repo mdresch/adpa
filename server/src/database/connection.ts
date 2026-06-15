@@ -135,23 +135,103 @@ export function buildSslConfig(target?: string) {
   return false
 }
 
+function isLocalDatabaseHost(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "127.0.0.1"
+}
+
+export function isTransactionPoolerUrl(databaseUrl: string): boolean {
+  try {
+    const dbUrl = new URL(databaseUrl)
+    return (
+      dbUrl.port === "6543" ||
+      dbUrl.searchParams.has("pgbouncer") ||
+      dbUrl.hostname.includes("pooler.supabase.com")
+    )
+  } catch {
+    return databaseUrl.includes(":6543") || databaseUrl.includes("pooler.supabase.com")
+  }
+}
+
+/**
+ * Prefer discrete host/user/password for trusted remote providers. node-postgres can
+ * re-apply strict TLS when `connectionString` is parsed even if `ssl` is also set.
+ */
+export function poolConfigFromDatabaseUrl(
+  databaseUrl: string,
+  base: Partial<PoolConfig> = {}
+): Partial<PoolConfig> {
+  const ssl = buildSslConfig(databaseUrl)
+
+  let dbUrl: URL
+  try {
+    dbUrl = new URL(databaseUrl)
+  } catch {
+    return {
+      ...base,
+      connectionString: databaseUrl,
+      ssl,
+    }
+  }
+
+  const trusted = isTrustedPoolingProvider(databaseUrl)
+  const isLocal = isLocalDatabaseHost(dbUrl.hostname)
+
+  if (trusted && !isLocal) {
+    return {
+      ...base,
+      host: dbUrl.hostname,
+      port: Number.parseInt(dbUrl.port || "5432", 10),
+      database: dbUrl.pathname.replace(/^\//, "").split("?")[0] || "postgres",
+      user: decodeURIComponent(dbUrl.username),
+      password: decodeURIComponent(dbUrl.password),
+      ssl,
+      ...(isTransactionPoolerUrl(databaseUrl) ? { prepareThreshold: 0 } : {}),
+    }
+  }
+
+  return {
+    ...base,
+    connectionString: stripLibpqSslQueryParams(dbUrl),
+    ssl,
+  }
+}
+
+export function logDatabaseSslDiagnostics(databaseUrl: string): void {
+  const ssl = buildSslConfig(databaseUrl)
+  const rejectUnauthorized =
+    ssl && typeof ssl === "object" && "rejectUnauthorized" in ssl
+      ? Boolean(ssl.rejectUnauthorized)
+      : null
+
+  let configMode = "connection-string"
+  try {
+    const u = new URL(databaseUrl)
+    if (isTrustedPoolingProvider(databaseUrl) && !isLocalDatabaseHost(u.hostname)) {
+      configMode = "discrete-fields"
+    }
+  } catch {
+    // keep default
+  }
+
+  console.log(
+    `🔐 DB SSL diagnostics: trustedProvider=${isTrustedPoolingProvider(databaseUrl)} ` +
+      `transactionPooler=${isTransactionPoolerUrl(databaseUrl)} ` +
+      `rejectUnauthorized=${rejectUnauthorized} configMode=${configMode} ` +
+      `strictTlsEnv=${process.env.ADPA_STRICT_SUPABASE_TLS === "true"}`
+  )
+}
+
 const createPool = (host: string) => {
   const currentDbUrl = getDatabaseUrl()
   // If DATABASE_URL is provided, use it directly
   if (currentDbUrl && host === connectionMethods[0].host) {
     console.log('Using DATABASE_URL connection string')
-    let connStr = currentDbUrl
-    try {
-      connStr = stripLibpqSslQueryParams(new URL(currentDbUrl))
-    } catch {
-      /* keep raw string */
-    }
     return new Pool({
-      connectionString: connStr,
-      ssl: buildSslConfig(currentDbUrl),
-      max: 50,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 10000,
+      ...poolConfigFromDatabaseUrl(currentDbUrl, {
+        max: 50,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 10000,
+      }),
     })
   }
 
@@ -422,17 +502,28 @@ async function connectDatabaseInternal(): Promise<void> {
   // If DATABASE_URL is provided, try it first
   if (currentDbUrl) {
     console.log(`🔌 Attempting connection via DATABASE_URL...`)
+    logDatabaseSslDiagnostics(currentDbUrl)
+
+    let normalizedDbUrl = currentDbUrl
+    try {
+      const dbUrl = new URL(currentDbUrl)
+      if (isTransactionPoolerUrl(currentDbUrl) && !dbUrl.searchParams.has("pgbouncer")) {
+        console.log("🔧 Auto-appending pgbouncer=true for transaction pooler compatibility")
+        dbUrl.searchParams.set("pgbouncer", "true")
+      }
+      normalizedDbUrl = dbUrl.toString()
+    } catch {
+      // keep raw DATABASE_URL
+    }
+
     for (let attempt = 1; attempt <= maxRetriesPerMethod; attempt++) {
       console.log(`🔌 Trying database connection via DATABASE_URL (attempt ${attempt}/${maxRetriesPerMethod})`)
 
-      // Parse connection string to extract components
-      // This allows us to force IPv4 by explicitly setting the family option
-      let poolConfig: any = {
-        ssl: buildSslConfig(currentDbUrl),
+      let poolConfig: Partial<PoolConfig> = poolConfigFromDatabaseUrl(normalizedDbUrl, {
         max: 50,
         idleTimeoutMillis: 30000,
         connectionTimeoutMillis: DEFAULT_DB_CONN_TIMEOUT_MS,
-      }
+      })
 
       // Parse URL and handle IPv4/IPv6 resolution
       try {
@@ -498,17 +589,10 @@ async function connectDatabaseInternal(): Promise<void> {
       } catch (e: any) {
         // Ultimate Fallback: Just use the raw connectionString with our determined SSL config
         console.warn('⚠️  Advanced parsing failed or was bypassed, ensuring raw string use')
-        try {
-          poolConfig.connectionString = stripLibpqSslQueryParams(new URL(currentDbUrl))
-        } catch {
-          poolConfig.connectionString = currentDbUrl
-        }
       }
 
-      // Transaction pooler (Supabase :6543) shares a small server-side pool — keep client max low.
-      const usesTransactionPooler =
-        currentDbUrl.includes(':6543') || currentDbUrl.includes('pooler.supabase.com')
-      const poolerDefaultMax = usesTransactionPooler ? 10 : 20
+      const usesTransactionPooler = isTransactionPoolerUrl(currentDbUrl)
+      const poolerDefaultMax = usesTransactionPooler ? 5 : 20
       poolConfig.max = Number(process.env.PG_MAX) || poolerDefaultMax
 
       const testPool = new Pool(poolConfig)

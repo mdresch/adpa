@@ -351,6 +351,8 @@ class UnifiedAIService {
             },
             metadata: {
               finishReason: response.finishReason,
+              langfuseTraceId: langfuseTrace?.id,
+              langfuseObservationId: langfuseGeneration?.id
             }
           }
         } catch (err: any) {
@@ -527,6 +529,10 @@ class UnifiedAIService {
               prompt_tokens: promptTokens,
               completion_tokens: completionTokens,
               total_tokens: totalTokens,
+            },
+            metadata: {
+              langfuseTraceId: langfuseTrace?.id,
+              langfuseObservationId: langfuseGeneration?.id
             }
           }
         } catch (err: any) {

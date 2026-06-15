@@ -47,7 +47,7 @@ module.exports = {
     '^@/(.*)$': '<rootDir>/src/$1',
   },
   transformIgnorePatterns: [
-    'node_modules/(?!(uuid|\\.pnpm/.*uuid))',
+    'node_modules[\\\\/](?!(uuid|\\.pnpm[\\\\/].*uuid))',
   ],
   transform: {
     '^.+\\.(ts|tsx)$': ['ts-jest', {
@@ -58,5 +58,12 @@ module.exports = {
       },
       diagnostics: false
     }],
+    '^.+\\.js$': ['ts-jest', {
+      tsconfig: {
+        esModuleInterop: true,
+        allowSyntheticDefaultImports: true,
+        allowJs: true,
+      }
+    }]
   }
 }
