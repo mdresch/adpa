@@ -38,11 +38,11 @@ git diff --stat
 ```
 *Wait for output.* Verify only declared files are changed.
 
-#### 🟢 Gate 2: Build Integrity
+#### 🟢 Gate 2: Build Integrity (Non-Blocking)
 ```powershell
-dotnet build
+dotnet build -c Release
 ```
-*Wait for output.* Verify zero errors.
+*Wait for output.* Verify zero errors. (Using Release config prevents file lock conflicts if the Orchestrator is actively running in Debug).
 
 #### 🟢 Gate 3: Orchestration Integrity
 ```powershell
