@@ -13,6 +13,7 @@ import { FolderOpen, Edit, FileText, AlertTriangle, Layers, RefreshCw } from "@/
 import { apiClient, ExtendedProject } from "@/lib/api"
 import { toast } from "@/lib/notify"
 import { ProjectSocketRoom } from "./ProjectSocketRoom"
+import { EditProjectDialog } from "../../components/EditProjectDialog"
 
 // 🚀 Dynamic On-Demand Tab Mapping Matrix
 const TabOverview = React.lazy(() => import("./tabs/OverviewTabWrapper"))
@@ -40,6 +41,8 @@ export default function ProjectWorkspaceOrchestrator({ projectId }: Props) {
 
   const [project, setProject] = useState<ExtendedProject | null>(null)
   const [loading, setLoading] = useState(true)
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [updating, setUpdating] = useState(false)
 
   // 1. URL Query Param Synchronization Core
   const activeTab = useMemo(() => searchParams.get("tab") || "overview", [searchParams])
@@ -66,6 +69,23 @@ export default function ProjectWorkspaceOrchestrator({ projectId }: Props) {
     const params = new URLSearchParams(searchParams.toString())
     params.set("tab", value)
     router.push(`${pathname}?${params.toString()}`, { scroll: false })
+  }
+
+  const handleUpdateProject = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!project) return
+    try {
+      setUpdating(true)
+      await apiClient.updateProject(projectId, project)
+      toast.success("Project updated successfully")
+      setIsEditDialogOpen(false)
+      fetchProjectBaseline()
+    } catch (error) {
+      console.error("Update failed:", error)
+      toast.error("Failed to update project")
+    } finally {
+      setUpdating(false)
+    }
   }
 
   // 2. Performance Core: Conditional Rendering Strategy (Destroys dead nodes)
@@ -133,6 +153,7 @@ export default function ProjectWorkspaceOrchestrator({ projectId }: Props) {
 
         {/* Workspace Quick-Jump Utility Dock */}
         <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setIsEditDialogOpen(true)} className="h-9 text-xs font-semibold"><Edit className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> Edit Project</Button>
           <Button variant="outline" size="sm" asChild className="h-9 text-xs font-semibold"><Link href={`/projects/${projectId}/drift`}><AlertTriangle className="mr-1.5 h-3.5 w-3.5 text-amber-500" /> Drift Management</Link></Button>
           <Button variant="outline" size="sm" asChild className="h-9 text-xs font-semibold"><Link href={`/projects/${projectId}/digital-twins`}><Layers className="mr-1.5 h-3.5 w-3.5 text-blue-500" /> Twin SNAPSHOT</Link></Button>
         </div>
@@ -167,6 +188,15 @@ export default function ProjectWorkspaceOrchestrator({ projectId }: Props) {
           </Suspense>
         </div>
       </Tabs>
+
+      <EditProjectDialog
+        open={isEditDialogOpen}
+        onOpenChange={setIsEditDialogOpen}
+        project={project}
+        onProjectChange={(updatedData) => updatedData && setProject(updatedData)}
+        onSubmit={handleUpdateProject}
+        updating={updating}
+      />
     </div>
   )
 }
