@@ -56,7 +56,7 @@ export class DependencyGraph {
    * If fail-fast mode is enabled, stops on first critical failure.
    */
   async initialize(): Promise<Map<string, DependencyStatus>> {
-    const maxWaitTime = 60000; // 60-second timeout for the entire process
+    const maxWaitTime = 90000; // 90s — must exceed Database init timeout (65s)
     const startTime = Date.now();
     const initialized = new Set<string>();
     const inProgress = new Map<string, Promise<void>>();

@@ -34,6 +34,8 @@ module.exports = {
     '**/__tests__/utils/pdfGenerator.test.ts',
     '**/__tests__/contextOrchestrator.test.ts',
     '**/__tests__/TemplateController.create.test.ts',
+    '**/__tests__/database/connectionSsl.test.ts',
+    '**/routes/__tests__/health_logic.test.ts',
   ],
   // No globalSetup / setupFilesAfterEnv — these tests use mocks only
   testTimeout: 30000,
@@ -43,7 +45,7 @@ module.exports = {
     '^@/(.*)$': '<rootDir>/src/$1',
   },
   transformIgnorePatterns: [
-    'node_modules/(?!(uuid|\\.pnpm/.*uuid))',
+    'node_modules[\\\\/](?!(uuid|\\.pnpm[\\\\/].*uuid))',
   ],
   transform: {
     '^.+\\.(ts|tsx)$': ['ts-jest', {
@@ -54,5 +56,12 @@ module.exports = {
       },
       diagnostics: false
     }],
+    '^.+\\.js$': ['ts-jest', {
+      tsconfig: {
+        esModuleInterop: true,
+        allowSyntheticDefaultImports: true,
+        allowJs: true,
+      }
+    }]
   }
 }
