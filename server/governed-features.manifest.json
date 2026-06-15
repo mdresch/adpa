@@ -99,6 +99,41 @@
       "overlapGuard": false,
       "testModuleDir": "compliance",
       "testPathPattern": "modules/compliance"
+    },
+    {
+      "id": "ip-governance",
+      "description": "IP Novelty Assessment, Legal Review, and Registration pipeline",
+      "skills": [
+        "adpa-governed-feature-loop"
+      ],
+      "overlapGuard": false,
+      "spec": "docs/features/implemented/ip-novelty-governance-pipeline.md",
+      "testModuleDir": "ip-governance",
+      "testPathPattern": "modules/ip-governance"
+    },
+    {
+      "id": "document-dependency-graph",
+      "description": "Topological sort and upstream/downstream dependency resolution for Document DAG",
+      "skills": [
+        "adpa-dependency-graph"
+      ],
+      "overlapGuard": false,
+      "spec": "docs/superpowers/specs/2026-06-15-cascading-regeneration-engine-design.md",
+      "testModuleDir": "document-dependency-graph",
+      "testPathPattern": "modules/document-dependency-graph"
+    },
+    {
+      "id": "cascading-regeneration",
+      "description": "Cascades regeneration jobs following positive drift or approved change request",
+      "skills": [
+        "adpa-dependency-graph",
+        "adpa-doc-gen-queue",
+        "adpa-compliance-layer-pillar4"
+      ],
+      "overlapGuard": false,
+      "spec": "docs/superpowers/specs/2026-06-15-cascading-regeneration-engine-design.md",
+      "testModuleDir": "cascading-regeneration",
+      "testPathPattern": "modules/cascading-regeneration"
     }
   ]
 }

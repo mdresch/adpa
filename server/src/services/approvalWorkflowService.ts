@@ -350,7 +350,7 @@ export class ApprovalWorkflowService {
 
               // ⭐ NEW HOOK: Automatically update the project baseline
               // Based on Phase 3: Workflow Automation from DRIFT_TO_CHANGE_REQUEST_WORKFLOW.md
-              logger.info('[APPROVAL-WORKFLOW] Final CR approval detected - triggering baseline update', {
+              logger.info('[APPROVAL-WORKFLOW] Final CR approval detected - triggering baseline update and cascading regeneration', {
                 changeRequestId: request.change_request_id,
                 projectId: request.project_id
               })
@@ -359,12 +359,42 @@ export class ApprovalWorkflowService {
               baselineUpdateService.updateBaselineFromChangeRequest(
                 request.change_request_id,
                 params.approver_user_id
-              ).then(result => {
+              ).then(async result => {
                 if (result.success) {
                   logger.info('[APPROVAL-WORKFLOW] Baseline updated successfully after approval', {
                     changeRequestId: request.change_request_id,
                     newVersion: result.baselineVersion
                   })
+                  
+                  // 🔥 TRIGGER CASCADING REGENERATION
+                  try {
+                    // Get the source document from the CR metadata to trigger cascade
+                    const crDocResult = await pool.query(
+                      `SELECT d.id, d.metadata->>'source_document_id' as source_doc_id, 
+                              d.metadata->>'drift_record_id' as drift_record_id,
+                              src.title as source_title
+                       FROM documents d
+                       JOIN documents src ON src.id = (d.metadata->>'source_document_id')::uuid
+                       WHERE d.id = $1`,
+                      [request.change_request_id]
+                    );
+
+                    if (crDocResult.rows.length > 0) {
+                      const { source_doc_id, drift_record_id, source_title } = crDocResult.rows[0];
+                      if (source_doc_id && source_title) {
+                        const { cascadingRegenerationService } = await import('../modules/cascading-regeneration/CascadingRegenerationService');
+                        await cascadingRegenerationService.triggerCascade(
+                          source_title,
+                          request.project_id,
+                          drift_record_id || 'manual-cr',
+                          params.approver_user_id
+                        );
+                      }
+                    }
+                  } catch (cascadeError) {
+                    logger.error('[APPROVAL-WORKFLOW] Failed to trigger cascading regeneration:', cascadeError);
+                  }
+                  
                 } else {
                   logger.warn('[APPROVAL-WORKFLOW] Baseline update skipped or failed', {
                     changeRequestId: request.change_request_id,
