@@ -555,8 +555,8 @@ importers:
         specifier: latest
         version: 1.15.0
       nodemailer:
-        specifier: ^8.0.5
-        version: 8.0.5
+        specifier: ^8.0.9
+        version: 8.0.9
       novel:
         specifier: ^1.0.2
         version: 1.0.2(@babel/core@7.28.5)(@babel/template@7.27.2)(@tiptap/extension-code-block@2.27.2(@tiptap/core@3.23.6(@tiptap/pm@3.23.6))(@tiptap/pm@3.23.6))(@types/react-dom@18.3.7(@types/react@18.3.26))(@types/react@18.3.26)(highlight.js@10.7.3)(immer@10.2.0)(lowlight@1.20.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -1093,8 +1093,8 @@ importers:
         specifier: ^2.1.1
         version: 2.1.1
       nodemailer:
-        specifier: ^8.0.5
-        version: 8.0.5
+        specifier: ^8.0.9
+        version: 8.0.9
       ollama-ai-provider-v2:
         specifier: ^3.3.1
         version: 3.3.1(ai@6.0.90(zod@4.1.8))(zod@4.1.8)
@@ -10949,8 +10949,8 @@ packages:
     resolution: {integrity: sha512-LN4fydt9TqhZhThkZIVQnF9cwjU3qmUH9h78Mx/K7d3VvfRqqwthLwJEUOEL0QPZ0XQmNN7be5Ggit5+4dq3Bw==}
     engines: {node: '>=0.12.0'}
 
-  nodemailer@8.0.5:
-    resolution: {integrity: sha512-0PF8Yb1yZuQfQbq+5/pZJrtF6WQcjTd5/S4JOHs9PGFxuTqoB/icwuB44pOdURHJbRKX1PPoJZtY7R4VUoCC8w==}
+  nodemailer@8.0.9:
+    resolution: {integrity: sha512-5ofa7BUN8+C+Hckh5V2GjeeOGRQBx0CJQA6KxrvuZfC8iU4/q7sLn8XrtEEhJkjV6HdyIiQs7Bba6bTao8JhkA==}
     engines: {node: '>=6.0.0'}
 
   nodemon@3.1.14:
@@ -25677,7 +25677,7 @@ snapshots:
 
   node-stream-zip@1.15.0: {}
 
-  nodemailer@8.0.5: {}
+  nodemailer@8.0.9: {}
 
   nodemon@3.1.14:
     dependencies:
