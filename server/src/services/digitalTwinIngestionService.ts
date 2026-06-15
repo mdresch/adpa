@@ -144,7 +144,7 @@ export async function startSync(sourceId: string): Promise<void> {
 
   // Start connector if active
   try {
-    const { connectorManager } = await import('./connectors/connectorManager');
+    const { connectorManager } = await Promise.resolve().then(() => require());
     await connectorManager.startConnector(source);
     logger.info({ sourceId }, 'Digital Twin ingestion sync started');
   } catch (error: any) {
@@ -172,7 +172,7 @@ export async function pauseSync(sourceId: string): Promise<void> {
 
   // Stop connector
   try {
-    const { connectorManager } = await import('./connectors/connectorManager');
+    const { connectorManager } = await Promise.resolve().then(() => require());
     await connectorManager.stopConnector(sourceId);
     logger.info({ sourceId }, 'Digital Twin ingestion sync paused');
   } catch (error: any) {

@@ -15,7 +15,7 @@ describe('MongoVectorStore.getStats cache', () => {
   });
 
   it('returns persisted stats immediately and schedules background refresh', async () => {
-    const { MongoVectorStore } = await import('../../services/mongoVectorStore');
+    const { MongoVectorStore } = await Promise.resolve().then(() => require());
     const store = new MongoVectorStore();
 
     const persisted = {

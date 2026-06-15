@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Baseline Extraction Job Service
  * Handles processing of baseline extraction jobs from the queue
  * 
@@ -101,7 +101,7 @@ export class BaselineExtractionJobService {
       const documents = documentsResult.rows
 
       // Extract entities with location tracking using enhanced coordinator
-      const { EnhancedEntityExtractionCoordinator } = await import('../enhancedEntityExtractionCoordinator')
+      const { EnhancedEntityExtractionCoordinator } = await Promise.resolve().then(() => require('../enhancedEntityExtractionCoordinator'))
       const enhancedCoordinator = new EnhancedEntityExtractionCoordinator()
       const extractionResults = await enhancedCoordinator.extractAllEntitiesWithLocations(
         documents,
@@ -118,7 +118,7 @@ export class BaselineExtractionJobService {
       await updateJobStatus(jobId, "processing", 70, workerId, "baseline-processing")
 
       // Create baseline in database
-      const { baselineService } = await import('../baselineService')
+      const { baselineService } = await Promise.resolve().then(() => require('../baselineService'))
       const baseline = await baselineService.createBaselineFromEntities(
         project_id,
         userId

@@ -247,7 +247,7 @@ export async function evaluateTriggerRules(
 
     // Queue trigger for processing
     try {
-      const { digitalTwinTriggerQueue } = await import('../services/queueService');
+      const { digitalTwinTriggerQueue } = await Promise.resolve().then(() => require());
       await digitalTwinTriggerQueue.add('process-trigger', { triggerId: tr.id }, {
         attempts: 3,
         backoff: { type: 'exponential', delay: 3000 },
@@ -363,7 +363,7 @@ export async function processDocumentTrigger(triggerId: string): Promise<{ id: s
     const template = templateRes.rows[0];
 
     // Generate document using existing document generation service
-    const { documentGenerationService } = await import('./documentGenerationService');
+    const { documentGenerationService } = await Promise.resolve().then(() => require());
 
     // Build generation context from asset and state
     const generationParams = trigger.generation_params || {};

@@ -286,7 +286,7 @@ export class PineconeService {
       logger.info('Starting entity upsert with integrated embedding', { entitiesCount: entities.length });
 
       // Use integrated embedding with correct record format from documentation
-      const { entityRowToPineconeRecord } = await import('./pineconeEntitySync');
+      const { entityRowToPineconeRecord } = await Promise.resolve().then(() => require());
       const records = entities
         .map((entity) => {
           if (entity.entity_type && entity.project_id) {
@@ -428,7 +428,7 @@ export class PineconeService {
       });
       // Fallback to VoyageAI if configured, otherwise throw
       try {
-        const { voyageAIService } = await import('./voyageAIService');
+        const { voyageAIService } = await Promise.resolve().then(() => require());
         return await voyageAIService.generateEmbedding(query, 'query', 'voyage-2');
       } catch (err) {
         throw error; // Re-throw original Pinecone error if VoyageAI fails too
@@ -760,7 +760,7 @@ export class PineconeService {
       // 3. Sync extracted entities from PostgreSQL domain tables
       logger.info('Starting Pinecone sync - Entities', { projectId });
 
-      const { fetchEntitiesForPinecone, entityRowToPineconeRecord } = await import('./pineconeEntitySync');
+      const { fetchEntitiesForPinecone, entityRowToPineconeRecord } = await Promise.resolve().then(() => require());
       const entityRows = await fetchEntitiesForPinecone(pgPool, projectId);
       stats.entities.total = entityRows.length;
 

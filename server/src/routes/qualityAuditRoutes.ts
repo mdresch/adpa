@@ -577,7 +577,7 @@ router.get(
         })
       }
 
-      const { templateOptimizationService } = await import('../services/templateOptimizationService')
+      const { templateOptimizationService } = await Promise.resolve().then(() => require())
       const suggestion = await templateOptimizationService.getLatestAuditPromptSuggestion(value.templateId)
 
       res.json({
@@ -604,7 +604,7 @@ router.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { templateId } = req.body
-      const { templateOptimizationService } = await import('../services/templateOptimizationService')
+      const { templateOptimizationService } = await Promise.resolve().then(() => require())
       const suggestionId = await templateOptimizationService.generatePromptSuggestionFromLatestAudit(templateId)
       const suggestion = await templateOptimizationService.getOptimizationSuggestion(suggestionId)
 
@@ -660,7 +660,7 @@ router.post(
         })
       }
 
-      const { templateOptimizationService } = await import('../services/templateOptimizationService')
+      const { templateOptimizationService } = await Promise.resolve().then(() => require())
       await templateOptimizationService.applyOptimization(suggestionId, userId)
       
       logger.info('[QUALITY-AUDIT-API] Template optimization applied', {
@@ -692,7 +692,7 @@ router.get(
     try {
       const { suggestionId } = req.params
 
-      const { templateOptimizationService } = await import('../services/templateOptimizationService')
+      const { templateOptimizationService } = await Promise.resolve().then(() => require())
       const suggestion = await templateOptimizationService.getOptimizationSuggestion(suggestionId)
       
       if (!suggestion) {
@@ -843,7 +843,7 @@ router.post(
 
       logger.info('[DRACO-API] Manual DRACO review triggered', { documentId, userId })
 
-      const { dracoService } = await import('../services/dracoService')
+      const { dracoService } = await Promise.resolve().then(() => require())
       
       // Respond immediately with 202 Accepted to prevent 502 Gateway timeouts
       // The client should listen to the SSE progress stream for real-time updates.
@@ -888,7 +888,7 @@ router.get(
     try {
       const { documentId } = req.params
 
-      const { dracoService } = await import('../services/dracoService')
+      const { dracoService } = await Promise.resolve().then(() => require())
       const review = await dracoService.getDocumentReview(documentId)
 
       if (!review) {
@@ -919,7 +919,7 @@ router.get(
     try {
       const { documentId } = req.params
 
-      const { dracoService } = await import('../services/dracoService')
+      const { dracoService } = await Promise.resolve().then(() => require())
       const review = await dracoService.getDocumentReview(documentId)
 
       if (!review) {
@@ -956,7 +956,7 @@ router.get(
   authenticateToken,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { dracoService } = await import('../services/dracoService')
+      const { dracoService } = await Promise.resolve().then(() => require())
       const stats = await dracoService.getReviewStats()
       res.json({ success: true, stats })
     } catch (error: unknown) {
@@ -1012,7 +1012,7 @@ router.get(
     // Send initial connection confirmation
     sendEvent({ type: 'connected', documentId, message: 'Review Board progress stream connected', progress_percent: 0, timestamp: new Date().toISOString() })
 
-    const { dracoProgressEmitter } = await import('../services/dracoProgressEmitter')
+    const { dracoProgressEmitter } = await Promise.resolve().then(() => require())
 
     // Close the stream when review finishes
     const closeStream = () => {
@@ -1062,7 +1062,7 @@ router.post(
         })
       }
 
-      const { dracoService } = await import('../services/dracoService')
+      const { dracoService } = await Promise.resolve().then(() => require())
       await dracoService.recordHumanOverride({
         documentId,
         reviewId,

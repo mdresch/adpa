@@ -32,8 +32,8 @@ async function run() {
     const userId = '42ca7333-b37e-4e1b-bd50-ac04abd7e682'; // Menno Drescher
     
     // We import the service AFTER connecting the DB just in case it does some eager initialization
-    const { documentGenerationService } = await import('../services/documentGenerationService');
-    const { initializeRegistry } = await import('../services/extraction/ExtractionRegistry');
+    const { documentGenerationService } = await Promise.resolve().then(() => require());
+    const { initializeRegistry } = await Promise.resolve().then(() => require());
 
     console.log('Initializing Extraction Registry...');
     await initializeRegistry();

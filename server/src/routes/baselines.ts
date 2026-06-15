@@ -120,7 +120,7 @@ router.get(
   async (req, res) => {
     try {
       const { id } = req.params
-      const { pool } = await import('../database/connection')
+      const { pool } = await Promise.resolve().then(() => require())
 
       const result = await pool.query(
         `SELECT 
@@ -168,7 +168,7 @@ router.post(
       const { project_id, document_ids, ai_provider, ai_model, project_name } = req.body
       const userId = (req as any).user.id
       const { v4: uuidv4 } = await import('uuid')
-      const { addJob } = await import('../services/queueService')
+      const { addJob } = await Promise.resolve().then(() => require())
 
       logger.info(`Queueing baseline extraction for project ${project_id}`)
       
@@ -376,7 +376,7 @@ router.post(
     try {
       const { id } = req.params
       const { reason } = req.body
-      const { pool } = await import('../database/connection')
+      const { pool } = await Promise.resolve().then(() => require())
 
       // Update baseline status to 'superseded' (declined baselines are treated as superseded)
       const result = await pool.query(
@@ -450,7 +450,7 @@ router.get(
     try {
       const { id } = req.params
       const { severity, status, page = 1, limit = 20 } = req.query
-      const { pool } = await import('../database/connection')
+      const { pool } = await Promise.resolve().then(() => require())
 
       const offset = (Number(page) - 1) * Number(limit)
 
@@ -627,7 +627,7 @@ router.get(
   async (req, res) => {
     try {
       const { id } = req.params
-      const { pool } = await import('../database/connection')
+      const { pool } = await Promise.resolve().then(() => require())
 
       // Get baseline with project name
       const result = await pool.query(

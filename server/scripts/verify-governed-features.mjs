@@ -18,6 +18,7 @@ const manifestPath = join(serverRoot, 'governed-features.manifest.json')
 const packagePath = join(serverRoot, 'package.json')
 const modulesTestRoot = join(serverRoot, 'src', '__tests__', 'modules')
 const testsRoot = join(serverRoot, 'src', '__tests__')
+const repoTestsRoot = join(repoRoot, '__tests__')
 const specsRoot = join(repoRoot, 'docs', 'superpowers', 'specs')
 const skillsRoot = join(repoRoot, '.agents', 'skills')
 const FEATURES_RUNNER = 'node scripts/run-governed-features.mjs'
@@ -44,23 +45,25 @@ function readTestSourcesFromDir(dir) {
 }
 
 function listTestFilesMatchingPattern(pattern) {
-  if (!existsSync(testsRoot)) return []
   const files = []
   const walk = (dir) => {
+    if (!existsSync(dir)) return
     for (const name of readdirSync(dir)) {
       const full = join(dir, name)
       if (statSync(full).isDirectory()) {
         walk(full)
         continue
       }
-      if (!/\.test\.(ts|js)$/.test(name)) continue
+      if (!/\.test\.(ts|js|tsx|jsx)$/.test(name)) continue
       const rel = full.replace(/\\/g, '/')
-      if (rel.includes(pattern) || name.includes(pattern)) {
+      const regex = new RegExp(pattern)
+      if (regex.test(rel) || regex.test(name)) {
         files.push(full)
       }
     }
   }
   walk(testsRoot)
+  walk(repoTestsRoot)
   return files
 }
 

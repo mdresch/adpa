@@ -15,17 +15,17 @@ describe('Authentication Module (#613) - Dynamic Audit', () => {
     
     try {
       console.log('[AUDIT] Dynamic import of database/connection...');
-      const dbModule = await import('../../../database/connection');
+      const dbModule = await Promise.resolve().then(() => require());
       pool = dbModule.pool;
       console.log('[AUDIT] pool imported');
 
       console.log('[AUDIT] Dynamic import of factories...');
-      const factModule = await import('../../../__tests__/factories');
+      const factModule = await Promise.resolve().then(() => require());
       createTestUser = factModule.createTestUser;
       console.log('[AUDIT] factories imported');
 
       console.log('[AUDIT] Dynamic import of testServer...');
-      const serverModule = await import('../../../__tests__/testServer');
+      const serverModule = await Promise.resolve().then(() => require());
       app = serverModule.app;
       console.log('[AUDIT] testServer imported');
 

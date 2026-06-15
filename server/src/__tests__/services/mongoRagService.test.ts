@@ -15,7 +15,7 @@ describe('mongoRagService', () => {
     process.env.MONGODB_URI = 'mongodb://localhost:27017';
     process.env.VOYAGE_API_KEY = 'test-key';
 
-    const { isMongoRagEnabled } = await import('../../services/mongoRagService');
+    const { isMongoRagEnabled } = await Promise.resolve().then(() => require());
     expect(isMongoRagEnabled()).toBe(false);
   });
 
@@ -24,7 +24,7 @@ describe('mongoRagService', () => {
     process.env.MONGODB_URI = 'mongodb://localhost:27017';
     process.env.VOYAGE_API_KEY = 'test-key';
 
-    const { isMongoRagEnabled } = await import('../../services/mongoRagService');
+    const { isMongoRagEnabled } = await Promise.resolve().then(() => require());
     expect(isMongoRagEnabled()).toBe(true);
   });
 });

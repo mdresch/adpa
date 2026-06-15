@@ -20,6 +20,7 @@ import type { IQueueJob } from './queue/IQueue'
 import type { AIGenerationJobData, JobStatus, QueueName } from './types'
 // Phase 5: Dependency injection
 import type { QueueServiceDependencies } from './queue/QueueDependencies'
+import { TestAsyncTaskTracker } from '../../utils/testAsyncTaskTracker'
 
 interface ProcessJobOptions {
   workerId: string
@@ -147,7 +148,7 @@ export class AIGenerationJobService {
         
         // Phase 6: Multi-Level Summary Register
         if (createdDocumentId && result.content) {
-          const { DocumentSummarizationService } = await import('../documentSummarizationService')
+          const { DocumentSummarizationService } = await Promise.resolve().then(() => require('../documentSummarizationService'))
           
           const summaries = result.summaries
           const hasSummaries = summaries && (Array.isArray(summaries) ? summaries.length > 0 : Object.keys(summaries).length > 0)
@@ -162,32 +163,24 @@ export class AIGenerationJobService {
                 }))
 
             logger.info(`[SUMMARIZER] Saving ${summariesArray.length} in-band summaries for ${createdDocumentId}`)
-            setImmediate(async () => {
-              try {
-                await DocumentSummarizationService.saveSummaries(
-                  createdDocumentId!,
-                  result.content,
-                  summariesArray,
-                  jobData.provider || 'default',
-                  jobData.model || 'default'
-                )
-              } catch (saveError) {
-                logger.error(`[SUMMARIZER] Failed to save in-band summaries for ${createdDocumentId}`, saveError)
-              }
+            TestAsyncTaskTracker.runTrackedDeferred('SaveInBandSummaries', async () => {
+              await DocumentSummarizationService.saveSummaries(
+                createdDocumentId!,
+                result.content,
+                summariesArray,
+                jobData.provider || 'default',
+                jobData.model || 'default'
+              )
             })
           } else {
             // Fallback: Generate summaries in background if not provided in-band
             logger.info(`[SUMMARIZER] No in-band summaries found, triggering background generation for ${createdDocumentId}`)
-            setImmediate(async () => {
-              try {
-                await DocumentSummarizationService.generateMultiLevelSummaries(
-                  createdDocumentId!, 
-                  result.content, 
-                  jobData.userId || 'system'
-                )
-              } catch (sumError) {
-                logger.error(`[SUMMARIZER] Background summarization failed for ${createdDocumentId}`, sumError)
-              }
+            TestAsyncTaskTracker.runTrackedDeferred('GenerateMultiLevelSummaries', async () => {
+              await DocumentSummarizationService.generateMultiLevelSummaries(
+                createdDocumentId!, 
+                result.content, 
+                jobData.userId || 'system'
+              )
             })
           }
         }
@@ -263,7 +256,7 @@ export class AIGenerationJobService {
       })
 
       // Lazy import to avoid circular dependency at module load time
-      const { documentGenerationService } = await import('../documentGenerationService')
+      const { documentGenerationService } = await Promise.resolve().then(() => require('../documentGenerationService'))
 
       const docId = uuidv4()
 
@@ -522,7 +515,7 @@ export class AIGenerationJobService {
 
       const processingTimeSec = (Math.max(processingTimeMs, 0) / 1000).toFixed(2)
 
-      const generationMetadata = AIGenerationJobService.buildGenerationMetadata({
+      let generationMetadata = AIGenerationJobService.buildGenerationMetadata({
         result,
         provider: provider || 'openai',
         model: model || 'unknown',
@@ -547,6 +540,14 @@ export class AIGenerationJobService {
         entityExtractionQuality: result?.entityExtractionQuality,
         appliedContextEntities: result?.appliedContextEntities,
       })
+
+      // Merge any user-provided generation metadata
+      if (jobData.generation_metadata) {
+        generationMetadata = {
+          ...generationMetadata,
+          ...jobData.generation_metadata,
+        }
+      }
 
       const insertResult = await db.query(
         `
@@ -587,9 +588,37 @@ export class AIGenerationJobService {
       if (insertResult.rows.length > 0) {
         createdDocumentId = insertResult.rows[0].id
 
+        if (generationMetadata.compliance_status === 'PENDING_HUMAN_APPROVAL' || generationMetadata.compliance_status === 'PENDING_APPROVAL') {
+          try {
+            const approvalRequestId = uuidv4()
+            await db.query(
+              `INSERT INTO approval_requests (id, request_type, change_request_id, status, priority, severity, created_by)
+               VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+              [approvalRequestId, 'document_generation', createdDocumentId, 'pending', 'medium', 'low', userId || null]
+            )
+            
+            await db.query(`UPDATE documents SET status = 'pending_approval' WHERE id = $1`, [createdDocumentId])
+
+            const { notificationService } = await Promise.resolve().then(() => require('../notificationService'))
+            if (notificationService.sendNotification) {
+              await notificationService.sendNotification({
+                notification_type: 'APPROVAL_REQUEST',
+                reference_type: 'document',
+                reference_id: createdDocumentId,
+                project_id: projectIdForDoc,
+                recipients: [{ user_id: userId || undefined, destination: 'in_app', channel: 'in_app' }],
+                variables: { documentName: docName, approvalRequestId }
+              })
+            }
+            log.info(`[AI-JOB] Created approval request ${approvalRequestId} and sent notification for document ${createdDocumentId}`)
+          } catch (approvalErr) {
+            log.error(`[AI-JOB] Failed to create approval request for ${createdDocumentId}`, approvalErr)
+          }
+        }
+
         if (projectIdForDoc && docContent.trim()) {
           try {
-            const { enqueueEntityPersistence } = await import('../jobs/enqueueEntityPersistence')
+            const { enqueueEntityPersistence } = await Promise.resolve().then(() => require('./enqueueEntityPersistence'))
             const entityJobId = await enqueueEntityPersistence({
               projectId: projectIdForDoc,
               userId: userId ?? null,
@@ -619,35 +648,27 @@ export class AIGenerationJobService {
           }, deps);
           
           try {
-            const { TemplateAnalyticsService } = await import('../templateAnalyticsService')
-            setImmediate(async () => {
-              try {
-                await TemplateAnalyticsService.updateTemplateEntityProfile(template_id)
-                log.info(`[AI-JOB] Template entity profile updated for ${template_id}`)
-              } catch (err) {
-                log.warn(`[AI-JOB] Failed to update template entity profile (non-fatal)`, { template_id, error: err })
-              }
+            const { TemplateAnalyticsService } = await Promise.resolve().then(() => require('../templateAnalyticsService'))
+            TestAsyncTaskTracker.runTrackedDeferred('UpdateTemplateEntityProfile', async () => {
+              await TemplateAnalyticsService.updateTemplateEntityProfile(template_id)
+              log.info(`[AI-JOB] Template entity profile updated for ${template_id}`)
             })
           } catch (err) { }
         }
         if (projectIdForDoc && docContent.trim() && createdDocumentId) {
-          setImmediate(async () => {
+          TestAsyncTaskTracker.runTrackedDeferred('RAGIngestDocument', async () => {
             if (!process.env.VOYAGE_API_KEY) return
-            try {
-              const { ragService } = await import('../ragService')
-              const ingestIds = new Set<string>([createdDocumentId])
-              if (documentIds?.length) {
-                documentIds.forEach((id) => ingestIds.add(id))
+            const { ragService } = await Promise.resolve().then(() => require('../ragService'))
+            const ingestIds = new Set<string>([createdDocumentId])
+            if (documentIds?.length) {
+              documentIds.forEach((id) => ingestIds.add(id))
+            }
+            for (const id of ingestIds) {
+              try {
+                await ragService.ingestDocument(id)
+              } catch (ingestErr) {
+                log.warn(`[AI-JOB] Post-save RAG ingest failed for ${id} (non-fatal)`, ingestErr)
               }
-              for (const id of ingestIds) {
-                try {
-                  await ragService.ingestDocument(id)
-                } catch (ingestErr) {
-                  log.warn(`[AI-JOB] Post-save RAG ingest failed for ${id} (non-fatal)`, ingestErr)
-                }
-              }
-            } catch (importErr) {
-              log.warn('[AI-JOB] RAG ingest skipped (non-fatal)', importErr)
             }
           })
         }
@@ -670,7 +691,7 @@ export class AIGenerationJobService {
   }
 
   private static async calculateQualityMetrics(content: string, metadata: any): Promise<any> {
-    const { analyzeDocumentQuality } = await import('../../utils/documentMetadata')
+    const { analyzeDocumentQuality } = await Promise.resolve().then(() => require('../../utils/documentMetadata'))
     const safeContent = String(content || '')
     const tempMetadata = {
       ...metadata,
@@ -801,7 +822,7 @@ export class AIGenerationJobService {
     const projectId = (jobData.projectId || jobData.variables?.project_id) as string
     if (!projectId) return
     try {
-      const { baselineService } = await import('../baselineService')
+      const { baselineService } = await Promise.resolve().then(() => require('../baselineService'))
       const docContent = (typeof result.content === 'string' ? result.content : JSON.stringify(result.content || result)) || ''
       const drifts = await baselineService.validateDocumentAgainstBaseline(projectId, documentId, docContent, jobData.name || 'Document')
       if (drifts.length > 0) {
@@ -842,6 +863,14 @@ export class AIGenerationJobService {
     log.error(`AI generation job failed: ${jobId}`, error)
     await db.query(`UPDATE jobs SET status = 'failed', error_message = $1, failed_at = CURRENT_TIMESTAMP WHERE id = $2`, [errorMessage, jobId])
     ws.emit("job:failed", { jobId, userId: jobData.userId, status: "failed", error: errorMessage, projectId: jobData.projectId || jobData.variables?.project_id })
+    
+    // Explicitly free memory upon failing document generation if GC is exposed
+    if (global.gc) {
+      log.info(`[WORKER] Freeing memory after failed document generation for job ${jobId}`);
+      global.gc();
+    } else {
+      log.warn(`[WORKER] Memory freeing requested for job ${jobId} but global.gc is not available. Try starting node with --expose-gc`);
+    }
   }
 
   private static startProgressHeartbeat(

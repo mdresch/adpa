@@ -1,8 +1,7 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import React, { useState, useEffect, useRef, useMemo } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -27,10 +26,12 @@ import {
   Trash2,
   Loader2,
   Zap,
+  Wand2,
 } from "lucide-react"
 import { AnimatedGrid, AnimatedGridItem, AnimatedLayout } from "@/components/animated-layout"
-import { Document, apiClient } from "@/lib/api"
+import { Document, apiClient, Project } from "@/lib/api"
 import { useAuth } from "@/contexts/AuthContext"
+import { GenerateDocumentModal } from "../../components/dialogs/GenerateDocumentModal"
 
 interface DocumentStats {
   totalDocuments: number
@@ -69,7 +70,8 @@ interface DocumentsTabProps {
   handleDownloadDocument: (id: string) => void
   handleDeleteDocument: (id: string) => void
   documentsPagination: DocumentsPagination
-  setDocumentsPagination: React.Dispatch<React.SetStateAction<DocumentsPagination>>
+  handlePageChange: (page: number) => void
+  project?: Project
 }
 
 const getStatusIcon = (status: string, isProcessing?: boolean) => {
@@ -107,17 +109,15 @@ const getStatusColor = (status: string) => {
   }
 }
 
-/** Hook that polls /api/v1/jobs for active (pending/processing) generation jobs */
 function useActiveGenerationJobs(projectId: string) {
   const [activeJobs, setActiveJobs] = useState<ActiveJobInfo[]>([])
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
 
   const fetchActiveJobs = async () => {
     try {
-      // Use apiClient (same as jobs monitor page) — it correctly hits /api/v1/jobs
       const [processingData, pendingData] = await Promise.all([
-        apiClient.get('/jobs?status=processing&limit=50') as Promise<any>,
-        apiClient.get('/jobs?status=pending&limit=50') as Promise<any>,
+        apiClient.request('/jobs?status=processing&limit=50') as Promise<any>,
+        apiClient.request('/jobs?status=pending&limit=50') as Promise<any>,
       ])
 
       const allJobs = [
@@ -125,27 +125,24 @@ function useActiveGenerationJobs(projectId: string) {
         ...(pendingData?.jobs || []),
       ]
 
-      console.log('[DocumentsTab] Active generation jobs raw:', allJobs.map((j: any) => ({
-        id: j.id, type: j.type, status: j.status, progress: j.progress,
-        documentName: j.documentName, docId: j.metadata?.document_id
-      })))
-
       const jobs: ActiveJobInfo[] = allJobs
         .filter((j: any) => ['ai-generate', 'document-regeneration'].includes(j.type))
+        .filter((j: any) => {
+          const jobProjectId = j.metadata?.project_id || j.project_id || j.projectId;
+          return jobProjectId === projectId;
+        })
         .map((j: any) => ({
           jobId: j.id,
           documentId: j.metadata?.document_id || null,
-          // documentName available even when documentId is null (job is still processing)
           documentName: j.documentName || j.metadata?.document_name || null,
           status: j.status,
           progress: j.progress || 0,
           type: j.type,
         }))
 
-      console.log('[DocumentsTab] Mapped active jobs:', jobs)
       setActiveJobs(jobs)
     } catch {
-      // silent — non-critical
+      // silent pass
     }
   }
 
@@ -171,41 +168,72 @@ export function DocumentsTab({
   handleDownloadDocument,
   handleDeleteDocument,
   documentsPagination,
-  setDocumentsPagination,
+  handlePageChange,
+  project,
 }: DocumentsTabProps) {
   const activeJobs = useActiveGenerationJobs(projectId)
-
+  const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false)
+  const [aiProviders, setAiProviders] = useState<any[]>([])
   const { user } = useAuth()
 
-  /** Resolve a raw updated_by value (UUID or name) to a display string */
+  // 🚀 RESTORED: Auto-fetch active hardware orchestration models on view mount
+  useEffect(() => {
+    const fetchEcosystemProviders = async () => {
+      try {
+        const providers: any = await apiClient.request('/ai-providers')
+        
+        // Normalize array string types smoothly to match configuration expectations
+        // Filter out inactive providers from the array so they don't appear in the dropdown
+        const mapped = (providers || [])
+          .filter((p: any) => p.is_active === true || p.isActive === true || p.active === true || p.status === 'active')
+          .map((p: any) => {
+          let modelsArray: any[] = []
+          const sourceModels = p.configuration?.models || p.models;
+          if (Array.isArray(sourceModels)) modelsArray = sourceModels
+          else if (typeof sourceModels === 'string') {
+            try { modelsArray = JSON.parse(sourceModels) } catch { modelsArray = sourceModels.split(',').map((s: string) => s.trim()) }
+          }
+          
+          let stringModels = modelsArray.map(m => typeof m === 'object' && m !== null ? (m.id || m.name || JSON.stringify(m)) : String(m));
+          const defaultModel = p.configuration?.default_model || p.model || stringModels[0] || "";
+          
+          if (stringModels.length === 0 && defaultModel) {
+            stringModels = [defaultModel];
+          }
+
+          return { ...p, models: stringModels, default_model: defaultModel }
+        })
+        
+        setAiProviders(mapped)
+      } catch (err) {
+        console.error("Failed to load automation engine settings:", err)
+      }
+    }
+    fetchEcosystemProviders()
+  }, [])
+
   const resolveUpdatedBy = (updatedBy: string | null | undefined, updatedByName?: string | null): string => {
     if (updatedByName && updatedByName.trim() !== '') return updatedByName
     if (!updatedBy) return '—'
-    // If it's the currently logged-in user, use their display name
     if (user?.id && updatedBy === user.id) {
       return user.name || user.email || 'You'
     }
-    // If it looks like a UUID, abbreviate it
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
     if (uuidRegex.test(updatedBy)) {
       return `User ${updatedBy.slice(0, 8)}…`
     }
-    // It's already a human-readable name
     return updatedBy
   }
 
-  /** Look up any active job for a given document id + name */
   const getActiveJob = (docId: string, docName: string): ActiveJobInfo | undefined =>
     activeJobs.find(j =>
-      // Primary: match by document ID (works after doc is persisted)
       (j.documentId && j.documentId === docId) ||
-      // Fallback: match by name (works during active generation before doc ID is saved)
       (j.documentName && j.documentName.toLowerCase() === docName.toLowerCase())
     )
 
   return (
     <div className="space-y-4">
-      {/* Document Stats */}
+      {/* Document Stats Grid */}
       <AnimatedGrid className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <AnimatedGridItem>
           <Card>
@@ -261,7 +289,7 @@ export function DocumentsTab({
         </AnimatedGridItem>
       </AnimatedGrid>
 
-      {/* Active job banner — shown when any generation job is running */}
+      {/* Active Job Banner Feed */}
       {activeJobs.length > 0 && (
         <div className="flex items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/40 px-4 py-2.5 text-sm text-blue-800 dark:text-blue-200">
           <Loader2 className="h-4 w-4 shrink-0 animate-spin text-blue-500" />
@@ -274,7 +302,7 @@ export function DocumentsTab({
         </div>
       )}
 
-      {/* Search area */}
+      {/* Control Actions Bar */}
       <div className="flex items-center space-x-4">
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
@@ -285,17 +313,20 @@ export function DocumentsTab({
             className="pl-10"
           />
         </div>
+        <Button variant="default" className="shrink-0" onClick={() => setIsGenerateModalOpen(true)}>
+          <Wand2 className="h-4 w-4 mr-2" />
+          Generate Document
+        </Button>
       </div>
 
-      {/* Loading state for documents */}
+      {/* List Layout Rendering Branch */}
       {documentsLoading ? (
         <div className="flex justify-center items-center py-8">
-          <Loader2 className="h-6 w-6 animate-spin" />
-          <span className="ml-2">Loading documents...</span>
+          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+          <span className="ml-2 text-sm font-medium text-slate-500">Loading documents...</span>
         </div>
       ) : (
         <AnimatedLayout className="space-y-2">
-          {/* Active generating documents placeholder cards */}
           {activeJobs.map((job) => {
             const hasPersistedDoc = displayDocuments.some(
               doc => (job.documentId && doc.id === job.documentId) ||
@@ -318,7 +349,7 @@ export function DocumentsTab({
                             {job.documentName || "Generating document..."}
                           </span>
                           <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 border border-blue-300 dark:border-blue-700 animate-pulse">
-                            <Zap className="h-3 w-3 animate-bounce" />
+                            <Zap className="h-3 w-3" />
                             Generating… {job.progress > 0 ? `${job.progress}%` : ""}
                           </span>
                         </div>
@@ -358,7 +389,6 @@ export function DocumentsTab({
                             {doc.name}
                           </Link>
 
-                          {/* Processing badge — replaces normal status badge when generating */}
                           {isProcessing ? (
                             <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 border border-blue-300 dark:border-blue-700 animate-pulse">
                               <Zap className="h-3 w-3" />
@@ -371,7 +401,6 @@ export function DocumentsTab({
                           )}
                         </div>
 
-                        {/* Progress bar for active generation */}
                         {isProcessing && activeJob.progress > 0 && (
                           <div className="mt-1.5 w-full max-w-xs">
                             <Progress value={activeJob.progress} className="h-1.5" />
@@ -443,16 +472,22 @@ export function DocumentsTab({
             <div className="text-center py-12 bg-gray-50/50 rounded-lg border-2 border-dashed">
               <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-20" />
               <h3 className="text-lg font-semibold mb-2">No documents found</h3>
-              <p className="text-muted-foreground">
+              <p className="text-muted-foreground mb-4">
                 {searchTerm
                   ? "Try adjusting your search criteria"
                   : "No documents have been added to this project yet."
                 }
               </p>
+              {!searchTerm && (
+                <Button variant="outline" onClick={() => setIsGenerateModalOpen(true)}>
+                  <Wand2 className="h-4 w-4 mr-2" />
+                  Generate Document
+                </Button>
+              )}
             </div>
           )}
 
-          {/* Pagination Controls */}
+          {/* Pagination control metrics footer section */}
           {displayDocuments.length > 0 && documentsPagination.pages > 1 && (
             <div className="flex items-center justify-between pt-4 border-t">
               <div className="text-sm text-muted-foreground">
@@ -462,7 +497,7 @@ export function DocumentsTab({
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setDocumentsPagination(prev => ({ ...prev, page: prev.page - 1 }))}
+                  onClick={() => handlePageChange(documentsPagination.page - 1)}
                   disabled={documentsPagination.page <= 1}
                 >
                   Previous
@@ -473,7 +508,7 @@ export function DocumentsTab({
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setDocumentsPagination(prev => ({ ...prev, page: prev.page + 1 }))}
+                  onClick={() => handlePageChange(documentsPagination.page + 1)}
                   disabled={documentsPagination.page >= documentsPagination.pages}
                 >
                   Next
@@ -482,6 +517,16 @@ export function DocumentsTab({
             </div>
           )}
         </AnimatedLayout>
+      )}
+      
+      {/* 🚀 RESTORED: Explicitly relays fetched aiProviders downwards to satisfy selection properties */}
+      {project && (
+        <GenerateDocumentModal
+          project={project}
+          isOpen={isGenerateModalOpen}
+          onClose={() => setIsGenerateModalOpen(false)}
+          aiProviders={aiProviders}
+        />
       )}
     </div>
   )

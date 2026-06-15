@@ -57,24 +57,24 @@ describe('Feature 2: adpa-rag-dynamic-fallback', () => {
     }
   })
 
-  /** REQ-005: FTS is the primary retrieval strategy when it returns candidates */
-  it('uses primary FTS when it returns candidates', async () => {
+  /** REQ-005: Vector is the primary retrieval strategy when it returns candidates */
+  it('uses primary Vector when it returns candidates', async () => {
     const deps = makeDeps()
     const result = await retrieveChunksWithFallback(
       { projectId, documentIds, query: 'What is ADPA?', topK: 5 },
       deps
     )
 
-    expect(result.strategy).toBe('fts')
+    expect(result.strategy).toBe('vector')
     expect(result.chunks).toHaveLength(1)
-    expect(deps.searchFts).toHaveBeenCalled()
-    expect(deps.searchSequential).not.toHaveBeenCalled()
+    expect(deps.searchVector).toHaveBeenCalled()
+    expect(deps.searchFts).not.toHaveBeenCalled()
   })
 
-  /** REQ-006: Fall back to sequential when FTS returns no candidates */
-  it('falls back to sequential chunks when FTS returns nothing', async () => {
+  /** REQ-006: Fall back to FTS when Vector returns no candidates */
+  it('falls back to FTS chunks when Vector returns nothing', async () => {
     const deps = makeDeps({
-      searchFts: jest.fn().mockResolvedValue([]),
+      searchVector: jest.fn().mockResolvedValue([]),
     })
 
     const result = await retrieveChunksWithFallback(
@@ -82,17 +82,17 @@ describe('Feature 2: adpa-rag-dynamic-fallback', () => {
       deps
     )
 
-    expect(result.strategy).toBe('sequential')
+    expect(result.strategy).toBe('fts')
+    expect(result.attempted).toContain('vector')
     expect(result.attempted).toContain('fts')
-    expect(result.attempted).toContain('sequential')
-    expect(deps.searchSequential).toHaveBeenCalled()
+    expect(deps.searchFts).toHaveBeenCalled()
   })
 
-  /** REQ-007: Fall back to vector when FTS and sequential are empty */
-  it('falls back to vector search when FTS and sequential are empty', async () => {
+  /** REQ-007: Fall back to sequential when Vector and FTS are empty */
+  it('falls back to sequential search when Vector and FTS are empty', async () => {
     const deps = makeDeps({
+      searchVector: jest.fn().mockResolvedValue([]),
       searchFts: jest.fn().mockResolvedValue([]),
-      searchSequential: jest.fn().mockResolvedValue([]),
     })
 
     const result = await retrieveChunksWithFallback(
@@ -100,9 +100,8 @@ describe('Feature 2: adpa-rag-dynamic-fallback', () => {
       deps
     )
 
-    expect(result.strategy).toBe('vector')
-    expect(result.chunks[0].content).toContain('Vector fallback')
-    expect(deps.searchVector).toHaveBeenCalled()
+    expect(result.strategy).toBe('sequential')
+    expect(deps.searchSequential).toHaveBeenCalled()
   })
 
   /** REQ-008: Throw RagRetrievalError when all providers fail */
@@ -121,7 +120,7 @@ describe('Feature 2: adpa-rag-dynamic-fallback', () => {
   /** REQ-009: Re-inject context metadata on every fallback response */
   it('re-injects context metadata on fallback responses', async () => {
     const deps = makeDeps({
-      searchFts: jest.fn().mockResolvedValue([]),
+      searchVector: jest.fn().mockResolvedValue([]),
     })
 
     const result = await retrieveChunksWithFallback(
@@ -131,6 +130,6 @@ describe('Feature 2: adpa-rag-dynamic-fallback', () => {
 
     expect(result.chunks[0].context.projectId).toBe(projectId)
     expect(result.chunks[0].context.documentIds).toEqual(documentIds)
-    expect(result.chunks[0].context.strategy).toBe('sequential')
+    expect(result.chunks[0].context.strategy).toBe('fts')
   })
 })

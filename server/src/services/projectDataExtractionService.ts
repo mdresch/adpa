@@ -147,7 +147,7 @@ export class ProjectDataExtractionService {
    * Universal bridge to the modular extraction registry for saving
    */
   private async bridgeSave(entityType: string, client: PoolClient, projectId: string, userId: string, entities: any[], correlationId?: string): Promise<PersistenceResult> {
-    const { extractionRegistry } = await import('./extraction/ExtractionRegistry')
+    const { extractionRegistry } = await Promise.resolve().then(() => require())
     const saver = extractionRegistry.getSaver(entityType)
     if (!saver) {
        logger.warn(`[EXTRACTION-BRIDGE] No saver found for ${entityType}`)
@@ -160,7 +160,7 @@ export class ProjectDataExtractionService {
    * Universal bridge to the modular extraction registry for extraction
    */
   private async bridgeExtract(entityType: string, documents: any[], projectId: string, options: any): Promise<any[]> {
-    const { extractionRegistry } = await import('./extraction/ExtractionRegistry')
+    const { extractionRegistry } = await Promise.resolve().then(() => require())
     const extractor = extractionRegistry.getExtractor(entityType)
     if (!extractor) {
         logger.warn(`[EXTRACTION-BRIDGE] No extractor found for ${entityType}`)
@@ -172,12 +172,12 @@ export class ProjectDataExtractionService {
   }
 
   async extractSingleEntityType(projectId: string, userId: string, entityType: string, options: any = {}): Promise<any[]> {
-    const { extractSingleEntityType } = await import('./extraction/ExtractionOrchestrator')
+    const { extractSingleEntityType } = await Promise.resolve().then(() => require())
     return extractSingleEntityType(projectId, userId, entityType, options)
   }
 
   async saveSingleEntityType(projectId: string, userId: string, entityType: string, entities: any[], correlationId?: string): Promise<any> {
-    const { saveSingleEntityType } = await import('./extraction/ExtractionOrchestrator')
+    const { saveSingleEntityType } = await Promise.resolve().then(() => require())
     return saveSingleEntityType(null as any, projectId, userId, entities, correlationId)
   }
 

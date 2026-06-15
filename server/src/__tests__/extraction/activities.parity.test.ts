@@ -64,7 +64,7 @@ describe('Activities Extraction Parity Tests', () => {
   beforeAll(async () => {
     // Ensure database connection
     if (!pool) {
-      const { connectDatabase } = await import('../../database/connection')
+      const { connectDatabase } = await Promise.resolve().then(() => require())
       await connectDatabase()
     }
   })

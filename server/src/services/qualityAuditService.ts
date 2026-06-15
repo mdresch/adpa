@@ -280,7 +280,7 @@ class QualityAuditService {
           logger.info('[QUALITY-AUDIT] Calculating compliance metrics', { documentId })
           
           // Import the calculateComplianceMetrics function
-          const { calculateComplianceMetrics } = await import('../utils/documentMetadata')
+          const { calculateComplianceMetrics } = await Promise.resolve().then(() => require())
           
           // Create a minimal metadata object for compliance calculation
           const tempMetadata = {
@@ -394,7 +394,7 @@ class QualityAuditService {
             })
 
             // Trigger AI-powered template optimization
-            const { templateOptimizationService } = await import('./templateOptimizationService')
+            const { templateOptimizationService } = await Promise.resolve().then(() => require())
             
             templateOptimizationService.analyzeRegressionAndOptimize(
               templateId,
@@ -428,7 +428,7 @@ class QualityAuditService {
           
           setImmediate(async () => {
             try {
-              const { templateAuditService } = await import('./templateAuditService')
+              const { templateAuditService } = await Promise.resolve().then(() => require())
               const tempResult = await pool.query(
                 "SELECT * FROM templates WHERE id = $1 AND deleted_at IS NULL",
                 [templateId]
@@ -1304,7 +1304,7 @@ Remember: Your audit helps improve future document generation, so be detailed an
       }))
 
       // Import and use notification service
-      const { notificationService } = await import('./notificationService')
+      const { notificationService } = await Promise.resolve().then(() => require())
       
       await notificationService.sendLowQualityAlert({
         documentId: doc.id,

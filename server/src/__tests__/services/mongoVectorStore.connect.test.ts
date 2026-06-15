@@ -15,7 +15,7 @@ describe('MongoVectorStore.connect', () => {
   });
 
   it('deduplicates concurrent connect into a single performConnect', async () => {
-    const { MongoVectorStore } = await import('../../services/mongoVectorStore');
+    const { MongoVectorStore } = await Promise.resolve().then(() => require());
     const store = new MongoVectorStore();
 
     const performConnect = jest

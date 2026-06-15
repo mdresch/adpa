@@ -57,8 +57,11 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Checkbox } from "@/components/ui/checkbox"
 import { useAuth } from "@/contexts/AuthContext"
 import { apiClient, Project, Template } from "@/lib/api"
+import type { Document } from "@/types/schema"
+import { GenerateDocumentModal } from "../../components/dialogs/GenerateDocumentModal"
 import { getApiUrl, getApiBaseUrl } from "@/lib/api-url"
 import { resolveBulkExportDownloadName } from "@/lib/documents/bulk-export"
 import type { WordBulkExportDialogValues } from "@/lib/documents/word-export"
@@ -70,7 +73,7 @@ import { QualityAuditBadge } from "@/components/quality"
 // Status configuration for template badges
 
 /** Shape of an active generation job used for document-row matching */
-interface ActiveJobInfo {
+export interface ActiveJobInfo {
   jobId: string
   documentId: string | null
   documentName: string | null
@@ -122,7 +125,6 @@ function useActiveGenerationJobs(projectId: string | undefined) {
   return activeJobs
 }
 
-// Status configuration for template badges
 const statusConfig = {
   draft: { emoji: '⚪', label: 'Draft', color: 'secondary', variant: 'secondary' as const },
   testing: { emoji: '🔵', label: 'Testing', color: 'blue', variant: 'default' as const },
@@ -197,6 +199,8 @@ interface DocumentStats {
   }
 }
 
+
+
 // Helper function to validate GUID
 const isValidGuid = (value: string | undefined | null): boolean => {
   if (!value || typeof value !== 'string') return false
@@ -247,21 +251,46 @@ export default function ProjectDocuments() {
   })
 
   // Document generation state
-  const [generateDialogOpen, setGenerateDialogOpen] = useState(false)
-  const [generatingDocument, setGeneratingDocument] = useState(false)
-  const [generateForm, setGenerateForm] = useState({
-    name: "",
-    template_id: "",
-    prompt: "",
-    provider: "Groq AI",
-    model: "llama-3.1-8b-instant",
-    temperature: 0.7,
-    max_tokens: 8000,
-  })
+  const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false)
 
   // AI Providers/Models state
   const [aiProviders, setAIProviders] = useState<any[]>([])
   const [models, setModels] = useState<any[]>([])
+
+  useEffect(() => {
+    const fetchEcosystemProviders = async () => {
+      try {
+        const providers: any = await apiClient.request('/ai-providers')
+        
+        // Normalize array string types smoothly to match configuration expectations
+        // Filter out inactive providers from the array so they don't appear in the dropdown
+        const mapped = (providers || [])
+          .filter((p: any) => p.is_active === true || p.isActive === true || p.active === true || p.status === 'active')
+          .map((p: any) => {
+          let modelsArray: any[] = []
+          const sourceModels = p.configuration?.models || p.models;
+          if (Array.isArray(sourceModels)) modelsArray = sourceModels
+          else if (typeof sourceModels === 'string') {
+            try { modelsArray = JSON.parse(sourceModels) } catch { modelsArray = sourceModels.split(',').map((s: string) => s.trim()) }
+          }
+          
+          let stringModels = modelsArray.map(m => typeof m === 'object' && m !== null ? (m.id || m.name || JSON.stringify(m)) : String(m));
+          const defaultModel = p.configuration?.default_model || p.model || stringModels[0] || "";
+          
+          if (stringModels.length === 0 && defaultModel) {
+            stringModels = [defaultModel];
+          }
+
+          return { ...p, models: stringModels, default_model: defaultModel }
+        })
+        
+        setAIProviders(mapped)
+      } catch (err) {
+        console.error("Failed to load automation engine settings:", err)
+      }
+    }
+    fetchEcosystemProviders()
+  }, [])
 
   const activeJobs = useActiveGenerationJobs(projectId)
 
@@ -281,49 +310,6 @@ export default function ProjectDocuments() {
     if (uuidRegex.test(updatedBy)) return `User ${updatedBy.slice(0, 8)}…`
     return updatedBy
   }
-
-  // Fetch AI Providers on mount
-  useEffect(() => {
-    (async () => {
-      const providers = await apiClient.getAIProviders?.() || []
-      setAIProviders(providers)
-      if (providers.length > 0) {
-        setGenerateForm(prev => ({ ...prev, provider: providers[0].name }))
-        // Fetch models for first provider
-        try {
-          const response = await apiClient.getProviderModels(providers[0].id)
-          setModels(response.models || [])
-          if (response.models && response.models.length > 0) {
-            setGenerateForm(prev => ({ ...prev, model: response.models[0].name }))
-          }
-        } catch (err) {
-          console.error("Failed to fetch models for initial provider", err)
-          setModels([])
-        }
-      }
-    })()
-  }, [])
-
-  // When provider changes, fetch models
-  useEffect(() => {
-    if (generateForm.provider) {
-      (async () => {
-        const provider = aiProviders.find(p => p.name === generateForm.provider)
-        if (provider) {
-          try {
-            const response = await apiClient.getProviderModels(provider.id)
-            setModels(response.models || [])
-            if (response.models && response.models.length > 0) {
-              setGenerateForm(prev => ({ ...prev, model: response.models[0].name }))
-            }
-          } catch (err) {
-            console.error("Failed to fetch models for selected provider", err)
-            setModels([])
-          }
-        }
-      })()
-    }
-  }, [generateForm.provider])
 
   // Fetch project data
   const fetchProject = async () => {
@@ -727,119 +713,7 @@ export default function ProjectDocuments() {
 
   // Handle document generation
   const handleGenerateDocument = () => {
-    setGenerateForm({
-      name: `${project?.name} - Generated Document`,
-      template_id: "",
-      prompt: `Generate a comprehensive document for the ${project?.name} project using the ${project?.framework} framework.`,
-      provider: "Groq AI",
-      model: "llama-3.1-8b-instant",
-      temperature: 0.7,
-      max_tokens: 8000,
-    })
-    setGenerateDialogOpen(true)
-    fetchTemplates()
-  }
-
-  const handleGenerateSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-
-    if (!generateForm.name || !generateForm.prompt) {
-      toast.error("Please fill in required fields")
-      return
-    }
-
-    try {
-      setGeneratingDocument(true)
-
-      if (!projectId || !isValidGuid(projectId)) {
-        throw new Error("Invalid project ID")
-      }
-      const aiResponse = await apiClient.generateContent({
-        prompt: generateForm.prompt,
-        provider: generateForm.provider || "Groq AI",
-        model: generateForm.model || "llama-3.1-8b-instant",
-        temperature: generateForm.temperature || 0.7,
-        max_tokens: generateForm.max_tokens || 8000,
-        template_id: generateForm.template_id || undefined,
-        projectId: projectId,
-      })
-
-      // Handle async job response
-      if (aiResponse.jobId && aiResponse.status === 'queued') {
-        const jobId = aiResponse.jobId
-        let jobStatus = 'queued'
-        let attempts = 0
-        const maxAttempts = 60 // 2 minutes timeout
-
-        while (jobStatus !== 'completed' && jobStatus !== 'failed' && attempts < maxAttempts) {
-          await new Promise(resolve => setTimeout(resolve, 2000))
-          try {
-            const job = await apiClient.getJob(jobId)
-            jobStatus = job.status
-
-            if (jobStatus === 'completed') {
-              toast.success("Document generated successfully!")
-              setGenerateDialogOpen(false)
-              setGenerateForm({
-                name: "",
-                template_id: "",
-                prompt: "",
-                provider: "Groq AI",
-                model: "llama-3.1-8b-instant",
-                temperature: 0.7,
-                max_tokens: 8000,
-              })
-              await fetchDocuments()
-              return
-            } else if (jobStatus === 'failed') {
-              throw new Error(job.error_message || "Generation job failed")
-            }
-            attempts++
-          } catch (err) {
-            console.error("Error polling job status:", err)
-            // Continue polling unless it's a critical error
-            attempts++
-          }
-        }
-
-        if (attempts >= maxAttempts) {
-          toast.info("Generation is taking longer than expected. It will continue in the background.")
-          setGenerateDialogOpen(false)
-          return
-        }
-      }
-
-      // Legacy synchronous handling (fallback)
-      const content = aiResponse.result?.content || aiResponse.result?.text || aiResponse.content || aiResponse.text || "# Document content not generated"
-
-      if (!projectId || !isValidGuid(projectId)) {
-        throw new Error("Invalid project ID")
-      }
-      await apiClient.createDocument(projectId, {
-        name: generateForm.name,
-        content: content,
-        template_id: generateForm.template_id || undefined,
-        status: "draft",
-      })
-
-      toast.success("Document generated successfully!")
-      setGenerateDialogOpen(false)
-      setGenerateForm({
-        name: "",
-        template_id: "",
-        prompt: "",
-        provider: "Groq AI",
-        model: "llama-3.1-8b-instant",
-        temperature: 0.7,
-        max_tokens: 8000,
-      })
-      await fetchDocuments()
-    } catch (error) {
-      console.error("Failed to generate document:", error)
-      toast.error("Failed to generate document")
-    } finally {
-      setGeneratingDocument(false)
-    }
+    setIsGenerateModalOpen(true)
   }
 
   // Delete document (soft delete)
@@ -2229,217 +2103,7 @@ export default function ProjectDocuments() {
                   </DialogContent>
                 </Dialog>
 
-                {/* Generate Document Dialog */}
-                <Dialog open={generateDialogOpen} onOpenChange={setGenerateDialogOpen}>
-                  <DialogContent className="sm:max-w-[600px]">
-                    <div className="space-y-4">
-                      <div>
-                        <h2 className="text-lg font-semibold">Generate Document</h2>
-                        <p className="text-sm text-muted-foreground">
-                          Generate a new document for {project?.name} using AI
-                        </p>
-                      </div>
-                      <form onSubmit={handleGenerateSubmit} className="space-y-4">
-                        <div className="grid gap-6 py-4">
-                          <div>
-                            <Label htmlFor="generate-doc-name">Document Name *</Label>
-                            <Input
-                              id="generate-doc-name"
-                              placeholder="Enter document name"
-                              value={generateForm.name}
-                              onChange={(e) => setGenerateForm({ ...generateForm, name: e.target.value })}
-                              className="mt-2"
-                              required
-                            />
-                          </div>
-                          <div>
-                            <Label htmlFor="generate-template-select">Template (Optional)</Label>
-                            <select
-                              id="generate-template-select"
-                              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
-                              value={generateForm.template_id}
-                              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setGenerateForm({ ...generateForm, template_id: e.target.value })}
-                            >
-                              <option value="">Select a template</option>
-                              {loadingTemplates ? (
-                                <option disabled>Loading templates...</option>
-                              ) : (
-                                templates.map((template) => (
-                                  <option key={template.id} value={template.id}>
-                                    {template.development_status && statusConfig[template.development_status as keyof typeof statusConfig]
-                                      ? statusConfig[template.development_status as keyof typeof statusConfig].emoji + ' '
-                                      : ''}
-                                    {template.name} ({template.framework})
-                                    {template.development_status === 'production' ? ' ✓' : ''}
-                                  </option>
-                                ))
-                              )}
-                            </select>
 
-                            {/* Template Status Information Panel */}
-                            {generateForm.template_id && templates.find(t => t.id === generateForm.template_id) && (() => {
-                              const selectedTemplate = templates.find(t => t.id === generateForm.template_id)!
-                              return (
-                                <div className="mt-3 rounded-lg border border-border bg-muted/30 p-4 space-y-3">
-                                  <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-sm font-medium">Template Status:</span>
-                                      {selectedTemplate.development_status && statusConfig[selectedTemplate.development_status as keyof typeof statusConfig] && (
-                                        <Badge variant={statusConfig[selectedTemplate.development_status as keyof typeof statusConfig].variant}>
-                                          {statusConfig[selectedTemplate.development_status as keyof typeof statusConfig].emoji} {statusConfig[selectedTemplate.development_status as keyof typeof statusConfig].label}
-                                        </Badge>
-                                      )}
-                                    </div>
-                                    {selectedTemplate.health_rating && healthConfig[selectedTemplate.health_rating as keyof typeof healthConfig] && (
-                                      <Badge variant="outline" className={`text-xs ${healthConfig[selectedTemplate.health_rating as keyof typeof healthConfig].color}`}>
-                                        {healthConfig[selectedTemplate.health_rating as keyof typeof healthConfig].icon} {selectedTemplate.health_rating}
-                                      </Badge>
-                                    )}
-                                  </div>
-
-                                  {selectedTemplate.validation_count !== undefined && selectedTemplate.validation_count > 0 && (
-                                    <div className="grid grid-cols-2 gap-3 text-sm">
-                                      <div className="flex flex-col">
-                                        <span className="text-muted-foreground text-xs">Success Rate</span>
-                                        <span className="font-semibold">
-                                          {selectedTemplate.success_rate !== undefined
-                                            ? `${Number(selectedTemplate.success_rate).toFixed(1)}%`
-                                            : selectedTemplate.success_count && selectedTemplate.validation_count
-                                              ? `${Math.round((selectedTemplate.success_count / selectedTemplate.validation_count) * 100)}%`
-                                              : 'N/A'}
-                                        </span>
-                                      </div>
-                                      <div className="flex flex-col">
-                                        <span className="text-muted-foreground text-xs">Test Runs</span>
-                                        <span className="font-semibold">{selectedTemplate.validation_count}</span>
-                                      </div>
-                                    </div>
-                                  )}
-
-                                  {/* Warning for non-production templates */}
-                                  {selectedTemplate.development_status && selectedTemplate.development_status !== 'production' && (
-                                    <div className="flex items-start gap-2 p-3 rounded-md bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800">
-                                      <AlertCircle className="h-4 w-4 text-yellow-600 dark:text-yellow-400 mt-0.5 flex-shrink-0" />
-                                      <div className="flex-1">
-                                        <p className="text-xs font-medium text-yellow-800 dark:text-yellow-200">
-                                          {selectedTemplate.development_status === 'draft' && 'Draft Template - Untested'}
-                                          {selectedTemplate.development_status === 'testing' && 'Testing Template - Limited validation'}
-                                          {selectedTemplate.development_status === 'validated' && 'Validated Template - Not yet production-ready'}
-                                          {selectedTemplate.development_status === 'deprecated' && 'Deprecated Template - Not recommended'}
-                                        </p>
-                                        <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">
-                                          This template is still being tested. Results may vary in quality.
-                                        </p>
-                                      </div>
-                                    </div>
-                                  )}
-
-                                  {/* Success indicator for production templates */}
-                                  {selectedTemplate.development_status === 'production' && (
-                                    <div className="flex items-start gap-2 p-3 rounded-md bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">
-                                      <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
-                                      <div className="flex-1">
-                                        <p className="text-xs font-medium text-green-800 dark:text-green-200">
-                                          Production Template - Fully Validated
-                                        </p>
-                                        <p className="text-xs text-green-700 dark:text-green-300 mt-1">
-                                          This template has been thoroughly tested and is ready for production use.
-                                        </p>
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              )
-                            })()}
-                          </div>
-                          <div>
-                            <Label htmlFor="ai_provider">AI Provider</Label>
-                            <select
-                              id="ai_provider"
-                              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
-                              value={generateForm.provider}
-                              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setGenerateForm({ ...generateForm, provider: e.target.value })}
-                            >
-                              {aiProviders.map((provider) => (
-                                <option key={provider.id} value={provider.name}>{provider.name}</option>
-                              ))}
-                            </select>
-                          </div>
-                          <div>
-                            <Label htmlFor="ai_model">Model</Label>
-                            <select
-                              id="ai_model"
-                              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
-                              value={generateForm.model}
-                              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setGenerateForm({ ...generateForm, model: e.target.value })}
-                            >
-                              {models.map((model) => (
-                                <option key={model.name} value={model.name}>{model.name}</option>
-                              ))}
-                            </select>
-                          </div>
-                          <div>
-                            <Label htmlFor="temperature">Temperature</Label>
-                            <input
-                              id="temperature"
-                              type="number"
-                              min={0}
-                              max={2}
-                              step={0.01}
-                              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
-                              value={generateForm.temperature}
-                              onChange={(e) => setGenerateForm({ ...generateForm, temperature: parseFloat(e.target.value) })}
-                            />
-                            <p className="text-xs text-muted-foreground">Lower = more focused, Higher = more creative</p>
-                          </div>
-                          <div>
-                            <Label htmlFor="max_tokens">Max Output Tokens</Label>
-                            <input
-                              id="max_tokens"
-                              type="number"
-                              min={100}
-                              max={32000}
-                              step={100}
-                              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
-                              value={generateForm.max_tokens}
-                              onChange={(e) => setGenerateForm({ ...generateForm, max_tokens: parseInt(e.target.value) })}
-                            />
-                            <p className="text-xs text-muted-foreground">Maximum number of tokens the model can generate</p>
-                          </div>
-                          <div>
-                            <Label htmlFor="generate-prompt">Generation Prompt *</Label>
-                            <Textarea
-                              id="generate-prompt"
-                              placeholder="Describe what you want the document to contain..."
-                              value={generateForm.prompt}
-                              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setGenerateForm({ ...generateForm, prompt: e.target.value })}
-                              className="mt-2"
-                              rows={4}
-                              required
-                            />
-                          </div>
-                        </div>
-                        <div className="flex justify-end space-x-2 pt-4">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => setGenerateDialogOpen(false)}
-                          >
-                            Cancel
-                          </Button>
-                          <Button
-                            type="submit"
-                            disabled={generatingDocument}
-                          >
-                            {generatingDocument && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                            <Wand2 className="h-4 w-4 mr-2" />
-                            Generate Document
-                          </Button>
-                        </div>
-                      </form>
-                    </div>
-                  </DialogContent>
-                </Dialog>
               </div>
             </AnimatedLayout>
           </PageTransition>
@@ -2462,6 +2126,15 @@ export default function ProjectDocuments() {
         documentId={selectedDensityDoc.id}
         documentTitle={selectedDensityDoc.name}
         fullRawContent={selectedDensityDoc.content || ''}
+        contextSnapshots={selectedDensityDoc.context_snapshots}
+      />
+    )}
+    {project && (
+      <GenerateDocumentModal
+        project={project}
+        isOpen={isGenerateModalOpen}
+        onClose={() => setIsGenerateModalOpen(false)}
+        aiProviders={aiProviders}
       />
     )}
     </>

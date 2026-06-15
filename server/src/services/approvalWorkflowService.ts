@@ -152,8 +152,14 @@ export class ApprovalWorkflowService {
 
       // 2. Calculate SLA deadline
       const priority = params.priority || 'medium'
-      const sla_hours = this.getSLAHours(workflow, priority)
-      const sla_deadline = new Date(Date.now() + sla_hours * 60 * 60 * 1000)
+      let sla_deadline: Date;
+      if (params.metadata && params.metadata.due_date) {
+        sla_deadline = new Date(params.metadata.due_date);
+      } else {
+        const sla_hours = this.getSLAHours(workflow, priority)
+        sla_deadline = new Date(Date.now() + sla_hours * 60 * 60 * 1000)
+      }
+
       const escalation_deadline = workflow.escalation_after_hours
         ? new Date(Date.now() + workflow.escalation_after_hours * 60 * 60 * 1000)
         : null
@@ -344,7 +350,7 @@ export class ApprovalWorkflowService {
 
               // ⭐ NEW HOOK: Automatically update the project baseline
               // Based on Phase 3: Workflow Automation from DRIFT_TO_CHANGE_REQUEST_WORKFLOW.md
-              logger.info('[APPROVAL-WORKFLOW] Final CR approval detected - triggering baseline update', {
+              logger.info('[APPROVAL-WORKFLOW] Final CR approval detected - triggering baseline update and cascading regeneration', {
                 changeRequestId: request.change_request_id,
                 projectId: request.project_id
               })
@@ -353,12 +359,42 @@ export class ApprovalWorkflowService {
               baselineUpdateService.updateBaselineFromChangeRequest(
                 request.change_request_id,
                 params.approver_user_id
-              ).then(result => {
+              ).then(async result => {
                 if (result.success) {
                   logger.info('[APPROVAL-WORKFLOW] Baseline updated successfully after approval', {
                     changeRequestId: request.change_request_id,
                     newVersion: result.baselineVersion
                   })
+                  
+                  // 🔥 TRIGGER CASCADING REGENERATION
+                  try {
+                    // Get the source document from the CR metadata to trigger cascade
+                    const crDocResult = await pool.query(
+                      `SELECT d.id, d.metadata->>'source_document_id' as source_doc_id, 
+                              d.metadata->>'drift_record_id' as drift_record_id,
+                              src.title as source_title
+                       FROM documents d
+                       JOIN documents src ON src.id = (d.metadata->>'source_document_id')::uuid
+                       WHERE d.id = $1`,
+                      [request.change_request_id]
+                    );
+
+                    if (crDocResult.rows.length > 0) {
+                      const { source_doc_id, drift_record_id, source_title } = crDocResult.rows[0];
+                      if (source_doc_id && source_title) {
+                        const { cascadingRegenerationService } = await import('../modules/cascading-regeneration/CascadingRegenerationService');
+                        await cascadingRegenerationService.triggerCascade(
+                          source_title,
+                          request.project_id,
+                          drift_record_id || 'manual-cr',
+                          params.approver_user_id
+                        );
+                      }
+                    }
+                  } catch (cascadeError) {
+                    logger.error('[APPROVAL-WORKFLOW] Failed to trigger cascading regeneration:', cascadeError);
+                  }
+                  
                 } else {
                   logger.warn('[APPROVAL-WORKFLOW] Baseline update skipped or failed', {
                     changeRequestId: request.change_request_id,
@@ -559,6 +595,33 @@ export class ApprovalWorkflowService {
     stages: ApprovalStage[],
     requestParams: CreateApprovalRequestParams
   ): Promise<void> {
+    const reviewers = requestParams.metadata?.reviewers as string[] | undefined;
+
+    // If dynamic reviewers are provided in the metadata, use them instead of the workflow's default stages
+    if (reviewers && reviewers.length > 0) {
+      logger.info('[APPROVAL-WORKFLOW] Using dynamic reviewers from metadata', { requestId, reviewers });
+      for (let i = 0; i < reviewers.length; i++) {
+        await client.query(
+          `INSERT INTO approval_steps (
+            approval_request_id, step_order, step_name, approver_role, approver_user_id,
+            is_required, is_conditional, status
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [
+            requestId,
+            i + 1,
+            `Approval by Selected Reviewer`,
+            'Reviewer', // Generic role
+            reviewers[i],
+            true,
+            false,
+            'pending'
+          ]
+        )
+      }
+      return;
+    }
+
+    // Default behavior: use workflow stages
     for (const stage of stages) {
       // Find users with the required role, ordered by created date for consistency
       const userResult = await client.query(
@@ -834,6 +897,49 @@ This is an automated notification from ADPA Approval Workflow System
       logger.error('[APPROVAL-WORKFLOW] Error sending reminder:', error)
     } finally {
       client.release()
+    }
+  }
+
+  /**
+   * Helper to automatically register an approval request for a newly generated document
+   */
+  async registerDocumentApproval(
+    projectId: string,
+    documentId: string,
+    documentName: string,
+    generationMetadata: any
+  ): Promise<void> {
+    if (!generationMetadata?.author_id) {
+      logger.info('[APPROVAL-WORKFLOW] Skipping document approval registration, no author_id in metadata');
+      return;
+    }
+
+    try {
+      // Look for a specific document approval workflow, fallback to general_cr
+      let requestType = 'document_approval';
+      const client = await pool.connect();
+      try {
+        const wfResult = await client.query('SELECT id FROM approval_workflows WHERE request_type = $1 AND is_active = true', [requestType]);
+        if (wfResult.rows.length === 0) {
+          requestType = 'general_cr'; // fallback
+        }
+      } finally {
+        client.release();
+      }
+
+      await this.createApprovalRequest({
+        request_type: requestType,
+        change_request_id: documentId,
+        project_id: projectId,
+        title: `Approval for Document: ${documentName}`,
+        description: `Auto-generated approval request for document created via template. Framework: ${generationMetadata.framework || 'N/A'}`,
+        requested_by: generationMetadata.author_id,
+        metadata: generationMetadata
+      });
+      logger.info(`[APPROVAL-WORKFLOW] Successfully registered document approval for document: ${documentId}`);
+    } catch (error) {
+      logger.error(`[APPROVAL-WORKFLOW] Failed to register document approval:`, error);
+      // Non-blocking
     }
   }
 }

@@ -122,4 +122,45 @@ describe('AIGenerationJobService template usage', () => {
     expect(usageUpdates).toHaveLength(1);
     expect(usageUpdates[0][1]).toEqual(['template-1']);
   });
+
+  it('safely lazy-loads documentGenerationService without crashing on id variable constraints', async () => {
+    (documentGenerationService.generateDocument as jest.Mock).mockResolvedValue({
+      content: '## Solution Evaluation Plan\n\nEvaluate the solution.',
+      metadata: { provider: 'mistral', model: 'mistral-large-2411', tokens_used: 123 },
+    });
+
+    const database = {
+      query: jest.fn().mockResolvedValue({ rows: [], rowCount: 1 })
+    };
+
+    const mockUpdateStatus = jest.fn();
+    
+    await expect(AIGenerationJobService.processJob(
+      {
+        id: 'job-2',
+        data: {
+          jobId: 'job-2',
+          userId: 'user-2',
+          projectId: 'project-2',
+          prompt: 'Generate something.',
+          provider: 'openai',
+          template_id: 'template-abc',
+          name: 'Test Doc',
+        },
+      } as any,
+      { workerId: 'worker-1', updateJobStatus: mockUpdateStatus } as any,
+      {
+        database,
+        websocket: { emit: jest.fn(), to: jest.fn(() => ({ emit: jest.fn() })) },
+        aiService: { updateUsageStats: jest.fn().mockResolvedValue(undefined) },
+        logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
+      } as any
+    )).resolves.not.toThrow();
+
+    expect(documentGenerationService.generateDocument).toHaveBeenCalledWith(
+      expect.objectContaining({
+        templateId: 'template-abc'
+      })
+    );
+  });
 });

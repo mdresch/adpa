@@ -99,7 +99,7 @@ export class TemplateController {
       }
 
       if (user?.id) {
-        trackActivity.viewTemplate(user.id, id);
+        trackActivity.viewTemplate(user.id, id, template.name);
       }
 
       res.json({ template, recentUsage, versionHistory, optimizationHistory });
@@ -134,7 +134,7 @@ export class TemplateController {
 
       const template = await this.repository.create(data);
 
-      trackActivity.createTemplate(user.id, template.id, {
+      trackActivity.createTemplate(user.id, template.id, template.name, {
         name, framework, category, is_public,
         variable_count: variables?.length || 0
       });
@@ -162,7 +162,7 @@ export class TemplateController {
       if (!template) return res.status(404).json({ error: "Template not found or no changes made" });
 
       await cache.del(`template:${id}`);
-      trackActivity.updateTemplate(user.id, id);
+      trackActivity.updateTemplate(user.id, id, req.body.name || template.name);
 
       res.json({ message: "Template updated successfully", template });
     } catch (error) {
@@ -197,7 +197,7 @@ export class TemplateController {
       if (!template) return res.status(404).json({ error: "Template not found" });
 
       await cache.del(`template:${id}`);
-      trackActivity.updateTemplate(user.id, id, { promotion: { from_scope: 'user', to_scope: 'company', company_id: userCompanyId } });
+      trackActivity.updateTemplate(user.id, id, template.name, { promotion: { from_scope: 'user', to_scope: 'company', company_id: userCompanyId } });
 
       const versions = await TemplateAnalyticsService.getVersionHistory(id, 1);
       const currentVersion = versions[0]?.version_number || '1.0.0';
@@ -227,7 +227,7 @@ export class TemplateController {
       if (!template) return res.status(404).json({ error: "Template not found" });
 
       await cache.del(`template:${id}`);
-      trackActivity.updateTemplate(user.id, id, { promotion: { to_scope: 'standard' } });
+      trackActivity.updateTemplate(user.id, id, template.name, { promotion: { to_scope: 'standard' } });
 
       const versions = await TemplateAnalyticsService.getVersionHistory(id, 1);
       const currentVersion = versions[0]?.version_number || '1.0.0';
@@ -349,7 +349,7 @@ export class TemplateController {
       if (!template) return res.status(404).json({ error: "Template not found" });
 
       await cache.del(`template:${id}`);
-      trackActivity.deleteTemplate(user.id, id);
+      trackActivity.deleteTemplate(user.id, id, template.name);
 
       res.json({ message: "Template moved to trash", template });
     } catch (error) {
@@ -495,7 +495,7 @@ export class TemplateController {
       const projectIds = projectsRes.rows.map((row) => row.project_id as string);
       
       if (projectIds.length > 0) {
-        const { default: DocumentPurposeService } = await import('../../services/documentPurposeService');
+        const { default: DocumentPurposeService } = await Promise.resolve().then(() => require());
         for (const projectId of projectIds) {
           await DocumentPurposeService.rebuildForProject(projectId);
         }
@@ -516,7 +516,7 @@ export class TemplateController {
   rebuildDocumentPurposes = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { projectId } = req.params;
-      const { default: DocumentPurposeService } = await import('../../services/documentPurposeService');
+      const { default: DocumentPurposeService } = await Promise.resolve().then(() => require());
       await DocumentPurposeService.rebuildForProject(projectId);
       res.json({ message: 'Document purposes rebuilt successfully for project', projectId });
     } catch (error) {
@@ -528,7 +528,7 @@ export class TemplateController {
     try {
       const { projectId } = req.body;
       if (projectId) {
-        const { default: DocumentPurposeService } = await import('../../services/documentPurposeService');
+        const { default: DocumentPurposeService } = await Promise.resolve().then(() => require());
         await DocumentPurposeService.rebuildForProject(projectId);
         
         const templatesRes = await pool.query(

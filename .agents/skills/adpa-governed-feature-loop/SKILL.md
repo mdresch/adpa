@@ -1,6 +1,6 @@
 ---
 name: adpa-governed-feature-loop
-description: Institutional pattern for governed feature delivery in ADPA — spec → requirements → Jest tests → SKILL.md → manifest registration → code → dual-loop guard. Use when creating or extending any feature packet. Register in server/governed-features.manifest.json; npm run test:features runs all packets automatically. Canonical references — RAG (modules/rag) and doc-gen (documentGenerationService tests).
+description: Institutional pattern for governed feature delivery in ADPA — spec → requirements → Contract Guards (Advanced Jest Test logic) → SKILL.md → manifest registration → code → dual-loop guard. Use when creating or extending any feature packet. Register in server/governed-features.manifest.json; npm run test:features runs all packets automatically. Canonical references — RAG (modules/rag) and doc-gen (documentGenerationService tests).
 ---
 
 # ADPA Governed Feature Loop
@@ -9,7 +9,7 @@ description: Institutional pattern for governed feature delivery in ADPA — spe
 
 - **Creating** a new backend or cross-cutting feature (not a one-line fix).
 - **Extending** a feature that **overlaps** another (Feature 2 may break Feature 1).
-- **Agent work** where tests must be correct by design, not reactive patches.
+- **Agent work** where Contract Guards must be correct by design, not reactive patches.
 
 **Do not use** for trivial UI copy, config-only changes, or chores with no behavioral contract.
 
@@ -18,10 +18,10 @@ Works alongside `adpa-aev-workflow` (atomic scope + validation gates). This skil
 ## Core Principle
 
 ```
-Business intent (spec) → Requirements → Tests (truth) → Skill (intent) → Code → Loop until green
+Business intent (spec) → Requirements → Contract Guards (Advanced Jest Test logic) → Skill (intent) → Code → Loop until green
 ```
 
-Jest tests are **not invented** — they are **derived from requirements and interaction rules** in the spec.
+**Contract Guards** are not just tests — they are instructional, executable representations of the `SKILL.md` invariants. They **MUST be built prior to modifying implementation code**.
 
 ## Maturity Levels
 
@@ -29,7 +29,7 @@ Jest tests are **not invented** — they are **derived from requirements and int
 | ----- | ----- |
 | 1 | Code-driven |
 | 2 | Test-driven |
-| 3 | Test + skills (per-feature) |
+| 3 | Contract Guards + skills (per-feature) |
 | 4 | **Feature packet standardized** ← target for new work |
 | 5 | CI-enforced governance (`npm run test:features` on every PR) |
 | 5.5 | Cross-artifact validation (`verify:governed-features` — manifest, skills, guards) |
@@ -38,6 +38,7 @@ Jest tests are **not invented** — they are **derived from requirements and int
 
 - **RAG packet** (`id: rag`) — module tests under `__tests__/modules/rag/`; skills `adpa-rag-context-injection`, `adpa-rag-dynamic-fallback`.
 - **Doc-gen packet** (`id: doc-gen`) — integration tests under `__tests__/documentGenerationService.*.test.ts`; skills `adpa-doc-gen-queue`, `adpa-template-driven-generation`.
+- **Infrastructure DB packet** (`id: infrastructure`) — module tests under `__tests__/modules/infrastructure/`; skills `adpa-governed-feature-loop`.
 
 All registered packets run via **`npm run test:features`** (manifest-driven; no manual `test:features` chaining).
 
@@ -50,7 +51,7 @@ One feature (or tightly coupled feature pair) = one packet:
 | Layer | Path | Role |
 | ----- | ---- | ---- |
 | Governance | `docs/superpowers/specs/YYYY-MM-DD-<feature>-design.md` | Why, REQs, interactions, risks, test plan |
-| Truth | `server/src/__tests__/**/<feature>.test.ts` | Executable requirements |
+| Truth | `server/src/__tests__/**/<feature>.test.ts` | Contract Guards (Executable requirements) |
 | Intent | `.agents/skills/adpa-<feature>/SKILL.md` | Invariants, file map, commands |
 | Execution | `server/src/**` | Implementation |
 
@@ -70,18 +71,18 @@ Agents **must** follow this order for new features:
 ```
 1. Write / update design spec (REQs + interaction rules)
 2. Write initial feature SKILL.md (intent draft — invariants, overlap rules)
-3. Write Jest tests derived from REQs (RED — imports may fail until step 5)
+3. Write Contract Guards (Advanced Jest Test logic) derived from REQs BEFORE writing implementation code (RED).
 4. Refine SKILL.md after test plan exposes gaps (stable system model)
-5. Write minimal production code (GREEN)
+5. Write minimal production code to satisfy the Contract Guards (GREEN)
 6. Wire integration (if needed)
 7. Register in `server/governed-features.manifest.json` (+ `jest.config.unit.js` if tests are outside default unit globs)
 8. Run `npm run verify:governed-features` + `npm run test:features`; loop until pass
 9. If overlap feature exists → run `npm run test:features` (all packets) or each affected id: `npm run test:features -- <id>`
 ```
 
-**Skills evolve with tests** — the first SKILL anchors intent; tests expose missing rules; the final SKILL stabilizes the model.
+**Skills evolve with Contract Guards** — the first SKILL anchors intent; Contract Guards expose missing rules; the final SKILL stabilizes the model.
 
-**Never** skip tests to “move faster.” **Never** ship Feature 2 without an overlap guard when Feature 1 has a contract.
+**Never** skip Contract Guards to “move faster.” **Never** ship Feature 2 without an overlap guard when Feature 1 has a contract.
 
 ---
 
@@ -123,8 +124,8 @@ New interaction tests required when:
 
 | Risk | Mitigation |
 |------|------------|
-| Feature 2 regresses Feature 1 | Overlap guard + interaction tests |
-| Weak test coverage | Every REQ maps to ≥1 test |
+| Feature 2 regresses Feature 1 | Overlap Contract Guard + interaction tests |
+| Weak test coverage | Every REQ maps to ≥1 Contract Guard |
 
 ## Test Plan
 
@@ -137,13 +138,14 @@ Keep the spec **one to three pages**. Deep tactical detail lives in the feature 
 
 ---
 
-## Step 2 — REQ → Test Rules
+## Step 2 — REQ → Contract Guard Rules
 
-1. **Every REQ** → at least one `it(...)` (name should reference REQ id in comment or describe).
+1. **Every REQ** → at least one `it(...)` Contract Guard (name should reference REQ id in comment or describe).
 2. **Every interaction rule** → at least one cross-feature or contract test.
-3. **Edge cases** called out in spec → explicit tests (empty input, both providers fail, etc.).
-4. Prefer **`jest.config.unit.js`** for pure unit tests (mocks, no DB).
-5. Test file location:
+3. **Edge cases** called out in spec → explicit Contract Guards (empty input, both providers fail, etc.).
+4. **Instructional Errors** → When a Contract Guard fails, it MUST throw an instructional error explaining *why* the rule exists and *how* to comply with the architecture, rather than a generic assertion failure.
+5. Prefer **`jest.config.unit.js`** for pure unit tests (mocks, no DB).
+6. Test file location:
    - **Module packet:** `server/src/__tests__/modules/<testModuleDir>/`
    - **Service integration packet:** `server/src/__tests__/<pattern>.test.ts` (set `testPathPattern` in manifest)
 
@@ -241,11 +243,12 @@ export async function runRagFeatureGuard(): Promise<{
 
 ### D. Document in both SKILL files
 
-Feature A skill: “This contract is the self-healing gate for dependents.”  
+Feature A skill: “This Contract Guard is the self-healing gate for dependents.”  
 Feature B skill: “Requires Feature A contract; see `beforeEach` guard.”
 
 **Reference implementation:**
 
+- `server/src/modules/infrastructure/dbGuardContract.ts` → `validateDbGuardContract`
 - `server/src/modules/rag/ragContextInjection.ts` → `validateContextInjectionContract`
 - `server/src/modules/rag/ragFeatureGuard.ts` → `runRagFeatureGuard`
 - `server/src/__tests__/modules/rag/ragDynamicFallback.test.ts` → `beforeEach` guard
@@ -257,16 +260,16 @@ Feature B skill: “Requires Feature A contract; see `beforeEach` guard.”
 ### Loop A — Feature loop (local)
 
 ```
-REQ → initial SKILL → test (RED) → refined SKILL → code (GREEN) → re-test
+REQ → initial SKILL → Contract Guard (RED) → refined SKILL → code (GREEN) → re-test
 ```
 
 ### Loop B — System loop (overlap)
 
-Triggered when **Feature 2 work causes Feature 1 tests or contract to fail**:
+Triggered when **Feature 2 work causes Feature 1 Contract Guards or tests to fail**:
 
 ```
 STOP patching blindly
-→ Add interaction test(s) to spec test plan
+→ Add interaction Contract Guard(s) to spec test plan
 → Update both SKILL files (interaction rules)
 → Fix Feature A contract and/or Feature B implementation
 → Re-run ALL feature test scripts
@@ -329,7 +332,7 @@ STOP patching blindly
 ### Registration checklist (per packet)
 
 1. Add `features[]` entry to `server/governed-features.manifest.json`.
-2. Add test files matching `testPathPattern`.
+2. Add Contract Guards matching `testPathPattern`.
 3. If tests are not matched by existing `jest.config.unit.js` globs, add an explicit `testMatch` line.
 4. *(Optional)* Add alias: `"test:<id>": "node scripts/run-governed-features.mjs <id>"`.
 5. Run `npm run verify:governed-features` then `npm run test:features`.
@@ -354,9 +357,9 @@ CI: `.github/workflows/adpa-feature-validation.yml` runs verify + `test:features
 ```
 [ ] Design spec exists with REQ-001… and interaction rules
 [ ] Initial SKILL.md (intent draft)
-[ ] Tests written before production code (RED)
+[ ] Contract Guards (Advanced Jest Tests) written before production code (RED)
 [ ] SKILL.md refined after test plan
-[ ] Overlap guard added if depending on another feature
+[ ] Overlap Contract Guard added if depending on another feature
 [ ] governed-features.manifest.json entry (id, skills, testPathPattern, spec)
 [ ] jest.config.unit.js updated if tests outside default globs
 [ ] npm run verify:governed-features passes
@@ -370,10 +373,10 @@ CI: `.github/workflows/adpa-feature-validation.yml` runs verify + `test:features
 
 | Don't | Do instead |
 | ----- | ---------- |
-| Write code before tests | RED → GREEN |
-| Fix Feature 2 only when Feature 1 regresses | Update interaction rules + both test suites |
+| Write code before Contract Guards | RED → GREEN |
+| Fix Feature 2 only when Feature 1 regresses | Update interaction rules + both Contract Guards |
 | Hide assumptions in code comments | Put in spec + SKILL invariants |
-| One giant integration test only | Unit tests per REQ + selective integration |
+| One giant integration test only | Contract Guards per REQ + selective integration |
 | Skip skill because "it's small" | Minimal SKILL still required for agent continuity |
 
 ---
@@ -418,3 +421,4 @@ Use **RAG** for module + overlap-guard packets; use **doc-gen** for service-leve
 - `adpa-doc-gen-queue` — doc-gen packet (queue + generation flow)
 - `adpa-template-driven-generation` — doc-gen packet (template paragraphs)
 - `writing-skills` — skill authoring quality bar
+

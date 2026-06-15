@@ -525,7 +525,7 @@ export async function processUploadedFile(
 
     // Step 5: Trigger Drift Detection (if project has approved baseline)
     try {
-      const { driftDetectionService } = await import('./driftDetectionService');
+      const { driftDetectionService } = await Promise.resolve().then(() => require());
 
       logger.info('🚨 [DRIFT] Checking for approved baseline', { projectId, documentId });
 
@@ -676,7 +676,7 @@ async function detectDocumentType(
   metadata: Record<string, any>;
 }> {
   // Use AI service with automatic failover instead of hardcoded Google AI
-  const { aiService } = await import('./aiService');
+  const { aiService } = await Promise.resolve().then(() => require());
 
   try {
     const prompt = `Analyze this document and classify its type.
@@ -1300,8 +1300,8 @@ async function triggerSemanticProcessing(
 
   try {
     // Import semantic processing service and queue
-    const { semanticProcessingService } = await import('./semanticProcessingService');
-    const { semanticProcessingQueue } = await import('./queueService');
+    const { semanticProcessingService } = await Promise.resolve().then(() => require());
+    const { semanticProcessingQueue } = await Promise.resolve().then(() => require());
 
     // Get all successfully processed documents from this batch
     const docsQuery = `
@@ -1369,7 +1369,7 @@ async function triggerSemanticProcessing(
       stack: error.stack
     });
     try {
-      const { semanticProcessingService } = await import('./semanticProcessingService');
+      const { semanticProcessingService } = await Promise.resolve().then(() => require());
       await semanticProcessingService.markBatchOrchestrationFailed(
         batchId,
         error instanceof Error ? error.message : String(error)

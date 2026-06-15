@@ -335,7 +335,7 @@ class DocumentGenerationService {
   private async ensureSourceDocumentsIngested(documentIds: string[]): Promise<void> {
     if (!documentIds.length || !process.env.VOYAGE_API_KEY) return
 
-    const { ragService } = await import('./ragService')
+    const { ragService } = await Promise.resolve().then(() => require('./ragService'))
     for (const documentId of documentIds) {
       try {
         const result = await ragService.ingestDocument(documentId)
@@ -765,7 +765,24 @@ class DocumentGenerationService {
 
       // 6.5. AGENTIC PHASE 4 & 5: Autonomous Auditing and Patching Loop
       logger.info(`[AGENT] Phase 4: Commencing Policy Audit Loop...`)
-      if (request.jobId) await updateJobStatus(request.jobId, "processing", 80)
+      if (request.jobId) {
+        await updateJobStatus(request.jobId, "processing", 80)
+        await updateJobLlmProgress(request.jobId, {
+          userId: request.userId,
+          currentStep: 'Commencing Policy Audit Loop…',
+          patchStep: {
+            id: 'audit-loop-start',
+            patch: {
+              phase: 'auditing',
+              label: 'Policy Audit',
+              status: 'running',
+              provider: request.provider,
+              model: request.model,
+              startedAt: new Date().toISOString()
+            }
+          }
+        })
+      }
       
       let currentScore = 100
       let attempts = 0
@@ -773,19 +790,97 @@ class DocumentGenerationService {
       const auditLog: any[] = []
 
       while (attempts < MAX_RETRIES) {
+        const auditId = `audit-attempt-${attempts + 1}`
+        if (request.jobId && attempts > 0) {
+          await updateJobLlmProgress(request.jobId, {
+            userId: request.userId,
+            currentStep: `Re-auditing document (Attempt ${attempts + 1})…`,
+            progress: 80 + (attempts * 2),
+            patchStep: {
+              id: auditId,
+              patch: {
+                phase: 'auditing',
+                label: `Re-audit (Attempt ${attempts + 1})`,
+                status: 'running',
+                provider: request.provider,
+                model: request.model,
+                startedAt: new Date().toISOString()
+              }
+            }
+          })
+        }
+
         const auditResult = await this.auditDocumentAgainstPolicies(markdown, template?.name, request.provider, request.model, request.jobId)
         currentScore = auditResult.score
         
+        if (request.jobId && attempts > 0) {
+          await updateJobLlmProgress(request.jobId, {
+            patchStep: {
+              id: auditId,
+              patch: {
+                status: 'completed',
+                completedAt: new Date().toISOString()
+              }
+            }
+          })
+        }
+
         if (currentScore >= 90) {
           logger.info(`[AGENT] Document passed compliance audit with score ${currentScore}%`)
+          if (request.jobId && attempts === 0) {
+            await updateJobLlmProgress(request.jobId, {
+              patchStep: {
+                id: 'audit-loop-start',
+                patch: { status: 'completed', completedAt: new Date().toISOString() }
+              }
+            })
+          }
           break
         }
         
         logger.warn(`[AGENT] Document failed audit (Score: ${currentScore}%). Initiating Phase 5: Patch Agent (Attempt ${attempts + 1}/${MAX_RETRIES})`)
-        if (request.jobId) await updateJobStatus(request.jobId, "processing", 80 + (attempts * 2))
+        const patchId = `patch-agent-${attempts + 1}`
+        if (request.jobId) {
+          await updateJobStatus(request.jobId, "processing", 80 + (attempts * 2))
+          await updateJobLlmProgress(request.jobId, {
+            userId: request.userId,
+            currentStep: `Patching document to fix ${auditResult.failedRules.length} rule(s) (Attempt ${attempts + 1})…`,
+            progress: 81 + (attempts * 2),
+            patchStep: {
+              id: patchId,
+              patch: {
+                phase: 'patching',
+                label: `Patch Agent — Fixing ${auditResult.failedRules.length} rule(s)`,
+                status: 'running',
+                provider: request.provider,
+                model: request.model,
+                startedAt: new Date().toISOString()
+              }
+            }
+          })
+          if (attempts === 0) {
+            // Mark the initial audit as completed since we're moving to patch
+            await updateJobLlmProgress(request.jobId, {
+              patchStep: {
+                id: 'audit-loop-start',
+                patch: { status: 'completed', completedAt: new Date().toISOString() }
+              }
+            })
+          }
+        }
 
         // Phase 5: The Patch Agent
         markdown = await this.patchDocument(markdown, auditResult.failedRules, request.provider, request.model, request.jobId)
+        
+        if (request.jobId) {
+          await updateJobLlmProgress(request.jobId, {
+            patchStep: {
+              id: patchId,
+              patch: { status: 'completed', completedAt: new Date().toISOString() }
+            }
+          })
+        }
+
         attempts++
         auditLog.push({ attempt: attempts, score: currentScore, failedRules: auditResult.failedRules })
       }
@@ -800,7 +895,7 @@ class DocumentGenerationService {
       logger.info(`[AGENT] Final Phase: Parsing H8 entities and queueing save-inline-entities job...`)
       if (request.jobId) await updateJobStatus(request.jobId, "processing", 85)
 
-      const { InlineEntityParserService } = await import('./inlineEntityParserService')
+      const { InlineEntityParserService } = await Promise.resolve().then(() => require('./inlineEntityParserService'))
       const parseResult = await InlineEntityParserService.parseAndProcess({
         projectId: request.projectId,
         userId: request.userId,

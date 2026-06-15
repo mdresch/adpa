@@ -1,6 +1,7 @@
 import dotenv from "dotenv"
 import { Pool, PoolClient } from "pg"
 import { setInternalPool } from "../database/connection"
+import { TestAsyncTaskTracker } from "../utils/testAsyncTaskTracker"
 
 // Load test environment variables
 dotenv.config({ path: ".env.test", override: true })
@@ -141,6 +142,7 @@ beforeAll(async () => {
 })
 
 beforeEach(async () => {
+  TestAsyncTaskTracker.reset()
   if (shouldSkipDatabaseBootstrap || !testPool) return
   currentClient = await testPool.connect()
   await currentClient.query("BEGIN")
@@ -148,6 +150,9 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
+  // Await and drain all pending background tasks before rolling back transaction and releasing client
+  await TestAsyncTaskTracker.awaitAllPending()
+
   if (shouldSkipDatabaseBootstrap) {
     currentClient = null
     return
@@ -167,13 +172,25 @@ afterEach(async () => {
 })
 
 afterAll(async () => {
-  if (shouldSkipDatabaseBootstrap) {
-    return
-  }
-
   if (testPool) {
     setInternalPool(null as any)
     await testPool.end()
     console.log(`[TEST-SETUP] Test pool closed.`)
+  }
+
+  try {
+    const { shutdownQueues } = await import('../services/queueService')
+    await shutdownQueues()
+    console.log(`[TEST-SETUP] RabbitMQ queues closed.`)
+  } catch (err) {
+    console.error(`[TEST-SETUP] Failed to shutdown RabbitMQ queues`, err)
+  }
+
+  try {
+    const { disconnectRedis } = await import('../utils/redis')
+    await disconnectRedis()
+    console.log("[TEST-SETUP] Redis disconnected.")
+  } catch (err) {
+    console.error("[TEST-SETUP] Failed to disconnect Redis", err)
   }
 })

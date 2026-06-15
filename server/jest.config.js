@@ -23,6 +23,7 @@ module.exports = {
     '^@/lib/(.*)$': '<rootDir>/../lib/$1',
     '^@/types/(.*)$': '<rootDir>/../types/$1',
     '^@/(.*)$': '<rootDir>/src/$1',
+    '^uuid$': require.resolve('uuid'),
   },
   transformIgnorePatterns: [
     'node_modules[\\\\/](?!(uuid|\\.pnpm[\\\\/].*uuid))',

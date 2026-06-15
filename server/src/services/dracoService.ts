@@ -231,7 +231,7 @@ async function feedTemplateImprovements(result: DracoReviewResult, userId: strin
 
     // Also trigger a fresh analyzeTemplateQuality pass asynchronously
     // so the standard audit pipeline re-evaluates with any new DRACO findings
-    const { templateImprovementService } = await import('./templateImprovementService')
+    const { templateImprovementService } = await Promise.resolve().then(() => require())
     templateImprovementService.analyzeTemplateQuality(templateId).catch((err: Error) =>
       logger.warn('[DRACO] analyzeTemplateQuality kick-off failed (non-blocking)', { error: err.message })
     )

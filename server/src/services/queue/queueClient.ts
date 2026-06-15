@@ -290,3 +290,56 @@ export async function getQueueServiceDependencies(): Promise<QueueServiceDepende
 }
 
 export { redisClient }
+
+export async function shutdownQueues(): Promise<void> {
+  try {
+    for (const queue of queues) {
+      try {
+        await queue.queue.close()
+      } catch (e) {}
+    }
+    await connection.close();
+  } catch (err) {
+    console.error('Failed to close rabbit connection', err);
+  }
+}
+
+export async function initializeQueues(): Promise<void> {
+  logger.info("Queues initialized (RabbitMQ)")
+
+  // Pillar 1: Orphan Job Recovery
+  try {
+    const { getDatabasePool } = await import("../../database/connection")
+    const dbPool = getDatabasePool()
+    if (dbPool) {
+      const recoveryResult = await pool.query(
+        `SELECT id, type, data FROM jobs 
+         WHERE status = 'processing' 
+           AND queue_name IN ('ai-processing', 'document-processing', 'document-regeneration', 'project-data-extraction')`
+      )
+      
+      if (recoveryResult.rows.length > 0) {
+        logger.info(`[QUEUE RECOVERY] Found ${recoveryResult.rows.length} orphaned jobs. Requeuing...`)
+        
+        for (const row of recoveryResult.rows) {
+          try {
+            // Requeue the job using the existing ID
+            await queueService.addJob(row.type, row.data, { jobId: row.id })
+            
+            // Mark the old stuck execution as reset/pending
+            await pool.query(
+              `UPDATE jobs SET status = 'pending', worker_id = NULL WHERE id = $1`,
+              [row.id]
+            )
+          } catch (requeueErr) {
+            logger.error(`[QUEUE RECOVERY] Failed to requeue orphaned job ${row.id}:`, requeueErr)
+          }
+        }
+        
+        logger.info(`[QUEUE RECOVERY] Successfully recovered orphaned jobs.`)
+      }
+    }
+  } catch (err) {
+    logger.error("Failed to recover orphaned jobs during queue initialization", err)
+  }
+}

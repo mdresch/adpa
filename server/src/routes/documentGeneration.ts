@@ -109,6 +109,8 @@ const generateDocumentSchema = Joi.object({
   provider: Joi.string().required(),
   model: Joi.string().optional(),
   temperature: Joi.number().min(0).max(2).default(0.7),
+  max_tokens: Joi.number().optional(),
+  generation_metadata: Joi.object().optional().unknown(true),
   includeStakeholders: Joi.boolean().default(true),
   includeDocuments: Joi.boolean().default(true),
   customContext: Joi.string().max(5000).optional(),
@@ -203,6 +205,7 @@ router.post("/generate",
           description: description?.trim() || undefined,
           use_context: true,
           template_name: undefined as string | undefined,
+          generation_metadata: req.body.generation_metadata,
         }
 
         // Resolve template name for the job record (non-fatal if it fails)
@@ -491,7 +494,7 @@ router.post("/generate",
       }
 
       // Calculate quality and compliance metrics
-      const { analyzeDocumentQuality, calculateDocumentMetadata } = await import('../utils/documentMetadata')
+      const { analyzeDocumentQuality, calculateDocumentMetadata } = await Promise.resolve().then(() => require())
       const tempMetadata = {
         wordCount,
         characterCount,
@@ -662,7 +665,7 @@ router.post("/generate",
               })
 
               // Use queue service for async processing
-              const { getQueueService } = await import('../services/queueService')
+              const { getQueueService } = await Promise.resolve().then(() => require())
               const auditJobId = uuidv4()
 
               await getQueueService().addJob('quality-audit', {
@@ -727,7 +730,7 @@ router.post("/generate",
               )
               const projectCtx = projectCtxResult.rows[0] ?? {}
 
-              const { dracoService } = await import('../services/dracoService')
+              const { dracoService } = await Promise.resolve().then(() => require())
               const dracoResult = await dracoService.runFullReview({
                 documentId,
                 content: result.content,
@@ -819,7 +822,7 @@ router.post("/generate",
                       throw new Error('Invalid credentials')
                     }
 
-                    const { ConfluenceIntegration } = await import('../integrations/confluence')
+                    const { ConfluenceIntegration } = await Promise.resolve().then(() => require())
                     const confluenceIntegration = new ConfluenceIntegration(
                       {
                         baseUrl: config.base_url || config.baseUrl || credentials.baseUrl,
@@ -877,7 +880,7 @@ router.post("/generate",
                     projectId
                   })
 
-                  const { jiraLinkageService } = await import('../services/jiraLinkageService')
+                  const { jiraLinkageService } = await Promise.resolve().then(() => require())
                   jiraLinkage = await jiraLinkageService.linkDocumentToJira(
                     documentId,
                     name,
@@ -910,7 +913,7 @@ router.post("/generate",
             } else {
               // Fallback: Try legacy Jira linkage if no project settings (for backward compatibility)
               try {
-                const jiraLinkageModule = await import('../services/jiraLinkageService')
+                const jiraLinkageModule = await Promise.resolve().then(() => require())
                 if (jiraLinkageModule.jiraLinkageService) {
                   jiraLinkage = await jiraLinkageModule.jiraLinkageService.linkDocumentToJira(
                     documentId,
@@ -976,7 +979,7 @@ router.post("/generate",
       setImmediate(() => {
         (async () => {
           try {
-            const { ragSyncService } = await import('../services/ragSyncService')
+            const { ragSyncService } = await Promise.resolve().then(() => require())
             if (ragSyncService.isAvailable()) {
               log.info('🔍 [RAG-SYNC] Syncing generated document to File Search', {
                 documentId,
@@ -1218,7 +1221,7 @@ router.post("/generate-new-version",
 
       // 🔥 Trigger quality audit after AI regeneration (MINOR version increment)
       try {
-        const { qualityAuditService } = await import('../services/qualityAuditService')
+        const { qualityAuditService } = await Promise.resolve().then(() => require())
 
         log.info('[AI-REGENERATION] Triggering quality audit after version increment', {
           documentId: existingDocumentId,
@@ -1306,7 +1309,7 @@ router.post("/generate-new-version",
 
       // 🔗 Update Jira issue if linked
       try {
-        const { jiraLinkageService } = await import('../services/jiraLinkageService')
+        const { jiraLinkageService } = await Promise.resolve().then(() => require())
         await jiraLinkageService.updateJiraForDocumentRegeneration(
           existingDocumentId,
           newVersion,

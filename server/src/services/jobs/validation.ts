@@ -38,6 +38,7 @@ export const aiGenerationJobDataSchema = baseJobDataSchema.keys({
   framework: Joi.string().optional(),
   template_name: Joi.string().optional(),
   use_context: Joi.boolean().optional(),
+  generation_metadata: Joi.object().unknown(true).optional(),
 })
 
 /**

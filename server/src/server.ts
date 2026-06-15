@@ -166,6 +166,7 @@ import documentModuleRoutes from "./modules/documents/routes"
 import analysisModuleRoutes from "./modules/analysis/routes"
 import openuiChatModuleRoutes from "./modules/openuiChat/routes"
 import { registerRoutes } from "./routes/registry"
+import ipGovernanceRoutes from "./routes/ipGovernance"
 import { shouldStartServerForArgv } from "./utils/serverStartup"
 import { startEffectivenessWorker, initializeEffectivenessListener } from "./workers/effectivenessWorker"
 import councilRouter from "./api/governance/councilRouter"
@@ -372,8 +373,10 @@ app.use("/api/compliance", complianceRoutes)
 app.use("/api/v1/policy-library", policyLibraryRoutes)
 app.use("/api/v1/governance", councilRouter)
 app.use("/api/v1/entity-audit", entityAuditRoutes)
+app.use("/api/v1/ip-governance", ipGovernanceRoutes)
 console.log("✅ Policy Library Routes Mounted")
 console.log("✅ Entity Audit Routes Mounted")
+console.log("✅ IP Governance Routes Mounted")
 app.use("/api/admin", adminRoutes)
 app.use("/api/onboarding", documentUploadRoutes)
 app.use("/api/assessment", assessmentExportRoutes)

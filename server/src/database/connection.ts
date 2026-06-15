@@ -26,7 +26,7 @@ const DEFAULT_DB_CONN_TIMEOUT_MS = parseInt(process.env.DB_CONN_TIMEOUT_MS || '6
 const DEFAULT_DB_QUERY_TIMEOUT_MS = parseInt(process.env.DB_QUERY_TIMEOUT_MS || '15000', 10)
 const DEFAULT_DB_MAX_RETRIES_PER_METHOD = parseInt(
   process.env.DB_MAX_RETRIES_PER_METHOD ||
-    (process.env.NODE_ENV === 'production' ? '5' : '1'),
+    (process.env.NODE_ENV === 'production' ? '5' : '3'),
   10
 )
 // Later code may bump these values when making manual connection attempts
@@ -321,13 +321,57 @@ function isTransientPoolError(err: unknown): boolean {
     message.includes("ECONNRESET") ||
     message.includes("ETIMEDOUT") ||
     message.includes("connection timeout") ||
+    message.includes("ECHECKOUTTIMEOUT") ||
+    message.includes("Transaction mode") ||
     code === "ECONNRESET" ||
     code === "57P01" ||
     code === "57P02" ||
     code === "57P03" ||
     code === "08006" ||
-    code === "08003"
+    code === "08003" ||
+    code === "XX000" // Internal error, often connectivity related in poolers
   )
+}
+
+/**
+ * Determines if an error should trip the circuit breaker.
+ * We only want to trip on connectivity or availability issues, 
+ * not on application errors like schema mismatches or constraint violations.
+ */
+function isCircuitBreakingError(err: any): boolean {
+  const code = String(err?.code ?? "")
+  const message = String(err?.message ?? "")
+
+  // Class 08 — Connection Exception
+  // Class 57 — Operator Intervention
+  // Class 58 — System Error (often external to DB)
+  if (code.startsWith('08') || code.startsWith('57') || code.startsWith('58')) {
+    return true
+  }
+
+  // Transient errors that exhausted retries are circuit-breaking
+  if (isTransientPoolError(err)) {
+    return true
+  }
+
+  // Generic network/timeout errors
+  if (
+    message.includes("ECONNREFUSED") ||
+    message.includes("ENETUNREACH") ||
+    message.includes("EHOSTUNREACH") ||
+    message.includes("Database connection timeout") ||
+    message.includes("Database query timeout")
+  ) {
+    return true
+  }
+
+  return false
+}
+
+export const __testing = {
+  isTransientPoolError,
+  isCircuitBreakingError,
+  getDbBreaker: () => dbBreaker
 }
 
 function attachPoolErrorHandler(p: Pool) {
@@ -336,12 +380,14 @@ function attachPoolErrorHandler(p: Pool) {
     // This is common with poolers (e.g., Supabase PgBouncer/transaction pooler).
     p.on("error", (err: any) => {
       try {
-        logger.error("[DB] Pool error event (idle client)", { message: err?.message })
+        logger.error("[DB] Pool error event (idle client)", { message: err?.message, code: err?.code })
       } catch {
         // ignore
       }
       try {
-        dbBreaker.recordFailure()
+        if (isCircuitBreakingError(err)) {
+          dbBreaker.recordFailure()
+        }
       } catch {
         // ignore
       }
@@ -375,13 +421,24 @@ function patchPoolQuery(p: Pool) {
               await new Promise((resolve) => setTimeout(resolve, 150 * (attempt + 1)))
               continue
             }
-            logger.error('[DB-GUARD] Unhandled pool.query error', {
-              sql: text,
-              params,
-              message: err?.message,
-              stack: err?.stack,
-            })
-            dbBreaker.recordFailure()
+            
+            // Only trip the breaker on connectivity/availability issues
+            if (isCircuitBreakingError(err)) {
+              logger.error('[DB-GUARD] Circuit-breaking query error', {
+                sql: text,
+                params,
+                message: err?.message,
+                code: err?.code
+              })
+              dbBreaker.recordFailure()
+            } else {
+              logger.error('[DB-GUARD] Application query error (not circuit-breaking)', {
+                sql: text,
+                params,
+                message: err?.message,
+                code: err?.code
+              })
+            }
             throw err
           }
         }
@@ -468,24 +525,73 @@ async function connectDatabaseInternal(): Promise<void> {
         connectionTimeoutMillis: DEFAULT_DB_CONN_TIMEOUT_MS,
       })
 
-      if (isTransactionPoolerUrl(normalizedDbUrl)) {
-        console.log(
-          `🔧 Pooler (${databaseUrlEndpointLabel(normalizedDbUrl)}): discrete connection fields (no connectionString)`
-        )
-      } else if (poolConfig.host && !isLocalDatabaseHost(poolConfig.host)) {
-        try {
-          console.log(`🔧 Resolving direct connection ${poolConfig.host} via dns.lookup...`)
-          const { address } = await dnsLookup(poolConfig.host, { family: 4 })
-          if (address) {
-            console.log(`✅ Resolved to IPv4: ${address}`)
-            poolConfig.host = address
+      // Parse URL and handle IPv4/IPv6 resolution
+      try {
+        const dbUrl = new URL(currentDbUrl)
+
+        // For Supabase, prefer connection pooler (port 6543) which has better IPv4 support
+        // If using direct connection (port 5432), try to resolve to IPv4 first
+        const isLocal = dbUrl.hostname === 'localhost' || dbUrl.hostname === '127.0.0.1'
+        const isDirectConnection = dbUrl.port === '5432' || !dbUrl.port || isLocal || dbUrl.port === '5433'
+        const isPoolerConnection =
+          dbUrl.port === '6543' ||
+          dbUrl.searchParams.has('pgbouncer') ||
+          dbUrl.hostname.includes('pooler.supabase.com')
+
+        // HARDENING: If it's a pooler connection and missing pgbouncer=true, add it!
+        if (isPoolerConnection) {
+          if (!dbUrl.searchParams.has('pgbouncer')) {
+            console.log('🔧 Auto-appending pgbouncer=true for transaction pooler compatibility')
+            dbUrl.searchParams.set('pgbouncer', 'true')
           }
-        } catch (ipv4Error: any) {
-          console.warn("⚠️  IPv4 resolution skipped/failed:", ipv4Error?.message)
+          // Disable prepared statements for PgBouncer compatibility
+          poolConfig.prepareThreshold = 0
         }
+
+        if (isDirectConnection && isLocal) {
+          // Try to resolve to IPv4 for local direct connections to avoid ::1 vs 127.0.0.1 issues
+          try {
+            console.log(`🔧 Resolving direct connection ${dbUrl.hostname} via dns.lookup...`)
+            const { address } = await dnsLookup(dbUrl.hostname, { family: 4 })
+
+            if (address) {
+              console.log(`✅ Resolved to IPv4: ${address}`)
+              poolConfig = {
+                ...poolConfig,
+                host: address, 
+                port: parseInt(dbUrl.port) || 5432,
+                database: dbUrl.pathname.slice(1).split('?')[0],
+                user: dbUrl.username,
+                password: decodeURIComponent(dbUrl.password),
+              }
+              // Add pgbouncer if we detected it was needed but we are using parsed config
+              if (isPoolerConnection) {
+                poolConfig.connectionString = stripLibpqSslQueryParams(dbUrl)
+              }
+            }
+          } catch (ipv4Error: any) {
+            console.warn('⚠️  IPv4 resolution skipped/failed:', ipv4Error?.message)
+            // Fallback: use connection string directly in the catch-all below
+          }
+        } else {
+          // Transaction pooler or Cloud DB (e.g. Supabase, Render, Neon): use the URL as-is.
+          // Do NOT substitute IPv4 into `host` — node-postgres will fail SNI routing (SELF_SIGNED_CERT_IN_CHAIN)
+          // or hang indefinitely on PaaS like Render.
+          console.log(`🔧 Cloud DB (${dbUrl.hostname}:${dbUrl.port}): using connection string as-is (no IPv4 substitution)`)
+          poolConfig.connectionString = stripLibpqSslQueryParams(dbUrl)
+          poolConfig.ssl = buildSslConfig(currentDbUrl)
+        }
+        
+        // Final sanity check: if advanced parsing didn't set a host, use the (potentially patched) URL string
+        if (!poolConfig.host && !poolConfig.connectionString) {
+          poolConfig.connectionString = stripLibpqSslQueryParams(dbUrl)
+        }
+      } catch (e: any) {
+        // Ultimate Fallback: Just use the raw connectionString with our determined SSL config
+        console.warn('⚠️  Advanced parsing failed or was bypassed, ensuring raw string use')
       }
 
-      const usesTransactionPooler = isTransactionPoolerUrl(normalizedDbUrl)
+      const usesTransactionPooler = isTransactionPoolerUrl(currentDbUrl)
       const poolerDefaultMax = usesTransactionPooler ? 5 : 20
       poolConfig.max = Number(process.env.PG_MAX) || poolerDefaultMax
 
@@ -506,10 +612,15 @@ async function connectDatabaseInternal(): Promise<void> {
         console.log(`📡 Connecting to ${formatConnectionLogTarget(poolConfig)}...`)
         const client = await Promise.race([
           testPool.connect(),
-          new Promise<never>((_, reject) => 
+          new Promise<any>((_, reject) => 
             setTimeout(() => reject(new Error('Database connection timeout')), DEFAULT_DB_CONN_TIMEOUT_MS)
           )
         ])
+
+        // Ensure the client has an error handler to prevent crashes during probe
+        client.on('error', (err: any) => {
+          console.warn('[DB] Client error during startup probe:', err?.message)
+        })
 
         // Use a generous timeout for the probe query: Supabase free-tier projects pause
         // after inactivity and the first query after waking can take 20-30+ seconds.

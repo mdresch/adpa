@@ -23,7 +23,117 @@
       ],
       "overlapGuard": false,
       "spec": "docs/superpowers/specs/2026-06-08-rag-context-scoping-design.md",
-      "testPathPattern": "documentGenerationService"
+      "testPathPattern": "(documentGeneration|AIGenerationJobService|project-documents)"
+    },
+    {
+      "id": "test-teardown-guard",
+      "description": "Async background task tracking system to prevent Jest teardown leaks",
+      "skills": [
+        "adpa-test-teardown-guard"
+      ],
+      "spec": "docs/superpowers/specs/2026-06-13-test-teardown-guard-design.md",
+      "testModuleDir": "test-teardown-guard",
+      "testPathPattern": "modules/test-teardown-guard"
+    },
+    {
+      "id": "codacy",
+      "description": "ADPA Codacy CLI wrapper & testing integration",
+      "skills": [
+        "adpa-codacy"
+      ],
+      "spec": "docs/superpowers/specs/2026-06-13-codacy-integration-design.md",
+      "testModuleDir": "codacy",
+      "testPathPattern": "modules/codacy"
+    },
+    {
+      "id": "infrastructure",
+      "description": "DB-GUARD Circuit Breaker and Pool Resilience (Pillar 5)",
+      "skills": [
+        "adpa-governed-feature-loop",
+        "adpa-data-infrastructure-pillar5"
+      ],
+      "overlapGuard": false,
+      "spec": "docs/superpowers/specs/2026-06-13-db-guard-circuit-breaker-hardening-design.md",
+      "testModuleDir": "infrastructure",
+      "testPathPattern": "modules/infrastructure"
+    },
+    {
+      "id": "inline-extraction",
+      "description": "Inline H8 Extraction and Dual-Store Persistence Guards",
+      "skills": [
+        "adpa-inline-entity-extraction"
+      ],
+      "overlapGuard": false,
+      "spec": "docs/superpowers/specs/2026-06-14-inline-h8-extraction-guards-design.md",
+      "testModuleDir": "inline-extraction",
+      "testPathPattern": "modules/inline-extraction"
+    },
+    {
+      "id": "document-generation-resiliency",
+      "description": "Document Generation & Processing Engine Resiliency (Pillar 1)",
+      "skills": [
+        "adpa-document-generation-resiliency"
+      ],
+      "overlapGuard": false,
+      "spec": "docs/superpowers/specs/2026-06-15-document-generation-resiliency-design.md",
+      "testModuleDir": "document-generation-resiliency",
+      "testPathPattern": "modules/document-generation-resiliency"
+    },
+    {
+      "id": "knowledge-graph",
+      "description": "Core ingestion pipeline and dual-store transactional atomicity for extracted entities (Pillar 3)",
+      "skills": [
+        "adpa-knowledge-graph-pillar3"
+      ],
+      "overlapGuard": false,
+      "testModuleDir": "knowledge-graph",
+      "testPathPattern": "modules/knowledge-graph"
+    },
+    {
+      "id": "compliance",
+      "description": "Security, Governance & Audit Layer (Pillar 4)",
+      "skills": [
+        "adpa-compliance-layer-pillar4",
+        "adpa-draco-escalation"
+      ],
+      "overlapGuard": false,
+      "testModuleDir": "compliance",
+      "testPathPattern": "modules/compliance"
+    },
+    {
+      "id": "ip-governance",
+      "description": "IP Novelty Assessment, Legal Review, and Registration pipeline",
+      "skills": [
+        "adpa-governed-feature-loop"
+      ],
+      "overlapGuard": false,
+      "spec": "docs/features/implemented/ip-novelty-governance-pipeline.md",
+      "testModuleDir": "ip-governance",
+      "testPathPattern": "modules/ip-governance"
+    },
+    {
+      "id": "document-dependency-graph",
+      "description": "Topological sort and upstream/downstream dependency resolution for Document DAG",
+      "skills": [
+        "adpa-dependency-graph"
+      ],
+      "overlapGuard": false,
+      "spec": "docs/superpowers/specs/2026-06-15-cascading-regeneration-engine-design.md",
+      "testModuleDir": "document-dependency-graph",
+      "testPathPattern": "modules/document-dependency-graph"
+    },
+    {
+      "id": "cascading-regeneration",
+      "description": "Cascades regeneration jobs following positive drift or approved change request",
+      "skills": [
+        "adpa-dependency-graph",
+        "adpa-doc-gen-queue",
+        "adpa-compliance-layer-pillar4"
+      ],
+      "overlapGuard": false,
+      "spec": "docs/superpowers/specs/2026-06-15-cascading-regeneration-engine-design.md",
+      "testModuleDir": "cascading-regeneration",
+      "testPathPattern": "modules/cascading-regeneration"
     },
     {
       "id": "api-worker-split",

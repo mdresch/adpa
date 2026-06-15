@@ -78,7 +78,7 @@ export async function searchDocumentsViaMongo(
     userId: string,
     limit: number = 10
 ): Promise<SearchResult[]> {
-    const { pool } = await import('../database/connection');
+    const { pool } = await Promise.resolve().then(() => require());
 
     const projects = await pool.query(
         `SELECT id, name FROM projects

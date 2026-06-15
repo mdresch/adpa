@@ -25,11 +25,18 @@ Before any change, state the following:
 - **Type**: Add/Modify/Delete.
 - **Rationale**: One factual sentence.
 
-### 2. Implementation
+### 2. Environment Snapshot
+Before executing any code changes that might mutate state, snapshot the database:
+```powershell
+./scripts/snapshot-db-state.ps1
+```
+*Wait for output.* Verify snapshots are successfully created in `backups/agent_snapshots`.
+
+### 3. Implementation
 - Use `replace_file_content` or `write_to_file` for full contents.
 - Ensure only declared files are modified.
 
-### 3. Validation Gates (IN ORDER)
+### 4. Validation Gates (IN ORDER)
 
 #### 🟢 Gate 1: Mechanical Integrity
 ```powershell
@@ -38,15 +45,15 @@ git diff --stat
 ```
 *Wait for output.* Verify only declared files are changed.
 
-#### 🟢 Gate 2: Build Integrity
+#### 🟢 Gate 2: Build Integrity (Non-Blocking)
 ```powershell
-dotnet build
+docker run --rm -v ${PWD}:/workspace adpa-agent-sandbox dotnet build -c Release -p:BaseOutputPath=/tmp/sandbox/bin/ -p:BaseIntermediateOutputPath=/tmp/sandbox/obj/
 ```
-*Wait for output.* Verify zero errors.
+*Wait for output.* Verify zero errors. (Using custom output paths prevents file lock conflicts with the host OS).
 
 #### 🟢 Gate 3: Orchestration Integrity
 ```powershell
-dotnet run --project orchestrator/Adpa.AppHost
+docker run --rm -v ${PWD}:/workspace adpa-agent-sandbox dotnet run --project orchestrator/Adpa.AppHost
 ```
 *Verify startup success.*
 
@@ -56,7 +63,14 @@ Confirm invariants:
 - Phase transitions are explicit.
 - Human approval gates are intact.
 
-### 4. Certification
+#### 🟢 Gate 5: Package Lock Integrity (Vercel Prevention)
+If `package.json` was modified in this change, ensure the lockfile is up to date and clean to prevent CI build failures:
+```powershell
+pnpm install --frozen-lockfile
+```
+*Wait for output.* If this fails with `ERR_PNPM_OUTDATED_LOCKFILE`, you must run `pnpm install`, add the updated `pnpm-lock.yaml` to your commit, and re-run this gate.
+
+### 5. Certification
 Only if all gates pass:
 ```powershell
 git add .
@@ -64,8 +78,9 @@ git commit -m "SAFE: <atomic change description>"
 ```
 
 ## Rollback Policy
-If ANY gate fails:
+If ANY gate fails, you must revert both code and database state:
 ```powershell
+./scripts/rollback-db-state.ps1
 git reset --hard HEAD
 ```
 Do **not** attempt to fix in a dirty state. Restart from a clean slate.

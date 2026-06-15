@@ -189,7 +189,7 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
     try {
       setLoading(true);
       console.log('[RISKS] Fetching risks for project:', projectId);
-      const response: any = await apiClient.get(`/projects/${projectId}/risks`);
+      const response: any = await apiClient.get(`/v1/execution/risks/registry?project_id=${projectId}`);
       console.log('[RISKS] API Response:', {
         responseType: typeof response,
         isArray: Array.isArray(response),

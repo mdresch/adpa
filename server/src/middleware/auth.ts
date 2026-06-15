@@ -386,3 +386,34 @@ export const optionalAuth = async (req: AuthRequest, res: Response, next: NextFu
     next()
   }
 }
+
+/**
+ * Automated tenant isolation verification.
+ * Rejects unauthorized cross-project or cross-tenant access attempts with explicit HTTP 403 status codes.
+ */
+export const verifyTenantAccess = (req: AuthRequest, res: Response, next: NextFunction) => {
+  if (!req.user) {
+    return res.status(401).json({ error: "Authentication required" })
+  }
+
+  const targetTenantId = req.params.tenantId || req.body.tenantId || req.query.tenantId
+  const targetProjectId = req.params.projectId || req.body.projectId || req.query.projectId
+
+  // Super admins bypass tenant restrictions
+  const userRole = req.user.role?.toLowerCase()
+  if (userRole === 'super_admin' || userRole === 'admin') {
+    return next()
+  }
+
+  const permissions = req.user.permissions || {}
+
+  if (targetTenantId && permissions.tenantId && targetTenantId !== permissions.tenantId) {
+    return res.status(403).json({ error: "Tenant Isolation Violation: Cross-tenant access denied" })
+  }
+
+  if (targetProjectId && permissions.projectId && targetProjectId !== permissions.projectId) {
+    return res.status(403).json({ error: "Project Isolation Violation: Cross-project access denied" })
+  }
+
+  next()
+}

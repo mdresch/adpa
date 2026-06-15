@@ -1084,7 +1084,7 @@ export async function suggestStakeholdersForTask(taskId: string): Promise<any[]>
       // Calculate skill match for each stakeholder
       for (const stakeholder of stakeholdersResult.rows) {
         try {
-          const { matchStakeholderToRole } = await import('./skillsManagementService')
+          const { matchStakeholderToRole } = await Promise.resolve().then(() => require())
           const match = await matchStakeholderToRole(stakeholder.id, taskRole.roleId)
 
           suggestions.push({

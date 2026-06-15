@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Extraction Orchestration Job Service
  * Handles processing of project data extraction jobs from the queue
  * 
@@ -591,7 +591,7 @@ export class ExtractionOrchestrationService {
         const dbJob = jobCheck.rows[0]
         // Skip processing if job is already failed, cancelled, or has an error message
         if (dbJob.status === 'failed' || dbJob.status === 'cancelled' || dbJob.error_message) {
-          log.warn(`[EXTRACTION-PARENT] ⚠️ Skipping job ${jobId} - already ${dbJob.status} with error: ${dbJob.error_message?.substring(0, 50)}`)
+          log.warn(`[EXTRACTION-PARENT] âš ï¸ Skipping job ${jobId} - already ${dbJob.status} with error: ${dbJob.error_message?.substring(0, 50)}`)
           // Update database to ensure it's marked as failed
           await db.query(
             `UPDATE jobs 
@@ -606,12 +606,12 @@ export class ExtractionOrchestrationService {
         }
       } else {
         // Job not found in database - this shouldn't happen, but skip it
-        log.warn(`[EXTRACTION-PARENT] ⚠️ Job ${jobId} not found in database - skipping`)
+        log.warn(`[EXTRACTION-PARENT] âš ï¸ Job ${jobId} not found in database - skipping`)
         await job.remove()
         return
       }
 
-      log.info(`[EXTRACTION-PARENT] 🚀 Starting orchestration: ${jobId}`, {
+      log.info(`[EXTRACTION-PARENT] ðŸš€ Starting orchestration: ${jobId}`, {
         projectId,
         userId,
         documentIds,
@@ -641,7 +641,7 @@ export class ExtractionOrchestrationService {
         ; (job.data as ExtendedExtractionJobData).domainRunIds = domainRunIds
 
       // Use queue service to persist DB rows and create child jobs with canonical UUID jobIds
-      const { addJob, getQueueService } = await import('../queueService')
+      const { addJob, getQueueService } = await Promise.resolve().then(() => require('../queueService'))
       const queueSvc = getQueueService()
 
       // Create child jobs for each entity type via QueueService.addJob (creates DB row + enqueues)
@@ -783,11 +783,11 @@ export class ExtractionOrchestrationService {
                       const entityType = (j.data as any)?.entityType || 'unknown'
 
                       if (activeDuration > CRITICAL_JOB_TIMEOUT) {
-                        log.error(`[EXTRACTION-PARENT] 🛑 Child job ${j.id} (${entityType}) is CRITICALLY stuck (>20m active). Treating as failed.`)
+                        log.error(`[EXTRACTION-PARENT] ðŸ›‘ Child job ${j.id} (${entityType}) is CRITICALLY stuck (>20m active). Treating as failed.`)
                         return 'failed'
                       } else if (activeDuration > STUCK_JOB_TIMEOUT) {
                         const stuckDuration = Math.floor(activeDuration / 1000 / 60)
-                        log.warn(`[EXTRACTION-PARENT] ⚠️ Child job ${j.id} (${entityType}) appears stuck - active for ${stuckDuration} minutes`)
+                        log.warn(`[EXTRACTION-PARENT] âš ï¸ Child job ${j.id} (${entityType}) appears stuck - active for ${stuckDuration} minutes`)
                       }
                     }
                   }
@@ -1423,8 +1423,8 @@ export class ExtractionOrchestrationService {
       // template_entity_profile using the helper views.
       // This runs best-effort; failures here should not break the main extraction job.
       try {
-        const { default: DocumentPurposeService } = await import('../documentPurposeService')
-        const { default: TemplateAnalyticsService } = await import('../templateAnalyticsService')
+        const { default: DocumentPurposeService } = await Promise.resolve().then(() => require('../documentPurposeService'))
+        const { default: TemplateAnalyticsService } = await Promise.resolve().then(() => require('../templateAnalyticsService'))
 
         log.info(`[EXTRACTION-PARENT] Rebuilding document purposes for project ${projectId}`)
 

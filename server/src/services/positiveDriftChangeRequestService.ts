@@ -14,6 +14,8 @@ import { DriftPoint } from './driftDetectionService'
 import { emailNotificationService, PositiveDriftEmailData } from './emailNotificationService'
 import { approvalWorkflowService } from './approvalWorkflowService'
 import projectSimilarityService from './projectSimilarityService'
+import { ipNoveltyAssessmentService } from '../modules/ip-governance/IPNoveltyAssessmentService'
+import { ipLegalReviewWorkflow } from '../modules/ip-governance/IPLegalReviewWorkflow'
 
 export interface PositiveDriftMetrics {
   costSavings?: number // $ saved
@@ -96,15 +98,15 @@ export class PositiveDriftChangeRequestService {
         }
       }
 
-      // Detect innovation opportunities
+      // Detect innovation opportunities → trigger IP Novelty Assessment Pipeline
       if (drift.description.toLowerCase().includes('innovat') || 
           drift.description.toLowerCase().includes('patent') ||
           drift.description.toLowerCase().includes('novel')) {
-        innovationValue += 50000 // Estimated innovation value
+        innovationValue += 50000 // Estimated innovation value (updated after assessment)
         isPositive = true
         driftCategory = 'innovation'
         description = drift.description
-        strategicValue = 'Potential intellectual property or competitive differentiation'
+        strategicValue = 'Potential intellectual property or competitive differentiation — IP assessment pending'
       }
     }
 
@@ -430,6 +432,41 @@ export class PositiveDriftChangeRequestService {
         logger.error('[POSITIVE-DRIFT-CR] Error sending notification:', err)
         // Don't fail CR creation if notification fails
       })
+
+      // ─── IP Novelty Assessment Pipeline ────────────────────────────────────
+      // Triggered for innovation-category drift. Runs async so it never blocks
+      // CR creation. If noveltyScore >= 0.60, legal review is auto-initiated.
+      if (positiveDrift.driftCategory === 'innovation') {
+        ipNoveltyAssessmentService.assessNovelty({
+          projectId,
+          documentId,
+          driftRecordId,
+          driftPoints,
+          positiveDrift,
+          triggeredBy: userId,
+        }).then(assessment => {
+          logger.info('[POSITIVE-DRIFT-CR] IP novelty assessment complete', {
+            changeRequestId,
+            assessmentId: assessment.id,
+            noveltyScore: assessment.noveltyScore,
+            ipClassification: assessment.ipClassification,
+          })
+
+          if (assessment.noveltyScore >= 0.60 && assessment.ipClassification !== 'none') {
+            ipLegalReviewWorkflow.initiateReview(assessment, userId).then(result => {
+              logger.info('[POSITIVE-DRIFT-CR] IP legal review initiated', {
+                assessmentId: assessment.id,
+                approvalRequestId: result.approvalRequestId,
+              })
+            }).catch(err => {
+              logger.error('[POSITIVE-DRIFT-CR] Error initiating IP legal review', { err })
+            })
+          }
+        }).catch(err => {
+          logger.error('[POSITIVE-DRIFT-CR] IP novelty assessment failed (non-blocking)', { err })
+        })
+      }
+      // ───────────────────────────────────────────────────────────────────────
 
       return {
         changeRequestId,

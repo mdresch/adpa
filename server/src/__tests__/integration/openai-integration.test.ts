@@ -18,7 +18,7 @@ describe('OpenAI Integration Tests', () => {
 
   beforeAll(async () => {
     // Import app after mocks are set up
-    const { default: createApp } = await import('../../server')
+    const { default: createApp } = await Promise.resolve().then(() => require())
     app = createApp()
 
     // Create test user

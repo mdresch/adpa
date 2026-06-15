@@ -87,36 +87,11 @@ export function PerformanceDashboard({ projectId }: PerformanceDashboardProps) {
       setLoading(true)
       setError(null)
 
-      // Get auth token
-      const token = localStorage.getItem('auth_token') || localStorage.getItem('token')
-      if (!token) {
-        throw new Error('Authentication required')
-      }
-
-      // Fetch summary and actuals in parallel
-      const [summaryResponse, actualsResponse] = await Promise.all([
-        fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/performance-actuals/${projectId}/summary`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        }),
-        fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/performance-actuals/${projectId}?limit=50`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        })
+      // Fetch summary and actuals in parallel using apiClient
+      const [summaryData, actualsData] = await Promise.all([
+        apiClient.get<{ data: PerformanceSummary }>(`/performance-actuals/${projectId}/summary`),
+        apiClient.get<{ data: PerformanceActual[] }>(`/performance-actuals/${projectId}?limit=50`)
       ])
-
-      if (!summaryResponse.ok) {
-        throw new Error('Failed to fetch performance summary')
-      }
-
-      if (!actualsResponse.ok) {
-        throw new Error('Failed to fetch performance actuals')
-      }
-
-      const summaryData = await summaryResponse.json()
-      const actualsData = await actualsResponse.json()
 
       setSummary(summaryData.data)
       setActuals(actualsData.data || [])

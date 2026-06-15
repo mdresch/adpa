@@ -1,15 +1,15 @@
 ---
 name: test-driven-development
-description: Use when implementing any feature or bugfix, before writing implementation code
+description: Use when implementing any feature or bugfix, before writing implementation code to build Contract Guards (Advanced Jest Test logic)
 ---
 
-# Test-Driven Development (TDD)
+# Contract Guard-Driven Development (TDD)
 
 ## Overview
 
-Write the test first. Watch it fail. Write minimal code to pass.
+Write the Contract Guard first. Watch it fail. Write minimal code to satisfy the contract.
 
-**Core principle:** If you didn't watch the test fail, you don't know if it tests the right thing.
+**Core principle:** If you didn't watch the Contract Guard fail, you don't know if it protects the right architectural invariant.
 
 **Violating the letter of the rules is violating the spirit of the rules.**
 
@@ -20,37 +20,38 @@ Write the test first. Watch it fail. Write minimal code to pass.
 - Bug fixes
 - Refactoring
 - Behavior changes
+- Adding governed features (see `adpa-governed-feature-loop`)
 
 **Exceptions (ask your human partner):**
 - Throwaway prototypes
 - Generated code
 - Configuration files
 
-Thinking "skip TDD just this once"? Stop. That's rationalization.
+Thinking "skip the Contract Guard just this once"? Stop. That's rationalization.
 
 ## The Iron Law
 
 ```
-NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST
+NO PRODUCTION CODE WITHOUT A FAILING CONTRACT GUARD FIRST
 ```
 
-Write code before the test? Delete it. Start over.
+Write code before the guard? Delete it. Start over.
 
 **No exceptions:**
 - Don't keep it as "reference"
-- Don't "adapt" it while writing tests
+- Don't "adapt" it while writing guards
 - Don't look at it
 - Delete means delete
 
-Implement fresh from tests. Period.
+Implement fresh from guards. Period.
 
 ## Red-Green-Refactor
 
 ```dot
 digraph tdd_cycle {
     rankdir=LR;
-    red [label="RED\nWrite failing test", shape=box, style=filled, fillcolor="#ffcccc"];
-    verify_red [label="Verify fails\ncorrectly", shape=diamond];
+    red [label="RED\nWrite failing Contract Guard", shape=box, style=filled, fillcolor="#ffcccc"];
+    verify_red [label="Verify fails\nwith instructional error", shape=diamond];
     green [label="GREEN\nMinimal code", shape=box, style=filled, fillcolor="#ccffcc"];
     verify_green [label="Verify passes\nAll green", shape=diamond];
     refactor [label="REFACTOR\nClean up", shape=box, style=filled, fillcolor="#ccccff"];
@@ -68,13 +69,13 @@ digraph tdd_cycle {
 }
 ```
 
-### RED - Write Failing Test
+### RED - Write Failing Contract Guard
 
-Write one minimal test showing what should happen.
+Write one minimal guard showing what invariant must be protected. In ADPA, these are not just simple assertions; they are executable contracts that throw instructional errors when broken.
 
 <Good>
 ```typescript
-test('retries failed operations 3 times', async () => {
+test('MUST retry failed operations exactly 3 times (REQ-002)', async () => {
   let attempts = 0;
   const operation = () => {
     attempts++;
@@ -84,11 +85,17 @@ test('retries failed operations 3 times', async () => {
 
   const result = await retryOperation(operation);
 
+  if (attempts !== 3) {
+    throw new Error(`
+      🚨 GOVERNANCE VIOLATION: Retry Contract Broken
+      Expected exactly 3 attempts, but saw ${attempts}.
+      WHY THIS MATTERS: Uncontrolled retries cause cascading downstream failures.
+    `);
+  }
   expect(result).toBe('success');
-  expect(attempts).toBe(3);
 });
 ```
-Clear name, tests real behavior, one thing
+Clear name, instructional error message, tests real behavior.
 </Good>
 
 <Bad>
@@ -293,16 +300,22 @@ Tests-first force edge case discovery before implementing. Tests-after verify yo
 
 **RED**
 ```typescript
-test('rejects empty email', async () => {
+test('MUST reject empty email (REQ-BUG-123)', async () => {
   const result = await submitForm({ email: '' });
-  expect(result.error).toBe('Email required');
+  if (result.error !== 'Email required') {
+    throw new Error(`
+      🚨 GOVERNANCE VIOLATION: Empty Email Accepted
+      Expected error 'Email required', got ${result.error}.
+      WHY THIS MATTERS: Empty emails corrupt the user ledger.
+    `);
+  }
 });
 ```
 
 **Verify RED**
 ```bash
 $ npm test
-FAIL: expected 'Email required', got undefined
+FAIL: 🚨 GOVERNANCE VIOLATION: Empty Email Accepted
 ```
 
 **GREEN**
@@ -328,16 +341,16 @@ Extract validation for multiple fields if needed.
 
 Before marking work complete:
 
-- [ ] Every new function/method has a test
-- [ ] Watched each test fail before implementing
-- [ ] Each test failed for expected reason (feature missing, not typo)
-- [ ] Wrote minimal code to pass each test
-- [ ] All tests pass
+- [ ] Every new function/method has a Contract Guard
+- [ ] Watched each guard fail before implementing code
+- [ ] Each guard failed with an explicit instructional error
+- [ ] Wrote minimal code to pass each guard
+- [ ] All Contract Guards pass
 - [ ] Output pristine (no errors, warnings)
-- [ ] Tests use real code (mocks only if unavoidable)
+- [ ] Guards use real code (mocks only if unavoidable)
 - [ ] Edge cases and errors covered
 
-Can't check all boxes? You skipped TDD. Start over.
+Can't check all boxes? You skipped Contract Guard-Driven Development. Start over.
 
 ## When Stuck
 

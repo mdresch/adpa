@@ -123,11 +123,13 @@ The project uses `pnpm` as its package manager. The `README.md` and `package.jso
 
 The entire polyglot stack is orchestrated using .NET Aspire. This is the recommended way to run the project locally.
 
--   **Run Full Stack**:
+-   **Run Full Stack (Recommended - with Hot Reload)**:
     ```bash
-    dotnet run --project orchestrator/Adpa.AppHost
+    dotnet watch run --project orchestrator/Adpa.AppHost
     ```
-    This starts the interactive Dashboard on `http://localhost:18888`, providing real-time logs, metrics, and traces for all services (Intelligence, Orchestrator, Web).
+    This starts the interactive Dashboard on `http://localhost:18888`, providing real-time logs, metrics, and traces for all services (Intelligence, Orchestrator, Web). Using `watch` enables C# Hot Reload and keeps the system running without needing restarts for backend changes.
+
+    *Note on Commits and Builds:* Because running the orchestrator locks the `bin/Debug` files, the **Atomic Execution & Validation (AEV)** workflow mandates using `dotnet build -c Release` for compile-time validation. This ensures the build integrity check can run safely in the background (`bin/Release`) without interrupting your active `dotnet watch` session.
 
 ### Database Migrations
 

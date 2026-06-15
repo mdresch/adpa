@@ -9,6 +9,7 @@ import { generateText, streamText } from "ai"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import * as dotenv from 'dotenv'
 import path from 'path'
+import { isTracingEnabled as isTracingEnabledFromConfig } from '../tracing'
 
 // Load environment variables early
 dotenv.config({ path: path.join(process.cwd(), '.env') })
@@ -94,10 +95,12 @@ const LOCAL_FALLBACK_PROVIDER = 'ollama'
 // Get pool at query time to ensure database is ready
 const getPool = () => getDatabasePoolSafe()
 
-// Import langfuse for tracing (optional, falls back gracefully)
+// Import langfuse for tracing (optional, falls back gracefully).
+// isTracingEnabled defaults to the config-level check from tracing.ts so that
+// experimental_telemetry is enabled for Aspire/OTLP even without Langfuse.
 let langfuse: any = null
 let isNativeLangfuseEnabled = () => false
-let isTracingEnabled = () => false
+let isTracingEnabled = isTracingEnabledFromConfig  // default: OTLP/Aspire-aware
 let tracedGenerateText = async (params: any) => {
   const { model, messages, prompt, temperature, maxOutputTokens } = params
   if (messages) {
@@ -121,11 +124,15 @@ try {
   const langfuseModule = runtimeRequire('../utils/langfuse')
   langfuse = langfuseModule.langfuse
   isNativeLangfuseEnabled = langfuseModule.isNativeLangfuseEnabled
-  isTracingEnabled = langfuseModule.isTracingEnabled
+  // Only override isTracingEnabled with Langfuse's version if Langfuse native tracing is active.
+  // Otherwise keep the config-level isTracingEnabled (which handles OTLP/Aspire).
+  if (langfuseModule.isNativeLangfuseEnabled()) {
+    isTracingEnabled = langfuseModule.isTracingEnabled
+  }
   tracedGenerateText = langfuseModule.tracedGenerateText
 } catch (e) {
   // Langfuse optional - continue without it
-  logger.debug('[AI-SERVICE] Langfuse not available, tracing disabled')
+  logger.debug('[AI-SERVICE] Langfuse not available, using OTLP/Aspire tracing config')
 }
 
 class AIService {
@@ -697,11 +704,13 @@ class AIService {
           errorMessageLower.includes('plans & billing') ||
           errorMessageLower.includes('service tier capacity exceeded') ||
           errorMessageLower.includes('capacity exceeded') ||
+          error.statusCode === 402 || // Payment Required
+          error.type === 'insufficient_funds'
+
+        const isRateLimit =
           errorMessageLower.includes('rate limit exceeded') ||
           errorMessageLower.includes('too many requests') ||
-          error.statusCode === 402 || // Payment Required
           error.statusCode === 429 || // Too Many Requests
-          error.type === 'insufficient_funds' ||
           error.code === 'rate_limit_exceeded'
 
         // Check if it's a model not found error (should trigger fallback, not disable provider)
@@ -720,6 +729,9 @@ class AIService {
         if (isInsufficientFunds) {
           logger.error(`💳 [AI-CREDITS] Provider ${provider} has insufficient funds/credits or capacity exceeded`)
           await autoDisableProvider(provider, `Insufficient capacity: ${errorMessage}`)
+        } else if (isRateLimit) {
+          logger.warn(`⏳ [AI-RATELIMIT] Provider ${provider} hit rate limit (429). Applying backoff without deactivation.`)
+          this.recordProviderFailure(provider)
         } else if (isInvalidCredentials && provider !== 'ollama') {
           logger.error(`🔐 [AI-AUTH] Provider ${provider} has invalid credentials`)
           await autoDisableProvider(provider, `Invalid credentials: ${errorMessage}`)
@@ -810,6 +822,16 @@ class AIService {
         messages.push({ role: 'system', content: systemMessage })
       }
       messages.push({ role: 'user', content: userMessage })
+    }
+
+    // Pillar 1: Template Integrity & Prompt Leak Mitigation
+    // Ensure no unresolved variables remain in the prompt before reaching the LLM
+    const templateRegex = /\{\{[a-zA-Z0-9_.-]+\}\}/g;
+    for (const msg of messages) {
+      if (typeof msg.content === 'string' && templateRegex.test(msg.content)) {
+        logger.error(`🚨 [AI-SERVICE] PromptLeakDetected: Unresolved template variable(s) found in prompt! Mitigating by replacing with [Not Provided]`);
+        msg.content = msg.content.replace(templateRegex, '[Not Provided]');
+      }
     }
 
     const resolvedTemplateName = await this.getTemplateName(request.template_id, request.template_name)
@@ -1004,13 +1026,27 @@ class AIService {
           logger.info(`[AI-SERVICE] Calling native chat.completions.create() - as per official docs`)
 
           // Use native OpenAI SDK - exactly as Moonshot documentation shows
-          const completion = await moonshotClient.chat.completions.create({
-            model: modelName,
-            messages: messages as any,
-            temperature: request.temperature || 0.7,
-            max_tokens: request.max_tokens,
+          let completion
+          try {
+            completion = await moonshotClient.chat.completions.create({
+              model: modelName,
+              messages: messages as any,
+              temperature: request.temperature || 0.7,
+              max_tokens: request.max_tokens,
 
-          })
+            })
+          } catch (moonshotError: any) {
+            logger.error('[AI-SERVICE] Moonshot API error', {
+              error: moonshotError instanceof Error ? moonshotError.message : String(moonshotError),
+              stack: moonshotError instanceof Error ? moonshotError.stack : undefined,
+              context: { model: modelName, temperature: request.temperature },
+              pii_prompt: messages // Per user requirement: DO NOT SCRUB
+            })
+            if (!moonshotError.provider) {
+              moonshotError.provider = 'moonshot'
+            }
+            throw moonshotError
+          }
 
           const totalTokens = completion.usage?.total_tokens || 0
           const promptTokens = completion.usage?.prompt_tokens || 0
@@ -1250,6 +1286,12 @@ class AIService {
             }
 
             // Re-throw other errors as-is for fallback mechanism
+            logger.error('[AI-SERVICE] Anthropic API error', {
+              error: anthropicError instanceof Error ? anthropicError.message : String(anthropicError),
+              stack: anthropicError instanceof Error ? anthropicError.stack : undefined,
+              context: { model: modelName, temperature: request.temperature },
+              pii_prompt: messages // Per user requirement: DO NOT SCRUB
+            })
             // Ensure error has provider info for fallback handling
             if (!anthropicError.provider) {
               anthropicError.provider = 'anthropic'
@@ -1444,8 +1486,23 @@ class AIService {
           const model = genAI.getGenerativeModel({ model: finalModel })
           // KISS: Combine messages for Google AI (best practice for fallback without full history support)
           const combinedPrompt = messages.map(m => `[${m.role.toUpperCase()}]: ${m.content}`).join('\n\n---\n\n')
-          const googleResult = await model.generateContent(combinedPrompt)
-          const response = await googleResult.response
+          let googleResult
+          let response
+          try {
+            googleResult = await model.generateContent(combinedPrompt)
+            response = await googleResult.response
+          } catch (googleError: any) {
+            logger.error('[AI-SERVICE] Google AI API error', {
+              error: googleError instanceof Error ? googleError.message : String(googleError),
+              stack: googleError instanceof Error ? googleError.stack : undefined,
+              context: { model: finalModel },
+              pii_prompt: combinedPrompt // Per user requirement: DO NOT SCRUB
+            })
+            if (!googleError.provider) {
+              googleError.provider = 'google'
+            }
+            throw googleError
+          }
 
           // Check for safety filter blocks
           const blocked = response.promptFeedback?.blockReason

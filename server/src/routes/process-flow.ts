@@ -295,7 +295,7 @@ router.post('/start-workflow',
       log.info(`Queueing workflow processing for template ${config.templateId} and project ${config.projectId}`)
       
       // Import addJob from queueService
-      const { addJob } = await import('../services/queueService')
+      const { addJob } = await Promise.resolve().then(() => require())
       
       // Generate job ID
       const jobId = require('crypto').randomUUID()
