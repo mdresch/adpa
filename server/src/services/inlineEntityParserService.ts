@@ -101,8 +101,20 @@ function normalizeLooseEntitySegment(segment: string): string | null {
 export function normalizeInlineEntityMarkdown(markdown: string): string {
   const lines = markdown.split(/\r?\n/);
   const normalizedLines: string[] = [];
+  let inCodeBlock = false;
 
   for (const line of lines) {
+    if (line.trim().startsWith('```')) {
+      inCodeBlock = !inCodeBlock;
+      normalizedLines.push(line);
+      continue;
+    }
+
+    if (inCodeBlock) {
+      normalizedLines.push(line);
+      continue;
+    }
+
     if (!lineHasLooseEntityTags(line)) {
       normalizedLines.push(line);
       continue;
@@ -148,9 +160,24 @@ export function stripInlineH8TagsForExport(markdown: string | null | undefined):
   const lines = content.split(/\r?\n/);
   const kept: string[] = [];
   let i = 0;
+  let inCodeBlock = false;
 
   while (i < lines.length) {
     const line = lines[i];
+    
+    if (line.trim().startsWith('```')) {
+      inCodeBlock = !inCodeBlock;
+      kept.push(line);
+      i++;
+      continue;
+    }
+
+    if (inCodeBlock) {
+      kept.push(line);
+      i++;
+      continue;
+    }
+
     const match = line.match(INLINE_H8_ENTITY_LINE_REGEX);
 
     if (match) {
@@ -367,8 +394,24 @@ export class InlineEntityParserService {
     let extractedCount = 0;
 
     let i = 0;
+    let inCodeBlock = false;
+
     while (i < lines.length) {
       let line = lines[i];
+
+      if (line.trim().startsWith('```')) {
+        inCodeBlock = !inCodeBlock;
+        cleanedLines.push(line);
+        i++;
+        continue;
+      }
+
+      if (inCodeBlock) {
+        cleanedLines.push(line);
+        i++;
+        continue;
+      }
+
       const match = line.match(INLINE_H8_ENTITY_LINE_REGEX);
       
       if (match) {

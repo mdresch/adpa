@@ -1011,13 +1011,27 @@ class AIService {
           logger.info(`[AI-SERVICE] Calling native chat.completions.create() - as per official docs`)
 
           // Use native OpenAI SDK - exactly as Moonshot documentation shows
-          const completion = await moonshotClient.chat.completions.create({
-            model: modelName,
-            messages: messages as any,
-            temperature: request.temperature || 0.7,
-            max_tokens: request.max_tokens,
+          let completion
+          try {
+            completion = await moonshotClient.chat.completions.create({
+              model: modelName,
+              messages: messages as any,
+              temperature: request.temperature || 0.7,
+              max_tokens: request.max_tokens,
 
-          })
+            })
+          } catch (moonshotError: any) {
+            logger.error('[AI-SERVICE] Moonshot API error', {
+              error: moonshotError instanceof Error ? moonshotError.message : String(moonshotError),
+              stack: moonshotError instanceof Error ? moonshotError.stack : undefined,
+              context: { model: modelName, temperature: request.temperature },
+              pii_prompt: messages // Per user requirement: DO NOT SCRUB
+            })
+            if (!moonshotError.provider) {
+              moonshotError.provider = 'moonshot'
+            }
+            throw moonshotError
+          }
 
           const totalTokens = completion.usage?.total_tokens || 0
           const promptTokens = completion.usage?.prompt_tokens || 0
@@ -1257,6 +1271,12 @@ class AIService {
             }
 
             // Re-throw other errors as-is for fallback mechanism
+            logger.error('[AI-SERVICE] Anthropic API error', {
+              error: anthropicError instanceof Error ? anthropicError.message : String(anthropicError),
+              stack: anthropicError instanceof Error ? anthropicError.stack : undefined,
+              context: { model: modelName, temperature: request.temperature },
+              pii_prompt: messages // Per user requirement: DO NOT SCRUB
+            })
             // Ensure error has provider info for fallback handling
             if (!anthropicError.provider) {
               anthropicError.provider = 'anthropic'
@@ -1451,8 +1471,23 @@ class AIService {
           const model = genAI.getGenerativeModel({ model: finalModel })
           // KISS: Combine messages for Google AI (best practice for fallback without full history support)
           const combinedPrompt = messages.map(m => `[${m.role.toUpperCase()}]: ${m.content}`).join('\n\n---\n\n')
-          const googleResult = await model.generateContent(combinedPrompt)
-          const response = await googleResult.response
+          let googleResult
+          let response
+          try {
+            googleResult = await model.generateContent(combinedPrompt)
+            response = await googleResult.response
+          } catch (googleError: any) {
+            logger.error('[AI-SERVICE] Google AI API error', {
+              error: googleError instanceof Error ? googleError.message : String(googleError),
+              stack: googleError instanceof Error ? googleError.stack : undefined,
+              context: { model: finalModel },
+              pii_prompt: combinedPrompt // Per user requirement: DO NOT SCRUB
+            })
+            if (!googleError.provider) {
+              googleError.provider = 'google'
+            }
+            throw googleError
+          }
 
           // Check for safety filter blocks
           const blocked = response.promptFeedback?.blockReason

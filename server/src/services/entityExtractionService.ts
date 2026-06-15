@@ -10,7 +10,7 @@ import { logger } from '../utils/logger'
 import { aiService } from './aiService'
 import { aiCacheService } from './aiCacheService'
 import { entityAuditService } from './entityAuditService'
-import { v4 as uuidv4 } from 'uuid'
+import { randomUUID as uuidv4 } from 'crypto'
 
 export type EntityType = string
 

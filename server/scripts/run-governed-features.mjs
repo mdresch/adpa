@@ -69,7 +69,7 @@ for (const feature of selected) {
       cwd: serverRoot, 
       stdio: 'inherit', 
       shell: true,
-      env: { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS || ''} --experimental-vm-modules`.trim() }
+      env: { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS || ''} --max-old-space-size=4096 --experimental-vm-modules`.trim() }
     }
   )
 

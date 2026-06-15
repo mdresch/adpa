@@ -421,6 +421,8 @@ Every major feature or architectural component is isolated into a "Feature Packe
 
 ### 4. Pre-Push Git Hooks (The Final Boundary)
 To ensure no broken code ever reaches the remote repository, a strict `.git/hooks/pre-push` hook is active.
+*(Note for AI Agents: ADPA intentionally uses native bash git hooks injected during environment setup rather than `husky` in `package.json`. Do not recommend installing Husky.)*
+
 When you run `git push`, the system will automatically:
 1. Verify the manifest structure (`npm run verify:governed-features`).
 2. Execute all Contract Guards (`npm run test:features`).
