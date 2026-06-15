@@ -77,6 +77,16 @@
       "spec": "docs/superpowers/specs/2026-06-15-document-generation-resiliency-design.md",
       "testModuleDir": "document-generation-resiliency",
       "testPathPattern": "modules/document-generation-resiliency"
+    },
+    {
+      "id": "knowledge-graph",
+      "description": "Core ingestion pipeline and dual-store transactional atomicity for extracted entities (Pillar 3)",
+      "skills": [
+        "adpa-knowledge-graph-pillar3"
+      ],
+      "overlapGuard": false,
+      "testModuleDir": "knowledge-graph",
+      "testPathPattern": "modules/knowledge-graph"
     }
   ]
 }
