@@ -8,6 +8,18 @@ describe('Pillar 3: H8 Parser and Dual-Store Transaction Invariants', () => {
     Neo4jGraph.reset()
   })
 
+  it('should parse valid H8 tags inline', () => {
+    // REQ-KNG-001: Parse valid H8 tags
+    const markdown = `
+      Some normal text.
+      ######## entity_1: {"type": "person", "name": "Alice"}
+      More text.
+    `
+    const entities = InlineH8Parser.parse(markdown)
+    expect(entities).toHaveLength(1)
+    expect(entities[0].name).toBe('Alice')
+  })
+
   it('should extract entities amidst hallucinations and enforce dual-store atomicity', async () => {
     const hallucinatedText = `
       Some random text here...
