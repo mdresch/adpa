@@ -5,6 +5,8 @@
   "main": "src/server.ts",
   "scripts": {
     "start": "node -r tsconfig-paths/register dist/server/src/server.js",
+    "start:api": "ADPA_PROCESS_ROLE=api node -r tsconfig-paths/register dist/server/src/server.js",
+    "start:worker": "ADPA_PROCESS_ROLE=worker node -r tsconfig-paths/register dist/server/src/worker.js",
     "predev": "node ../scripts/ensure-zod-v4-exports.mjs",
     "dev": "nodemon --exec tsx src/server.ts",
     "lint": "eslint .",

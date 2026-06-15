@@ -24,6 +24,16 @@
       "overlapGuard": false,
       "spec": "docs/superpowers/specs/2026-06-08-rag-context-scoping-design.md",
       "testPathPattern": "documentGenerationService"
+    },
+    {
+      "id": "api-worker-split",
+      "description": "API / Worker process role split, lazy load Puppeteer, and restricted Langfuse scope to prevent OOMs",
+      "skills": [
+        "adpa-api-worker-split"
+      ],
+      "spec": "docs/superpowers/specs/2026-06-15-api-worker-split-design.md",
+      "testModuleDir": "api-worker-split",
+      "testPathPattern": "modules/api-worker-split"
     }
   ]
 }

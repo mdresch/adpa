@@ -68,16 +68,23 @@ interface LLMPromptSnapshot {
 }
 
 class DocumentGenerationService {
-  private async recordLLMPromptSnapshot(
+  public async recordLLMPromptSnapshot(
     jobId: string | undefined,
     snapshot: Omit<LLMPromptSnapshot, 'characterCount' | 'capturedAt'>
-  ) {
+  ): Promise<LLMPromptSnapshot | undefined> {
     if (!jobId) return
+
+    const storeBlobs = process.env.LLM_INSIGHTS_STORE_BLOBS === "true"
 
     const payload: LLMPromptSnapshot = {
       ...snapshot,
-      characterCount: snapshot.prompt.length,
+      characterCount: snapshot.prompt?.length || 0,
       capturedAt: new Date().toISOString(),
+    }
+
+    if (!storeBlobs) {
+      delete (payload as any).prompt
+      delete (payload as any).response
     }
 
     try {
@@ -107,6 +114,8 @@ class DocumentGenerationService {
         error: error instanceof Error ? error.message : String(error),
       })
     }
+
+    return payload
   }
 
   private getDraftConcurrency(provider: string): number {

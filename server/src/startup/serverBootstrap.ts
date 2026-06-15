@@ -1,7 +1,11 @@
 import { StartupManager } from "./startupManager"
 import { logger } from "../utils/logger"
 import { pool } from "../database/connection"
-import { initializeDependencyHealthTracking, updateDependencyHealth } from "../routes/health"
+import {
+  getDependencyHealthStatus,
+  initializeDependencyHealthTracking,
+  updateDependencyHealth,
+} from "../routes/health"
 import { connectDatabase } from "../database/connection"
 
 // Export the startupManager instance so other modules can access it.
@@ -21,7 +25,10 @@ function startBackgroundDbRetry(manager: StartupManager, intervalMs = 30_000): v
   const attempt = async () => {
     try {
       logger.info('[Bootstrap] Background DB retry attempt...')
+      const startTime = Date.now()
       await connectDatabase()
+      const latency = Date.now() - startTime
+      updateDependencyHealth("Database", "healthy", latency)
       logger.info('[Bootstrap] ✅ Background DB retry succeeded — opening readiness gate')
       manager.forceReady()
     } catch (err: any) {
@@ -89,10 +96,14 @@ export async function initializeServerWithDependencyGraph(
     // We must NOT exit — the port is already bound and Render is watching it.
     // Instead: log the failure, keep the server alive with the readiness gate still closed,
     // and start a background retry loop so the gate opens once the DB comes online.
+    const initMessage = initError?.message || String(initError)
     logger.error(
-      `[Bootstrap] ⚠️  Startup dependencies failed: ${initError?.message}. ` +
+      `[Bootstrap] ⚠️  Startup dependencies failed: ${initMessage}. ` +
       `Server will keep running and retry DB connection in background.`
     )
+    if (getDependencyHealthStatus("Database") === "unknown") {
+      updateDependencyHealth("Database", "unhealthy", 0, initMessage)
+    }
     const retryMs =
       process.env.NODE_ENV === 'development'
         ? Number(process.env.DB_BACKGROUND_RETRY_MS || 10_000)
