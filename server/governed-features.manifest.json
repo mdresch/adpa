@@ -66,6 +66,17 @@
       "spec": "docs/superpowers/specs/2026-06-14-inline-h8-extraction-guards-design.md",
       "testModuleDir": "inline-extraction",
       "testPathPattern": "modules/inline-extraction"
+    },
+    {
+      "id": "document-generation-resiliency",
+      "description": "Document Generation & Processing Engine Resiliency (Pillar 1)",
+      "skills": [
+        "adpa-document-generation-resiliency"
+      ],
+      "overlapGuard": false,
+      "spec": "docs/superpowers/specs/2026-06-15-document-generation-resiliency-design.md",
+      "testModuleDir": "document-generation-resiliency",
+      "testPathPattern": "modules/document-generation-resiliency"
     }
   ]
 }

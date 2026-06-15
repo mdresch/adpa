@@ -122,8 +122,11 @@ export class StuckJobMonitor {
           }
         }
 
-        // Requeue logic: create a new job if enabled and stuckCount <= MAX_REQUEUE
-        if (REQUEUE_ENABLED && stuckCount <= MAX_REQUEUE) {
+        // Pillar 1: Requeue logic explicitly prioritizes AI generation jobs even if global requeue is disabled
+        const isGenerationJob = row.queue_name === 'ai-processing' || row.queue_name === 'document-processing' || row.queue_name === 'document-regeneration'
+        const shouldRequeue = (REQUEUE_ENABLED || isGenerationJob) && stuckCount <= MAX_REQUEUE
+
+        if (shouldRequeue) {
           try {
             // Obtain job type and data from jobs table if not present
             const jobDetailSql = `SELECT type, data FROM jobs WHERE id = $1`;
@@ -149,9 +152,11 @@ export class StuckJobMonitor {
 
                 if (typeof addFn === 'function') {
                   // Re-add job with same type and data
-                  await addFn(jobType, jobData)
-                  logger.info('[STUCK-JOB-MONITOR] Requeued job', { jobId, jobType })
-                  // Optionally mark original job as requeued (leave as 'stuck' for audit)
+                  await addFn(jobType, jobData, { jobId })
+                  logger.info('[STUCK-JOB-MONITOR] Requeued job', { jobId, jobType, isGenerationJob })
+                  
+                  // Reset status to pending so it gets picked up immediately
+                  await safeQuery(this.pool, `UPDATE jobs SET status = 'pending', worker_id = NULL WHERE id = $1`, [jobId])
                 } else {
                   logger.warn('[STUCK-JOB-MONITOR] addJob function not available; skipping requeue')
                 }
@@ -162,7 +167,7 @@ export class StuckJobMonitor {
           } catch (rqErr) {
             logger.error('[STUCK-JOB-MONITOR] Failed to requeue job', rqErr)
           }
-        } else if (REQUEUE_ENABLED) {
+        } else if (REQUEUE_ENABLED || isGenerationJob) {
           logger.info('[STUCK-JOB-MONITOR] Requeue skipped because stuckCount exceeds MAX_REQUEUE', { jobId, stuckCount, max: MAX_REQUEUE })
         }
       } catch (err) {
