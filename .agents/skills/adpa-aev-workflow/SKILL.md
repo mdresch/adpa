@@ -25,11 +25,18 @@ Before any change, state the following:
 - **Type**: Add/Modify/Delete.
 - **Rationale**: One factual sentence.
 
-### 2. Implementation
+### 2. Environment Snapshot
+Before executing any code changes that might mutate state, snapshot the database:
+```powershell
+./scripts/snapshot-db-state.ps1
+```
+*Wait for output.* Verify snapshots are successfully created in `backups/agent_snapshots`.
+
+### 3. Implementation
 - Use `replace_file_content` or `write_to_file` for full contents.
 - Ensure only declared files are modified.
 
-### 3. Validation Gates (IN ORDER)
+### 4. Validation Gates (IN ORDER)
 
 #### 🟢 Gate 1: Mechanical Integrity
 ```powershell
@@ -40,13 +47,13 @@ git diff --stat
 
 #### 🟢 Gate 2: Build Integrity (Non-Blocking)
 ```powershell
-dotnet build -c Release
+docker run --rm -v ${PWD}:/workspace adpa-agent-sandbox dotnet build -c Release -p:BaseOutputPath=/tmp/sandbox/bin/ -p:BaseIntermediateOutputPath=/tmp/sandbox/obj/
 ```
-*Wait for output.* Verify zero errors. (Using Release config prevents file lock conflicts if the Orchestrator is actively running in Debug).
+*Wait for output.* Verify zero errors. (Using custom output paths prevents file lock conflicts with the host OS).
 
 #### 🟢 Gate 3: Orchestration Integrity
 ```powershell
-dotnet run --project orchestrator/Adpa.AppHost
+docker run --rm -v ${PWD}:/workspace adpa-agent-sandbox dotnet run --project orchestrator/Adpa.AppHost
 ```
 *Verify startup success.*
 
@@ -63,7 +70,7 @@ pnpm install --frozen-lockfile
 ```
 *Wait for output.* If this fails with `ERR_PNPM_OUTDATED_LOCKFILE`, you must run `pnpm install`, add the updated `pnpm-lock.yaml` to your commit, and re-run this gate.
 
-### 4. Certification
+### 5. Certification
 Only if all gates pass:
 ```powershell
 git add .
@@ -71,8 +78,9 @@ git commit -m "SAFE: <atomic change description>"
 ```
 
 ## Rollback Policy
-If ANY gate fails:
+If ANY gate fails, you must revert both code and database state:
 ```powershell
+./scripts/rollback-db-state.ps1
 git reset --hard HEAD
 ```
 Do **not** attempt to fix in a dirty state. Restart from a clean slate.
