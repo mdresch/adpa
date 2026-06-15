@@ -12,7 +12,9 @@ export async function initDb(): Promise<void> {
 }
 
 export async function query(text: string, params?: any[], options?: { retries?: number, backoffMs?: number }): Promise<QueryResult | null> {
-  const retries = options?.retries ?? 3
+  // Default to 1 attempt because connection.ts already handles retries for transient errors.
+  // Higher retry counts here create a multiplier effect that trips the circuit breaker too early.
+  const retries = options?.retries ?? 1
   const baseBackoff = options?.backoffMs ?? 200
 
   let lastErr: any = null

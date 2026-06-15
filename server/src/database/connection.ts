@@ -26,7 +26,7 @@ const DEFAULT_DB_CONN_TIMEOUT_MS = parseInt(process.env.DB_CONN_TIMEOUT_MS || '6
 const DEFAULT_DB_QUERY_TIMEOUT_MS = parseInt(process.env.DB_QUERY_TIMEOUT_MS || '15000', 10)
 const DEFAULT_DB_MAX_RETRIES_PER_METHOD = parseInt(
   process.env.DB_MAX_RETRIES_PER_METHOD ||
-    (process.env.NODE_ENV === 'production' ? '5' : '1'),
+    (process.env.NODE_ENV === 'production' ? '5' : '3'),
   10
 )
 // Later code may bump these values when making manual connection attempts
@@ -241,13 +241,51 @@ function isTransientPoolError(err: unknown): boolean {
     message.includes("ECONNRESET") ||
     message.includes("ETIMEDOUT") ||
     message.includes("connection timeout") ||
+    message.includes("ECHECKOUTTIMEOUT") ||
+    message.includes("Transaction mode") ||
     code === "ECONNRESET" ||
     code === "57P01" ||
     code === "57P02" ||
     code === "57P03" ||
     code === "08006" ||
-    code === "08003"
+    code === "08003" ||
+    code === "XX000" // Internal error, often connectivity related in poolers
   )
+}
+
+/**
+ * Determines if an error should trip the circuit breaker.
+ * We only want to trip on connectivity or availability issues, 
+ * not on application errors like schema mismatches or constraint violations.
+ */
+function isCircuitBreakingError(err: any): boolean {
+  const code = String(err?.code ?? "")
+  const message = String(err?.message ?? "")
+
+  // Class 08 — Connection Exception
+  // Class 57 — Operator Intervention
+  // Class 58 — System Error (often external to DB)
+  if (code.startsWith('08') || code.startsWith('57') || code.startsWith('58')) {
+    return true
+  }
+
+  // Transient errors that exhausted retries are circuit-breaking
+  if (isTransientPoolError(err)) {
+    return true
+  }
+
+  // Generic network/timeout errors
+  if (
+    message.includes("ECONNREFUSED") ||
+    message.includes("ENETUNREACH") ||
+    message.includes("EHOSTUNREACH") ||
+    message.includes("Database connection timeout") ||
+    message.includes("Database query timeout")
+  ) {
+    return true
+  }
+
+  return false
 }
 
 function attachPoolErrorHandler(p: Pool) {
@@ -256,12 +294,14 @@ function attachPoolErrorHandler(p: Pool) {
     // This is common with poolers (e.g., Supabase PgBouncer/transaction pooler).
     p.on("error", (err: any) => {
       try {
-        logger.error("[DB] Pool error event (idle client)", { message: err?.message })
+        logger.error("[DB] Pool error event (idle client)", { message: err?.message, code: err?.code })
       } catch {
         // ignore
       }
       try {
-        dbBreaker.recordFailure()
+        if (isCircuitBreakingError(err)) {
+          dbBreaker.recordFailure()
+        }
       } catch {
         // ignore
       }
@@ -295,13 +335,24 @@ function patchPoolQuery(p: Pool) {
               await new Promise((resolve) => setTimeout(resolve, 150 * (attempt + 1)))
               continue
             }
-            logger.error('[DB-GUARD] Unhandled pool.query error', {
-              sql: text,
-              params,
-              message: err?.message,
-              stack: err?.stack,
-            })
-            dbBreaker.recordFailure()
+            
+            // Only trip the breaker on connectivity/availability issues
+            if (isCircuitBreakingError(err)) {
+              logger.error('[DB-GUARD] Circuit-breaking query error', {
+                sql: text,
+                params,
+                message: err?.message,
+                code: err?.code
+              })
+              dbBreaker.recordFailure()
+            } else {
+              logger.error('[DB-GUARD] Application query error (not circuit-breaking)', {
+                sql: text,
+                params,
+                message: err?.message,
+                code: err?.code
+              })
+            }
             throw err
           }
         }
@@ -451,7 +502,7 @@ async function connectDatabaseInternal(): Promise<void> {
       // Transaction pooler (Supabase :6543) shares a small server-side pool — keep client max low.
       const usesTransactionPooler =
         currentDbUrl.includes(':6543') || currentDbUrl.includes('pooler.supabase.com')
-      const poolerDefaultMax = usesTransactionPooler ? 5 : 20
+      const poolerDefaultMax = usesTransactionPooler ? 10 : 20
       poolConfig.max = Number(process.env.PG_MAX) || poolerDefaultMax
 
       const testPool = new Pool(poolConfig)
@@ -471,10 +522,15 @@ async function connectDatabaseInternal(): Promise<void> {
         console.log(`📡 Connecting to ${formatConnectionLogTarget(poolConfig)}...`)
         const client = await Promise.race([
           testPool.connect(),
-          new Promise<never>((_, reject) => 
+          new Promise<any>((_, reject) => 
             setTimeout(() => reject(new Error('Database connection timeout')), DEFAULT_DB_CONN_TIMEOUT_MS)
           )
         ])
+
+        // Ensure the client has an error handler to prevent crashes during probe
+        client.on('error', (err: any) => {
+          console.warn('[DB] Client error during startup probe:', err?.message)
+        })
 
         // Use a generous timeout for the probe query: Supabase free-tier projects pause
         // after inactivity and the first query after waking can take 20-30+ seconds.
