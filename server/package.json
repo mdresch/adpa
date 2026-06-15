@@ -104,7 +104,7 @@
     "ioredis": "^5.3.2",
     "joi": "^18.2.1",
     "js-tiktoken": "^1.0.21",
-    "js-yaml": "^4.1.1",
+    "js-yaml": "^4.2.0",
     "json2csv": "^6.0.0-alpha.2",
     "jsonwebtoken": "^9.0.2",
     "jspdf": "^4.2.1",
