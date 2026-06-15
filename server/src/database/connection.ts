@@ -288,6 +288,12 @@ function isCircuitBreakingError(err: any): boolean {
   return false
 }
 
+export const __testing = {
+  isTransientPoolError,
+  isCircuitBreakingError,
+  getDbBreaker: () => dbBreaker
+}
+
 function attachPoolErrorHandler(p: Pool) {
   try {
     // Prevent unhandled 'error' events from crashing the process when an idle client disconnects.

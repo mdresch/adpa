@@ -44,6 +44,17 @@
       "spec": "docs/superpowers/specs/2026-06-13-codacy-integration-design.md",
       "testModuleDir": "codacy",
       "testPathPattern": "modules/codacy"
+    },
+    {
+      "id": "infrastructure",
+      "description": "DB-GUARD Circuit Breaker and Pool Resilience",
+      "skills": [
+        "adpa-governed-feature-loop"
+      ],
+      "overlapGuard": false,
+      "spec": "docs/superpowers/specs/2026-06-13-db-guard-circuit-breaker-hardening-design.md",
+      "testModuleDir": "infrastructure",
+      "testPathPattern": "modules/infrastructure"
     }
   ]
 }
