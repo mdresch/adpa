@@ -77,6 +77,7 @@ describe('documentGenerationService template paragraph handling', () => {
     jest.clearAllMocks();
     (pool.query as jest.Mock).mockResolvedValue({ rows: [] });
     (documentTemplateService.getTemplateGkgStrategy as jest.Mock).mockResolvedValue(null);
+    process.env.LLM_INSIGHTS_STORE_BLOBS = 'true';
   });
 
   it('generates a document when template_paragraphs is legacy non-array JSON', async () => {

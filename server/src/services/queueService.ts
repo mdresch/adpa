@@ -5,7 +5,8 @@ import { logger } from "../utils/logger";
 export * from "./queue/queueClient";
 
 // If the current process role enables workers, dynamically import and register handlers.
-if (shouldRunWorkers()) {
+// Skip automatic registration during tests to prevent leaking RabbitMQ connections.
+if (shouldRunWorkers() && process.env.NODE_ENV !== 'test') {
   logger.info("[QUEUE] Process role allows workers. Registering queue consumers...");
   import("./queue/registerWorkers")
     .then(({ registerWorkers }) => {
@@ -15,5 +16,5 @@ if (shouldRunWorkers()) {
       logger.error(err, "[QUEUE] Failed to register worker consumers on file load");
     });
 } else {
-  logger.info("[QUEUE] Process role skips background worker consumer registrations on this instance.");
+  logger.info("[QUEUE] Process role skips background worker consumer registrations on this instance (or in test).");
 }
