@@ -58,7 +58,7 @@ export class AzureConnector {
     try {
       console.log('[AZURE AI] Initializing providers from database...');
 
-      const { pool } = await Promise.resolve().then(() => require());
+      const { pool } = await Promise.resolve().then(() => require('../../database/connection'));
       const result = await pool.query(`
         SELECT 
           id, name, api_key_encrypted, configuration, is_active,
