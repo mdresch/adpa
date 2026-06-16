@@ -843,7 +843,7 @@ router.post(
 
       logger.info('[DRACO-API] Manual DRACO review triggered', { documentId, userId })
 
-      const { dracoService } = await Promise.resolve().then(() => require())
+      const { dracoService } = await Promise.resolve().then(() => require('../services/dracoService'))
       
       // Respond immediately with 202 Accepted to prevent 502 Gateway timeouts
       // The client should listen to the SSE progress stream for real-time updates.
@@ -888,7 +888,7 @@ router.get(
     try {
       const { documentId } = req.params
 
-      const { dracoService } = await Promise.resolve().then(() => require())
+      const { dracoService } = await Promise.resolve().then(() => require('../services/dracoService'))
       const review = await dracoService.getDocumentReview(documentId)
 
       if (!review) {
@@ -919,7 +919,7 @@ router.get(
     try {
       const { documentId } = req.params
 
-      const { dracoService } = await Promise.resolve().then(() => require())
+      const { dracoService } = await Promise.resolve().then(() => require('../services/dracoService'))
       const review = await dracoService.getDocumentReview(documentId)
 
       if (!review) {
@@ -956,7 +956,7 @@ router.get(
   authenticateToken,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { dracoService } = await Promise.resolve().then(() => require())
+      const { dracoService } = await Promise.resolve().then(() => require('../services/dracoService'))
       const stats = await dracoService.getReviewStats()
       res.json({ success: true, stats })
     } catch (error: unknown) {
@@ -1012,7 +1012,7 @@ router.get(
     // Send initial connection confirmation
     sendEvent({ type: 'connected', documentId, message: 'Review Board progress stream connected', progress_percent: 0, timestamp: new Date().toISOString() })
 
-    const { dracoProgressEmitter } = await Promise.resolve().then(() => require())
+    const { dracoProgressEmitter } = await Promise.resolve().then(() => require('../services/dracoProgressEmitter'))
 
     // Close the stream when review finishes
     const closeStream = () => {
@@ -1062,7 +1062,7 @@ router.post(
         })
       }
 
-      const { dracoService } = await Promise.resolve().then(() => require())
+      const { dracoService } = await Promise.resolve().then(() => require('../services/dracoService'))
       await dracoService.recordHumanOverride({
         documentId,
         reviewId,

@@ -141,7 +141,7 @@ router.post('/', async (req, res) => {
     // 🛡️ DRACO GOVERNANCE CHECK
     // If this is a document approval (linked via change_request_id), check DRACO status
     if (change_request_id) {
-      const { dracoService } = await Promise.resolve().then(() => require())
+      const { dracoService } = await Promise.resolve().then(() => require('../services/dracoService'))
       const latestReview = await dracoService.getDocumentReview(change_request_id)
 
       if (latestReview && 

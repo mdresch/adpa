@@ -174,7 +174,7 @@ router.get(
     requireIntegrationReadAccess,
     async (_req: Request, res: Response) => {
         try {
-            const { pineconeService } = await Promise.resolve().then(() => require());
+            const { pineconeService } = await Promise.resolve().then(() => require('../services/pineconeService'));
             const stats = await pineconeService.getIndexStats();
             if (!stats) {
                 return res.status(503).json({ error: 'Pinecone unavailable' });
@@ -251,7 +251,7 @@ router.post(
             const limit = req.body.limit as number | undefined;
 
             if (integrationType === 'pinecone') {
-                const { pineconeService } = await Promise.resolve().then(() => require());
+                const { pineconeService } = await Promise.resolve().then(() => require('../services/pineconeService'));
                 void (async () => {
                     try {
                         await pool.query(

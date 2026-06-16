@@ -476,37 +476,37 @@ export class PipelineOrchestrator {
 
   // Stage execution methods (these would delegate to actual stage implementations)
   private async executeContextGatheringStage(input: StageInput): Promise<StageOutput> {
-    const { ContextGatheringStage } = await Promise.resolve().then(() => require())
+    const { ContextGatheringStage } = await Promise.resolve().then(() => require('../stages/contextGatheringStage'))
     const stage = new ContextGatheringStage()
     return await stage.execute(input)
   }
 
   private async executeTemplateProcessingStage(input: StageInput): Promise<StageOutput> {
-    const { TemplateProcessingStage } = await Promise.resolve().then(() => require())
+    const { TemplateProcessingStage } = await Promise.resolve().then(() => require('../stages/templateProcessingStage'))
     const stage = new TemplateProcessingStage()
     return await stage.execute(input)
   }
 
   private async executeAIGenerationStage(input: StageInput): Promise<StageOutput> {
-    const { AIGenerationStage } = await Promise.resolve().then(() => require())
+    const { AIGenerationStage } = await Promise.resolve().then(() => require('../stages/aiGenerationStage'))
     const stage = new AIGenerationStage()
     return await stage.execute(input)
   }
 
   private async executeContextInjectionStage(input: StageInput): Promise<StageOutput> {
-    const { ContextInjectionStage } = await Promise.resolve().then(() => require())
+    const { ContextInjectionStage } = await Promise.resolve().then(() => require('../stages/contextInjectionStage'))
     const stage = new ContextInjectionStage()
     return await stage.execute(input)
   }
 
   private async executeQualityAssuranceStage(input: StageInput): Promise<StageOutput> {
-    const { QualityAssuranceStage } = await Promise.resolve().then(() => require())
+    const { QualityAssuranceStage } = await Promise.resolve().then(() => require('../stages/qualityAssuranceStage'))
     const stage = new QualityAssuranceStage()
     return await stage.execute(input)
   }
 
   private async executeOutputFormattingStage(input: StageInput): Promise<StageOutput> {
-    const { OutputFormattingStage } = await Promise.resolve().then(() => require())
+    const { OutputFormattingStage } = await Promise.resolve().then(() => require('../stages/outputFormattingStage'))
     const stage = new OutputFormattingStage()
     return await stage.execute(input)
   }

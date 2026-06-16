@@ -581,9 +581,9 @@ export class ExtractionOrchestrationService {
     const entityTypesForRun = resolveEntityTypesForDomains(selectedDomains)
     const { workerId, updateJobStatus } = options
     try {
-      // Check if job is already marked as failed/cancelled in database before processing
+      // 1. Fetch current job state from DB to check for idempotency and existing children
       const jobCheck = await db.query(
-        'SELECT status, error_message FROM jobs WHERE id = $1',
+        'SELECT status, error_message, data FROM jobs WHERE id = $1',
         [jobId]
       )
 
@@ -591,27 +591,54 @@ export class ExtractionOrchestrationService {
         const dbJob = jobCheck.rows[0]
         // Skip processing if job is already failed, cancelled, or has an error message
         if (dbJob.status === 'failed' || dbJob.status === 'cancelled' || dbJob.error_message) {
-          log.warn(`[EXTRACTION-PARENT] âš ï¸ Skipping job ${jobId} - already ${dbJob.status} with error: ${dbJob.error_message?.substring(0, 50)}`)
-          // Update database to ensure it's marked as failed
+          log.warn(`[EXTRACTION-PARENT] ⚠️ Skipping job ${jobId} - already ${dbJob.status} with error: ${dbJob.error_message?.substring(0, 50)}`)
+          // Update database to ensure it's marked as failed if it was cancelled
           await db.query(
             `UPDATE jobs 
              SET status = 'failed',
                  completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP)
-             WHERE id = $1 AND status != 'failed'`,
+             WHERE id = $1 AND status != 'failed' AND status != 'completed'`,
             [jobId]
           )
           // Remove from queue
           await job.remove()
           return
         }
+
+        // IDEMPOTENCY CHECK: If child jobs already exist, resume monitoring instead of recreating
+        const existingChildIds = dbJob.data?.childJobIds
+        if (Array.isArray(existingChildIds) && existingChildIds.length > 0) {
+          log.info(`[EXTRACTION-PARENT] 🔄 Resuming monitoring for ${existingChildIds.length} existing child jobs for parent: ${jobId}`)
+          
+          // Re-mark as processing to refresh heartbeats
+          await updateJobStatus(jobId, "processing", 10, workerId, "project-data-extraction")
+          
+          const { getQueueService } = await Promise.resolve().then(() => require('../queueService'))
+          const queueSvc = getQueueService()
+          
+          const childJobs = await Promise.all(existingChildIds.map(async (id) => {
+            try {
+              const childQueue = (queueSvc as any).getQueue('project-data-extraction')
+              const queued = await childQueue.getJob(id)
+              if (queued) return queued
+            } catch (e) {}
+            // Return placeholder for DB-based monitoring if not in queue
+            return { id, data: { parentJobId: jobId }, getState: async () => 'unknown' }
+          }))
+          
+          // Proceed to the monitoring phase (the monitoring loop code is below)
+          // For now, we'll let the execution continue but skip the creation phase
+          log.info(`[EXTRACTION-PARENT] Skipping child job creation, proceeding to monitor ${childJobs.length} jobs`)
+          return await this.monitorExistingChildJobs(jobId, projectId, childJobs, workerId, updateJobStatus, dbJob.data.domainRunIds, deps, log, ws, job)
+        }
       } else {
         // Job not found in database - this shouldn't happen, but skip it
-        log.warn(`[EXTRACTION-PARENT] âš ï¸ Job ${jobId} not found in database - skipping`)
+        log.warn(`[EXTRACTION-PARENT] ⚠️ Job ${jobId} not found in database - skipping`)
         await job.remove()
         return
       }
 
-      log.info(`[EXTRACTION-PARENT] ðŸš€ Starting orchestration: ${jobId}`, {
+      log.info(`[EXTRACTION-PARENT] 🚀 Starting orchestration: ${jobId}`, {
         projectId,
         userId,
         documentIds,
@@ -687,8 +714,6 @@ export class ExtractionOrchestrationService {
 
       log.info(`[EXTRACTION-PARENT] Created ${childJobs.length} child extraction jobs`, { jobId })
 
-      await updateJobStatus(jobId, "processing", 10, workerId)
-
       // Store child job IDs in parent job data
       await db.query(
         `UPDATE jobs SET data = data || $1 WHERE id = $2`,
@@ -702,387 +727,7 @@ export class ExtractionOrchestrationService {
         ]
       )
 
-      // Monitor child job completion using a Promise that resolves when all children complete
-      // This ensures Bull doesn't mark the parent job as complete prematurely
-      const monitoringResult = await new Promise<{ success: boolean; error?: string }>((resolve, reject) => {
-        let completedCount = 0
-        let checkInterval: NodeJS.Timeout | null = null
-        let isResolved = false // Prevent multiple resolutions
-        const jobStartTimes = new Map<string, number>() // Track when each child job started processing
-        // Configurable timeouts (minutes -> ms)
-        const STUCK_JOB_TIMEOUT = (parseInt(process.env.EXTRACTION_STUCK_TIMEOUT_MINUTES || '10') || 10) * 60 * 1000
-        const CRITICAL_JOB_TIMEOUT = (parseInt(process.env.EXTRACTION_CRITICAL_TIMEOUT_MINUTES || '20') || 20) * 60 * 1000
-        const PARTIAL_SUCCESS_TIMEOUT_MS = (parseInt(process.env.EXTRACTION_PARTIAL_TIMEOUT_MINUTES || '20') || 20) * 60 * 1000
-        const FULL_TIMEOUT_MS = (parseInt(process.env.EXTRACTION_FULL_TIMEOUT_MINUTES || '30') || 30) * 60 * 1000
-
-        let partialSuccessTimeout: NodeJS.Timeout | null = null
-        let fullTimeout: NodeJS.Timeout | null = null
-        let currentHeartbeatProgress = 10
-        let lastRealProgress = 10
-
-        const cleanup = () => {
-          if (checkInterval) {
-            clearInterval(checkInterval)
-            checkInterval = null
-          }
-          if (partialSuccessTimeout) {
-            clearTimeout(partialSuccessTimeout)
-            partialSuccessTimeout = null
-          }
-          if (fullTimeout) {
-            clearTimeout(fullTimeout)
-            fullTimeout = null
-          }
-          // Clean up global reference
-          if ((global as any).extractionIntervals) {
-            (global as any).extractionIntervals.delete(jobId)
-          }
-        }
-
-        const performCheck = async (): Promise<void> => {
-          if (isResolved) return // Skip if already resolved
-
-          try {
-            // Check if job was cancelled
-            const statusCheck = await db.query(
-              'SELECT status FROM jobs WHERE id = $1',
-              [jobId]
-            )
-            if (statusCheck.rows.length > 0 && statusCheck.rows[0].status === 'cancelled') {
-              log.info(`[EXTRACTION-PARENT] Job ${jobId} was cancelled - stopping monitoring`)
-              cleanup()
-              isResolved = true
-              resolve({ success: false, error: 'Job was cancelled' })
-              return
-            }
-
-            const now = Date.now()
-            const states = await Promise.all(
-              childJobs.map(async (j) => {
-                try {
-                  const state = await j.getState()
-
-                  const jobIdStr = j.id.toString()
-
-                  // Track when jobs start processing
-                  if (state === 'active' && !jobStartTimes.has(jobIdStr)) {
-                    jobStartTimes.set(jobIdStr, now)
-                    const entityType = (j.data as any)?.entityType || 'unknown'
-                    log.debug(`[EXTRACTION-PARENT] Child job ${j.id} (${entityType}) started processing`)
-                  }
-
-                  // use configured timeouts above
-                  const STUCK_JOB_TIMEOUT_LOCAL = STUCK_JOB_TIMEOUT
-                  const CRITICAL_JOB_TIMEOUT_LOCAL = CRITICAL_JOB_TIMEOUT
-
-                  // Check for stuck jobs (active for too long)
-                  if (state === 'active') {
-                    const startTime = jobStartTimes.get(jobIdStr)
-                    if (startTime) {
-                      const activeDuration = now - startTime
-                      const entityType = (j.data as any)?.entityType || 'unknown'
-
-                      if (activeDuration > CRITICAL_JOB_TIMEOUT) {
-                        log.error(`[EXTRACTION-PARENT] ðŸ›‘ Child job ${j.id} (${entityType}) is CRITICALLY stuck (>20m active). Treating as failed.`)
-                        return 'failed'
-                      } else if (activeDuration > STUCK_JOB_TIMEOUT) {
-                        const stuckDuration = Math.floor(activeDuration / 1000 / 60)
-                        log.warn(`[EXTRACTION-PARENT] âš ï¸ Child job ${j.id} (${entityType}) appears stuck - active for ${stuckDuration} minutes`)
-                      }
-                    }
-                  }
-
-                  // Treat 'unknown' (job removed from queue) as completed
-                  // This happens when jobs are auto-cleaned after completion
-                  if ((state as string) === 'unknown') {
-                    log.debug(`[EXTRACTION-PARENT] Child job ${j.id} state is 'unknown' (removed from queue), treating as completed`)
-                    jobStartTimes.delete(jobIdStr)
-                    return 'completed'
-                  }
-
-                  // Clear start time when job completes or fails
-                  if (state === 'completed' || state === 'failed') {
-                    jobStartTimes.delete(jobIdStr)
-                  }
-
-                  return state
-                } catch (err) {
-                  // If we can't get state, assume completed (job was cleaned up)
-                  log.warn(`[EXTRACTION-PARENT] Could not get state for child job ${j.id}, assuming completed: ${err}`)
-                  const jobIdStr = j.id.toString()
-                  jobStartTimes.delete(jobIdStr)
-                  return 'completed'
-                }
-              })
-            )
-
-            const completed = states.filter(s => s === 'completed').length
-            const failed = states.filter(s => s === 'failed').length
-            const active = states.filter(s => s === 'active').length
-            const waiting = states.filter(s => s === 'waiting' || s === 'delayed').length
-
-            // Log detailed progress including stuck jobs
-            const stuckJobs = childJobs
-              .map((j, i) => ({ job: j, state: states[i], index: i }))
-              .filter(({ state }) => state === 'active')
-              .filter(({ job }) => {
-                const startTime = jobStartTimes.get(job.id.toString())
-                return startTime && (now - startTime) > STUCK_JOB_TIMEOUT
-              })
-              .map(({ job }) => {
-                const entityType = (job.data as any)?.entityType || 'unknown'
-                const startTime = jobStartTimes.get(job.id.toString())
-                const stuckDuration = startTime ? Math.floor((now - startTime) / 1000 / 60) : 0
-                return `${entityType} (${stuckDuration}m)`
-              })
-
-            if (stuckJobs.length > 0) {
-              log.warn(`[EXTRACTION-PARENT] Job ${jobId} progress: ${completed} completed, ${failed} failed, ${active} active (${stuckJobs.length} stuck: ${stuckJobs.join(', ')}), ${waiting} waiting out of ${childJobs.length}`)
-            } else if (active > 0 || waiting > 0) {
-              log.debug(`[EXTRACTION-PARENT] Job ${jobId} progress: ${completed} completed, ${failed} failed, ${active} active, ${waiting} waiting out of ${childJobs.length}`)
-            } else {
-              log.debug(`[EXTRACTION-PARENT] Job ${jobId} progress: ${completed} completed, ${failed} failed out of ${childJobs.length}`)
-            }
-
-            const activeEntities = childJobs
-              .map((j, i) => ({ entity: (j.data as any).entityType, state: states[i] }))
-              .filter(s => s.state === 'active')
-              .map(s => s.entity)
-              .slice(0, 3) // Show first 3 active entities
-
-            const activeMessage = activeEntities.length > 0
-              ? `Extracting ${activeEntities.join(', ')}${activeEntities.length < active ? '...' : ''}`
-              : 'Orchestrating extractions...'
-
-            const realProgress = 10 + Math.floor(((completed + failed) / childJobs.length) * 85)
-
-            // Sync heartbeat with real progress if real progress moved forward
-            if (realProgress > lastRealProgress) {
-              lastRealProgress = realProgress
-              currentHeartbeatProgress = Math.max(currentHeartbeatProgress, realProgress)
-            } else {
-              // Otherwise, slowly increment heartbeat progress (max 1% every check)
-              if (currentHeartbeatProgress < 95 && currentHeartbeatProgress < realProgress + 5) {
-                currentHeartbeatProgress += 0.5
-              }
-            }
-
-            if (completed + failed === childJobs.length) {
-              // All children done - clean up and finalize
-              cleanup()
-              isResolved = true
-
-              // Get details about failed jobs for better error reporting
-              const failedJobs: Array<{ entityType: string; error: string }> = []
-              if (failed > 0) {
-                for (let i = 0; i < childJobs.length; i++) {
-                  if (states[i] === 'failed') {
-                    try {
-                      const childJob = childJobs[i]
-                      const entityType = (childJob.data as any)?.entityType || 'unknown'
-
-                      // Try to get error from job's failedReason or returnvalue
-                      let errorMessage = 'Unknown error'
-                      try {
-                        if ((childJob as any).failedReason) {
-                          errorMessage = (childJob as any).failedReason
-                        } else {
-                          const returnValue = childJob.returnvalue ?? null
-                          if (returnValue?.error) {
-                            errorMessage = returnValue.error
-                          } else if (returnValue?.message) {
-                            errorMessage = returnValue.message
-                          }
-                        }
-                      } catch (err) {
-                        errorMessage = 'Failed after retries'
-                      }
-
-                      failedJobs.push({ entityType, error: errorMessage })
-                      log.error(`[EXTRACTION-PARENT] Failed entity type: ${entityType}`, {
-                        jobId: childJob.id,
-                        error: errorMessage,
-                        parentJobId: jobId,
-                        jobData: childJob.data
-                      })
-                    } catch (err: any) {
-                      log.error(`[EXTRACTION-PARENT] Could not get failed job details: ${err?.message || err}`, {
-                        jobId: childJobs[i].id,
-                        error: err
-                      })
-                      const entityType = (childJobs[i].data as any)?.entityType || 'unknown'
-                      failedJobs.push({ entityType, error: `Could not retrieve error: ${err?.message || 'Unknown'}` })
-                    }
-                  }
-                }
-
-                const failedTypes = failedJobs.map(f => f.entityType).join(', ')
-                log.warn(`[EXTRACTION-PARENT] ${failed} entity extraction(s) failed: ${failedTypes}`, {
-                  failedJobs,
-                  completed,
-                  total: childJobs.length
-                })
-
-                // Allow partial success if at least 50% succeeded
-                const successRate = completed / childJobs.length
-                if (successRate >= 0.5) {
-                  log.info(`[EXTRACTION-PARENT] Allowing partial success: ${completed}/${childJobs.length} succeeded (${(successRate * 100).toFixed(1)}%)`)
-                  await this.finalizeExtractionJob(jobId, projectId, failedJobs, workerId, updateJobStatus, domainRunIds, deps)
-                  resolve({ success: true })
-                } else {
-                  const errorMessage = `${failed} entity extraction(s) failed: ${failedTypes}. Errors: ${failedJobs.map(f => `${f.entityType}: ${f.error}`).join('; ')}`
-                  reject(new Error(errorMessage))
-                }
-              } else {
-                // All succeeded
-                await this.finalizeExtractionJob(jobId, projectId, undefined, workerId, updateJobStatus, domainRunIds, deps)
-                resolve({ success: true })
-              }
-            } else {
-              // Update progress based on completed child jobs + heartbeat
-              const displayProgress = Math.floor(currentHeartbeatProgress)
-
-              // Only update DB if progress milestone reached or every few cycles to reduce load
-              if (displayProgress > (job as any).lastReportedProgress || now % 9000 < 3000) {
-                await updateJobStatus(jobId, "processing", displayProgress, workerId, "project-data-extraction")
-                  ; (job as any).lastReportedProgress = displayProgress
-              }
-
-              // Always emit WebSocket for real-time feel
-              if (ws) {
-                ws.emit("job:status", {
-                  jobId,
-                  userId: (job.data as any).userId,
-                  progress: displayProgress,
-                  status: "processing",
-                  projectId,
-                  message: `${activeMessage} (${completed}/${childJobs.length} done)`
-                })
-              }
-              completedCount = completed
-            }
-          } catch (error: any) {
-            if (isResolved) return
-
-            cleanup()
-            isResolved = true
-
-            const errorMessage = error?.message || 'Unknown extraction monitoring error'
-            log.error(`[EXTRACTION-PARENT] Monitoring loop failed for job ${jobId}: ${errorMessage}`, {
-              projectId,
-              stack: error?.stack
-            })
-
-            try {
-              await updateJobStatus(jobId, "failed", undefined, workerId, "project-data-extraction")
-              await db.query(
-                `UPDATE jobs 
-                 SET status = 'failed', error_message = $1, 
-                     started_at = COALESCE(started_at, CURRENT_TIMESTAMP),
-                     processing_started_at = COALESCE(processing_started_at, CURRENT_TIMESTAMP),
-                     completed_at = CURRENT_TIMESTAMP 
-                 WHERE id = $2`,
-                [errorMessage, jobId]
-              )
-              await failDomainRuns((job.data as ExtendedExtractionJobData).domainRunIds || domainRunIds, errorMessage, deps)
-            } catch (updateError: any) {
-              log.error(
-                `[EXTRACTION-PARENT] Failed to record monitoring failure for job ${jobId}: ${updateError?.message || updateError}`,
-                { projectId }
-              )
-            }
-
-            reject(error)
-          }
-        }
-
-        // Start monitoring interval
-        checkInterval = setInterval(() => {
-          performCheck().catch(err => {
-            log.error(`[EXTRACTION-PARENT] Unhandled error in check for job ${jobId}:`, err)
-          })
-        }, 3000) // Check every 3 seconds
-
-        // Store interval reference for cleanup on cancellation
-        if (!(global as any).extractionIntervals) {
-          (global as any).extractionIntervals = new Map<string, NodeJS.Timeout>()
-        }
-        (global as any).extractionIntervals.set(jobId, checkInterval)
-
-        // Run first check immediately
-        performCheck().catch(err => {
-          log.error(`[EXTRACTION-PARENT] Initial check failed for job ${jobId}:`, err)
-        })
-
-        // Add a timeout to prevent jobs from hanging forever (30 minutes max)
-        // But allow partial success if most jobs completed (after 20 minutes)
-        partialSuccessTimeout = setTimeout(async () => {
-          if (!isResolved) {
-            // Check if we have enough completed jobs to allow partial success
-            try {
-              const states = await Promise.all(
-                childJobs.map(async (j) => {
-                  try {
-                    const state = await j.getState()
-                    if ((state as string) === 'unknown') return 'completed'
-                    return state
-                  } catch {
-                    return 'completed'
-                  }
-                })
-              )
-
-              const completed = states.filter(s => s === 'completed').length
-              const failed = states.filter(s => s === 'failed').length
-              const successRate = (completed + failed) / childJobs.length
-
-              // If at least 80% of jobs are done (completed or failed), allow partial success
-              if (successRate >= 0.8) {
-                log.warn(`[EXTRACTION-PARENT] Job ${jobId} reached 20-minute timeout but ${(successRate * 100).toFixed(1)}% complete - allowing partial success`, {
-                  completed,
-                  failed,
-                  total: childJobs.length,
-                  successRate
-                })
-
-                const failedJobs: Array<{ entityType: string; error: string }> = []
-                // Collect failed job details
-                for (let i = 0; i < childJobs.length; i++) {
-                  if (states[i] === 'failed') {
-                    const entityType = (childJobs[i].data as any)?.entityType || 'unknown'
-                    failedJobs.push({ entityType, error: 'Job failed or timed out' })
-                  } else if (states[i] === 'active' || states[i] === 'waiting' || states[i] === 'delayed') {
-                    const entityType = (childJobs[i].data as any)?.entityType || 'unknown'
-                    failedJobs.push({ entityType, error: 'Job timed out after 20 minutes' })
-                  }
-                }
-
-                cleanup()
-                isResolved = true
-                await this.finalizeExtractionJob(jobId, projectId, failedJobs, workerId, updateJobStatus, domainRunIds, deps)
-                resolve({ success: true })
-                return
-              }
-            } catch (err: any) {
-              log.error(`[EXTRACTION-PARENT] Error checking partial success at 20-minute timeout: ${err?.message || err}`)
-            }
-          }
-        }, PARTIAL_SUCCESS_TIMEOUT_MS) // check for partial success (configurable)
-
-        fullTimeout = setTimeout(() => {
-          if (!isResolved) {
-            clearTimeout(partialSuccessTimeout)
-            cleanup()
-            isResolved = true
-            const timeoutError = `Extraction job timed out after ${Math.floor(FULL_TIMEOUT_MS / 60000)} minutes`
-            log.error(`[EXTRACTION-PARENT] ${timeoutError}: ${jobId}`)
-            reject(new Error(timeoutError))
-          }
-        }, FULL_TIMEOUT_MS)
-      })
-
-      log.info(`[EXTRACTION-PARENT] Monitoring completed for job ${jobId}`, { result: monitoringResult })
-      return monitoringResult
+      return await this.monitorExistingChildJobs(jobId, projectId, childJobs, workerId, updateJobStatus, domainRunIds, deps, log, ws, job)
 
     } catch (error: any) {
       log.error(`[EXTRACTION-PARENT] Failed: ${jobId} ${error.message}`, { stack: error.stack })
@@ -1108,6 +753,337 @@ export class ExtractionOrchestrationService {
       await failDomainRuns((job.data as ExtendedExtractionJobData).domainRunIds, error.message, deps)
       throw error
     }
+  }
+
+  /**
+   * Internal method to monitor child job completion
+   */
+  private static async monitorExistingChildJobs(
+    jobId: string,
+    projectId: string,
+    childJobs: any[],
+    workerId: string,
+    updateJobStatus: ProcessJobOptions['updateJobStatus'],
+    domainRunIds: DomainRunIdMap,
+    deps: QueueServiceDependencies | undefined,
+    log: any,
+    ws: any,
+    parentJob: IQueueJob
+  ): Promise<any> {
+    const db = deps?.database || { query: pool.query.bind(pool) } as any
+
+    // Monitor child job completion using a Promise that resolves when all children complete
+    // This ensures RabbitMQ/Bull doesn't mark the parent job as complete prematurely
+    const monitoringResult = await new Promise<{ success: boolean; error?: string }>((resolve, reject) => {
+      let checkInterval: NodeJS.Timeout | null = null
+      let isResolved = false // Prevent multiple resolutions
+      const jobStartTimes = new Map<string, number>() // Track when each child job started processing
+      
+      // Configurable timeouts (minutes -> ms)
+      const STUCK_JOB_TIMEOUT = (parseInt(process.env.EXTRACTION_STUCK_TIMEOUT_MINUTES || '10') || 10) * 60 * 1000
+      const CRITICAL_JOB_TIMEOUT = (parseInt(process.env.EXTRACTION_CRITICAL_TIMEOUT_MINUTES || '20') || 20) * 60 * 1000
+      const PARTIAL_SUCCESS_TIMEOUT_MS = (parseInt(process.env.EXTRACTION_PARTIAL_TIMEOUT_MINUTES || '20') || 20) * 60 * 1000
+      const FULL_TIMEOUT_MS = (parseInt(process.env.EXTRACTION_FULL_TIMEOUT_MINUTES || '30') || 30) * 60 * 1000
+
+      let partialSuccessTimeout: NodeJS.Timeout | null = null
+      let fullTimeout: NodeJS.Timeout | null = null
+      let currentHeartbeatProgress = 10
+      let lastRealProgress = 10
+
+      const cleanup = () => {
+        if (checkInterval) {
+          clearInterval(checkInterval)
+          checkInterval = null
+        }
+        if (partialSuccessTimeout) {
+          clearTimeout(partialSuccessTimeout)
+          partialSuccessTimeout = null
+        }
+        if (fullTimeout) {
+          clearTimeout(fullTimeout)
+          fullTimeout = null
+        }
+        // Clean up global reference
+        if ((global as any).extractionIntervals) {
+          (global as any).extractionIntervals.delete(jobId)
+        }
+      }
+
+      const performCheck = async (): Promise<void> => {
+        if (isResolved) return // Skip if already resolved
+
+        try {
+          // Check if job was cancelled
+          const statusCheck = await db.query(
+            'SELECT status FROM jobs WHERE id = $1',
+            [jobId]
+          )
+          if (statusCheck.rows.length > 0 && statusCheck.rows[0].status === 'cancelled') {
+            log.info(`[EXTRACTION-PARENT] Job ${jobId} was cancelled - stopping monitoring`)
+            cleanup()
+            isResolved = true
+            resolve({ success: false, error: 'Job was cancelled' })
+            return
+          }
+
+          const now = Date.now()
+          const states = await Promise.all(
+            childJobs.map(async (j) => {
+              try {
+                let state = await j.getState()
+                const jobIdStr = j.id.toString()
+
+                // FALLBACK: If state is unknown (e.g. RabbitMQ doesn't support getJob), check the DB status
+                // This is the source of truth for polyglot workers.
+                if (state === 'unknown') {
+                  const dbStateRes = await db.query('SELECT status FROM jobs WHERE id = $1', [jobIdStr])
+                  if (dbStateRes.rows.length > 0) {
+                    const dbStatus = dbStateRes.rows[0].status
+                    // Map DB status to worker state
+                    if (dbStatus === 'completed') state = 'completed'
+                    else if (dbStatus === 'failed') state = 'failed'
+                    else if (dbStatus === 'processing') state = 'active'
+                    else state = 'waiting'
+                  }
+                }
+
+                // Track when jobs start processing
+                if (state === 'active' && !jobStartTimes.has(jobIdStr)) {
+                  jobStartTimes.set(jobIdStr, now)
+                  const entityType = (j.data as any)?.entityType || 'unknown'
+                  log.debug(`[EXTRACTION-PARENT] Child job ${j.id} (${entityType}) started processing`)
+                }
+
+                // Check for stuck jobs (active for too long)
+                if (state === 'active') {
+                  const startTime = jobStartTimes.get(jobIdStr)
+                  if (startTime) {
+                    const activeDuration = now - startTime
+                    const entityType = (j.data as any)?.entityType || 'unknown'
+
+                    if (activeDuration > CRITICAL_JOB_TIMEOUT) {
+                      log.error(`[EXTRACTION-PARENT] 🛑 Child job ${j.id} (${entityType}) is CRITICALLY stuck (>20m active). Treating as failed.`)
+                      return 'failed'
+                    } else if (activeDuration > STUCK_JOB_TIMEOUT) {
+                      const stuckDuration = Math.floor(activeDuration / 1000 / 60)
+                      log.warn(`[EXTRACTION-PARENT] ⚠️ Child job ${j.id} (${entityType}) appears stuck - active for ${stuckDuration} minutes`)
+                    }
+                  }
+                }
+
+                // Clear start time when job completes or fails
+                if (state === 'completed' || state === 'failed') {
+                  jobStartTimes.delete(jobIdStr)
+                }
+
+                return state
+              } catch (err) {
+                // If we can't get state, assume waiting (it might be in DB but not queue yet)
+                return 'waiting'
+              }
+            })
+          )
+
+          const completed = states.filter(s => s === 'completed').length
+          const failed = states.filter(s => s === 'failed').length
+          const active = states.filter(s => s === 'active').length
+          const waiting = states.filter(s => s === 'waiting' || s === 'delayed').length
+
+          // Log detailed progress including stuck jobs
+          const stuckJobs = childJobs
+            .map((j, i) => ({ job: j, state: states[i], index: i }))
+            .filter(({ state }) => state === 'active')
+            .filter(({ job }) => {
+              const startTime = jobStartTimes.get(job.id.toString())
+              return startTime && (now - startTime) > STUCK_JOB_TIMEOUT
+            })
+            .map(({ job }) => {
+              const entityType = (job.data as any)?.entityType || 'unknown'
+              const startTime = jobStartTimes.get(job.id.toString())
+              const stuckDuration = startTime ? Math.floor((now - startTime) / 1000 / 60) : 0
+              return `${entityType} (${stuckDuration}m)`
+            })
+
+          if (stuckJobs.length > 0) {
+            log.warn(`[EXTRACTION-PARENT] Job ${jobId} progress: ${completed} completed, ${failed} failed, ${active} active (${stuckJobs.length} stuck: ${stuckJobs.join(', ')}), ${waiting} waiting out of ${childJobs.length}`)
+          } else if (active > 0 || waiting > 0) {
+            log.debug(`[EXTRACTION-PARENT] Job ${jobId} progress: ${completed} completed, ${failed} failed, ${active} active, ${waiting} waiting out of ${childJobs.length}`)
+          } else {
+            log.debug(`[EXTRACTION-PARENT] Job ${jobId} progress: ${completed} completed, ${failed} failed out of ${childJobs.length}`)
+          }
+
+          const activeEntities = childJobs
+            .map((j, i) => ({ entity: (j.data as any).entityType, state: states[i] }))
+            .filter(s => s.state === 'active')
+            .map(s => s.entity)
+            .slice(0, 3) // Show first 3 active entities
+
+          const activeMessage = activeEntities.length > 0
+            ? `Extracting ${activeEntities.join(', ')}${activeEntities.length < active ? '...' : ''}`
+            : 'Orchestrating extractions...'
+
+          const realProgress = 10 + Math.floor(((completed + failed) / childJobs.length) * 85)
+
+          // Sync heartbeat with real progress if real progress moved forward
+          if (realProgress > lastRealProgress) {
+            lastRealProgress = realProgress
+            currentHeartbeatProgress = Math.max(currentHeartbeatProgress, realProgress)
+          } else {
+            // Otherwise, slowly increment heartbeat progress (max 1% every check)
+            if (currentHeartbeatProgress < 95 && currentHeartbeatProgress < realProgress + 5) {
+              currentHeartbeatProgress += 0.5
+            }
+          }
+
+          if (completed + failed === childJobs.length) {
+            // All children done - clean up and finalize
+            cleanup()
+            isResolved = true
+
+            // Get details about failed jobs for better error reporting
+            const failedJobs: Array<{ entityType: string; error: string }> = []
+            if (failed > 0) {
+              for (let i = 0; i < childJobs.length; i++) {
+                if (states[i] === 'failed') {
+                  try {
+                    const childJob = childJobs[i]
+                    const entityType = (childJob.data as any)?.entityType || 'unknown'
+
+                    // Try to get error from job's failedReason or returnvalue
+                    let errorMessage = 'Unknown error'
+                    try {
+                      if ((childJob as any).failedReason) {
+                        errorMessage = (childJob as any).failedReason
+                      } else {
+                        const dbErrRes = await db.query('SELECT error_message FROM jobs WHERE id = $1', [childJob.id.toString()])
+                        if (dbErrRes.rows[0]?.error_message) {
+                          errorMessage = dbErrRes.rows[0].error_message
+                        }
+                      }
+                    } catch (err) {
+                      errorMessage = 'Failed after retries'
+                    }
+
+                    failedJobs.push({ entityType, error: errorMessage })
+                    log.error(`[EXTRACTION-PARENT] Failed entity type: ${entityType}`, {
+                      jobId: childJob.id,
+                      error: errorMessage,
+                      parentJobId: jobId
+                    })
+                  } catch (err: any) {
+                    const entityType = (childJobs[i].data as any)?.entityType || 'unknown'
+                    failedJobs.push({ entityType, error: `Could not retrieve error: ${err?.message || 'Unknown'}` })
+                  }
+                }
+              }
+
+              const failedTypes = failedJobs.map(f => f.entityType).join(', ')
+              log.warn(`[EXTRACTION-PARENT] ${failed} entity extraction(s) failed: ${failedTypes}`, {
+                failedJobs,
+                completed,
+                total: childJobs.length
+              })
+
+              // Allow partial success if at least 50% succeeded
+              const successRate = completed / childJobs.length
+              if (successRate >= 0.5) {
+                log.info(`[EXTRACTION-PARENT] Allowing partial success: ${completed}/${childJobs.length} succeeded (${(successRate * 100).toFixed(1)}%)`)
+                await this.finalizeExtractionJob(jobId, projectId, failedJobs, workerId, updateJobStatus, domainRunIds, deps)
+                resolve({ success: true })
+              } else {
+                const errorMessage = `${failed} entity extraction(s) failed: ${failedTypes}. Errors: ${failedJobs.map(f => `${f.entityType}: ${f.error}`).join('; ')}`
+                reject(new Error(errorMessage))
+              }
+            } else {
+              // All succeeded
+              await this.finalizeExtractionJob(jobId, projectId, undefined, workerId, updateJobStatus, domainRunIds, deps)
+              resolve({ success: true })
+            }
+          } else {
+            // Update progress based on completed child jobs + heartbeat
+            const displayProgress = Math.floor(currentHeartbeatProgress)
+
+            // Always update DB if progress milestone reached or every few cycles to reduce load
+            await updateJobStatus(jobId, "processing", displayProgress, workerId, "project-data-extraction")
+
+            // Always emit WebSocket for real-time feel
+            if (ws) {
+              ws.emit("job:status", {
+                jobId,
+                userId: (parentJob.data as any).userId,
+                progress: displayProgress,
+                status: "processing",
+                projectId,
+                message: `${activeMessage} (${completed}/${childJobs.length} done)`
+              })
+            }
+          }
+        } catch (error: any) {
+          if (isResolved) return
+
+          cleanup()
+          isResolved = true
+
+          const errorMessage = error?.message || 'Unknown extraction monitoring error'
+          log.error(`[EXTRACTION-PARENT] Monitoring loop failed for job ${jobId}: ${errorMessage}`, {
+            projectId,
+            stack: error?.stack
+          })
+
+          try {
+            await updateJobStatus(jobId, "failed", undefined, workerId, "project-data-extraction")
+            await db.query(
+              `UPDATE jobs 
+               SET status = 'failed', error_message = $1, 
+                   started_at = COALESCE(started_at, CURRENT_TIMESTAMP),
+                   processing_started_at = COALESCE(processing_started_at, CURRENT_TIMESTAMP),
+                   completed_at = CURRENT_TIMESTAMP 
+               WHERE id = $2`,
+              [errorMessage, jobId]
+            )
+            await failDomainRuns(domainRunIds, errorMessage, deps)
+          } catch (updateError: any) {
+            log.error(
+              `[EXTRACTION-PARENT] Failed to record monitoring failure for job ${jobId}: ${updateError?.message || updateError}`,
+              { projectId }
+            )
+          }
+
+          reject(error)
+        }
+      }
+
+      // Start monitoring interval
+      checkInterval = setInterval(() => {
+        performCheck().catch(err => {
+          log.error(`[EXTRACTION-PARENT] Unhandled error in check for job ${jobId}:`, err)
+        })
+      }, 5000) // Check every 5 seconds
+
+      // Store interval reference for cleanup on cancellation
+      if (!(global as any).extractionIntervals) {
+        (global as any).extractionIntervals = new Map<string, NodeJS.Timeout>()
+      }
+      (global as any).extractionIntervals.set(jobId, checkInterval)
+
+      // Run first check immediately
+      performCheck().catch(err => {
+        log.error(`[EXTRACTION-PARENT] Initial check failed for job ${jobId}:`, err)
+      })
+
+      // Add a timeout to prevent jobs from hanging forever
+      fullTimeout = setTimeout(() => {
+        if (!isResolved) {
+          cleanup()
+          isResolved = true
+          const timeoutError = `Extraction job timed out after ${Math.floor(FULL_TIMEOUT_MS / 60000)} minutes`
+          log.error(`[EXTRACTION-PARENT] ${timeoutError}: ${jobId}`)
+          reject(new Error(timeoutError))
+        }
+      }, FULL_TIMEOUT_MS)
+    })
+
+    return monitoringResult
   }
 
   /**

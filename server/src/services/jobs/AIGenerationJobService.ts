@@ -360,6 +360,21 @@ export class AIGenerationJobService {
       const docContent = (typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent)) || ''
       const projectIdForDoc = projectId || variables?.project_id || null
 
+      // Prevent "blank documents" from being inserted when generation failed upstream.
+      // If the AI provider call fails, `result.content` can be empty/undefined and we would
+      // otherwise persist an empty markdown document that looks like a duplicate placeholder in UI.
+      if (!docContent || docContent.trim().length === 0) {
+        log.warn('[AI-JOB] Refusing to persist empty document content', {
+          jobId: jobId || jobData.jobId,
+          documentId,
+          projectId: projectIdForDoc,
+          template_id,
+          docName,
+          hasRawContent: !!rawContent,
+        })
+        throw new Error('AI_GENERATION_EMPTY_CONTENT')
+      }
+
       // Mission Draco: Sync Verification Log
       log.info(`[MISSION-DRACO] [SYNC] Saving Document ${documentId}: ${docContent.length} characters. Source context pools: ${documentIds?.length || 0}.`)
 

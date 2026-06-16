@@ -587,9 +587,10 @@ export class QueueService {
       }
 
       if (status === 'processing') {
-        if (!updates.some(u => u.startsWith('processing_started_at'))) {
-          updates.push(`processing_started_at = COALESCE(processing_started_at, CURRENT_TIMESTAMP)`)
-        }
+        // ALWAYS update processing_started_at to NOW() during heartbeats
+        // to indicate the job is still active and prevent StuckJobMonitor from flagging it.
+        updates.push(`processing_started_at = CURRENT_TIMESTAMP`)
+        
         if (!updates.some(u => u.startsWith('started_at'))) {
           updates.push(`started_at = COALESCE(started_at, CURRENT_TIMESTAMP)`)
         }

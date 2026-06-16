@@ -108,7 +108,7 @@ router.post('/sync-all', async (req, res) => {
 // POST /api/rag/sync-gemini (New Gemini File Search sync/backfill)
 router.post('/sync-gemini', async (req, res) => {
     try {
-        const { ragSyncService } = await Promise.resolve().then(() => require())
+        const { ragSyncService } = await Promise.resolve().then(() => require('../services/ragSyncService'))
 
         if (!ragSyncService.isAvailable()) {
             return res.status(503).json({

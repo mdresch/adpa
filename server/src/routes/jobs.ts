@@ -1510,3 +1510,135 @@ router.get(
   }
 )
 
+// ─────────────────────────────────────────────────────────────────────────────
+// EMERGENCY KILL SWITCH
+// POST /api/jobs/emergency-stop
+// Kills ALL active, processing, and stuck jobs instantly.
+// Admin-only. Returns counts of killed jobs and deletes blank documents.
+// ─────────────────────────────────────────────────────────────────────────────
+router.post(
+  "/emergency-stop",
+  authenticateToken,
+  requirePermission("jobs.admin"),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    const killedBy = (req as any).user?.email || (req as any).user?.id || "admin"
+
+    try {
+      log.warn(`[EMERGENCY-STOP] Triggered by ${killedBy}`)
+
+      // 1. Kill all non-terminal jobs in the database
+      const killResult = await pool.query(`
+        UPDATE jobs
+        SET status        = 'cancelled',
+            error_message = $1,
+            completed_at  = CURRENT_TIMESTAMP
+        WHERE status IN ('pending', 'processing', 'stuck')
+        RETURNING id, type, queue_name, status
+      `, [`Emergency stop triggered by ${killedBy} at ${new Date().toISOString()}`])
+
+      const killedJobs = killResult.rows
+      log.warn(`[EMERGENCY-STOP] Marked ${killedJobs.length} jobs as cancelled`)
+
+      // 2. Delete blank/near-blank documents created by runaway generation
+      //    (content < 200 characters AND created in the last 24 hours)
+      const deleteBlankResult = await pool.query(`
+        DELETE FROM documents
+        WHERE (content IS NULL OR LENGTH(TRIM(content)) < 200)
+          AND created_at > NOW() - INTERVAL '24 hours'
+          AND generation_metadata IS NOT NULL
+        RETURNING id, name, project_id
+      `)
+      const deletedBlankDocs = deleteBlankResult.rows
+      log.warn(`[EMERGENCY-STOP] Deleted ${deletedBlankDocs.length} blank documents`)
+
+      // 3. Broadcast to all connected clients so UI reflects immediately
+      try {
+        const { io: socketIo } = await import("../socket")
+        socketIo.emit("job:emergency-stop", {
+          killedBy,
+          killedAt: new Date().toISOString(),
+          killedCount: killedJobs.length,
+          deletedBlankDocs: deletedBlankDocs.length,
+          message: `Emergency stop executed — ${killedJobs.length} jobs cancelled, ${deletedBlankDocs.length} blank documents removed`,
+        })
+      } catch (socketErr) {
+        log.warn("[EMERGENCY-STOP] Could not emit socket event", socketErr)
+      }
+
+      // 4. Summary by queue
+      const byQueue: Record<string, number> = {}
+      killedJobs.forEach((j: any) => {
+        const q = j.queue_name || j.type || "unknown"
+        byQueue[q] = (byQueue[q] || 0) + 1
+      })
+
+      log.warn(`[EMERGENCY-STOP] Complete`, { byQueue, deletedBlankDocs: deletedBlankDocs.length })
+
+      res.json({
+        success: true,
+        message: `Emergency stop complete. ${killedJobs.length} jobs killed, ${deletedBlankDocs.length} blank documents removed.`,
+        killedJobs: killedJobs.length,
+        deletedBlankDocuments: deletedBlankDocs.length,
+        byQueue,
+        killedAt: new Date().toISOString(),
+        killedBy,
+      })
+    } catch (error) {
+      log.error("[EMERGENCY-STOP] Failed", error)
+      const message = error instanceof Error ? error.message : "Emergency stop failed"
+      res.status(500).json({ error: message })
+    }
+  }
+)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/jobs/emergency-stop/status
+// Returns current count of active jobs + blank documents — used to decide
+// whether the kill switch is needed.
+// ─────────────────────────────────────────────────────────────────────────────
+router.get(
+  "/emergency-stop/status",
+  authenticateToken,
+  requirePermission("jobs.admin"),
+  async (req, res) => {
+    try {
+      const [activeResult, blankResult] = await Promise.all([
+        pool.query(`
+          SELECT
+            status,
+            COUNT(*) as count,
+            MIN(created_at) as oldest
+          FROM jobs
+          WHERE status IN ('pending', 'processing', 'stuck')
+          GROUP BY status
+        `),
+        pool.query(`
+          SELECT COUNT(*) as count
+          FROM documents
+          WHERE (content IS NULL OR LENGTH(TRIM(content)) < 200)
+            AND created_at > NOW() - INTERVAL '24 hours'
+            AND generation_metadata IS NOT NULL
+        `),
+      ])
+
+      const activeByStatus: Record<string, any> = {}
+      let totalActive = 0
+      activeResult.rows.forEach((row: any) => {
+        activeByStatus[row.status] = { count: parseInt(row.count), oldest: row.oldest }
+        totalActive += parseInt(row.count)
+      })
+
+      res.json({
+        totalActiveJobs: totalActive,
+        byStatus: activeByStatus,
+        blankDocuments: parseInt(blankResult.rows[0]?.count || "0"),
+        dangerLevel: totalActive > 10 ? "critical" : totalActive > 3 ? "warning" : "ok",
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Status check failed"
+      res.status(500).json({ error: message })
+    }
+  }
+)
+

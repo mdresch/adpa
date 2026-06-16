@@ -542,7 +542,7 @@ export class DocumentTemplateService {
    */
   async updateTemplateEntityStats(templateId: string, entityCounts: Record<string, number>): Promise<void> {
     try {
-      const { default: TemplateAnalyticsService } = await Promise.resolve().then(() => require())
+      const { default: TemplateAnalyticsService } = await Promise.resolve().then(() => require('../../services/templateAnalyticsService'))
       await TemplateAnalyticsService.updateTemplateEntityProfile(templateId)
       
       // Clear cache
