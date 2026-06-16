@@ -25,6 +25,7 @@ interface AuditHistoryItem {
   issues: QualityIssue[]
   recommendations: string[]
   audited_at: string
+  audit_performed?: boolean
 }
 
 interface QualityIssue {
@@ -49,6 +50,7 @@ interface Template {
   system_prompt?: string
   description?: string
   category?: string
+  variables?: any[]
 }
 
 interface ImprovementSuggestionData {
@@ -1063,7 +1065,7 @@ Focus on the most impactful improvements. Be specific and actionable.`
       )
 
       if (recentDocsResult.rows.length > 0) {
-        const { getQueueService } = await Promise.resolve().then(() => require())
+        const { getQueueService } = await Promise.resolve().then(() => require('../../services/queueService'))
         const { v4: uuidv4 } = await import('uuid')
 
         // Get project context for each document
@@ -1242,6 +1244,251 @@ ${improvements.map((imp, idx) => `<!-- Improvement ${idx + 1}: ${imp.issue_addre
         error: error instanceof Error ? error.message : String(error)
       })
     }
+  }
+
+  /**
+   * REQ-009: System Prompt Optimization Loop
+   * 
+   * Audit findings on system prompt quality generate specific prompt recommendations.
+   * Prompt recommendations are actionable (exact text to add/modify).
+   * Prompt changes are versioned in template history.
+   * Prompt optimization does not break variable resolution.
+   */
+  async optimizeSystemPrompt(templateId: string, auditFindings: any): Promise<void> {
+    logger.info('[TEMPLATE-IMPROVEMENT] Optimizing system prompt', { templateId })
+
+    try {
+      // 1. Get template
+      const template = await this.getTemplate(templateId)
+      if (!template) {
+        logger.warn('[TEMPLATE-IMPROVEMENT] Template not found for prompt optimization', { templateId })
+        return
+      }
+
+      // 2. Extract system prompt findings from audit
+      const promptFindings = this.extractPromptFindings(auditFindings)
+      if (promptFindings.length === 0) {
+        logger.info('[TEMPLATE-IMPROVEMENT] No system prompt findings to optimize', { templateId })
+        return
+      }
+
+      // 3. Generate specific prompt recommendations
+      const promptRecommendations = await this.generatePromptRecommendations(
+        template,
+        promptFindings
+      )
+
+      if (promptRecommendations.length === 0) {
+        logger.info('[TEMPLATE-IMPROVEMENT] No prompt recommendations generated', { templateId })
+        return
+      }
+
+      // 4. Validate that recommendations don't break variable resolution
+      const validatedRecommendations = this.validateVariablePreservation(
+        template.system_prompt || '',
+        promptRecommendations
+      )
+
+      // 5. Save prompt optimization as improvement suggestion
+      await this.savePromptOptimizationSuggestions(
+        templateId,
+        validatedRecommendations,
+        auditFindings
+      )
+
+      logger.info('[TEMPLATE-IMPROVEMENT] System prompt optimization complete', {
+        templateId,
+        recommendationCount: validatedRecommendations.length
+      })
+    } catch (error) {
+      logger.error('[TEMPLATE-IMPROVEMENT] System prompt optimization failed', {
+        templateId,
+        error: error instanceof Error ? error.message : String(error)
+      })
+    }
+  }
+
+  /**
+   * Extract system prompt findings from audit results
+   */
+  private extractPromptFindings(auditFindings: any): string[] {
+    const findings: string[] = []
+
+    // Extract from governance findings
+    if (auditFindings.governanceFindings) {
+      findings.push(...auditFindings.governanceFindings.filter((f: string) => 
+        f.toLowerCase().includes('prompt') || 
+        f.toLowerCase().includes('system') ||
+        f.toLowerCase().includes('guidance')
+      ))
+    }
+
+    // Extract from challenger findings
+    if (auditFindings.challengerFindings) {
+      findings.push(...auditFindings.challengerFindings.filter((f: string) => 
+        f.toLowerCase().includes('prompt') || 
+        f.toLowerCase().includes('system') ||
+        f.toLowerCase().includes('guidance')
+      ))
+    }
+
+    return findings
+  }
+
+  /**
+   * Generate specific prompt recommendations
+   */
+  private async generatePromptRecommendations(
+    template: Template,
+    promptFindings: string[]
+  ): Promise<ImprovementItem[]> {
+    const prompt = this.buildPromptOptimizationPrompt(template, promptFindings)
+
+    // Get preferred provider
+    const providerResult = await pool.query(
+      "SELECT provider_type FROM ai_providers WHERE is_active = true ORDER BY priority ASC LIMIT 1"
+    )
+    const preferredProvider = providerResult.rows[0]?.provider_type || 'google'
+
+    try {
+      const result = await aiService.generateWithFallback({
+        provider: preferredProvider,
+        prompt: prompt,
+        system_prompt: `You are an expert in AI prompt engineering. Analyze system prompts and provide specific, actionable improvements. Always respond with valid JSON only.`,
+        temperature: 0.3,
+        max_tokens: 3000
+      })
+
+      const cleaned = this.cleanJson(result.content)
+      const parsed = JSON.parse(cleaned)
+      return parsed.improvements || []
+    } catch (error) {
+      logger.error('[TEMPLATE-IMPROVEMENT] Failed to generate prompt recommendations', { error })
+      return []
+    }
+  }
+
+  /**
+   * Build prompt for optimization analysis
+   */
+  private buildPromptOptimizationPrompt(template: Template, findings: string[]): string {
+    return `# System Prompt Optimization
+
+Analyze this template's system prompt and provide specific improvements based on audit findings.
+
+## Current System Prompt:
+${template.system_prompt || 'No system prompt defined'}
+
+## Audit Findings Related to Prompt:
+${findings.map((f, i) => `${i + 1}. ${f}`).join('\n')}
+
+## Template Variables:
+${JSON.stringify(template.variables || [], null, 2)}
+
+## Your Task:
+Provide 3-5 specific, actionable improvements to the system prompt. Each improvement must:
+1. Address a specific finding from the audit
+2. Provide exact text to add or modify (not vague suggestions)
+3. Preserve all existing variable references (e.g., {{variable}})
+4. Be implementable as a direct text replacement
+
+## Response Format (JSON):
+\`\`\`json
+{
+  "improvements": [
+    {
+      "issue_addressed": "Vague persona definition",
+      "proposed_change": "Replace 'You are an assistant' with 'You are a Senior Project Manager with 15+ years of experience in PMBOK-based project planning'",
+      "change_type": "prompt_enhancement",
+      "section": "system_prompt",
+      "priority": "high",
+      "rationale": "Specific persona improves tone and expertise level"
+    }
+  ]
+}
+\`\`\`
+
+Focus on the most impactful prompt improvements. Be specific and actionable.`
+  }
+
+  /**
+   * Validate that recommendations preserve variable resolution
+   */
+  private validateVariablePreservation(
+    currentPrompt: string,
+    recommendations: ImprovementItem[]
+  ): ImprovementItem[] {
+    // Extract all variable patterns from current prompt
+    const variablePattern = /\{\{[^}]+\}\}/g
+    const currentVariables = currentPrompt.match(variablePattern) || []
+
+    // Filter recommendations that don't break variable resolution
+    return recommendations.filter(rec => {
+      const proposedChange = rec.proposed_change || ''
+      
+      // Check if the proposed change removes any variable references
+      for (const variable of currentVariables) {
+        if (rec.change_type === 'prompt_enhancement' && 
+            proposedChange.includes('replace') &&
+            !proposedChange.includes(variable)) {
+          logger.warn('[TEMPLATE-IMPROVEMENT] Recommendation breaks variable resolution', {
+            variable,
+            recommendation: rec.issue_addressed
+          })
+          return false
+        }
+      }
+
+      return true
+    })
+  }
+
+  /**
+   * Save prompt optimization suggestions
+   */
+  private async savePromptOptimizationSuggestions(
+    templateId: string,
+    recommendations: ImprovementItem[],
+    auditFindings: any
+  ): Promise<void> {
+    if (recommendations.length === 0) return
+
+    // Create a focused improvement suggestion for prompt optimization
+    await this.saveImprovementSuggestions({
+      templateId,
+      qualityMetrics: {
+        avgQuality: 0,
+        avgCompleteness: 0,
+        avgConsistency: 0,
+        avgProfessionalQuality: 0,
+        avgStandardsCompliance: 0,
+        avgAccuracy: 0,
+        avgContextRelevance: 0,
+        documentCount: 0,
+        lowestScore: 0,
+        highestScore: 0,
+        standardDeviation: 0
+      },
+      commonIssues: [{
+        severity: 'medium',
+        dimension: 'System Prompt',
+        description: 'Prompt optimization based on audit findings',
+        count: 1
+      }],
+      issueFrequency: {},
+      improvements: recommendations,
+      expectedGain: 10,
+      priority: 'high',
+      analysisTokens: 0,
+      analysisCost: 0,
+      analyzerProvider: 'system',
+      analyzerModel: 'audit-driven'
+    })
+
+    logger.info('[TEMPLATE-IMPROVEMENT] Prompt optimization suggestions saved', {
+      templateId,
+      count: recommendations.length
+    })
   }
 }
 

@@ -36,7 +36,7 @@ router.post(
       const options = req.body || {}
 
       // Get document to verify project access
-      const { pool } = await Promise.resolve().then(() => require())
+      const { pool } = await Promise.resolve().then(() => require('../database/connection'))
       const docResult = await pool.query(
         `SELECT project_id FROM documents WHERE id = $1 AND deleted_at IS NULL`,
         [documentId]

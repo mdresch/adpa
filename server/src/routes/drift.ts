@@ -270,7 +270,7 @@ router.get(
     try {
       const { driftRecordId } = req.params
 
-      const { pool } = await Promise.resolve().then(() => require())
+      const { pool } = await Promise.resolve().then(() => require('../database/connection'))
       const result = await pool.query(
         `SELECT 
           bdd.*,
@@ -317,7 +317,7 @@ router.get(
       const { projectId } = req.params
       const { status } = req.query
 
-      const { pool } = await Promise.resolve().then(() => require())
+      const { pool } = await Promise.resolve().then(() => require('../database/connection'))
       
       let query = `
         SELECT 
