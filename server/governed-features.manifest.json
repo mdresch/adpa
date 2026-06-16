@@ -1,7 +1,11 @@
 {
   "version": 1,
   "description": "Governed feature packets (Level 5). Add a feature here with testPathPattern (and optional testModuleDir for modules/* layout). All entries run via npm run test:features. legacyModuleDirs are pre-governance tests — migrate into features[] over time.",
-  "legacyModuleDirs": ["analysis", "documents", "openuiChat"],
+  "legacyModuleDirs": [
+    "analysis",
+    "documents",
+    "openuiChat"
+  ],
   "features": [
     {
       "id": "rag",
@@ -144,6 +148,26 @@
       "spec": "docs/superpowers/specs/2026-06-15-api-worker-split-design.md",
       "testModuleDir": "api-worker-split",
       "testPathPattern": "modules/api-worker-split"
+    },
+    {
+      "id": "template-lifecycle",
+      "description": "Template Lifecycle Management (Pillar 6) - Quality feedback loops, audit triggers, regression detection, and system prompt optimization",
+      "skills": [
+        "adpa-template-lifecycle-pillar6"
+      ],
+      "overlapGuard": false,
+      "testModuleDir": "template-lifecycle",
+      "testPathPattern": "modules/template-lifecycle"
+    },
+    {
+      "id": "projects",
+      "description": "Project Governance & Lifecycle Management (Pillar 7) - Authorization boundaries, tenant isolation, team membership, context items, and project CRUD invariants",
+      "skills": [
+        "adpa-projects-pillar7"
+      ],
+      "overlapGuard": false,
+      "testModuleDir": "projects",
+      "testPathPattern": "modules/projects"
     }
   ]
 }

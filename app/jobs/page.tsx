@@ -53,6 +53,8 @@ import {
   AlertCircle,
   Trash,
   Copy,
+  Zap,
+  ShieldAlert,
 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useAuth } from "@/contexts/AuthContext"
@@ -160,6 +162,48 @@ export default function JobMonitorPage() {
   const [loadingWorkers, setLoadingWorkers] = React.useState(true)
   const [loadingLlmInsightsJobId, setLoadingLlmInsightsJobId] = React.useState<string | null>(null)
   const didScrollToQueryJobRef = React.useRef(false)
+
+  // ── EMERGENCY KILL SWITCH ──────────────────────────────────────────────────
+  const [killStatus, setKillStatus] = React.useState<{ totalActiveJobs: number; blankDocuments: number; dangerLevel: string } | null>(null)
+  const [killLoading, setKillLoading] = React.useState(false)
+
+  // Poll kill-switch status every 10 seconds (admin only)
+  React.useEffect(() => {
+    if (authLoading || !isAuthenticated) return
+    const canAdmin = (user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'super_admin' || hasPermission('jobs.admin'))
+    if (!canAdmin) return
+
+    const poll = async () => {
+      try {
+        const status = await apiClient.request<any>('/jobs/emergency-stop/status', { suppressNotFoundError: true } as any)
+        setKillStatus(status)
+      } catch { /* not admin or backend down — ignore */ }
+    }
+    void poll()
+    const interval = setInterval(poll, 10000)
+    return () => clearInterval(interval)
+  }, [authLoading, isAuthenticated, user?.role, hasPermission])
+
+  const handleEmergencyStop = React.useCallback(async () => {
+    const activeCount = killStatus?.totalActiveJobs ?? 0
+    const blankCount = killStatus?.blankDocuments ?? 0
+    const confirmed = window.confirm(
+      `⚠️ EMERGENCY STOP\n\nThis will immediately cancel ALL ${activeCount} active/stuck jobs and permanently delete ${blankCount} blank document(s) created in the last 24 hours.\n\nThis cannot be undone. Continue?`
+    )
+    if (!confirmed) return
+
+    setKillLoading(true)
+    try {
+      const result = await apiClient.request<any>('/jobs/emergency-stop', { method: 'POST' })
+      toast.success(`🛑 Emergency stop complete — ${result.killedJobs ?? 0} jobs killed, ${result.deletedBlankDocuments ?? 0} blank docs removed`)
+      setKillStatus(null)
+      void fetchJobs({ silent: true })
+    } catch (error: any) {
+      toast.error(`Emergency stop failed: ${error?.message ?? 'Unknown error'}`)
+    } finally {
+      setKillLoading(false)
+    }
+  }, [killStatus])
 
   const loadLlmInsightsIfNeeded = React.useCallback(async (jobId: string) => {
     let alreadyLoaded = false
@@ -542,6 +586,45 @@ return (
         <div className="container mx-auto px-6 py-8">
           <PageTransition>
             <AnimatedLayout className="space-y-8">
+              {/* ── EMERGENCY KILL SWITCH BANNER ─────────────────────── */}
+              {killStatus && killStatus.totalActiveJobs > 0 && (
+                <div
+                  className={`rounded-xl border-2 p-4 flex items-center justify-between gap-4 ${
+                    killStatus.dangerLevel === 'critical'
+                      ? 'bg-red-950/80 border-red-500 animate-pulse'
+                      : 'bg-orange-950/70 border-orange-500'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <ShieldAlert className={`h-7 w-7 shrink-0 ${
+                      killStatus.dangerLevel === 'critical' ? 'text-red-400' : 'text-orange-400'
+                    }`} />
+                    <div>
+                      <p className={`font-bold text-sm ${
+                        killStatus.dangerLevel === 'critical' ? 'text-red-300' : 'text-orange-300'
+                      }`}>
+                        {killStatus.dangerLevel === 'critical' ? '🚨 CRITICAL — Backend overloaded by runaway jobs' : '⚠️ Warning — Active jobs consuming backend resources'}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {killStatus.totalActiveJobs} active/stuck job{killStatus.totalActiveJobs !== 1 ? 's' : ''}
+                        {killStatus.blankDocuments > 0 ? ` · ${killStatus.blankDocuments} blank document${killStatus.blankDocuments !== 1 ? 's' : ''} detected` : ''}
+                        {' — kill switch will cancel all and clean blank files'}
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    disabled={killLoading}
+                    onClick={handleEmergencyStop}
+                    className="shrink-0 bg-red-600 hover:bg-red-700 border-red-400 font-bold text-white shadow-lg shadow-red-900/50 px-6"
+                  >
+                    <Zap className="h-4 w-4 mr-2" />
+                    {killLoading ? 'Stopping...' : '🛑 Kill All Jobs'}
+                  </Button>
+                </div>
+              )}
+
               {/* Header */}
               <div className="flex flex-col space-y-4 md:flex-row md:items-center md:justify-between md:space-y-0">
                 <div>

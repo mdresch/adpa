@@ -122,9 +122,35 @@ export class StuckJobMonitor {
           }
         }
 
-        // Pillar 1: Requeue logic explicitly prioritizes AI generation jobs even if global requeue is disabled
-        const isGenerationJob = row.queue_name === 'ai-processing' || row.queue_name === 'document-processing' || row.queue_name === 'document-regeneration'
-        const shouldRequeue = (REQUEUE_ENABLED || isGenerationJob) && stuckCount <= MAX_REQUEUE
+        // ─── REQUEUE POLICY ──────────────────────────────────────────────────
+        // Generation jobs (ai-processing, document-processing, document-regeneration)
+        // and GKG sync jobs (gkg-sync) must NEVER be auto-requeued.
+        //
+        // WHY: These are long-running, resource-intensive jobs. If they fail or
+        // time out, auto-requeue causes a runaway loop that consumes the backend
+        // (as seen with 118 stuck jobs dating back to January 2026).
+        // Users must manually retry from the Job Monitor UI.
+        //
+        // Only short, idempotent jobs on non-generation queues may auto-requeue,
+        // and only when STUCK_JOB_REQUEUE=true is explicitly set in .env.
+        const NEVER_REQUEUE_QUEUES = new Set([
+          'ai-processing',
+          'document-processing',
+          'document-regeneration',
+          'gkg-sync',
+          'project-data-extraction',
+        ])
+        const isNeverRequeueJob = NEVER_REQUEUE_QUEUES.has(row.queue_name) || 
+                                (typeof row.type === 'string' && row.type.startsWith('extract-entity-'))
+        const shouldRequeue = REQUEUE_ENABLED && !isNeverRequeueJob && stuckCount <= MAX_REQUEUE
+
+        if (isNeverRequeueJob) {
+          logger.warn('[STUCK-JOB-MONITOR] Job on protected queue — will NOT auto-requeue. User must retry manually.', {
+            jobId,
+            queue: row.queue_name,
+            stuckCount,
+          })
+        }
 
         if (shouldRequeue) {
           try {
@@ -153,8 +179,8 @@ export class StuckJobMonitor {
                 if (typeof addFn === 'function') {
                   // Re-add job with same type and data
                   await addFn(jobType, jobData, { jobId })
-                  logger.info('[STUCK-JOB-MONITOR] Requeued job', { jobId, jobType, isGenerationJob })
-                  
+                  logger.info('[STUCK-JOB-MONITOR] Requeued job', { jobId, jobType })
+
                   // Reset status to pending so it gets picked up immediately
                   await safeQuery(this.pool, `UPDATE jobs SET status = 'pending', worker_id = NULL WHERE id = $1`, [jobId])
                 } else {
@@ -167,7 +193,7 @@ export class StuckJobMonitor {
           } catch (rqErr) {
             logger.error('[STUCK-JOB-MONITOR] Failed to requeue job', rqErr)
           }
-        } else if (REQUEUE_ENABLED || isGenerationJob) {
+        } else if (REQUEUE_ENABLED && !isNeverRequeueJob) {
           logger.info('[STUCK-JOB-MONITOR] Requeue skipped because stuckCount exceeds MAX_REQUEUE', { jobId, stuckCount, max: MAX_REQUEUE })
         }
       } catch (err) {

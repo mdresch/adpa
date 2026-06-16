@@ -4,7 +4,6 @@
  */
 
 import { logger } from '@/utils/logger'
-import { AIService } from '@/services/aiService'
 import { pool } from '@/database/connection'
 
 export interface EmbeddingsConfig {
@@ -42,25 +41,21 @@ export interface EmbeddingResponse {
 }
 
 export class MultiProviderEmbeddingsService {
-  private aiService: AIService
   private config: EmbeddingsConfig
   private cache: Map<string, { embedding: number[], timestamp: number, provider: string }> = new Map()
   private rateLimitTracker: Map<string, { count: number, resetTime: number }> = new Map()
 
   constructor(config?: Partial<EmbeddingsConfig>) {
-    try {
-      this.aiService = new AIService()
-    } catch (error) {
-      logger.error('[MULTI-PROVIDER-EMBEDDINGS] Failed to initialize AIService', {
-        error: error instanceof Error ? error.message : String(error)
-      })
-      throw new Error(`Failed to initialize AIService: ${error instanceof Error ? error.message : String(error)}`)
-    }
-    
     // Merge config with defaults, ensuring model is always set
     const defaultConfig: EmbeddingsConfig = {
-      providers: ['openai', 'google', 'azure'],
-      model: 'text-embedding-ada-002',
+      /**
+       * NOTE:
+       * This module currently provides deterministic *local* embeddings only.
+       * Providers are kept in config for forward-compatibility when we wire
+       * true embeddings endpoints, but they do not trigger external calls today.
+       */
+      providers: ['local-deterministic'],
+      model: 'local-deterministic-v1',
       maxTokens: 8191,
       timeout: 30000,
       retryAttempts: 3,
@@ -94,15 +89,19 @@ export class MultiProviderEmbeddingsService {
         return this.formatResponse(cached.embedding, modelToUse, cached.provider, input)
       }
 
-      // Try providers in order of preference
+      // Try providers in order of preference (currently local-deterministic only)
       const providersToTry = provider ? [provider] : this.config.providers
       let lastError: Error | null = null
 
       for (const providerToTry of providersToTry) {
         try {
-          if (!await this.isProviderAvailable(providerToTry)) {
-            logger.warn('Provider not available, skipping', { provider: providerToTry })
-            continue
+          // For local deterministic embeddings we don't consult ai_providers.
+          const isLocal = providerToTry === 'local-deterministic'
+          if (!isLocal) {
+            if (!await this.isProviderAvailable(providerToTry)) {
+              logger.warn('Provider not available, skipping', { provider: providerToTry })
+              continue
+            }
           }
 
           if (!await this.checkRateLimit(providerToTry)) {
@@ -155,23 +154,19 @@ export class MultiProviderEmbeddingsService {
   private async generateWithProvider(input: string | string[], model: string, provider: string): Promise<number[]> {
     const inputText = Array.isArray(input) ? input.join('\n') : input
     
-    // Create a prompt for embeddings generation
-    const prompt = `Generate embeddings for the following text: "${inputText}"`
-    
     try {
-      const response = await this.aiService.generate({
-        prompt,
-        provider,
-        model,
-        temperature: 0, // Deterministic for embeddings
-        max_tokens: this.config.maxTokens
-      })
-
-      // For now, we'll simulate embeddings generation
-      // In a real implementation, you would call the provider's embeddings API
-      const embedding = this.simulateEmbeddingGeneration(inputText, provider)
-      
-      return embedding
+      /**
+       * IMPORTANT:
+       * This service is used as a *secondary* fallback for vector candidate scoring.
+       * It previously called `AIService.generate()` (chat/text generation) which:
+       * - is not an embeddings API
+       * - hard-fails when provider keys/quotas are missing (taking RAG down)
+       *
+       * Until we wire a real embeddings endpoint per provider, we intentionally
+       * return deterministic local embeddings and never call external providers here.
+       */
+      // Always local deterministic today
+      return this.simulateEmbeddingGeneration(inputText, provider)
 
     } catch (error) {
       logger.error('Provider embedding generation failed', {
@@ -323,15 +318,16 @@ export class MultiProviderEmbeddingsService {
 
   private async isProviderAvailable(provider: string): Promise<boolean> {
     try {
-      // Check if provider is configured and active
+      // Query by provider_type (e.g. 'google', 'openai'), NOT by display name (e.g. 'Google Gemini').
+      // The name column holds human-readable labels like "Google Gemini" which won't match 'google'.
       const result = await pool.query(
-        'SELECT is_active FROM ai_providers WHERE name = $1',
+        'SELECT is_active FROM ai_providers WHERE provider_type = $1 AND is_active = true LIMIT 1',
         [provider]
       )
-      
-      return result.rows.length > 0 && result.rows[0].is_active
+
+      return result.rows.length > 0
     } catch (error) {
-      logger.warn('Failed to check provider availability', { provider, error: error.message })
+      logger.warn('Failed to check provider availability', { provider, error: error instanceof Error ? error.message : String(error) })
       return false
     }
   }
