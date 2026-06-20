@@ -141,7 +141,7 @@ importers:
         version: 1.4.0
       '@github/copilot-sdk':
         specifier: latest
-        version: 1.0.1(typescript@5.9.3)
+        version: 1.0.2
       '@google/genai':
         specifier: ^1.42.0
         version: 1.42.0(@modelcontextprotocol/sdk@1.26.0(zod@3.25.76))(bufferutil@4.0.9)(utf-8-validate@6.0.5)
@@ -150,7 +150,7 @@ importers:
         version: 0.24.1
       '@hookform/resolvers':
         specifier: ^5.2.2
-        version: 5.2.2(react-hook-form@7.79.0(react@18.3.1))
+        version: 5.2.2(react-hook-form@7.80.0(react@18.3.1))
       '@itwin/core-common':
         specifier: ^5.5.2
         version: 5.5.2(@itwin/core-bentley@5.5.2)(@itwin/core-geometry@5.5.2)
@@ -417,7 +417,7 @@ importers:
         version: 3.0.3
       bullmq:
         specifier: latest
-        version: 5.78.1(redis@5.10.0)
+        version: 5.79.0(redis@5.10.0)
       chalk:
         specifier: ^4.1.2
         version: 4.1.2
@@ -507,7 +507,7 @@ importers:
         version: 4.0.0(@jest/globals@30.2.0)(jest@30.2.0(@types/node@24.9.2)(esbuild-register@3.6.0(esbuild@0.28.1))(ts-node@10.9.2(@types/node@24.9.2)(typescript@5.9.3)))(typescript@5.9.3)
       joi:
         specifier: latest
-        version: 18.2.1
+        version: 18.2.3
       js-yaml:
         specifier: '>=4.2.0'
         version: 4.2.0
@@ -548,8 +548,8 @@ importers:
         specifier: ^7.1.0
         version: 7.1.0(socks@2.8.7)
       multer:
-        specifier: '>=2.1.1'
-        version: 2.1.1
+        specifier: ^2.2.0
+        version: 2.2.0
       neo4j-driver:
         specifier: latest
         version: 6.1.0
@@ -624,7 +624,7 @@ importers:
         version: 5.1.1(firebase@11.10.0)(react@18.3.1)
       react-hook-form:
         specifier: latest
-        version: 7.79.0(react@18.3.1)
+        version: 7.80.0(react@18.3.1)
       react-is:
         specifier: ^19.2.4
         version: 19.2.4
@@ -1092,8 +1092,8 @@ importers:
         specifier: ^7.1.0
         version: 7.1.0(socks@2.8.7)
       multer:
-        specifier: ^2.1.1
-        version: 2.1.1
+        specifier: ^2.2.0
+        version: 2.2.0
       neo4j-driver:
         specifier: ^5.28.0
         version: 5.28.3
@@ -2376,8 +2376,8 @@ packages:
     os: [darwin]
     hasBin: true
 
-  '@github/copilot-darwin-arm64@1.0.62':
-    resolution: {integrity: sha512-ShFS6+O/9SzXT7WelzRnbDo/RWieTnEsACcarfYunbYb5CWbc3VDgpWc6ispn6UbLXFxO5Nj26j6vMlRqYugfA==}
+  '@github/copilot-darwin-arm64@1.0.64-1':
+    resolution: {integrity: sha512-MQHZT9LhmCiq+ogO1E8cPCWrurZ6x+r9lPJfYUSnOyMO+EHbREpiJwOOChxtLHgL2/tKJSZdId2pg3tDgUlcsw==}
     cpu: [arm64]
     os: [darwin]
     hasBin: true
@@ -2388,8 +2388,8 @@ packages:
     os: [darwin]
     hasBin: true
 
-  '@github/copilot-darwin-x64@1.0.62':
-    resolution: {integrity: sha512-6Ne9q04o/bIJyGciFqv0zu+6VftEA9BZahvg9QrBt/tMHxJ1IhY8//0deQlPtFh2hu5gaWp64hBjTBY3ViJkKA==}
+  '@github/copilot-darwin-x64@1.0.64-1':
+    resolution: {integrity: sha512-kOQY7CvI7He0eO3ObQAHePWdkNLWAOegCSzUqUmdcpa1SNVqbZ3GBMsQ7uAZQip2cQxnGZ7pS1v6tKQ0HJdkYw==}
     cpu: [x64]
     os: [darwin]
     hasBin: true
@@ -2401,8 +2401,8 @@ packages:
     libc: [glibc]
     hasBin: true
 
-  '@github/copilot-linux-arm64@1.0.62':
-    resolution: {integrity: sha512-PAEU/VyJ/6AUc+p5BfpuKVXUEZhQSZT26hiEf6R2ZxSOAL1BZPXj1BuqniFdBghP7SS2JKh6M5FM7oT0PomKPg==}
+  '@github/copilot-linux-arm64@1.0.64-1':
+    resolution: {integrity: sha512-hIfuO7Q+pWs0SKfIRYqT+CjMaupudnhp4RMS6XoJ5s/e33rvpj2tkTkXYlHJo1PMDI823vvbqgpEdr+KeewMwg==}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
@@ -2415,8 +2415,8 @@ packages:
     libc: [glibc]
     hasBin: true
 
-  '@github/copilot-linux-x64@1.0.62':
-    resolution: {integrity: sha512-XE+O7a1lyF6fhWrALPuyXARAwvVKSzbH+L1cbQU/BdVgx6TR68B0MMX3ByJTnwjGSzfxxVs2LI6nMrcbTyXhUQ==}
+  '@github/copilot-linux-x64@1.0.64-1':
+    resolution: {integrity: sha512-VHaE62pha0rDDvuNN3bd97gf0EZ+EJebstM1ejHsMYoPT1IOUkYEXlNfGGHY+GfUGYxAiy/+Uew4xw5mJyy/Sw==}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
@@ -2429,8 +2429,8 @@ packages:
     libc: [musl]
     hasBin: true
 
-  '@github/copilot-linuxmusl-arm64@1.0.62':
-    resolution: {integrity: sha512-kww9Hi75i5BVhzrIgQnA/gz48m7A7aLkzG/ci2cRvuI7gTG3XzX+b93mpNqOcVD4yN1oqWza49rWnElJhjSvvg==}
+  '@github/copilot-linuxmusl-arm64@1.0.64-1':
+    resolution: {integrity: sha512-L/YrZPotRujAP0QERq+DlkR1SLr7abbTSz/56JqKKOqEdjKZPdQW1bUlhL/w1CZg1gXlTNUsNVyKz/fUfrEBgw==}
     cpu: [arm64]
     os: [linux]
     libc: [musl]
@@ -2443,8 +2443,8 @@ packages:
     libc: [musl]
     hasBin: true
 
-  '@github/copilot-linuxmusl-x64@1.0.62':
-    resolution: {integrity: sha512-6sC/Uz1OsMltkd0eqg7so5WyejnSxhnu2sY6rfVsn0epJ9wQyMXcjUDSHaY9DobUaF7HpgT3EPzU9Ncs0rByCQ==}
+  '@github/copilot-linuxmusl-x64@1.0.64-1':
+    resolution: {integrity: sha512-AGMjXqR128oyjiJhoI6Gd7JP5ddWkib+P4YH/JoHm05iNn23ZYl4tSc0XihHzeyMI1ix7Aacn8UINYB7lGOGOA==}
     cpu: [x64]
     os: [linux]
     libc: [musl]
@@ -2454,8 +2454,8 @@ packages:
     resolution: {integrity: sha512-mPWM0fw1Gqc/SW8nl45K8abrFH+92fO7y6tRtRl5imjS5hGapLf/dkX5WDrgPtlsflD0c41lFXVUri5NVJwtoA==}
     engines: {node: '>=20.0.0'}
 
-  '@github/copilot-sdk@1.0.1':
-    resolution: {integrity: sha512-w6AaS0WqqTE/3iyUrZznvgCLQhsUF7ZmEVCneacuHCfOzlH0r6ww9WUmyA0zgqmXO75V0IYrkIcnFke/qJkkDg==}
+  '@github/copilot-sdk@1.0.2':
+    resolution: {integrity: sha512-JJDsGM/bA1LGy1Ro/8iC8RLpKsLmuiFdQ67oFAVfi0Hfxyx289teHwmM70ehK76DXBkrPqqcxcliJi56k1ggFA==}
     engines: {node: ^20.19.0 || >=22.12.0}
 
   '@github/copilot-win32-arm64@1.0.55':
@@ -2464,8 +2464,8 @@ packages:
     os: [win32]
     hasBin: true
 
-  '@github/copilot-win32-arm64@1.0.62':
-    resolution: {integrity: sha512-kPpckuVCEvuXOEW+FNTs4AbF3I3/O8dA+S0wSyehNVzQczJRIpI+SDIGGXzehThw8EM2yf2mkcl9KfFq/ji18Q==}
+  '@github/copilot-win32-arm64@1.0.64-1':
+    resolution: {integrity: sha512-vvv+gnemi9WKaxF41zz7Xmq6a493n8Yjps5UFaOY6a3WR222kKXZXfOpeRvIYsDgnIPHGBHIj1TBOmnHQT4V4w==}
     cpu: [arm64]
     os: [win32]
     hasBin: true
@@ -2476,8 +2476,8 @@ packages:
     os: [win32]
     hasBin: true
 
-  '@github/copilot-win32-x64@1.0.62':
-    resolution: {integrity: sha512-cpXRdLMPm5dwCvF57NFmsr//Dsiqx5jMHSpzaqX78h4NI9m30v24cXFkXSoOOsCCgoPtO6170sassAlj1WWPNQ==}
+  '@github/copilot-win32-x64@1.0.64-1':
+    resolution: {integrity: sha512-mcHvD0fjGDuqr/YXzy8mKuDmah1F+qjPujxoFuGmabmTJZ33cSIJ3nq7RRvxZNIdp8YJ57NkbcW30WvIcOeJ3w==}
     cpu: [x64]
     os: [win32]
     hasBin: true
@@ -2486,8 +2486,8 @@ packages:
     resolution: {integrity: sha512-wqzI0L7krORW6jDAQPx7VnInka5BYN5yVgu+dpUK4w8xP5RgnOBa6kRoXpydj/9O1ufs0k6RKRtQjsVLp52TRw==}
     hasBin: true
 
-  '@github/copilot@1.0.62':
-    resolution: {integrity: sha512-jR2msL2xmLPHvcfnQnIJuaM9oEoL8qcjmsVOkyUrsqBVRGw2HaaFx9yAB4NLR+ub/XrhaIdnV91/4URR59Utbw==}
+  '@github/copilot@1.0.64-1':
+    resolution: {integrity: sha512-lojV4Cb7oT4VJnYPEKBRH8KI3W43Q4Lh0Pc+V6sej+xjPJkoqwm68sNKn73/p3wXPBSTVTzPeCm9WhIisgf1Jw==}
     hasBin: true
 
   '@google-cloud/firestore@7.11.6':
@@ -2924,8 +2924,8 @@ packages:
       react: ^18.0.0 || ^19.0.0
       react-dom: ^18.0.0 || ^19.0.0
 
-  '@itwin/core-bentley@5.10.2':
-    resolution: {integrity: sha512-QD1rPCdWdPyYr3ffdpgM/eowg9jMjiboC/mR4+COgvCwMIRak9MPcMmt+ojwOr92RxOB4H+zbAtOHsro5XtyYw==}
+  '@itwin/core-bentley@5.10.3':
+    resolution: {integrity: sha512-kaPmDsI+VtqrCPujQ5FULpQFDqHBtQz5nFN01tAjTSAEsIGrE1OFnDjN+TMXRFfhO7huSy+hikhz8HZNsKKdog==}
 
   '@itwin/core-bentley@5.5.2':
     resolution: {integrity: sha512-qkVUKnRwvavJel7gyWmTFjZMKDFF2EXh9LH4VrCTGOgvw8XobDxxiw/yxjXfZpKp+qFp9iJ5OWVeZpRYGUeoUg==}
@@ -4349,21 +4349,6 @@ packages:
       react-dom: ^18.0.0 || ^19.0.0
       zod: ^3.25.0 || ^4.0.0
       zustand: ^4.5.5
-
-  '@os-theme/darwin-arm64@0.0.8':
-    resolution: {integrity: sha512-gMsOs+8Ju396a5yyMWigkbA0dMTxD78U3HzG3mlpiAyn6hfd5dbyI4VGP+sfTB82KGgWLzIhWWTFX5UYY6iX0A==}
-    cpu: [arm64]
-    os: [darwin]
-
-  '@os-theme/linux-x64@0.0.8':
-    resolution: {integrity: sha512-zvjmBUiSQPjM1RbhpsfCDYMJxW4eLlGmkFPnpteC/03X2lz6CjiX2hfbN2EWLxXjNnIje3Jqaen8IsqEnWrRBg==}
-    cpu: [x64]
-    os: [linux]
-
-  '@os-theme/win32-x64@0.0.8':
-    resolution: {integrity: sha512-N3yxKNbVl2IBa/ncDuq55QhwqwUjnYLJxDKMEmYeJbLIV950qZNojPw3scXA6PbfxPZfIiRa8iz1pzNg9XxP8w==}
-    cpu: [x64]
-    os: [win32]
 
   '@paralleldrive/cuid2@2.3.1':
     resolution: {integrity: sha512-XO7cAxhnTZl0Yggq6jOgjiOHhbgcO4NqFqwSmQpjK3b6TEE6Uj/jfSk6wzYyemh3+I0sHirKSetjQwn5cZktFw==}
@@ -6284,8 +6269,8 @@ packages:
   '@types/node@25.8.0':
     resolution: {integrity: sha512-TCFSk8IZh+iLX1xtksoBVtdmgL+1IX0fC9BeU4QqFSuNdN/K+HUlhqOzEmSYYpZUVsLYcPqc9KX+60iDuninSQ==}
 
-  '@types/node@25.9.3':
-    resolution: {integrity: sha512-603BddQMv3pUcr4U2dhujk83N2tTDVr/34wII2B6bJy6g+8WD6yUb11jszNs0gdi4PesVWl7ABt8nYMVpnLUcg==}
+  '@types/node@25.9.4':
+    resolution: {integrity: sha512-dszCsrKb5U7ZsVZBWiHFklTloVl0mSEnWH/iZXfZUlI4rzCUnsvGmgqfuVRHL54ugE7/wRuxEIXRa2iMZ+BG6g==}
 
   '@types/nodemailer@7.0.9':
     resolution: {integrity: sha512-vI8oF1M+8JvQhsId0Pc38BdUP2evenIIys7c7p+9OZXSPOH5c1dyINP1jT8xQ2xPuBUXmIC87s+91IZMDjH8Ow==}
@@ -7148,6 +7133,11 @@ packages:
     engines: {node: '>=6.0.0'}
     hasBin: true
 
+  baseline-browser-mapping@2.10.38:
+    resolution: {integrity: sha512-31/02mVB4yuQU6adKk5SlY6m+mxDwUq5KZkyYgnLrrKl7TEm1+3PyDtDBz2kOv/wxZz41GHsvV1A/u6RmiyBvw==}
+    engines: {node: '>=6.0.0'}
+    hasBin: true
+
   baseline-browser-mapping@2.9.11:
     resolution: {integrity: sha512-Sg0xJUNDU1sJNGdfGWhVHX0kkZ+HWcvmVymJbj6NSgZZmW/8S9Y2HQ5euytnIgakgxN6papOAWiwDo1ctFDcoQ==}
     hasBin: true
@@ -7224,6 +7214,11 @@ packages:
     engines: {node: ^6 || ^7 || ^8 || ^9 || ^10 || ^11 || ^12 || >=13.7}
     hasBin: true
 
+  browserslist@4.28.2:
+    resolution: {integrity: sha512-48xSriZYYg+8qXna9kwqjIVzuQxi+KYWp2+5nCYnYKPTr0LvD89Jqk2Or5ogxz0NUMfIjhh2lIUX/LyX9B4oIg==}
+    engines: {node: ^6 || ^7 || ^8 || ^9 || ^10 || ^11 || ^12 || >=13.7}
+    hasBin: true
+
   bs-logger@0.2.6:
     resolution: {integrity: sha512-pd8DCoxmbgc7hyPKOvxtqNcjYoOsABPQdcCUjGp3d42VR2CX1ORhk2A87oqqu5R1kk+76nsxZupkmyd+MVtCog==}
     engines: {node: '>= 6'}
@@ -7269,8 +7264,8 @@ packages:
     resolution: {integrity: sha512-WDtdLmJvAuNNPzByAYpRo2rF1Mmradw6gvWsQKf63476DDXmomT9zUiGypLcG4ibIM67vhAj8jJRdbmEws2Aqw==}
     engines: {node: '>=6.14.2'}
 
-  bullmq@5.78.1:
-    resolution: {integrity: sha512-zD5IT+qMqbMgPFPdL9FwnZka1bz6nckM+5lXj4N0vsXqdzoVO6wizmXpwsg/4GnHmXJsL7XOKeWA64tYUdPrOA==}
+  bullmq@5.79.0:
+    resolution: {integrity: sha512-sg+kYGn7PIDI/AAkSWINPNz0vMp745YaBYMyo3AtcfXk5iCvjEPU+XMbU3yf7rSf1KsU+OfU+GH8FhxUa+WDNA==}
     engines: {node: '>=12.22.0'}
     peerDependencies:
       redis: '>=5.0.0'
@@ -8068,6 +8063,9 @@ packages:
   dompurify@3.4.10:
     resolution: {integrity: sha512-0xzNv0e7oYC6yyuOGZIABPM4qtg3QxLFniDNPP4ZP90wR8Yq3zgwpRbrNiT4N3IKqDbbYFEJLV+JWEs19aZ//w==}
 
+  dompurify@3.4.11:
+    resolution: {integrity: sha512-zhlUV12GsaRzMsf9q5M254YhA4+VuF0fG+QFqu6aYpoGlKtz+w8//jBcGVYBgQkR5GHjUomejY84AV+/uPbWdw==}
+
   domutils@3.2.2:
     resolution: {integrity: sha512-6kZKyUajlDuqlHKVX1w7gyslj9MPIXzIFiz/rGu35uC1wMi+kMhQwGhl4lt9unC9Vb9INnY9Z3/ZA3+FhASLaw==}
 
@@ -8206,6 +8204,9 @@ packages:
 
   electron-to-chromium@1.5.372:
     resolution: {integrity: sha512-M3yhbAlilnwqC8D21t28UCDGHyitShTmmLRU/H+b74P6Ski16Nb9HONYEaVpMj/pwC7BEo5B95FpjODLCWbtfA==}
+
+  electron-to-chromium@1.5.376:
+    resolution: {integrity: sha512-cUVA7/RvbFTEuw/i3obUwDTRIXojaxkResf+ibByPFxjc6XK3VNtcQXV0NSbAlJ0FMjcJGgftVVB4Qo184EXvA==}
 
   embla-carousel-react@8.6.0:
     resolution: {integrity: sha512-0/PjqU7geVmo6F734pmPqpyHqiM99olvyecY7zdweCw+6tKEXnrE90pBiBbMMU8s5tICemzpQ3hi5EpxzGW+JA==}
@@ -9814,6 +9815,10 @@ packages:
     resolution: {integrity: sha512-2/OKlogiESf2Nh3TFCrRjrr9z1DRHeW0I+KReF67+4J0Ns+8hBtHRmoWAZ2OFU6I5+TWLEe6sVlSdXPjHm5UbQ==}
     engines: {node: '>= 20'}
 
+  joi@18.2.3:
+    resolution: {integrity: sha512-N5A3KTWQpPWT4ExxxPlUx7WmykGXRzhNidWhV41d6Abu9YfI2NyWCJuxdPnslJCPWtbRpSVOWSnSS6GakLM/Rg==}
+    engines: {node: '>= 20'}
+
   jose@4.15.9:
     resolution: {integrity: sha512-1vUQX+IdDMVPj4k8kOxgUqlcK518yluMuGZwqlr44FS1ppZB/5GWh4rZG89erpOBOJjU/OBsnCVFfapsRz6nEA==}
 
@@ -10583,8 +10588,8 @@ packages:
   msgpackr@2.0.2:
     resolution: {integrity: sha512-c5hYOXFbP79Slh6Dzd2wzk+jnV7mX1UxfMYtilnY1NmalXPqG8DGb5cYCMBrW4AsH3zekBBZd4QrKz9NhtvYLQ==}
 
-  multer@2.1.1:
-    resolution: {integrity: sha512-mo+QTzKlx8R7E5ylSXxWzGoXoZbOsRMpyitcht8By2KHvMbf3tjwosZ/Mu/XYU6UuJ3VZnODIrak5ZrPiPyB6A==}
+  multer@2.2.0:
+    resolution: {integrity: sha512-6rdyFg2kLrMh9Jee7/BMPuV9lEAd7lLW2YUpF9/YxR7njyoUwwQ0ZPh3TaIY50Sw6vlyD2HW3wGOkTS4P79xrQ==}
     engines: {node: '>= 10.16.0'}
 
   mustache@4.2.0:
@@ -10739,6 +10744,10 @@ packages:
     resolution: {integrity: sha512-Uzmd6LXpouKo8EUK68IjH4+E01w/hXyV3R3g/geCJo+rXLNfh1xucB+LOzYEOQPSiUK3h/xZf0cQGcSsmyL2Og==}
     engines: {node: '>=18'}
 
+  node-releases@2.0.48:
+    resolution: {integrity: sha512-1uz8041X6LoI6ZSdZacM9lVY28vuzDlSKitnpbSNK0RfKoIJkX29NBPVEFXhnuSuEOA9Ww0xnPJ+ILWbGAv8DA==}
+    engines: {node: '>=18'}
+
   node-schedule@2.1.1:
     resolution: {integrity: sha512-OXdegQq03OmXEjt2hZP33W2YPs/E5BcFQks46+G2gAxs4gHOIVD1u7EqlYLYSKsaIpyKCK9Gbk0ta1/gjRSMRQ==}
     engines: {node: '>=6'}
@@ -10884,11 +10893,6 @@ packages:
 
   orderedmap@2.1.1:
     resolution: {integrity: sha512-TvAWxi0nDe1j/rtMcWcIj94+Ffe6n7zhow33h40SKxmsmozs6dz/e+EajymfoFcHd7sxNn8yHM8839uixMOV6g==}
-
-  os-theme@0.0.8:
-    resolution: {integrity: sha512-u1q3bLSv5uMHNIiPItkfDrHXu6ZFs2juwqxWREFM/uVBa+7Kkhy2v49LmJev2JcinGwqiEccElB/XsH9gwasuA==}
-    peerDependencies:
-      typescript: ^5
 
   overlap-area@1.1.0:
     resolution: {integrity: sha512-3dlJgJCaVeXH0/eZjYVJvQiLVVrPO4U1ZGqlATtx6QGO3b5eNM6+JgUKa7oStBTdYuGTk7gVoABCW6Tp+dhRdw==}
@@ -11520,8 +11524,8 @@ packages:
       firebase: 11.10.0
       react: '>= 16.8.0'
 
-  react-hook-form@7.79.0:
-    resolution: {integrity: sha512-mhYp/MTmXvzYX6AJcJVko0rktoIhhmRnEouObj4wF5i/tCttgJvnp1+9wRkpITZjDTqpo4IOSJqu0dBlPlV/Lw==}
+  react-hook-form@7.80.0:
+    resolution: {integrity: sha512-4P+fk6oXsxY+6xSj7Euhc2sumQD8zQqCuVHoJwoyp9EchP+IUW9OESB7uHFJOKsIBQ4MQqYE84INJFqUCYNoOg==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
       react: ^16.8.0 || ^17 || ^18 || ^19
@@ -11989,6 +11993,11 @@ packages:
 
   semver@7.8.4:
     resolution: {integrity: sha512-rUCObTnP32Q08R2uuIrt7r9PlEonuTmtuXYcW6s5kjdlj3xbnwe+21yXptAUYcMAABLkYYTtnmzb3w3EDZfueA==}
+    engines: {node: '>=10'}
+    hasBin: true
+
+  semver@7.8.5:
+    resolution: {integrity: sha512-Y7/KDsb8LjooZpwaqGyulO6DQlksgCncchHGk+sZIY4SBvUocMBEFH5Ur1fI4dV+Jvl0w6cjvucaIi40puRioA==}
     engines: {node: '>=10'}
     hasBin: true
 
@@ -14504,37 +14513,37 @@ snapshots:
   '@github/copilot-darwin-arm64@1.0.55':
     optional: true
 
-  '@github/copilot-darwin-arm64@1.0.62':
+  '@github/copilot-darwin-arm64@1.0.64-1':
     optional: true
 
   '@github/copilot-darwin-x64@1.0.55':
     optional: true
 
-  '@github/copilot-darwin-x64@1.0.62':
+  '@github/copilot-darwin-x64@1.0.64-1':
     optional: true
 
   '@github/copilot-linux-arm64@1.0.55':
     optional: true
 
-  '@github/copilot-linux-arm64@1.0.62':
+  '@github/copilot-linux-arm64@1.0.64-1':
     optional: true
 
   '@github/copilot-linux-x64@1.0.55':
     optional: true
 
-  '@github/copilot-linux-x64@1.0.62':
+  '@github/copilot-linux-x64@1.0.64-1':
     optional: true
 
   '@github/copilot-linuxmusl-arm64@1.0.55':
     optional: true
 
-  '@github/copilot-linuxmusl-arm64@1.0.62':
+  '@github/copilot-linuxmusl-arm64@1.0.64-1':
     optional: true
 
   '@github/copilot-linuxmusl-x64@1.0.55':
     optional: true
 
-  '@github/copilot-linuxmusl-x64@1.0.62':
+  '@github/copilot-linuxmusl-x64@1.0.64-1':
     optional: true
 
   '@github/copilot-sdk@0.1.32':
@@ -14543,24 +14552,22 @@ snapshots:
       vscode-jsonrpc: 8.2.1
       zod: 4.4.3
 
-  '@github/copilot-sdk@1.0.1(typescript@5.9.3)':
+  '@github/copilot-sdk@1.0.2':
     dependencies:
-      '@github/copilot': 1.0.62(typescript@5.9.3)
+      '@github/copilot': 1.0.64-1
       vscode-jsonrpc: 8.2.1
       zod: 4.4.3
-    transitivePeerDependencies:
-      - typescript
 
   '@github/copilot-win32-arm64@1.0.55':
     optional: true
 
-  '@github/copilot-win32-arm64@1.0.62':
+  '@github/copilot-win32-arm64@1.0.64-1':
     optional: true
 
   '@github/copilot-win32-x64@1.0.55':
     optional: true
 
-  '@github/copilot-win32-x64@1.0.62':
+  '@github/copilot-win32-x64@1.0.64-1':
     optional: true
 
   '@github/copilot@1.0.55':
@@ -14576,21 +14583,18 @@ snapshots:
       '@github/copilot-win32-arm64': 1.0.55
       '@github/copilot-win32-x64': 1.0.55
 
-  '@github/copilot@1.0.62(typescript@5.9.3)':
+  '@github/copilot@1.0.64-1':
     dependencies:
       detect-libc: 2.1.2
-      os-theme: 0.0.8(typescript@5.9.3)
     optionalDependencies:
-      '@github/copilot-darwin-arm64': 1.0.62
-      '@github/copilot-darwin-x64': 1.0.62
-      '@github/copilot-linux-arm64': 1.0.62
-      '@github/copilot-linux-x64': 1.0.62
-      '@github/copilot-linuxmusl-arm64': 1.0.62
-      '@github/copilot-linuxmusl-x64': 1.0.62
-      '@github/copilot-win32-arm64': 1.0.62
-      '@github/copilot-win32-x64': 1.0.62
-    transitivePeerDependencies:
-      - typescript
+      '@github/copilot-darwin-arm64': 1.0.64-1
+      '@github/copilot-darwin-x64': 1.0.64-1
+      '@github/copilot-linux-arm64': 1.0.64-1
+      '@github/copilot-linux-x64': 1.0.64-1
+      '@github/copilot-linuxmusl-arm64': 1.0.64-1
+      '@github/copilot-linuxmusl-x64': 1.0.64-1
+      '@github/copilot-win32-arm64': 1.0.64-1
+      '@github/copilot-win32-x64': 1.0.64-1
 
   '@google-cloud/firestore@7.11.6':
     dependencies:
@@ -14710,10 +14714,10 @@ snapshots:
     dependencies:
       hono: 4.12.25
 
-  '@hookform/resolvers@5.2.2(react-hook-form@7.79.0(react@18.3.1))':
+  '@hookform/resolvers@5.2.2(react-hook-form@7.80.0(react@18.3.1))':
     dependencies:
       '@standard-schema/utils': 0.3.0
-      react-hook-form: 7.79.0(react@18.3.1)
+      react-hook-form: 7.80.0(react@18.3.1)
 
   '@humanfs/core@0.19.1': {}
 
@@ -14979,7 +14983,7 @@ snapshots:
       rxjs: 7.8.2
       ts-key-enum: 2.0.13
 
-  '@itwin/core-bentley@5.10.2': {}
+  '@itwin/core-bentley@5.10.3': {}
 
   '@itwin/core-bentley@5.5.2': {}
 
@@ -15032,7 +15036,7 @@ snapshots:
       '@itwin/itwinui-icons-react': 2.11.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@itwin/itwinui-react': 3.20.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       classnames: 2.5.1
-      dompurify: 3.4.10
+      dompurify: 3.4.11
       lodash: 4.18.1
       react: 18.3.1
       react-autosuggest: 10.1.0(react@18.3.1)
@@ -15183,7 +15187,7 @@ snapshots:
 
   '@itwin/presentation-shared@1.2.16':
     dependencies:
-      '@itwin/core-bentley': 5.10.2
+      '@itwin/core-bentley': 5.10.3
 
   '@itwin/presentation-shared@1.2.7':
     dependencies:
@@ -15206,7 +15210,7 @@ snapshots:
 
   '@itwin/unified-selection@1.8.1':
     dependencies:
-      '@itwin/core-bentley': 5.10.2
+      '@itwin/core-bentley': 5.10.3
       '@itwin/presentation-shared': 1.2.16
       rxjs: 7.8.2
       rxjs-for-await: 1.0.0(rxjs@7.8.2)
@@ -17054,15 +17058,6 @@ snapshots:
       - '@types/react'
       - '@types/react-dom'
       - supports-color
-
-  '@os-theme/darwin-arm64@0.0.8':
-    optional: true
-
-  '@os-theme/linux-x64@0.0.8':
-    optional: true
-
-  '@os-theme/win32-x64@0.0.8':
-    optional: true
 
   '@paralleldrive/cuid2@2.3.1':
     dependencies:
@@ -19646,7 +19641,7 @@ snapshots:
     dependencies:
       undici-types: 7.24.6
 
-  '@types/node@25.9.3':
+  '@types/node@25.9.4':
     dependencies:
       undici-types: 7.24.6
 
@@ -20613,6 +20608,8 @@ snapshots:
 
   baseline-browser-mapping@2.10.37: {}
 
+  baseline-browser-mapping@2.10.38: {}
+
   baseline-browser-mapping@2.9.11: {}
 
   basic-ftp@6.0.1: {}
@@ -20701,6 +20698,14 @@ snapshots:
       node-releases: 2.0.47
       update-browserslist-db: 1.2.3(browserslist@4.28.1)
 
+  browserslist@4.28.2:
+    dependencies:
+      baseline-browser-mapping: 2.10.38
+      caniuse-lite: 1.0.30001799
+      electron-to-chromium: 1.5.376
+      node-releases: 2.0.48
+      update-browserslist-db: 1.2.3(browserslist@4.28.2)
+
   bs-logger@0.2.6:
     dependencies:
       fast-json-stable-stringify: 2.1.0
@@ -20739,7 +20744,7 @@ snapshots:
     dependencies:
       node-gyp-build: 4.8.4
 
-  bullmq@5.78.1(redis@5.10.0):
+  bullmq@5.79.0(redis@5.10.0):
     dependencies:
       cron-parser: 4.9.0
       ioredis: 5.10.1
@@ -21518,6 +21523,10 @@ snapshots:
     optionalDependencies:
       '@types/trusted-types': 2.0.7
 
+  dompurify@3.4.11:
+    optionalDependencies:
+      '@types/trusted-types': 2.0.7
+
   domutils@3.2.2:
     dependencies:
       dom-serializer: 2.0.0
@@ -21582,6 +21591,8 @@ snapshots:
   electron-to-chromium@1.5.244: {}
 
   electron-to-chromium@1.5.372: {}
+
+  electron-to-chromium@1.5.376: {}
 
   embla-carousel-react@8.6.0(react@18.3.1):
     dependencies:
@@ -23695,7 +23706,7 @@ snapshots:
   jest-haste-map@30.4.1:
     dependencies:
       '@jest/types': 30.4.1
-      '@types/node': 25.9.3
+      '@types/node': 25.9.4
       anymatch: 3.1.3
       fb-watchman: 2.0.2
       graceful-fs: 4.2.11
@@ -24037,7 +24048,7 @@ snapshots:
       jest-message-util: 30.4.1
       jest-util: 30.4.1
       pretty-format: 30.4.1
-      semver: 7.8.4
+      semver: 7.8.5
       synckit: 0.11.13
     transitivePeerDependencies:
       - supports-color
@@ -24111,7 +24122,7 @@ snapshots:
 
   jest-worker@27.5.1:
     dependencies:
-      '@types/node': 25.9.3
+      '@types/node': 25.9.4
       merge-stream: 2.0.0
       supports-color: 8.1.1
 
@@ -24132,7 +24143,7 @@ snapshots:
 
   jest-worker@30.4.1:
     dependencies:
-      '@types/node': 25.9.3
+      '@types/node': 25.9.4
       '@ungap/structured-clone': 1.3.1
       jest-util: 30.4.1
       merge-stream: 2.0.0
@@ -24166,6 +24177,16 @@ snapshots:
   jiti@1.21.7: {}
 
   joi@18.2.1:
+    dependencies:
+      '@hapi/address': 5.1.1
+      '@hapi/formula': 3.0.2
+      '@hapi/hoek': 11.0.7
+      '@hapi/pinpoint': 2.0.1
+      '@hapi/tlds': 1.1.4
+      '@hapi/topo': 6.0.2
+      '@standard-schema/spec': 1.1.0
+
+  joi@18.2.3:
     dependencies:
       '@hapi/address': 5.1.1
       '@hapi/formula': 3.0.2
@@ -25156,7 +25177,7 @@ snapshots:
     optionalDependencies:
       msgpackr-extract: 3.0.4
 
-  multer@2.1.1:
+  multer@2.2.0:
     dependencies:
       append-field: 1.0.0
       busboy: 1.6.0
@@ -25298,6 +25319,8 @@ snapshots:
   node-releases@2.0.27: {}
 
   node-releases@2.0.47: {}
+
+  node-releases@2.0.48: {}
 
   node-schedule@2.1.1:
     dependencies:
@@ -25499,14 +25522,6 @@ snapshots:
       wcwidth: 1.0.1
 
   orderedmap@2.1.1: {}
-
-  os-theme@0.0.8(typescript@5.9.3):
-    dependencies:
-      typescript: 5.9.3
-    optionalDependencies:
-      '@os-theme/darwin-arm64': 0.0.8
-      '@os-theme/linux-x64': 0.0.8
-      '@os-theme/win32-x64': 0.0.8
 
   overlap-area@1.1.0:
     dependencies:
@@ -26245,7 +26260,7 @@ snapshots:
       firebase: 11.10.0
       react: 18.3.1
 
-  react-hook-form@7.79.0(react@18.3.1):
+  react-hook-form@7.80.0(react@18.3.1):
     dependencies:
       react: 18.3.1
 
@@ -26939,6 +26954,8 @@ snapshots:
   semver@7.8.1: {}
 
   semver@7.8.4: {}
+
+  semver@7.8.5: {}
 
   send@0.19.2:
     dependencies:
@@ -28071,6 +28088,12 @@ snapshots:
       escalade: 3.2.0
       picocolors: 1.1.1
 
+  update-browserslist-db@1.2.3(browserslist@4.28.2):
+    dependencies:
+      browserslist: 4.28.2
+      escalade: 3.2.0
+      picocolors: 1.1.1
+
   url-join@4.0.1: {}
 
   url-parse@1.5.10:
@@ -28282,7 +28305,7 @@ snapshots:
       '@webassemblyjs/wasm-parser': 1.14.1
       acorn: 8.17.0
       acorn-import-phases: 1.0.4(acorn@8.17.0)
-      browserslist: 4.28.1
+      browserslist: 4.28.2
       chrome-trace-event: 1.0.4
       enhanced-resolve: 5.24.0
       es-module-lexer: 2.1.0
