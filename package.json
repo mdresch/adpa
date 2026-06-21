@@ -187,7 +187,7 @@
     "node-fetch": "^2.7.0",
     "node-schedule": "^2.1.1",
     "node-stream-zip": "latest",
-    "nodemailer": "^8.0.9",
+    "nodemailer": "^9.0.1",
     "novel": "^1.0.2",
     "openai": "^6.22.0",
     "p-limit": "latest",
