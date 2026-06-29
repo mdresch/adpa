@@ -168,6 +168,17 @@
       "overlapGuard": false,
       "testModuleDir": "projects",
       "testPathPattern": "modules/projects"
+    },
+    {
+      "id": "doc-gen-queue-health",
+      "description": "Queue consumer health detection + pending generation job reconciliation (fixes document generation jobs stuck at 'pending')",
+      "skills": [
+        "adpa-doc-gen-queue-health"
+      ],
+      "overlapGuard": false,
+      "spec": "docs/superpowers/specs/2026-06-29-doc-gen-queue-consumer-health-design.md",
+      "testModuleDir": "doc-gen-queue-health",
+      "testPathPattern": "modules/doc-gen-queue-health"
     }
   ]
 }

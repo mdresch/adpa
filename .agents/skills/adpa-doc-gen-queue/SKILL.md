@@ -156,6 +156,15 @@ Return 503. Do not fall back to synchronous generation. Surface a clear error to
 
 This is better UX than a cryptic `socket hang up` after 2 minutes of waiting.
 
+## Jobs Stuck at `pending` (no consumer)
+
+If `addJob` returns `202` but jobs never leave `pending`, the symptom is **no consumer
+attached to `ai-processing`** (RabbitMQ down, or `registerWorkers()` never ran in this
+process — e.g. `ADPA_PROCESS_ROLE=api` with no worker process). Load
+**`adpa-doc-gen-queue-health`** — it adds real RabbitMQ/Workers health checks, deterministic
+registration, and pending-job reconciliation. Do not "fix" this by making generation
+synchronous.
+
 ## Governed feature packet (`doc-gen`)
 
 Registered in `server/governed-features.manifest.json` with `testPathPattern: documentGenerationService`. Paired skill: `adpa-template-driven-generation`. Load `adpa-governed-feature-loop` when adding new doc-gen tests or registering another packet.

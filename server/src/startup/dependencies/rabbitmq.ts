@@ -1,30 +1,48 @@
 import { Dependency } from "../dependencyGraph"
 import { logger } from "../../utils/logger"
 import { updateDependencyHealth } from "../../routes/health"
+import { evaluateRabbitHealth } from "../../services/queue/queueHealth"
 
 /**
- * RabbitMQ dependency - currently a placeholder for future use.
- * Not yet integrated into the ADPA codebase.
+ * RabbitMQ dependency — verifies the broker connection that the job queue runs on.
+ *
+ * The job queue (RabbitQueueAdapter) requires a live RabbitMQ connection. If the broker
+ * is unreachable, publishes are buffered and generation jobs silently stay at 'pending'.
+ * This check surfaces that as `unhealthy` instead of a misleading placeholder `healthy`.
+ * See .agents/skills/adpa-doc-gen-queue-health/SKILL.md (REQ-001).
  */
 export const rabbitmqDependency: Dependency = {
   name: "RabbitMQ",
   critical: false,
   timeout: 30000, // 30 seconds
   init: async () => {
-    // RabbitMQ is not yet implemented in ADPA
-    // This is a placeholder for future integration
-    logger.debug("RabbitMQ dependency registered but not configured")
-    updateDependencyHealth("RabbitMQ", "healthy", 0, "Placeholder")
+    logger.debug("RabbitMQ dependency registered")
   },
   validate: async () => {
-    // Skip validation if RabbitMQ is not configured
-    if (!process.env.RABBITMQ_URL) {
-      updateDependencyHealth("RabbitMQ", "healthy", 0, "Not configured")
+    const configured = !!process.env.RABBITMQ_URL
+    if (!configured) {
+      const verdict = evaluateRabbitHealth({ configured: false, connected: false })
+      updateDependencyHealth("RabbitMQ", verdict.status, 0, verdict.reason)
       return true
     }
-    // For now, allow RabbitMQ to pass as it is a known optional placeholder
-    logger.info("RabbitMQ is currently a placeholder - skipping deep validation")
-    updateDependencyHealth("RabbitMQ", "healthy", 0, "Placeholder validated")
+
+    let connected = false
+    try {
+      // Reuse the shared connection created by the queue client.
+      const { connection } = await import("../../services/queue/queueClient")
+      const isConnected = (connection as any)?.isConnected
+      connected = typeof isConnected === "function" ? !!isConnected.call(connection) : false
+    } catch (err) {
+      logger.warn("RabbitMQ health check could not read connection state", err)
+      connected = false
+    }
+
+    const verdict = evaluateRabbitHealth({ configured: true, connected })
+    updateDependencyHealth("RabbitMQ", verdict.status, 0, verdict.reason)
+    if (!verdict.ok) {
+      logger.warn(`[RABBITMQ] ${verdict.reason}`)
+    }
+    // Optional dependency: do not block startup, but report the true state.
     return true
   },
 }

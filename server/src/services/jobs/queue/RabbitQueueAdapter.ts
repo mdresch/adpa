@@ -384,6 +384,16 @@ export class RabbitQueueAdapter extends EventEmitter implements IQueue {
     return this.queueName
   }
 
+  /**
+   * Whether a consumer is currently attached and draining this queue.
+   * The consumer is set up asynchronously (when RabbitMQ connects), so this is false
+   * between process() being called and the deferred setup actually running.
+   * Used by the Workers startup health check to detect the "stuck at pending" failure.
+   */
+  isConsumerAttached(): boolean {
+    return this.consumerStarted && this.consumerTag !== null
+  }
+
   async close(): Promise<void> {
     try {
       if (this.consumerTag) {
