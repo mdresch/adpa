@@ -11,8 +11,11 @@ import { GeneralPurposeAgent } from '../modules/agents/GeneralPurposeAgent';
 import { globalToolRegistry } from '../modules/agents/ToolRegistry';
 import { logger } from '../utils/logger';
 import { streamingBus } from '../modules/agents/StreamingBus';
+import { agentRegistryService } from '../services/agents/AgentRegistry';
+import { agentOrchestrator, PMBOK_PROCESS_MAPPING } from '../services/agents/AgentOrchestrator';
 
 const router = Router();
+
 
 // This function will be called from server.ts to attach the socket.io server
 export function attachAgentRoutes(io: SocketIOServer) {
@@ -43,7 +46,32 @@ export function attachAgentRoutes(io: SocketIOServer) {
 }
 
 
+// --- Registry Endpoints ---
+
+router.get('/registry', (req: Request, res: Response) => {
+  try {
+    const agents = agentRegistryService.getAgents();
+    const relationships = Array.from(agentRegistryService.getRelationshipsForAgent('all') || []); // Simplified for this endpoint
+    
+    res.json({
+      success: true,
+      agents,
+      relationships,
+      processMapping: PMBOK_PROCESS_MAPPING,
+      metadata: {
+        totalAgents: agents.length,
+        governanceStandard: "PMBOK 6th Edition",
+        framework: "ADPA V7-STRICT"
+      }
+    });
+  } catch (error: any) {
+    logger.error('Failed to fetch consolidated registry:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // --- REST Endpoints ---
+
 
 // Fix: Creates a fresh agent per request to prevent state leakage
 router.post('/chat', async (req: Request, res: Response) => {
