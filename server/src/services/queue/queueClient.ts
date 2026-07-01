@@ -16,34 +16,65 @@ export const WORKER_ID = `worker-${process.pid}-${Date.now()}`
 
 // Rabbit connection and queue setup
 const RABBIT_URL = process.env.RABBITMQ_URL || "amqp://localhost"
+// Global fallback used by any queue without a dedicated *_PREFETCH override below.
 export const QUEUE_PREFETCH = parseInt(process.env.QUEUE_PREFETCH || "4", 10)
 
 export const connection = createRabbitConnection(RABBIT_URL)
+
+/**
+ * Per-queue prefetch override, e.g. AI_PROCESSING_PREFETCH=1.
+ * Falls back to QUEUE_PREFETCH so existing deployments keep working unchanged.
+ */
+function queuePrefetch(envVar: string, fallback: number): number {
+  const configured = parseInt(process.env[envVar] || "", 10)
+  return Number.isInteger(configured) && configured > 0 ? configured : fallback
+}
 
 export function createRabbitQueue(
   queueName: string,
   defaultAttempts: number,
   defaultBackoffMs: number,
-  options?: { maxLength?: number; dlqMaxLength?: number }
+  options?: { maxLength?: number; dlqMaxLength?: number; prefetch?: number }
 ) {
+  const { prefetch, ...rest } = options ?? {}
   return new RabbitQueueAdapter({
     connection,
     queueName,
-    prefetch: QUEUE_PREFETCH,
+    prefetch: prefetch ?? QUEUE_PREFETCH,
     defaultAttempts,
     defaultBackoffMs,
-    ...options,
+    ...rest,
   })
 }
 
-export const aiQueue = createRabbitQueue("ai-processing", 3, 2000)
-export const documentQueue = createRabbitQueue("document-processing", 2, 5000)
-export const documentUploadQueue = createRabbitQueue("document-upload", 3, 2000)
-export const pipelineQueue = createRabbitQueue("pipeline-processing", 3, 5000)
-export const baselineQueue = createRabbitQueue("baseline-processing", 2, 3000)
-export const processFlowQueue = createRabbitQueue("process-flow-processing", 2, 10000)
-export const regenerationQueue = createRabbitQueue("document-regeneration", 3, 3000)
-export const qualityAuditQueue = createRabbitQueue("quality-audit", 2, 3000)
+// Heavy queues (agentic LLM drafting, Puppeteer PDF/DOCX rendering, quality audits) get a
+// tighter default prefetch than lightweight queues, since each in-flight job on these holds
+// full document/GKG/RAG context (or a Chromium page) in memory for the job's duration.
+// All are still individually overridable per deployment size via the env vars below.
+export const aiQueue = createRabbitQueue("ai-processing", 3, 2000, {
+  prefetch: queuePrefetch("AI_PROCESSING_PREFETCH", 2),
+})
+export const documentQueue = createRabbitQueue("document-processing", 2, 5000, {
+  prefetch: queuePrefetch("DOCUMENT_PROCESSING_PREFETCH", 1),
+})
+export const documentUploadQueue = createRabbitQueue("document-upload", 3, 2000, {
+  prefetch: queuePrefetch("DOCUMENT_UPLOAD_PREFETCH", QUEUE_PREFETCH),
+})
+export const pipelineQueue = createRabbitQueue("pipeline-processing", 3, 5000, {
+  prefetch: queuePrefetch("PIPELINE_PROCESSING_PREFETCH", QUEUE_PREFETCH),
+})
+export const baselineQueue = createRabbitQueue("baseline-processing", 2, 3000, {
+  prefetch: queuePrefetch("BASELINE_PROCESSING_PREFETCH", 2),
+})
+export const processFlowQueue = createRabbitQueue("process-flow-processing", 2, 10000, {
+  prefetch: queuePrefetch("PROCESS_FLOW_PREFETCH", 2),
+})
+export const regenerationQueue = createRabbitQueue("document-regeneration", 3, 3000, {
+  prefetch: queuePrefetch("DOCUMENT_REGENERATION_PREFETCH", 2),
+})
+export const qualityAuditQueue = createRabbitQueue("quality-audit", 2, 3000, {
+  prefetch: queuePrefetch("QUALITY_AUDIT_PREFETCH", 2),
+})
 
 const extractionDlqMax = process.env.QUEUE_PROJECT_DATA_EXTRACTION_DLQ_MAX_LENGTH
   ? parseInt(process.env.QUEUE_PROJECT_DATA_EXTRACTION_DLQ_MAX_LENGTH, 10)
@@ -51,12 +82,23 @@ const extractionDlqMax = process.env.QUEUE_PROJECT_DATA_EXTRACTION_DLQ_MAX_LENGT
 
 export const extractionQueue = createRabbitQueue("project-data-extraction", 3, 5000, {
   dlqMaxLength: extractionDlqMax && extractionDlqMax > 0 ? extractionDlqMax : undefined,
+  prefetch: queuePrefetch("PROJECT_DATA_EXTRACTION_PREFETCH", 2),
 })
-export const confluenceQueue = createRabbitQueue("confluence-publishing", 3, 2000)
-export const digitalTwinEventQueue = createRabbitQueue("digital-twin-events", 3, 2000)
-export const digitalTwinTriggerQueue = createRabbitQueue("digital-twin-triggers", 3, 3000)
-export const gkgSyncQueue = createRabbitQueue("gkg-sync", 2, 5000)
-export const semanticProcessingQueue = createRabbitQueue("semantic-processing", 3, 5000)
+export const confluenceQueue = createRabbitQueue("confluence-publishing", 3, 2000, {
+  prefetch: queuePrefetch("CONFLUENCE_PUBLISHING_PREFETCH", QUEUE_PREFETCH),
+})
+export const digitalTwinEventQueue = createRabbitQueue("digital-twin-events", 3, 2000, {
+  prefetch: queuePrefetch("DIGITAL_TWIN_EVENTS_PREFETCH", QUEUE_PREFETCH),
+})
+export const digitalTwinTriggerQueue = createRabbitQueue("digital-twin-triggers", 3, 3000, {
+  prefetch: queuePrefetch("DIGITAL_TWIN_TRIGGERS_PREFETCH", QUEUE_PREFETCH),
+})
+export const gkgSyncQueue = createRabbitQueue("gkg-sync", 2, 5000, {
+  prefetch: queuePrefetch("GKG_SYNC_PREFETCH", QUEUE_PREFETCH),
+})
+export const semanticProcessingQueue = createRabbitQueue("semantic-processing", 3, 5000, {
+  prefetch: queuePrefetch("SEMANTIC_PROCESSING_PREFETCH", QUEUE_PREFETCH),
+})
 
 // Trace attachment (lightweight)
 const tracer = trace.getTracer("adpa-queue-service")
@@ -319,13 +361,32 @@ export async function initializeQueues(): Promise<void> {
       )
       
       if (recoveryResult.rows.length > 0) {
-        logger.info(`[QUEUE RECOVERY] Found ${recoveryResult.rows.length} orphaned jobs. Requeuing...`)
-        
+        logger.info(`[QUEUE RECOVERY] Found ${recoveryResult.rows.length} orphaned jobs. Recovering...`)
+        const { isNeverRequeueJob } = await import("../jobs/protectedQueues")
+
         for (const row of recoveryResult.rows) {
           try {
+            if (isNeverRequeueJob(row.queue_name, row.type)) {
+              // Generation jobs must NEVER be auto-requeued: re-publishing gives the job a
+              // brand new message with its retry/backoff counter reset to zero, and this
+              // runs on every process restart — so a persistently-failing job (bad provider
+              // config, network issue) gets endlessly re-attempted across restarts instead of
+              // exhausting its retry budget once. Each of those attempts can also mint its own
+              // duplicate downstream artifact (e.g. a fresh blank document). Park it instead;
+              // a human retries it deliberately from the Job Monitor UI.
+              await pool.query(
+                `UPDATE jobs SET status = 'stuck', worker_id = NULL,
+                  error_message = COALESCE(error_message, 'Orphaned on restart — protected queue, requires manual retry from Job Monitor')
+                 WHERE id = $1`,
+                [row.id]
+              )
+              logger.warn(`[QUEUE RECOVERY] Job ${row.id} on protected queue '${row.queue_name}' — parked as 'stuck', NOT auto-requeued.`)
+              continue
+            }
+
             // Requeue the job using the existing ID
             await queueService.addJob(row.type, row.data, { jobId: row.id })
-            
+
             // Mark the old stuck execution as reset/pending
             await pool.query(
               `UPDATE jobs SET status = 'pending', worker_id = NULL WHERE id = $1`,
@@ -335,7 +396,7 @@ export async function initializeQueues(): Promise<void> {
             logger.error(`[QUEUE RECOVERY] Failed to requeue orphaned job ${row.id}:`, requeueErr)
           }
         }
-        
+
         logger.info(`[QUEUE RECOVERY] Successfully recovered orphaned jobs.`)
       }
     }

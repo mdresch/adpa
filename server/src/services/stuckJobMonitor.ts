@@ -1,6 +1,7 @@
 import type { Pool } from 'pg'
 import { logger } from '../utils/logger'
 import { safeQuery, safeUpdate } from './jobs/dbGuards'
+import { isNeverRequeueJob } from './jobs/protectedQueues'
 const REQUEUE_ENABLED = (process.env.STUCK_JOB_REQUEUE || 'false').toLowerCase() === 'true'
 const MAX_REQUEUE = Number(process.env.STUCK_JOB_MAX_REQUEUE || 3)
 const ALERT_WEBHOOK = process.env.STUCK_JOB_ALERT_WEBHOOK || ''
@@ -133,18 +134,14 @@ export class StuckJobMonitor {
         //
         // Only short, idempotent jobs on non-generation queues may auto-requeue,
         // and only when STUCK_JOB_REQUEUE=true is explicitly set in .env.
-        const NEVER_REQUEUE_QUEUES = new Set([
-          'ai-processing',
-          'document-processing',
-          'document-regeneration',
-          'gkg-sync',
-          'project-data-extraction',
-        ])
-        const isNeverRequeueJob = NEVER_REQUEUE_QUEUES.has(row.queue_name) || 
-                                (typeof row.type === 'string' && row.type.startsWith('extract-entity-'))
-        const shouldRequeue = REQUEUE_ENABLED && !isNeverRequeueJob && stuckCount <= MAX_REQUEUE
+        //
+        // Protected queue list lives in ./jobs/protectedQueues so this policy stays in
+        // sync with the orphan-recovery path in queueClient.ts (initializeQueues) — the
+        // two used to diverge, which is how a near-identical runaway loop happened twice.
+        const isProtectedJob = isNeverRequeueJob(row.queue_name, row.type)
+        const shouldRequeue = REQUEUE_ENABLED && !isProtectedJob && stuckCount <= MAX_REQUEUE
 
-        if (isNeverRequeueJob) {
+        if (isProtectedJob) {
           logger.warn('[STUCK-JOB-MONITOR] Job on protected queue — will NOT auto-requeue. User must retry manually.', {
             jobId,
             queue: row.queue_name,
@@ -193,7 +190,7 @@ export class StuckJobMonitor {
           } catch (rqErr) {
             logger.error('[STUCK-JOB-MONITOR] Failed to requeue job', rqErr)
           }
-        } else if (REQUEUE_ENABLED && !isNeverRequeueJob) {
+        } else if (REQUEUE_ENABLED && !isProtectedJob) {
           logger.info('[STUCK-JOB-MONITOR] Requeue skipped because stuckCount exceeds MAX_REQUEUE', { jobId, stuckCount, max: MAX_REQUEUE })
         }
       } catch (err) {

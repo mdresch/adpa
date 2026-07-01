@@ -258,7 +258,31 @@ export class AIGenerationJobService {
       // Lazy import to avoid circular dependency at module load time
       const { documentGenerationService } = await Promise.resolve().then(() => require('../documentGenerationService'))
 
-      const docId = uuidv4()
+      // Reuse the document id from a prior attempt of this same job if one exists —
+      // documentGenerationService pre-inserts a draft row keyed by this id and its
+      // insert is idempotent (ON CONFLICT DO NOTHING), so reusing it means a retry
+      // resumes/overwrites the same draft instead of minting a brand new blank
+      // document every time this job gets reprocessed (queue redelivery, manual
+      // retry, etc). Persist it back onto the job row immediately so any future
+      // reprocessing of this same job id also sees it.
+      const docId = jobData.documentId || uuidv4()
+      if (!jobData.documentId) {
+        const jobIdForPersist = jobData.jobId || actualJobId
+        if (jobIdForPersist) {
+          try {
+            const db = deps?.database || { query: pool.query.bind(pool) } as any
+            await db.query(
+              `UPDATE jobs SET data = jsonb_set(COALESCE(data, '{}'::jsonb), '{documentId}', to_jsonb($1::text)) WHERE id = $2`,
+              [docId, jobIdForPersist]
+            )
+          } catch (persistErr) {
+            log.warn('[AIGenerationJobService] Failed to persist documentId onto job row (non-fatal)', {
+              jobId: jobIdForPersist,
+              error: persistErr instanceof Error ? persistErr.message : String(persistErr),
+            })
+          }
+        }
+      }
 
       const agenticResult = await documentGenerationService.generateDocument({
         jobId: jobData.jobId || actualJobId,
