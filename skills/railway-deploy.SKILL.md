@@ -20,6 +20,35 @@
 - User must run `railway login` once per machine before first deploy
 - Optionally **linked** to ADPA project (script can run `-LinkProject` if not)
 
+## Two-service topology (API + Worker split)
+
+`server/Procfile` defines two process types — this repo is no longer a single-service deploy:
+
+```
+web:    NODE_OPTIONS=--max-old-space-size=384 npm run start:api     (ADPA_PROCESS_ROLE=api)
+worker: NODE_OPTIONS=--max-old-space-size=320 npm run start:worker  (ADPA_PROCESS_ROLE=worker)
+```
+
+This was introduced to fix OOM crashes: previously `npm start` ran with no `ADPA_PROCESS_ROLE`
+(defaults to `all`), so one process ran the HTTP API **and** all 13 RabbitMQ queue consumers
+**and** Puppeteer/Chromium for PDF export — on a memory-constrained instance that's the
+`adpa-api-worker-split` skill's invariants being violated by the deploy config, not the code.
+
+**If Railway only has one service today**, create a second service pointed at this same repo:
+
+1. In the Railway dashboard, add a new service from the same GitHub repo/branch.
+2. Set its start command to the `worker` Procfile process (override to
+   `NODE_OPTIONS=--max-old-space-size=320 npm run start:worker` if Railway doesn't
+   auto-detect the second Procfile entry).
+3. Copy all env vars from the existing web service (`DATABASE_URL`, `RABBITMQ_URL`,
+   `REDIS_URL`, AI provider keys, etc.) — the worker needs the same secrets, just a
+   different process role.
+4. Verify the two services log differently: the api service should NOT log
+   "Registering queue consumers...", the worker service should log the
+   `[QUEUE] Registered ...` lines for all queues.
+
+See `adpa-api-worker-split` for the code-level invariants this enforces.
+
 ---
 
 ## Procedure
