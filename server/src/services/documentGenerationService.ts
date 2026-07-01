@@ -133,7 +133,9 @@ class DocumentGenerationService {
       return 1
     }
 
-    return 3
+    // Each concurrent section draft holds a full GKG/RAG context in memory for the
+    // job's duration; keep this low by default on memory-constrained deployments.
+    return 2
   }
 
   /**
@@ -168,6 +170,21 @@ class DocumentGenerationService {
       }
     }
     throw lastError
+  }
+
+  /**
+   * Enforces a hard wall-clock ceiling on a single LLM call so a hung provider request
+   * can't stall the whole generation job indefinitely. Default 90s, overridable via
+   * DOC_GEN_LLM_CALL_TIMEOUT_MS.
+   */
+  private async withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
+    const timeoutMs = Number(process.env.DOC_GEN_LLM_CALL_TIMEOUT_MS) || 90000
+    return Promise.race([
+      promise,
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`${label} timed out after ${Math.round(timeoutMs / 1000)}s`)), timeoutMs)
+      ),
+    ])
   }
 
   /**
@@ -400,7 +417,7 @@ class DocumentGenerationService {
 
   async generateDocument(request: DocumentGenerationRequest) {
     let isDocumentCreated = false;
-    const docId = request.documentId || uuidv4();
+    let docId = request.documentId || uuidv4();
     try {
       logger.info(`Starting agentic document generation for project ${request.projectId}`)
       
@@ -438,6 +455,34 @@ class DocumentGenerationService {
 
       // 2.3. Pre-insert a minimal/draft document row to satisfy foreign key constraints for entity extraction during parallel drafting
       const docName = request.name || (template?.name ? `Generated: ${template.name}` : 'Generated Document')
+
+      // Reuse an existing empty draft instead of minting a new one, unless docId already
+      // corresponds to a real row. NOTE: checking `!request.documentId` here is NOT enough —
+      // the caller (AIGenerationJobService.generateContent) always passes *some* documentId,
+      // whether it's a genuinely-reused one or a freshly minted uuid generated because its own
+      // reuse attempt found nothing (e.g. a prior crash meant the id was never persisted back
+      // onto the job row). So `request.documentId` is checked here for existence of an actual
+      // row, not mere presence of the field, before falling back to a fresh row.
+      const candidateRow = await pool.query(`SELECT 1 FROM documents WHERE id = $1`, [docId])
+      if (candidateRow.rows.length === 0) {
+        const existingDraft = await pool.query(
+          `SELECT id FROM documents
+           WHERE project_id = $1
+             AND template_id IS NOT DISTINCT FROM $2
+             AND created_by IS NOT DISTINCT FROM $3
+             AND status = 'draft'
+             AND (content IS NULL OR content = '')
+             AND created_at > NOW() - INTERVAL '2 hours'
+           ORDER BY created_at DESC
+           LIMIT 1`,
+          [request.projectId, request.templateId || null, request.userId || null]
+        )
+        if (existingDraft.rows.length > 0) {
+          docId = existingDraft.rows[0].id
+          logger.info(`[DOC-GEN] Reusing existing empty draft document ${docId} for project ${request.projectId} instead of creating a new one`)
+        }
+      }
+
       await pool.query(
         `INSERT INTO documents (id, project_id, name, content, template_id, status, created_by, version, semantic_version)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -616,6 +661,17 @@ class DocumentGenerationService {
         throw new Error("AI failed to return a valid document structure plan.")
       }
 
+      // Hard cap on planner sprawl for templates with no fixed structure — the planner
+      // prompt targets 4-6 sections, but this backstops non-compliant responses so a
+      // single generation can't balloon into an unbounded number of LLM calls.
+      if (this.getTemplateParagraphs(template).length === 0) {
+        const maxSections = Number(process.env.DOC_GEN_MAX_SECTIONS) || 6
+        if (generationPlan.sections.length > maxSections) {
+          logger.warn(`[AGENT] Plan proposed ${generationPlan.sections.length} sections for an unstructured template; capping to ${maxSections}.`)
+          generationPlan.sections = generationPlan.sections.slice(0, maxSections)
+        }
+      }
+
       logger.info(`[AGENT] Plan returned ${generationPlan.sections.length} required sections to draft.`)
 
       if (request.jobId) {
@@ -786,7 +842,7 @@ class DocumentGenerationService {
       
       let currentScore = 100
       let attempts = 0
-      const MAX_RETRIES = 3
+      const MAX_RETRIES = Number(process.env.DOC_GEN_AUDIT_MAX_RETRIES) || 1
       const auditLog: any[] = []
 
       while (attempts < MAX_RETRIES) {
@@ -972,7 +1028,7 @@ Your task is to take the provided draft and generate four recursive context comp
 ${summarySample}
 ---`
 
-        const compilationResult = await unifiedAIService.generateStructuredObject({
+        const compilationResult = await this.withTimeout(unifiedAIService.generateStructuredObject({
           prompt,
           provider: request.provider,
           model: request.model,
@@ -980,7 +1036,7 @@ ${summarySample}
           schema: finalizationSchema,
           max_tokens: 16000, // Large budget for summaries
           traceName: 'agentic-doc-finalization-compaction'
-        })
+        }), 'Generate multi-scale summaries')
 
         const payload = compilationResult.object
 
@@ -1337,9 +1393,9 @@ Based on the type of error encountered, please follow these steps to resolve the
     } else {
       const docType = params.template?.name || "unstructured document"
       plannerPrompt += `### Document Type: ${docType}\n`
-      plannerPrompt += `No pre-defined template structure is specified. Design a comprehensive, logical structure with as many sections as the document type and user request require. `
-      plannerPrompt += `For a Project Charter, Business Case, or similar governance document, aim for 10–18 sections covering all standard components. `
-      plannerPrompt += `Choose logical headings appropriate for a ${params.project.framework} document, covering background, objectives, scope, stakeholders, risks, budget, timeline, governance, and any other relevant areas.`
+      plannerPrompt += `No pre-defined template structure is specified. Design a compact, logical structure covering only the most essential components. `
+      plannerPrompt += `Aim for 4–6 sections — merge closely related topics into one section rather than splitting them out (e.g. combine risks and constraints, or budget and timeline, where they naturally overlap). `
+      plannerPrompt += `Choose logical headings appropriate for a ${params.project.framework} document, covering background, objectives, scope, stakeholders, risks, budget, timeline, governance, and any other relevant areas — but stay within the section budget above.`
       plannerPrompt += `\n\n`
     }
 
@@ -1351,7 +1407,7 @@ Based on the type of error encountered, please follow these steps to resolve the
     let responseText: string = "";
 
     try {
-      const result = await unifiedAIService.generateStructuredObject({
+      const result = await this.withTimeout(unifiedAIService.generateStructuredObject({
         prompt: plannerPrompt,
         provider: params.provider,
         model: params.model,
@@ -1361,7 +1417,7 @@ Based on the type of error encountered, please follow these steps to resolve the
         projectId: params.projectId,
         userId: params.userId,
         template_id: params.templateId,
-      })
+      }), 'Plan document structure')
       resultObject = result.object
       responseText = JSON.stringify(result.object, null, 2);
     } catch (e: any) {
@@ -1674,7 +1730,7 @@ Based on the type of error encountered, please follow these steps to resolve the
     
     try {
       const aiResponse = await this.retryOnRateLimit(
-        () => unifiedAIService.generate({
+        () => this.withTimeout(unifiedAIService.generate({
           prompt: sectionPrompt,
           provider: params.provider,
           model: params.model,
@@ -1684,7 +1740,7 @@ Based on the type of error encountered, please follow these steps to resolve the
           projectId: params.projectId,
           userId: params.userId,
           template_id: params.templateId,
-        }),
+        }), `Draft Section ${params.order + 1} (${params.task.heading})`),
         3,
         `Draft Section ${params.order + 1} (${params.task.heading})`
       )
@@ -1989,14 +2045,14 @@ ${auditSample}
     })
 
     try {
-      const result = await unifiedAIService.generateStructuredObject({
+      const result = await this.withTimeout(unifiedAIService.generateStructuredObject({
         prompt,
         provider: provider || 'default',
         model,
         temperature: 0.1,
         schema: auditSchema,
         traceName: 'agentic-policy-audit'
-      })
+      }), 'Audit document against policies')
       
       const payload = result.object
       
@@ -2151,7 +2207,7 @@ ${patchDocSample}
     })
 
     try {
-      const result = await unifiedAIService.generateStructuredObject({
+      const result = await this.withTimeout(unifiedAIService.generateStructuredObject({
         prompt,
         provider: provider || 'default',
         model,
@@ -2159,7 +2215,7 @@ ${patchDocSample}
         schema: patchSchema,
         max_tokens: 16000, // Large budget for patches
         traceName: 'agentic-policy-patch'
-      })
+      }), 'Patch document')
 
       const payload = result.object
       let patched = markdown
