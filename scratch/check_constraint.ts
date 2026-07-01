@@ -1,4 +1,4 @@
-import { pool } from './server/src/database/connection.ts';
+import { pool } from '../server/src/database/connection.ts';
 
 async function checkConstraint() {
   try {
