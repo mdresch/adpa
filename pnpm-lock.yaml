@@ -551,8 +551,8 @@ importers:
         specifier: ^7.1.0
         version: 7.1.0(socks@2.8.7)
       multer:
-        specifier: '>=2.1.1'
-        version: 2.1.1
+        specifier: ^2.2.0
+        version: 2.2.0
       neo4j-driver:
         specifier: latest
         version: 6.2.0
@@ -1095,8 +1095,8 @@ importers:
         specifier: ^7.1.0
         version: 7.1.0(socks@2.8.7)
       multer:
-        specifier: ^2.1.1
-        version: 2.1.1
+        specifier: ^2.2.0
+        version: 2.2.0
       neo4j-driver:
         specifier: ^5.28.0
         version: 5.28.3
@@ -10660,8 +10660,8 @@ packages:
   msgpackr@2.0.4:
     resolution: {integrity: sha512-o1C5KRmuRt+apqMr1HuGSqWStZoRBUpEsCsl15uM9VdAF1qHLtvMOU2En747EnTyEl6c4pzPewRMFF31s1CNbA==}
 
-  multer@2.1.1:
-    resolution: {integrity: sha512-mo+QTzKlx8R7E5ylSXxWzGoXoZbOsRMpyitcht8By2KHvMbf3tjwosZ/Mu/XYU6UuJ3VZnODIrak5ZrPiPyB6A==}
+  multer@2.2.0:
+    resolution: {integrity: sha512-6rdyFg2kLrMh9Jee7/BMPuV9lEAd7lLW2YUpF9/YxR7njyoUwwQ0ZPh3TaIY50Sw6vlyD2HW3wGOkTS4P79xrQ==}
     engines: {node: '>= 10.16.0'}
 
   mustache@4.2.0:
@@ -25384,7 +25384,7 @@ snapshots:
     optionalDependencies:
       msgpackr-extract: 3.0.4
 
-  multer@2.1.1:
+  multer@2.2.0:
     dependencies:
       append-field: 1.0.0
       busboy: 1.6.0
