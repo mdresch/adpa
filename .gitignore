@@ -210,6 +210,10 @@ scripts/*.log
 # Local logs
 logs/
 
+# Local MinIO data and ad-hoc screenshots (not tracked, per team decision)
+minio/
+screenshots/
+
 
 #Ignore vscode AI rules
 .github\instructions\codacy.instructions.md
