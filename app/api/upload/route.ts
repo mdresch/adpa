@@ -1,9 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import {
+    BlobServiceClient,
+    StorageSharedKeyCredential,
+    generateBlobSASQueryParameters,
+    BlobSASPermissions,
+} from '@azure/storage-blob'
+import { getAuthenticatedUser } from '@/lib/auth-utils'
 import { v4 as uuidv4 } from 'uuid'
 
 // Limit file size (e.g. 10MB)
 const MAX_FILE_SIZE = 10 * 1024 * 1024
+const CONTAINER_NAME = process.env.AZURE_STORAGE_UPLOADS_CONTAINER || 'morphic-uploads'
+const SAS_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
+
+function getBlobServiceClient(): BlobServiceClient {
+    const connectionString = process.env.AZURE_STORAGE_CONNECTION_STRING
+    if (connectionString) {
+        return BlobServiceClient.fromConnectionString(connectionString)
+    }
+
+    const accountName = process.env.AZURE_STORAGE_ACCOUNT_NAME
+    const accountKey = process.env.AZURE_STORAGE_ACCOUNT_KEY
+    if (!accountName || !accountKey) {
+        throw new Error('Azure Storage is not configured (set AZURE_STORAGE_CONNECTION_STRING or AZURE_STORAGE_ACCOUNT_NAME/AZURE_STORAGE_ACCOUNT_KEY)')
+    }
+    const credential = new StorageSharedKeyCredential(accountName, accountKey)
+    return new BlobServiceClient(`https://${accountName}.blob.core.windows.net`, credential)
+}
 
 export async function POST(req: NextRequest) {
     try {
@@ -19,55 +42,45 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'File too large' }, { status: 400 })
         }
 
-        const supabase = await createClient()
-
-        // Try Supabase auth first, then fall back to Bearer token verification
-        let userId: string | null = null
-        const { data: { user } } = await supabase.auth.getUser()
-        
-        if (user) {
-            userId = user.id
-        } else {
-            // Try Bearer token from header (for users authenticated via backend JWT)
-            const authHeader = req.headers.get('authorization')
-            if (authHeader?.startsWith('Bearer ')) {
-                // For now, allow upload with any bearer token - consider validating against backend
-                // Extract user ID from token or use a temp ID
-                userId = 'authenticated'
-            }
-        }
-        
-        if (!userId) {
+        const user = await getAuthenticatedUser(req)
+        if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
-        const bucket = 'morphic_uploads'
         // Sanitize filename
         const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_')
-        const fileName = `${userId}/${chatId}/${uuidv4()}-${safeName}`
+        const blobName = `${user.id}/${chatId}/${uuidv4()}-${safeName}`
 
-        const { data, error } = await supabase.storage
-            .from(bucket)
-            .upload(fileName, file, {
-                upsert: false,
-                contentType: file.type
-            })
+        const blobServiceClient = getBlobServiceClient()
+        const containerClient = blobServiceClient.getContainerClient(CONTAINER_NAME)
+        const blockBlobClient = containerClient.getBlockBlobClient(blobName)
 
-        if (error) {
-            console.error('Supabase upload error:', error)
-            return NextResponse.json({ error: error.message }, { status: 500 })
+        const buffer = Buffer.from(await file.arrayBuffer())
+        await blockBlobClient.uploadData(buffer, {
+            blobHTTPHeaders: { blobContentType: file.type },
+        })
+
+        const credential = blobServiceClient.credential
+        let url = blockBlobClient.url
+        if (credential instanceof StorageSharedKeyCredential) {
+            const sasToken = generateBlobSASQueryParameters(
+                {
+                    containerName: CONTAINER_NAME,
+                    blobName,
+                    permissions: BlobSASPermissions.parse('r'),
+                    startsOn: new Date(),
+                    expiresOn: new Date(Date.now() + SAS_TTL_MS),
+                },
+                credential
+            ).toString()
+            url = `${blockBlobClient.url}?${sasToken}`
         }
-
-        // Get public URL
-        const { data: { publicUrl } } = supabase.storage
-            .from(bucket)
-            .getPublicUrl(data.path)
 
         return NextResponse.json({
             file: {
-                url: publicUrl,
+                url,
                 name: file.name,
-                key: data.path,
+                key: blobName,
             }
         })
 

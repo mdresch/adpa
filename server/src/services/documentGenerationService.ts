@@ -352,8 +352,14 @@ class DocumentGenerationService {
   private async ensureSourceDocumentsIngested(documentIds: string[]): Promise<void> {
     if (!documentIds.length || !process.env.VOYAGE_API_KEY) return
 
+    const staleIds = await this.filterAlreadySyncedDocumentIds(documentIds)
+    if (staleIds.length === 0) {
+      logger.info(`[DOC-GEN] Skipping RAG ingest — all ${documentIds.length} source document(s) already synced`)
+      return
+    }
+
     const { ragService } = await Promise.resolve().then(() => require('./ragService'))
-    for (const documentId of documentIds) {
+    await this.mapWithConcurrency(staleIds, 3, async (documentId) => {
       try {
         const result = await ragService.ingestDocument(documentId)
         logger.info(`[DOC-GEN] RAG ingest for source document ${documentId}: ${result.chunks} chunks`)
@@ -362,7 +368,28 @@ class DocumentGenerationService {
           error: err instanceof Error ? err.message : String(err),
         })
       }
+    })
+  }
+
+  /** Drop documents that are already RAG-synced and haven't changed since their last ingest. */
+  private async filterAlreadySyncedDocumentIds(documentIds: string[]): Promise<string[]> {
+    const rows = await pool.query(
+      `SELECT id, sync_status, processing_time, updated_at
+       FROM documents
+       WHERE id = ANY($1::uuid[])`,
+      [documentIds]
+    )
+
+    const staleIds: string[] = []
+    for (const row of rows.rows as Array<{ id: string; sync_status: string | null; processing_time: string | null; updated_at: string | Date }>) {
+      const lastSyncedAt = row.processing_time ? new Date(row.processing_time) : null
+      const updatedAt = new Date(row.updated_at)
+      const isUpToDate = row.sync_status === 'synced' && lastSyncedAt && !Number.isNaN(lastSyncedAt.getTime()) && lastSyncedAt >= updatedAt
+      if (!isUpToDate) {
+        staleIds.push(row.id)
+      }
     }
+    return staleIds
   }
 
   private async mapWithConcurrency<T, R>(

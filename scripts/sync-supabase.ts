@@ -4,8 +4,13 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 // --- CONFIGURATION ---
-const SUPABASE_URL = "postgresql://postgres.blxzjbxczpmmgiwbtmdo:QueIQ4ADPA$@aws-1-us-east-1.pooler.supabase.com:6543/postgres?sslmode=require";
-const LOCAL_URL = "postgresql://myuser:mypassword@localhost:5432/adpa?sslmode=disable";
+// TODO: rotate the Supabase database password (this script previously hardcoded the old one in plaintext).
+const SUPABASE_URL = process.env.SUPABASE_SYNC_SOURCE_URL;
+const LOCAL_URL = process.env.SUPABASE_SYNC_LOCAL_URL || "postgresql://myuser:mypassword@localhost:5432/adpa?sslmode=disable";
+
+if (!SUPABASE_URL) {
+  throw new Error('SUPABASE_SYNC_SOURCE_URL must be set (no hardcoded credential fallback).');
+}
 
 // Tables to sync
 const TABLES_TO_SYNC = [

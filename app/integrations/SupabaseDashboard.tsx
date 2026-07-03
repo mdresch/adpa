@@ -62,7 +62,7 @@ interface SupabaseStats {
             name: string;
             status: string;
             description: string;
-            url: string;
+            url: string | null;
             stats?: EdgeFunctionStats;
         }>;
     };
@@ -288,7 +288,7 @@ export function SupabaseDashboard({ integrationId }: SupabaseDashboardProps) {
                                             <FileCode className="h-5 w-5 text-emerald-600" />
                                             {func.name}
                                         </CardTitle>
-                                        <Badge variant={func.status === 'deployed' ? 'default' : 'secondary'}>
+                                        <Badge variant={func.status === 'deployed' ? 'default' : func.status === 'removed' ? 'destructive' : 'secondary'}>
                                             {func.status}
                                         </Badge>
                                     </div>
@@ -296,10 +296,12 @@ export function SupabaseDashboard({ integrationId }: SupabaseDashboardProps) {
                                 </CardHeader>
                                 <CardContent>
                                     <div className="space-y-3">
-                                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                            <Code className="h-4 w-4" />
-                                            <code className="text-xs">{func.url}</code>
-                                        </div>
+                                        {func.url && (
+                                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                <Code className="h-4 w-4" />
+                                                <code className="text-xs">{func.url}</code>
+                                            </div>
+                                        )}
 
                                         {/* RAG Function Stats */}
                                         {func.name === 'ingest-for-rag' && func.stats && (
@@ -432,19 +434,19 @@ export function SupabaseDashboard({ integrationId }: SupabaseDashboardProps) {
                                 <span className="text-muted-foreground">RAG Ingestion:</span>
                                 <div className="flex items-center gap-2">
                                     <CheckCircle2 className="h-4 w-4 text-green-500" />
-                                    <span>ingest-for-rag deployed</span>
+                                    <span>ingest-for-rag migrated to Node ragService</span>
                                 </div>
                             </div>
                             <div className="flex items-center justify-between">
                                 <span className="text-muted-foreground">Entity Extraction:</span>
                                 <div className="flex items-center gap-2">
-                                    <CheckCircle2 className="h-4 w-4 text-green-500" />
-                                    <span>entity-extractor deployed</span>
+                                    <AlertCircle className="h-4 w-4 text-amber-500" />
+                                    <span>entity-extractor removed (stub only)</span>
                                 </div>
                             </div>
                             <div className="flex items-center justify-between border-t pt-2 mt-2">
                                 <span className="text-muted-foreground italic">
-                                    Note: Edge Functions process documents asynchronously
+                                    Note: both were originally Supabase Edge Functions; entity extraction has no working replacement yet
                                 </span>
                             </div>
                         </CardContent>

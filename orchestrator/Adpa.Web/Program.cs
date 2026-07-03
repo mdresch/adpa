@@ -1,5 +1,3 @@
-using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
 using Adpa.Web.Components;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -19,23 +17,7 @@ if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ASPNETCORE_HTT
 builder.AddServiceDefaults();
 
 // ---------------------------------------------------------------------------
-// 2. Authentication (Governor Management Identity)
-// ---------------------------------------------------------------------------
-
-builder.Services.AddAuthentication(options =>
-    {
-        options.DefaultScheme = IdentityConstants.ApplicationScheme;
-        options.DefaultSignInScheme = IdentityConstants.ExternalScheme;
-    })
-    .AddIdentityCookies();
-
-builder.Services.AddIdentityCore<IdentityUser>(options => options.SignIn.RequireConfirmedAccount = true)
-    .AddEntityFrameworkStores<DbContext>() // This would be the GovernanceDbContext
-    .AddSignInManager()
-    .AddDefaultTokenProviders();
-
-// ---------------------------------------------------------------------------
-// 3. ApiService Bridge (Orchestrator Client)
+// 2. ApiService Bridge (Orchestrator Client)
 // ---------------------------------------------------------------------------
 
 builder.Services.AddHttpClient("api", client => 
@@ -45,7 +27,7 @@ builder.Services.AddHttpClient("api", client =>
 });
 
 // ---------------------------------------------------------------------------
-// 4. Web Interface Infrastructure (Blazor)
+// 3. Web Interface Infrastructure (Blazor)
 // ---------------------------------------------------------------------------
 
 builder.Services.AddRazorComponents()
@@ -54,7 +36,7 @@ builder.Services.AddRazorComponents()
 var app = builder.Build();
 
 // ---------------------------------------------------------------------------
-// 5. Middleware & Endpoints
+// 4. Middleware & Endpoints
 // ---------------------------------------------------------------------------
 
 app.MapDefaultEndpoints();

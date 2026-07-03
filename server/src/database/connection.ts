@@ -144,11 +144,12 @@ export function isTransactionPoolerUrl(databaseUrl: string): boolean {
     const dbUrl = new URL(databaseUrl)
     return (
       dbUrl.port === "6543" ||
+      dbUrl.port === "6432" ||
       dbUrl.searchParams.has("pgbouncer") ||
       dbUrl.hostname.includes("pooler.supabase.com")
     )
   } catch {
-    return databaseUrl.includes(":6543") || databaseUrl.includes("pooler.supabase.com")
+    return databaseUrl.includes(":6543") || databaseUrl.includes(":6432") || databaseUrl.includes("pooler.supabase.com")
   }
 }
 

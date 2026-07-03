@@ -30,9 +30,10 @@ function getDb() {
             : { rejectUnauthorized: false }
 
     // Force SSL for local development if not explicitly disabled or if remote host detected
-    const isRemoteDb = connectionString?.includes('rlwy.net') || 
-                       connectionString?.includes('supabase') || 
-                       connectionString?.includes('pooler.supabase.com');
+    const isRemoteDb = connectionString?.includes('rlwy.net') ||
+                       connectionString?.includes('supabase') ||
+                       connectionString?.includes('pooler.supabase.com') ||
+                       connectionString?.includes('.postgres.database.azure.com');
     const isLocal = connectionString?.includes('localhost') || connectionString?.includes('127.0.0.1');
 
     const finalSslConfig = (isRemoteDb || (isDevelopment && process.env.DATABASE_SSL_DISABLED !== 'true')) && !isLocal

@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
-import { FileText, Plus, Edit, Copy, Archive, Download, Upload, Search, Filter, Minus, Wand2, Brain, Sparkles, Eye, Network } from "lucide-react"
+import { FileText, Plus, Edit, Copy, Archive, Download, Upload, Search, Filter, Minus, Wand2, Brain, Sparkles, Eye, Network, Activity } from "lucide-react"
 import { toast } from '@/lib/notify'
 import { apiClient, Template } from "@/lib/api"
 import {
@@ -488,6 +488,10 @@ export default function Templates() {
                 </p>
               </div>
               <div className="flex space-x-2">
+                <Button variant="outline" onClick={() => router.push('/templates/dashboard')}>
+                  <Activity className="h-4 w-4 mr-2" />
+                  Control Center
+                </Button>
                 <Button variant="outline">
                   <Upload className="h-4 w-4 mr-2" />
                   Import Template
