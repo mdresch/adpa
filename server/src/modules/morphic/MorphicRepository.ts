@@ -9,7 +9,6 @@ import { childLogger } from "../../utils/logger"
  */
 export class MorphicRepository {
     private static _pool: Pool | null = null;
-    private static _preferMainFallback = false;
     private log = childLogger({ module: 'MorphicRepository' });
 
     /**
@@ -148,103 +147,50 @@ export class MorphicRepository {
     }
 
     /**
-     * Get the active database pool, falling back to main DB if Morphic DB is unavailable.
+     * Get the active database pool for the dedicated Morphic database.
+     *
+     * This intentionally never falls back to the main ADPA database (DATABASE_URL):
+     * chat data must stay in its designated database. If MORPHIC_DATABASE_URL is
+     * unavailable, callers should see a hard failure (surfaced via the "Morphic DB"
+     * health check) rather than have chats silently written to the wrong database.
      */
     private async getPool() {
         if (MorphicRepository._pool) return MorphicRepository._pool;
 
         let morphicUrl = process.env.MORPHIC_DATABASE_URL || process.env.MORPHIC_DB_URL;
-        const mainUrl = process.env.DATABASE_URL;
 
-        if (morphicUrl && !MorphicRepository._preferMainFallback) {
-            // Trim quotes
-            morphicUrl = morphicUrl.replace(/^["']|["']$/g, '');
-            
-            // Force SSL for remote hosts or if explicitly enabled
-            const isRemote = (morphicUrl.includes('rlwy.net') || morphicUrl.includes('supabase') || morphicUrl.includes('pooler.supabase.com') || morphicUrl.includes('azure')) && 
-                             !morphicUrl.includes('localhost') && !morphicUrl.includes('127.0.0.1');
-
-            const sslConfig = isRemote || process.env.MORPHIC_DB_SSL === 'true'
-                ? buildSslConfig(morphicUrl)
-                : false
-
-            try {
-                MorphicRepository._pool = new Pool({
-                    connectionString: stripLibpqSslQueryParams(morphicUrl),
-                    ssl: sslConfig,
-                    max: 10,
-                    idleTimeoutMillis: 10000,
-                    connectionTimeoutMillis: 5000
-                });
-                return MorphicRepository._pool;
-            } catch (err) {
-                this.log.warn('Failed to initialize Morphic DB pool, falling back to main DB');
-            }
+        if (!morphicUrl) {
+            throw new Error('MORPHIC_DATABASE_URL is not configured; refusing to fall back to the main database');
         }
 
-        if (mainUrl) {
-            const trimmedMainUrl = mainUrl.replace(/^["']|["']$/g, '')
-            MorphicRepository._pool = new Pool({
-                connectionString: stripLibpqSslQueryParams(trimmedMainUrl),
-                ssl: buildSslConfig(trimmedMainUrl),
-                max: 5
-            });
-            this.log.info('Morphic repository using main database as fallback');
-            return MorphicRepository._pool;
-        }
+        // Trim quotes
+        morphicUrl = morphicUrl.replace(/^["']|["']$/g, '');
 
-        throw new Error('No database connection available');
+        // Force SSL for remote hosts or if explicitly enabled
+        const isRemote = (morphicUrl.includes('rlwy.net') || morphicUrl.includes('supabase') || morphicUrl.includes('pooler.supabase.com') || morphicUrl.includes('azure')) &&
+                         !morphicUrl.includes('localhost') && !morphicUrl.includes('127.0.0.1');
+
+        const sslConfig = isRemote || process.env.MORPHIC_DB_SSL === 'true'
+            ? buildSslConfig(morphicUrl)
+            : false
+
+        MorphicRepository._pool = new Pool({
+            connectionString: stripLibpqSslQueryParams(morphicUrl),
+            ssl: sslConfig,
+            max: 10,
+            idleTimeoutMillis: 10000,
+            connectionTimeoutMillis: 5000
+        });
+        return MorphicRepository._pool;
     }
 
     /**
-     * Execute a query with automatic fallback if the primary DB fails.
+     * Execute a query against the dedicated Morphic database.
      */
     private async query(text: string, params?: any[]) {
-        try {
-            const pool = await this.getPool();
-            const result = await pool.query(text, params);
-            return result.rows;
-        } catch (error: any) {
-            const errorCode = String(error?.code || '').toUpperCase();
-            const errorMessage = String(error?.message || '');
-            const causeCode = String(error?.cause?.code || '').toUpperCase();
-            const causeMessage = String(error?.cause?.message || '');
-
-            // Check for connection related errors (including nested Drizzle/pg causes).
-            const isConnectionError =
-                errorMessage.includes('terminated') ||
-                errorMessage.includes('ECONNRESET') ||
-                errorMessage.includes('ECONNREFUSED') ||
-                errorMessage.includes('expired') ||
-                errorMessage.includes('ETIMEDOUT') ||
-                errorMessage.includes('ENOTFOUND') ||
-                causeMessage.includes('terminated') ||
-                causeMessage.includes('ECONNRESET') ||
-                causeMessage.includes('ECONNREFUSED') ||
-                causeMessage.includes('ETIMEDOUT') ||
-                causeMessage.includes('ENOTFOUND') ||
-                errorCode === 'ECONNRESET' ||
-                errorCode === 'ECONNREFUSED' ||
-                errorCode === 'ETIMEDOUT' ||
-                errorCode === 'ENOTFOUND' ||
-                causeCode === 'ECONNRESET' ||
-                causeCode === 'ECONNREFUSED' ||
-                causeCode === 'ETIMEDOUT' ||
-                causeCode === 'ENOTFOUND';
-
-            if (isConnectionError && process.env.MORPHIC_DATABASE_URL) {
-                this.log.warn('Morphic DB connection failed, attempting fallback to main DB...', error.message);
-                
-                // Reset pool and force main DB fallback for this process lifetime.
-                // Otherwise getPool() would keep reselecting MORPHIC_DATABASE_URL and loop-failing.
-                MorphicRepository._preferMainFallback = true;
-                MorphicRepository._pool = null;
-                const pool = await this.getPool();
-                const result = await pool.query(text, params);
-                return result.rows;
-            }
-            throw error;
-        }
+        const pool = await this.getPool();
+        const result = await pool.query(text, params);
+        return result.rows;
     }
 
     /**
