@@ -1,8 +1,10 @@
 -- Governance Domain Entities
 
 -- Governance Decisions
-DROP TABLE IF EXISTS governance_decisions CASCADE;
-CREATE TABLE governance_decisions (
+-- (DROP TABLE removed: governance_decisions already exists from server/migrations/000_baseline.sql or a later
+-- server/migrations/*.sql alter; dropping it here silently destroyed richer
+-- production schema/data. CREATE TABLE IF NOT EXISTS below is a safe no-op.)
+CREATE TABLE IF NOT EXISTS governance_decisions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   decision_id VARCHAR(100), -- ID extracted from doc
@@ -22,8 +24,10 @@ CREATE TABLE governance_decisions (
 CREATE INDEX IF NOT EXISTS idx_governance_decisions_project_id ON governance_decisions(project_id);
 
 -- Approval Workflows
-DROP TABLE IF EXISTS approval_workflows CASCADE;
-CREATE TABLE approval_workflows (
+-- (DROP TABLE removed: approval_workflows already exists from server/migrations/000_baseline.sql or a later
+-- server/migrations/*.sql alter; dropping it here silently destroyed richer
+-- production schema/data. CREATE TABLE IF NOT EXISTS below is a safe no-op.)
+CREATE TABLE IF NOT EXISTS approval_workflows (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   name VARCHAR(255) NOT NULL,
@@ -42,8 +46,10 @@ CREATE TABLE approval_workflows (
 CREATE INDEX IF NOT EXISTS idx_approval_workflows_project_id ON approval_workflows(project_id);
 
 -- Steering Committees
-DROP TABLE IF EXISTS steering_committees CASCADE;
-CREATE TABLE steering_committees (
+-- (DROP TABLE removed: steering_committees already exists from server/migrations/000_baseline.sql or a later
+-- server/migrations/*.sql alter; dropping it here silently destroyed richer
+-- production schema/data. CREATE TABLE IF NOT EXISTS below is a safe no-op.)
+CREATE TABLE IF NOT EXISTS steering_committees (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   name VARCHAR(255) NOT NULL,
@@ -60,8 +66,10 @@ CREATE TABLE steering_committees (
 CREATE INDEX IF NOT EXISTS idx_steering_committees_project_id ON steering_committees(project_id);
 
 -- Change Control Boards
-DROP TABLE IF EXISTS change_control_boards CASCADE;
-CREATE TABLE change_control_boards (
+-- (DROP TABLE removed: change_control_boards already exists from server/migrations/000_baseline.sql or a later
+-- server/migrations/*.sql alter; dropping it here silently destroyed richer
+-- production schema/data. CREATE TABLE IF NOT EXISTS below is a safe no-op.)
+CREATE TABLE IF NOT EXISTS change_control_boards (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   name VARCHAR(255) NOT NULL,
@@ -77,8 +85,10 @@ CREATE TABLE change_control_boards (
 CREATE INDEX IF NOT EXISTS idx_change_control_boards_project_id ON change_control_boards(project_id);
 
 -- Policy Compliance
-DROP TABLE IF EXISTS policy_compliance CASCADE;
-CREATE TABLE policy_compliance (
+-- (DROP TABLE removed: policy_compliance already exists from server/migrations/000_baseline.sql or a later
+-- server/migrations/*.sql alter; dropping it here silently destroyed richer
+-- production schema/data. CREATE TABLE IF NOT EXISTS below is a safe no-op.)
+CREATE TABLE IF NOT EXISTS policy_compliance (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   policy_name VARCHAR(255) NOT NULL,

@@ -21,6 +21,9 @@ CREATE TABLE IF NOT EXISTS risk_responses (
     updated_by UUID REFERENCES users(id)
 );
 
+-- Reconcile with production schema (baseline) which lacks these columns
+ALTER TABLE risk_responses ADD COLUMN IF NOT EXISTS source_document VARCHAR(255);
+
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_risk_responses_project_id ON risk_responses(project_id);
 CREATE INDEX IF NOT EXISTS idx_risk_responses_risk_title ON risk_responses(risk_title);
@@ -37,6 +40,7 @@ BEGIN
 END;
 $BODY$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_update_risk_responses_updated_at ON risk_responses;
 CREATE TRIGGER trigger_update_risk_responses_updated_at
     BEFORE UPDATE ON risk_responses
     FOR EACH ROW

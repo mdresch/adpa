@@ -7,7 +7,7 @@ DO $$
 BEGIN
     -- Add benefit_name if missing
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'benefit_realization_plan' AND column_name = 'benefit_name') THEN
-        ALTER TABLE public."benefit_realization_plan" ADD COLUMN "benefit_name" character varying(255);
+        ALTER TABLE public."benefit_realization_plan" ADD COLUMN IF NOT EXISTS "benefit_name" character varying(255);
         -- Copy data from benefit_description if possible (for existing records)
         UPDATE public."benefit_realization_plan" SET "benefit_name" = COALESCE(SUBSTRING("benefit_description" FROM 1 FOR 255), 'Unnamed benefit') WHERE "benefit_name" IS NULL;
         -- Set to NOT NULL once populated
@@ -16,12 +16,12 @@ BEGIN
 
     -- Add strategic_alignment if missing
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'benefit_realization_plan' AND column_name = 'strategic_alignment') THEN
-        ALTER TABLE public."benefit_realization_plan" ADD COLUMN "strategic_alignment" text;
+        ALTER TABLE public."benefit_realization_plan" ADD COLUMN IF NOT EXISTS "strategic_alignment" text;
     END IF;
 
     -- Add actual_value if missing
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'benefit_realization_plan' AND column_name = 'actual_value') THEN
-        ALTER TABLE public."benefit_realization_plan" ADD COLUMN "actual_value" numeric;
+        ALTER TABLE public."benefit_realization_plan" ADD COLUMN IF NOT EXISTS "actual_value" numeric;
     END IF;
 END $$;
 
@@ -29,7 +29,7 @@ END $$;
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'business_case_details' AND column_name = 'idempotency_key') THEN
-        ALTER TABLE public."business_case_details" ADD COLUMN "idempotency_key" character varying(64);
+        ALTER TABLE public."business_case_details" ADD COLUMN IF NOT EXISTS "idempotency_key" character varying(64);
         CREATE INDEX IF NOT EXISTS "idx_business_case_idempotency" ON public.business_case_details("idempotency_key");
     END IF;
 END $$;

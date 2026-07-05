@@ -1,8 +1,10 @@
 -- Resource Domain Entities
 
 -- Resource Plans
-DROP TABLE IF EXISTS resource_plans CASCADE;
-CREATE TABLE resource_plans (
+-- (DROP TABLE removed: resource_plans already exists from server/migrations/000_baseline.sql or a later
+-- server/migrations/*.sql alter; dropping it here silently destroyed richer
+-- production schema/data. CREATE TABLE IF NOT EXISTS below is a safe no-op.)
+CREATE TABLE IF NOT EXISTS resource_plans (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   resource_description TEXT,
@@ -21,8 +23,10 @@ CREATE TABLE resource_plans (
 CREATE INDEX IF NOT EXISTS idx_resource_plans_project_id ON resource_plans(project_id);
 
 -- Roles and Responsibilities (RACI)
-DROP TABLE IF EXISTS roles_and_responsibilities CASCADE;
-CREATE TABLE roles_and_responsibilities (
+-- (DROP TABLE removed: roles_and_responsibilities already exists from server/migrations/000_baseline.sql or a later
+-- server/migrations/*.sql alter; dropping it here silently destroyed richer
+-- production schema/data. CREATE TABLE IF NOT EXISTS below is a safe no-op.)
+CREATE TABLE IF NOT EXISTS roles_and_responsibilities (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   role_name VARCHAR(255) NOT NULL,
@@ -39,8 +43,10 @@ CREATE TABLE roles_and_responsibilities (
 CREATE INDEX IF NOT EXISTS idx_roles_responsibilities_project_id ON roles_and_responsibilities(project_id);
 
 -- Team Availability
-DROP TABLE IF EXISTS team_availability CASCADE;
-CREATE TABLE team_availability (
+-- (DROP TABLE removed: team_availability already exists from server/migrations/000_baseline.sql or a later
+-- server/migrations/*.sql alter; dropping it here silently destroyed richer
+-- production schema/data. CREATE TABLE IF NOT EXISTS below is a safe no-op.)
+CREATE TABLE IF NOT EXISTS team_availability (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   person_name VARCHAR(255) NOT NULL,
@@ -57,8 +63,10 @@ CREATE TABLE team_availability (
 CREATE INDEX IF NOT EXISTS idx_team_availability_project_id ON team_availability(project_id);
 
 -- Labor Rates
-DROP TABLE IF EXISTS labor_rates CASCADE;
-CREATE TABLE labor_rates (
+-- (DROP TABLE removed: labor_rates already exists from server/migrations/000_baseline.sql or a later
+-- server/migrations/*.sql alter; dropping it here silently destroyed richer
+-- production schema/data. CREATE TABLE IF NOT EXISTS below is a safe no-op.)
+CREATE TABLE IF NOT EXISTS labor_rates (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   resource_category VARCHAR(255),
@@ -74,8 +82,10 @@ CREATE TABLE labor_rates (
 CREATE INDEX IF NOT EXISTS idx_labor_rates_project_id ON labor_rates(project_id);
 
 -- Project Org Chart (Nodes/Hierarchy)
-DROP TABLE IF EXISTS project_org_chart CASCADE;
-CREATE TABLE project_org_chart (
+-- (DROP TABLE removed: project_org_chart already exists from server/migrations/000_baseline.sql or a later
+-- server/migrations/*.sql alter; dropping it here silently destroyed richer
+-- production schema/data. CREATE TABLE IF NOT EXISTS below is a safe no-op.)
+CREATE TABLE IF NOT EXISTS project_org_chart (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   person_name VARCHAR(255) NOT NULL,

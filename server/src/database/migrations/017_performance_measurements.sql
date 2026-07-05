@@ -23,6 +23,9 @@ CREATE TABLE IF NOT EXISTS performance_measurements (
     updated_by UUID REFERENCES users(id)
 );
 
+-- Reconcile with production schema (baseline) which lacks these columns
+ALTER TABLE performance_measurements ADD COLUMN IF NOT EXISTS source_document VARCHAR(255);
+
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_performance_measurements_project_id ON performance_measurements(project_id);
 CREATE INDEX IF NOT EXISTS idx_performance_measurements_success_criterion ON performance_measurements(success_criterion_name);
@@ -41,6 +44,7 @@ BEGIN
 END;
 $BODY$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_update_performance_measurements_updated_at ON performance_measurements;
 CREATE TRIGGER trigger_update_performance_measurements_updated_at
     BEFORE UPDATE ON performance_measurements
     FOR EACH ROW

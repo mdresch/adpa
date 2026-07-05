@@ -1,8 +1,10 @@
 -- Scope Domain Entities
 
 -- Scope Baseline
-DROP TABLE IF EXISTS scope_baseline CASCADE;
-CREATE TABLE scope_baseline (
+-- (DROP TABLE removed: scope_baseline already exists from server/migrations/000_baseline.sql or a later
+-- server/migrations/*.sql alter; dropping it here silently destroyed richer
+-- production schema/data. CREATE TABLE IF NOT EXISTS below is a safe no-op.)
+CREATE TABLE IF NOT EXISTS scope_baseline (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   statement TEXT,
@@ -22,8 +24,10 @@ CREATE TABLE scope_baseline (
 CREATE INDEX IF NOT EXISTS idx_scope_baseline_project_id ON scope_baseline(project_id);
 
 -- WBS Nodes
-DROP TABLE IF EXISTS wbs_nodes CASCADE;
-CREATE TABLE wbs_nodes (
+-- (DROP TABLE removed: wbs_nodes already exists from server/migrations/000_baseline.sql or a later
+-- server/migrations/*.sql alter; dropping it here silently destroyed richer
+-- production schema/data. CREATE TABLE IF NOT EXISTS below is a safe no-op.)
+CREATE TABLE IF NOT EXISTS wbs_nodes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   wbs_code VARCHAR(50) NOT NULL,
@@ -45,8 +49,10 @@ CREATE INDEX IF NOT EXISTS idx_wbs_nodes_project_id ON wbs_nodes(project_id);
 CREATE INDEX IF NOT EXISTS idx_wbs_nodes_code ON wbs_nodes(project_id, wbs_code);
 
 -- Scope Change Requests
-DROP TABLE IF EXISTS scope_change_requests CASCADE;
-CREATE TABLE scope_change_requests (
+-- (DROP TABLE removed: scope_change_requests already exists from server/migrations/000_baseline.sql or a later
+-- server/migrations/*.sql alter; dropping it here silently destroyed richer
+-- production schema/data. CREATE TABLE IF NOT EXISTS below is a safe no-op.)
+CREATE TABLE IF NOT EXISTS scope_change_requests (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   request_id VARCHAR(50),
@@ -67,8 +73,10 @@ CREATE TABLE scope_change_requests (
 CREATE INDEX IF NOT EXISTS idx_scope_change_requests_project_id ON scope_change_requests(project_id);
 
 -- Requirements Traceability
-DROP TABLE IF EXISTS requirements_traceability CASCADE;
-CREATE TABLE requirements_traceability (
+-- (DROP TABLE removed: requirements_traceability already exists from server/migrations/000_baseline.sql or a later
+-- server/migrations/*.sql alter; dropping it here silently destroyed richer
+-- production schema/data. CREATE TABLE IF NOT EXISTS below is a safe no-op.)
+CREATE TABLE IF NOT EXISTS requirements_traceability (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   requirement_id VARCHAR(100),
@@ -85,8 +93,10 @@ CREATE TABLE requirements_traceability (
 CREATE INDEX IF NOT EXISTS idx_requirements_traceability_project_id ON requirements_traceability(project_id);
 
 -- Scope Verification
-DROP TABLE IF EXISTS scope_verification CASCADE;
-CREATE TABLE scope_verification (
+-- (DROP TABLE removed: scope_verification already exists from server/migrations/000_baseline.sql or a later
+-- server/migrations/*.sql alter; dropping it here silently destroyed richer
+-- production schema/data. CREATE TABLE IF NOT EXISTS below is a safe no-op.)
+CREATE TABLE IF NOT EXISTS scope_verification (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   deliverable_name VARCHAR(255),

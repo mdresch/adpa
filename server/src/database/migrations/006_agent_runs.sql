@@ -17,6 +17,11 @@ CREATE TABLE IF NOT EXISTS agent_runs (
   completed_at  TIMESTAMPTZ
 );
 
+-- Reconcile with production schema (baseline) which lacks these columns
+ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS start_phase INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS created_by TEXT;
+ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ;
+
 CREATE INDEX IF NOT EXISTS agent_runs_project_id_idx ON agent_runs(project_id);
 CREATE INDEX IF NOT EXISTS agent_runs_status_idx     ON agent_runs(status);
 CREATE INDEX IF NOT EXISTS agent_runs_created_at_idx ON agent_runs(created_at DESC);
@@ -38,6 +43,10 @@ CREATE TABLE IF NOT EXISTS agent_run_phases (
   completed_at  TIMESTAMPTZ
 );
 
+-- Reconcile with production schema (baseline) which lacks these columns
+ALTER TABLE agent_run_phases ADD COLUMN IF NOT EXISTS review_notes TEXT;
+ALTER TABLE agent_run_phases ADD COLUMN IF NOT EXISTS consensus_score NUMERIC(4,3);
+
 CREATE INDEX IF NOT EXISTS agent_run_phases_run_id_idx ON agent_run_phases(run_id);
 CREATE UNIQUE INDEX IF NOT EXISTS agent_run_phases_run_phase_idx ON agent_run_phases(run_id, phase_number);
 
@@ -52,6 +61,15 @@ CREATE TABLE IF NOT EXISTS agent_run_events (
   metadata      JSONB,                     -- e.g. tool name, args, duration
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Reconcile with production schema (baseline) which lacks these columns
+-- (baseline's own "content" column is jsonb, not text; left as-is since the
+-- table already exists there and no app code path depends on this file's
+-- inline TEXT declaration, which is a no-op against an existing table anyway)
+ALTER TABLE agent_run_events ADD COLUMN IF NOT EXISTS event_type VARCHAR(30)
+  CHECK (event_type IN ('thought','action','observation','review','error','guidance','consensus','phase_start','phase_complete','run_complete'));
+ALTER TABLE agent_run_events ADD COLUMN IF NOT EXISTS metadata JSONB;
+ALTER TABLE agent_run_events ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 
 CREATE INDEX IF NOT EXISTS agent_run_events_run_id_idx   ON agent_run_events(run_id);
 CREATE INDEX IF NOT EXISTS agent_run_events_phase_id_idx ON agent_run_events(phase_id);

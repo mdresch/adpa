@@ -23,6 +23,9 @@ CREATE TABLE IF NOT EXISTS work_items (
     updated_by UUID REFERENCES users(id)
 );
 
+-- Reconcile with production schema (baseline) which lacks these columns
+ALTER TABLE work_items ADD COLUMN IF NOT EXISTS source_document VARCHAR(255);
+
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_work_items_project_id ON work_items(project_id);
 CREATE INDEX IF NOT EXISTS idx_work_items_status ON work_items(status);
@@ -40,6 +43,7 @@ BEGIN
 END;
 $BODY$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_update_work_items_updated_at ON work_items;
 CREATE TRIGGER trigger_update_work_items_updated_at
     BEFORE UPDATE ON work_items
     FOR EACH ROW

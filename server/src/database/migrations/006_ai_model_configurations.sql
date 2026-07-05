@@ -46,6 +46,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS update_ai_model_configurations_updated_at ON ai_model_configurations;
 CREATE TRIGGER update_ai_model_configurations_updated_at
     BEFORE UPDATE ON ai_model_configurations
     FOR EACH ROW

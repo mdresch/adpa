@@ -1,8 +1,10 @@
 -- Finance Domain Entities
 
 -- Budget Baseline
-DROP TABLE IF EXISTS budget_baseline CASCADE;
-CREATE TABLE budget_baseline (
+-- (DROP TABLE removed: budget_baseline already exists from server/migrations/000_baseline.sql or a later
+-- server/migrations/*.sql alter; dropping it here silently destroyed richer
+-- production schema/data. CREATE TABLE IF NOT EXISTS below is a safe no-op.)
+CREATE TABLE IF NOT EXISTS budget_baseline (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   total_budget NUMERIC,
@@ -19,8 +21,10 @@ CREATE TABLE budget_baseline (
 CREATE INDEX IF NOT EXISTS idx_budget_baseline_project_id ON budget_baseline(project_id);
 
 -- Cost Estimates
-DROP TABLE IF EXISTS cost_estimates CASCADE;
-CREATE TABLE cost_estimates (
+-- (DROP TABLE removed: cost_estimates already exists from server/migrations/000_baseline.sql or a later
+-- server/migrations/*.sql alter; dropping it here silently destroyed richer
+-- production schema/data. CREATE TABLE IF NOT EXISTS below is a safe no-op.)
+CREATE TABLE IF NOT EXISTS cost_estimates (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   item_name VARCHAR(255) NOT NULL,
@@ -38,8 +42,10 @@ CREATE TABLE cost_estimates (
 CREATE INDEX IF NOT EXISTS idx_cost_estimates_project_id ON cost_estimates(project_id);
 
 -- Funding Tranches (Funding Requirements)
-DROP TABLE IF EXISTS funding_tranches CASCADE;
-CREATE TABLE funding_tranches (
+-- (DROP TABLE removed: funding_tranches already exists from server/migrations/000_baseline.sql or a later
+-- server/migrations/*.sql alter; dropping it here silently destroyed richer
+-- production schema/data. CREATE TABLE IF NOT EXISTS below is a safe no-op.)
+CREATE TABLE IF NOT EXISTS funding_tranches (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   tranche_name VARCHAR(100),
@@ -56,8 +62,10 @@ CREATE TABLE funding_tranches (
 CREATE INDEX IF NOT EXISTS idx_funding_tranches_project_id ON funding_tranches(project_id);
 
 -- Financial Variances (Cost Control)
-DROP TABLE IF EXISTS financial_variances CASCADE;
-CREATE TABLE financial_variances (
+-- (DROP TABLE removed: financial_variances already exists from server/migrations/000_baseline.sql or a later
+-- server/migrations/*.sql alter; dropping it here silently destroyed richer
+-- production schema/data. CREATE TABLE IF NOT EXISTS below is a safe no-op.)
+CREATE TABLE IF NOT EXISTS financial_variances (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   report_date TIMESTAMP WITH TIME ZONE,
@@ -76,8 +84,10 @@ CREATE TABLE financial_variances (
 CREATE INDEX IF NOT EXISTS idx_financial_variances_project_id ON financial_variances(project_id);
 
 -- Procurement Costs
-DROP TABLE IF EXISTS procurement_costs CASCADE;
-CREATE TABLE procurement_costs (
+-- (DROP TABLE removed: procurement_costs already exists from server/migrations/000_baseline.sql or a later
+-- server/migrations/*.sql alter; dropping it here silently destroyed richer
+-- production schema/data. CREATE TABLE IF NOT EXISTS below is a safe no-op.)
+CREATE TABLE IF NOT EXISTS procurement_costs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   vendor_name VARCHAR(255),

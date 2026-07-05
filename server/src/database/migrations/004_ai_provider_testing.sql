@@ -73,15 +73,20 @@ CREATE INDEX IF NOT EXISTS idx_ai_provider_health_metrics_health ON ai_provider_
 CREATE INDEX IF NOT EXISTS idx_ai_provider_health_metrics_tested ON ai_provider_health_metrics(last_tested);
 
 CREATE INDEX IF NOT EXISTS idx_ai_provider_test_configs_provider ON ai_provider_test_configs(provider_id);
-CREATE INDEX IF NOT EXISTS idx_ai_provider_test_configs_active ON ai_provider_test_configs(is_active);
+-- No is_active index: production's ai_provider_test_configs (see
+-- server/migrations/000_baseline.sql) is a simpler one-row-per-provider
+-- table keyed by provider_id, with no id/is_active columns.
 
 CREATE INDEX IF NOT EXISTS idx_ai_provider_test_schedules_provider ON ai_provider_test_schedules(provider_id);
 CREATE INDEX IF NOT EXISTS idx_ai_provider_test_schedules_active ON ai_provider_test_schedules(is_active);
 CREATE INDEX IF NOT EXISTS idx_ai_provider_test_schedules_next_run ON ai_provider_test_schedules(next_run);
 
 -- Create triggers for updated_at timestamps
+DROP TRIGGER IF EXISTS update_ai_provider_health_metrics_updated_at ON ai_provider_health_metrics;
 CREATE TRIGGER update_ai_provider_health_metrics_updated_at BEFORE UPDATE ON ai_provider_health_metrics FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DROP TRIGGER IF EXISTS update_ai_provider_test_configs_updated_at ON ai_provider_test_configs;
 CREATE TRIGGER update_ai_provider_test_configs_updated_at BEFORE UPDATE ON ai_provider_test_configs FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DROP TRIGGER IF EXISTS update_ai_provider_test_schedules_updated_at ON ai_provider_test_schedules;
 CREATE TRIGGER update_ai_provider_test_schedules_updated_at BEFORE UPDATE ON ai_provider_test_schedules FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Insert default test configurations for existing providers
@@ -123,53 +128,31 @@ SELECT
     ap.is_active,
     COALESCE(hm.overall_health, 0) as overall_health,
     COALESCE(hm.availability, 0) as availability,
-    COALESCE(hm.avg_response_time, 0) as avg_response_time,
+    COALESCE(hm.response_time, 0) as avg_response_time,
     COALESCE(hm.success_rate, 0) as success_rate,
-    COALESCE(hm.test_count, 0) as test_count,
+    0 as test_count, -- production's ai_provider_health_metrics (see baseline) has no test_count column
     hm.last_tested,
-    CASE 
+    CASE
         WHEN COALESCE(hm.overall_health, 0) >= 80 THEN 'EXCELLENT'
         WHEN COALESCE(hm.overall_health, 0) >= 60 THEN 'GOOD'
         WHEN COALESCE(hm.overall_health, 0) >= 40 THEN 'WARNING'
         ELSE 'CRITICAL'
     END as health_status,
-    CASE 
-        WHEN COALESCE(hm.avg_response_time, 0) <= 1000 THEN 'FAST'
-        WHEN COALESCE(hm.avg_response_time, 0) <= 3000 THEN 'MODERATE'
-        WHEN COALESCE(hm.avg_response_time, 0) <= 5000 THEN 'SLOW'
+    CASE
+        WHEN COALESCE(hm.response_time, 0) <= 1000 THEN 'FAST'
+        WHEN COALESCE(hm.response_time, 0) <= 3000 THEN 'MODERATE'
+        WHEN COALESCE(hm.response_time, 0) <= 5000 THEN 'SLOW'
         ELSE 'VERY_SLOW'
     END as response_category
 FROM ai_providers ap
 LEFT JOIN ai_provider_health_metrics hm ON ap.id = hm.provider_id
 ORDER BY COALESCE(hm.overall_health, 0) DESC, ap.name;
 
--- Create function to get provider test statistics
-CREATE OR REPLACE FUNCTION get_provider_test_statistics(provider_id_param UUID, days_back INTEGER DEFAULT 7)
-RETURNS TABLE (
-    test_type VARCHAR(50),
-    total_tests INTEGER,
-    pass_count INTEGER,
-    fail_count INTEGER,
-    warning_count INTEGER,
-    avg_score DECIMAL(5,2),
-    avg_response_time INTEGER,
-    success_rate DECIMAL(5,2)
-) AS $$
-BEGIN
-    RETURN QUERY
-    SELECT 
-        apr.test_type,
-        COUNT(*)::INTEGER as total_tests,
-        COUNT(CASE WHEN apr.status = 'pass' THEN 1 END)::INTEGER as pass_count,
-        COUNT(CASE WHEN apr.status = 'fail' THEN 1 END)::INTEGER as fail_count,
-        COUNT(CASE WHEN apr.status = 'warning' THEN 1 END)::INTEGER as warning_count,
-        AVG(apr.score) as avg_score,
-        AVG(apr.response_time)::INTEGER as avg_response_time,
-        (COUNT(CASE WHEN apr.status IN ('pass', 'warning') THEN 1 END) * 100.0 / COUNT(*)) as success_rate
-    FROM ai_provider_test_results apr
-    WHERE apr.provider_id = provider_id_param
-    AND apr.timestamp >= CURRENT_TIMESTAMP - INTERVAL '1 day' * days_back
-    GROUP BY apr.test_type
-    ORDER BY apr.test_type;
-END;
-$$ LANGUAGE plpgsql;
+-- NOTE: this migration originally also (re)created get_provider_test_statistics
+-- here, but production (see server/migrations/000_baseline.sql) already has a
+-- function of that name with a different, incompatible return signature
+-- (passed_tests/failed_tests/last_test_date vs this version's pass_count/
+-- fail_count/warning_count). CREATE OR REPLACE can't change a function's
+-- return type, and no application code calls either version, so this
+-- redefinition is intentionally skipped rather than risking a DROP+CREATE
+-- against the active production function.
