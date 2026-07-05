@@ -11,16 +11,15 @@ The codebase is organized into four logical tiers with enforced boundaries — k
 - **Intelligence Tier (advisory-only)**: Python FastAPI services for AI/PMBOK reasoning. Returns advisory JSON only; never mutates state.
 - **Orchestration Tier (authority)**: `.NET 10` / `.NET Aspire` under `orchestrator/` — `Adpa.AppHost` (service discovery/telemetry orchestrator), `Adpa.Orchestrator` (sole execution authority for governance "rituals"), `Adpa.ServiceDefaults`, `Adpa.Web` (Blazor **Governor Portal** for high-integrity decisions).
 - **Experience Tier (read-only/decision)**: The Next.js frontend (`app/`) — the **Researcher Dashboard** — for exploration and AI-assisted drafting. It proxies `/api/*` to the Express backend (see API Proxy below) and `/api/Ritual|ritual/*` to the .NET orchestrator when `orchestratorUrl` is configured.
-- **Data Tier (append-only)**: PostgreSQL (via Supabase in most environments) is the governance ledger and primary DB; Redis for cache/sessions/Bull queues; RabbitMQ (MassTransit) for orchestration messaging; Neo4j/Qdrant/Pinecone for knowledge graph/RAG (optional in dev).
+- **Data Tier (append-only)**: PostgreSQL (Azure Database for PostgreSQL Flexible Server) is the governance ledger and primary DB — migrated off Supabase; `server/migrations/000_baseline.sql` still creates extensions/shims defensively so the schema also boots on a Supabase host if needed. Redis for cache/sessions/Bull queues; RabbitMQ (MassTransit) for orchestration messaging; Neo4j/Qdrant/Pinecone for knowledge graph/RAG (optional in dev).
 
-Most day-to-day work happens in the Next.js frontend (root) and the Express backend (`server/`), which are two separate Node projects with separate package managers.
+Most day-to-day work happens in the Next.js frontend (root) and the Express backend (`server/`) — two Node projects joined in a single pnpm workspace (`pnpm-workspace.yaml` lists both `.` and `server`).
 
 ## Commands
 
 ### Install
 ```bash
-pnpm install                    # root (Next.js) — also installs via workspace
-cd server && npm install        # backend has its own package.json/lockfile
+pnpm install                    # installs both root (Next.js) and server/ (Express) — single pnpm workspace
 ```
 
 ### Dev servers
@@ -132,8 +131,8 @@ Domain-specific procedural knowledge lives in `.agents/skills/<name>/SKILL.md` (
 
 ## Operational Notes
 
-- **Package managers are split**: root uses `pnpm` (workspace, `packageManager` pinned), `server/` uses plain `npm` with its own lockfile. Don't run `npm install` at the root or `pnpm install` inside `server/`.
-- **Windows/F: drive dev**: first browser request after `✓ Ready` can take minutes to compile; watch for `GET /… 200` in the terminal, not just the ready message. For a faster Turbopack cache, delete `.next` and run `pnpm dev:cache` (creates a junction to `%LOCALAPPDATA%`) — don't set `NEXT_DIST_DIR` to an absolute `C:\...` path, Next treats `distDir` as relative.
+- **Single pnpm workspace**: root and `server/` are joined via `pnpm-workspace.yaml` — `pnpm install` from either directory resolves to the same root-level `pnpm-lock.yaml`. Don't use `npm install`/`npm ci` anywhere in this repo.
+- **Windows dev**: first browser request after `✓ Ready` can take minutes to compile; watch for `GET /… 200` in the terminal, not just the ready message. For a faster Turbopack cache, delete `.next` and run `pnpm dev:cache` (creates a junction to `%LOCALAPPDATA%`) — don't set `NEXT_DIST_DIR` to an absolute `C:\...` path, Next treats `distDir` as relative.
 - **Auth in dev**: without Firebase credentials, use `POST /api/v1/auth/demo`, or register directly via `POST /api/v1/auth/register`. Firebase Auth is a non-critical dependency in `NODE_ENV=development`.
 - **Commit but don't push**: commit locally as needed; never `git push` without explicit user request in this turn. A pre-push hook independently re-enforces this by running `verify:governed-features` and `test:features` and rejecting the push if either fails.
 - **TypeScript strict, no bare `any`** without justification; parameterized SQL queries only (no string-interpolated SQL); UUID primary keys; JSONB for flexible/Markdown content.
