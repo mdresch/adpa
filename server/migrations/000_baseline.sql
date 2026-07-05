@@ -12,8 +12,22 @@ SET row_security = off;
 
 -- BEGIN;
 
--- Supabase Compatibility Shim
-DO $$ 
+-- Extensions (must run before the Supabase Compatibility Shim below, so a
+-- real "vector" extension wins over the shim's placeholder type instead of
+-- being blocked by a name collision)
+DO $$ BEGIN CREATE EXTENSION IF NOT EXISTS "btree_gist"; EXCEPTION WHEN OTHERS THEN RAISE WARNING 'Extension btree_gist not available, using shim if needed'; END $$;
+DO $$ BEGIN CREATE EXTENSION IF NOT EXISTS "http"; EXCEPTION WHEN OTHERS THEN RAISE WARNING 'Extension http not available, using shim if needed'; END $$;
+DO $$ BEGIN CREATE EXTENSION IF NOT EXISTS "pg_stat_statements"; EXCEPTION WHEN OTHERS THEN RAISE WARNING 'Extension pg_stat_statements not available, using shim if needed'; END $$;
+DO $$ BEGIN CREATE EXTENSION IF NOT EXISTS "pgcrypto"; EXCEPTION WHEN OTHERS THEN RAISE WARNING 'Extension pgcrypto not available, using shim if needed'; END $$;
+DO $$ BEGIN CREATE EXTENSION IF NOT EXISTS "supabase_vault"; EXCEPTION WHEN OTHERS THEN RAISE WARNING 'Extension supabase_vault not available, using shim if needed'; END $$;
+DO $$ BEGIN CREATE EXTENSION IF NOT EXISTS "uuid-ossp"; EXCEPTION WHEN OTHERS THEN RAISE WARNING 'Extension uuid-ossp not available, using shim if needed'; END $$;
+DO $$ BEGIN CREATE EXTENSION IF NOT EXISTS "pg_graphql"; EXCEPTION WHEN OTHERS THEN RAISE WARNING 'Extension pg_graphql not available, using shim if needed'; END $$;
+DO $$ BEGIN CREATE EXTENSION IF NOT EXISTS "wrappers"; EXCEPTION WHEN OTHERS THEN RAISE WARNING 'Extension wrappers not available, using shim if needed'; END $$;
+DO $$ BEGIN CREATE EXTENSION IF NOT EXISTS "vector"; EXCEPTION WHEN OTHERS THEN RAISE WARNING 'Extension vector not available, using shim if needed'; END $$;
+
+-- Supabase Compatibility Shim (fallback only — each IF NOT EXISTS check below
+-- is a no-op once the matching real extension above succeeded)
+DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'http_header') THEN
     CREATE TYPE public.http_header AS (field text, value text);
@@ -34,17 +48,6 @@ END $$;
 
 CREATE OR REPLACE FUNCTION public.http_header(field text, value text) RETURNS public.http_header AS $$ BEGIN RETURN (field, value)::public.http_header; END; $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION public.http(req public.http_request) RETURNS public.http_response AS $$ BEGIN RETURN (500, null, null, null)::public.http_response; END; $$ LANGUAGE plpgsql;
-
--- Extensions
-DO $$ BEGIN CREATE EXTENSION IF NOT EXISTS "btree_gist"; EXCEPTION WHEN OTHERS THEN RAISE WARNING 'Extension btree_gist not available, using shim if needed'; END $$;
-DO $$ BEGIN CREATE EXTENSION IF NOT EXISTS "http"; EXCEPTION WHEN OTHERS THEN RAISE WARNING 'Extension http not available, using shim if needed'; END $$;
-DO $$ BEGIN CREATE EXTENSION IF NOT EXISTS "pg_stat_statements"; EXCEPTION WHEN OTHERS THEN RAISE WARNING 'Extension pg_stat_statements not available, using shim if needed'; END $$;
-DO $$ BEGIN CREATE EXTENSION IF NOT EXISTS "pgcrypto"; EXCEPTION WHEN OTHERS THEN RAISE WARNING 'Extension pgcrypto not available, using shim if needed'; END $$;
-DO $$ BEGIN CREATE EXTENSION IF NOT EXISTS "supabase_vault"; EXCEPTION WHEN OTHERS THEN RAISE WARNING 'Extension supabase_vault not available, using shim if needed'; END $$;
-DO $$ BEGIN CREATE EXTENSION IF NOT EXISTS "uuid-ossp"; EXCEPTION WHEN OTHERS THEN RAISE WARNING 'Extension uuid-ossp not available, using shim if needed'; END $$;
-DO $$ BEGIN CREATE EXTENSION IF NOT EXISTS "pg_graphql"; EXCEPTION WHEN OTHERS THEN RAISE WARNING 'Extension pg_graphql not available, using shim if needed'; END $$;
-DO $$ BEGIN CREATE EXTENSION IF NOT EXISTS "wrappers"; EXCEPTION WHEN OTHERS THEN RAISE WARNING 'Extension wrappers not available, using shim if needed'; END $$;
-DO $$ BEGIN CREATE EXTENSION IF NOT EXISTS "vector"; EXCEPTION WHEN OTHERS THEN RAISE WARNING 'Extension vector not available, using shim if needed'; END $$;
 
 -- Custom Types
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'pmbok_domain') THEN CREATE TYPE public."pmbok_domain" AS ENUM ('stakeholders', 'team', 'development_approach', 'planning', 'project_work', 'delivery', 'measurement', 'uncertainty', 'governance', 'scope', 'schedule', 'finance', 'resources', 'risk', 'stakeholders_ops'); END IF; END $$;
@@ -567,22 +570,12 @@ CREATE TABLE IF NOT EXISTS public."audit_log" (
 );
 ALTER TABLE public."audit_log" ENABLE ROW LEVEL SECURITY;
 
--- Table: audit_logs
-CREATE TABLE IF NOT EXISTS public."audit_logs" (
-  "id" uuid DEFAULT uuid_generate_v4() NOT NULL,
-  "user_id" uuid,
-  "action" character varying(100) NOT NULL,
-  "resource_type" character varying(50),
-  "resource_id" uuid,
-  "old_values" jsonb,
-  "new_values" jsonb,
-  "ip_address" inet,
-  "user_agent" text,
-  "created_at" timestamp without time zone DEFAULT CURRENT_TIMESTAMP
-,
-  PRIMARY KEY (id)
-);
-ALTER TABLE public."audit_logs" ENABLE ROW LEVEL SECURITY;
+-- audit_logs (id/user_id/action/resource_type/resource_id/old_values/new_values/
+-- ip_address/user_agent/created_at) has been merged into audit_log (which already
+-- had hash-chained tamper-evidence via trg_audit_log_before_insert). Column mapping
+-- for anything still expecting the old shape: user_id->actor_user_id,
+-- resource_type->table_name, resource_id->row_id, ip_address->ip, created_at->occurred_at.
+-- Do not recreate audit_logs here.
 
 -- Table: baseline_comparisons
 CREATE TABLE IF NOT EXISTS public."baseline_comparisons" (
@@ -2028,7 +2021,7 @@ CREATE TABLE IF NOT EXISTS public."document_chunks" (
   "id" uuid DEFAULT gen_random_uuid() NOT NULL,
   "document_id" uuid,
   "content" text,
-  "embedding" public."vector",
+  "embedding" public."vector"(1024),
   "chunk_index" integer,
   "metadata" jsonb,
   "title" character varying(255),
@@ -2398,7 +2391,7 @@ CREATE TABLE IF NOT EXISTS public."documents" (
   "sync_status" character varying(50) DEFAULT 'local'::character varying,
   "confluence_page_url" text,
   "current_version_id" uuid,
-  "embedding" public."vector"
+  "embedding" public."vector"(1024)
 ,
   UNIQUE (external_id, external_source),
   PRIMARY KEY (id),
@@ -2423,7 +2416,7 @@ CREATE TABLE IF NOT EXISTS public."documents_vectors" (
   "id" uuid DEFAULT gen_random_uuid() NOT NULL,
   "document_id" uuid,
   "chunk_index" integer NOT NULL,
-  "embedding" public."vector",
+  "embedding" public."vector"(1024),
   "content" text,
   "metadata" jsonb DEFAULT '{}'::jsonb,
   "created_at" timestamp with time zone DEFAULT now()
@@ -3379,7 +3372,7 @@ CREATE TABLE IF NOT EXISTS public."knowledge_base_entries" (
   "success_rate" numeric(3) DEFAULT 0.0,
   "updated_at" timestamp without time zone DEFAULT now(),
   "notes" text,
-  "embedding" public."vector",
+  "embedding" public."vector"(1024),
   "embedding_model" character varying(50) DEFAULT 'voyage-4'::character varying,
   "embedding_generated_at" timestamp without time zone,
   "semantic_keywords" text[] DEFAULT '{}'::text[],
@@ -3639,136 +3632,6 @@ CREATE TABLE IF NOT EXISTS public."mitigation_plans" (
   PRIMARY KEY (id)
 );
 ALTER TABLE public."mitigation_plans" ENABLE ROW LEVEL SECURITY;
-
--- Table: morphic_ai_model_config
-CREATE TABLE IF NOT EXISTS public."morphic_ai_model_config" (
-  "id" character varying(191) NOT NULL,
-  "search_mode" character varying(256) NOT NULL,
-  "model_type" character varying(256) NOT NULL,
-  "model_id" character varying(191) NOT NULL,
-  "priority" integer DEFAULT 0 NOT NULL,
-  "created_at" timestamp without time zone DEFAULT now() NOT NULL
-,
-  PRIMARY KEY (id)
-);
-ALTER TABLE public."morphic_ai_model_config" ENABLE ROW LEVEL SECURITY;
-
--- Table: morphic_ai_models
-CREATE TABLE IF NOT EXISTS public."morphic_ai_models" (
-  "id" character varying(191) NOT NULL,
-  "provider_id" character varying(191) NOT NULL,
-  "name" character varying(256) NOT NULL,
-  "model_id" character varying(256) NOT NULL,
-  "is_enabled" integer DEFAULT 1 NOT NULL,
-  "created_at" timestamp without time zone DEFAULT now() NOT NULL
-,
-  PRIMARY KEY (id)
-);
-ALTER TABLE public."morphic_ai_models" ENABLE ROW LEVEL SECURITY;
-
--- Table: morphic_ai_providers
-CREATE TABLE IF NOT EXISTS public."morphic_ai_providers" (
-  "id" character varying(191) NOT NULL,
-  "name" character varying(256) NOT NULL,
-  "type" character varying(256) DEFAULT 'openai'::character varying NOT NULL,
-  "base_url" text,
-  "api_key" text,
-  "is_enabled" integer DEFAULT 1 NOT NULL,
-  "status" character varying(256) DEFAULT 'disabled'::character varying,
-  "last_error" text,
-  "last_checked_at" timestamp without time zone,
-  "created_at" timestamp without time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp without time zone
-,
-  PRIMARY KEY (id)
-);
-ALTER TABLE public."morphic_ai_providers" ENABLE ROW LEVEL SECURITY;
-
--- Table: morphic_chats
-CREATE TABLE IF NOT EXISTS public."morphic_chats" (
-  "id" character varying(191) NOT NULL,
-  "created_at" timestamp without time zone DEFAULT now() NOT NULL,
-  "title" text NOT NULL,
-  "user_id" character varying(255) NOT NULL,
-  "visibility" character varying(256) DEFAULT 'private'::character varying NOT NULL
-,
-  PRIMARY KEY (id)
-);
-ALTER TABLE public."morphic_chats" ENABLE ROW LEVEL SECURITY;
-
--- Table: morphic_feedback
-CREATE TABLE IF NOT EXISTS public."morphic_feedback" (
-  "id" character varying(191) NOT NULL,
-  "user_id" character varying(255),
-  "sentiment" character varying(256) NOT NULL,
-  "message" text NOT NULL,
-  "page_url" text NOT NULL,
-  "user_agent" text,
-  "created_at" timestamp without time zone DEFAULT now() NOT NULL
-,
-  PRIMARY KEY (id)
-);
-ALTER TABLE public."morphic_feedback" ENABLE ROW LEVEL SECURITY;
-
--- Table: morphic_messages
-CREATE TABLE IF NOT EXISTS public."morphic_messages" (
-  "id" character varying(191) NOT NULL,
-  "chat_id" character varying(191) NOT NULL,
-  "role" character varying(256) NOT NULL,
-  "created_at" timestamp without time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp without time zone,
-  "metadata" jsonb
-,
-  PRIMARY KEY (id)
-);
-ALTER TABLE public."morphic_messages" ENABLE ROW LEVEL SECURITY;
-
--- Table: morphic_parts
-CREATE TABLE IF NOT EXISTS public."morphic_parts" (
-  "id" character varying(191) NOT NULL,
-  "message_id" character varying(191) NOT NULL,
-  "order" integer NOT NULL,
-  "type" character varying(256) NOT NULL,
-  "text_text" text,
-  "reasoning_text" text,
-  "file_media_type" character varying(256),
-  "file_filename" character varying(1024),
-  "file_url" text,
-  "source_url_source_id" character varying(256),
-  "source_url_url" text,
-  "source_url_title" text,
-  "source_document_source_id" character varying(256),
-  "source_document_media_type" character varying(256),
-  "source_document_title" text,
-  "source_document_filename" character varying(1024),
-  "source_document_url" text,
-  "source_document_snippet" text,
-  "tool_tool_call_id" character varying(256),
-  "tool_state" character varying(256),
-  "tool_error_text" text,
-  "tool_search_input" json,
-  "tool_search_output" json,
-  "tool_fetch_input" json,
-  "tool_fetch_output" json,
-  "tool_question_input" json,
-  "tool_question_output" json,
-  "tool_todoWrite_input" json,
-  "tool_todoWrite_output" json,
-  "tool_todoRead_input" json,
-  "tool_todoRead_output" json,
-  "tool_dynamic_input" json,
-  "tool_dynamic_output" json,
-  "tool_dynamic_name" character varying(256),
-  "tool_dynamic_type" character varying(256),
-  "data_prefix" character varying(256),
-  "data_content" json,
-  "data_id" character varying(256),
-  "provider_metadata" json,
-  "created_at" timestamp without time zone DEFAULT now() NOT NULL
-,
-  PRIMARY KEY (id)
-);
-ALTER TABLE public."morphic_parts" ENABLE ROW LEVEL SECURITY;
 
 -- Table: notification_logs
 CREATE TABLE IF NOT EXISTS public."notification_logs" (
@@ -8712,7 +8575,6 @@ ALTER TABLE public."approval_workflows" ADD CONSTRAINT "approval_workflows_sourc
 ALTER TABLE public."assessments" ADD CONSTRAINT "assessments_batch_id_fkey" FOREIGN KEY (batch_id) REFERENCES upload_batches(id) ON DELETE CASCADE;
 ALTER TABLE public."assessments" ADD CONSTRAINT "assessments_company_id_fkey" FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE SET NULL;
 ALTER TABLE public."assessments" ADD CONSTRAINT "assessments_project_id_fkey" FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE;
-ALTER TABLE public."audit_logs" ADD CONSTRAINT "audit_logs_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id);
 ALTER TABLE public."baseline_comparisons" ADD CONSTRAINT "baseline_comparisons_baseline_id_fkey" FOREIGN KEY (baseline_id) REFERENCES project_entity_baselines(id) ON DELETE CASCADE;
 ALTER TABLE public."baseline_comparisons" ADD CONSTRAINT "baseline_comparisons_compared_by_fkey" FOREIGN KEY (compared_by) REFERENCES users(id);
 ALTER TABLE public."baseline_compliance_reviews" ADD CONSTRAINT "baseline_compliance_reviews_baseline_id_fkey" FOREIGN KEY (baseline_id) REFERENCES project_baselines(id) ON DELETE CASCADE;
@@ -9009,10 +8871,6 @@ ALTER TABLE public."mitigation_plans" ADD CONSTRAINT "mitigation_plans_issue_id_
 ALTER TABLE public."mitigation_plans" ADD CONSTRAINT "mitigation_plans_owner_id_fkey" FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE SET NULL;
 ALTER TABLE public."mitigation_plans" ADD CONSTRAINT "mitigation_plans_risk_id_fkey" FOREIGN KEY (risk_id) REFERENCES risks(id) ON DELETE CASCADE;
 ALTER TABLE public."mitigation_plans" ADD CONSTRAINT "mitigation_plans_source_document_id_fkey" FOREIGN KEY (source_document_id) REFERENCES documents(id);
-ALTER TABLE public."morphic_ai_model_config" ADD CONSTRAINT "morphic_ai_model_config_model_id_morphic_ai_models_id_fk" FOREIGN KEY (model_id) REFERENCES morphic_ai_models(id) ON DELETE CASCADE;
-ALTER TABLE public."morphic_ai_models" ADD CONSTRAINT "morphic_ai_models_provider_id_morphic_ai_providers_id_fk" FOREIGN KEY (provider_id) REFERENCES morphic_ai_providers(id) ON DELETE CASCADE;
-ALTER TABLE public."morphic_messages" ADD CONSTRAINT "morphic_messages_chat_id_morphic_chats_id_fk" FOREIGN KEY (chat_id) REFERENCES morphic_chats(id) ON DELETE CASCADE;
-ALTER TABLE public."morphic_parts" ADD CONSTRAINT "morphic_parts_message_id_morphic_messages_id_fk" FOREIGN KEY (message_id) REFERENCES morphic_messages(id) ON DELETE CASCADE;
 ALTER TABLE public."onboarding_offboarding" ADD CONSTRAINT "onboarding_offboarding_created_by_fkey" FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL;
 ALTER TABLE public."onboarding_offboarding" ADD CONSTRAINT "onboarding_offboarding_project_id_fkey" FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE;
 ALTER TABLE public."onboarding_offboarding" ADD CONSTRAINT "onboarding_offboarding_source_document_id_fkey" FOREIGN KEY (source_document_id) REFERENCES documents(id) ON DELETE SET NULL;
@@ -9487,1473 +9345,1343 @@ ALTER TABLE public."workflow_executions" ADD CONSTRAINT "workflow_executions_use
 ALTER TABLE public."workflow_presets" ADD CONSTRAINT "workflow_presets_created_by_fkey" FOREIGN KEY (created_by) REFERENCES users(id);
 
 -- Indexes
-CREATE INDEX idx_action_items_project_id ON public.action_items USING btree (project_id);
-CREATE UNIQUE INDEX idx_action_items_idempotency ON public.action_items USING btree (project_id, idempotency_key) WHERE (idempotency_key IS NOT NULL);
-CREATE UNIQUE INDEX activities_project_name_unique ON public.activities USING btree (project_id, activity_name);
-CREATE INDEX idx_activities_source_document ON public.activities USING btree (source_document_id) WHERE (source_document_id IS NOT NULL);
-CREATE INDEX idx_activities_source_location ON public.activities USING btree (source_document_id, source_text_start);
+CREATE INDEX IF NOT EXISTS idx_action_items_project_id ON public.action_items USING btree (project_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_action_items_idempotency ON public.action_items USING btree (project_id, idempotency_key) WHERE (idempotency_key IS NOT NULL);
+CREATE UNIQUE INDEX IF NOT EXISTS activities_project_name_unique ON public.activities USING btree (project_id, activity_name);
+CREATE INDEX IF NOT EXISTS idx_activities_source_document ON public.activities USING btree (source_document_id) WHERE (source_document_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_activities_source_location ON public.activities USING btree (source_document_id, source_text_start);
 -- CREATE UNIQUE INDEX activities_idempotency_key_key ON public.activities USING btree (idempotency_key);
-CREATE INDEX idx_activities_idempotency_key ON public.activities USING btree (idempotency_key);
-CREATE INDEX idx_ai_fallback_chain_entries_chain ON public.ai_fallback_chain_entries USING btree (chain_id);
-CREATE INDEX idx_ai_fallback_chains_task ON public.ai_fallback_chains USING btree (task_type);
-CREATE UNIQUE INDEX ai_model_configurations_provider_id_model_id_key ON public.ai_model_configurations USING btree (provider_id, model_id);
-CREATE INDEX idx_ai_model_configurations_created_at ON public.ai_model_configurations USING btree (created_at);
-CREATE INDEX idx_ai_model_configurations_is_active ON public.ai_model_configurations USING btree (is_active);
-CREATE INDEX idx_ai_model_configurations_model_id ON public.ai_model_configurations USING btree (model_id);
-CREATE INDEX idx_ai_model_configurations_provider_id ON public.ai_model_configurations USING btree (provider_id);
-CREATE UNIQUE INDEX ai_models_provider_id_name_key ON public.ai_models USING btree (provider_id, name);
-CREATE INDEX idx_ai_models_provider ON public.ai_models USING btree (provider_id);
-CREATE INDEX idx_ai_models_active ON public.ai_models USING btree (is_active);
-CREATE INDEX idx_health_metrics_provider ON public.ai_provider_health_metrics USING btree (provider_id);
-CREATE INDEX idx_health_metrics_tested ON public.ai_provider_health_metrics USING btree (last_tested DESC);
-CREATE INDEX idx_test_results_provider ON public.ai_provider_test_results USING btree (provider_id);
-CREATE INDEX idx_test_results_status ON public.ai_provider_test_results USING btree (status);
-CREATE INDEX idx_test_results_timestamp ON public.ai_provider_test_results USING btree ("timestamp" DESC);
-CREATE INDEX idx_ai_provider_usage_domain ON public.ai_provider_usage USING btree (domain);
-CREATE INDEX idx_ai_provider_usage_project ON public.ai_provider_usage USING btree (project_id);
-CREATE INDEX idx_ai_provider_usage_provider ON public.ai_provider_usage USING btree (provider_name, model_name);
-CREATE INDEX idx_ai_providers_default_model ON public.ai_providers USING btree (default_model);
-CREATE INDEX idx_ai_providers_priority ON public.ai_providers USING btree (priority, is_active);
-CREATE INDEX idx_ai_providers_type_active ON public.ai_providers USING btree (provider_type, is_active);
-CREATE INDEX idx_ai_usage_logs_cost ON public.ai_usage_logs USING btree (estimated_cost DESC);
-CREATE INDEX idx_ai_usage_logs_created_at ON public.ai_usage_logs USING btree (created_at DESC);
-CREATE INDEX idx_ai_usage_logs_document_id ON public.ai_usage_logs USING btree (document_id);
-CREATE INDEX idx_ai_usage_logs_project_date ON public.ai_usage_logs USING btree (project_id, created_at DESC);
-CREATE INDEX idx_ai_usage_logs_project_id ON public.ai_usage_logs USING btree (project_id);
-CREATE INDEX idx_ai_usage_logs_provider_date ON public.ai_usage_logs USING btree (provider_id, created_at DESC);
-CREATE INDEX idx_ai_usage_logs_provider_id ON public.ai_usage_logs USING btree (provider_id);
-CREATE INDEX idx_ai_usage_logs_provider_type ON public.ai_usage_logs USING btree (provider_type);
-CREATE INDEX idx_ai_usage_logs_success ON public.ai_usage_logs USING btree (success);
-CREATE INDEX idx_ai_usage_logs_user_date ON public.ai_usage_logs USING btree (user_id, created_at DESC);
-CREATE INDEX idx_ai_usage_logs_user_id ON public.ai_usage_logs USING btree (user_id);
-CREATE UNIQUE INDEX analysis_metrics_metric_date_key ON public.analysis_metrics USING btree (metric_date);
-CREATE INDEX idx_analysis_metrics_metric_date ON public.analysis_metrics USING btree (metric_date);
-CREATE INDEX idx_analytics_events_timestamp ON public.analytics_events USING btree ("timestamp");
-CREATE INDEX idx_analytics_events_type ON public.analytics_events USING btree (event_type);
-CREATE INDEX idx_analytics_events_user_type ON public.analytics_events USING btree (user_id, event_type);
-CREATE INDEX idx_api_logs_created ON public.api_request_logs USING btree (created_at DESC);
-CREATE INDEX idx_api_logs_endpoint ON public.api_request_logs USING btree (endpoint, created_at DESC);
-CREATE INDEX idx_api_logs_status ON public.api_request_logs USING btree (status_code, created_at DESC);
-CREATE INDEX idx_api_logs_user ON public.api_request_logs USING btree (user_id, created_at DESC);
-CREATE INDEX idx_approval_audit_action ON public.approval_audit_log USING btree (action_type);
-CREATE INDEX idx_approval_audit_created ON public.approval_audit_log USING btree (created_at DESC);
-CREATE INDEX idx_approval_audit_request ON public.approval_audit_log USING btree (approval_request_id);
-CREATE INDEX idx_approval_audit_step ON public.approval_audit_log USING btree (approval_step_id);
-CREATE INDEX idx_approval_escalations_escalated_at ON public.approval_escalations USING btree (escalated_at DESC);
-CREATE INDEX idx_approval_escalations_request ON public.approval_escalations USING btree (approval_request_id);
-CREATE INDEX idx_approval_escalations_status ON public.approval_escalations USING btree (resolution_status);
-CREATE INDEX idx_approval_notifications_recipient ON public.approval_notifications USING btree (recipient_user_id);
-CREATE INDEX idx_approval_notifications_request ON public.approval_notifications USING btree (approval_request_id);
-CREATE INDEX idx_approval_notifications_sent ON public.approval_notifications USING btree (sent_at DESC);
-CREATE INDEX idx_approval_notifications_status ON public.approval_notifications USING btree (status);
-CREATE INDEX idx_approval_requests_cr ON public.approval_requests USING btree (change_request_id);
-CREATE INDEX idx_approval_requests_created_at ON public.approval_requests USING btree (created_at DESC);
-CREATE INDEX idx_approval_requests_drift ON public.approval_requests USING btree (drift_record_id);
-CREATE INDEX idx_approval_requests_priority ON public.approval_requests USING btree (priority);
-CREATE INDEX idx_approval_requests_project ON public.approval_requests USING btree (project_id);
-CREATE INDEX idx_approval_requests_requested_by ON public.approval_requests USING btree (requested_by);
-CREATE INDEX idx_approval_requests_sla ON public.approval_requests USING btree (sla_deadline) WHERE ((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('in_progress'::character varying)::text]));
-CREATE INDEX idx_approval_requests_status ON public.approval_requests USING btree (status);
-CREATE UNIQUE INDEX approval_steps_approval_request_id_step_order_key ON public.approval_steps USING btree (approval_request_id, step_order);
-CREATE INDEX idx_approval_steps_approver ON public.approval_steps USING btree (approver_user_id);
-CREATE INDEX idx_approval_steps_request ON public.approval_steps USING btree (approval_request_id);
-CREATE INDEX idx_approval_steps_role ON public.approval_steps USING btree (approver_role);
-CREATE INDEX idx_approval_steps_status ON public.approval_steps USING btree (status);
-CREATE INDEX idx_approval_workflows_project_id ON public.approval_workflows USING btree (project_id);
-CREATE INDEX idx_assessments_assessment_data ON public.assessments USING gin (assessment_data);
-CREATE INDEX idx_assessments_batch_id ON public.assessments USING btree (batch_id);
-CREATE INDEX idx_assessments_company_id ON public.assessments USING btree (company_id);
-CREATE INDEX idx_assessments_created_at ON public.assessments USING btree (created_at DESC);
-CREATE INDEX idx_assessments_project_id ON public.assessments USING btree (project_id);
-CREATE INDEX idx_assessments_status ON public.assessments USING btree (status);
-CREATE INDEX idx_audit_action ON public.audit_log USING btree (action, occurred_at DESC);
-CREATE INDEX idx_audit_table_row ON public.audit_log USING btree (table_name, row_id, occurred_at DESC);
-CREATE INDEX idx_audit_logs_created_at ON public.audit_logs USING btree (created_at);
-CREATE INDEX idx_audit_logs_user ON public.audit_logs USING btree (user_id);
-CREATE INDEX idx_audit_logs_user_action ON public.audit_logs USING btree (user_id, action);
-CREATE INDEX idx_baseline_comparisons_baseline ON public.baseline_comparisons USING btree (baseline_id);
-CREATE INDEX idx_baseline_comparisons_compared ON public.baseline_comparisons USING btree (compared_at DESC);
-CREATE INDEX idx_baseline_comparisons_drift ON public.baseline_comparisons USING btree (drift_detected, drift_severity);
-CREATE INDEX idx_compliance_reviews_baseline ON public.baseline_compliance_reviews USING btree (baseline_id);
-CREATE INDEX idx_compliance_reviews_status ON public.baseline_compliance_reviews USING btree (review_status);
-CREATE INDEX idx_compliance_reviews_type ON public.baseline_compliance_reviews USING btree (review_type);
-CREATE UNIQUE INDEX unique_baseline_component ON public.baseline_components USING btree (baseline_id, component_type, title);
-CREATE INDEX idx_baseline_components_baseline_id ON public.baseline_components USING btree (baseline_id);
-CREATE INDEX idx_baseline_components_source_document ON public.baseline_components USING btree (source_document_id);
-CREATE INDEX idx_baseline_components_type ON public.baseline_components USING btree (component_type);
-CREATE INDEX idx_baseline_drift_baseline_id ON public.baseline_drift_detection USING btree (baseline_id);
-CREATE INDEX idx_baseline_drift_detection_date ON public.baseline_drift_detection USING btree (detection_date);
-CREATE INDEX idx_baseline_drift_project_id ON public.baseline_drift_detection USING btree (project_id);
-CREATE INDEX idx_baseline_drift_severity ON public.baseline_drift_detection USING btree (drift_severity);
-CREATE INDEX idx_baseline_drift_status ON public.baseline_drift_detection USING btree (status);
-CREATE INDEX idx_baseline_drift_type ON public.baseline_drift_detection USING btree (detection_type);
-CREATE UNIQUE INDEX unique_baseline_version ON public.baseline_versions USING btree (baseline_id, version_number);
-CREATE INDEX idx_baseline_versions_baseline_id ON public.baseline_versions USING btree (baseline_id);
-CREATE INDEX idx_baseline_versions_changed_at ON public.baseline_versions USING btree (changed_at);
-CREATE INDEX idx_batch_files_batch_id ON public.batch_files USING btree (batch_id);
-CREATE INDEX idx_batch_files_file_id ON public.batch_files USING btree (file_id);
-CREATE INDEX idx_batch_files_status ON public.batch_files USING btree (status);
-CREATE INDEX idx_benefit_realization_project_id ON public.benefit_realization_plan USING btree (project_id);
-CREATE UNIQUE INDEX best_practices_project_title_unique ON public.best_practices USING btree (project_id, title);
-CREATE INDEX idx_best_practices_project_id ON public.best_practices USING btree (project_id);
-CREATE INDEX idx_best_practices_source_document ON public.best_practices USING btree (source_document_id) WHERE (source_document_id IS NOT NULL);
-CREATE INDEX idx_best_practices_source_location ON public.best_practices USING btree (source_document_id, source_text_start);
-CREATE INDEX idx_budget_baseline_project_id ON public.budget_baseline USING btree (project_id);
-CREATE UNIQUE INDEX idx_budget_baseline_idempotency ON public.budget_baseline USING btree (project_id, idempotency_key) WHERE (idempotency_key IS NOT NULL);
-CREATE UNIQUE INDEX budget_baselines_project_id_baseline_name_baseline_version_key ON public.budget_baselines USING btree (project_id, baseline_name, baseline_version);
-CREATE INDEX idx_budget_baselines_current ON public.budget_baselines USING btree (project_id, is_current) WHERE (is_current = true);
-CREATE INDEX idx_budget_baselines_project_id ON public.budget_baselines USING btree (project_id);
-CREATE INDEX idx_budget_baselines_status ON public.budget_baselines USING btree (status);
-CREATE UNIQUE INDEX budget_baselines_idempotency_key_key ON public.budget_baselines USING btree (idempotency_key);
-CREATE INDEX idx_budget_baselines_idempotency_key ON public.budget_baselines USING btree (idempotency_key);
-CREATE INDEX idx_business_case_details_project_id ON public.business_case_details USING btree (project_id);
-CREATE UNIQUE INDEX capacity_forecasts_project_id_forecast_date_role_skill_leve_key ON public.capacity_forecasts USING btree (project_id, forecast_date, role, skill_level);
-CREATE INDEX idx_capacity_forecasts_date ON public.capacity_forecasts USING btree (forecast_date);
-CREATE INDEX idx_capacity_forecasts_project_id ON public.capacity_forecasts USING btree (project_id);
-CREATE INDEX idx_capacity_forecasts_role ON public.capacity_forecasts USING btree (role);
-CREATE UNIQUE INDEX capacity_plans_project_id_team_member_period_start_period_e_key ON public.capacity_plans USING btree (project_id, team_member, period_start, period_end);
-CREATE INDEX idx_capacity_plans_project_id ON public.capacity_plans USING btree (project_id);
-CREATE INDEX idx_capacity_plans_source_document ON public.capacity_plans USING btree (source_document_id) WHERE (source_document_id IS NOT NULL);
-CREATE INDEX idx_change_control_boards_project_id ON public.change_control_boards USING btree (project_id);
-CREATE INDEX idx_checklist_items_assigned_user ON public.checklist_items USING btree (assigned_user_id);
-CREATE INDEX idx_checklist_items_completed ON public.checklist_items USING btree (is_completed);
-CREATE INDEX idx_checklist_items_due_date ON public.checklist_items USING btree (due_date);
-CREATE INDEX idx_checklist_items_sequence ON public.checklist_items USING btree (task_id, sequence_order);
-CREATE INDEX idx_checklist_items_task ON public.checklist_items USING btree (task_id);
-CREATE INDEX idx_communication_logs_project_id ON public.communication_logs USING btree (project_id);
-CREATE UNIQUE INDEX competencies_name_key ON public.competencies USING btree (name);
-CREATE INDEX idx_competencies_category ON public.competencies USING btree (category);
-CREATE INDEX idx_competencies_name ON public.competencies USING btree (name);
-CREATE UNIQUE INDEX unique_project_compliance_security ON public.compliance_security USING btree (project_id, title);
-CREATE INDEX idx_compliance_security_category ON public.compliance_security USING btree (category);
-CREATE INDEX idx_compliance_security_created_at ON public.compliance_security USING btree (created_at);
-CREATE INDEX idx_compliance_security_project_id ON public.compliance_security USING btree (project_id);
-CREATE INDEX idx_compliance_security_source_document_id ON public.compliance_security USING btree (source_document_id);
-CREATE INDEX idx_compliance_security_status ON public.compliance_security USING btree (status);
-CREATE INDEX idx_compliance_security_type ON public.compliance_security USING btree (type);
-CREATE INDEX idx_compression_feedback_created_at ON public.compression_feedback USING btree (created_at);
-CREATE INDEX idx_compression_feedback_document_id ON public.compression_feedback USING btree (document_id);
-CREATE INDEX idx_compression_feedback_method ON public.compression_feedback USING btree (compression_method);
-CREATE INDEX idx_compression_metrics_created_at ON public.compression_metrics USING btree (created_at DESC);
-CREATE INDEX idx_compression_metrics_document_id ON public.compression_metrics USING btree (document_id);
-CREATE INDEX idx_compression_metrics_strategy ON public.compression_metrics USING btree (strategy_used);
-CREATE UNIQUE INDEX compression_strategies_method_key ON public.compression_strategies USING btree (method);
-CREATE INDEX idx_compression_strategies_document_type ON public.compression_strategies USING btree (document_type);
-CREATE INDEX idx_compression_strategies_method ON public.compression_strategies USING btree (method);
-CREATE INDEX idx_compression_strategies_project_type ON public.compression_strategies USING btree (project_type);
-CREATE UNIQUE INDEX constraints_project_name_unique ON public.constraints USING btree (project_id, name);
-CREATE INDEX idx_constraints_impact ON public.constraints USING btree (impact);
-CREATE INDEX idx_constraints_project_id ON public.constraints USING btree (project_id);
-CREATE INDEX idx_constraints_source_document ON public.constraints USING btree (source_document_id) WHERE (source_document_id IS NOT NULL);
-CREATE INDEX idx_constraints_source_location ON public.constraints USING btree (source_document_id, source_text_start);
-CREATE UNIQUE INDEX constraints_idempotency_key_key ON public.constraints USING btree (idempotency_key);
-CREATE INDEX idx_constraints_idempotency_key ON public.constraints USING btree (idempotency_key);
-CREATE INDEX idx_context_bundles_created_at ON public.context_bundles USING btree (created_at);
-CREATE INDEX idx_context_bundles_metadata ON public.context_bundles USING gin (metadata);
-CREATE INDEX idx_context_bundles_project_id ON public.context_bundles USING btree (project_id);
-CREATE INDEX idx_context_bundles_results ON public.context_bundles USING gin (results);
-CREATE INDEX idx_context_bundles_template_id ON public.context_bundles USING btree (template_id);
-CREATE INDEX idx_context_bundles_updated_at ON public.context_bundles USING btree (updated_at);
-CREATE INDEX idx_context_bundles_user_id ON public.context_bundles USING btree (user_id);
-CREATE UNIQUE INDEX context_cleanup_results_cleanup_id_key ON public.context_cleanup_results USING btree (cleanup_id);
-CREATE INDEX idx_context_cleanup_results_cleanup_id ON public.context_cleanup_results USING btree (cleanup_id);
-CREATE INDEX idx_context_cleanup_results_started_at ON public.context_cleanup_results USING btree (started_at);
-CREATE INDEX idx_context_freshness_assessments_assessed_at ON public.context_freshness_assessments USING btree (assessed_at);
-CREATE INDEX idx_context_freshness_assessments_context_id ON public.context_freshness_assessments USING btree (context_id);
-CREATE INDEX idx_context_freshness_assessments_freshness_score ON public.context_freshness_assessments USING btree (freshness_score);
-CREATE INDEX idx_context_freshness_assessments_staleness_level ON public.context_freshness_assessments USING btree (staleness_level);
-CREATE UNIQUE INDEX context_freshness_metrics_metric_date_key ON public.context_freshness_metrics USING btree (metric_date);
-CREATE INDEX idx_context_freshness_metrics_metric_date ON public.context_freshness_metrics USING btree (metric_date);
-CREATE UNIQUE INDEX context_freshness_policies_policy_id_key ON public.context_freshness_policies USING btree (policy_id);
-CREATE INDEX idx_context_freshness_policies_enabled ON public.context_freshness_policies USING btree (enabled);
-CREATE INDEX idx_context_freshness_policies_policy_id ON public.context_freshness_policies USING btree (policy_id);
-CREATE INDEX idx_context_freshness_policy_evaluations_evaluated_at ON public.context_freshness_policy_evaluations USING btree (evaluated_at);
-CREATE INDEX idx_context_freshness_policy_evaluations_policy_id ON public.context_freshness_policy_evaluations USING btree (policy_id);
-CREATE INDEX idx_context_freshness_policy_results_applied_at ON public.context_freshness_policy_results USING btree (applied_at);
-CREATE INDEX idx_context_freshness_policy_results_context_id ON public.context_freshness_policy_results USING btree (context_id);
-CREATE INDEX idx_context_freshness_policy_results_policy_id ON public.context_freshness_policy_results USING btree (policy_id);
-CREATE INDEX idx_context_freshness_trends_context_id ON public.context_freshness_trends USING btree (context_id);
-CREATE INDEX idx_context_freshness_trends_timeframe ON public.context_freshness_trends USING btree (timeframe);
-CREATE INDEX idx_context_gathering_metrics_created_at ON public.context_gathering_metrics USING btree (created_at);
-CREATE INDEX idx_context_gathering_metrics_request_id ON public.context_gathering_metrics USING btree (request_id);
-CREATE INDEX idx_context_injection_metrics_bundle_id ON public.context_injection_metrics USING btree (bundle_id);
-CREATE INDEX idx_context_injection_metrics_created_at ON public.context_injection_metrics USING btree (created_at);
-CREATE INDEX idx_context_injection_metrics_project_id ON public.context_injection_metrics USING btree (project_id);
-CREATE INDEX idx_context_injection_metrics_template_id ON public.context_injection_metrics USING btree (template_id);
-CREATE INDEX idx_context_injection_metrics_user_id ON public.context_injection_metrics USING btree (user_id);
-CREATE INDEX idx_context_items_expires_at ON public.context_items USING btree (expires_at);
-CREATE INDEX idx_context_items_freshness_score ON public.context_items USING btree (freshness_score);
-CREATE INDEX idx_context_items_is_stale ON public.context_items USING btree (is_stale);
-CREATE INDEX idx_context_items_last_accessed_at ON public.context_items USING btree (last_accessed_at);
-CREATE INDEX idx_context_items_type ON public.context_items USING btree (type);
-CREATE INDEX idx_context_items_updated_at ON public.context_items USING btree (updated_at);
-CREATE INDEX idx_context_refresh_results_context_id ON public.context_refresh_results USING btree (context_id);
-CREATE INDEX idx_context_refresh_results_refreshed_at ON public.context_refresh_results USING btree (refreshed_at);
-CREATE INDEX idx_context_refresh_results_success ON public.context_refresh_results USING btree (success);
-CREATE UNIQUE INDEX context_refresh_schedules_schedule_id_key ON public.context_refresh_schedules USING btree (schedule_id);
-CREATE INDEX idx_context_refresh_schedules_context_id ON public.context_refresh_schedules USING btree (context_id);
-CREATE INDEX idx_context_refresh_schedules_enabled ON public.context_refresh_schedules USING btree (enabled);
-CREATE INDEX idx_context_refresh_schedules_next_execution ON public.context_refresh_schedules USING btree (next_execution);
-CREATE INDEX idx_context_refresh_schedules_schedule_type ON public.context_refresh_schedules USING btree (schedule_type);
-CREATE UNIQUE INDEX context_retrieval_metrics_metric_date_key ON public.context_retrieval_metrics USING btree (metric_date);
-CREATE INDEX idx_context_retrieval_metrics_metric_date ON public.context_retrieval_metrics USING btree (metric_date);
-CREATE INDEX idx_context_source_logs_retrieval_timestamp ON public.context_source_logs USING btree (retrieval_timestamp);
-CREATE INDEX idx_context_source_logs_source_id ON public.context_source_logs USING btree (source_id);
-CREATE INDEX idx_context_source_logs_source_type ON public.context_source_logs USING btree (source_type);
-CREATE INDEX idx_context_source_logs_success ON public.context_source_logs USING btree (success);
-CREATE INDEX idx_context_staleness_log_action ON public.context_staleness_log USING btree (action);
-CREATE INDEX idx_context_staleness_log_context_id ON public.context_staleness_log USING btree (context_id);
-CREATE INDEX idx_context_staleness_log_performed_at ON public.context_staleness_log USING btree (performed_at);
-CREATE UNIQUE INDEX contingency_reserves_project_id_reserve_id_key ON public.contingency_reserves USING btree (project_id, reserve_id);
-CREATE INDEX idx_contingency_reserves_project_id ON public.contingency_reserves USING btree (project_id);
-CREATE INDEX idx_contingency_reserves_status ON public.contingency_reserves USING btree (status);
-CREATE INDEX idx_contingency_reserves_type ON public.contingency_reserves USING btree (reserve_type);
-CREATE INDEX idx_cost_actuals_category ON public.cost_actuals USING btree (category);
-CREATE INDEX idx_cost_actuals_period ON public.cost_actuals USING btree (period_start_date, period_end_date);
-CREATE INDEX idx_cost_actuals_project_id ON public.cost_actuals USING btree (project_id);
-CREATE INDEX idx_cost_actuals_wbs ON public.cost_actuals USING btree (wbs_code);
-CREATE UNIQUE INDEX cost_categories_category_code_key ON public.cost_categories USING btree (category_code);
-CREATE UNIQUE INDEX cost_categories_organization_id_name_key ON public.cost_categories USING btree (organization_id, name);
-CREATE INDEX idx_cost_categories_active ON public.cost_categories USING btree (is_active);
-CREATE INDEX idx_cost_categories_order ON public.cost_categories USING btree (display_order);
-CREATE INDEX idx_cost_categories_type ON public.cost_categories USING btree (category_type);
-CREATE INDEX idx_cost_estimates_project_id ON public.cost_estimates USING btree (project_id);
-CREATE UNIQUE INDEX idx_cost_estimates_idempotency ON public.cost_estimates USING btree (project_id, idempotency_key) WHERE (idempotency_key IS NOT NULL);
-CREATE INDEX idx_cost_estimates_idempotency_key ON public.cost_estimates USING btree (idempotency_key);
-CREATE INDEX idx_critical_path_project_id ON public.critical_path USING btree (project_id);
-CREATE UNIQUE INDEX critical_path_activities_project_id_activity_id_key ON public.critical_path_activities USING btree (project_id, activity_id);
-CREATE INDEX idx_critical_path_activities_project_id ON public.critical_path_activities USING btree (project_id);
-CREATE INDEX idx_critical_path_activities_sequence ON public.critical_path_activities USING btree (project_id, path_sequence);
-CREATE UNIQUE INDEX daily_statistics_date_key ON public.daily_statistics USING btree (date);
-CREATE INDEX idx_daily_stats_date ON public.daily_statistics USING btree (date DESC);
-CREATE UNIQUE INDEX deliverable_acceptance_project_id_deliverable_name_reviewer_key ON public.deliverable_acceptance USING btree (project_id, deliverable_name, reviewer);
-CREATE INDEX idx_deliverable_acceptance_project ON public.deliverable_acceptance USING btree (project_id);
-CREATE INDEX idx_deliverable_acceptance_status ON public.deliverable_acceptance USING btree (status);
-CREATE UNIQUE INDEX deliverables_project_name_unique ON public.deliverables USING btree (project_id, name);
-CREATE INDEX idx_deliverables_source_document ON public.deliverables USING btree (source_document_id) WHERE (source_document_id IS NOT NULL);
-CREATE INDEX idx_deliverables_source_location ON public.deliverables USING btree (source_document_id, source_text_start);
-CREATE UNIQUE INDEX deliverables_idempotency_key_key ON public.deliverables USING btree (idempotency_key);
-CREATE INDEX idx_deliverables_idempotency_key ON public.deliverables USING btree (idempotency_key);
-CREATE UNIQUE INDEX development_approach_project_id_key ON public.development_approach USING btree (project_id);
-CREATE INDEX idx_dev_approach_methodology ON public.development_approach USING btree (approach, methodology);
-CREATE INDEX idx_dev_approach_project ON public.development_approach USING btree (project_id);
-CREATE INDEX idx_development_approaches_project_id ON public.development_approaches USING btree (project_id);
-CREATE UNIQUE INDEX idx_development_approaches_unique ON public.development_approaches USING btree (project_id, approach, COALESCE(framework, ''::text));
-CREATE UNIQUE INDEX digital_twin_asset_states_asset_id_state_version_key ON public.digital_twin_asset_states USING btree (asset_id, state_version);
-CREATE INDEX idx_dt_states_asset_current ON public.digital_twin_asset_states USING btree (asset_id, is_current) WHERE (is_current = true);
-CREATE INDEX idx_dt_states_asset_id ON public.digital_twin_asset_states USING btree (asset_id);
-CREATE INDEX idx_dt_states_event_id ON public.digital_twin_asset_states USING btree (source_event_id);
-CREATE INDEX idx_dt_states_snapshot_gin ON public.digital_twin_asset_states USING gin (state_snapshot);
-CREATE INDEX idx_dt_states_timestamp ON public.digital_twin_asset_states USING btree ("timestamp" DESC);
-CREATE INDEX idx_dt_assets_asset_type ON public.digital_twin_assets USING btree (asset_type);
-CREATE INDEX idx_dt_assets_company_id ON public.digital_twin_assets USING btree (company_id);
-CREATE INDEX idx_dt_assets_metadata_gin ON public.digital_twin_assets USING gin (metadata);
-CREATE INDEX idx_dt_assets_platform ON public.digital_twin_assets USING btree (platform_type, external_id);
-CREATE UNIQUE INDEX idx_dt_assets_platform_unique ON public.digital_twin_assets USING btree (external_id, platform_type, COALESCE(platform_instance_url, ''::text));
-CREATE INDEX idx_dt_assets_project_id ON public.digital_twin_assets USING btree (project_id);
-CREATE INDEX idx_dt_assets_source_document_id ON public.digital_twin_assets USING btree (source_document_id);
-CREATE INDEX idx_dt_assets_source_entity_id ON public.digital_twin_assets USING btree (source_entity_id);
-CREATE INDEX idx_dt_assets_sync_status ON public.digital_twin_assets USING btree (sync_status) WHERE ((sync_status)::text = 'active'::text);
-CREATE INDEX idx_dt_triggers_asset_id ON public.digital_twin_document_triggers USING btree (asset_id);
-CREATE INDEX idx_dt_triggers_event_id ON public.digital_twin_document_triggers USING btree (event_id);
-CREATE INDEX idx_dt_triggers_status ON public.digital_twin_document_triggers USING btree (status) WHERE ((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('processing'::character varying)::text]));
-CREATE INDEX idx_dt_triggers_template_id ON public.digital_twin_document_triggers USING btree (template_id);
-CREATE INDEX idx_dt_triggers_triggered_at ON public.digital_twin_document_triggers USING btree (triggered_at DESC);
-CREATE UNIQUE INDEX digital_twin_events_platform_event_id_platform_type_asset_i_key ON public.digital_twin_events USING btree (platform_event_id, platform_type, asset_id);
-CREATE INDEX idx_dt_events_asset_id ON public.digital_twin_events USING btree (asset_id);
-CREATE INDEX idx_dt_events_ingested ON public.digital_twin_events USING btree (ingested_at DESC);
-CREATE INDEX idx_dt_events_payload_gin ON public.digital_twin_events USING gin (event_payload);
-CREATE INDEX idx_dt_events_status ON public.digital_twin_events USING btree (processing_status) WHERE ((processing_status)::text = ANY (ARRAY[('pending'::character varying)::text, ('processing'::character varying)::text]));
-CREATE INDEX idx_dt_events_timestamp ON public.digital_twin_events USING btree (event_timestamp DESC);
-CREATE INDEX idx_dt_events_type ON public.digital_twin_events USING btree (event_type);
-CREATE INDEX idx_dt_sources_active ON public.digital_twin_ingestion_sources USING btree (is_active) WHERE (is_active = true);
-CREATE INDEX idx_dt_sources_project_id ON public.digital_twin_ingestion_sources USING btree (project_id);
-CREATE INDEX idx_dt_rules_active ON public.digital_twin_trigger_rules USING btree (is_active) WHERE (is_active = true);
-CREATE INDEX idx_dt_rules_project_id ON public.digital_twin_trigger_rules USING btree (project_id);
-CREATE INDEX idx_document_analysis_analysis_type ON public.document_analysis USING btree (analysis_type);
-CREATE INDEX idx_document_analysis_analyzed_at ON public.document_analysis USING btree (analyzed_at);
-CREATE INDEX idx_document_analysis_compliance_score ON public.document_analysis USING btree (compliance_score);
-CREATE INDEX idx_document_analysis_document_id ON public.document_analysis USING btree (document_id);
-CREATE UNIQUE INDEX document_analytics_document_id_key ON public.document_analytics USING btree (document_id);
-CREATE INDEX idx_doc_analytics_edits ON public.document_analytics USING btree (edit_count DESC);
-CREATE INDEX idx_doc_analytics_project ON public.document_analytics USING btree (project_id);
-CREATE INDEX idx_doc_analytics_views ON public.document_analytics USING btree (view_count DESC);
-CREATE INDEX idx_document_audit_trail_action_type ON public.document_audit_trail USING btree (action_type);
-CREATE INDEX idx_document_audit_trail_document_id ON public.document_audit_trail USING btree (document_id);
-CREATE INDEX idx_document_audit_trail_event_type ON public.document_audit_trail USING btree (event_type);
-CREATE INDEX idx_document_audit_trail_performed_by ON public.document_audit_trail USING btree (performed_by);
-CREATE INDEX idx_document_audit_trail_user_id ON public.document_audit_trail USING btree (user_id);
-CREATE INDEX document_chunks_embedding_idx ON public.document_chunks USING ivfflat (embedding vector_cosine_ops) WITH (lists='100');
-CREATE INDEX doc_entities_doc_idx ON public.document_entities USING btree (document_id);
-CREATE INDEX idx_document_entities_document_id ON public.document_entities USING btree (document_id);
-CREATE INDEX idx_document_entities_entity ON public.document_entities USING btree (entity);
-CREATE INDEX idx_document_entities_type ON public.document_entities USING btree (type) WHERE (type IS NOT NULL);
-CREATE UNIQUE INDEX uq_document_integration ON public.document_integrations USING btree (document_id, integration_type);
-CREATE INDEX idx_document_integrations_document_id ON public.document_integrations USING btree (document_id);
-CREATE INDEX idx_document_integrations_integration_type ON public.document_integrations USING btree (integration_type);
-CREATE INDEX idx_document_integrations_external_id ON public.document_integrations USING btree (external_id);
-CREATE INDEX idx_document_integrations_sync_status ON public.document_integrations USING btree (sync_status);
-CREATE UNIQUE INDEX document_jira_links_document_id_integration_id_key ON public.document_jira_links USING btree (document_id, integration_id);
-CREATE INDEX idx_document_jira_links_document_id ON public.document_jira_links USING btree (document_id);
-CREATE INDEX idx_document_jira_links_integration_id ON public.document_jira_links USING btree (integration_id);
-CREATE INDEX idx_document_jira_links_jira_issue_key ON public.document_jira_links USING btree (jira_issue_key);
-CREATE INDEX idx_document_jira_links_project_id ON public.document_jira_links USING btree (project_id);
-CREATE INDEX idx_document_pattern_analysis_analyzed_at ON public.document_pattern_analysis USING btree (analyzed_at);
-CREATE INDEX idx_document_pattern_analysis_document_id ON public.document_pattern_analysis USING btree (document_id);
-CREATE INDEX idx_document_pattern_analysis_pattern_confidence ON public.document_pattern_analysis USING btree (pattern_confidence);
-CREATE INDEX idx_document_patterns_category ON public.document_patterns USING btree (category);
-CREATE INDEX idx_document_patterns_framework ON public.document_patterns USING btree (framework);
-CREATE INDEX idx_document_patterns_pattern_type ON public.document_patterns USING btree (pattern_type);
-CREATE INDEX idx_document_pmbok7_refs_document ON public.document_pmbok7_principle_refs USING btree (document_id);
-CREATE INDEX idx_document_pmbok7_refs_principle ON public.document_pmbok7_principle_refs USING btree (principle_id);
-CREATE INDEX idx_document_pmbok7_refs_type ON public.document_pmbok7_principle_refs USING btree (reference_type);
-CREATE UNIQUE INDEX document_processing_history_history_id_key ON public.document_processing_history USING btree (history_id);
-CREATE INDEX idx_document_processing_history_created_at ON public.document_processing_history USING btree (created_at);
-CREATE INDEX idx_document_processing_history_history_id ON public.document_processing_history USING btree (history_id);
-CREATE INDEX idx_document_processing_history_project_id ON public.document_processing_history USING btree (project_id);
-CREATE INDEX idx_document_processing_history_request_id ON public.document_processing_history USING btree (request_id);
-CREATE INDEX idx_document_processing_history_status ON public.document_processing_history USING btree (status);
-CREATE INDEX idx_document_processing_history_template_id ON public.document_processing_history USING btree (template_id);
-CREATE INDEX idx_document_processing_history_user_id ON public.document_processing_history USING btree (user_id);
-CREATE UNIQUE INDEX document_processing_jobs_job_id_key ON public.document_processing_jobs USING btree (job_id);
-CREATE INDEX idx_document_processing_jobs_created_at ON public.document_processing_jobs USING btree (created_at);
-CREATE INDEX idx_document_processing_jobs_job_id ON public.document_processing_jobs USING btree (job_id);
-CREATE INDEX idx_document_processing_jobs_project_id ON public.document_processing_jobs USING btree (project_id);
-CREATE INDEX idx_document_processing_jobs_request_id ON public.document_processing_jobs USING btree (request_id);
-CREATE INDEX idx_document_processing_jobs_status ON public.document_processing_jobs USING btree (status);
-CREATE INDEX idx_document_processing_jobs_template_id ON public.document_processing_jobs USING btree (template_id);
-CREATE INDEX idx_document_processing_jobs_user_id ON public.document_processing_jobs USING btree (user_id);
-CREATE INDEX idx_document_quality_metrics_document_id ON public.document_quality_metrics USING btree (document_id);
-CREATE INDEX idx_document_quality_metrics_overall_score ON public.document_quality_metrics USING btree (overall_score);
-CREATE INDEX idx_document_signatures_request_id ON public.document_signatures USING btree (signature_request_id);
-CREATE INDEX idx_document_signatures_status ON public.document_signatures USING btree (status);
-CREATE INDEX idx_document_signatures_approval_request ON public.document_signatures USING btree (approval_request_id) WHERE (approval_request_id IS NOT NULL);
-CREATE INDEX idx_document_signatures_document_id ON public.document_signatures USING btree (document_id);
-CREATE INDEX idx_document_signatures_initiated_by ON public.document_signatures USING btree (initiated_by);
-CREATE UNIQUE INDEX document_summaries_unique_cache_v2 ON public.document_summaries USING btree (document_id, compression_level, compression_method, template_context_hash);
-CREATE INDEX idx_document_summaries_document_id ON public.document_summaries USING btree (document_id);
-CREATE INDEX idx_document_summaries_hash ON public.document_summaries USING btree (template_context_hash) WHERE (template_context_hash IS NOT NULL);
-CREATE INDEX idx_document_summaries_method ON public.document_summaries USING btree (compression_method);
-CREATE INDEX idx_document_summaries_reuse ON public.document_summaries USING btree (times_reused DESC);
-CREATE INDEX idx_document_summaries_valid ON public.document_summaries USING btree (is_valid) WHERE (is_valid = true);
-CREATE UNIQUE INDEX document_tags_document_id_tag_key ON public.document_tags USING btree (document_id, tag);
-CREATE INDEX idx_document_tags_document_id ON public.document_tags USING btree (document_id);
-CREATE INDEX idx_document_tags_tag ON public.document_tags USING btree (tag);
-CREATE INDEX idx_conflicts_document_id ON public.document_version_conflicts USING btree (document_id);
-CREATE INDEX idx_conflicts_existing_version_id ON public.document_version_conflicts USING btree (existing_version_id);
-CREATE INDEX idx_conflicts_template_id ON public.document_version_conflicts USING btree (template_id);
-CREATE UNIQUE INDEX document_versions_document_id_version_key ON public.document_versions USING btree (document_id, version);
-CREATE INDEX idx_document_versions_created_at ON public.document_versions USING btree (created_at DESC);
-CREATE INDEX idx_document_versions_document_id ON public.document_versions USING btree (document_id);
-CREATE INDEX idx_document_versions_semantic_version ON public.document_versions USING btree (document_id, semantic_version);
-CREATE INDEX idx_document_versions_version ON public.document_versions USING btree (version);
-CREATE UNIQUE INDEX documents_external_unique ON public.documents USING btree (external_id, external_source);
-CREATE UNIQUE INDEX unique_sharepoint_file_id ON public.documents USING btree (sharepoint_file_id);
-CREATE INDEX idx_documents_comments ON public.documents USING gin (comments);
-CREATE INDEX idx_documents_company_id ON public.documents USING btree (company_id);
-CREATE INDEX idx_documents_confluence_page_url ON public.documents USING btree (confluence_page_url);
-CREATE INDEX idx_documents_content_metrics ON public.documents USING btree (word_count, character_count, sentence_count, paragraph_count);
-CREATE INDEX idx_documents_created_at ON public.documents USING btree (created_at DESC) WHERE (deleted_at IS NULL);
-CREATE INDEX idx_documents_created_by ON public.documents USING btree (created_by);
-CREATE INDEX idx_documents_deleted ON public.documents USING btree (deleted_at DESC) WHERE (deleted_at IS NOT NULL);
-CREATE INDEX idx_documents_external_id ON public.documents USING btree (external_id);
-CREATE INDEX idx_documents_external_source ON public.documents USING btree (external_source);
-CREATE INDEX idx_documents_framework ON public.documents USING btree (framework);
-CREATE INDEX idx_documents_framework_updated ON public.documents USING btree (framework, updated_at DESC) WHERE ((deleted_at IS NULL) AND (framework IS NOT NULL));
-CREATE INDEX idx_documents_generation_metadata ON public.documents USING gin (generation_metadata);
-CREATE INDEX idx_documents_is_regeneration ON public.documents USING btree (is_regeneration);
-CREATE INDEX idx_documents_metadata ON public.documents USING gin (metadata);
-CREATE INDEX idx_documents_not_deleted ON public.documents USING btree (created_at DESC) WHERE (deleted_at IS NULL);
-CREATE INDEX idx_documents_parent_document_id ON public.documents USING btree (parent_document_id);
-CREATE INDEX idx_documents_project ON public.documents USING btree (project_id);
-CREATE INDEX idx_documents_project_parent ON public.documents USING btree (project_id, parent_document_id);
-CREATE INDEX idx_documents_quality_composite ON public.documents USING btree (quality_status, quality_score DESC);
-CREATE INDEX idx_documents_quality_score ON public.documents USING btree (quality_score DESC);
-CREATE INDEX idx_documents_quality_status ON public.documents USING btree (quality_status);
-CREATE INDEX idx_documents_search ON public.documents USING gin (to_tsvector('english'::regconfig, (((COALESCE(title, ''::character varying))::text || ' '::text) || COALESCE(content, ''::text)))) WHERE (deleted_at IS NULL);
-CREATE INDEX idx_documents_sharepoint_drive_id ON public.documents USING btree (sharepoint_drive_id);
-CREATE INDEX idx_documents_sharepoint_file_id ON public.documents USING btree (sharepoint_file_id);
-CREATE INDEX idx_documents_sharepoint_site_id ON public.documents USING btree (sharepoint_site_id);
-CREATE INDEX idx_documents_source_documents ON public.documents USING gin (source_documents);
-CREATE INDEX idx_documents_tags ON public.documents USING gin (tags);
-CREATE INDEX idx_documents_template_framework ON public.documents USING btree (template_framework);
-CREATE INDEX idx_documents_template_id ON public.documents USING btree (template_id);
-CREATE INDEX idx_documents_updated_at ON public.documents USING btree (updated_at DESC) WHERE (deleted_at IS NULL);
-CREATE INDEX documents_embedding_idx ON public.documents USING ivfflat (embedding vector_cosine_ops) WITH (lists='100');
-CREATE INDEX idx_documents_raw_created_at ON public.documents_raw USING btree (created_at DESC);
-CREATE INDEX idx_documents_raw_metadata ON public.documents_raw USING gin (metadata);
-CREATE UNIQUE INDEX documents_vectors_document_id_chunk_index_key ON public.documents_vectors USING btree (document_id, chunk_index);
-CREATE INDEX documents_vectors_embedding_idx ON public.documents_vectors USING ivfflat (embedding vector_cosine_ops) WITH (lists='100');
-CREATE INDEX documents_vectors_document_id_idx ON public.documents_vectors USING btree (document_id);
-CREATE INDEX idx_domain_entities_domain ON public.domain_entities USING btree (domain);
-CREATE INDEX idx_domain_entities_project_id ON public.domain_entities USING btree (project_id);
-CREATE INDEX idx_domain_entities_type ON public.domain_entities USING btree (entity_type);
-CREATE INDEX idx_domain_entities_idempotency_key ON public.domain_entities USING btree (idempotency_key);
-CREATE INDEX idx_domain_entities_project_entity_key ON public.domain_entities USING btree (project_id, entity_type, idempotency_key);
-CREATE INDEX idx_domain_extraction_runs_project ON public.domain_extraction_runs USING btree (project_id, domain);
-CREATE INDEX idx_domain_extraction_runs_status ON public.domain_extraction_runs USING btree (status);
-CREATE UNIQUE INDEX domain_kpi_snapshots_project_id_domain_metric_name_recorded_key ON public.domain_kpi_snapshots USING btree (project_id, domain, metric_name, recorded_at);
-CREATE INDEX idx_domain_kpi_snapshots_project ON public.domain_kpi_snapshots USING btree (project_id, domain);
-CREATE INDEX idx_drift_rules_active ON public.drift_detection_rules USING btree (is_active);
-CREATE INDEX idx_drift_rules_project ON public.drift_detection_rules USING btree (project_id);
-CREATE INDEX idx_drift_rules_type ON public.drift_detection_rules USING btree (rule_type);
-CREATE INDEX idx_drift_affected_entities ON public.drift_detections USING gin (affected_entity_ids);
-CREATE INDEX idx_drift_baseline ON public.drift_detections USING btree (baseline_id);
-CREATE INDEX idx_drift_detected ON public.drift_detections USING btree (detected_at DESC);
-CREATE INDEX idx_drift_project ON public.drift_detections USING btree (project_id);
-CREATE INDEX idx_drift_severity ON public.drift_detections USING btree (severity);
-CREATE INDEX idx_drift_status ON public.drift_detections USING btree (status);
-CREATE INDEX idx_drift_type ON public.drift_detections USING btree (drift_type);
-CREATE UNIQUE INDEX earned_value_metrics_project_id_measurement_date_key ON public.earned_value_metrics USING btree (project_id, measurement_date);
-CREATE INDEX idx_earned_value_metrics_project_id ON public.earned_value_metrics USING btree (project_id);
-CREATE UNIQUE INDEX embedding_cache_content_hash_key ON public.embedding_cache USING btree (content_hash);
-CREATE INDEX idx_embedding_cache_content_hash ON public.embedding_cache USING btree (content_hash);
-CREATE INDEX idx_embedding_cache_expires_at ON public.embedding_cache USING btree (expires_at);
-CREATE INDEX idx_embedding_cache_model ON public.embedding_cache USING btree (model);
-CREATE UNIQUE INDEX emergency_meetings_meeting_id_key ON public.emergency_meetings USING btree (meeting_id);
-CREATE INDEX idx_emergency_meetings_created_at ON public.emergency_meetings USING btree (created_at);
-CREATE INDEX idx_emergency_meetings_drift_record ON public.emergency_meetings USING btree (drift_record_id);
-CREATE INDEX idx_emergency_meetings_meeting_id ON public.emergency_meetings USING btree (meeting_id);
-CREATE INDEX idx_emergency_meetings_project_id ON public.emergency_meetings USING btree (project_id);
-CREATE INDEX idx_emergency_meetings_scheduled_date ON public.emergency_meetings USING btree (scheduled_date);
-CREATE INDEX idx_emergency_meetings_search ON public.emergency_meetings USING gin (to_tsvector('english'::regconfig, (((((COALESCE(title, ''::character varying))::text || ' '::text) || COALESCE(trigger_reason, ''::text)) || ' '::text) || COALESCE(resolution, ''::text))));
-CREATE INDEX idx_emergency_meetings_severity ON public.emergency_meetings USING btree (severity);
-CREATE INDEX idx_emergency_meetings_status ON public.emergency_meetings USING btree (status);
-CREATE UNIQUE INDEX engagement_actions_project_id_action_id_key ON public.engagement_actions USING btree (project_id, action_id);
-CREATE INDEX idx_engagement_actions_action_id ON public.engagement_actions USING btree (action_id);
-CREATE INDEX idx_engagement_actions_date ON public.engagement_actions USING btree (planned_date);
-CREATE INDEX idx_engagement_actions_project_id ON public.engagement_actions USING btree (project_id);
-CREATE INDEX idx_engagement_actions_stakeholder ON public.engagement_actions USING btree (stakeholder_id);
-CREATE INDEX idx_engagement_actions_type ON public.engagement_actions USING btree (action_type);
-CREATE INDEX idx_entity_extractions_created ON public.entity_extractions USING btree (created_at DESC);
-CREATE INDEX idx_entity_extractions_document ON public.entity_extractions USING btree (document_id);
-CREATE INDEX idx_entity_extractions_entity_data ON public.entity_extractions USING gin (entity_data);
-CREATE INDEX idx_entity_extractions_project ON public.entity_extractions USING btree (project_id);
-CREATE INDEX idx_entity_extractions_status ON public.entity_extractions USING btree (status);
-CREATE INDEX idx_entity_extractions_type ON public.entity_extractions USING btree (entity_type);
-CREATE UNIQUE INDEX unique_entity_relationship ON public.entity_relationships USING btree (source_entity_id, target_entity_id, relationship_type);
-CREATE INDEX idx_entity_relationships_source ON public.entity_relationships USING btree (source_entity_id);
-CREATE INDEX idx_entity_relationships_target ON public.entity_relationships USING btree (target_entity_id);
-CREATE INDEX idx_entity_relationships_type ON public.entity_relationships USING btree (relationship_type);
-CREATE INDEX idx_escalation_history_action ON public.escalation_alert_history USING btree (action_type);
-CREATE INDEX idx_escalation_history_alert ON public.escalation_alert_history USING btree (alert_id);
-CREATE INDEX idx_escalation_history_performed ON public.escalation_alert_history USING btree (performed_at);
-CREATE INDEX idx_escalation_alerts_created ON public.escalation_alerts USING btree (created_at);
-CREATE INDEX idx_escalation_alerts_deadline ON public.escalation_alerts USING btree (deadline);
-CREATE INDEX idx_escalation_alerts_drift ON public.escalation_alerts USING btree (drift_detection_id);
-CREATE INDEX idx_escalation_alerts_project ON public.escalation_alerts USING btree (project_id);
-CREATE INDEX idx_escalation_alerts_severity ON public.escalation_alerts USING btree (severity_level);
-CREATE INDEX idx_escalation_alerts_status ON public.escalation_alerts USING btree (status);
-CREATE UNIQUE INDEX escalation_matrix_rule_name_key ON public.escalation_matrix USING btree (rule_name);
-CREATE INDEX idx_escalation_matrix_active ON public.escalation_matrix USING btree (is_active);
-CREATE INDEX idx_escalation_matrix_drift_type ON public.escalation_matrix USING btree (drift_type);
-CREATE INDEX idx_escalation_matrix_priority ON public.escalation_matrix USING btree (priority);
-CREATE INDEX idx_escalation_matrix_severity ON public.escalation_matrix USING btree (severity_level);
-CREATE UNIQUE INDEX extracted_dt_assets_project_id_external_id_platform_type_key ON public.extracted_dt_assets USING btree (project_id, external_id, platform_type);
-CREATE INDEX idx_extracted_dt_assets_asset_type ON public.extracted_dt_assets USING btree (asset_type);
-CREATE INDEX idx_extracted_dt_assets_project_id ON public.extracted_dt_assets USING btree (project_id);
-CREATE INDEX idx_extracted_dt_assets_source_document_id ON public.extracted_dt_assets USING btree (source_document_id);
-CREATE INDEX idx_extraction_failures_project_id ON public.extraction_failures USING btree (project_id);
-CREATE INDEX idx_extraction_failures_correlation_id ON public.extraction_failures USING btree (correlation_id);
-CREATE INDEX idx_extraction_failures_entity_type ON public.extraction_failures USING btree (entity_type);
-CREATE INDEX idx_extraction_failures_created_at ON public.extraction_failures USING btree (created_at);
-CREATE INDEX idx_extraction_failures_status ON public.extraction_failures USING btree (status);
-CREATE INDEX idx_extraction_failures_retry_at ON public.extraction_failures USING btree (retry_at);
-CREATE INDEX idx_extraction_failures_pending_by_project ON public.extraction_failures USING btree (project_id, status) WHERE ((status)::text = 'pending'::text);
-CREATE UNIQUE INDEX fallback_strategies_strategy_id_key ON public.fallback_strategies USING btree (strategy_id);
-CREATE INDEX idx_fallback_strategies_config_gin ON public.fallback_strategies USING gin (config);
-CREATE INDEX idx_fallback_strategies_enabled ON public.fallback_strategies USING btree (enabled);
-CREATE INDEX idx_fallback_strategies_order ON public.fallback_strategies USING btree (fallback_order);
-CREATE INDEX idx_fallback_strategies_type ON public.fallback_strategies USING btree (strategy_type);
-CREATE INDEX idx_file_assets_uploaded_by ON public.file_assets USING btree (uploaded_by);
-CREATE INDEX idx_financial_variances_project_id ON public.financial_variances USING btree (project_id);
-CREATE INDEX idx_framework_analysis_analyzed_at ON public.framework_analysis USING btree (analyzed_at);
-CREATE INDEX idx_framework_analysis_average_quality_score ON public.framework_analysis USING btree (average_quality_score);
-CREATE INDEX idx_framework_analysis_framework ON public.framework_analysis USING btree (framework);
-CREATE INDEX idx_funding_tranches_project_id ON public.funding_tranches USING btree (project_id);
-CREATE INDEX idx_gen_change_requests_project_id ON public.general_change_requests USING btree (project_id);
-CREATE INDEX idx_goal_milestones_goal ON public.goal_milestones USING btree (goal_id);
-CREATE INDEX idx_governance_decisions_project_id ON public.governance_decisions USING btree (project_id);
-CREATE INDEX idx_health_checks_timestamp ON public.health_checks USING btree ("timestamp");
-CREATE INDEX idx_historical_trends_created_at ON public.historical_trends USING btree (created_at);
-CREATE INDEX idx_historical_trends_metric_name ON public.historical_trends USING btree (metric_name);
-CREATE INDEX idx_historical_trends_timeframe ON public.historical_trends USING btree (timeframe);
-CREATE INDEX idx_historical_trends_trend_direction ON public.historical_trends USING btree (trend_direction);
-CREATE INDEX idx_improvement_suggestions_created_at ON public.improvement_suggestions USING btree (created_at);
-CREATE INDEX idx_improvement_suggestions_document_id ON public.improvement_suggestions USING btree (document_id);
-CREATE INDEX idx_improvement_suggestions_priority ON public.improvement_suggestions USING btree (priority);
-CREATE INDEX idx_improvement_suggestions_project_id ON public.improvement_suggestions USING btree (project_id);
-CREATE INDEX idx_improvement_suggestions_status ON public.improvement_suggestions USING btree (status);
-CREATE INDEX idx_improvement_suggestions_suggestion_type ON public.improvement_suggestions USING btree (suggestion_type);
-CREATE INDEX idx_improvement_suggestions_user_id ON public.improvement_suggestions USING btree (user_id);
-CREATE INDEX idx_suggestions_priority ON public.improvement_suggestions USING btree (priority DESC);
-CREATE INDEX idx_suggestions_project ON public.improvement_suggestions USING btree (project_id);
-CREATE INDEX idx_suggestions_status ON public.improvement_suggestions USING btree (status);
-CREATE INDEX idx_suggestions_type ON public.improvement_suggestions USING btree (suggestion_type);
-CREATE INDEX idx_infrared_thermal_conductance_qubit ON public.infrared_thermal_conductance_log USING btree (qubit_id);
-CREATE INDEX idx_infrared_thermal_conductance_wavelength ON public.infrared_thermal_conductance_log USING btree (infrared_wavelength);
-CREATE INDEX idx_infrared_thermal_conductance_timestamp ON public.infrared_thermal_conductance_log USING btree ("timestamp");
-CREATE INDEX idx_innovation_opportunities_novelty ON public.innovation_opportunities USING btree (novelty_score);
-CREATE INDEX idx_innovation_opportunities_project_id ON public.innovation_opportunities USING btree (project_id);
-CREATE INDEX idx_innovation_opportunities_status ON public.innovation_opportunities USING btree (status);
-CREATE INDEX idx_innovation_opportunities_type ON public.innovation_opportunities USING btree (opportunity_type);
-CREATE UNIQUE INDEX integration_sync_metadata_integration_id_adpa_document_id_key ON public.integration_sync_metadata USING btree (integration_id, adpa_document_id);
-CREATE INDEX idx_integration_sync_metadata_adpa_document_id ON public.integration_sync_metadata USING btree (adpa_document_id);
-CREATE INDEX idx_integration_sync_metadata_external_id ON public.integration_sync_metadata USING btree (external_id);
-CREATE INDEX idx_integration_sync_metadata_integration_id ON public.integration_sync_metadata USING btree (integration_id);
-CREATE INDEX idx_integration_metrics_type_time ON public.integration_usage_metrics USING btree (integration_type, period_start DESC);
-CREATE INDEX idx_integration_metrics_integration ON public.integration_usage_metrics USING btree (integration_id) WHERE (integration_id IS NOT NULL);
-CREATE INDEX idx_integrations_last_sync ON public.integrations USING btree (last_sync);
-CREATE INDEX idx_integrations_sync_status ON public.integrations USING btree (sync_status);
-CREATE INDEX idx_issue_log_assigned_to ON public.issue_log USING btree (assigned_to);
-CREATE INDEX idx_issue_log_category ON public.issue_log USING btree (category);
-CREATE INDEX idx_issue_log_priority ON public.issue_log USING btree (priority);
-CREATE INDEX idx_issue_log_project_id ON public.issue_log USING btree (project_id);
-CREATE INDEX idx_issue_log_status ON public.issue_log USING btree (status);
-CREATE INDEX idx_issue_history_changed_at ON public.issue_status_history USING btree (changed_at DESC);
-CREATE INDEX idx_issue_history_issue_id ON public.issue_status_history USING btree (issue_id);
-CREATE INDEX idx_issue_history_status ON public.issue_status_history USING btree (new_status);
-CREATE INDEX idx_issues_assigned_to ON public.issues USING btree (assigned_to) WHERE (assigned_to IS NOT NULL);
-CREATE INDEX idx_issues_category ON public.issues USING btree (category);
-CREATE INDEX idx_issues_date_raised ON public.issues USING btree (date_raised DESC);
-CREATE INDEX idx_issues_playbook_execution ON public.issues USING btree (playbook_execution_id) WHERE (playbook_execution_id IS NOT NULL);
-CREATE INDEX idx_issues_priority ON public.issues USING btree (priority);
-CREATE INDEX idx_issues_project_id ON public.issues USING btree (project_id);
-CREATE INDEX idx_issues_related_risk ON public.issues USING btree (related_risk_id) WHERE (related_risk_id IS NOT NULL);
-CREATE INDEX idx_issues_source_document ON public.issues USING btree (source_document_id);
-CREATE INDEX idx_issues_source_location ON public.issues USING btree (source_document_id, source_text_start);
-CREATE INDEX idx_issues_status ON public.issues USING btree (status);
-CREATE INDEX idx_issues_status_priority ON public.issues USING btree (status, priority);
-CREATE INDEX idx_issues_tags ON public.issues USING gin (tags);
-CREATE INDEX idx_job_logs_created ON public.job_execution_logs USING btree (created_at DESC);
-CREATE INDEX idx_job_logs_queue ON public.job_execution_logs USING btree (queue_name, created_at DESC);
-CREATE INDEX idx_job_logs_status ON public.job_execution_logs USING btree (status, created_at DESC);
-CREATE INDEX idx_job_logs_type ON public.job_execution_logs USING btree (job_type, created_at DESC);
-CREATE INDEX idx_jobs_processing_started_at ON public.jobs USING btree (processing_started_at);
-CREATE INDEX idx_jobs_project_id ON public.jobs USING btree (project_id) WHERE (project_id IS NOT NULL);
-CREATE INDEX idx_jobs_project_name ON public.jobs USING btree (project_name) WHERE (project_name IS NOT NULL);
-CREATE INDEX idx_jobs_queue_name ON public.jobs USING btree (queue_name);
-CREATE INDEX idx_jobs_status ON public.jobs USING btree (status);
-CREATE INDEX idx_jobs_status_queue ON public.jobs USING btree (status, queue_name);
-CREATE INDEX idx_jobs_type ON public.jobs USING btree (type);
-CREATE INDEX idx_jobs_worker_id ON public.jobs USING btree (worker_id);
-CREATE INDEX idx_kb_applications_applied_at ON public.knowledge_base_applications USING btree (applied_at);
-CREATE INDEX idx_kb_applications_applied_by ON public.knowledge_base_applications USING btree (applied_by);
-CREATE INDEX idx_kb_applications_entry_id ON public.knowledge_base_applications USING btree (knowledge_base_entry_id);
-CREATE INDEX idx_kb_applications_project_id ON public.knowledge_base_applications USING btree (target_project_id);
-CREATE INDEX idx_kb_applications_status ON public.knowledge_base_applications USING btree (status);
-CREATE INDEX idx_kb_entries_baseline_id ON public.knowledge_base_entries USING btree (baseline_id);
-CREATE INDEX idx_kb_entries_category ON public.knowledge_base_entries USING btree (category);
-CREATE INDEX idx_kb_entries_created_at ON public.knowledge_base_entries USING btree (created_at);
-CREATE INDEX idx_kb_entries_drift_detection_id ON public.knowledge_base_entries USING btree (drift_detection_id);
-CREATE INDEX idx_kb_entries_innovation_opportunity_id ON public.knowledge_base_entries USING btree (innovation_opportunity_id);
-CREATE INDEX idx_kb_entries_keywords ON public.knowledge_base_entries USING gin (keywords);
-CREATE INDEX idx_kb_entries_project_id ON public.knowledge_base_entries USING btree (project_id);
-CREATE INDEX idx_kb_entries_published_at ON public.knowledge_base_entries USING btree (published_at);
-CREATE INDEX idx_kb_entries_search ON public.knowledge_base_entries USING gin (to_tsvector('english'::regconfig, (((COALESCE(title, ''::character varying))::text || ' '::text) || COALESCE(description, ''::text))));
-CREATE INDEX idx_kb_entries_status ON public.knowledge_base_entries USING btree (status);
-CREATE INDEX idx_kb_entries_tags ON public.knowledge_base_entries USING gin (tags);
-CREATE INDEX idx_kb_entries_type ON public.knowledge_base_entries USING btree (entry_type);
-CREATE INDEX idx_kb_entries_embedding ON public.knowledge_base_entries USING ivfflat (embedding vector_cosine_ops) WITH (lists='100');
-CREATE INDEX idx_kb_entries_business_value ON public.knowledge_base_entries USING btree (business_value_score);
-CREATE UNIQUE INDEX knowledge_base_entry_relation_source_entry_id_target_entry__key ON public.knowledge_base_entry_relationships USING btree (source_entry_id, target_entry_id, relationship_type);
-CREATE INDEX idx_kb_relationships_source ON public.knowledge_base_entry_relationships USING btree (source_entry_id);
-CREATE INDEX idx_kb_relationships_target ON public.knowledge_base_entry_relationships USING btree (target_entry_id);
-CREATE INDEX idx_kb_reviews_entry_id ON public.knowledge_base_reviews USING btree (knowledge_base_entry_id);
-CREATE INDEX idx_kb_reviews_reviewer_id ON public.knowledge_base_reviews USING btree (reviewer_id);
-CREATE INDEX idx_kb_reviews_type ON public.knowledge_base_reviews USING btree (review_type);
-CREATE INDEX idx_labor_rates_project_id ON public.labor_rates USING btree (project_id);
-CREATE INDEX idx_lessons_learned_category ON public.lessons_learned USING btree (category);
-CREATE INDEX idx_lessons_learned_project_id ON public.lessons_learned USING btree (project_id);
-CREATE INDEX idx_lessons_learned_severity ON public.lessons_learned USING btree (severity);
-CREATE INDEX idx_lessons_learned_shared ON public.lessons_learned USING btree (shared_with_org);
-CREATE INDEX idx_lessons_learned_status ON public.lessons_learned USING btree (status);
-CREATE INDEX idx_maturity_assessed ON public.maturity_assessments USING btree (assessed_at DESC);
-CREATE INDEX idx_maturity_level ON public.maturity_assessments USING btree (maturity_level);
-CREATE INDEX idx_maturity_project ON public.maturity_assessments USING btree (project_id);
-CREATE INDEX idx_maturity_type ON public.maturity_assessments USING btree (assessment_type);
-CREATE UNIQUE INDEX unique_meeting_attendee ON public.meeting_attendees USING btree (meeting_id, user_id);
-CREATE INDEX idx_meeting_attendees_confirmed ON public.meeting_attendees USING btree (confirmed);
-CREATE INDEX idx_meeting_attendees_meeting_id ON public.meeting_attendees USING btree (meeting_id);
-CREATE INDEX idx_meeting_attendees_required ON public.meeting_attendees USING btree (required);
-CREATE INDEX idx_meeting_attendees_user_id ON public.meeting_attendees USING btree (user_id);
-CREATE INDEX idx_meeting_escalation_created_at ON public.meeting_escalation_history USING btree (created_at);
-CREATE INDEX idx_meeting_escalation_meeting_id ON public.meeting_escalation_history USING btree (meeting_id);
-CREATE INDEX idx_meeting_minutes_project_id ON public.meeting_minutes USING btree (project_id);
-CREATE UNIQUE INDEX milestones_project_name_unique ON public.milestones USING btree (project_id, name);
-CREATE INDEX idx_milestones_date ON public.milestones USING btree (due_date);
-CREATE INDEX idx_milestones_project_id ON public.milestones USING btree (project_id);
-CREATE INDEX idx_milestones_source_document ON public.milestones USING btree (source_document_id) WHERE (source_document_id IS NOT NULL);
-CREATE INDEX idx_milestones_source_location ON public.milestones USING btree (source_document_id, source_text_start);
-CREATE UNIQUE INDEX idx_milestones_idempotency ON public.milestones USING btree (project_id, idempotency_key) WHERE (idempotency_key IS NOT NULL);
-CREATE INDEX idx_milestones_idempotency_key ON public.milestones USING btree (idempotency_key);
-CREATE INDEX idx_mitigation_plans_cost_estimate ON public.mitigation_plans USING btree (cost_estimate) WHERE (cost_estimate IS NOT NULL);
-CREATE INDEX idx_mitigation_plans_created_at ON public.mitigation_plans USING btree (created_at DESC);
-CREATE INDEX idx_mitigation_plans_due_date ON public.mitigation_plans USING btree (due_date) WHERE (due_date IS NOT NULL);
-CREATE INDEX idx_mitigation_plans_issue_id ON public.mitigation_plans USING btree (issue_id);
-CREATE INDEX idx_mitigation_plans_owner_id ON public.mitigation_plans USING btree (owner_id);
-CREATE INDEX idx_mitigation_plans_assigned_to ON public.mitigation_plans USING btree (assigned_to);
-CREATE INDEX idx_mitigation_plans_assigned_to_name ON public.mitigation_plans USING btree (assigned_to_name) WHERE (assigned_to_name IS NOT NULL);
-CREATE INDEX idx_mitigation_plans_owner_name ON public.mitigation_plans USING btree (owner_name) WHERE (owner_name IS NOT NULL);
-CREATE INDEX idx_mitigation_plans_risk_id ON public.mitigation_plans USING btree (risk_id);
-CREATE INDEX idx_mitigation_plans_source_document ON public.mitigation_plans USING btree (source_document_id);
-CREATE INDEX idx_mitigation_plans_source_location ON public.mitigation_plans USING btree (source_document_id, source_text_start);
-CREATE INDEX idx_mitigation_plans_status ON public.mitigation_plans USING btree (status);
-CREATE INDEX idx_mitigation_plans_status_due_date ON public.mitigation_plans USING btree (status, due_date) WHERE ((status)::text = ANY (ARRAY[('planned'::character varying)::text, ('in_progress'::character varying)::text]));
-CREATE INDEX morphic_ai_model_config_mode_type_idx ON public.morphic_ai_model_config USING btree (search_mode, model_type);
-CREATE INDEX morphic_chats_user_id_idx ON public.morphic_chats USING btree (user_id);
-CREATE INDEX morphic_chats_user_id_created_at_idx ON public.morphic_chats USING btree (user_id, created_at DESC NULLS LAST);
-CREATE INDEX morphic_chats_created_at_idx ON public.morphic_chats USING btree (created_at DESC NULLS LAST);
-CREATE INDEX morphic_chats_id_user_id_idx ON public.morphic_chats USING btree (id, user_id);
-CREATE INDEX morphic_feedback_user_id_idx ON public.morphic_feedback USING btree (user_id);
-CREATE INDEX morphic_feedback_created_at_idx ON public.morphic_feedback USING btree (created_at);
-CREATE INDEX morphic_messages_chat_id_idx ON public.morphic_messages USING btree (chat_id);
-CREATE INDEX morphic_messages_chat_id_created_at_idx ON public.morphic_messages USING btree (chat_id, created_at);
-CREATE INDEX morphic_parts_message_id_idx ON public.morphic_parts USING btree (message_id);
-CREATE INDEX morphic_parts_message_id_order_idx ON public.morphic_parts USING btree (message_id, "order");
-CREATE INDEX idx_notification_logs_sent_at ON public.notification_logs USING btree (sent_at DESC);
-CREATE INDEX idx_notification_logs_type ON public.notification_logs USING btree (type);
-CREATE INDEX idx_notion_databases_last_synced ON public.notion_databases USING btree (last_synced);
-CREATE UNIQUE INDEX onboarding_offboarding_project_id_resource_id_process_type_key ON public.onboarding_offboarding USING btree (project_id, resource_id, process_type);
-CREATE INDEX idx_onboarding_offboarding_action_type ON public.onboarding_offboarding USING btree (action_type);
-CREATE INDEX idx_onboarding_offboarding_project_id ON public.onboarding_offboarding USING btree (project_id);
-CREATE INDEX idx_onboarding_offboarding_resource ON public.onboarding_offboarding USING btree (resource_id);
-CREATE INDEX idx_onboarding_offboarding_status ON public.onboarding_offboarding USING btree (status);
-CREATE INDEX idx_onboarding_offboarding_type ON public.onboarding_offboarding USING btree (process_type);
-CREATE INDEX idx_onboarding_offboarding_end_date ON public.onboarding_offboarding USING btree (end_date);
-CREATE INDEX idx_operational_playbooks_source_document ON public.operational_playbooks USING btree (source_document_id);
-CREATE INDEX idx_operational_playbooks_source_location ON public.operational_playbooks USING btree (source_document_id, source_text_start);
-CREATE INDEX idx_playbooks_active ON public.operational_playbooks USING btree (is_active) WHERE (is_active = true);
-CREATE INDEX idx_playbooks_category ON public.operational_playbooks USING btree (category);
-CREATE INDEX idx_playbooks_project_id ON public.operational_playbooks USING btree (project_id);
-CREATE INDEX idx_playbooks_risk_categories ON public.operational_playbooks USING gin (applicable_risk_categories);
-CREATE INDEX idx_playbooks_severity_levels ON public.operational_playbooks USING gin (applicable_severity_levels);
-CREATE UNIQUE INDEX opportunities_project_id_title_key ON public.opportunities USING btree (project_id, title);
-CREATE INDEX idx_opportunities_project_id ON public.opportunities USING btree (project_id);
-CREATE INDEX idx_opportunities_source_document ON public.opportunities USING btree (source_document_id) WHERE (source_document_id IS NOT NULL);
-CREATE INDEX idx_opportunities_source_location ON public.opportunities USING btree (source_document_id, source_text_start);
-CREATE UNIQUE INDEX performance_actuals_project_measurement_unique ON public.performance_actuals USING btree (project_id, measurement_date);
-CREATE UNIQUE INDEX unique_performance_actual_measurement ON public.performance_actuals USING btree (project_id, entity_type, entity_name, measurement_date);
-CREATE INDEX idx_performance_actuals_baseline ON public.performance_actuals USING btree (baseline_id) WHERE (baseline_id IS NOT NULL);
-CREATE INDEX idx_performance_actuals_entity ON public.performance_actuals USING btree (entity_type, entity_id);
-CREATE INDEX idx_performance_actuals_entity_name ON public.performance_actuals USING btree (entity_name);
-CREATE INDEX idx_performance_actuals_measured_by ON public.performance_actuals USING btree (measured_by) WHERE (measured_by IS NOT NULL);
-CREATE INDEX idx_performance_actuals_measurement_date ON public.performance_actuals USING btree (measurement_date DESC);
-CREATE INDEX idx_performance_actuals_project ON public.performance_actuals USING btree (project_id);
-CREATE INDEX idx_performance_actuals_project_entity_date ON public.performance_actuals USING btree (project_id, entity_type, measurement_date DESC);
-CREATE INDEX idx_performance_actuals_project_entity_type ON public.performance_actuals USING btree (project_id, entity_type);
-CREATE INDEX idx_performance_actuals_project_id ON public.performance_actuals USING btree (project_id);
-CREATE INDEX idx_performance_actuals_project_measurement_date ON public.performance_actuals USING btree (project_id, measurement_date DESC);
-CREATE INDEX idx_performance_actuals_source_location ON public.performance_actuals USING btree (source_document_id, source_text_start);
-CREATE UNIQUE INDEX performance_measurements_project_id_success_criterion_name__key ON public.performance_measurements USING btree (project_id, success_criterion_name, measurement_date);
-CREATE INDEX idx_performance_measurements_status ON public.performance_measurements USING btree (status);
-CREATE INDEX idx_performance_measurements_project_id ON public.performance_measurements USING btree (project_id);
-CREATE UNIQUE INDEX phases_project_name_unique ON public.phases USING btree (project_id, name);
-CREATE INDEX idx_phases_project_id ON public.phases USING btree (project_id);
-CREATE INDEX idx_phases_source_document ON public.phases USING btree (source_document_id) WHERE (source_document_id IS NOT NULL);
-CREATE INDEX idx_phases_source_location ON public.phases USING btree (source_document_id, source_text_start);
-CREATE INDEX idx_phases_start_date ON public.phases USING btree (start_date);
-CREATE INDEX idx_pipeline_configurations_active ON public.pipeline_configurations USING btree (is_active);
-CREATE INDEX idx_pipeline_executions_created_at ON public.pipeline_executions USING btree (created_at DESC);
-CREATE INDEX idx_pipeline_executions_project_id ON public.pipeline_executions USING btree (project_id);
-CREATE INDEX idx_pipeline_executions_status ON public.pipeline_executions USING btree (status);
-CREATE INDEX idx_pipeline_executions_template_id ON public.pipeline_executions USING btree (template_id);
-CREATE INDEX idx_pipeline_executions_user_id ON public.pipeline_executions USING btree (user_id);
-CREATE INDEX idx_pipeline_executions_user_status ON public.pipeline_executions USING btree (user_id, status, created_at DESC);
-CREATE INDEX idx_executions_playbook_id ON public.playbook_executions USING btree (playbook_id);
-CREATE INDEX idx_executions_started_at ON public.playbook_executions USING btree (started_at DESC);
-CREATE INDEX idx_executions_status ON public.playbook_executions USING btree (status) WHERE ((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('in_progress'::character varying)::text]));
-CREATE INDEX idx_executions_triggered_by ON public.playbook_executions USING btree (triggered_by_type, triggered_by_id);
-CREATE INDEX idx_executions_triggered_by_user ON public.playbook_executions USING btree (triggered_by_user_id);
-CREATE INDEX idx_playbook_executions_source_document ON public.playbook_executions USING btree (source_document_id);
-CREATE INDEX idx_playbook_executions_source_location ON public.playbook_executions USING btree (source_document_id, source_text_start);
-CREATE UNIQUE INDEX playbook_response_steps_playbook_id_step_order_key ON public.playbook_response_steps USING btree (playbook_id, step_order);
-CREATE INDEX idx_steps_order ON public.playbook_response_steps USING btree (playbook_id, step_order);
-CREATE INDEX idx_steps_playbook_id ON public.playbook_response_steps USING btree (playbook_id);
-CREATE INDEX idx_steps_type ON public.playbook_response_steps USING btree (step_type);
-CREATE UNIQUE INDEX playbook_scenarios_playbook_id_scenario_condition_key ON public.playbook_scenarios USING btree (playbook_id, scenario_condition);
-CREATE INDEX idx_scenarios_condition_gin ON public.playbook_scenarios USING gin (scenario_condition);
-CREATE INDEX idx_scenarios_playbook_id ON public.playbook_scenarios USING btree (playbook_id);
-CREATE INDEX idx_scenarios_priority ON public.playbook_scenarios USING btree (priority DESC);
-CREATE UNIQUE INDEX playbook_step_executions_execution_id_step_id_key ON public.playbook_step_executions USING btree (execution_id, step_id);
-CREATE INDEX idx_step_executions_assigned_to ON public.playbook_step_executions USING btree (assigned_to) WHERE (assigned_to IS NOT NULL);
-CREATE INDEX idx_step_executions_execution_id ON public.playbook_step_executions USING btree (execution_id);
-CREATE INDEX idx_step_executions_sla_deadline ON public.playbook_step_executions USING btree (sla_deadline) WHERE ((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('in_progress'::character varying)::text]));
-CREATE INDEX idx_step_executions_status ON public.playbook_step_executions USING btree (status) WHERE ((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('in_progress'::character varying)::text]));
-CREATE INDEX idx_step_executions_step_id ON public.playbook_step_executions USING btree (step_id);
-CREATE UNIQUE INDEX pmbok6_knowledge_areas_code_key ON public.pmbok6_knowledge_areas USING btree (code);
-CREATE UNIQUE INDEX pmbok6_process_groups_code_key ON public.pmbok6_process_groups USING btree (code);
-CREATE UNIQUE INDEX pmbok6_processes_code_key ON public.pmbok6_processes USING btree (code);
-CREATE INDEX idx_pmbok6_processes_code ON public.pmbok6_processes USING btree (code);
-CREATE INDEX idx_pmbok6_processes_display_order ON public.pmbok6_processes USING btree (display_order);
-CREATE INDEX idx_pmbok6_processes_knowledge_area ON public.pmbok6_processes USING btree (knowledge_area_id);
-CREATE INDEX idx_pmbok6_processes_process_group ON public.pmbok6_processes USING btree (process_group_id);
-CREATE UNIQUE INDEX unique_process_principle ON public.pmbok6_to_pmbok7_principle_mapping USING btree (process_id, principle_id);
-CREATE INDEX idx_pmbok6_to_7_principle ON public.pmbok6_to_pmbok7_principle_mapping USING btree (principle_id);
-CREATE INDEX idx_pmbok6_to_7_process ON public.pmbok6_to_pmbok7_principle_mapping USING btree (process_id);
-CREATE INDEX idx_pmbok6_to_7_relevance ON public.pmbok6_to_pmbok7_principle_mapping USING btree (relevance_level);
-CREATE UNIQUE INDEX pmbok7_performance_domains_code_key ON public.pmbok7_performance_domains USING btree (code);
-CREATE INDEX idx_pmbok7_domains_code ON public.pmbok7_performance_domains USING btree (code);
-CREATE INDEX idx_pmbok7_domains_order ON public.pmbok7_performance_domains USING btree (display_order);
-CREATE UNIQUE INDEX pmbok7_principles_code_key ON public.pmbok7_principles USING btree (code);
-CREATE INDEX idx_pmbok7_principles_code ON public.pmbok7_principles USING btree (code);
-CREATE INDEX idx_pmbok7_principles_order ON public.pmbok7_principles USING btree (display_order);
-CREATE INDEX idx_policy_compliance_project_id ON public.policy_compliance USING btree (project_id);
-CREATE UNIQUE INDEX idx_portfolio_domains_name ON public.portfolio_domains USING btree (name);
-CREATE INDEX idx_portfolio_governance_company ON public.portfolio_governance USING btree (company_id);
-CREATE UNIQUE INDEX idx_portfolio_governance_company_unique ON public.portfolio_governance USING btree (company_id) WHERE (company_id IS NOT NULL);
-CREATE INDEX idx_portfolio_governance_risk_review ON public.portfolio_governance USING btree (next_risk_review_due);
-CREATE INDEX idx_portfolio_governance_status ON public.portfolio_governance USING btree (status);
-CREATE INDEX idx_portfolios_owner ON public.portfolio_governance USING btree (owner_id);
-CREATE INDEX idx_portfolios_status ON public.portfolio_governance USING btree (status);
-CREATE INDEX idx_portfolio_key_results_created_at ON public.portfolio_key_results USING btree (created_at DESC);
-CREATE INDEX idx_portfolio_key_results_next_measurement ON public.portfolio_key_results USING btree (next_measurement_date) WHERE (next_measurement_date IS NOT NULL);
-CREATE INDEX idx_portfolio_key_results_okr ON public.portfolio_key_results USING btree (okr_id);
-CREATE INDEX idx_portfolio_key_results_owner ON public.portfolio_key_results USING btree (owner_id) WHERE (owner_id IS NOT NULL);
-CREATE INDEX idx_portfolio_key_results_status ON public.portfolio_key_results USING btree (progress_status) WHERE (progress_status IS NOT NULL);
-CREATE INDEX idx_portfolio_ksf_category ON public.portfolio_key_success_factors USING btree (ksf_category);
-CREATE INDEX idx_portfolio_ksf_criticality ON public.portfolio_key_success_factors USING btree (criticality);
-CREATE INDEX idx_portfolio_ksf_deadline ON public.portfolio_key_success_factors USING btree (deadline);
-CREATE INDEX idx_portfolio_ksf_org_id ON public.portfolio_key_success_factors USING btree (organization_id);
-CREATE INDEX idx_portfolio_ksf_owner_id ON public.portfolio_key_success_factors USING btree (owner_id);
-CREATE INDEX idx_portfolio_ksf_priority ON public.portfolio_key_success_factors USING btree (priority_rank);
-CREATE INDEX idx_portfolio_ksf_risk_level ON public.portfolio_key_success_factors USING btree (risk_level);
-CREATE INDEX idx_portfolio_ksf_sponsor_id ON public.portfolio_key_success_factors USING btree (sponsor_id);
-CREATE INDEX idx_portfolio_ksf_status ON public.portfolio_key_success_factors USING btree (achievement_status);
-CREATE INDEX idx_portfolio_kpi_history_date ON public.portfolio_kpi_history USING btree (measurement_date);
-CREATE INDEX idx_portfolio_kpi_history_kpi_date ON public.portfolio_kpi_history USING btree (kpi_id, measurement_date);
-CREATE INDEX idx_portfolio_kpi_history_kpi_id ON public.portfolio_kpi_history USING btree (kpi_id);
-CREATE INDEX idx_portfolio_kpi_history_measured_by ON public.portfolio_kpi_history USING btree (measured_by);
-CREATE INDEX idx_portfolio_kpis_bsc_perspective ON public.portfolio_kpis USING btree (bsc_perspective);
-CREATE INDEX idx_portfolio_kpis_category ON public.portfolio_kpis USING btree (kpi_category);
-CREATE INDEX idx_portfolio_kpis_is_active ON public.portfolio_kpis USING btree (is_active);
-CREATE INDEX idx_portfolio_kpis_last_measured ON public.portfolio_kpis USING btree (last_measured_at);
-CREATE INDEX idx_portfolio_kpis_org_id ON public.portfolio_kpis USING btree (organization_id);
-CREATE INDEX idx_portfolio_kpis_owner_id ON public.portfolio_kpis USING btree (owner_id);
-CREATE INDEX idx_portfolio_kpis_rag_status ON public.portfolio_kpis USING btree (rag_status);
-CREATE INDEX idx_portfolio_okrs_created_at ON public.portfolio_okrs USING btree (created_at DESC);
-CREATE INDEX idx_portfolio_okrs_entity ON public.portfolio_okrs USING btree (entity_type, entity_id) WHERE (entity_id IS NOT NULL);
-CREATE INDEX idx_portfolio_okrs_level ON public.portfolio_okrs USING btree (level);
-CREATE INDEX idx_portfolio_okrs_org ON public.portfolio_okrs USING btree (organization_id) WHERE (organization_id IS NOT NULL);
-CREATE INDEX idx_portfolio_okrs_owner ON public.portfolio_okrs USING btree (owner_id) WHERE (owner_id IS NOT NULL);
-CREATE INDEX idx_portfolio_okrs_parent ON public.portfolio_okrs USING btree (parent_okr_id) WHERE (parent_okr_id IS NOT NULL);
-CREATE INDEX idx_portfolio_okrs_period ON public.portfolio_okrs USING btree (okr_period) WHERE (okr_period IS NOT NULL);
-CREATE INDEX idx_portfolio_okrs_status ON public.portfolio_okrs USING btree (status) WHERE (status IS NOT NULL);
-CREATE INDEX idx_portfolio_okrs_strategic_goal ON public.portfolio_okrs USING btree (strategic_goal_id) WHERE (strategic_goal_id IS NOT NULL);
-CREATE UNIQUE INDEX unique_risk_per_portfolio ON public.portfolio_risks USING btree (portfolio_id, risk_title);
-CREATE INDEX idx_portfolio_risks_escalation_status ON public.portfolio_risks USING btree (escalation_status, portfolio_id);
-CREATE INDEX idx_portfolio_risks_portfolio ON public.portfolio_risks USING btree (portfolio_id);
-CREATE INDEX idx_portfolio_risks_status ON public.portfolio_risks USING btree (risk_status);
-CREATE INDEX idx_portfolio_strategic_goals_target_year ON public.portfolio_strategic_goals USING btree (target_year);
-CREATE INDEX idx_portfolio_strategic_goals_category ON public.portfolio_strategic_goals USING btree (goal_category);
-CREATE INDEX idx_portfolio_strategic_goals_org_id ON public.portfolio_strategic_goals USING btree (organization_id);
-CREATE INDEX idx_portfolio_strategic_goals_priority ON public.portfolio_strategic_goals USING btree (priority_rank);
-CREATE INDEX idx_portfolio_strategic_goals_status ON public.portfolio_strategic_goals USING btree (status);
-CREATE INDEX idx_portfolio_strategic_goals_vision_id ON public.portfolio_strategic_goals USING btree (vision_id);
-CREATE INDEX idx_portfolio_vision_effective_from ON public.portfolio_vision USING btree (effective_from);
-CREATE INDEX idx_portfolio_vision_org_id ON public.portfolio_vision USING btree (organization_id);
-CREATE INDEX idx_prioritization_criteria_active ON public.prioritization_criteria USING btree (is_active) WHERE (is_active = true);
-CREATE INDEX idx_prioritization_criteria_org ON public.prioritization_criteria USING btree (organization_id) WHERE (organization_id IS NOT NULL);
-CREATE INDEX idx_prioritization_criteria_sort ON public.prioritization_criteria USING btree (sort_order) WHERE (sort_order IS NOT NULL);
-CREATE INDEX idx_prob_impact_matrix_project_id ON public.probability_impact_matrix USING btree (project_id);
-CREATE INDEX idx_processing_metrics_created_at ON public.processing_metrics USING btree (created_at);
-CREATE INDEX idx_processing_metrics_project_id ON public.processing_metrics USING btree (project_id);
-CREATE INDEX idx_processing_metrics_request_id ON public.processing_metrics USING btree (request_id);
-CREATE INDEX idx_processing_metrics_template_id ON public.processing_metrics USING btree (template_id);
-CREATE INDEX idx_processing_metrics_user_id ON public.processing_metrics USING btree (user_id);
-CREATE INDEX idx_procurement_costs_project_id ON public.procurement_costs USING btree (project_id);
-CREATE INDEX idx_program_benefits_program ON public.program_benefits USING btree (program_id);
-CREATE INDEX idx_program_benefits_project ON public.program_benefits USING btree (project_id);
-CREATE INDEX idx_program_benefits_status ON public.program_benefits USING btree (status);
-CREATE INDEX idx_program_benefits_type ON public.program_benefits USING btree (benefit_type);
-CREATE UNIQUE INDEX program_budgets_program_id_fiscal_year_fiscal_quarter_key ON public.program_budgets USING btree (program_id, fiscal_year, fiscal_quarter);
-CREATE INDEX idx_program_budgets_fiscal_year ON public.program_budgets USING btree (fiscal_year);
-CREATE INDEX idx_program_budgets_program_id ON public.program_budgets USING btree (program_id);
-CREATE INDEX idx_program_budgets_status ON public.program_budgets USING btree (budget_status);
-CREATE UNIQUE INDEX program_capacity_forecast_program_id_forecast_period_key ON public.program_capacity_forecast USING btree (program_id, forecast_period);
-CREATE INDEX idx_program_capacity_forecast_bottleneck ON public.program_capacity_forecast USING btree (is_bottleneck_period) WHERE (is_bottleneck_period = true);
-CREATE INDEX idx_program_capacity_forecast_period ON public.program_capacity_forecast USING btree (forecast_period);
-CREATE INDEX idx_program_capacity_forecast_program ON public.program_capacity_forecast USING btree (program_id);
-CREATE UNIQUE INDEX program_cash_flow_program_id_period_month_is_forecast_key ON public.program_cash_flow USING btree (program_id, period_month, is_forecast);
-CREATE INDEX idx_program_cash_flow_forecast ON public.program_cash_flow USING btree (is_forecast);
-CREATE INDEX idx_program_cash_flow_period ON public.program_cash_flow USING btree (period_month);
-CREATE INDEX idx_program_cash_flow_program_id ON public.program_cash_flow USING btree (program_id);
-CREATE UNIQUE INDEX program_cost_performance_program_id_reporting_date_key ON public.program_cost_performance USING btree (program_id, reporting_date);
-CREATE INDEX idx_program_cost_performance_date ON public.program_cost_performance USING btree (reporting_date);
-CREATE INDEX idx_program_cost_performance_program_id ON public.program_cost_performance USING btree (program_id);
-CREATE INDEX idx_program_cost_performance_status ON public.program_cost_performance USING btree (performance_status);
-CREATE INDEX idx_program_financial_analysis_date ON public.program_financial_analysis USING btree (analysis_date);
-CREATE INDEX idx_program_financial_analysis_program ON public.program_financial_analysis USING btree (program_id);
-CREATE INDEX idx_program_financial_analysis_type ON public.program_financial_analysis USING btree (analysis_type);
-CREATE INDEX idx_program_financial_transactions_date ON public.program_financial_transactions USING btree (transaction_date);
-CREATE INDEX idx_program_financial_transactions_program ON public.program_financial_transactions USING btree (program_id);
-CREATE INDEX idx_program_financial_transactions_project ON public.program_financial_transactions USING btree (project_id);
-CREATE INDEX idx_program_financial_transactions_type ON public.program_financial_transactions USING btree (transaction_type);
-CREATE INDEX idx_program_forecasts_date ON public.program_forecasts USING btree (forecast_date);
-CREATE INDEX idx_program_forecasts_program_id ON public.program_forecasts USING btree (program_id);
-CREATE INDEX idx_program_forecasts_type ON public.program_forecasts USING btree (forecast_type);
-CREATE INDEX idx_program_funding_program_id ON public.program_funding USING btree (program_id);
-CREATE INDEX idx_program_funding_status ON public.program_funding USING btree (approval_status);
-CREATE INDEX unique_active_allocation ON public.program_resource_allocations USING gist (resource_id, project_id, tsrange((allocation_start)::timestamp without time zone, (COALESCE(allocation_end, '9999-12-31'::date))::timestamp without time zone)) WHERE ((allocation_status)::text = ANY (ARRAY[('planned'::character varying)::text, ('active'::character varying)::text]));
-CREATE INDEX idx_program_resource_allocations_conflicts ON public.program_resource_allocations USING btree (has_conflicts) WHERE (has_conflicts = true);
-CREATE INDEX idx_program_resource_allocations_dates ON public.program_resource_allocations USING gist (tsrange((allocation_start)::timestamp without time zone, (COALESCE(allocation_end, '9999-12-31'::date))::timestamp without time zone));
-CREATE INDEX idx_program_resource_allocations_program ON public.program_resource_allocations USING btree (program_id);
-CREATE INDEX idx_program_resource_allocations_project ON public.program_resource_allocations USING btree (project_id);
-CREATE INDEX idx_program_resource_allocations_resource ON public.program_resource_allocations USING btree (resource_id);
-CREATE INDEX idx_program_resource_allocations_status ON public.program_resource_allocations USING btree (allocation_status);
-CREATE UNIQUE INDEX program_resource_performance_program_id_resource_id_reporti_key ON public.program_resource_performance USING btree (program_id, resource_id, reporting_period);
-CREATE INDEX idx_program_resource_performance_period ON public.program_resource_performance USING btree (reporting_period);
-CREATE INDEX idx_program_resource_performance_program ON public.program_resource_performance USING btree (program_id);
-CREATE INDEX idx_program_resource_performance_resource ON public.program_resource_performance USING btree (resource_id);
-CREATE INDEX idx_program_resource_performance_utilization ON public.program_resource_performance USING btree (utilization_rate);
-CREATE INDEX idx_program_resource_plan_dates ON public.program_resource_plan USING btree (needed_from, needed_until);
-CREATE INDEX idx_program_resource_plan_program ON public.program_resource_plan USING btree (program_id);
-CREATE INDEX idx_program_resource_plan_status ON public.program_resource_plan USING btree (planning_status);
-CREATE INDEX idx_program_resource_plan_type ON public.program_resource_plan USING btree (resource_type);
-CREATE INDEX idx_program_resource_risks_program ON public.program_resource_risks USING btree (program_id);
-CREATE INDEX idx_program_resource_risks_resource ON public.program_resource_risks USING btree (resource_id);
-CREATE INDEX idx_program_resource_risks_score ON public.program_resource_risks USING btree (risk_score);
-CREATE INDEX idx_program_resource_risks_status ON public.program_resource_risks USING btree (risk_status);
-CREATE UNIQUE INDEX program_skills_inventory_program_id_user_id_skill_name_key ON public.program_skills_inventory USING btree (program_id, user_id, skill_name);
-CREATE INDEX idx_program_skills_inventory_available ON public.program_skills_inventory USING btree (available_for_allocation) WHERE (available_for_allocation = true);
-CREATE INDEX idx_program_skills_inventory_category ON public.program_skills_inventory USING btree (skill_category);
-CREATE INDEX idx_program_skills_inventory_proficiency ON public.program_skills_inventory USING btree (proficiency_level);
-CREATE INDEX idx_program_skills_inventory_program ON public.program_skills_inventory USING btree (program_id);
-CREATE INDEX idx_program_skills_inventory_skill ON public.program_skills_inventory USING btree (skill_name);
-CREATE INDEX idx_program_skills_inventory_user ON public.program_skills_inventory USING btree (user_id);
-CREATE INDEX idx_programs_archived ON public.programs USING btree (archived);
-CREATE INDEX idx_programs_company_id ON public.programs USING btree (company_id);
-CREATE INDEX idx_programs_end_date ON public.programs USING btree (end_date);
-CREATE INDEX idx_programs_owner_id ON public.programs USING btree (owner_id);
-CREATE INDEX idx_programs_search ON public.programs USING gin (to_tsvector('english'::regconfig, (((COALESCE(name, ''::character varying))::text || ' '::text) || COALESCE(description, ''::text))));
-CREATE INDEX idx_programs_start_date ON public.programs USING btree (start_date);
-CREATE INDEX idx_programs_status ON public.programs USING btree (status);
-CREATE INDEX idx_programs_portfolio ON public.programs USING btree (portfolio_id);
-CREATE INDEX idx_programs_portfolio_id ON public.programs USING btree (portfolio_id);
-CREATE INDEX idx_project_analysis_analyzed_at ON public.project_analysis USING btree (analyzed_at);
-CREATE INDEX idx_project_analysis_average_quality_score ON public.project_analysis USING btree (average_quality_score);
-CREATE INDEX idx_project_analysis_project_id ON public.project_analysis USING btree (project_id);
-CREATE UNIQUE INDEX unique_project_version ON public.project_baselines USING btree (project_id, version);
-CREATE INDEX idx_project_baselines_created_at ON public.project_baselines USING btree (created_at);
-CREATE INDEX idx_project_baselines_project_id ON public.project_baselines USING btree (project_id);
-CREATE INDEX idx_project_baselines_status ON public.project_baselines USING btree (status);
-CREATE INDEX idx_charter_details_project_id ON public.project_charter_details USING btree (project_id);
-CREATE INDEX idx_project_context_items_active ON public.project_context_items USING btree (project_id, is_active);
-CREATE INDEX idx_project_context_items_priority ON public.project_context_items USING btree (project_id, priority DESC, is_active);
-CREATE INDEX idx_project_context_items_project_id ON public.project_context_items USING btree (project_id);
-CREATE INDEX idx_project_context_items_type ON public.project_context_items USING btree (type);
-CREATE INDEX idx_context_usage_item ON public.project_context_usage_log USING btree (context_item_id);
-CREATE INDEX idx_context_usage_project ON public.project_context_usage_log USING btree (project_id);
-CREATE INDEX idx_context_usage_project_item ON public.project_context_usage_log USING btree (project_id, context_item_id);
-CREATE INDEX idx_context_usage_timestamp ON public.project_context_usage_log USING btree (usage_timestamp);
-CREATE INDEX idx_context_usage_type ON public.project_context_usage_log USING btree (usage_type);
-CREATE UNIQUE INDEX project_cost_breakdown_project_id_key ON public.project_cost_breakdown USING btree (project_id);
-CREATE INDEX idx_project_cost_breakdown_project ON public.project_cost_breakdown USING btree (project_id);
-CREATE UNIQUE INDEX project_dependencies_source_project_id_target_project_id_key ON public.project_dependencies USING btree (source_project_id, target_project_id);
-CREATE INDEX idx_project_dependencies_source ON public.project_dependencies USING btree (source_project_id);
-CREATE INDEX idx_project_dependencies_target ON public.project_dependencies USING btree (target_project_id);
-CREATE INDEX idx_baselines_created ON public.project_entity_baselines USING btree (created_at DESC);
-CREATE INDEX idx_baselines_entity_snapshot ON public.project_entity_baselines USING gin (entity_snapshot);
-CREATE INDEX idx_baselines_project ON public.project_entity_baselines USING btree (project_id);
-CREATE INDEX idx_baselines_status ON public.project_entity_baselines USING btree (status);
-CREATE INDEX idx_baselines_type ON public.project_entity_baselines USING btree (baseline_type);
-CREATE INDEX idx_project_expenses_category ON public.project_expenses USING btree (cost_category_id);
-CREATE INDEX idx_project_expenses_date ON public.project_expenses USING btree (expense_date);
-CREATE INDEX idx_project_expenses_project ON public.project_expenses USING btree (project_id);
-CREATE INDEX idx_project_expenses_status ON public.project_expenses USING btree (status);
-CREATE INDEX idx_project_goals_project ON public.project_goals USING btree (project_id);
-CREATE INDEX idx_project_goals_status ON public.project_goals USING btree (status);
-CREATE INDEX project_integrations_project_id_idx ON public.project_integrations USING btree (project_id);
-CREATE UNIQUE INDEX project_iterations_project_id_name_key ON public.project_iterations USING btree (project_id, name);
-CREATE INDEX idx_project_iterations_project_id ON public.project_iterations USING btree (project_id);
-CREATE INDEX idx_project_iterations_status ON public.project_iterations USING btree (status);
-CREATE INDEX idx_project_org_chart_project_id ON public.project_org_chart USING btree (project_id);
-CREATE UNIQUE INDEX unique_project_domain ON public.project_pmbok7_domains USING btree (project_id, domain_id);
-CREATE INDEX idx_project_pmbok7_domains_domain ON public.project_pmbok7_domains USING btree (domain_id);
-CREATE INDEX idx_project_pmbok7_domains_maturity ON public.project_pmbok7_domains USING btree (maturity_level);
-CREATE INDEX idx_project_pmbok7_domains_project ON public.project_pmbok7_domains USING btree (project_id);
-CREATE UNIQUE INDEX unique_project_principle ON public.project_pmbok7_principles USING btree (project_id, principle_id);
-CREATE INDEX idx_project_pmbok7_principles_level ON public.project_pmbok7_principles USING btree (alignment_level);
-CREATE INDEX idx_project_pmbok7_principles_principle ON public.project_pmbok7_principles USING btree (principle_id);
-CREATE INDEX idx_project_pmbok7_principles_project ON public.project_pmbok7_principles USING btree (project_id);
-CREATE UNIQUE INDEX project_priority_scores_project_id_criteria_id_key ON public.project_priority_scores USING btree (project_id, criteria_id);
-CREATE INDEX idx_project_priority_scores_composite ON public.project_priority_scores USING btree (project_id, criteria_id);
-CREATE INDEX idx_project_priority_scores_criteria ON public.project_priority_scores USING btree (criteria_id);
-CREATE INDEX idx_project_priority_scores_project ON public.project_priority_scores USING btree (project_id);
-CREATE INDEX idx_project_priority_scores_scored_at ON public.project_priority_scores USING btree (scored_at);
-CREATE INDEX idx_project_priority_scores_scored_by ON public.project_priority_scores USING btree (scored_by) WHERE (scored_by IS NOT NULL);
-CREATE UNIQUE INDEX project_resource_assignments_project_id_user_id_role_id_sta_key ON public.project_resource_assignments USING btree (project_id, user_id, role_id, start_date);
-CREATE INDEX idx_project_resource_assignments_source_document ON public.project_resource_assignments USING btree (source_document_id) WHERE (source_document_id IS NOT NULL);
-CREATE INDEX idx_project_resource_assignments_activity_id ON public.project_resource_assignments USING btree (activity_id) WHERE (activity_id IS NOT NULL);
-CREATE INDEX idx_resource_assignments_project ON public.project_resource_assignments USING btree (project_id);
-CREATE INDEX idx_resource_assignments_role ON public.project_resource_assignments USING btree (role_id);
-CREATE INDEX idx_resource_assignments_status ON public.project_resource_assignments USING btree (status);
-CREATE INDEX idx_resource_assignments_user ON public.project_resource_assignments USING btree (user_id);
-CREATE UNIQUE INDEX project_roles_organization_id_role_name_key ON public.project_roles USING btree (organization_id, role_name);
-CREATE UNIQUE INDEX project_roles_role_code_key ON public.project_roles USING btree (role_code);
-CREATE INDEX idx_project_roles_active ON public.project_roles USING btree (is_active);
-CREATE INDEX idx_project_roles_category ON public.project_roles USING btree (role_category);
-CREATE INDEX idx_project_roles_type ON public.project_roles USING btree (role_type);
-CREATE UNIQUE INDEX unique_task_number_per_project ON public.project_tasks USING btree (project_id, task_number);
-CREATE INDEX idx_project_tasks_entity_type ON public.project_tasks USING btree (entity_type);
-CREATE INDEX idx_project_tasks_parent ON public.project_tasks USING btree (parent_task_id);
-CREATE INDEX idx_project_tasks_project ON public.project_tasks USING btree (project_id);
-CREATE INDEX idx_project_tasks_role ON public.project_tasks USING btree (required_role_id);
-CREATE INDEX idx_project_tasks_source_doc ON public.project_tasks USING btree (source_document_id);
-CREATE INDEX idx_project_tasks_status ON public.project_tasks USING btree (status);
-CREATE INDEX idx_project_tasks_wbs ON public.project_tasks USING btree (wbs_code);
-CREATE INDEX idx_project_tasks_goal ON public.project_tasks USING btree (goal_id);
-CREATE INDEX idx_team_evaluations_project_id ON public.project_team_evaluations USING btree (project_id);
-CREATE INDEX idx_projects_actual_cost ON public.projects USING btree (actual_cost) WHERE (actual_cost > (0)::numeric);
-CREATE INDEX idx_projects_archived ON public.projects USING btree (archived);
-CREATE INDEX idx_projects_budget ON public.projects USING btree (budget) WHERE (budget > (0)::numeric);
-CREATE INDEX idx_projects_company_id ON public.projects USING btree (company_id);
-CREATE INDEX idx_projects_costs ON public.projects USING btree (internal_labor_cost, external_labor_cost, actual_cost);
-CREATE INDEX idx_projects_created_by ON public.projects USING btree (created_by);
-CREATE INDEX idx_projects_framework ON public.projects USING btree (framework) WHERE (framework IS NOT NULL);
-CREATE INDEX idx_projects_metadata ON public.projects USING gin (metadata);
-CREATE INDEX idx_projects_owner ON public.projects USING btree (owner_id);
-CREATE INDEX idx_projects_owner_id ON public.projects USING btree (owner_id);
-CREATE INDEX idx_projects_owner_updated ON public.projects USING btree (owner_id, updated_at DESC);
-CREATE INDEX idx_projects_program_archived ON public.projects USING btree (program_id, archived);
-CREATE INDEX idx_projects_program_id ON public.projects USING btree (program_id);
-CREATE INDEX idx_projects_search ON public.projects USING gin (to_tsvector('english'::regconfig, (((COALESCE(name, ''::character varying))::text || ' '::text) || COALESCE(description, ''::text))));
-CREATE INDEX idx_projects_status ON public.projects USING btree (status);
-CREATE INDEX idx_projects_updated_at ON public.projects USING btree (updated_at DESC);
-CREATE INDEX idx_projects_created_at ON public.projects USING btree (created_at);
-CREATE INDEX idx_projects_team_members ON public.projects USING gin (team_members);
-CREATE INDEX idx_prompt_templates_category ON public.prompt_templates USING btree (category);
-CREATE INDEX idx_prompt_templates_methodology ON public.prompt_templates USING btree (methodology);
-CREATE INDEX idx_prompt_templates_public ON public.prompt_templates USING btree (is_public);
-CREATE INDEX idx_quality_audits_date ON public.quality_audits USING btree (audited_at DESC);
-CREATE INDEX idx_quality_audits_document ON public.quality_audits USING btree (document_id);
-CREATE INDEX idx_quality_audits_document_date ON public.quality_audits USING btree (document_id, audited_at DESC);
-CREATE INDEX idx_quality_audits_grade ON public.quality_audits USING btree (overall_grade);
-CREATE INDEX idx_quality_audits_provider ON public.quality_audits USING btree (ai_provider);
-CREATE INDEX idx_quality_audits_score ON public.quality_audits USING btree (overall_score DESC);
-CREATE INDEX idx_quality_audits_source_document ON public.quality_audits USING btree (source_document_id);
-CREATE INDEX idx_quality_audits_source_location ON public.quality_audits USING btree (source_document_id, source_text_start);
-CREATE UNIQUE INDEX quality_reports_report_id_key ON public.quality_reports USING btree (report_id);
-CREATE INDEX idx_quality_reports_created_at ON public.quality_reports USING btree (created_at);
-CREATE INDEX idx_quality_reports_document_id ON public.quality_reports USING btree (document_id);
-CREATE INDEX idx_quality_reports_job_id ON public.quality_reports USING btree (job_id);
-CREATE INDEX idx_quality_reports_report_id ON public.quality_reports USING btree (report_id);
-CREATE UNIQUE INDEX quality_standards_project_id_standard_name_key ON public.quality_standards USING btree (project_id, standard_name);
-CREATE UNIQUE INDEX quality_standards_project_name_unique ON public.quality_standards USING btree (project_id, standard_name);
-CREATE INDEX idx_quality_standards_source_document ON public.quality_standards USING btree (source_document_id) WHERE (source_document_id IS NOT NULL);
-CREATE INDEX idx_quality_trends_timeframe ON public.quality_trends USING btree (timeframe);
-CREATE INDEX idx_quantum_stability_audit_qubit ON public.quantum_stability_audit USING btree (qubit_id);
-CREATE INDEX idx_quantum_stability_audit_event ON public.quantum_stability_audit USING btree (event_type);
-CREATE INDEX idx_quantum_stability_audit_timestamp ON public.quantum_stability_audit USING btree ("timestamp");
-CREATE INDEX idx_quantum_stability_audit_infrared ON public.quantum_stability_audit USING btree (infrared_value);
-CREATE INDEX idx_quantum_stability_metrics_timestamp ON public.quantum_stability_metrics USING btree ("timestamp");
-CREATE INDEX idx_quantum_stability_metrics_efficiency ON public.quantum_stability_metrics USING btree (efficiency);
-CREATE UNIQUE INDEX qubit_states_qubit_id_key ON public.qubit_states USING btree (qubit_id);
-CREATE INDEX idx_qubit_states_qubit_id ON public.qubit_states USING btree (qubit_id);
-CREATE INDEX idx_qubit_states_coherence ON public.qubit_states USING btree (coherence);
-CREATE INDEX idx_qubit_states_temperature ON public.qubit_states USING btree (temperature);
-CREATE INDEX idx_qubit_states_stability ON public.qubit_states USING btree (stability);
-CREATE INDEX idx_qubit_states_infrared ON public.qubit_states USING btree (infrared_spectrum);
-CREATE UNIQUE INDEX query_analytics_query_hash_key ON public.query_analytics USING btree (query_hash);
-CREATE INDEX idx_query_analytics_frequency ON public.query_analytics USING btree (frequency);
-CREATE INDEX idx_query_analytics_last_searched ON public.query_analytics USING btree (last_searched);
-CREATE INDEX idx_query_analytics_query_hash ON public.query_analytics USING btree (query_hash);
-CREATE INDEX idx_rag_analytics_type_time ON public.rag_analytics USING btree (operation_type, created_at DESC);
-CREATE INDEX idx_rag_analytics_success ON public.rag_analytics USING btree (success, created_at DESC);
-CREATE INDEX idx_rag_analytics_document ON public.rag_analytics USING btree (document_id) WHERE (document_id IS NOT NULL);
-CREATE INDEX idx_regeneration_jobs_conflict_id ON public.regeneration_jobs USING btree (conflict_id);
-CREATE INDEX idx_regeneration_jobs_created_at ON public.regeneration_jobs USING btree (created_at DESC);
-CREATE INDEX idx_regeneration_jobs_document_id ON public.regeneration_jobs USING btree (document_id);
-CREATE INDEX idx_regeneration_jobs_status ON public.regeneration_jobs USING btree (status);
-CREATE INDEX idx_regeneration_jobs_user_id ON public.regeneration_jobs USING btree (user_id);
-CREATE UNIQUE INDEX relationship_health_project_id_assessment_date_stakeholder__key ON public.relationship_health USING btree (project_id, assessment_date, stakeholder_id);
-CREATE INDEX idx_relationship_health_date ON public.relationship_health USING btree (assessment_date);
-CREATE INDEX idx_relationship_health_project_id ON public.relationship_health USING btree (project_id);
-CREATE INDEX idx_relationship_health_score ON public.relationship_health USING btree (health_score);
-CREATE INDEX idx_relationship_health_stakeholder ON public.relationship_health USING btree (stakeholder_id);
-CREATE INDEX idx_relationship_health_strength ON public.relationship_health USING btree (relationship_strength);
-CREATE UNIQUE INDEX releases_project_id_release_number_key ON public.releases USING btree (project_id, release_number);
-CREATE INDEX idx_releases_project ON public.releases USING btree (project_id);
-CREATE INDEX idx_releases_status ON public.releases USING btree (status);
-CREATE UNIQUE INDEX relevance_feedback_result_id_user_id_key ON public.relevance_feedback USING btree (result_id, user_id);
-CREATE INDEX idx_relevance_feedback_relevance_score ON public.relevance_feedback USING btree (relevance_score);
-CREATE INDEX idx_relevance_feedback_result_id ON public.relevance_feedback USING btree (result_id);
-CREATE INDEX idx_relevance_feedback_user_id ON public.relevance_feedback USING btree (user_id);
-CREATE UNIQUE INDEX requirements_project_name_unique ON public.requirements USING btree (project_id, name);
-CREATE INDEX idx_requirements_priority ON public.requirements USING btree (priority);
-CREATE INDEX idx_requirements_project_id ON public.requirements USING btree (project_id);
-CREATE INDEX idx_requirements_source_document ON public.requirements USING btree (source_document_id) WHERE (source_document_id IS NOT NULL);
-CREATE INDEX idx_requirements_source_location ON public.requirements USING btree (source_document_id, source_text_start);
-CREATE INDEX idx_requirements_status ON public.requirements USING btree (status);
-CREATE UNIQUE INDEX idx_requirements_idempotency ON public.requirements USING btree (project_id, idempotency_key) WHERE (idempotency_key IS NOT NULL);
-CREATE INDEX idx_requirements_idempotency_key ON public.requirements USING btree (idempotency_key);
-CREATE INDEX idx_requirements_traceability_project_id ON public.requirements_traceability USING btree (project_id);
-CREATE UNIQUE INDEX resolution_strategies_strategy_id_key ON public.resolution_strategies USING btree (strategy_id);
-CREATE INDEX idx_resolution_strategies_conditions_gin ON public.resolution_strategies USING gin (conditions);
-CREATE INDEX idx_resolution_strategies_config_gin ON public.resolution_strategies USING gin (config);
-CREATE INDEX idx_resolution_strategies_enabled ON public.resolution_strategies USING btree (enabled);
-CREATE INDEX idx_resolution_strategies_priority ON public.resolution_strategies USING btree (priority);
-CREATE INDEX idx_resolution_strategies_type ON public.resolution_strategies USING btree (strategy_type);
-CREATE UNIQUE INDEX resource_articles_slug_key ON public.resource_articles USING btree (slug);
-CREATE INDEX idx_resource_articles_status_published_at ON public.resource_articles USING btree (status, published_at DESC);
-CREATE INDEX idx_resource_articles_tags ON public.resource_articles USING gin (tags);
-CREATE INDEX idx_resource_articles_type_status ON public.resource_articles USING btree (content_type, status);
-CREATE UNIQUE INDEX resource_assignments_project_id_assignment_id_key ON public.resource_assignments USING btree (project_id, assignment_id);
-CREATE INDEX idx_resource_assignments_activity ON public.resource_assignments USING btree (activity_id);
-CREATE INDEX idx_resource_assignments_dates ON public.resource_assignments USING btree (start_date, end_date);
-CREATE INDEX idx_resource_assignments_project_id ON public.resource_assignments USING btree (project_id);
-CREATE INDEX idx_resource_assignments_resource ON public.resource_assignments USING btree (resource_id);
-CREATE UNIQUE INDEX unique_user_capacity_period ON public.resource_capacity_settings USING btree (user_id, effective_from);
-CREATE INDEX idx_resource_capacity_active ON public.resource_capacity_settings USING btree (is_active);
-CREATE INDEX idx_resource_capacity_dates ON public.resource_capacity_settings USING btree (effective_from, effective_until);
-CREATE INDEX idx_resource_capacity_type ON public.resource_capacity_settings USING btree (resource_type);
-CREATE INDEX idx_resource_capacity_user ON public.resource_capacity_settings USING btree (user_id);
-CREATE UNIQUE INDEX resource_conflicts_project_id_conflict_id_key ON public.resource_conflicts USING btree (project_id, conflict_id);
-CREATE INDEX idx_resource_conflicts_project_id ON public.resource_conflicts USING btree (project_id);
-CREATE INDEX idx_resource_conflicts_resource ON public.resource_conflicts USING btree (resource_id);
-CREATE INDEX idx_resource_conflicts_status ON public.resource_conflicts USING btree (resolution_status);
-CREATE INDEX idx_resource_conflicts_type ON public.resource_conflicts USING btree (conflict_type);
-CREATE INDEX idx_resource_conflicts_resolution ON public.resource_conflicts USING btree (resolution) WHERE (resolution IS NOT NULL);
-CREATE INDEX idx_resource_conflicts_resolution_date ON public.resource_conflicts USING btree (resolution_date);
-CREATE INDEX idx_resource_plans_project_id ON public.resource_plans USING btree (project_id);
-CREATE UNIQUE INDEX resource_pool_project_id_resource_id_key ON public.resource_pool USING btree (project_id, resource_id);
-CREATE INDEX idx_resource_pool_availability ON public.resource_pool USING btree (availability_start_date, availability_end_date);
-CREATE INDEX idx_resource_pool_project_id ON public.resource_pool USING btree (project_id);
-CREATE INDEX idx_resource_pool_status ON public.resource_pool USING btree (status);
-CREATE INDEX idx_resource_pool_type ON public.resource_pool USING btree (resource_type);
-CREATE UNIQUE INDEX resource_templates_slug_key ON public.resource_templates USING btree (slug);
-CREATE INDEX idx_resource_templates_category ON public.resource_templates USING btree (category);
-CREATE INDEX idx_resource_templates_status ON public.resource_templates USING btree (status);
-CREATE INDEX idx_resource_templates_tags ON public.resource_templates USING gin (tags);
-CREATE INDEX idx_resource_unavailability_dates ON public.resource_unavailability USING btree (start_date, end_date);
-CREATE INDEX idx_resource_unavailability_status ON public.resource_unavailability USING btree (status);
-CREATE INDEX idx_resource_unavailability_type ON public.resource_unavailability USING btree (unavailability_type);
-CREATE INDEX idx_resource_unavailability_user ON public.resource_unavailability USING btree (user_id);
-CREATE UNIQUE INDEX resources_project_name_unique ON public.resources USING btree (project_id, name);
-CREATE INDEX idx_resources_conflict_severity ON public.resources USING btree (conflict_severity) WHERE (conflict_severity IS NOT NULL);
-CREATE INDEX idx_resources_conflict_status ON public.resources USING btree (conflict_status) WHERE (conflict_status IS NOT NULL);
-CREATE INDEX idx_resources_source_document ON public.resources USING btree (source_document_id) WHERE (source_document_id IS NOT NULL);
-CREATE INDEX idx_resources_source_location ON public.resources USING btree (source_document_id, source_text_start);
-CREATE INDEX idx_resources_availability_pct ON public.resources USING btree (availability_pct);
-CREATE INDEX idx_resources_cost_rate ON public.resources USING btree (cost_rate);
-CREATE INDEX idx_review_action_items_assigned_to ON public.review_action_items USING btree (assigned_to);
-CREATE INDEX idx_review_action_items_due_date ON public.review_action_items USING btree (due_date);
-CREATE INDEX idx_review_action_items_meeting_id ON public.review_action_items USING btree (review_meeting_id);
-CREATE INDEX idx_review_action_items_priority ON public.review_action_items USING btree (priority);
-CREATE INDEX idx_review_action_items_status ON public.review_action_items USING btree (status);
-CREATE INDEX idx_review_decisions_approved_by ON public.review_decisions USING btree (approved_by);
-CREATE INDEX idx_review_decisions_implementation_status ON public.review_decisions USING btree (implementation_status);
-CREATE INDEX idx_review_decisions_meeting_id ON public.review_decisions USING btree (review_meeting_id);
-CREATE INDEX idx_review_meetings_actual_date ON public.review_meetings USING btree (actual_date);
-CREATE INDEX idx_review_meetings_program_id ON public.review_meetings USING btree (program_id);
-CREATE INDEX idx_review_meetings_schedule_id ON public.review_meetings USING btree (schedule_id);
-CREATE INDEX idx_review_meetings_scheduled_date ON public.review_meetings USING btree (scheduled_date);
-CREATE INDEX idx_review_meetings_status ON public.review_meetings USING btree (status);
-CREATE INDEX idx_review_schedules_frequency ON public.review_schedules USING btree (frequency);
-CREATE INDEX idx_review_schedules_is_active ON public.review_schedules USING btree (is_active);
-CREATE INDEX idx_review_schedules_program_id ON public.review_schedules USING btree (program_id);
-CREATE INDEX idx_review_schedules_review_owner_id ON public.review_schedules USING btree (review_owner_id);
-CREATE INDEX idx_risk_appetite_project_id ON public.risk_appetite USING btree (project_id);
-CREATE UNIQUE INDEX risk_assessments_project_id_risk_id_assessment_date_key ON public.risk_assessments USING btree (project_id, risk_id, assessment_date);
-CREATE INDEX idx_risk_assessments_assessment_date ON public.risk_assessments USING btree (assessment_date);
-CREATE INDEX idx_risk_assessments_date ON public.risk_assessments USING btree (assessment_date);
-CREATE INDEX idx_risk_assessments_project_id ON public.risk_assessments USING btree (project_id);
-CREATE INDEX idx_risk_assessments_risk ON public.risk_assessments USING btree (risk_id);
-CREATE INDEX idx_risk_assessments_score ON public.risk_assessments USING btree (risk_score);
-CREATE INDEX idx_risk_checklists_project_id ON public.risk_checklists USING btree (project_id);
-CREATE INDEX idx_risk_escalation_event_steps_event ON public.risk_escalation_event_steps USING btree (event_id, status);
-CREATE INDEX idx_risk_escalation_events_status ON public.risk_escalation_events USING btree (status, triggered_at DESC);
-CREATE INDEX idx_risk_escalation_policies_active ON public.risk_escalation_policies USING btree (active, escalation_type);
-CREATE UNIQUE INDEX risk_escalation_steps_policy_id_step_order_key ON public.risk_escalation_steps USING btree (policy_id, step_order);
-CREATE INDEX idx_risk_escalation_steps_policy ON public.risk_escalation_steps USING btree (policy_id, step_order);
-CREATE UNIQUE INDEX risk_metrics_project_id_metric_date_key ON public.risk_metrics USING btree (project_id, metric_date);
-CREATE INDEX idx_risk_metrics_date ON public.risk_metrics USING btree (metric_date);
-CREATE INDEX idx_risk_metrics_project_id ON public.risk_metrics USING btree (project_id);
-CREATE INDEX idx_risk_response_plans_project_id ON public.risk_response_plans USING btree (project_id);
-CREATE INDEX idx_risk_response_plans_risk ON public.risk_response_plans USING btree (risk_id);
-CREATE INDEX idx_risk_response_plans_status ON public.risk_response_plans USING btree (status);
-CREATE INDEX idx_risk_response_plans_strategy ON public.risk_response_plans USING btree (response_strategy);
-CREATE UNIQUE INDEX risk_responses_project_id_risk_title_response_date_key ON public.risk_responses USING btree (project_id, risk_title, response_date);
-CREATE INDEX idx_risk_responses_project_id ON public.risk_responses USING btree (project_id);
-CREATE INDEX idx_risk_responses_risk_id ON public.risk_responses USING btree (risk_id);
-CREATE INDEX idx_risk_responses_source_document ON public.risk_responses USING btree (source_document_id) WHERE (source_document_id IS NOT NULL);
-CREATE UNIQUE INDEX risk_reviews_project_id_review_id_key ON public.risk_reviews USING btree (project_id, review_id);
-CREATE INDEX idx_risk_reviews_date ON public.risk_reviews USING btree (review_date);
-CREATE INDEX idx_risk_reviews_project_id ON public.risk_reviews USING btree (project_id);
-CREATE INDEX idx_risk_reviews_type ON public.risk_reviews USING btree (review_type);
-CREATE UNIQUE INDEX risk_triggers_project_id_risk_id_trigger_name_key ON public.risk_triggers USING btree (project_id, risk_id, trigger_name);
-CREATE INDEX idx_risk_triggers_project_id ON public.risk_triggers USING btree (project_id);
-CREATE INDEX idx_risk_triggers_risk ON public.risk_triggers USING btree (risk_id);
-CREATE INDEX idx_risk_triggers_status ON public.risk_triggers USING btree (status);
-CREATE INDEX idx_risk_triggers_title ON public.risk_triggers USING btree (risk_title);
-CREATE INDEX idx_risk_triggers_response_action ON public.risk_triggers USING btree (response_action) WHERE (response_action IS NOT NULL);
-CREATE UNIQUE INDEX risks_project_id_name_key ON public.risks USING btree (project_id, name);
-CREATE UNIQUE INDEX risks_project_name_unique ON public.risks USING btree (project_id, name);
-CREATE UNIQUE INDEX risks_project_title_unique ON public.risks USING btree (project_id, title);
-CREATE INDEX idx_risks_affects_programs ON public.risks USING gin (affects_programs);
-CREATE INDEX idx_risks_cross_program ON public.risks USING btree (cross_program) WHERE (cross_program = true);
-CREATE INDEX idx_risks_is_curated ON public.risks USING btree (is_curated);
-CREATE INDEX idx_risks_last_review_date ON public.risks USING btree (last_review_date);
-CREATE INDEX idx_risks_monthly_review_status ON public.risks USING btree (monthly_review_status);
-CREATE INDEX idx_risks_next_review_due_date ON public.risks USING btree (next_review_due_date);
-CREATE INDEX idx_risks_playbook_execution ON public.risks USING btree (playbook_execution_id) WHERE (playbook_execution_id IS NOT NULL);
-CREATE INDEX idx_risks_program_id ON public.risks USING btree (program_id) WHERE (program_id IS NOT NULL);
-CREATE INDEX idx_risks_project_id ON public.risks USING btree (project_id);
-CREATE INDEX idx_risks_recommended_playbook ON public.risks USING btree (recommended_playbook_id) WHERE (recommended_playbook_id IS NOT NULL);
-CREATE INDEX idx_risks_risk_level ON public.risks USING btree (risk_level);
-CREATE INDEX idx_risks_risk_origin ON public.risks USING btree (risk_origin);
-CREATE INDEX idx_risks_source_document ON public.risks USING btree (source_document_id) WHERE (source_document_id IS NOT NULL);
-CREATE INDEX idx_risks_source_location ON public.risks USING btree (source_document_id, source_text_start);
-CREATE INDEX idx_risks_status ON public.risks USING btree (status);
-CREATE INDEX idx_risks_systemic ON public.risks USING btree (systemic_risk) WHERE (systemic_risk = true);
-CREATE INDEX idx_risks_tags ON public.risks USING gin (tags);
-CREATE UNIQUE INDEX idx_risks_idempotency ON public.risks USING btree (project_id, idempotency_key) WHERE (idempotency_key IS NOT NULL);
-CREATE INDEX idx_risks_idempotency_key ON public.risks USING btree (idempotency_key);
-CREATE UNIQUE INDEX unique_role_competency ON public.role_competencies USING btree (role_id, competency_id);
-CREATE INDEX idx_role_competencies_competency ON public.role_competencies USING btree (competency_id);
-CREATE INDEX idx_role_competencies_role ON public.role_competencies USING btree (role_id);
-CREATE UNIQUE INDEX unique_role_skill ON public.role_skills USING btree (role_id, skill_id);
-CREATE INDEX idx_role_skills_role ON public.role_skills USING btree (role_id);
-CREATE INDEX idx_role_skills_skill ON public.role_skills USING btree (skill_id);
-CREATE INDEX idx_roles_responsibilities_project_id ON public.roles_and_responsibilities USING btree (project_id);
-CREATE UNIQUE INDEX satisfaction_surveys_project_id_survey_id_key ON public.satisfaction_surveys USING btree (project_id, survey_id);
-CREATE INDEX idx_satisfaction_surveys_date ON public.satisfaction_surveys USING btree (survey_date);
-CREATE INDEX idx_satisfaction_surveys_nps ON public.satisfaction_surveys USING btree (nps_score);
-CREATE INDEX idx_satisfaction_surveys_project_id ON public.satisfaction_surveys USING btree (project_id);
-CREATE INDEX idx_satisfaction_surveys_score ON public.satisfaction_surveys USING btree (satisfaction_score);
-CREATE INDEX idx_satisfaction_surveys_stakeholder ON public.satisfaction_surveys USING btree (stakeholder_id);
-CREATE INDEX idx_satisfaction_surveys_sentiment ON public.satisfaction_surveys USING btree (sentiment);
-CREATE INDEX idx_schedule_activities_project_id ON public.schedule_activities USING btree (project_id);
-CREATE INDEX idx_schedule_baseline_project_id ON public.schedule_baseline USING btree (project_id);
-CREATE UNIQUE INDEX schedule_baselines_project_id_baseline_name_baseline_versio_key ON public.schedule_baselines USING btree (project_id, baseline_name, baseline_version);
-CREATE INDEX idx_schedule_baselines_current ON public.schedule_baselines USING btree (project_id, is_current) WHERE (is_current = true);
-CREATE INDEX idx_schedule_baselines_dates ON public.schedule_baselines USING btree (baseline_start_date, baseline_end_date);
-CREATE INDEX idx_schedule_baselines_project_id ON public.schedule_baselines USING btree (project_id);
-CREATE INDEX idx_schedule_forecasts_project_id ON public.schedule_forecasts USING btree (project_id);
-CREATE INDEX idx_schedule_variances_project_id ON public.schedule_variances USING btree (project_id);
-CREATE INDEX idx_scope_baseline_project_id ON public.scope_baseline USING btree (project_id);
-CREATE UNIQUE INDEX scope_baselines_project_id_baseline_name_baseline_version_key ON public.scope_baselines USING btree (project_id, baseline_name, baseline_version);
-CREATE INDEX idx_scope_baselines_current ON public.scope_baselines USING btree (project_id, is_current) WHERE (is_current = true);
-CREATE INDEX idx_scope_baselines_project_id ON public.scope_baselines USING btree (project_id);
-CREATE INDEX idx_scope_baselines_status ON public.scope_baselines USING btree (status);
-CREATE INDEX idx_scope_change_requests_project_id ON public.scope_change_requests USING btree (project_id);
-CREATE UNIQUE INDEX scope_items_project_name_unique ON public.scope_items USING btree (project_id, item_name);
-CREATE INDEX idx_scope_items_source_document ON public.scope_items USING btree (source_document_id) WHERE (source_document_id IS NOT NULL);
-CREATE INDEX idx_scope_items_source_location ON public.scope_items USING btree (source_document_id, source_text_start);
-CREATE INDEX idx_scope_verification_project_id ON public.scope_verification USING btree (project_id);
-CREATE INDEX idx_search_analytics_created ON public.search_analytics USING btree (created_at DESC);
-CREATE INDEX idx_search_analytics_frameworks ON public.search_analytics USING gin (frameworks);
-CREATE INDEX idx_search_analytics_has_results ON public.search_analytics USING btree (has_results, created_at DESC);
-CREATE INDEX idx_search_analytics_mode ON public.search_analytics USING btree (search_mode, created_at DESC);
-CREATE INDEX idx_search_analytics_query ON public.search_analytics USING btree (query, created_at DESC);
-CREATE INDEX idx_search_analytics_query_fts ON public.search_analytics USING gin (to_tsvector('english'::regconfig, query));
-CREATE INDEX idx_search_analytics_types ON public.search_analytics USING gin (types);
-CREATE INDEX idx_search_analytics_user ON public.search_analytics USING btree (user_id, created_at DESC);
-CREATE INDEX idx_search_history_created_at ON public.search_history USING btree (created_at);
-CREATE INDEX idx_search_history_project_id ON public.search_history USING btree (project_id);
-CREATE INDEX idx_search_history_query ON public.search_history USING gin (to_tsvector('english'::regconfig, query));
-CREATE INDEX idx_search_history_search_strategy ON public.search_history USING btree (search_strategy);
-CREATE INDEX idx_search_history_template_id ON public.search_history USING btree (template_id);
-CREATE INDEX idx_search_history_user_id ON public.search_history USING btree (user_id);
-CREATE UNIQUE INDEX search_index_source_source_id_key ON public.search_index USING btree (source, source_id);
-CREATE INDEX idx_search_index_access_count ON public.search_index USING btree (access_count);
-CREATE INDEX idx_search_index_created_at ON public.search_index USING btree (created_at);
-CREATE INDEX idx_search_index_keywords ON public.search_index USING gin (keywords);
-CREATE INDEX idx_search_index_metadata ON public.search_index USING gin (metadata);
-CREATE INDEX idx_search_index_relevance_score ON public.search_index USING btree (relevance_score);
-CREATE INDEX idx_search_index_source ON public.search_index USING btree (source);
-CREATE INDEX idx_search_index_type ON public.search_index USING btree (type);
-CREATE INDEX idx_search_clicks_created ON public.search_result_clicks USING btree (created_at DESC);
-CREATE INDEX idx_search_clicks_position ON public.search_result_clicks USING btree (result_position);
-CREATE INDEX idx_search_clicks_result ON public.search_result_clicks USING btree (result_id, result_type);
-CREATE INDEX idx_search_clicks_search ON public.search_result_clicks USING btree (search_id, created_at DESC);
-CREATE INDEX idx_search_clicks_user ON public.search_result_clicks USING btree (user_id, created_at DESC);
-CREATE INDEX idx_suggestion_clicks_created ON public.search_suggestion_clicks USING btree (created_at DESC);
-CREATE INDEX idx_suggestion_clicks_text ON public.search_suggestion_clicks USING btree (suggestion_text, created_at DESC);
-CREATE INDEX idx_suggestion_clicks_type ON public.search_suggestion_clicks USING btree (suggestion_type, created_at DESC);
-CREATE INDEX idx_suggestion_clicks_user ON public.search_suggestion_clicks USING btree (user_id, created_at DESC);
-CREATE INDEX idx_security_events_created_at ON public.security_events USING btree (created_at);
-CREATE INDEX idx_security_events_type ON public.security_events USING btree (event_type);
-CREATE INDEX idx_semantic_units_created_at ON public.semantic_units USING btree (created_at);
-CREATE INDEX idx_semantic_units_document_id ON public.semantic_units USING btree (document_id);
-CREATE INDEX idx_semantic_units_type ON public.semantic_units USING btree (type);
-CREATE INDEX idx_signature_audit_logs_action_type ON public.signature_audit_logs USING btree (action_type);
-CREATE INDEX idx_signature_audit_logs_document_id ON public.signature_audit_logs USING btree (document_id);
-CREATE INDEX idx_signature_audit_logs_document_signature_id ON public.signature_audit_logs USING btree (document_signature_id);
-CREATE INDEX idx_signature_audit_logs_performed_at ON public.signature_audit_logs USING btree (performed_at DESC);
-CREATE INDEX idx_signature_audit_logs_performed_by ON public.signature_audit_logs USING btree (performed_by) WHERE (performed_by IS NOT NULL);
-CREATE INDEX idx_signature_fields_approval_request ON public.signature_fields USING btree (approval_request_id) WHERE (approval_request_id IS NOT NULL);
-CREATE INDEX idx_signature_fields_assigned_to ON public.signature_fields USING btree (assigned_to_user_id) WHERE (assigned_to_user_id IS NOT NULL);
-CREATE INDEX idx_signature_fields_document_id ON public.signature_fields USING btree (document_id);
-CREATE INDEX idx_signature_fields_status ON public.signature_fields USING btree (status) WHERE ((status)::text = 'pending'::text);
-CREATE UNIQUE INDEX signature_recipients_invitation_token_key ON public.signature_recipients USING btree (invitation_token);
-CREATE INDEX idx_signature_recipients_document_signature_id ON public.signature_recipients USING btree (document_signature_id);
-CREATE INDEX idx_signature_recipients_email ON public.signature_recipients USING btree (email);
-CREATE INDEX idx_signature_recipients_invitation_token ON public.signature_recipients USING btree (invitation_token) WHERE (invitation_token IS NOT NULL);
-CREATE INDEX idx_signature_recipients_status ON public.signature_recipients USING btree (status);
-CREATE INDEX idx_signature_recipients_user_id ON public.signature_recipients USING btree (user_id) WHERE (user_id IS NOT NULL);
-CREATE UNIQUE INDEX skills_name_key ON public.skills USING btree (name);
-CREATE INDEX idx_skills_category ON public.skills USING btree (category);
-CREATE INDEX idx_skills_name ON public.skills USING btree (name);
-CREATE INDEX idx_sla_violations_detected_at ON public.sla_violations USING btree (detected_at DESC);
-CREATE INDEX idx_sla_violations_resolved ON public.sla_violations USING btree (resolved_at) WHERE (resolved_at IS NULL);
-CREATE INDEX idx_sla_violations_template_id ON public.sla_violations USING btree (template_id);
-CREATE UNIQUE INDEX source_authority_source_source_id_key ON public.source_authority USING btree (source, source_id);
-CREATE INDEX idx_source_authority_authority_score ON public.source_authority USING btree (authority_score);
-CREATE INDEX idx_source_authority_source ON public.source_authority USING btree (source);
-CREATE INDEX idx_source_authority_verification_status ON public.source_authority USING btree (verification_status);
-CREATE UNIQUE INDEX src_schema_migrations_migration_number_migration_name_key ON public.src_schema_migrations USING btree (migration_number, migration_name);
-CREATE INDEX idx_stage_executions_job_id ON public.stage_executions USING btree (job_id);
-CREATE INDEX idx_stage_executions_job_stage ON public.stage_executions USING btree (job_id, stage_id, created_at DESC);
-CREATE INDEX idx_stage_executions_stage_id ON public.stage_executions USING btree (stage_id);
-CREATE INDEX idx_stage_executions_status ON public.stage_executions USING btree (status);
-CREATE UNIQUE INDEX stage_jobs_job_id_key ON public.stage_jobs USING btree (job_id);
-CREATE INDEX idx_stage_jobs_created_at ON public.stage_jobs USING btree (created_at);
-CREATE INDEX idx_stage_jobs_job_id ON public.stage_jobs USING btree (job_id);
-CREATE INDEX idx_stage_jobs_stage_id ON public.stage_jobs USING btree (stage_id);
-CREATE INDEX idx_stage_jobs_stage_type ON public.stage_jobs USING btree (stage_type);
-CREATE INDEX idx_stage_jobs_status ON public.stage_jobs USING btree (status);
-CREATE INDEX idx_stage_metrics_created_at ON public.stage_metrics USING btree (created_at);
-CREATE INDEX idx_stage_metrics_stage_id ON public.stage_metrics USING btree (stage_id);
-CREATE INDEX idx_stage_metrics_stage_type ON public.stage_metrics USING btree (stage_type);
-CREATE INDEX idx_stage_metrics_success ON public.stage_metrics USING btree (success);
-CREATE UNIQUE INDEX unique_stakeholder_competency ON public.stakeholder_competencies USING btree (stakeholder_id, competency_id);
-CREATE INDEX idx_stakeholder_competencies_competency ON public.stakeholder_competencies USING btree (competency_id);
-CREATE INDEX idx_stakeholder_competencies_stakeholder ON public.stakeholder_competencies USING btree (stakeholder_id);
-CREATE INDEX idx_stakeholder_engagements_project_id ON public.stakeholder_engagements USING btree (project_id);
-CREATE UNIQUE INDEX stakeholder_issues_project_id_issue_id_key ON public.stakeholder_issues USING btree (project_id, issue_id);
-CREATE INDEX idx_stakeholder_issues_date ON public.stakeholder_issues USING btree (reported_date);
-CREATE INDEX idx_stakeholder_issues_issue_id ON public.stakeholder_issues USING btree (issue_id);
-CREATE INDEX idx_stakeholder_issues_priority ON public.stakeholder_issues USING btree (priority);
-CREATE INDEX idx_stakeholder_issues_project_id ON public.stakeholder_issues USING btree (project_id);
-CREATE INDEX idx_stakeholder_issues_stakeholder ON public.stakeholder_issues USING btree (stakeholder_id);
-CREATE INDEX idx_stakeholder_issues_status ON public.stakeholder_issues USING btree (resolution_status);
-CREATE INDEX idx_stakeholder_issues_reported_date ON public.stakeholder_issues USING btree (reported_date) WHERE (reported_date IS NOT NULL);
-CREATE UNIQUE INDEX unique_stakeholder_role_project ON public.stakeholder_role_assignments USING btree (stakeholder_id, role_id, project_id);
-CREATE INDEX idx_stakeholder_role_assignments_project ON public.stakeholder_role_assignments USING btree (project_id);
-CREATE INDEX idx_stakeholder_role_assignments_role ON public.stakeholder_role_assignments USING btree (role_id);
-CREATE INDEX idx_stakeholder_role_assignments_stakeholder ON public.stakeholder_role_assignments USING btree (stakeholder_id);
-CREATE INDEX idx_stakeholder_role_assignments_status ON public.stakeholder_role_assignments USING btree (status);
-CREATE UNIQUE INDEX unique_stakeholder_skill ON public.stakeholder_skills USING btree (stakeholder_id, skill_id);
-CREATE INDEX idx_stakeholder_skills_skill ON public.stakeholder_skills USING btree (skill_id);
-CREATE INDEX idx_stakeholder_skills_stakeholder ON public.stakeholder_skills USING btree (stakeholder_id);
-CREATE INDEX idx_stakeholder_skills_verified ON public.stakeholder_skills USING btree (verified);
-CREATE UNIQUE INDEX stakeholders_project_name_unique ON public.stakeholders USING btree (project_id, name);
-CREATE INDEX idx_stakeholders_email ON public.stakeholders USING btree (email);
-CREATE INDEX idx_stakeholders_engagement_approach ON public.stakeholders USING btree (engagement_approach);
-CREATE INDEX idx_stakeholders_is_team_member ON public.stakeholders USING btree (project_id, is_team_member) WHERE (is_team_member = true);
-CREATE INDEX idx_stakeholders_project_id ON public.stakeholders USING btree (project_id);
-CREATE INDEX idx_stakeholders_role ON public.stakeholders USING btree (role);
-CREATE INDEX idx_stakeholders_source_document ON public.stakeholders USING btree (source_document_id) WHERE (source_document_id IS NOT NULL);
-CREATE INDEX idx_stakeholders_source_location ON public.stakeholders USING btree (source_document_id, source_text_start);
-CREATE INDEX idx_stakeholders_stakeholder_type ON public.stakeholders USING btree (stakeholder_type);
-CREATE INDEX idx_stakeholders_user_id ON public.stakeholders USING btree (user_id);
-CREATE INDEX idx_stakeholders_interest_level ON public.stakeholders USING btree (interest_level);
-CREATE INDEX idx_stakeholders_influence_level ON public.stakeholders USING btree (influence_level);
-CREATE INDEX idx_stakeholders_stakeholder_category ON public.stakeholders USING btree (stakeholder_category);
-CREATE UNIQUE INDEX idx_stakeholders_idempotency ON public.stakeholders USING btree (project_id, idempotency_key) WHERE (idempotency_key IS NOT NULL);
-CREATE INDEX idx_stakeholders_idempotency_key ON public.stakeholders USING btree (idempotency_key);
-CREATE INDEX idx_steering_committees_project_id ON public.steering_committees USING btree (project_id);
-CREATE UNIQUE INDEX success_criteria_project_name_unique ON public.success_criteria USING btree (project_id, name);
-CREATE INDEX idx_success_criteria_project_id ON public.success_criteria USING btree (project_id);
-CREATE INDEX idx_success_criteria_source_document ON public.success_criteria USING btree (source_document_id) WHERE (source_document_id IS NOT NULL);
-CREATE INDEX idx_success_criteria_source_location ON public.success_criteria USING btree (source_document_id, source_text_start);
-CREATE UNIQUE INDEX success_criteria_idempotency_key_key ON public.success_criteria USING btree (idempotency_key);
-CREATE INDEX idx_success_criteria_idempotency_key ON public.success_criteria USING btree (idempotency_key);
-CREATE INDEX idx_system_metrics_recorded_at ON public.system_metrics USING btree (recorded_at);
-CREATE UNIQUE INDEX system_settings_setting_key_key ON public.system_settings USING btree (setting_key);
-CREATE INDEX idx_system_settings_key ON public.system_settings USING btree (setting_key);
-CREATE UNIQUE INDEX unique_task_user_assignment ON public.task_assignments USING btree (task_id, user_id);
-CREATE INDEX idx_task_assignments_resource ON public.task_assignments USING btree (resource_assignment_id);
-CREATE INDEX idx_task_assignments_status ON public.task_assignments USING btree (status);
-CREATE INDEX idx_task_assignments_task ON public.task_assignments USING btree (task_id);
-CREATE INDEX idx_task_assignments_user ON public.task_assignments USING btree (user_id);
-CREATE UNIQUE INDEX unique_dependency ON public.task_dependencies USING btree (task_id, depends_on_task_id);
-CREATE INDEX idx_task_dependencies_depends_on ON public.task_dependencies USING btree (depends_on_task_id);
-CREATE INDEX idx_task_dependencies_task ON public.task_dependencies USING btree (task_id);
-CREATE UNIQUE INDEX unique_task_role ON public.task_roles USING btree (task_id, role_id, role_type);
-CREATE INDEX idx_task_roles_role ON public.task_roles USING btree (role_id);
-CREATE INDEX idx_task_roles_task ON public.task_roles USING btree (task_id);
-CREATE INDEX idx_task_roles_type ON public.task_roles USING btree (role_type);
-CREATE INDEX idx_adherence_log_agreement ON public.team_agreement_adherence_log USING btree (agreement_id);
-CREATE INDEX idx_adherence_log_agreement_date ON public.team_agreement_adherence_log USING btree (agreement_id, date_recorded DESC);
-CREATE INDEX idx_adherence_log_date ON public.team_agreement_adherence_log USING btree (date_recorded DESC);
-CREATE UNIQUE INDEX team_agreements_project_id_title_key ON public.team_agreements USING btree (project_id, title);
-CREATE INDEX idx_team_agreements_agreed_by ON public.team_agreements USING gin (agreed_by);
-CREATE INDEX idx_team_agreements_category ON public.team_agreements USING btree (category);
-CREATE INDEX idx_team_agreements_effective_date ON public.team_agreements USING btree (effective_date DESC);
-CREATE INDEX idx_team_agreements_next_review ON public.team_agreements USING btree (next_review_date) WHERE (next_review_date IS NOT NULL);
-CREATE INDEX idx_team_agreements_project ON public.team_agreements USING btree (project_id);
-CREATE INDEX idx_team_agreements_project_id ON public.team_agreements USING btree (project_id);
-CREATE INDEX idx_team_agreements_status ON public.team_agreements USING btree (status);
-CREATE INDEX idx_team_availability_project_id ON public.team_availability USING btree (project_id);
-CREATE UNIQUE INDEX technologies_project_id_name_key ON public.technologies USING btree (project_id, name);
-CREATE INDEX idx_technologies_category ON public.technologies USING btree (project_id, category);
-CREATE INDEX idx_technologies_project_id ON public.technologies USING btree (project_id);
-CREATE INDEX idx_technologies_source_document ON public.technologies USING btree (source_document_id) WHERE (source_document_id IS NOT NULL);
-CREATE UNIQUE INDEX template_comparison_metrics_template_id_a_template_id_b_met_key ON public.template_comparison_metrics USING btree (template_id_a, template_id_b, metric_name, comparison_period_start);
-CREATE INDEX idx_template_comparison_a ON public.template_comparison_metrics USING btree (template_id_a);
-CREATE INDEX idx_template_comparison_b ON public.template_comparison_metrics USING btree (template_id_b);
-CREATE INDEX idx_template_comparison_type ON public.template_comparison_metrics USING btree (comparison_type);
-CREATE INDEX idx_template_improvement_suggestions_source_document ON public.template_improvement_suggestions USING btree (source_document_id);
-CREATE INDEX idx_template_improvement_suggestions_source_location ON public.template_improvement_suggestions USING btree (source_document_id, source_text_start);
-CREATE INDEX idx_template_improvements_date ON public.template_improvement_suggestions USING btree (created_at DESC);
-CREATE INDEX idx_template_improvements_pending ON public.template_improvement_suggestions USING btree (status, priority) WHERE ((status)::text = 'pending_review'::text);
-CREATE INDEX idx_template_improvements_priority ON public.template_improvement_suggestions USING btree (priority);
-CREATE INDEX idx_template_improvements_status ON public.template_improvement_suggestions USING btree (status);
-CREATE INDEX idx_template_improvements_template ON public.template_improvement_suggestions USING btree (template_id);
-CREATE INDEX idx_maintenance_assigned ON public.template_maintenance_log USING btree (assigned_to);
-CREATE INDEX idx_maintenance_priority ON public.template_maintenance_log USING btree (priority);
-CREATE INDEX idx_maintenance_status ON public.template_maintenance_log USING btree (action_status);
-CREATE INDEX idx_maintenance_template ON public.template_maintenance_log USING btree (template_id, created_at DESC);
-CREATE INDEX idx_template_performance_created_at ON public.template_performance USING btree (created_at);
-CREATE INDEX idx_template_performance_template_id ON public.template_performance USING btree (template_id);
-CREATE UNIQUE INDEX template_quality_metrics_template_id_period_type_period_sta_key ON public.template_quality_metrics USING btree (template_id, period_type, period_start);
-CREATE INDEX idx_template_quality_period ON public.template_quality_metrics USING btree (period_type, period_start DESC);
-CREATE INDEX idx_template_quality_priority ON public.template_quality_metrics USING btree (maintenance_priority);
-CREATE INDEX idx_template_quality_success_rate ON public.template_quality_metrics USING btree (success_rate DESC);
-CREATE INDEX idx_template_quality_template ON public.template_quality_metrics USING btree (template_id);
-CREATE INDEX idx_template_status_history_date ON public.template_status_history USING btree (created_at);
-CREATE INDEX idx_template_status_history_template ON public.template_status_history USING btree (template_id);
-CREATE INDEX idx_template_usage_project ON public.template_usage USING btree (project_id, used_at DESC);
-CREATE INDEX idx_template_usage_success ON public.template_usage USING btree (success, used_at DESC);
-CREATE INDEX idx_template_usage_template_id ON public.template_usage USING btree (template_id);
-CREATE INDEX idx_template_usage_template_time ON public.template_usage USING btree (template_id, used_at DESC);
-CREATE INDEX idx_template_usage_used_at ON public.template_usage USING btree (used_at DESC);
-CREATE INDEX idx_template_usage_user ON public.template_usage USING btree (user_id, used_at DESC);
-CREATE INDEX idx_template_usage_user_id ON public.template_usage USING btree (user_id);
-CREATE UNIQUE INDEX unique_template_version ON public.template_versions USING btree (template_id, version_number);
-CREATE INDEX idx_template_versions_created ON public.template_versions USING btree (created_at DESC);
-CREATE INDEX idx_template_versions_number ON public.template_versions USING btree (template_id, version_number DESC);
-CREATE INDEX idx_template_versions_suggestion ON public.template_versions USING btree (improvement_suggestion_id);
-CREATE INDEX idx_template_versions_tag ON public.template_versions USING btree (version_tag);
-CREATE INDEX idx_template_versions_template ON public.template_versions USING btree (template_id, created_at DESC);
-CREATE INDEX idx_templates_archived ON public.templates USING btree (archived_at);
-CREATE INDEX idx_templates_category ON public.templates USING btree (category);
-CREATE INDEX idx_templates_company_id ON public.templates USING btree (company_id);
-CREATE INDEX idx_templates_compliance_checked ON public.templates USING btree (compliance_checked_at);
-CREATE INDEX idx_templates_context_injection_config ON public.templates USING gin (context_injection_config);
-CREATE INDEX idx_templates_created_by ON public.templates USING btree (created_by) WHERE (deleted_at IS NULL);
-CREATE INDEX idx_templates_deleted_at ON public.templates USING btree (deleted_at);
-CREATE INDEX idx_templates_deleted_by ON public.templates USING btree (deleted_by);
-CREATE INDEX idx_templates_dev_status ON public.templates USING btree (development_status);
-CREATE INDEX idx_templates_framework ON public.templates USING btree (framework) WHERE ((deleted_at IS NULL) AND (framework IS NOT NULL));
-CREATE INDEX idx_templates_gkg_context_strategy ON public.templates USING gin (gkg_context_strategy) WHERE (gkg_context_strategy IS NOT NULL);
-CREATE INDEX idx_templates_last_used_at ON public.templates USING btree (last_used_at DESC NULLS LAST);
-CREATE INDEX idx_templates_prompt_build_up ON public.templates USING gin (prompt_build_up);
-CREATE INDEX idx_templates_scope ON public.templates USING btree (template_scope);
-CREATE INDEX idx_templates_scope_company ON public.templates USING btree (template_scope, company_id) WHERE ((template_scope)::text = 'company'::text);
-CREATE INDEX idx_templates_scope_standard ON public.templates USING btree (template_scope) WHERE ((template_scope)::text = 'standard'::text);
-CREATE INDEX idx_templates_scope_user ON public.templates USING btree (template_scope, created_by) WHERE ((template_scope)::text = 'user'::text);
-CREATE INDEX idx_templates_search ON public.templates USING gin (to_tsvector('english'::regconfig, (((((COALESCE(name, ''::character varying))::text || ' '::text) || COALESCE(description, ''::text)) || ' '::text) || COALESCE(system_prompt, ''::text)))) WHERE (deleted_at IS NULL);
-CREATE INDEX idx_templates_template_paragraphs ON public.templates USING gin (template_paragraphs);
-CREATE INDEX idx_templates_updated_at ON public.templates USING btree (updated_at DESC) WHERE (deleted_at IS NULL);
-CREATE INDEX idx_templates_validated ON public.templates USING btree (last_validated_at);
-CREATE UNIQUE INDEX time_entries_assignment_id_user_id_entry_date_key ON public.time_entries USING btree (assignment_id, user_id, entry_date);
-CREATE INDEX idx_time_entries_assignment ON public.time_entries USING btree (assignment_id);
-CREATE INDEX idx_time_entries_billable ON public.time_entries USING btree (is_billable);
-CREATE INDEX idx_time_entries_category ON public.time_entries USING btree (time_entry_category);
-CREATE INDEX idx_time_entries_date ON public.time_entries USING btree (entry_date);
-CREATE INDEX idx_time_entries_project ON public.time_entries USING btree (project_id);
-CREATE INDEX idx_time_entries_status ON public.time_entries USING btree (status);
-CREATE INDEX idx_time_entries_task ON public.time_entries USING btree (task_id);
-CREATE INDEX idx_time_entries_task_assignment ON public.time_entries USING btree (task_assignment_id);
-CREATE INDEX idx_time_entries_user ON public.time_entries USING btree (user_id);
-CREATE INDEX idx_upload_batches_company_id ON public.upload_batches USING btree (company_id);
-CREATE INDEX idx_upload_batches_created_at ON public.upload_batches USING btree (created_at DESC);
-CREATE INDEX idx_upload_batches_metadata ON public.upload_batches USING gin (batch_metadata);
-CREATE INDEX idx_upload_batches_project_id ON public.upload_batches USING btree (project_id);
-CREATE INDEX idx_upload_batches_status ON public.upload_batches USING btree (status);
-CREATE INDEX idx_upload_batches_uploaded_by ON public.upload_batches USING btree (uploaded_by);
-CREATE INDEX idx_user_activity_category ON public.user_activity_logs USING btree (activity_category, created_at DESC);
-CREATE INDEX idx_user_activity_created ON public.user_activity_logs USING btree (created_at DESC);
-CREATE INDEX idx_user_activity_type ON public.user_activity_logs USING btree (activity_type, created_at DESC);
-CREATE INDEX idx_user_activity_user ON public.user_activity_logs USING btree (user_id, created_at DESC);
-CREATE INDEX idx_user_analysis_analyzed_at ON public.user_analysis USING btree (analyzed_at);
-CREATE INDEX idx_user_analysis_average_quality_score ON public.user_analysis USING btree (average_quality_score);
-CREATE INDEX idx_user_analysis_user_id ON public.user_analysis USING btree (user_id);
-CREATE UNIQUE INDEX user_collaboration_preferences_user_id_key ON public.user_collaboration_preferences USING btree (user_id);
-CREATE INDEX idx_user_collaboration_preferences_user_id ON public.user_collaboration_preferences USING btree (user_id);
-CREATE UNIQUE INDEX user_domain_knowledge_user_id_key ON public.user_domain_knowledge USING btree (user_id);
-CREATE INDEX idx_user_domain_knowledge_frameworks ON public.user_domain_knowledge USING gin (frameworks);
-CREATE INDEX idx_user_domain_knowledge_user_id ON public.user_domain_knowledge USING btree (user_id);
-CREATE UNIQUE INDEX user_expertise_user_id_key ON public.user_expertise USING btree (user_id);
-CREATE INDEX idx_user_expertise_domains ON public.user_expertise USING gin (domains);
-CREATE INDEX idx_user_expertise_level ON public.user_expertise USING btree (level);
-CREATE INDEX idx_user_expertise_user_id ON public.user_expertise USING btree (user_id);
-CREATE UNIQUE INDEX user_model_preferences_user_id_task_type_key ON public.user_model_preferences USING btree (user_id, task_type);
-CREATE INDEX idx_user_model_preferences_user ON public.user_model_preferences USING btree (user_id);
-CREATE UNIQUE INDEX user_preferences_user_id_key ON public.user_preferences USING btree (user_id);
-CREATE INDEX idx_user_preferences_user_id ON public.user_preferences USING btree (user_id);
-CREATE UNIQUE INDEX user_search_preferences_user_id_key ON public.user_search_preferences USING btree (user_id);
-CREATE INDEX idx_user_search_preferences_frameworks ON public.user_search_preferences USING gin (preferred_frameworks);
-CREATE INDEX idx_user_search_preferences_user_id ON public.user_search_preferences USING btree (user_id);
-CREATE INDEX idx_user_search_preferences_categories ON public.user_search_preferences USING gin (preferred_categories);
-CREATE UNIQUE INDEX user_writing_style_user_id_key ON public.user_writing_style USING btree (user_id);
-CREATE INDEX idx_user_writing_style_user_id ON public.user_writing_style USING btree (user_id);
-CREATE UNIQUE INDEX users_email_key ON public.users USING btree (email);
-CREATE INDEX idx_users_active_search ON public.users USING btree (name, email) WHERE (is_active = true);
-CREATE INDEX idx_users_company_id ON public.users USING btree (company_id);
-CREATE INDEX idx_users_date_format ON public.users USING btree (date_format) WHERE (date_format IS NOT NULL);
-CREATE INDEX idx_users_metadata ON public.users USING gin (metadata);
-CREATE INDEX idx_users_tenant_id ON public.users USING btree (tenant_id);
-CREATE INDEX idx_users_timezone ON public.users USING btree (timezone) WHERE (timezone IS NOT NULL);
-CREATE UNIQUE INDEX utilization_records_project_id_record_date_resource_id_key ON public.utilization_records USING btree (project_id, record_date, resource_id);
-CREATE INDEX idx_utilization_records_date ON public.utilization_records USING btree (record_date);
-CREATE INDEX idx_utilization_records_period ON public.utilization_records USING btree (period);
-CREATE INDEX idx_utilization_records_project_id ON public.utilization_records USING btree (project_id);
-CREATE INDEX idx_utilization_records_resource ON public.utilization_records USING btree (resource_id);
-CREATE UNIQUE INDEX variable_analysis_results_analysis_id_key ON public.variable_analysis_results USING btree (analysis_id);
-CREATE INDEX idx_variable_analysis_complexity ON public.variable_analysis_results USING btree (complexity_score);
-CREATE INDEX idx_variable_analysis_created ON public.variable_analysis_results USING btree (created_at);
-CREATE INDEX idx_variable_analysis_data_gin ON public.variable_analysis_results USING gin (analysis_data);
-CREATE INDEX idx_variable_analysis_quality ON public.variable_analysis_results USING btree (quality_score);
-CREATE INDEX idx_variable_analysis_recommendations_gin ON public.variable_analysis_results USING gin (recommendations);
-CREATE INDEX idx_variable_analysis_template ON public.variable_analysis_results USING btree (template_id);
-CREATE UNIQUE INDEX variable_patterns_pattern_id_key ON public.variable_patterns USING btree (pattern_id);
-CREATE INDEX idx_variable_patterns_confidence ON public.variable_patterns USING btree (pattern_confidence);
-CREATE INDEX idx_variable_patterns_examples_gin ON public.variable_patterns USING gin (pattern_examples);
-CREATE INDEX idx_variable_patterns_frequency ON public.variable_patterns USING btree (pattern_frequency);
-CREATE INDEX idx_variable_patterns_metadata_gin ON public.variable_patterns USING gin (pattern_metadata);
-CREATE INDEX idx_variable_patterns_type ON public.variable_patterns USING btree (pattern_type);
-CREATE UNIQUE INDEX variable_resolution_cache_cache_key_key ON public.variable_resolution_cache USING btree (cache_key);
-CREATE INDEX idx_variable_resolution_cache_data_gin ON public.variable_resolution_cache USING gin (resolution_data);
-CREATE INDEX idx_variable_resolution_cache_expires ON public.variable_resolution_cache USING btree (expires_at);
-CREATE INDEX idx_variable_resolution_cache_key ON public.variable_resolution_cache USING btree (cache_key);
-CREATE INDEX idx_variable_resolution_metrics_context_gin ON public.variable_resolution_metrics USING gin (context_data);
-CREATE INDEX idx_variable_resolution_metrics_created ON public.variable_resolution_metrics USING btree (created_at);
-CREATE INDEX idx_variable_resolution_metrics_name ON public.variable_resolution_metrics USING btree (variable_name);
-CREATE INDEX idx_variable_resolution_metrics_status ON public.variable_resolution_metrics USING btree (status);
-CREATE INDEX idx_variable_resolution_metrics_strategy ON public.variable_resolution_metrics USING btree (resolution_strategy);
-CREATE INDEX idx_variable_resolution_metrics_type ON public.variable_resolution_metrics USING btree (variable_type);
-CREATE UNIQUE INDEX variable_resolution_results_result_id_key ON public.variable_resolution_results USING btree (result_id);
-CREATE INDEX idx_variable_resolution_results_created ON public.variable_resolution_results USING btree (created_at);
-CREATE INDEX idx_variable_resolution_results_metrics_gin ON public.variable_resolution_results USING gin (resolution_metrics);
-CREATE INDEX idx_variable_resolution_results_quality_gin ON public.variable_resolution_results USING gin (quality_assessment);
-CREATE INDEX idx_variable_resolution_results_recommendations_gin ON public.variable_resolution_results USING gin (recommendations);
-CREATE INDEX idx_variable_resolution_results_request ON public.variable_resolution_results USING btree (request_id);
-CREATE INDEX idx_variable_resolution_results_template ON public.variable_resolution_results USING btree (template_id);
-CREATE INDEX idx_variable_resolution_results_unresolved_gin ON public.variable_resolution_results USING gin (unresolved_variables);
-CREATE INDEX idx_variable_resolution_results_variables_gin ON public.variable_resolution_results USING gin (resolved_variables);
-CREATE INDEX idx_wbs_nodes_code ON public.wbs_nodes USING btree (project_id, wbs_code);
-CREATE INDEX idx_wbs_nodes_project_id ON public.wbs_nodes USING btree (project_id);
-CREATE UNIQUE INDEX idx_wbs_nodes_idempotency ON public.wbs_nodes USING btree (project_id, idempotency_key) WHERE (idempotency_key IS NOT NULL);
-CREATE UNIQUE INDEX work_items_project_id_name_key ON public.work_items USING btree (project_id, name);
-CREATE INDEX idx_work_items_activity ON public.work_items USING btree (activity_id);
-CREATE INDEX idx_work_items_project ON public.work_items USING btree (project_id);
-CREATE INDEX idx_work_items_project_id ON public.work_items USING btree (project_id);
-CREATE INDEX idx_work_items_source_document ON public.work_items USING btree (source_document_id) WHERE (source_document_id IS NOT NULL);
-CREATE INDEX idx_work_items_source_location ON public.work_items USING btree (source_document_id, source_text_start);
-CREATE INDEX idx_work_items_status ON public.work_items USING btree (status);
-CREATE INDEX idx_worker_heartbeats_last_heartbeat ON public.worker_heartbeats USING btree (last_heartbeat);
-CREATE INDEX idx_workflow_executions_created_at ON public.workflow_executions USING btree (created_at);
-CREATE INDEX idx_workflow_executions_project_id ON public.workflow_executions USING btree (project_id);
-CREATE INDEX idx_workflow_executions_status ON public.workflow_executions USING btree (status);
-CREATE INDEX idx_workflow_executions_template_id ON public.workflow_executions USING btree (template_id);
-CREATE INDEX idx_workflow_executions_user_id ON public.workflow_executions USING btree (user_id);
-CREATE INDEX idx_workflow_presets_category ON public.workflow_presets USING btree (category);
-CREATE INDEX idx_workflow_presets_created_by ON public.workflow_presets USING btree (created_by);
-CREATE INDEX idx_workflow_presets_public ON public.workflow_presets USING btree (is_public);
+CREATE INDEX IF NOT EXISTS idx_activities_idempotency_key ON public.activities USING btree (idempotency_key);
+CREATE INDEX IF NOT EXISTS idx_ai_fallback_chain_entries_chain ON public.ai_fallback_chain_entries USING btree (chain_id);
+CREATE INDEX IF NOT EXISTS idx_ai_fallback_chains_task ON public.ai_fallback_chains USING btree (task_type);
+CREATE INDEX IF NOT EXISTS idx_ai_model_configurations_created_at ON public.ai_model_configurations USING btree (created_at);
+CREATE INDEX IF NOT EXISTS idx_ai_model_configurations_is_active ON public.ai_model_configurations USING btree (is_active);
+CREATE INDEX IF NOT EXISTS idx_ai_model_configurations_model_id ON public.ai_model_configurations USING btree (model_id);
+CREATE INDEX IF NOT EXISTS idx_ai_model_configurations_provider_id ON public.ai_model_configurations USING btree (provider_id);
+CREATE INDEX IF NOT EXISTS idx_ai_models_provider ON public.ai_models USING btree (provider_id);
+CREATE INDEX IF NOT EXISTS idx_ai_models_active ON public.ai_models USING btree (is_active);
+CREATE INDEX IF NOT EXISTS idx_health_metrics_provider ON public.ai_provider_health_metrics USING btree (provider_id);
+CREATE INDEX IF NOT EXISTS idx_health_metrics_tested ON public.ai_provider_health_metrics USING btree (last_tested DESC);
+CREATE INDEX IF NOT EXISTS idx_test_results_provider ON public.ai_provider_test_results USING btree (provider_id);
+CREATE INDEX IF NOT EXISTS idx_test_results_status ON public.ai_provider_test_results USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_test_results_timestamp ON public.ai_provider_test_results USING btree ("timestamp" DESC);
+CREATE INDEX IF NOT EXISTS idx_ai_provider_usage_domain ON public.ai_provider_usage USING btree (domain);
+CREATE INDEX IF NOT EXISTS idx_ai_provider_usage_project ON public.ai_provider_usage USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_ai_provider_usage_provider ON public.ai_provider_usage USING btree (provider_name, model_name);
+CREATE INDEX IF NOT EXISTS idx_ai_providers_default_model ON public.ai_providers USING btree (default_model);
+CREATE INDEX IF NOT EXISTS idx_ai_providers_priority ON public.ai_providers USING btree (priority, is_active);
+CREATE INDEX IF NOT EXISTS idx_ai_providers_type_active ON public.ai_providers USING btree (provider_type, is_active);
+CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_cost ON public.ai_usage_logs USING btree (estimated_cost DESC);
+CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_created_at ON public.ai_usage_logs USING btree (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_document_id ON public.ai_usage_logs USING btree (document_id);
+CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_project_date ON public.ai_usage_logs USING btree (project_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_project_id ON public.ai_usage_logs USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_provider_date ON public.ai_usage_logs USING btree (provider_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_provider_id ON public.ai_usage_logs USING btree (provider_id);
+CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_provider_type ON public.ai_usage_logs USING btree (provider_type);
+CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_success ON public.ai_usage_logs USING btree (success);
+CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_user_date ON public.ai_usage_logs USING btree (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_user_id ON public.ai_usage_logs USING btree (user_id);
+CREATE INDEX IF NOT EXISTS idx_analysis_metrics_metric_date ON public.analysis_metrics USING btree (metric_date);
+CREATE INDEX IF NOT EXISTS idx_analytics_events_timestamp ON public.analytics_events USING btree ("timestamp");
+CREATE INDEX IF NOT EXISTS idx_analytics_events_type ON public.analytics_events USING btree (event_type);
+CREATE INDEX IF NOT EXISTS idx_analytics_events_user_type ON public.analytics_events USING btree (user_id, event_type);
+CREATE INDEX IF NOT EXISTS idx_api_logs_created ON public.api_request_logs USING btree (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_api_logs_endpoint ON public.api_request_logs USING btree (endpoint, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_api_logs_status ON public.api_request_logs USING btree (status_code, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_api_logs_user ON public.api_request_logs USING btree (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_approval_audit_action ON public.approval_audit_log USING btree (action_type);
+CREATE INDEX IF NOT EXISTS idx_approval_audit_created ON public.approval_audit_log USING btree (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_approval_audit_request ON public.approval_audit_log USING btree (approval_request_id);
+CREATE INDEX IF NOT EXISTS idx_approval_audit_step ON public.approval_audit_log USING btree (approval_step_id);
+CREATE INDEX IF NOT EXISTS idx_approval_escalations_escalated_at ON public.approval_escalations USING btree (escalated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_approval_escalations_request ON public.approval_escalations USING btree (approval_request_id);
+CREATE INDEX IF NOT EXISTS idx_approval_escalations_status ON public.approval_escalations USING btree (resolution_status);
+CREATE INDEX IF NOT EXISTS idx_approval_notifications_recipient ON public.approval_notifications USING btree (recipient_user_id);
+CREATE INDEX IF NOT EXISTS idx_approval_notifications_request ON public.approval_notifications USING btree (approval_request_id);
+CREATE INDEX IF NOT EXISTS idx_approval_notifications_sent ON public.approval_notifications USING btree (sent_at DESC);
+CREATE INDEX IF NOT EXISTS idx_approval_notifications_status ON public.approval_notifications USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_approval_requests_cr ON public.approval_requests USING btree (change_request_id);
+CREATE INDEX IF NOT EXISTS idx_approval_requests_created_at ON public.approval_requests USING btree (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_approval_requests_drift ON public.approval_requests USING btree (drift_record_id);
+CREATE INDEX IF NOT EXISTS idx_approval_requests_priority ON public.approval_requests USING btree (priority);
+CREATE INDEX IF NOT EXISTS idx_approval_requests_project ON public.approval_requests USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_approval_requests_requested_by ON public.approval_requests USING btree (requested_by);
+CREATE INDEX IF NOT EXISTS idx_approval_requests_sla ON public.approval_requests USING btree (sla_deadline) WHERE ((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('in_progress'::character varying)::text]));
+CREATE INDEX IF NOT EXISTS idx_approval_requests_status ON public.approval_requests USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_approval_steps_approver ON public.approval_steps USING btree (approver_user_id);
+CREATE INDEX IF NOT EXISTS idx_approval_steps_request ON public.approval_steps USING btree (approval_request_id);
+CREATE INDEX IF NOT EXISTS idx_approval_steps_role ON public.approval_steps USING btree (approver_role);
+CREATE INDEX IF NOT EXISTS idx_approval_steps_status ON public.approval_steps USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_approval_workflows_project_id ON public.approval_workflows USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_assessments_assessment_data ON public.assessments USING gin (assessment_data);
+CREATE INDEX IF NOT EXISTS idx_assessments_batch_id ON public.assessments USING btree (batch_id);
+CREATE INDEX IF NOT EXISTS idx_assessments_company_id ON public.assessments USING btree (company_id);
+CREATE INDEX IF NOT EXISTS idx_assessments_created_at ON public.assessments USING btree (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_assessments_project_id ON public.assessments USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_assessments_status ON public.assessments USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_audit_action ON public.audit_log USING btree (action, occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_table_row ON public.audit_log USING btree (table_name, row_id, occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_actor_user ON public.audit_log USING btree (actor_user_id, action);
+CREATE INDEX IF NOT EXISTS idx_baseline_comparisons_baseline ON public.baseline_comparisons USING btree (baseline_id);
+CREATE INDEX IF NOT EXISTS idx_baseline_comparisons_compared ON public.baseline_comparisons USING btree (compared_at DESC);
+CREATE INDEX IF NOT EXISTS idx_baseline_comparisons_drift ON public.baseline_comparisons USING btree (drift_detected, drift_severity);
+CREATE INDEX IF NOT EXISTS idx_compliance_reviews_baseline ON public.baseline_compliance_reviews USING btree (baseline_id);
+CREATE INDEX IF NOT EXISTS idx_compliance_reviews_status ON public.baseline_compliance_reviews USING btree (review_status);
+CREATE INDEX IF NOT EXISTS idx_compliance_reviews_type ON public.baseline_compliance_reviews USING btree (review_type);
+CREATE UNIQUE INDEX IF NOT EXISTS unique_baseline_component ON public.baseline_components USING btree (baseline_id, component_type, title);
+CREATE INDEX IF NOT EXISTS idx_baseline_components_baseline_id ON public.baseline_components USING btree (baseline_id);
+CREATE INDEX IF NOT EXISTS idx_baseline_components_source_document ON public.baseline_components USING btree (source_document_id);
+CREATE INDEX IF NOT EXISTS idx_baseline_components_type ON public.baseline_components USING btree (component_type);
+CREATE INDEX IF NOT EXISTS idx_baseline_drift_baseline_id ON public.baseline_drift_detection USING btree (baseline_id);
+CREATE INDEX IF NOT EXISTS idx_baseline_drift_detection_date ON public.baseline_drift_detection USING btree (detection_date);
+CREATE INDEX IF NOT EXISTS idx_baseline_drift_project_id ON public.baseline_drift_detection USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_baseline_drift_severity ON public.baseline_drift_detection USING btree (drift_severity);
+CREATE INDEX IF NOT EXISTS idx_baseline_drift_status ON public.baseline_drift_detection USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_baseline_drift_type ON public.baseline_drift_detection USING btree (detection_type);
+CREATE UNIQUE INDEX IF NOT EXISTS unique_baseline_version ON public.baseline_versions USING btree (baseline_id, version_number);
+CREATE INDEX IF NOT EXISTS idx_baseline_versions_baseline_id ON public.baseline_versions USING btree (baseline_id);
+CREATE INDEX IF NOT EXISTS idx_baseline_versions_changed_at ON public.baseline_versions USING btree (changed_at);
+CREATE INDEX IF NOT EXISTS idx_batch_files_batch_id ON public.batch_files USING btree (batch_id);
+CREATE INDEX IF NOT EXISTS idx_batch_files_file_id ON public.batch_files USING btree (file_id);
+CREATE INDEX IF NOT EXISTS idx_batch_files_status ON public.batch_files USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_benefit_realization_project_id ON public.benefit_realization_plan USING btree (project_id);
+CREATE UNIQUE INDEX IF NOT EXISTS best_practices_project_title_unique ON public.best_practices USING btree (project_id, title);
+CREATE INDEX IF NOT EXISTS idx_best_practices_project_id ON public.best_practices USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_best_practices_source_document ON public.best_practices USING btree (source_document_id) WHERE (source_document_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_best_practices_source_location ON public.best_practices USING btree (source_document_id, source_text_start);
+CREATE INDEX IF NOT EXISTS idx_budget_baseline_project_id ON public.budget_baseline USING btree (project_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_budget_baseline_idempotency ON public.budget_baseline USING btree (project_id, idempotency_key) WHERE (idempotency_key IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_budget_baselines_current ON public.budget_baselines USING btree (project_id, is_current) WHERE (is_current = true);
+CREATE INDEX IF NOT EXISTS idx_budget_baselines_project_id ON public.budget_baselines USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_budget_baselines_status ON public.budget_baselines USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_budget_baselines_idempotency_key ON public.budget_baselines USING btree (idempotency_key);
+CREATE INDEX IF NOT EXISTS idx_business_case_details_project_id ON public.business_case_details USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_capacity_forecasts_date ON public.capacity_forecasts USING btree (forecast_date);
+CREATE INDEX IF NOT EXISTS idx_capacity_forecasts_project_id ON public.capacity_forecasts USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_capacity_forecasts_role ON public.capacity_forecasts USING btree (role);
+CREATE INDEX IF NOT EXISTS idx_capacity_plans_project_id ON public.capacity_plans USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_capacity_plans_source_document ON public.capacity_plans USING btree (source_document_id) WHERE (source_document_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_change_control_boards_project_id ON public.change_control_boards USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_checklist_items_assigned_user ON public.checklist_items USING btree (assigned_user_id);
+CREATE INDEX IF NOT EXISTS idx_checklist_items_completed ON public.checklist_items USING btree (is_completed);
+CREATE INDEX IF NOT EXISTS idx_checklist_items_due_date ON public.checklist_items USING btree (due_date);
+CREATE INDEX IF NOT EXISTS idx_checklist_items_sequence ON public.checklist_items USING btree (task_id, sequence_order);
+CREATE INDEX IF NOT EXISTS idx_checklist_items_task ON public.checklist_items USING btree (task_id);
+CREATE INDEX IF NOT EXISTS idx_communication_logs_project_id ON public.communication_logs USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_competencies_category ON public.competencies USING btree (category);
+CREATE INDEX IF NOT EXISTS idx_competencies_name ON public.competencies USING btree (name);
+CREATE UNIQUE INDEX IF NOT EXISTS unique_project_compliance_security ON public.compliance_security USING btree (project_id, title);
+CREATE INDEX IF NOT EXISTS idx_compliance_security_category ON public.compliance_security USING btree (category);
+CREATE INDEX IF NOT EXISTS idx_compliance_security_created_at ON public.compliance_security USING btree (created_at);
+CREATE INDEX IF NOT EXISTS idx_compliance_security_project_id ON public.compliance_security USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_compliance_security_source_document_id ON public.compliance_security USING btree (source_document_id);
+CREATE INDEX IF NOT EXISTS idx_compliance_security_status ON public.compliance_security USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_compliance_security_type ON public.compliance_security USING btree (type);
+CREATE INDEX IF NOT EXISTS idx_compression_feedback_created_at ON public.compression_feedback USING btree (created_at);
+CREATE INDEX IF NOT EXISTS idx_compression_feedback_document_id ON public.compression_feedback USING btree (document_id);
+CREATE INDEX IF NOT EXISTS idx_compression_feedback_method ON public.compression_feedback USING btree (compression_method);
+CREATE INDEX IF NOT EXISTS idx_compression_metrics_created_at ON public.compression_metrics USING btree (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_compression_metrics_document_id ON public.compression_metrics USING btree (document_id);
+CREATE INDEX IF NOT EXISTS idx_compression_metrics_strategy ON public.compression_metrics USING btree (strategy_used);
+CREATE INDEX IF NOT EXISTS idx_compression_strategies_document_type ON public.compression_strategies USING btree (document_type);
+CREATE INDEX IF NOT EXISTS idx_compression_strategies_method ON public.compression_strategies USING btree (method);
+CREATE INDEX IF NOT EXISTS idx_compression_strategies_project_type ON public.compression_strategies USING btree (project_type);
+CREATE UNIQUE INDEX IF NOT EXISTS constraints_project_name_unique ON public.constraints USING btree (project_id, name);
+CREATE INDEX IF NOT EXISTS idx_constraints_impact ON public.constraints USING btree (impact);
+CREATE INDEX IF NOT EXISTS idx_constraints_project_id ON public.constraints USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_constraints_source_document ON public.constraints USING btree (source_document_id) WHERE (source_document_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_constraints_source_location ON public.constraints USING btree (source_document_id, source_text_start);
+CREATE INDEX IF NOT EXISTS idx_constraints_idempotency_key ON public.constraints USING btree (idempotency_key);
+CREATE INDEX IF NOT EXISTS idx_context_bundles_created_at ON public.context_bundles USING btree (created_at);
+CREATE INDEX IF NOT EXISTS idx_context_bundles_metadata ON public.context_bundles USING gin (metadata);
+CREATE INDEX IF NOT EXISTS idx_context_bundles_project_id ON public.context_bundles USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_context_bundles_results ON public.context_bundles USING gin (results);
+CREATE INDEX IF NOT EXISTS idx_context_bundles_template_id ON public.context_bundles USING btree (template_id);
+CREATE INDEX IF NOT EXISTS idx_context_bundles_updated_at ON public.context_bundles USING btree (updated_at);
+CREATE INDEX IF NOT EXISTS idx_context_bundles_user_id ON public.context_bundles USING btree (user_id);
+CREATE INDEX IF NOT EXISTS idx_context_cleanup_results_cleanup_id ON public.context_cleanup_results USING btree (cleanup_id);
+CREATE INDEX IF NOT EXISTS idx_context_cleanup_results_started_at ON public.context_cleanup_results USING btree (started_at);
+CREATE INDEX IF NOT EXISTS idx_context_freshness_assessments_assessed_at ON public.context_freshness_assessments USING btree (assessed_at);
+CREATE INDEX IF NOT EXISTS idx_context_freshness_assessments_context_id ON public.context_freshness_assessments USING btree (context_id);
+CREATE INDEX IF NOT EXISTS idx_context_freshness_assessments_freshness_score ON public.context_freshness_assessments USING btree (freshness_score);
+CREATE INDEX IF NOT EXISTS idx_context_freshness_assessments_staleness_level ON public.context_freshness_assessments USING btree (staleness_level);
+CREATE INDEX IF NOT EXISTS idx_context_freshness_metrics_metric_date ON public.context_freshness_metrics USING btree (metric_date);
+CREATE INDEX IF NOT EXISTS idx_context_freshness_policies_enabled ON public.context_freshness_policies USING btree (enabled);
+CREATE INDEX IF NOT EXISTS idx_context_freshness_policies_policy_id ON public.context_freshness_policies USING btree (policy_id);
+CREATE INDEX IF NOT EXISTS idx_context_freshness_policy_evaluations_evaluated_at ON public.context_freshness_policy_evaluations USING btree (evaluated_at);
+CREATE INDEX IF NOT EXISTS idx_context_freshness_policy_evaluations_policy_id ON public.context_freshness_policy_evaluations USING btree (policy_id);
+CREATE INDEX IF NOT EXISTS idx_context_freshness_policy_results_applied_at ON public.context_freshness_policy_results USING btree (applied_at);
+CREATE INDEX IF NOT EXISTS idx_context_freshness_policy_results_context_id ON public.context_freshness_policy_results USING btree (context_id);
+CREATE INDEX IF NOT EXISTS idx_context_freshness_policy_results_policy_id ON public.context_freshness_policy_results USING btree (policy_id);
+CREATE INDEX IF NOT EXISTS idx_context_freshness_trends_context_id ON public.context_freshness_trends USING btree (context_id);
+CREATE INDEX IF NOT EXISTS idx_context_freshness_trends_timeframe ON public.context_freshness_trends USING btree (timeframe);
+CREATE INDEX IF NOT EXISTS idx_context_gathering_metrics_created_at ON public.context_gathering_metrics USING btree (created_at);
+CREATE INDEX IF NOT EXISTS idx_context_gathering_metrics_request_id ON public.context_gathering_metrics USING btree (request_id);
+CREATE INDEX IF NOT EXISTS idx_context_injection_metrics_bundle_id ON public.context_injection_metrics USING btree (bundle_id);
+CREATE INDEX IF NOT EXISTS idx_context_injection_metrics_created_at ON public.context_injection_metrics USING btree (created_at);
+CREATE INDEX IF NOT EXISTS idx_context_injection_metrics_project_id ON public.context_injection_metrics USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_context_injection_metrics_template_id ON public.context_injection_metrics USING btree (template_id);
+CREATE INDEX IF NOT EXISTS idx_context_injection_metrics_user_id ON public.context_injection_metrics USING btree (user_id);
+CREATE INDEX IF NOT EXISTS idx_context_items_expires_at ON public.context_items USING btree (expires_at);
+CREATE INDEX IF NOT EXISTS idx_context_items_freshness_score ON public.context_items USING btree (freshness_score);
+CREATE INDEX IF NOT EXISTS idx_context_items_is_stale ON public.context_items USING btree (is_stale);
+CREATE INDEX IF NOT EXISTS idx_context_items_last_accessed_at ON public.context_items USING btree (last_accessed_at);
+CREATE INDEX IF NOT EXISTS idx_context_items_type ON public.context_items USING btree (type);
+CREATE INDEX IF NOT EXISTS idx_context_items_updated_at ON public.context_items USING btree (updated_at);
+CREATE INDEX IF NOT EXISTS idx_context_refresh_results_context_id ON public.context_refresh_results USING btree (context_id);
+CREATE INDEX IF NOT EXISTS idx_context_refresh_results_refreshed_at ON public.context_refresh_results USING btree (refreshed_at);
+CREATE INDEX IF NOT EXISTS idx_context_refresh_results_success ON public.context_refresh_results USING btree (success);
+CREATE INDEX IF NOT EXISTS idx_context_refresh_schedules_context_id ON public.context_refresh_schedules USING btree (context_id);
+CREATE INDEX IF NOT EXISTS idx_context_refresh_schedules_enabled ON public.context_refresh_schedules USING btree (enabled);
+CREATE INDEX IF NOT EXISTS idx_context_refresh_schedules_next_execution ON public.context_refresh_schedules USING btree (next_execution);
+CREATE INDEX IF NOT EXISTS idx_context_refresh_schedules_schedule_type ON public.context_refresh_schedules USING btree (schedule_type);
+CREATE INDEX IF NOT EXISTS idx_context_retrieval_metrics_metric_date ON public.context_retrieval_metrics USING btree (metric_date);
+CREATE INDEX IF NOT EXISTS idx_context_source_logs_retrieval_timestamp ON public.context_source_logs USING btree (retrieval_timestamp);
+CREATE INDEX IF NOT EXISTS idx_context_source_logs_source_id ON public.context_source_logs USING btree (source_id);
+CREATE INDEX IF NOT EXISTS idx_context_source_logs_source_type ON public.context_source_logs USING btree (source_type);
+CREATE INDEX IF NOT EXISTS idx_context_source_logs_success ON public.context_source_logs USING btree (success);
+CREATE INDEX IF NOT EXISTS idx_context_staleness_log_action ON public.context_staleness_log USING btree (action);
+CREATE INDEX IF NOT EXISTS idx_context_staleness_log_context_id ON public.context_staleness_log USING btree (context_id);
+CREATE INDEX IF NOT EXISTS idx_context_staleness_log_performed_at ON public.context_staleness_log USING btree (performed_at);
+CREATE INDEX IF NOT EXISTS idx_contingency_reserves_project_id ON public.contingency_reserves USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_contingency_reserves_status ON public.contingency_reserves USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_contingency_reserves_type ON public.contingency_reserves USING btree (reserve_type);
+CREATE INDEX IF NOT EXISTS idx_cost_actuals_category ON public.cost_actuals USING btree (category);
+CREATE INDEX IF NOT EXISTS idx_cost_actuals_period ON public.cost_actuals USING btree (period_start_date, period_end_date);
+CREATE INDEX IF NOT EXISTS idx_cost_actuals_project_id ON public.cost_actuals USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_cost_actuals_wbs ON public.cost_actuals USING btree (wbs_code);
+CREATE INDEX IF NOT EXISTS idx_cost_categories_active ON public.cost_categories USING btree (is_active);
+CREATE INDEX IF NOT EXISTS idx_cost_categories_order ON public.cost_categories USING btree (display_order);
+CREATE INDEX IF NOT EXISTS idx_cost_categories_type ON public.cost_categories USING btree (category_type);
+CREATE INDEX IF NOT EXISTS idx_cost_estimates_project_id ON public.cost_estimates USING btree (project_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cost_estimates_idempotency ON public.cost_estimates USING btree (project_id, idempotency_key) WHERE (idempotency_key IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_cost_estimates_idempotency_key ON public.cost_estimates USING btree (idempotency_key);
+CREATE INDEX IF NOT EXISTS idx_critical_path_project_id ON public.critical_path USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_critical_path_activities_project_id ON public.critical_path_activities USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_critical_path_activities_sequence ON public.critical_path_activities USING btree (project_id, path_sequence);
+CREATE INDEX IF NOT EXISTS idx_daily_stats_date ON public.daily_statistics USING btree (date DESC);
+CREATE INDEX IF NOT EXISTS idx_deliverable_acceptance_project ON public.deliverable_acceptance USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_deliverable_acceptance_status ON public.deliverable_acceptance USING btree (status);
+CREATE UNIQUE INDEX IF NOT EXISTS deliverables_project_name_unique ON public.deliverables USING btree (project_id, name);
+CREATE INDEX IF NOT EXISTS idx_deliverables_source_document ON public.deliverables USING btree (source_document_id) WHERE (source_document_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_deliverables_source_location ON public.deliverables USING btree (source_document_id, source_text_start);
+CREATE INDEX IF NOT EXISTS idx_deliverables_idempotency_key ON public.deliverables USING btree (idempotency_key);
+CREATE INDEX IF NOT EXISTS idx_dev_approach_methodology ON public.development_approach USING btree (approach, methodology);
+CREATE INDEX IF NOT EXISTS idx_dev_approach_project ON public.development_approach USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_development_approaches_project_id ON public.development_approaches USING btree (project_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_development_approaches_unique ON public.development_approaches USING btree (project_id, approach, COALESCE(framework, ''::text));
+CREATE INDEX IF NOT EXISTS idx_dt_states_asset_current ON public.digital_twin_asset_states USING btree (asset_id, is_current) WHERE (is_current = true);
+CREATE INDEX IF NOT EXISTS idx_dt_states_asset_id ON public.digital_twin_asset_states USING btree (asset_id);
+CREATE INDEX IF NOT EXISTS idx_dt_states_event_id ON public.digital_twin_asset_states USING btree (source_event_id);
+CREATE INDEX IF NOT EXISTS idx_dt_states_snapshot_gin ON public.digital_twin_asset_states USING gin (state_snapshot);
+CREATE INDEX IF NOT EXISTS idx_dt_states_timestamp ON public.digital_twin_asset_states USING btree ("timestamp" DESC);
+CREATE INDEX IF NOT EXISTS idx_dt_assets_asset_type ON public.digital_twin_assets USING btree (asset_type);
+CREATE INDEX IF NOT EXISTS idx_dt_assets_company_id ON public.digital_twin_assets USING btree (company_id);
+CREATE INDEX IF NOT EXISTS idx_dt_assets_metadata_gin ON public.digital_twin_assets USING gin (metadata);
+CREATE INDEX IF NOT EXISTS idx_dt_assets_platform ON public.digital_twin_assets USING btree (platform_type, external_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_dt_assets_platform_unique ON public.digital_twin_assets USING btree (external_id, platform_type, COALESCE(platform_instance_url, ''::text));
+CREATE INDEX IF NOT EXISTS idx_dt_assets_project_id ON public.digital_twin_assets USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_dt_assets_source_document_id ON public.digital_twin_assets USING btree (source_document_id);
+CREATE INDEX IF NOT EXISTS idx_dt_assets_source_entity_id ON public.digital_twin_assets USING btree (source_entity_id);
+CREATE INDEX IF NOT EXISTS idx_dt_assets_sync_status ON public.digital_twin_assets USING btree (sync_status) WHERE ((sync_status)::text = 'active'::text);
+CREATE INDEX IF NOT EXISTS idx_dt_triggers_asset_id ON public.digital_twin_document_triggers USING btree (asset_id);
+CREATE INDEX IF NOT EXISTS idx_dt_triggers_event_id ON public.digital_twin_document_triggers USING btree (event_id);
+CREATE INDEX IF NOT EXISTS idx_dt_triggers_status ON public.digital_twin_document_triggers USING btree (status) WHERE ((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('processing'::character varying)::text]));
+CREATE INDEX IF NOT EXISTS idx_dt_triggers_template_id ON public.digital_twin_document_triggers USING btree (template_id);
+CREATE INDEX IF NOT EXISTS idx_dt_triggers_triggered_at ON public.digital_twin_document_triggers USING btree (triggered_at DESC);
+CREATE INDEX IF NOT EXISTS idx_dt_events_asset_id ON public.digital_twin_events USING btree (asset_id);
+CREATE INDEX IF NOT EXISTS idx_dt_events_ingested ON public.digital_twin_events USING btree (ingested_at DESC);
+CREATE INDEX IF NOT EXISTS idx_dt_events_payload_gin ON public.digital_twin_events USING gin (event_payload);
+CREATE INDEX IF NOT EXISTS idx_dt_events_status ON public.digital_twin_events USING btree (processing_status) WHERE ((processing_status)::text = ANY (ARRAY[('pending'::character varying)::text, ('processing'::character varying)::text]));
+CREATE INDEX IF NOT EXISTS idx_dt_events_timestamp ON public.digital_twin_events USING btree (event_timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_dt_events_type ON public.digital_twin_events USING btree (event_type);
+CREATE INDEX IF NOT EXISTS idx_dt_sources_active ON public.digital_twin_ingestion_sources USING btree (is_active) WHERE (is_active = true);
+CREATE INDEX IF NOT EXISTS idx_dt_sources_project_id ON public.digital_twin_ingestion_sources USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_dt_rules_active ON public.digital_twin_trigger_rules USING btree (is_active) WHERE (is_active = true);
+CREATE INDEX IF NOT EXISTS idx_dt_rules_project_id ON public.digital_twin_trigger_rules USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_document_analysis_analysis_type ON public.document_analysis USING btree (analysis_type);
+CREATE INDEX IF NOT EXISTS idx_document_analysis_analyzed_at ON public.document_analysis USING btree (analyzed_at);
+CREATE INDEX IF NOT EXISTS idx_document_analysis_compliance_score ON public.document_analysis USING btree (compliance_score);
+CREATE INDEX IF NOT EXISTS idx_document_analysis_document_id ON public.document_analysis USING btree (document_id);
+CREATE INDEX IF NOT EXISTS idx_doc_analytics_edits ON public.document_analytics USING btree (edit_count DESC);
+CREATE INDEX IF NOT EXISTS idx_doc_analytics_project ON public.document_analytics USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_doc_analytics_views ON public.document_analytics USING btree (view_count DESC);
+CREATE INDEX IF NOT EXISTS idx_document_audit_trail_action_type ON public.document_audit_trail USING btree (action_type);
+CREATE INDEX IF NOT EXISTS idx_document_audit_trail_document_id ON public.document_audit_trail USING btree (document_id);
+CREATE INDEX IF NOT EXISTS idx_document_audit_trail_event_type ON public.document_audit_trail USING btree (event_type);
+CREATE INDEX IF NOT EXISTS idx_document_audit_trail_performed_by ON public.document_audit_trail USING btree (performed_by);
+CREATE INDEX IF NOT EXISTS idx_document_audit_trail_user_id ON public.document_audit_trail USING btree (user_id);
+CREATE INDEX IF NOT EXISTS document_chunks_embedding_idx ON public.document_chunks USING ivfflat (embedding vector_cosine_ops) WITH (lists='100');
+CREATE INDEX IF NOT EXISTS doc_entities_doc_idx ON public.document_entities USING btree (document_id);
+CREATE INDEX IF NOT EXISTS idx_document_entities_document_id ON public.document_entities USING btree (document_id);
+CREATE INDEX IF NOT EXISTS idx_document_entities_entity ON public.document_entities USING btree (entity);
+CREATE INDEX IF NOT EXISTS idx_document_entities_type ON public.document_entities USING btree (type) WHERE (type IS NOT NULL);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_document_integration ON public.document_integrations USING btree (document_id, integration_type);
+CREATE INDEX IF NOT EXISTS idx_document_integrations_document_id ON public.document_integrations USING btree (document_id);
+CREATE INDEX IF NOT EXISTS idx_document_integrations_integration_type ON public.document_integrations USING btree (integration_type);
+CREATE INDEX IF NOT EXISTS idx_document_integrations_external_id ON public.document_integrations USING btree (external_id);
+CREATE INDEX IF NOT EXISTS idx_document_integrations_sync_status ON public.document_integrations USING btree (sync_status);
+CREATE INDEX IF NOT EXISTS idx_document_jira_links_document_id ON public.document_jira_links USING btree (document_id);
+CREATE INDEX IF NOT EXISTS idx_document_jira_links_integration_id ON public.document_jira_links USING btree (integration_id);
+CREATE INDEX IF NOT EXISTS idx_document_jira_links_jira_issue_key ON public.document_jira_links USING btree (jira_issue_key);
+CREATE INDEX IF NOT EXISTS idx_document_jira_links_project_id ON public.document_jira_links USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_document_pattern_analysis_analyzed_at ON public.document_pattern_analysis USING btree (analyzed_at);
+CREATE INDEX IF NOT EXISTS idx_document_pattern_analysis_document_id ON public.document_pattern_analysis USING btree (document_id);
+CREATE INDEX IF NOT EXISTS idx_document_pattern_analysis_pattern_confidence ON public.document_pattern_analysis USING btree (pattern_confidence);
+CREATE INDEX IF NOT EXISTS idx_document_patterns_category ON public.document_patterns USING btree (category);
+CREATE INDEX IF NOT EXISTS idx_document_patterns_framework ON public.document_patterns USING btree (framework);
+CREATE INDEX IF NOT EXISTS idx_document_patterns_pattern_type ON public.document_patterns USING btree (pattern_type);
+CREATE INDEX IF NOT EXISTS idx_document_pmbok7_refs_document ON public.document_pmbok7_principle_refs USING btree (document_id);
+CREATE INDEX IF NOT EXISTS idx_document_pmbok7_refs_principle ON public.document_pmbok7_principle_refs USING btree (principle_id);
+CREATE INDEX IF NOT EXISTS idx_document_pmbok7_refs_type ON public.document_pmbok7_principle_refs USING btree (reference_type);
+CREATE INDEX IF NOT EXISTS idx_document_processing_history_created_at ON public.document_processing_history USING btree (created_at);
+CREATE INDEX IF NOT EXISTS idx_document_processing_history_history_id ON public.document_processing_history USING btree (history_id);
+CREATE INDEX IF NOT EXISTS idx_document_processing_history_project_id ON public.document_processing_history USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_document_processing_history_request_id ON public.document_processing_history USING btree (request_id);
+CREATE INDEX IF NOT EXISTS idx_document_processing_history_status ON public.document_processing_history USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_document_processing_history_template_id ON public.document_processing_history USING btree (template_id);
+CREATE INDEX IF NOT EXISTS idx_document_processing_history_user_id ON public.document_processing_history USING btree (user_id);
+CREATE INDEX IF NOT EXISTS idx_document_processing_jobs_created_at ON public.document_processing_jobs USING btree (created_at);
+CREATE INDEX IF NOT EXISTS idx_document_processing_jobs_job_id ON public.document_processing_jobs USING btree (job_id);
+CREATE INDEX IF NOT EXISTS idx_document_processing_jobs_project_id ON public.document_processing_jobs USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_document_processing_jobs_request_id ON public.document_processing_jobs USING btree (request_id);
+CREATE INDEX IF NOT EXISTS idx_document_processing_jobs_status ON public.document_processing_jobs USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_document_processing_jobs_template_id ON public.document_processing_jobs USING btree (template_id);
+CREATE INDEX IF NOT EXISTS idx_document_processing_jobs_user_id ON public.document_processing_jobs USING btree (user_id);
+CREATE INDEX IF NOT EXISTS idx_document_quality_metrics_document_id ON public.document_quality_metrics USING btree (document_id);
+CREATE INDEX IF NOT EXISTS idx_document_quality_metrics_overall_score ON public.document_quality_metrics USING btree (overall_score);
+CREATE INDEX IF NOT EXISTS idx_document_signatures_request_id ON public.document_signatures USING btree (signature_request_id);
+CREATE INDEX IF NOT EXISTS idx_document_signatures_status ON public.document_signatures USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_document_signatures_approval_request ON public.document_signatures USING btree (approval_request_id) WHERE (approval_request_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_document_signatures_document_id ON public.document_signatures USING btree (document_id);
+CREATE INDEX IF NOT EXISTS idx_document_signatures_initiated_by ON public.document_signatures USING btree (initiated_by);
+CREATE UNIQUE INDEX IF NOT EXISTS document_summaries_unique_cache_v2 ON public.document_summaries USING btree (document_id, compression_level, compression_method, template_context_hash);
+CREATE INDEX IF NOT EXISTS idx_document_summaries_document_id ON public.document_summaries USING btree (document_id);
+CREATE INDEX IF NOT EXISTS idx_document_summaries_hash ON public.document_summaries USING btree (template_context_hash) WHERE (template_context_hash IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_document_summaries_method ON public.document_summaries USING btree (compression_method);
+CREATE INDEX IF NOT EXISTS idx_document_summaries_reuse ON public.document_summaries USING btree (times_reused DESC);
+CREATE INDEX IF NOT EXISTS idx_document_summaries_valid ON public.document_summaries USING btree (is_valid) WHERE (is_valid = true);
+CREATE INDEX IF NOT EXISTS idx_document_tags_document_id ON public.document_tags USING btree (document_id);
+CREATE INDEX IF NOT EXISTS idx_document_tags_tag ON public.document_tags USING btree (tag);
+CREATE INDEX IF NOT EXISTS idx_conflicts_document_id ON public.document_version_conflicts USING btree (document_id);
+CREATE INDEX IF NOT EXISTS idx_conflicts_existing_version_id ON public.document_version_conflicts USING btree (existing_version_id);
+CREATE INDEX IF NOT EXISTS idx_conflicts_template_id ON public.document_version_conflicts USING btree (template_id);
+CREATE INDEX IF NOT EXISTS idx_document_versions_created_at ON public.document_versions USING btree (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_document_versions_document_id ON public.document_versions USING btree (document_id);
+CREATE INDEX IF NOT EXISTS idx_document_versions_semantic_version ON public.document_versions USING btree (document_id, semantic_version);
+CREATE INDEX IF NOT EXISTS idx_document_versions_version ON public.document_versions USING btree (version);
+CREATE UNIQUE INDEX IF NOT EXISTS documents_external_unique ON public.documents USING btree (external_id, external_source);
+CREATE UNIQUE INDEX IF NOT EXISTS unique_sharepoint_file_id ON public.documents USING btree (sharepoint_file_id);
+CREATE INDEX IF NOT EXISTS idx_documents_comments ON public.documents USING gin (comments);
+CREATE INDEX IF NOT EXISTS idx_documents_company_id ON public.documents USING btree (company_id);
+CREATE INDEX IF NOT EXISTS idx_documents_confluence_page_url ON public.documents USING btree (confluence_page_url);
+CREATE INDEX IF NOT EXISTS idx_documents_content_metrics ON public.documents USING btree (word_count, character_count, sentence_count, paragraph_count);
+CREATE INDEX IF NOT EXISTS idx_documents_created_at ON public.documents USING btree (created_at DESC) WHERE (deleted_at IS NULL);
+CREATE INDEX IF NOT EXISTS idx_documents_created_by ON public.documents USING btree (created_by);
+CREATE INDEX IF NOT EXISTS idx_documents_deleted ON public.documents USING btree (deleted_at DESC) WHERE (deleted_at IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_documents_external_id ON public.documents USING btree (external_id);
+CREATE INDEX IF NOT EXISTS idx_documents_external_source ON public.documents USING btree (external_source);
+CREATE INDEX IF NOT EXISTS idx_documents_framework ON public.documents USING btree (framework);
+CREATE INDEX IF NOT EXISTS idx_documents_framework_updated ON public.documents USING btree (framework, updated_at DESC) WHERE ((deleted_at IS NULL) AND (framework IS NOT NULL));
+CREATE INDEX IF NOT EXISTS idx_documents_generation_metadata ON public.documents USING gin (generation_metadata);
+CREATE INDEX IF NOT EXISTS idx_documents_is_regeneration ON public.documents USING btree (is_regeneration);
+CREATE INDEX IF NOT EXISTS idx_documents_metadata ON public.documents USING gin (metadata);
+CREATE INDEX IF NOT EXISTS idx_documents_not_deleted ON public.documents USING btree (created_at DESC) WHERE (deleted_at IS NULL);
+CREATE INDEX IF NOT EXISTS idx_documents_parent_document_id ON public.documents USING btree (parent_document_id);
+CREATE INDEX IF NOT EXISTS idx_documents_project ON public.documents USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_documents_project_parent ON public.documents USING btree (project_id, parent_document_id);
+CREATE INDEX IF NOT EXISTS idx_documents_quality_composite ON public.documents USING btree (quality_status, quality_score DESC);
+CREATE INDEX IF NOT EXISTS idx_documents_quality_score ON public.documents USING btree (quality_score DESC);
+CREATE INDEX IF NOT EXISTS idx_documents_quality_status ON public.documents USING btree (quality_status);
+CREATE INDEX IF NOT EXISTS idx_documents_search ON public.documents USING gin (to_tsvector('english'::regconfig, (((COALESCE(title, ''::character varying))::text || ' '::text) || COALESCE(content, ''::text)))) WHERE (deleted_at IS NULL);
+CREATE INDEX IF NOT EXISTS idx_documents_sharepoint_drive_id ON public.documents USING btree (sharepoint_drive_id);
+CREATE INDEX IF NOT EXISTS idx_documents_sharepoint_file_id ON public.documents USING btree (sharepoint_file_id);
+CREATE INDEX IF NOT EXISTS idx_documents_sharepoint_site_id ON public.documents USING btree (sharepoint_site_id);
+CREATE INDEX IF NOT EXISTS idx_documents_source_documents ON public.documents USING gin (source_documents);
+CREATE INDEX IF NOT EXISTS idx_documents_tags ON public.documents USING gin (tags);
+CREATE INDEX IF NOT EXISTS idx_documents_template_framework ON public.documents USING btree (template_framework);
+CREATE INDEX IF NOT EXISTS idx_documents_template_id ON public.documents USING btree (template_id);
+CREATE INDEX IF NOT EXISTS idx_documents_updated_at ON public.documents USING btree (updated_at DESC) WHERE (deleted_at IS NULL);
+CREATE INDEX IF NOT EXISTS documents_embedding_idx ON public.documents USING ivfflat (embedding vector_cosine_ops) WITH (lists='100');
+CREATE INDEX IF NOT EXISTS idx_documents_raw_created_at ON public.documents_raw USING btree (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_documents_raw_metadata ON public.documents_raw USING gin (metadata);
+CREATE INDEX IF NOT EXISTS documents_vectors_embedding_idx ON public.documents_vectors USING ivfflat (embedding vector_cosine_ops) WITH (lists='100');
+CREATE INDEX IF NOT EXISTS documents_vectors_document_id_idx ON public.documents_vectors USING btree (document_id);
+CREATE INDEX IF NOT EXISTS idx_domain_entities_domain ON public.domain_entities USING btree (domain);
+CREATE INDEX IF NOT EXISTS idx_domain_entities_project_id ON public.domain_entities USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_domain_entities_type ON public.domain_entities USING btree (entity_type);
+CREATE INDEX IF NOT EXISTS idx_domain_entities_idempotency_key ON public.domain_entities USING btree (idempotency_key);
+CREATE INDEX IF NOT EXISTS idx_domain_entities_project_entity_key ON public.domain_entities USING btree (project_id, entity_type, idempotency_key);
+CREATE INDEX IF NOT EXISTS idx_domain_extraction_runs_project ON public.domain_extraction_runs USING btree (project_id, domain);
+CREATE INDEX IF NOT EXISTS idx_domain_extraction_runs_status ON public.domain_extraction_runs USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_domain_kpi_snapshots_project ON public.domain_kpi_snapshots USING btree (project_id, domain);
+CREATE INDEX IF NOT EXISTS idx_drift_rules_active ON public.drift_detection_rules USING btree (is_active);
+CREATE INDEX IF NOT EXISTS idx_drift_rules_project ON public.drift_detection_rules USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_drift_rules_type ON public.drift_detection_rules USING btree (rule_type);
+CREATE INDEX IF NOT EXISTS idx_drift_affected_entities ON public.drift_detections USING gin (affected_entity_ids);
+CREATE INDEX IF NOT EXISTS idx_drift_baseline ON public.drift_detections USING btree (baseline_id);
+CREATE INDEX IF NOT EXISTS idx_drift_detected ON public.drift_detections USING btree (detected_at DESC);
+CREATE INDEX IF NOT EXISTS idx_drift_project ON public.drift_detections USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_drift_severity ON public.drift_detections USING btree (severity);
+CREATE INDEX IF NOT EXISTS idx_drift_status ON public.drift_detections USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_drift_type ON public.drift_detections USING btree (drift_type);
+CREATE INDEX IF NOT EXISTS idx_earned_value_metrics_project_id ON public.earned_value_metrics USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_embedding_cache_content_hash ON public.embedding_cache USING btree (content_hash);
+CREATE INDEX IF NOT EXISTS idx_embedding_cache_expires_at ON public.embedding_cache USING btree (expires_at);
+CREATE INDEX IF NOT EXISTS idx_embedding_cache_model ON public.embedding_cache USING btree (model);
+CREATE INDEX IF NOT EXISTS idx_emergency_meetings_created_at ON public.emergency_meetings USING btree (created_at);
+CREATE INDEX IF NOT EXISTS idx_emergency_meetings_drift_record ON public.emergency_meetings USING btree (drift_record_id);
+CREATE INDEX IF NOT EXISTS idx_emergency_meetings_meeting_id ON public.emergency_meetings USING btree (meeting_id);
+CREATE INDEX IF NOT EXISTS idx_emergency_meetings_project_id ON public.emergency_meetings USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_emergency_meetings_scheduled_date ON public.emergency_meetings USING btree (scheduled_date);
+CREATE INDEX IF NOT EXISTS idx_emergency_meetings_search ON public.emergency_meetings USING gin (to_tsvector('english'::regconfig, (((((COALESCE(title, ''::character varying))::text || ' '::text) || COALESCE(trigger_reason, ''::text)) || ' '::text) || COALESCE(resolution, ''::text))));
+CREATE INDEX IF NOT EXISTS idx_emergency_meetings_severity ON public.emergency_meetings USING btree (severity);
+CREATE INDEX IF NOT EXISTS idx_emergency_meetings_status ON public.emergency_meetings USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_engagement_actions_action_id ON public.engagement_actions USING btree (action_id);
+CREATE INDEX IF NOT EXISTS idx_engagement_actions_date ON public.engagement_actions USING btree (planned_date);
+CREATE INDEX IF NOT EXISTS idx_engagement_actions_project_id ON public.engagement_actions USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_engagement_actions_stakeholder ON public.engagement_actions USING btree (stakeholder_id);
+CREATE INDEX IF NOT EXISTS idx_engagement_actions_type ON public.engagement_actions USING btree (action_type);
+CREATE INDEX IF NOT EXISTS idx_entity_extractions_created ON public.entity_extractions USING btree (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_entity_extractions_document ON public.entity_extractions USING btree (document_id);
+CREATE INDEX IF NOT EXISTS idx_entity_extractions_entity_data ON public.entity_extractions USING gin (entity_data);
+CREATE INDEX IF NOT EXISTS idx_entity_extractions_project ON public.entity_extractions USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_entity_extractions_status ON public.entity_extractions USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_entity_extractions_type ON public.entity_extractions USING btree (entity_type);
+CREATE UNIQUE INDEX IF NOT EXISTS unique_entity_relationship ON public.entity_relationships USING btree (source_entity_id, target_entity_id, relationship_type);
+CREATE INDEX IF NOT EXISTS idx_entity_relationships_source ON public.entity_relationships USING btree (source_entity_id);
+CREATE INDEX IF NOT EXISTS idx_entity_relationships_target ON public.entity_relationships USING btree (target_entity_id);
+CREATE INDEX IF NOT EXISTS idx_entity_relationships_type ON public.entity_relationships USING btree (relationship_type);
+CREATE INDEX IF NOT EXISTS idx_escalation_history_action ON public.escalation_alert_history USING btree (action_type);
+CREATE INDEX IF NOT EXISTS idx_escalation_history_alert ON public.escalation_alert_history USING btree (alert_id);
+CREATE INDEX IF NOT EXISTS idx_escalation_history_performed ON public.escalation_alert_history USING btree (performed_at);
+CREATE INDEX IF NOT EXISTS idx_escalation_alerts_created ON public.escalation_alerts USING btree (created_at);
+CREATE INDEX IF NOT EXISTS idx_escalation_alerts_deadline ON public.escalation_alerts USING btree (deadline);
+CREATE INDEX IF NOT EXISTS idx_escalation_alerts_drift ON public.escalation_alerts USING btree (drift_detection_id);
+CREATE INDEX IF NOT EXISTS idx_escalation_alerts_project ON public.escalation_alerts USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_escalation_alerts_severity ON public.escalation_alerts USING btree (severity_level);
+CREATE INDEX IF NOT EXISTS idx_escalation_alerts_status ON public.escalation_alerts USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_escalation_matrix_active ON public.escalation_matrix USING btree (is_active);
+CREATE INDEX IF NOT EXISTS idx_escalation_matrix_drift_type ON public.escalation_matrix USING btree (drift_type);
+CREATE INDEX IF NOT EXISTS idx_escalation_matrix_priority ON public.escalation_matrix USING btree (priority);
+CREATE INDEX IF NOT EXISTS idx_escalation_matrix_severity ON public.escalation_matrix USING btree (severity_level);
+CREATE INDEX IF NOT EXISTS idx_extracted_dt_assets_asset_type ON public.extracted_dt_assets USING btree (asset_type);
+CREATE INDEX IF NOT EXISTS idx_extracted_dt_assets_project_id ON public.extracted_dt_assets USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_extracted_dt_assets_source_document_id ON public.extracted_dt_assets USING btree (source_document_id);
+CREATE INDEX IF NOT EXISTS idx_extraction_failures_project_id ON public.extraction_failures USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_extraction_failures_correlation_id ON public.extraction_failures USING btree (correlation_id);
+CREATE INDEX IF NOT EXISTS idx_extraction_failures_entity_type ON public.extraction_failures USING btree (entity_type);
+CREATE INDEX IF NOT EXISTS idx_extraction_failures_created_at ON public.extraction_failures USING btree (created_at);
+CREATE INDEX IF NOT EXISTS idx_extraction_failures_status ON public.extraction_failures USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_extraction_failures_retry_at ON public.extraction_failures USING btree (retry_at);
+CREATE INDEX IF NOT EXISTS idx_extraction_failures_pending_by_project ON public.extraction_failures USING btree (project_id, status) WHERE ((status)::text = 'pending'::text);
+CREATE INDEX IF NOT EXISTS idx_fallback_strategies_config_gin ON public.fallback_strategies USING gin (config);
+CREATE INDEX IF NOT EXISTS idx_fallback_strategies_enabled ON public.fallback_strategies USING btree (enabled);
+CREATE INDEX IF NOT EXISTS idx_fallback_strategies_order ON public.fallback_strategies USING btree (fallback_order);
+CREATE INDEX IF NOT EXISTS idx_fallback_strategies_type ON public.fallback_strategies USING btree (strategy_type);
+CREATE INDEX IF NOT EXISTS idx_file_assets_uploaded_by ON public.file_assets USING btree (uploaded_by);
+CREATE INDEX IF NOT EXISTS idx_financial_variances_project_id ON public.financial_variances USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_framework_analysis_analyzed_at ON public.framework_analysis USING btree (analyzed_at);
+CREATE INDEX IF NOT EXISTS idx_framework_analysis_average_quality_score ON public.framework_analysis USING btree (average_quality_score);
+CREATE INDEX IF NOT EXISTS idx_framework_analysis_framework ON public.framework_analysis USING btree (framework);
+CREATE INDEX IF NOT EXISTS idx_funding_tranches_project_id ON public.funding_tranches USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_gen_change_requests_project_id ON public.general_change_requests USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_goal_milestones_goal ON public.goal_milestones USING btree (goal_id);
+CREATE INDEX IF NOT EXISTS idx_governance_decisions_project_id ON public.governance_decisions USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_health_checks_timestamp ON public.health_checks USING btree ("timestamp");
+CREATE INDEX IF NOT EXISTS idx_historical_trends_created_at ON public.historical_trends USING btree (created_at);
+CREATE INDEX IF NOT EXISTS idx_historical_trends_metric_name ON public.historical_trends USING btree (metric_name);
+CREATE INDEX IF NOT EXISTS idx_historical_trends_timeframe ON public.historical_trends USING btree (timeframe);
+CREATE INDEX IF NOT EXISTS idx_historical_trends_trend_direction ON public.historical_trends USING btree (trend_direction);
+CREATE INDEX IF NOT EXISTS idx_improvement_suggestions_created_at ON public.improvement_suggestions USING btree (created_at);
+CREATE INDEX IF NOT EXISTS idx_improvement_suggestions_document_id ON public.improvement_suggestions USING btree (document_id);
+CREATE INDEX IF NOT EXISTS idx_improvement_suggestions_priority ON public.improvement_suggestions USING btree (priority);
+CREATE INDEX IF NOT EXISTS idx_improvement_suggestions_project_id ON public.improvement_suggestions USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_improvement_suggestions_status ON public.improvement_suggestions USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_improvement_suggestions_suggestion_type ON public.improvement_suggestions USING btree (suggestion_type);
+CREATE INDEX IF NOT EXISTS idx_improvement_suggestions_user_id ON public.improvement_suggestions USING btree (user_id);
+CREATE INDEX IF NOT EXISTS idx_suggestions_priority ON public.improvement_suggestions USING btree (priority DESC);
+CREATE INDEX IF NOT EXISTS idx_suggestions_project ON public.improvement_suggestions USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_suggestions_status ON public.improvement_suggestions USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_suggestions_type ON public.improvement_suggestions USING btree (suggestion_type);
+CREATE INDEX IF NOT EXISTS idx_infrared_thermal_conductance_qubit ON public.infrared_thermal_conductance_log USING btree (qubit_id);
+CREATE INDEX IF NOT EXISTS idx_infrared_thermal_conductance_wavelength ON public.infrared_thermal_conductance_log USING btree (infrared_wavelength);
+CREATE INDEX IF NOT EXISTS idx_infrared_thermal_conductance_timestamp ON public.infrared_thermal_conductance_log USING btree ("timestamp");
+CREATE INDEX IF NOT EXISTS idx_innovation_opportunities_novelty ON public.innovation_opportunities USING btree (novelty_score);
+CREATE INDEX IF NOT EXISTS idx_innovation_opportunities_project_id ON public.innovation_opportunities USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_innovation_opportunities_status ON public.innovation_opportunities USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_innovation_opportunities_type ON public.innovation_opportunities USING btree (opportunity_type);
+CREATE INDEX IF NOT EXISTS idx_integration_sync_metadata_adpa_document_id ON public.integration_sync_metadata USING btree (adpa_document_id);
+CREATE INDEX IF NOT EXISTS idx_integration_sync_metadata_external_id ON public.integration_sync_metadata USING btree (external_id);
+CREATE INDEX IF NOT EXISTS idx_integration_sync_metadata_integration_id ON public.integration_sync_metadata USING btree (integration_id);
+CREATE INDEX IF NOT EXISTS idx_integration_metrics_type_time ON public.integration_usage_metrics USING btree (integration_type, period_start DESC);
+CREATE INDEX IF NOT EXISTS idx_integration_metrics_integration ON public.integration_usage_metrics USING btree (integration_id) WHERE (integration_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_integrations_last_sync ON public.integrations USING btree (last_sync);
+CREATE INDEX IF NOT EXISTS idx_integrations_sync_status ON public.integrations USING btree (sync_status);
+CREATE INDEX IF NOT EXISTS idx_issue_log_assigned_to ON public.issue_log USING btree (assigned_to);
+CREATE INDEX IF NOT EXISTS idx_issue_log_category ON public.issue_log USING btree (category);
+CREATE INDEX IF NOT EXISTS idx_issue_log_priority ON public.issue_log USING btree (priority);
+CREATE INDEX IF NOT EXISTS idx_issue_log_project_id ON public.issue_log USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_issue_log_status ON public.issue_log USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_issue_history_changed_at ON public.issue_status_history USING btree (changed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_issue_history_issue_id ON public.issue_status_history USING btree (issue_id);
+CREATE INDEX IF NOT EXISTS idx_issue_history_status ON public.issue_status_history USING btree (new_status);
+CREATE INDEX IF NOT EXISTS idx_issues_assigned_to ON public.issues USING btree (assigned_to) WHERE (assigned_to IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_issues_category ON public.issues USING btree (category);
+CREATE INDEX IF NOT EXISTS idx_issues_date_raised ON public.issues USING btree (date_raised DESC);
+CREATE INDEX IF NOT EXISTS idx_issues_playbook_execution ON public.issues USING btree (playbook_execution_id) WHERE (playbook_execution_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_issues_priority ON public.issues USING btree (priority);
+CREATE INDEX IF NOT EXISTS idx_issues_project_id ON public.issues USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_issues_related_risk ON public.issues USING btree (related_risk_id) WHERE (related_risk_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_issues_source_document ON public.issues USING btree (source_document_id);
+CREATE INDEX IF NOT EXISTS idx_issues_source_location ON public.issues USING btree (source_document_id, source_text_start);
+CREATE INDEX IF NOT EXISTS idx_issues_status ON public.issues USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_issues_status_priority ON public.issues USING btree (status, priority);
+CREATE INDEX IF NOT EXISTS idx_issues_tags ON public.issues USING gin (tags);
+CREATE INDEX IF NOT EXISTS idx_job_logs_created ON public.job_execution_logs USING btree (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_job_logs_queue ON public.job_execution_logs USING btree (queue_name, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_job_logs_status ON public.job_execution_logs USING btree (status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_job_logs_type ON public.job_execution_logs USING btree (job_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_jobs_processing_started_at ON public.jobs USING btree (processing_started_at);
+CREATE INDEX IF NOT EXISTS idx_jobs_project_id ON public.jobs USING btree (project_id) WHERE (project_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_jobs_project_name ON public.jobs USING btree (project_name) WHERE (project_name IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_jobs_queue_name ON public.jobs USING btree (queue_name);
+CREATE INDEX IF NOT EXISTS idx_jobs_status ON public.jobs USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_jobs_status_queue ON public.jobs USING btree (status, queue_name);
+CREATE INDEX IF NOT EXISTS idx_jobs_type ON public.jobs USING btree (type);
+CREATE INDEX IF NOT EXISTS idx_jobs_worker_id ON public.jobs USING btree (worker_id);
+CREATE INDEX IF NOT EXISTS idx_kb_applications_applied_at ON public.knowledge_base_applications USING btree (applied_at);
+CREATE INDEX IF NOT EXISTS idx_kb_applications_applied_by ON public.knowledge_base_applications USING btree (applied_by);
+CREATE INDEX IF NOT EXISTS idx_kb_applications_entry_id ON public.knowledge_base_applications USING btree (knowledge_base_entry_id);
+CREATE INDEX IF NOT EXISTS idx_kb_applications_project_id ON public.knowledge_base_applications USING btree (target_project_id);
+CREATE INDEX IF NOT EXISTS idx_kb_applications_status ON public.knowledge_base_applications USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_kb_entries_baseline_id ON public.knowledge_base_entries USING btree (baseline_id);
+CREATE INDEX IF NOT EXISTS idx_kb_entries_category ON public.knowledge_base_entries USING btree (category);
+CREATE INDEX IF NOT EXISTS idx_kb_entries_created_at ON public.knowledge_base_entries USING btree (created_at);
+CREATE INDEX IF NOT EXISTS idx_kb_entries_drift_detection_id ON public.knowledge_base_entries USING btree (drift_detection_id);
+CREATE INDEX IF NOT EXISTS idx_kb_entries_innovation_opportunity_id ON public.knowledge_base_entries USING btree (innovation_opportunity_id);
+CREATE INDEX IF NOT EXISTS idx_kb_entries_keywords ON public.knowledge_base_entries USING gin (keywords);
+CREATE INDEX IF NOT EXISTS idx_kb_entries_project_id ON public.knowledge_base_entries USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_kb_entries_published_at ON public.knowledge_base_entries USING btree (published_at);
+CREATE INDEX IF NOT EXISTS idx_kb_entries_search ON public.knowledge_base_entries USING gin (to_tsvector('english'::regconfig, (((COALESCE(title, ''::character varying))::text || ' '::text) || COALESCE(description, ''::text))));
+CREATE INDEX IF NOT EXISTS idx_kb_entries_status ON public.knowledge_base_entries USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_kb_entries_tags ON public.knowledge_base_entries USING gin (tags);
+CREATE INDEX IF NOT EXISTS idx_kb_entries_type ON public.knowledge_base_entries USING btree (entry_type);
+CREATE INDEX IF NOT EXISTS idx_kb_entries_embedding ON public.knowledge_base_entries USING ivfflat (embedding vector_cosine_ops) WITH (lists='100');
+CREATE INDEX IF NOT EXISTS idx_kb_entries_business_value ON public.knowledge_base_entries USING btree (business_value_score);
+CREATE UNIQUE INDEX IF NOT EXISTS knowledge_base_entry_relation_source_entry_id_target_entry__key ON public.knowledge_base_entry_relationships USING btree (source_entry_id, target_entry_id, relationship_type);
+CREATE INDEX IF NOT EXISTS idx_kb_relationships_source ON public.knowledge_base_entry_relationships USING btree (source_entry_id);
+CREATE INDEX IF NOT EXISTS idx_kb_relationships_target ON public.knowledge_base_entry_relationships USING btree (target_entry_id);
+CREATE INDEX IF NOT EXISTS idx_kb_reviews_entry_id ON public.knowledge_base_reviews USING btree (knowledge_base_entry_id);
+CREATE INDEX IF NOT EXISTS idx_kb_reviews_reviewer_id ON public.knowledge_base_reviews USING btree (reviewer_id);
+CREATE INDEX IF NOT EXISTS idx_kb_reviews_type ON public.knowledge_base_reviews USING btree (review_type);
+CREATE INDEX IF NOT EXISTS idx_labor_rates_project_id ON public.labor_rates USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_lessons_learned_category ON public.lessons_learned USING btree (category);
+CREATE INDEX IF NOT EXISTS idx_lessons_learned_project_id ON public.lessons_learned USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_lessons_learned_severity ON public.lessons_learned USING btree (severity);
+CREATE INDEX IF NOT EXISTS idx_lessons_learned_shared ON public.lessons_learned USING btree (shared_with_org);
+CREATE INDEX IF NOT EXISTS idx_lessons_learned_status ON public.lessons_learned USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_maturity_assessed ON public.maturity_assessments USING btree (assessed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_maturity_level ON public.maturity_assessments USING btree (maturity_level);
+CREATE INDEX IF NOT EXISTS idx_maturity_project ON public.maturity_assessments USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_maturity_type ON public.maturity_assessments USING btree (assessment_type);
+CREATE UNIQUE INDEX IF NOT EXISTS unique_meeting_attendee ON public.meeting_attendees USING btree (meeting_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_meeting_attendees_confirmed ON public.meeting_attendees USING btree (confirmed);
+CREATE INDEX IF NOT EXISTS idx_meeting_attendees_meeting_id ON public.meeting_attendees USING btree (meeting_id);
+CREATE INDEX IF NOT EXISTS idx_meeting_attendees_required ON public.meeting_attendees USING btree (required);
+CREATE INDEX IF NOT EXISTS idx_meeting_attendees_user_id ON public.meeting_attendees USING btree (user_id);
+CREATE INDEX IF NOT EXISTS idx_meeting_escalation_created_at ON public.meeting_escalation_history USING btree (created_at);
+CREATE INDEX IF NOT EXISTS idx_meeting_escalation_meeting_id ON public.meeting_escalation_history USING btree (meeting_id);
+CREATE INDEX IF NOT EXISTS idx_meeting_minutes_project_id ON public.meeting_minutes USING btree (project_id);
+CREATE UNIQUE INDEX IF NOT EXISTS milestones_project_name_unique ON public.milestones USING btree (project_id, name);
+CREATE INDEX IF NOT EXISTS idx_milestones_date ON public.milestones USING btree (due_date);
+CREATE INDEX IF NOT EXISTS idx_milestones_project_id ON public.milestones USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_milestones_source_document ON public.milestones USING btree (source_document_id) WHERE (source_document_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_milestones_source_location ON public.milestones USING btree (source_document_id, source_text_start);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_milestones_idempotency ON public.milestones USING btree (project_id, idempotency_key) WHERE (idempotency_key IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_milestones_idempotency_key ON public.milestones USING btree (idempotency_key);
+CREATE INDEX IF NOT EXISTS idx_mitigation_plans_cost_estimate ON public.mitigation_plans USING btree (cost_estimate) WHERE (cost_estimate IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_mitigation_plans_created_at ON public.mitigation_plans USING btree (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_mitigation_plans_due_date ON public.mitigation_plans USING btree (due_date) WHERE (due_date IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_mitigation_plans_issue_id ON public.mitigation_plans USING btree (issue_id);
+CREATE INDEX IF NOT EXISTS idx_mitigation_plans_owner_id ON public.mitigation_plans USING btree (owner_id);
+CREATE INDEX IF NOT EXISTS idx_mitigation_plans_assigned_to ON public.mitigation_plans USING btree (assigned_to);
+CREATE INDEX IF NOT EXISTS idx_mitigation_plans_assigned_to_name ON public.mitigation_plans USING btree (assigned_to_name) WHERE (assigned_to_name IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_mitigation_plans_owner_name ON public.mitigation_plans USING btree (owner_name) WHERE (owner_name IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_mitigation_plans_risk_id ON public.mitigation_plans USING btree (risk_id);
+CREATE INDEX IF NOT EXISTS idx_mitigation_plans_source_document ON public.mitigation_plans USING btree (source_document_id);
+CREATE INDEX IF NOT EXISTS idx_mitigation_plans_source_location ON public.mitigation_plans USING btree (source_document_id, source_text_start);
+CREATE INDEX IF NOT EXISTS idx_mitigation_plans_status ON public.mitigation_plans USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_mitigation_plans_status_due_date ON public.mitigation_plans USING btree (status, due_date) WHERE ((status)::text = ANY (ARRAY[('planned'::character varying)::text, ('in_progress'::character varying)::text]));
+CREATE INDEX IF NOT EXISTS idx_notification_logs_sent_at ON public.notification_logs USING btree (sent_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notification_logs_type ON public.notification_logs USING btree (type);
+CREATE INDEX IF NOT EXISTS idx_notion_databases_last_synced ON public.notion_databases USING btree (last_synced);
+CREATE INDEX IF NOT EXISTS idx_onboarding_offboarding_action_type ON public.onboarding_offboarding USING btree (action_type);
+CREATE INDEX IF NOT EXISTS idx_onboarding_offboarding_project_id ON public.onboarding_offboarding USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_onboarding_offboarding_resource ON public.onboarding_offboarding USING btree (resource_id);
+CREATE INDEX IF NOT EXISTS idx_onboarding_offboarding_status ON public.onboarding_offboarding USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_onboarding_offboarding_type ON public.onboarding_offboarding USING btree (process_type);
+CREATE INDEX IF NOT EXISTS idx_onboarding_offboarding_end_date ON public.onboarding_offboarding USING btree (end_date);
+CREATE INDEX IF NOT EXISTS idx_operational_playbooks_source_document ON public.operational_playbooks USING btree (source_document_id);
+CREATE INDEX IF NOT EXISTS idx_operational_playbooks_source_location ON public.operational_playbooks USING btree (source_document_id, source_text_start);
+CREATE INDEX IF NOT EXISTS idx_playbooks_active ON public.operational_playbooks USING btree (is_active) WHERE (is_active = true);
+CREATE INDEX IF NOT EXISTS idx_playbooks_category ON public.operational_playbooks USING btree (category);
+CREATE INDEX IF NOT EXISTS idx_playbooks_project_id ON public.operational_playbooks USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_playbooks_risk_categories ON public.operational_playbooks USING gin (applicable_risk_categories);
+CREATE INDEX IF NOT EXISTS idx_playbooks_severity_levels ON public.operational_playbooks USING gin (applicable_severity_levels);
+CREATE INDEX IF NOT EXISTS idx_opportunities_project_id ON public.opportunities USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_opportunities_source_document ON public.opportunities USING btree (source_document_id) WHERE (source_document_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_opportunities_source_location ON public.opportunities USING btree (source_document_id, source_text_start);
+CREATE UNIQUE INDEX IF NOT EXISTS performance_actuals_project_measurement_unique ON public.performance_actuals USING btree (project_id, measurement_date);
+CREATE UNIQUE INDEX IF NOT EXISTS unique_performance_actual_measurement ON public.performance_actuals USING btree (project_id, entity_type, entity_name, measurement_date);
+CREATE INDEX IF NOT EXISTS idx_performance_actuals_baseline ON public.performance_actuals USING btree (baseline_id) WHERE (baseline_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_performance_actuals_entity ON public.performance_actuals USING btree (entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_performance_actuals_entity_name ON public.performance_actuals USING btree (entity_name);
+CREATE INDEX IF NOT EXISTS idx_performance_actuals_measured_by ON public.performance_actuals USING btree (measured_by) WHERE (measured_by IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_performance_actuals_measurement_date ON public.performance_actuals USING btree (measurement_date DESC);
+CREATE INDEX IF NOT EXISTS idx_performance_actuals_project ON public.performance_actuals USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_performance_actuals_project_entity_date ON public.performance_actuals USING btree (project_id, entity_type, measurement_date DESC);
+CREATE INDEX IF NOT EXISTS idx_performance_actuals_project_entity_type ON public.performance_actuals USING btree (project_id, entity_type);
+CREATE INDEX IF NOT EXISTS idx_performance_actuals_project_id ON public.performance_actuals USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_performance_actuals_project_measurement_date ON public.performance_actuals USING btree (project_id, measurement_date DESC);
+CREATE INDEX IF NOT EXISTS idx_performance_actuals_source_location ON public.performance_actuals USING btree (source_document_id, source_text_start);
+CREATE INDEX IF NOT EXISTS idx_performance_measurements_status ON public.performance_measurements USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_performance_measurements_project_id ON public.performance_measurements USING btree (project_id);
+CREATE UNIQUE INDEX IF NOT EXISTS phases_project_name_unique ON public.phases USING btree (project_id, name);
+CREATE INDEX IF NOT EXISTS idx_phases_project_id ON public.phases USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_phases_source_document ON public.phases USING btree (source_document_id) WHERE (source_document_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_phases_source_location ON public.phases USING btree (source_document_id, source_text_start);
+CREATE INDEX IF NOT EXISTS idx_phases_start_date ON public.phases USING btree (start_date);
+CREATE INDEX IF NOT EXISTS idx_pipeline_configurations_active ON public.pipeline_configurations USING btree (is_active);
+CREATE INDEX IF NOT EXISTS idx_pipeline_executions_created_at ON public.pipeline_executions USING btree (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_pipeline_executions_project_id ON public.pipeline_executions USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_pipeline_executions_status ON public.pipeline_executions USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_pipeline_executions_template_id ON public.pipeline_executions USING btree (template_id);
+CREATE INDEX IF NOT EXISTS idx_pipeline_executions_user_id ON public.pipeline_executions USING btree (user_id);
+CREATE INDEX IF NOT EXISTS idx_pipeline_executions_user_status ON public.pipeline_executions USING btree (user_id, status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_executions_playbook_id ON public.playbook_executions USING btree (playbook_id);
+CREATE INDEX IF NOT EXISTS idx_executions_started_at ON public.playbook_executions USING btree (started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_executions_status ON public.playbook_executions USING btree (status) WHERE ((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('in_progress'::character varying)::text]));
+CREATE INDEX IF NOT EXISTS idx_executions_triggered_by ON public.playbook_executions USING btree (triggered_by_type, triggered_by_id);
+CREATE INDEX IF NOT EXISTS idx_executions_triggered_by_user ON public.playbook_executions USING btree (triggered_by_user_id);
+CREATE INDEX IF NOT EXISTS idx_playbook_executions_source_document ON public.playbook_executions USING btree (source_document_id);
+CREATE INDEX IF NOT EXISTS idx_playbook_executions_source_location ON public.playbook_executions USING btree (source_document_id, source_text_start);
+CREATE INDEX IF NOT EXISTS idx_steps_order ON public.playbook_response_steps USING btree (playbook_id, step_order);
+CREATE INDEX IF NOT EXISTS idx_steps_playbook_id ON public.playbook_response_steps USING btree (playbook_id);
+CREATE INDEX IF NOT EXISTS idx_steps_type ON public.playbook_response_steps USING btree (step_type);
+CREATE INDEX IF NOT EXISTS idx_scenarios_condition_gin ON public.playbook_scenarios USING gin (scenario_condition);
+CREATE INDEX IF NOT EXISTS idx_scenarios_playbook_id ON public.playbook_scenarios USING btree (playbook_id);
+CREATE INDEX IF NOT EXISTS idx_scenarios_priority ON public.playbook_scenarios USING btree (priority DESC);
+CREATE INDEX IF NOT EXISTS idx_step_executions_assigned_to ON public.playbook_step_executions USING btree (assigned_to) WHERE (assigned_to IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_step_executions_execution_id ON public.playbook_step_executions USING btree (execution_id);
+CREATE INDEX IF NOT EXISTS idx_step_executions_sla_deadline ON public.playbook_step_executions USING btree (sla_deadline) WHERE ((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('in_progress'::character varying)::text]));
+CREATE INDEX IF NOT EXISTS idx_step_executions_status ON public.playbook_step_executions USING btree (status) WHERE ((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('in_progress'::character varying)::text]));
+CREATE INDEX IF NOT EXISTS idx_step_executions_step_id ON public.playbook_step_executions USING btree (step_id);
+CREATE INDEX IF NOT EXISTS idx_pmbok6_processes_code ON public.pmbok6_processes USING btree (code);
+CREATE INDEX IF NOT EXISTS idx_pmbok6_processes_display_order ON public.pmbok6_processes USING btree (display_order);
+CREATE INDEX IF NOT EXISTS idx_pmbok6_processes_knowledge_area ON public.pmbok6_processes USING btree (knowledge_area_id);
+CREATE INDEX IF NOT EXISTS idx_pmbok6_processes_process_group ON public.pmbok6_processes USING btree (process_group_id);
+CREATE UNIQUE INDEX IF NOT EXISTS unique_process_principle ON public.pmbok6_to_pmbok7_principle_mapping USING btree (process_id, principle_id);
+CREATE INDEX IF NOT EXISTS idx_pmbok6_to_7_principle ON public.pmbok6_to_pmbok7_principle_mapping USING btree (principle_id);
+CREATE INDEX IF NOT EXISTS idx_pmbok6_to_7_process ON public.pmbok6_to_pmbok7_principle_mapping USING btree (process_id);
+CREATE INDEX IF NOT EXISTS idx_pmbok6_to_7_relevance ON public.pmbok6_to_pmbok7_principle_mapping USING btree (relevance_level);
+CREATE INDEX IF NOT EXISTS idx_pmbok7_domains_code ON public.pmbok7_performance_domains USING btree (code);
+CREATE INDEX IF NOT EXISTS idx_pmbok7_domains_order ON public.pmbok7_performance_domains USING btree (display_order);
+CREATE INDEX IF NOT EXISTS idx_pmbok7_principles_code ON public.pmbok7_principles USING btree (code);
+CREATE INDEX IF NOT EXISTS idx_pmbok7_principles_order ON public.pmbok7_principles USING btree (display_order);
+CREATE INDEX IF NOT EXISTS idx_policy_compliance_project_id ON public.policy_compliance USING btree (project_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_portfolio_domains_name ON public.portfolio_domains USING btree (name);
+CREATE INDEX IF NOT EXISTS idx_portfolio_governance_company ON public.portfolio_governance USING btree (company_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_portfolio_governance_company_unique ON public.portfolio_governance USING btree (company_id) WHERE (company_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_portfolio_governance_risk_review ON public.portfolio_governance USING btree (next_risk_review_due);
+CREATE INDEX IF NOT EXISTS idx_portfolio_governance_status ON public.portfolio_governance USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_portfolios_owner ON public.portfolio_governance USING btree (owner_id);
+CREATE INDEX IF NOT EXISTS idx_portfolios_status ON public.portfolio_governance USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_portfolio_key_results_created_at ON public.portfolio_key_results USING btree (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_portfolio_key_results_next_measurement ON public.portfolio_key_results USING btree (next_measurement_date) WHERE (next_measurement_date IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_portfolio_key_results_okr ON public.portfolio_key_results USING btree (okr_id);
+CREATE INDEX IF NOT EXISTS idx_portfolio_key_results_owner ON public.portfolio_key_results USING btree (owner_id) WHERE (owner_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_portfolio_key_results_status ON public.portfolio_key_results USING btree (progress_status) WHERE (progress_status IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_portfolio_ksf_category ON public.portfolio_key_success_factors USING btree (ksf_category);
+CREATE INDEX IF NOT EXISTS idx_portfolio_ksf_criticality ON public.portfolio_key_success_factors USING btree (criticality);
+CREATE INDEX IF NOT EXISTS idx_portfolio_ksf_deadline ON public.portfolio_key_success_factors USING btree (deadline);
+CREATE INDEX IF NOT EXISTS idx_portfolio_ksf_org_id ON public.portfolio_key_success_factors USING btree (organization_id);
+CREATE INDEX IF NOT EXISTS idx_portfolio_ksf_owner_id ON public.portfolio_key_success_factors USING btree (owner_id);
+CREATE INDEX IF NOT EXISTS idx_portfolio_ksf_priority ON public.portfolio_key_success_factors USING btree (priority_rank);
+CREATE INDEX IF NOT EXISTS idx_portfolio_ksf_risk_level ON public.portfolio_key_success_factors USING btree (risk_level);
+CREATE INDEX IF NOT EXISTS idx_portfolio_ksf_sponsor_id ON public.portfolio_key_success_factors USING btree (sponsor_id);
+CREATE INDEX IF NOT EXISTS idx_portfolio_ksf_status ON public.portfolio_key_success_factors USING btree (achievement_status);
+CREATE INDEX IF NOT EXISTS idx_portfolio_kpi_history_date ON public.portfolio_kpi_history USING btree (measurement_date);
+CREATE INDEX IF NOT EXISTS idx_portfolio_kpi_history_kpi_date ON public.portfolio_kpi_history USING btree (kpi_id, measurement_date);
+CREATE INDEX IF NOT EXISTS idx_portfolio_kpi_history_kpi_id ON public.portfolio_kpi_history USING btree (kpi_id);
+CREATE INDEX IF NOT EXISTS idx_portfolio_kpi_history_measured_by ON public.portfolio_kpi_history USING btree (measured_by);
+CREATE INDEX IF NOT EXISTS idx_portfolio_kpis_bsc_perspective ON public.portfolio_kpis USING btree (bsc_perspective);
+CREATE INDEX IF NOT EXISTS idx_portfolio_kpis_category ON public.portfolio_kpis USING btree (kpi_category);
+CREATE INDEX IF NOT EXISTS idx_portfolio_kpis_is_active ON public.portfolio_kpis USING btree (is_active);
+CREATE INDEX IF NOT EXISTS idx_portfolio_kpis_last_measured ON public.portfolio_kpis USING btree (last_measured_at);
+CREATE INDEX IF NOT EXISTS idx_portfolio_kpis_org_id ON public.portfolio_kpis USING btree (organization_id);
+CREATE INDEX IF NOT EXISTS idx_portfolio_kpis_owner_id ON public.portfolio_kpis USING btree (owner_id);
+CREATE INDEX IF NOT EXISTS idx_portfolio_kpis_rag_status ON public.portfolio_kpis USING btree (rag_status);
+CREATE INDEX IF NOT EXISTS idx_portfolio_okrs_created_at ON public.portfolio_okrs USING btree (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_portfolio_okrs_entity ON public.portfolio_okrs USING btree (entity_type, entity_id) WHERE (entity_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_portfolio_okrs_level ON public.portfolio_okrs USING btree (level);
+CREATE INDEX IF NOT EXISTS idx_portfolio_okrs_org ON public.portfolio_okrs USING btree (organization_id) WHERE (organization_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_portfolio_okrs_owner ON public.portfolio_okrs USING btree (owner_id) WHERE (owner_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_portfolio_okrs_parent ON public.portfolio_okrs USING btree (parent_okr_id) WHERE (parent_okr_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_portfolio_okrs_period ON public.portfolio_okrs USING btree (okr_period) WHERE (okr_period IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_portfolio_okrs_status ON public.portfolio_okrs USING btree (status) WHERE (status IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_portfolio_okrs_strategic_goal ON public.portfolio_okrs USING btree (strategic_goal_id) WHERE (strategic_goal_id IS NOT NULL);
+CREATE UNIQUE INDEX IF NOT EXISTS unique_risk_per_portfolio ON public.portfolio_risks USING btree (portfolio_id, risk_title);
+CREATE INDEX IF NOT EXISTS idx_portfolio_risks_escalation_status ON public.portfolio_risks USING btree (escalation_status, portfolio_id);
+CREATE INDEX IF NOT EXISTS idx_portfolio_risks_portfolio ON public.portfolio_risks USING btree (portfolio_id);
+CREATE INDEX IF NOT EXISTS idx_portfolio_risks_status ON public.portfolio_risks USING btree (risk_status);
+CREATE INDEX IF NOT EXISTS idx_portfolio_strategic_goals_target_year ON public.portfolio_strategic_goals USING btree (target_year);
+CREATE INDEX IF NOT EXISTS idx_portfolio_strategic_goals_category ON public.portfolio_strategic_goals USING btree (goal_category);
+CREATE INDEX IF NOT EXISTS idx_portfolio_strategic_goals_org_id ON public.portfolio_strategic_goals USING btree (organization_id);
+CREATE INDEX IF NOT EXISTS idx_portfolio_strategic_goals_priority ON public.portfolio_strategic_goals USING btree (priority_rank);
+CREATE INDEX IF NOT EXISTS idx_portfolio_strategic_goals_status ON public.portfolio_strategic_goals USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_portfolio_strategic_goals_vision_id ON public.portfolio_strategic_goals USING btree (vision_id);
+CREATE INDEX IF NOT EXISTS idx_portfolio_vision_effective_from ON public.portfolio_vision USING btree (effective_from);
+CREATE INDEX IF NOT EXISTS idx_portfolio_vision_org_id ON public.portfolio_vision USING btree (organization_id);
+CREATE INDEX IF NOT EXISTS idx_prioritization_criteria_active ON public.prioritization_criteria USING btree (is_active) WHERE (is_active = true);
+CREATE INDEX IF NOT EXISTS idx_prioritization_criteria_org ON public.prioritization_criteria USING btree (organization_id) WHERE (organization_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_prioritization_criteria_sort ON public.prioritization_criteria USING btree (sort_order) WHERE (sort_order IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_prob_impact_matrix_project_id ON public.probability_impact_matrix USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_processing_metrics_created_at ON public.processing_metrics USING btree (created_at);
+CREATE INDEX IF NOT EXISTS idx_processing_metrics_project_id ON public.processing_metrics USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_processing_metrics_request_id ON public.processing_metrics USING btree (request_id);
+CREATE INDEX IF NOT EXISTS idx_processing_metrics_template_id ON public.processing_metrics USING btree (template_id);
+CREATE INDEX IF NOT EXISTS idx_processing_metrics_user_id ON public.processing_metrics USING btree (user_id);
+CREATE INDEX IF NOT EXISTS idx_procurement_costs_project_id ON public.procurement_costs USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_program_benefits_program ON public.program_benefits USING btree (program_id);
+CREATE INDEX IF NOT EXISTS idx_program_benefits_project ON public.program_benefits USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_program_benefits_status ON public.program_benefits USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_program_benefits_type ON public.program_benefits USING btree (benefit_type);
+CREATE INDEX IF NOT EXISTS idx_program_budgets_fiscal_year ON public.program_budgets USING btree (fiscal_year);
+CREATE INDEX IF NOT EXISTS idx_program_budgets_program_id ON public.program_budgets USING btree (program_id);
+CREATE INDEX IF NOT EXISTS idx_program_budgets_status ON public.program_budgets USING btree (budget_status);
+CREATE INDEX IF NOT EXISTS idx_program_capacity_forecast_bottleneck ON public.program_capacity_forecast USING btree (is_bottleneck_period) WHERE (is_bottleneck_period = true);
+CREATE INDEX IF NOT EXISTS idx_program_capacity_forecast_period ON public.program_capacity_forecast USING btree (forecast_period);
+CREATE INDEX IF NOT EXISTS idx_program_capacity_forecast_program ON public.program_capacity_forecast USING btree (program_id);
+CREATE INDEX IF NOT EXISTS idx_program_cash_flow_forecast ON public.program_cash_flow USING btree (is_forecast);
+CREATE INDEX IF NOT EXISTS idx_program_cash_flow_period ON public.program_cash_flow USING btree (period_month);
+CREATE INDEX IF NOT EXISTS idx_program_cash_flow_program_id ON public.program_cash_flow USING btree (program_id);
+CREATE INDEX IF NOT EXISTS idx_program_cost_performance_date ON public.program_cost_performance USING btree (reporting_date);
+CREATE INDEX IF NOT EXISTS idx_program_cost_performance_program_id ON public.program_cost_performance USING btree (program_id);
+CREATE INDEX IF NOT EXISTS idx_program_cost_performance_status ON public.program_cost_performance USING btree (performance_status);
+CREATE INDEX IF NOT EXISTS idx_program_financial_analysis_date ON public.program_financial_analysis USING btree (analysis_date);
+CREATE INDEX IF NOT EXISTS idx_program_financial_analysis_program ON public.program_financial_analysis USING btree (program_id);
+CREATE INDEX IF NOT EXISTS idx_program_financial_analysis_type ON public.program_financial_analysis USING btree (analysis_type);
+CREATE INDEX IF NOT EXISTS idx_program_financial_transactions_date ON public.program_financial_transactions USING btree (transaction_date);
+CREATE INDEX IF NOT EXISTS idx_program_financial_transactions_program ON public.program_financial_transactions USING btree (program_id);
+CREATE INDEX IF NOT EXISTS idx_program_financial_transactions_project ON public.program_financial_transactions USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_program_financial_transactions_type ON public.program_financial_transactions USING btree (transaction_type);
+CREATE INDEX IF NOT EXISTS idx_program_forecasts_date ON public.program_forecasts USING btree (forecast_date);
+CREATE INDEX IF NOT EXISTS idx_program_forecasts_program_id ON public.program_forecasts USING btree (program_id);
+CREATE INDEX IF NOT EXISTS idx_program_forecasts_type ON public.program_forecasts USING btree (forecast_type);
+CREATE INDEX IF NOT EXISTS idx_program_funding_program_id ON public.program_funding USING btree (program_id);
+CREATE INDEX IF NOT EXISTS idx_program_funding_status ON public.program_funding USING btree (approval_status);
+CREATE INDEX IF NOT EXISTS unique_active_allocation ON public.program_resource_allocations USING gist (resource_id, project_id, tsrange((allocation_start)::timestamp without time zone, (COALESCE(allocation_end, '9999-12-31'::date))::timestamp without time zone)) WHERE ((allocation_status)::text = ANY (ARRAY[('planned'::character varying)::text, ('active'::character varying)::text]));
+CREATE INDEX IF NOT EXISTS idx_program_resource_allocations_conflicts ON public.program_resource_allocations USING btree (has_conflicts) WHERE (has_conflicts = true);
+CREATE INDEX IF NOT EXISTS idx_program_resource_allocations_dates ON public.program_resource_allocations USING gist (tsrange((allocation_start)::timestamp without time zone, (COALESCE(allocation_end, '9999-12-31'::date))::timestamp without time zone));
+CREATE INDEX IF NOT EXISTS idx_program_resource_allocations_program ON public.program_resource_allocations USING btree (program_id);
+CREATE INDEX IF NOT EXISTS idx_program_resource_allocations_project ON public.program_resource_allocations USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_program_resource_allocations_resource ON public.program_resource_allocations USING btree (resource_id);
+CREATE INDEX IF NOT EXISTS idx_program_resource_allocations_status ON public.program_resource_allocations USING btree (allocation_status);
+CREATE INDEX IF NOT EXISTS idx_program_resource_performance_period ON public.program_resource_performance USING btree (reporting_period);
+CREATE INDEX IF NOT EXISTS idx_program_resource_performance_program ON public.program_resource_performance USING btree (program_id);
+CREATE INDEX IF NOT EXISTS idx_program_resource_performance_resource ON public.program_resource_performance USING btree (resource_id);
+CREATE INDEX IF NOT EXISTS idx_program_resource_performance_utilization ON public.program_resource_performance USING btree (utilization_rate);
+CREATE INDEX IF NOT EXISTS idx_program_resource_plan_dates ON public.program_resource_plan USING btree (needed_from, needed_until);
+CREATE INDEX IF NOT EXISTS idx_program_resource_plan_program ON public.program_resource_plan USING btree (program_id);
+CREATE INDEX IF NOT EXISTS idx_program_resource_plan_status ON public.program_resource_plan USING btree (planning_status);
+CREATE INDEX IF NOT EXISTS idx_program_resource_plan_type ON public.program_resource_plan USING btree (resource_type);
+CREATE INDEX IF NOT EXISTS idx_program_resource_risks_program ON public.program_resource_risks USING btree (program_id);
+CREATE INDEX IF NOT EXISTS idx_program_resource_risks_resource ON public.program_resource_risks USING btree (resource_id);
+CREATE INDEX IF NOT EXISTS idx_program_resource_risks_score ON public.program_resource_risks USING btree (risk_score);
+CREATE INDEX IF NOT EXISTS idx_program_resource_risks_status ON public.program_resource_risks USING btree (risk_status);
+CREATE INDEX IF NOT EXISTS idx_program_skills_inventory_available ON public.program_skills_inventory USING btree (available_for_allocation) WHERE (available_for_allocation = true);
+CREATE INDEX IF NOT EXISTS idx_program_skills_inventory_category ON public.program_skills_inventory USING btree (skill_category);
+CREATE INDEX IF NOT EXISTS idx_program_skills_inventory_proficiency ON public.program_skills_inventory USING btree (proficiency_level);
+CREATE INDEX IF NOT EXISTS idx_program_skills_inventory_program ON public.program_skills_inventory USING btree (program_id);
+CREATE INDEX IF NOT EXISTS idx_program_skills_inventory_skill ON public.program_skills_inventory USING btree (skill_name);
+CREATE INDEX IF NOT EXISTS idx_program_skills_inventory_user ON public.program_skills_inventory USING btree (user_id);
+CREATE INDEX IF NOT EXISTS idx_programs_archived ON public.programs USING btree (archived);
+CREATE INDEX IF NOT EXISTS idx_programs_company_id ON public.programs USING btree (company_id);
+CREATE INDEX IF NOT EXISTS idx_programs_end_date ON public.programs USING btree (end_date);
+CREATE INDEX IF NOT EXISTS idx_programs_owner_id ON public.programs USING btree (owner_id);
+CREATE INDEX IF NOT EXISTS idx_programs_search ON public.programs USING gin (to_tsvector('english'::regconfig, (((COALESCE(name, ''::character varying))::text || ' '::text) || COALESCE(description, ''::text))));
+CREATE INDEX IF NOT EXISTS idx_programs_start_date ON public.programs USING btree (start_date);
+CREATE INDEX IF NOT EXISTS idx_programs_status ON public.programs USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_programs_portfolio ON public.programs USING btree (portfolio_id);
+CREATE INDEX IF NOT EXISTS idx_programs_portfolio_id ON public.programs USING btree (portfolio_id);
+CREATE INDEX IF NOT EXISTS idx_project_analysis_analyzed_at ON public.project_analysis USING btree (analyzed_at);
+CREATE INDEX IF NOT EXISTS idx_project_analysis_average_quality_score ON public.project_analysis USING btree (average_quality_score);
+CREATE INDEX IF NOT EXISTS idx_project_analysis_project_id ON public.project_analysis USING btree (project_id);
+CREATE UNIQUE INDEX IF NOT EXISTS unique_project_version ON public.project_baselines USING btree (project_id, version);
+CREATE INDEX IF NOT EXISTS idx_project_baselines_created_at ON public.project_baselines USING btree (created_at);
+CREATE INDEX IF NOT EXISTS idx_project_baselines_project_id ON public.project_baselines USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_project_baselines_status ON public.project_baselines USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_charter_details_project_id ON public.project_charter_details USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_project_context_items_active ON public.project_context_items USING btree (project_id, is_active);
+CREATE INDEX IF NOT EXISTS idx_project_context_items_priority ON public.project_context_items USING btree (project_id, priority DESC, is_active);
+CREATE INDEX IF NOT EXISTS idx_project_context_items_project_id ON public.project_context_items USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_project_context_items_type ON public.project_context_items USING btree (type);
+CREATE INDEX IF NOT EXISTS idx_context_usage_item ON public.project_context_usage_log USING btree (context_item_id);
+CREATE INDEX IF NOT EXISTS idx_context_usage_project ON public.project_context_usage_log USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_context_usage_project_item ON public.project_context_usage_log USING btree (project_id, context_item_id);
+CREATE INDEX IF NOT EXISTS idx_context_usage_timestamp ON public.project_context_usage_log USING btree (usage_timestamp);
+CREATE INDEX IF NOT EXISTS idx_context_usage_type ON public.project_context_usage_log USING btree (usage_type);
+CREATE INDEX IF NOT EXISTS idx_project_cost_breakdown_project ON public.project_cost_breakdown USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_project_dependencies_source ON public.project_dependencies USING btree (source_project_id);
+CREATE INDEX IF NOT EXISTS idx_project_dependencies_target ON public.project_dependencies USING btree (target_project_id);
+CREATE INDEX IF NOT EXISTS idx_baselines_created ON public.project_entity_baselines USING btree (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_baselines_entity_snapshot ON public.project_entity_baselines USING gin (entity_snapshot);
+CREATE INDEX IF NOT EXISTS idx_baselines_project ON public.project_entity_baselines USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_baselines_status ON public.project_entity_baselines USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_baselines_type ON public.project_entity_baselines USING btree (baseline_type);
+CREATE INDEX IF NOT EXISTS idx_project_expenses_category ON public.project_expenses USING btree (cost_category_id);
+CREATE INDEX IF NOT EXISTS idx_project_expenses_date ON public.project_expenses USING btree (expense_date);
+CREATE INDEX IF NOT EXISTS idx_project_expenses_project ON public.project_expenses USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_project_expenses_status ON public.project_expenses USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_project_goals_project ON public.project_goals USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_project_goals_status ON public.project_goals USING btree (status);
+CREATE INDEX IF NOT EXISTS project_integrations_project_id_idx ON public.project_integrations USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_project_iterations_project_id ON public.project_iterations USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_project_iterations_status ON public.project_iterations USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_project_org_chart_project_id ON public.project_org_chart USING btree (project_id);
+CREATE UNIQUE INDEX IF NOT EXISTS unique_project_domain ON public.project_pmbok7_domains USING btree (project_id, domain_id);
+CREATE INDEX IF NOT EXISTS idx_project_pmbok7_domains_domain ON public.project_pmbok7_domains USING btree (domain_id);
+CREATE INDEX IF NOT EXISTS idx_project_pmbok7_domains_maturity ON public.project_pmbok7_domains USING btree (maturity_level);
+CREATE INDEX IF NOT EXISTS idx_project_pmbok7_domains_project ON public.project_pmbok7_domains USING btree (project_id);
+CREATE UNIQUE INDEX IF NOT EXISTS unique_project_principle ON public.project_pmbok7_principles USING btree (project_id, principle_id);
+CREATE INDEX IF NOT EXISTS idx_project_pmbok7_principles_level ON public.project_pmbok7_principles USING btree (alignment_level);
+CREATE INDEX IF NOT EXISTS idx_project_pmbok7_principles_principle ON public.project_pmbok7_principles USING btree (principle_id);
+CREATE INDEX IF NOT EXISTS idx_project_pmbok7_principles_project ON public.project_pmbok7_principles USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_project_priority_scores_composite ON public.project_priority_scores USING btree (project_id, criteria_id);
+CREATE INDEX IF NOT EXISTS idx_project_priority_scores_criteria ON public.project_priority_scores USING btree (criteria_id);
+CREATE INDEX IF NOT EXISTS idx_project_priority_scores_project ON public.project_priority_scores USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_project_priority_scores_scored_at ON public.project_priority_scores USING btree (scored_at);
+CREATE INDEX IF NOT EXISTS idx_project_priority_scores_scored_by ON public.project_priority_scores USING btree (scored_by) WHERE (scored_by IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_project_resource_assignments_source_document ON public.project_resource_assignments USING btree (source_document_id) WHERE (source_document_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_project_resource_assignments_activity_id ON public.project_resource_assignments USING btree (activity_id) WHERE (activity_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_resource_assignments_project ON public.project_resource_assignments USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_resource_assignments_role ON public.project_resource_assignments USING btree (role_id);
+CREATE INDEX IF NOT EXISTS idx_resource_assignments_status ON public.project_resource_assignments USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_resource_assignments_user ON public.project_resource_assignments USING btree (user_id);
+CREATE INDEX IF NOT EXISTS idx_project_roles_active ON public.project_roles USING btree (is_active);
+CREATE INDEX IF NOT EXISTS idx_project_roles_category ON public.project_roles USING btree (role_category);
+CREATE INDEX IF NOT EXISTS idx_project_roles_type ON public.project_roles USING btree (role_type);
+CREATE UNIQUE INDEX IF NOT EXISTS unique_task_number_per_project ON public.project_tasks USING btree (project_id, task_number);
+CREATE INDEX IF NOT EXISTS idx_project_tasks_entity_type ON public.project_tasks USING btree (entity_type);
+CREATE INDEX IF NOT EXISTS idx_project_tasks_parent ON public.project_tasks USING btree (parent_task_id);
+CREATE INDEX IF NOT EXISTS idx_project_tasks_project ON public.project_tasks USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_project_tasks_role ON public.project_tasks USING btree (required_role_id);
+CREATE INDEX IF NOT EXISTS idx_project_tasks_source_doc ON public.project_tasks USING btree (source_document_id);
+CREATE INDEX IF NOT EXISTS idx_project_tasks_status ON public.project_tasks USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_project_tasks_wbs ON public.project_tasks USING btree (wbs_code);
+CREATE INDEX IF NOT EXISTS idx_project_tasks_goal ON public.project_tasks USING btree (goal_id);
+CREATE INDEX IF NOT EXISTS idx_team_evaluations_project_id ON public.project_team_evaluations USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_projects_actual_cost ON public.projects USING btree (actual_cost) WHERE (actual_cost > (0)::numeric);
+CREATE INDEX IF NOT EXISTS idx_projects_archived ON public.projects USING btree (archived);
+CREATE INDEX IF NOT EXISTS idx_projects_budget ON public.projects USING btree (budget) WHERE (budget > (0)::numeric);
+CREATE INDEX IF NOT EXISTS idx_projects_company_id ON public.projects USING btree (company_id);
+CREATE INDEX IF NOT EXISTS idx_projects_costs ON public.projects USING btree (internal_labor_cost, external_labor_cost, actual_cost);
+CREATE INDEX IF NOT EXISTS idx_projects_created_by ON public.projects USING btree (created_by);
+CREATE INDEX IF NOT EXISTS idx_projects_framework ON public.projects USING btree (framework) WHERE (framework IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_projects_metadata ON public.projects USING gin (metadata);
+CREATE INDEX IF NOT EXISTS idx_projects_owner ON public.projects USING btree (owner_id);
+CREATE INDEX IF NOT EXISTS idx_projects_owner_id ON public.projects USING btree (owner_id);
+CREATE INDEX IF NOT EXISTS idx_projects_owner_updated ON public.projects USING btree (owner_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_projects_program_archived ON public.projects USING btree (program_id, archived);
+CREATE INDEX IF NOT EXISTS idx_projects_program_id ON public.projects USING btree (program_id);
+CREATE INDEX IF NOT EXISTS idx_projects_search ON public.projects USING gin (to_tsvector('english'::regconfig, (((COALESCE(name, ''::character varying))::text || ' '::text) || COALESCE(description, ''::text))));
+CREATE INDEX IF NOT EXISTS idx_projects_status ON public.projects USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_projects_updated_at ON public.projects USING btree (updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_projects_created_at ON public.projects USING btree (created_at);
+CREATE INDEX IF NOT EXISTS idx_projects_team_members ON public.projects USING gin (team_members);
+CREATE INDEX IF NOT EXISTS idx_prompt_templates_category ON public.prompt_templates USING btree (category);
+CREATE INDEX IF NOT EXISTS idx_prompt_templates_methodology ON public.prompt_templates USING btree (methodology);
+CREATE INDEX IF NOT EXISTS idx_prompt_templates_public ON public.prompt_templates USING btree (is_public);
+CREATE INDEX IF NOT EXISTS idx_quality_audits_date ON public.quality_audits USING btree (audited_at DESC);
+CREATE INDEX IF NOT EXISTS idx_quality_audits_document ON public.quality_audits USING btree (document_id);
+CREATE INDEX IF NOT EXISTS idx_quality_audits_document_date ON public.quality_audits USING btree (document_id, audited_at DESC);
+CREATE INDEX IF NOT EXISTS idx_quality_audits_grade ON public.quality_audits USING btree (overall_grade);
+CREATE INDEX IF NOT EXISTS idx_quality_audits_provider ON public.quality_audits USING btree (ai_provider);
+CREATE INDEX IF NOT EXISTS idx_quality_audits_score ON public.quality_audits USING btree (overall_score DESC);
+CREATE INDEX IF NOT EXISTS idx_quality_audits_source_document ON public.quality_audits USING btree (source_document_id);
+CREATE INDEX IF NOT EXISTS idx_quality_audits_source_location ON public.quality_audits USING btree (source_document_id, source_text_start);
+CREATE INDEX IF NOT EXISTS idx_quality_reports_created_at ON public.quality_reports USING btree (created_at);
+CREATE INDEX IF NOT EXISTS idx_quality_reports_document_id ON public.quality_reports USING btree (document_id);
+CREATE INDEX IF NOT EXISTS idx_quality_reports_job_id ON public.quality_reports USING btree (job_id);
+CREATE INDEX IF NOT EXISTS idx_quality_reports_report_id ON public.quality_reports USING btree (report_id);
+CREATE UNIQUE INDEX IF NOT EXISTS quality_standards_project_name_unique ON public.quality_standards USING btree (project_id, standard_name);
+CREATE INDEX IF NOT EXISTS idx_quality_standards_source_document ON public.quality_standards USING btree (source_document_id) WHERE (source_document_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_quality_trends_timeframe ON public.quality_trends USING btree (timeframe);
+CREATE INDEX IF NOT EXISTS idx_quantum_stability_audit_qubit ON public.quantum_stability_audit USING btree (qubit_id);
+CREATE INDEX IF NOT EXISTS idx_quantum_stability_audit_event ON public.quantum_stability_audit USING btree (event_type);
+CREATE INDEX IF NOT EXISTS idx_quantum_stability_audit_timestamp ON public.quantum_stability_audit USING btree ("timestamp");
+CREATE INDEX IF NOT EXISTS idx_quantum_stability_audit_infrared ON public.quantum_stability_audit USING btree (infrared_value);
+CREATE INDEX IF NOT EXISTS idx_quantum_stability_metrics_timestamp ON public.quantum_stability_metrics USING btree ("timestamp");
+CREATE INDEX IF NOT EXISTS idx_quantum_stability_metrics_efficiency ON public.quantum_stability_metrics USING btree (efficiency);
+CREATE INDEX IF NOT EXISTS idx_qubit_states_qubit_id ON public.qubit_states USING btree (qubit_id);
+CREATE INDEX IF NOT EXISTS idx_qubit_states_coherence ON public.qubit_states USING btree (coherence);
+CREATE INDEX IF NOT EXISTS idx_qubit_states_temperature ON public.qubit_states USING btree (temperature);
+CREATE INDEX IF NOT EXISTS idx_qubit_states_stability ON public.qubit_states USING btree (stability);
+CREATE INDEX IF NOT EXISTS idx_qubit_states_infrared ON public.qubit_states USING btree (infrared_spectrum);
+CREATE INDEX IF NOT EXISTS idx_query_analytics_frequency ON public.query_analytics USING btree (frequency);
+CREATE INDEX IF NOT EXISTS idx_query_analytics_last_searched ON public.query_analytics USING btree (last_searched);
+CREATE INDEX IF NOT EXISTS idx_query_analytics_query_hash ON public.query_analytics USING btree (query_hash);
+CREATE INDEX IF NOT EXISTS idx_rag_analytics_type_time ON public.rag_analytics USING btree (operation_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_rag_analytics_success ON public.rag_analytics USING btree (success, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_rag_analytics_document ON public.rag_analytics USING btree (document_id) WHERE (document_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_regeneration_jobs_conflict_id ON public.regeneration_jobs USING btree (conflict_id);
+CREATE INDEX IF NOT EXISTS idx_regeneration_jobs_created_at ON public.regeneration_jobs USING btree (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_regeneration_jobs_document_id ON public.regeneration_jobs USING btree (document_id);
+CREATE INDEX IF NOT EXISTS idx_regeneration_jobs_status ON public.regeneration_jobs USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_regeneration_jobs_user_id ON public.regeneration_jobs USING btree (user_id);
+CREATE INDEX IF NOT EXISTS idx_relationship_health_date ON public.relationship_health USING btree (assessment_date);
+CREATE INDEX IF NOT EXISTS idx_relationship_health_project_id ON public.relationship_health USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_relationship_health_score ON public.relationship_health USING btree (health_score);
+CREATE INDEX IF NOT EXISTS idx_relationship_health_stakeholder ON public.relationship_health USING btree (stakeholder_id);
+CREATE INDEX IF NOT EXISTS idx_relationship_health_strength ON public.relationship_health USING btree (relationship_strength);
+CREATE INDEX IF NOT EXISTS idx_releases_project ON public.releases USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_releases_status ON public.releases USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_relevance_feedback_relevance_score ON public.relevance_feedback USING btree (relevance_score);
+CREATE INDEX IF NOT EXISTS idx_relevance_feedback_result_id ON public.relevance_feedback USING btree (result_id);
+CREATE INDEX IF NOT EXISTS idx_relevance_feedback_user_id ON public.relevance_feedback USING btree (user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS requirements_project_name_unique ON public.requirements USING btree (project_id, name);
+CREATE INDEX IF NOT EXISTS idx_requirements_priority ON public.requirements USING btree (priority);
+CREATE INDEX IF NOT EXISTS idx_requirements_project_id ON public.requirements USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_requirements_source_document ON public.requirements USING btree (source_document_id) WHERE (source_document_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_requirements_source_location ON public.requirements USING btree (source_document_id, source_text_start);
+CREATE INDEX IF NOT EXISTS idx_requirements_status ON public.requirements USING btree (status);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_requirements_idempotency ON public.requirements USING btree (project_id, idempotency_key) WHERE (idempotency_key IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_requirements_idempotency_key ON public.requirements USING btree (idempotency_key);
+CREATE INDEX IF NOT EXISTS idx_requirements_traceability_project_id ON public.requirements_traceability USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_resolution_strategies_conditions_gin ON public.resolution_strategies USING gin (conditions);
+CREATE INDEX IF NOT EXISTS idx_resolution_strategies_config_gin ON public.resolution_strategies USING gin (config);
+CREATE INDEX IF NOT EXISTS idx_resolution_strategies_enabled ON public.resolution_strategies USING btree (enabled);
+CREATE INDEX IF NOT EXISTS idx_resolution_strategies_priority ON public.resolution_strategies USING btree (priority);
+CREATE INDEX IF NOT EXISTS idx_resolution_strategies_type ON public.resolution_strategies USING btree (strategy_type);
+CREATE INDEX IF NOT EXISTS idx_resource_articles_status_published_at ON public.resource_articles USING btree (status, published_at DESC);
+CREATE INDEX IF NOT EXISTS idx_resource_articles_tags ON public.resource_articles USING gin (tags);
+CREATE INDEX IF NOT EXISTS idx_resource_articles_type_status ON public.resource_articles USING btree (content_type, status);
+CREATE INDEX IF NOT EXISTS idx_resource_assignments_activity ON public.resource_assignments USING btree (activity_id);
+CREATE INDEX IF NOT EXISTS idx_resource_assignments_dates ON public.resource_assignments USING btree (start_date, end_date);
+CREATE INDEX IF NOT EXISTS idx_resource_assignments_project_id ON public.resource_assignments USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_resource_assignments_resource ON public.resource_assignments USING btree (resource_id);
+CREATE UNIQUE INDEX IF NOT EXISTS unique_user_capacity_period ON public.resource_capacity_settings USING btree (user_id, effective_from);
+CREATE INDEX IF NOT EXISTS idx_resource_capacity_active ON public.resource_capacity_settings USING btree (is_active);
+CREATE INDEX IF NOT EXISTS idx_resource_capacity_dates ON public.resource_capacity_settings USING btree (effective_from, effective_until);
+CREATE INDEX IF NOT EXISTS idx_resource_capacity_type ON public.resource_capacity_settings USING btree (resource_type);
+CREATE INDEX IF NOT EXISTS idx_resource_capacity_user ON public.resource_capacity_settings USING btree (user_id);
+CREATE INDEX IF NOT EXISTS idx_resource_conflicts_project_id ON public.resource_conflicts USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_resource_conflicts_resource ON public.resource_conflicts USING btree (resource_id);
+CREATE INDEX IF NOT EXISTS idx_resource_conflicts_status ON public.resource_conflicts USING btree (resolution_status);
+CREATE INDEX IF NOT EXISTS idx_resource_conflicts_type ON public.resource_conflicts USING btree (conflict_type);
+CREATE INDEX IF NOT EXISTS idx_resource_conflicts_resolution ON public.resource_conflicts USING btree (resolution) WHERE (resolution IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_resource_conflicts_resolution_date ON public.resource_conflicts USING btree (resolution_date);
+CREATE INDEX IF NOT EXISTS idx_resource_plans_project_id ON public.resource_plans USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_resource_pool_availability ON public.resource_pool USING btree (availability_start_date, availability_end_date);
+CREATE INDEX IF NOT EXISTS idx_resource_pool_project_id ON public.resource_pool USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_resource_pool_status ON public.resource_pool USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_resource_pool_type ON public.resource_pool USING btree (resource_type);
+CREATE INDEX IF NOT EXISTS idx_resource_templates_category ON public.resource_templates USING btree (category);
+CREATE INDEX IF NOT EXISTS idx_resource_templates_status ON public.resource_templates USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_resource_templates_tags ON public.resource_templates USING gin (tags);
+CREATE INDEX IF NOT EXISTS idx_resource_unavailability_dates ON public.resource_unavailability USING btree (start_date, end_date);
+CREATE INDEX IF NOT EXISTS idx_resource_unavailability_status ON public.resource_unavailability USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_resource_unavailability_type ON public.resource_unavailability USING btree (unavailability_type);
+CREATE INDEX IF NOT EXISTS idx_resource_unavailability_user ON public.resource_unavailability USING btree (user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS resources_project_name_unique ON public.resources USING btree (project_id, name);
+CREATE INDEX IF NOT EXISTS idx_resources_conflict_severity ON public.resources USING btree (conflict_severity) WHERE (conflict_severity IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_resources_conflict_status ON public.resources USING btree (conflict_status) WHERE (conflict_status IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_resources_source_document ON public.resources USING btree (source_document_id) WHERE (source_document_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_resources_source_location ON public.resources USING btree (source_document_id, source_text_start);
+CREATE INDEX IF NOT EXISTS idx_resources_availability_pct ON public.resources USING btree (availability_pct);
+CREATE INDEX IF NOT EXISTS idx_resources_cost_rate ON public.resources USING btree (cost_rate);
+CREATE INDEX IF NOT EXISTS idx_review_action_items_assigned_to ON public.review_action_items USING btree (assigned_to);
+CREATE INDEX IF NOT EXISTS idx_review_action_items_due_date ON public.review_action_items USING btree (due_date);
+CREATE INDEX IF NOT EXISTS idx_review_action_items_meeting_id ON public.review_action_items USING btree (review_meeting_id);
+CREATE INDEX IF NOT EXISTS idx_review_action_items_priority ON public.review_action_items USING btree (priority);
+CREATE INDEX IF NOT EXISTS idx_review_action_items_status ON public.review_action_items USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_review_decisions_approved_by ON public.review_decisions USING btree (approved_by);
+CREATE INDEX IF NOT EXISTS idx_review_decisions_implementation_status ON public.review_decisions USING btree (implementation_status);
+CREATE INDEX IF NOT EXISTS idx_review_decisions_meeting_id ON public.review_decisions USING btree (review_meeting_id);
+CREATE INDEX IF NOT EXISTS idx_review_meetings_actual_date ON public.review_meetings USING btree (actual_date);
+CREATE INDEX IF NOT EXISTS idx_review_meetings_program_id ON public.review_meetings USING btree (program_id);
+CREATE INDEX IF NOT EXISTS idx_review_meetings_schedule_id ON public.review_meetings USING btree (schedule_id);
+CREATE INDEX IF NOT EXISTS idx_review_meetings_scheduled_date ON public.review_meetings USING btree (scheduled_date);
+CREATE INDEX IF NOT EXISTS idx_review_meetings_status ON public.review_meetings USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_review_schedules_frequency ON public.review_schedules USING btree (frequency);
+CREATE INDEX IF NOT EXISTS idx_review_schedules_is_active ON public.review_schedules USING btree (is_active);
+CREATE INDEX IF NOT EXISTS idx_review_schedules_program_id ON public.review_schedules USING btree (program_id);
+CREATE INDEX IF NOT EXISTS idx_review_schedules_review_owner_id ON public.review_schedules USING btree (review_owner_id);
+CREATE INDEX IF NOT EXISTS idx_risk_appetite_project_id ON public.risk_appetite USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_risk_assessments_assessment_date ON public.risk_assessments USING btree (assessment_date);
+CREATE INDEX IF NOT EXISTS idx_risk_assessments_date ON public.risk_assessments USING btree (assessment_date);
+CREATE INDEX IF NOT EXISTS idx_risk_assessments_project_id ON public.risk_assessments USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_risk_assessments_risk ON public.risk_assessments USING btree (risk_id);
+CREATE INDEX IF NOT EXISTS idx_risk_assessments_score ON public.risk_assessments USING btree (risk_score);
+CREATE INDEX IF NOT EXISTS idx_risk_checklists_project_id ON public.risk_checklists USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_risk_escalation_event_steps_event ON public.risk_escalation_event_steps USING btree (event_id, status);
+CREATE INDEX IF NOT EXISTS idx_risk_escalation_events_status ON public.risk_escalation_events USING btree (status, triggered_at DESC);
+CREATE INDEX IF NOT EXISTS idx_risk_escalation_policies_active ON public.risk_escalation_policies USING btree (active, escalation_type);
+CREATE INDEX IF NOT EXISTS idx_risk_escalation_steps_policy ON public.risk_escalation_steps USING btree (policy_id, step_order);
+CREATE INDEX IF NOT EXISTS idx_risk_metrics_date ON public.risk_metrics USING btree (metric_date);
+CREATE INDEX IF NOT EXISTS idx_risk_metrics_project_id ON public.risk_metrics USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_risk_response_plans_project_id ON public.risk_response_plans USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_risk_response_plans_risk ON public.risk_response_plans USING btree (risk_id);
+CREATE INDEX IF NOT EXISTS idx_risk_response_plans_status ON public.risk_response_plans USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_risk_response_plans_strategy ON public.risk_response_plans USING btree (response_strategy);
+CREATE INDEX IF NOT EXISTS idx_risk_responses_project_id ON public.risk_responses USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_risk_responses_risk_id ON public.risk_responses USING btree (risk_id);
+CREATE INDEX IF NOT EXISTS idx_risk_responses_source_document ON public.risk_responses USING btree (source_document_id) WHERE (source_document_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_risk_reviews_date ON public.risk_reviews USING btree (review_date);
+CREATE INDEX IF NOT EXISTS idx_risk_reviews_project_id ON public.risk_reviews USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_risk_reviews_type ON public.risk_reviews USING btree (review_type);
+CREATE INDEX IF NOT EXISTS idx_risk_triggers_project_id ON public.risk_triggers USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_risk_triggers_risk ON public.risk_triggers USING btree (risk_id);
+CREATE INDEX IF NOT EXISTS idx_risk_triggers_status ON public.risk_triggers USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_risk_triggers_title ON public.risk_triggers USING btree (risk_title);
+CREATE INDEX IF NOT EXISTS idx_risk_triggers_response_action ON public.risk_triggers USING btree (response_action) WHERE (response_action IS NOT NULL);
+CREATE UNIQUE INDEX IF NOT EXISTS risks_project_name_unique ON public.risks USING btree (project_id, name);
+CREATE UNIQUE INDEX IF NOT EXISTS risks_project_title_unique ON public.risks USING btree (project_id, title);
+CREATE INDEX IF NOT EXISTS idx_risks_affects_programs ON public.risks USING gin (affects_programs);
+CREATE INDEX IF NOT EXISTS idx_risks_cross_program ON public.risks USING btree (cross_program) WHERE (cross_program = true);
+CREATE INDEX IF NOT EXISTS idx_risks_is_curated ON public.risks USING btree (is_curated);
+CREATE INDEX IF NOT EXISTS idx_risks_last_review_date ON public.risks USING btree (last_review_date);
+CREATE INDEX IF NOT EXISTS idx_risks_monthly_review_status ON public.risks USING btree (monthly_review_status);
+CREATE INDEX IF NOT EXISTS idx_risks_next_review_due_date ON public.risks USING btree (next_review_due_date);
+CREATE INDEX IF NOT EXISTS idx_risks_playbook_execution ON public.risks USING btree (playbook_execution_id) WHERE (playbook_execution_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_risks_program_id ON public.risks USING btree (program_id) WHERE (program_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_risks_project_id ON public.risks USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_risks_recommended_playbook ON public.risks USING btree (recommended_playbook_id) WHERE (recommended_playbook_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_risks_risk_level ON public.risks USING btree (risk_level);
+CREATE INDEX IF NOT EXISTS idx_risks_risk_origin ON public.risks USING btree (risk_origin);
+CREATE INDEX IF NOT EXISTS idx_risks_source_document ON public.risks USING btree (source_document_id) WHERE (source_document_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_risks_source_location ON public.risks USING btree (source_document_id, source_text_start);
+CREATE INDEX IF NOT EXISTS idx_risks_status ON public.risks USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_risks_systemic ON public.risks USING btree (systemic_risk) WHERE (systemic_risk = true);
+CREATE INDEX IF NOT EXISTS idx_risks_tags ON public.risks USING gin (tags);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_risks_idempotency ON public.risks USING btree (project_id, idempotency_key) WHERE (idempotency_key IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_risks_idempotency_key ON public.risks USING btree (idempotency_key);
+CREATE UNIQUE INDEX IF NOT EXISTS unique_role_competency ON public.role_competencies USING btree (role_id, competency_id);
+CREATE INDEX IF NOT EXISTS idx_role_competencies_competency ON public.role_competencies USING btree (competency_id);
+CREATE INDEX IF NOT EXISTS idx_role_competencies_role ON public.role_competencies USING btree (role_id);
+CREATE UNIQUE INDEX IF NOT EXISTS unique_role_skill ON public.role_skills USING btree (role_id, skill_id);
+CREATE INDEX IF NOT EXISTS idx_role_skills_role ON public.role_skills USING btree (role_id);
+CREATE INDEX IF NOT EXISTS idx_role_skills_skill ON public.role_skills USING btree (skill_id);
+CREATE INDEX IF NOT EXISTS idx_roles_responsibilities_project_id ON public.roles_and_responsibilities USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_satisfaction_surveys_date ON public.satisfaction_surveys USING btree (survey_date);
+CREATE INDEX IF NOT EXISTS idx_satisfaction_surveys_nps ON public.satisfaction_surveys USING btree (nps_score);
+CREATE INDEX IF NOT EXISTS idx_satisfaction_surveys_project_id ON public.satisfaction_surveys USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_satisfaction_surveys_score ON public.satisfaction_surveys USING btree (satisfaction_score);
+CREATE INDEX IF NOT EXISTS idx_satisfaction_surveys_stakeholder ON public.satisfaction_surveys USING btree (stakeholder_id);
+CREATE INDEX IF NOT EXISTS idx_satisfaction_surveys_sentiment ON public.satisfaction_surveys USING btree (sentiment);
+CREATE INDEX IF NOT EXISTS idx_schedule_activities_project_id ON public.schedule_activities USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_schedule_baseline_project_id ON public.schedule_baseline USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_schedule_baselines_current ON public.schedule_baselines USING btree (project_id, is_current) WHERE (is_current = true);
+CREATE INDEX IF NOT EXISTS idx_schedule_baselines_dates ON public.schedule_baselines USING btree (baseline_start_date, baseline_end_date);
+CREATE INDEX IF NOT EXISTS idx_schedule_baselines_project_id ON public.schedule_baselines USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_schedule_forecasts_project_id ON public.schedule_forecasts USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_schedule_variances_project_id ON public.schedule_variances USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_scope_baseline_project_id ON public.scope_baseline USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_scope_baselines_current ON public.scope_baselines USING btree (project_id, is_current) WHERE (is_current = true);
+CREATE INDEX IF NOT EXISTS idx_scope_baselines_project_id ON public.scope_baselines USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_scope_baselines_status ON public.scope_baselines USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_scope_change_requests_project_id ON public.scope_change_requests USING btree (project_id);
+CREATE UNIQUE INDEX IF NOT EXISTS scope_items_project_name_unique ON public.scope_items USING btree (project_id, item_name);
+CREATE INDEX IF NOT EXISTS idx_scope_items_source_document ON public.scope_items USING btree (source_document_id) WHERE (source_document_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_scope_items_source_location ON public.scope_items USING btree (source_document_id, source_text_start);
+CREATE INDEX IF NOT EXISTS idx_scope_verification_project_id ON public.scope_verification USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_search_analytics_created ON public.search_analytics USING btree (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_search_analytics_frameworks ON public.search_analytics USING gin (frameworks);
+CREATE INDEX IF NOT EXISTS idx_search_analytics_has_results ON public.search_analytics USING btree (has_results, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_search_analytics_mode ON public.search_analytics USING btree (search_mode, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_search_analytics_query ON public.search_analytics USING btree (query, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_search_analytics_query_fts ON public.search_analytics USING gin (to_tsvector('english'::regconfig, query));
+CREATE INDEX IF NOT EXISTS idx_search_analytics_types ON public.search_analytics USING gin (types);
+CREATE INDEX IF NOT EXISTS idx_search_analytics_user ON public.search_analytics USING btree (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_search_history_created_at ON public.search_history USING btree (created_at);
+CREATE INDEX IF NOT EXISTS idx_search_history_project_id ON public.search_history USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_search_history_query ON public.search_history USING gin (to_tsvector('english'::regconfig, query));
+CREATE INDEX IF NOT EXISTS idx_search_history_search_strategy ON public.search_history USING btree (search_strategy);
+CREATE INDEX IF NOT EXISTS idx_search_history_template_id ON public.search_history USING btree (template_id);
+CREATE INDEX IF NOT EXISTS idx_search_history_user_id ON public.search_history USING btree (user_id);
+CREATE INDEX IF NOT EXISTS idx_search_index_access_count ON public.search_index USING btree (access_count);
+CREATE INDEX IF NOT EXISTS idx_search_index_created_at ON public.search_index USING btree (created_at);
+CREATE INDEX IF NOT EXISTS idx_search_index_keywords ON public.search_index USING gin (keywords);
+CREATE INDEX IF NOT EXISTS idx_search_index_metadata ON public.search_index USING gin (metadata);
+CREATE INDEX IF NOT EXISTS idx_search_index_relevance_score ON public.search_index USING btree (relevance_score);
+CREATE INDEX IF NOT EXISTS idx_search_index_source ON public.search_index USING btree (source);
+CREATE INDEX IF NOT EXISTS idx_search_index_type ON public.search_index USING btree (type);
+CREATE INDEX IF NOT EXISTS idx_search_clicks_created ON public.search_result_clicks USING btree (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_search_clicks_position ON public.search_result_clicks USING btree (result_position);
+CREATE INDEX IF NOT EXISTS idx_search_clicks_result ON public.search_result_clicks USING btree (result_id, result_type);
+CREATE INDEX IF NOT EXISTS idx_search_clicks_search ON public.search_result_clicks USING btree (search_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_search_clicks_user ON public.search_result_clicks USING btree (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_suggestion_clicks_created ON public.search_suggestion_clicks USING btree (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_suggestion_clicks_text ON public.search_suggestion_clicks USING btree (suggestion_text, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_suggestion_clicks_type ON public.search_suggestion_clicks USING btree (suggestion_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_suggestion_clicks_user ON public.search_suggestion_clicks USING btree (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_security_events_created_at ON public.security_events USING btree (created_at);
+CREATE INDEX IF NOT EXISTS idx_security_events_type ON public.security_events USING btree (event_type);
+CREATE INDEX IF NOT EXISTS idx_semantic_units_created_at ON public.semantic_units USING btree (created_at);
+CREATE INDEX IF NOT EXISTS idx_semantic_units_document_id ON public.semantic_units USING btree (document_id);
+CREATE INDEX IF NOT EXISTS idx_semantic_units_type ON public.semantic_units USING btree (type);
+CREATE INDEX IF NOT EXISTS idx_signature_audit_logs_action_type ON public.signature_audit_logs USING btree (action_type);
+CREATE INDEX IF NOT EXISTS idx_signature_audit_logs_document_id ON public.signature_audit_logs USING btree (document_id);
+CREATE INDEX IF NOT EXISTS idx_signature_audit_logs_document_signature_id ON public.signature_audit_logs USING btree (document_signature_id);
+CREATE INDEX IF NOT EXISTS idx_signature_audit_logs_performed_at ON public.signature_audit_logs USING btree (performed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_signature_audit_logs_performed_by ON public.signature_audit_logs USING btree (performed_by) WHERE (performed_by IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_signature_fields_approval_request ON public.signature_fields USING btree (approval_request_id) WHERE (approval_request_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_signature_fields_assigned_to ON public.signature_fields USING btree (assigned_to_user_id) WHERE (assigned_to_user_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_signature_fields_document_id ON public.signature_fields USING btree (document_id);
+CREATE INDEX IF NOT EXISTS idx_signature_fields_status ON public.signature_fields USING btree (status) WHERE ((status)::text = 'pending'::text);
+CREATE INDEX IF NOT EXISTS idx_signature_recipients_document_signature_id ON public.signature_recipients USING btree (document_signature_id);
+CREATE INDEX IF NOT EXISTS idx_signature_recipients_email ON public.signature_recipients USING btree (email);
+CREATE INDEX IF NOT EXISTS idx_signature_recipients_invitation_token ON public.signature_recipients USING btree (invitation_token) WHERE (invitation_token IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_signature_recipients_status ON public.signature_recipients USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_signature_recipients_user_id ON public.signature_recipients USING btree (user_id) WHERE (user_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_skills_category ON public.skills USING btree (category);
+CREATE INDEX IF NOT EXISTS idx_skills_name ON public.skills USING btree (name);
+CREATE INDEX IF NOT EXISTS idx_sla_violations_detected_at ON public.sla_violations USING btree (detected_at DESC);
+CREATE INDEX IF NOT EXISTS idx_sla_violations_resolved ON public.sla_violations USING btree (resolved_at) WHERE (resolved_at IS NULL);
+CREATE INDEX IF NOT EXISTS idx_sla_violations_template_id ON public.sla_violations USING btree (template_id);
+CREATE INDEX IF NOT EXISTS idx_source_authority_authority_score ON public.source_authority USING btree (authority_score);
+CREATE INDEX IF NOT EXISTS idx_source_authority_source ON public.source_authority USING btree (source);
+CREATE INDEX IF NOT EXISTS idx_source_authority_verification_status ON public.source_authority USING btree (verification_status);
+CREATE INDEX IF NOT EXISTS idx_stage_executions_job_id ON public.stage_executions USING btree (job_id);
+CREATE INDEX IF NOT EXISTS idx_stage_executions_job_stage ON public.stage_executions USING btree (job_id, stage_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_stage_executions_stage_id ON public.stage_executions USING btree (stage_id);
+CREATE INDEX IF NOT EXISTS idx_stage_executions_status ON public.stage_executions USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_stage_jobs_created_at ON public.stage_jobs USING btree (created_at);
+CREATE INDEX IF NOT EXISTS idx_stage_jobs_job_id ON public.stage_jobs USING btree (job_id);
+CREATE INDEX IF NOT EXISTS idx_stage_jobs_stage_id ON public.stage_jobs USING btree (stage_id);
+CREATE INDEX IF NOT EXISTS idx_stage_jobs_stage_type ON public.stage_jobs USING btree (stage_type);
+CREATE INDEX IF NOT EXISTS idx_stage_jobs_status ON public.stage_jobs USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_stage_metrics_created_at ON public.stage_metrics USING btree (created_at);
+CREATE INDEX IF NOT EXISTS idx_stage_metrics_stage_id ON public.stage_metrics USING btree (stage_id);
+CREATE INDEX IF NOT EXISTS idx_stage_metrics_stage_type ON public.stage_metrics USING btree (stage_type);
+CREATE INDEX IF NOT EXISTS idx_stage_metrics_success ON public.stage_metrics USING btree (success);
+CREATE UNIQUE INDEX IF NOT EXISTS unique_stakeholder_competency ON public.stakeholder_competencies USING btree (stakeholder_id, competency_id);
+CREATE INDEX IF NOT EXISTS idx_stakeholder_competencies_competency ON public.stakeholder_competencies USING btree (competency_id);
+CREATE INDEX IF NOT EXISTS idx_stakeholder_competencies_stakeholder ON public.stakeholder_competencies USING btree (stakeholder_id);
+CREATE INDEX IF NOT EXISTS idx_stakeholder_engagements_project_id ON public.stakeholder_engagements USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_stakeholder_issues_date ON public.stakeholder_issues USING btree (reported_date);
+CREATE INDEX IF NOT EXISTS idx_stakeholder_issues_issue_id ON public.stakeholder_issues USING btree (issue_id);
+CREATE INDEX IF NOT EXISTS idx_stakeholder_issues_priority ON public.stakeholder_issues USING btree (priority);
+CREATE INDEX IF NOT EXISTS idx_stakeholder_issues_project_id ON public.stakeholder_issues USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_stakeholder_issues_stakeholder ON public.stakeholder_issues USING btree (stakeholder_id);
+CREATE INDEX IF NOT EXISTS idx_stakeholder_issues_status ON public.stakeholder_issues USING btree (resolution_status);
+CREATE INDEX IF NOT EXISTS idx_stakeholder_issues_reported_date ON public.stakeholder_issues USING btree (reported_date) WHERE (reported_date IS NOT NULL);
+CREATE UNIQUE INDEX IF NOT EXISTS unique_stakeholder_role_project ON public.stakeholder_role_assignments USING btree (stakeholder_id, role_id, project_id);
+CREATE INDEX IF NOT EXISTS idx_stakeholder_role_assignments_project ON public.stakeholder_role_assignments USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_stakeholder_role_assignments_role ON public.stakeholder_role_assignments USING btree (role_id);
+CREATE INDEX IF NOT EXISTS idx_stakeholder_role_assignments_stakeholder ON public.stakeholder_role_assignments USING btree (stakeholder_id);
+CREATE INDEX IF NOT EXISTS idx_stakeholder_role_assignments_status ON public.stakeholder_role_assignments USING btree (status);
+CREATE UNIQUE INDEX IF NOT EXISTS unique_stakeholder_skill ON public.stakeholder_skills USING btree (stakeholder_id, skill_id);
+CREATE INDEX IF NOT EXISTS idx_stakeholder_skills_skill ON public.stakeholder_skills USING btree (skill_id);
+CREATE INDEX IF NOT EXISTS idx_stakeholder_skills_stakeholder ON public.stakeholder_skills USING btree (stakeholder_id);
+CREATE INDEX IF NOT EXISTS idx_stakeholder_skills_verified ON public.stakeholder_skills USING btree (verified);
+CREATE UNIQUE INDEX IF NOT EXISTS stakeholders_project_name_unique ON public.stakeholders USING btree (project_id, name);
+CREATE INDEX IF NOT EXISTS idx_stakeholders_email ON public.stakeholders USING btree (email);
+CREATE INDEX IF NOT EXISTS idx_stakeholders_engagement_approach ON public.stakeholders USING btree (engagement_approach);
+CREATE INDEX IF NOT EXISTS idx_stakeholders_is_team_member ON public.stakeholders USING btree (project_id, is_team_member) WHERE (is_team_member = true);
+CREATE INDEX IF NOT EXISTS idx_stakeholders_project_id ON public.stakeholders USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_stakeholders_role ON public.stakeholders USING btree (role);
+CREATE INDEX IF NOT EXISTS idx_stakeholders_source_document ON public.stakeholders USING btree (source_document_id) WHERE (source_document_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_stakeholders_source_location ON public.stakeholders USING btree (source_document_id, source_text_start);
+CREATE INDEX IF NOT EXISTS idx_stakeholders_stakeholder_type ON public.stakeholders USING btree (stakeholder_type);
+CREATE INDEX IF NOT EXISTS idx_stakeholders_user_id ON public.stakeholders USING btree (user_id);
+CREATE INDEX IF NOT EXISTS idx_stakeholders_interest_level ON public.stakeholders USING btree (interest_level);
+CREATE INDEX IF NOT EXISTS idx_stakeholders_influence_level ON public.stakeholders USING btree (influence_level);
+CREATE INDEX IF NOT EXISTS idx_stakeholders_stakeholder_category ON public.stakeholders USING btree (stakeholder_category);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_stakeholders_idempotency ON public.stakeholders USING btree (project_id, idempotency_key) WHERE (idempotency_key IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_stakeholders_idempotency_key ON public.stakeholders USING btree (idempotency_key);
+CREATE INDEX IF NOT EXISTS idx_steering_committees_project_id ON public.steering_committees USING btree (project_id);
+CREATE UNIQUE INDEX IF NOT EXISTS success_criteria_project_name_unique ON public.success_criteria USING btree (project_id, name);
+CREATE INDEX IF NOT EXISTS idx_success_criteria_project_id ON public.success_criteria USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_success_criteria_source_document ON public.success_criteria USING btree (source_document_id) WHERE (source_document_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_success_criteria_source_location ON public.success_criteria USING btree (source_document_id, source_text_start);
+CREATE INDEX IF NOT EXISTS idx_success_criteria_idempotency_key ON public.success_criteria USING btree (idempotency_key);
+CREATE INDEX IF NOT EXISTS idx_system_metrics_recorded_at ON public.system_metrics USING btree (recorded_at);
+CREATE INDEX IF NOT EXISTS idx_system_settings_key ON public.system_settings USING btree (setting_key);
+CREATE UNIQUE INDEX IF NOT EXISTS unique_task_user_assignment ON public.task_assignments USING btree (task_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_task_assignments_resource ON public.task_assignments USING btree (resource_assignment_id);
+CREATE INDEX IF NOT EXISTS idx_task_assignments_status ON public.task_assignments USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_task_assignments_task ON public.task_assignments USING btree (task_id);
+CREATE INDEX IF NOT EXISTS idx_task_assignments_user ON public.task_assignments USING btree (user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS unique_dependency ON public.task_dependencies USING btree (task_id, depends_on_task_id);
+CREATE INDEX IF NOT EXISTS idx_task_dependencies_depends_on ON public.task_dependencies USING btree (depends_on_task_id);
+CREATE INDEX IF NOT EXISTS idx_task_dependencies_task ON public.task_dependencies USING btree (task_id);
+CREATE UNIQUE INDEX IF NOT EXISTS unique_task_role ON public.task_roles USING btree (task_id, role_id, role_type);
+CREATE INDEX IF NOT EXISTS idx_task_roles_role ON public.task_roles USING btree (role_id);
+CREATE INDEX IF NOT EXISTS idx_task_roles_task ON public.task_roles USING btree (task_id);
+CREATE INDEX IF NOT EXISTS idx_task_roles_type ON public.task_roles USING btree (role_type);
+CREATE INDEX IF NOT EXISTS idx_adherence_log_agreement ON public.team_agreement_adherence_log USING btree (agreement_id);
+CREATE INDEX IF NOT EXISTS idx_adherence_log_agreement_date ON public.team_agreement_adherence_log USING btree (agreement_id, date_recorded DESC);
+CREATE INDEX IF NOT EXISTS idx_adherence_log_date ON public.team_agreement_adherence_log USING btree (date_recorded DESC);
+CREATE INDEX IF NOT EXISTS idx_team_agreements_agreed_by ON public.team_agreements USING gin (agreed_by);
+CREATE INDEX IF NOT EXISTS idx_team_agreements_category ON public.team_agreements USING btree (category);
+CREATE INDEX IF NOT EXISTS idx_team_agreements_effective_date ON public.team_agreements USING btree (effective_date DESC);
+CREATE INDEX IF NOT EXISTS idx_team_agreements_next_review ON public.team_agreements USING btree (next_review_date) WHERE (next_review_date IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_team_agreements_project ON public.team_agreements USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_team_agreements_project_id ON public.team_agreements USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_team_agreements_status ON public.team_agreements USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_team_availability_project_id ON public.team_availability USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_technologies_category ON public.technologies USING btree (project_id, category);
+CREATE INDEX IF NOT EXISTS idx_technologies_project_id ON public.technologies USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_technologies_source_document ON public.technologies USING btree (source_document_id) WHERE (source_document_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_template_comparison_a ON public.template_comparison_metrics USING btree (template_id_a);
+CREATE INDEX IF NOT EXISTS idx_template_comparison_b ON public.template_comparison_metrics USING btree (template_id_b);
+CREATE INDEX IF NOT EXISTS idx_template_comparison_type ON public.template_comparison_metrics USING btree (comparison_type);
+CREATE INDEX IF NOT EXISTS idx_template_improvement_suggestions_source_document ON public.template_improvement_suggestions USING btree (source_document_id);
+CREATE INDEX IF NOT EXISTS idx_template_improvement_suggestions_source_location ON public.template_improvement_suggestions USING btree (source_document_id, source_text_start);
+CREATE INDEX IF NOT EXISTS idx_template_improvements_date ON public.template_improvement_suggestions USING btree (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_template_improvements_pending ON public.template_improvement_suggestions USING btree (status, priority) WHERE ((status)::text = 'pending_review'::text);
+CREATE INDEX IF NOT EXISTS idx_template_improvements_priority ON public.template_improvement_suggestions USING btree (priority);
+CREATE INDEX IF NOT EXISTS idx_template_improvements_status ON public.template_improvement_suggestions USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_template_improvements_template ON public.template_improvement_suggestions USING btree (template_id);
+CREATE INDEX IF NOT EXISTS idx_maintenance_assigned ON public.template_maintenance_log USING btree (assigned_to);
+CREATE INDEX IF NOT EXISTS idx_maintenance_priority ON public.template_maintenance_log USING btree (priority);
+CREATE INDEX IF NOT EXISTS idx_maintenance_status ON public.template_maintenance_log USING btree (action_status);
+CREATE INDEX IF NOT EXISTS idx_maintenance_template ON public.template_maintenance_log USING btree (template_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_template_performance_created_at ON public.template_performance USING btree (created_at);
+CREATE INDEX IF NOT EXISTS idx_template_performance_template_id ON public.template_performance USING btree (template_id);
+CREATE INDEX IF NOT EXISTS idx_template_quality_period ON public.template_quality_metrics USING btree (period_type, period_start DESC);
+CREATE INDEX IF NOT EXISTS idx_template_quality_priority ON public.template_quality_metrics USING btree (maintenance_priority);
+CREATE INDEX IF NOT EXISTS idx_template_quality_success_rate ON public.template_quality_metrics USING btree (success_rate DESC);
+CREATE INDEX IF NOT EXISTS idx_template_quality_template ON public.template_quality_metrics USING btree (template_id);
+CREATE INDEX IF NOT EXISTS idx_template_status_history_date ON public.template_status_history USING btree (created_at);
+CREATE INDEX IF NOT EXISTS idx_template_status_history_template ON public.template_status_history USING btree (template_id);
+CREATE INDEX IF NOT EXISTS idx_template_usage_project ON public.template_usage USING btree (project_id, used_at DESC);
+CREATE INDEX IF NOT EXISTS idx_template_usage_success ON public.template_usage USING btree (success, used_at DESC);
+CREATE INDEX IF NOT EXISTS idx_template_usage_template_id ON public.template_usage USING btree (template_id);
+CREATE INDEX IF NOT EXISTS idx_template_usage_template_time ON public.template_usage USING btree (template_id, used_at DESC);
+CREATE INDEX IF NOT EXISTS idx_template_usage_used_at ON public.template_usage USING btree (used_at DESC);
+CREATE INDEX IF NOT EXISTS idx_template_usage_user ON public.template_usage USING btree (user_id, used_at DESC);
+CREATE INDEX IF NOT EXISTS idx_template_usage_user_id ON public.template_usage USING btree (user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS unique_template_version ON public.template_versions USING btree (template_id, version_number);
+CREATE INDEX IF NOT EXISTS idx_template_versions_created ON public.template_versions USING btree (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_template_versions_number ON public.template_versions USING btree (template_id, version_number DESC);
+CREATE INDEX IF NOT EXISTS idx_template_versions_suggestion ON public.template_versions USING btree (improvement_suggestion_id);
+CREATE INDEX IF NOT EXISTS idx_template_versions_tag ON public.template_versions USING btree (version_tag);
+CREATE INDEX IF NOT EXISTS idx_template_versions_template ON public.template_versions USING btree (template_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_templates_archived ON public.templates USING btree (archived_at);
+CREATE INDEX IF NOT EXISTS idx_templates_category ON public.templates USING btree (category);
+CREATE INDEX IF NOT EXISTS idx_templates_company_id ON public.templates USING btree (company_id);
+CREATE INDEX IF NOT EXISTS idx_templates_compliance_checked ON public.templates USING btree (compliance_checked_at);
+CREATE INDEX IF NOT EXISTS idx_templates_context_injection_config ON public.templates USING gin (context_injection_config);
+CREATE INDEX IF NOT EXISTS idx_templates_created_by ON public.templates USING btree (created_by) WHERE (deleted_at IS NULL);
+CREATE INDEX IF NOT EXISTS idx_templates_deleted_at ON public.templates USING btree (deleted_at);
+CREATE INDEX IF NOT EXISTS idx_templates_deleted_by ON public.templates USING btree (deleted_by);
+CREATE INDEX IF NOT EXISTS idx_templates_dev_status ON public.templates USING btree (development_status);
+CREATE INDEX IF NOT EXISTS idx_templates_framework ON public.templates USING btree (framework) WHERE ((deleted_at IS NULL) AND (framework IS NOT NULL));
+CREATE INDEX IF NOT EXISTS idx_templates_gkg_context_strategy ON public.templates USING gin (gkg_context_strategy) WHERE (gkg_context_strategy IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_templates_last_used_at ON public.templates USING btree (last_used_at DESC NULLS LAST);
+CREATE INDEX IF NOT EXISTS idx_templates_prompt_build_up ON public.templates USING gin (prompt_build_up);
+CREATE INDEX IF NOT EXISTS idx_templates_scope ON public.templates USING btree (template_scope);
+CREATE INDEX IF NOT EXISTS idx_templates_scope_company ON public.templates USING btree (template_scope, company_id) WHERE ((template_scope)::text = 'company'::text);
+CREATE INDEX IF NOT EXISTS idx_templates_scope_standard ON public.templates USING btree (template_scope) WHERE ((template_scope)::text = 'standard'::text);
+CREATE INDEX IF NOT EXISTS idx_templates_scope_user ON public.templates USING btree (template_scope, created_by) WHERE ((template_scope)::text = 'user'::text);
+CREATE INDEX IF NOT EXISTS idx_templates_search ON public.templates USING gin (to_tsvector('english'::regconfig, (((((COALESCE(name, ''::character varying))::text || ' '::text) || COALESCE(description, ''::text)) || ' '::text) || COALESCE(system_prompt, ''::text)))) WHERE (deleted_at IS NULL);
+CREATE INDEX IF NOT EXISTS idx_templates_template_paragraphs ON public.templates USING gin (template_paragraphs);
+CREATE INDEX IF NOT EXISTS idx_templates_updated_at ON public.templates USING btree (updated_at DESC) WHERE (deleted_at IS NULL);
+CREATE INDEX IF NOT EXISTS idx_templates_validated ON public.templates USING btree (last_validated_at);
+CREATE INDEX IF NOT EXISTS idx_time_entries_assignment ON public.time_entries USING btree (assignment_id);
+CREATE INDEX IF NOT EXISTS idx_time_entries_billable ON public.time_entries USING btree (is_billable);
+CREATE INDEX IF NOT EXISTS idx_time_entries_category ON public.time_entries USING btree (time_entry_category);
+CREATE INDEX IF NOT EXISTS idx_time_entries_date ON public.time_entries USING btree (entry_date);
+CREATE INDEX IF NOT EXISTS idx_time_entries_project ON public.time_entries USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_time_entries_status ON public.time_entries USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_time_entries_task ON public.time_entries USING btree (task_id);
+CREATE INDEX IF NOT EXISTS idx_time_entries_task_assignment ON public.time_entries USING btree (task_assignment_id);
+CREATE INDEX IF NOT EXISTS idx_time_entries_user ON public.time_entries USING btree (user_id);
+CREATE INDEX IF NOT EXISTS idx_upload_batches_company_id ON public.upload_batches USING btree (company_id);
+CREATE INDEX IF NOT EXISTS idx_upload_batches_created_at ON public.upload_batches USING btree (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_upload_batches_metadata ON public.upload_batches USING gin (batch_metadata);
+CREATE INDEX IF NOT EXISTS idx_upload_batches_project_id ON public.upload_batches USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_upload_batches_status ON public.upload_batches USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_upload_batches_uploaded_by ON public.upload_batches USING btree (uploaded_by);
+CREATE INDEX IF NOT EXISTS idx_user_activity_category ON public.user_activity_logs USING btree (activity_category, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_user_activity_created ON public.user_activity_logs USING btree (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_user_activity_type ON public.user_activity_logs USING btree (activity_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_user_activity_user ON public.user_activity_logs USING btree (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_user_analysis_analyzed_at ON public.user_analysis USING btree (analyzed_at);
+CREATE INDEX IF NOT EXISTS idx_user_analysis_average_quality_score ON public.user_analysis USING btree (average_quality_score);
+CREATE INDEX IF NOT EXISTS idx_user_analysis_user_id ON public.user_analysis USING btree (user_id);
+CREATE INDEX IF NOT EXISTS idx_user_collaboration_preferences_user_id ON public.user_collaboration_preferences USING btree (user_id);
+CREATE INDEX IF NOT EXISTS idx_user_domain_knowledge_frameworks ON public.user_domain_knowledge USING gin (frameworks);
+CREATE INDEX IF NOT EXISTS idx_user_domain_knowledge_user_id ON public.user_domain_knowledge USING btree (user_id);
+CREATE INDEX IF NOT EXISTS idx_user_expertise_domains ON public.user_expertise USING gin (domains);
+CREATE INDEX IF NOT EXISTS idx_user_expertise_level ON public.user_expertise USING btree (level);
+CREATE INDEX IF NOT EXISTS idx_user_expertise_user_id ON public.user_expertise USING btree (user_id);
+CREATE INDEX IF NOT EXISTS idx_user_model_preferences_user ON public.user_model_preferences USING btree (user_id);
+CREATE INDEX IF NOT EXISTS idx_user_preferences_user_id ON public.user_preferences USING btree (user_id);
+CREATE INDEX IF NOT EXISTS idx_user_search_preferences_frameworks ON public.user_search_preferences USING gin (preferred_frameworks);
+CREATE INDEX IF NOT EXISTS idx_user_search_preferences_user_id ON public.user_search_preferences USING btree (user_id);
+CREATE INDEX IF NOT EXISTS idx_user_search_preferences_categories ON public.user_search_preferences USING gin (preferred_categories);
+CREATE INDEX IF NOT EXISTS idx_user_writing_style_user_id ON public.user_writing_style USING btree (user_id);
+CREATE INDEX IF NOT EXISTS idx_users_active_search ON public.users USING btree (name, email) WHERE (is_active = true);
+CREATE INDEX IF NOT EXISTS idx_users_company_id ON public.users USING btree (company_id);
+CREATE INDEX IF NOT EXISTS idx_users_date_format ON public.users USING btree (date_format) WHERE (date_format IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_users_metadata ON public.users USING gin (metadata);
+CREATE INDEX IF NOT EXISTS idx_users_tenant_id ON public.users USING btree (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_users_timezone ON public.users USING btree (timezone) WHERE (timezone IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_utilization_records_date ON public.utilization_records USING btree (record_date);
+CREATE INDEX IF NOT EXISTS idx_utilization_records_period ON public.utilization_records USING btree (period);
+CREATE INDEX IF NOT EXISTS idx_utilization_records_project_id ON public.utilization_records USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_utilization_records_resource ON public.utilization_records USING btree (resource_id);
+CREATE INDEX IF NOT EXISTS idx_variable_analysis_complexity ON public.variable_analysis_results USING btree (complexity_score);
+CREATE INDEX IF NOT EXISTS idx_variable_analysis_created ON public.variable_analysis_results USING btree (created_at);
+CREATE INDEX IF NOT EXISTS idx_variable_analysis_data_gin ON public.variable_analysis_results USING gin (analysis_data);
+CREATE INDEX IF NOT EXISTS idx_variable_analysis_quality ON public.variable_analysis_results USING btree (quality_score);
+CREATE INDEX IF NOT EXISTS idx_variable_analysis_recommendations_gin ON public.variable_analysis_results USING gin (recommendations);
+CREATE INDEX IF NOT EXISTS idx_variable_analysis_template ON public.variable_analysis_results USING btree (template_id);
+CREATE INDEX IF NOT EXISTS idx_variable_patterns_confidence ON public.variable_patterns USING btree (pattern_confidence);
+CREATE INDEX IF NOT EXISTS idx_variable_patterns_examples_gin ON public.variable_patterns USING gin (pattern_examples);
+CREATE INDEX IF NOT EXISTS idx_variable_patterns_frequency ON public.variable_patterns USING btree (pattern_frequency);
+CREATE INDEX IF NOT EXISTS idx_variable_patterns_metadata_gin ON public.variable_patterns USING gin (pattern_metadata);
+CREATE INDEX IF NOT EXISTS idx_variable_patterns_type ON public.variable_patterns USING btree (pattern_type);
+CREATE INDEX IF NOT EXISTS idx_variable_resolution_cache_data_gin ON public.variable_resolution_cache USING gin (resolution_data);
+CREATE INDEX IF NOT EXISTS idx_variable_resolution_cache_expires ON public.variable_resolution_cache USING btree (expires_at);
+CREATE INDEX IF NOT EXISTS idx_variable_resolution_cache_key ON public.variable_resolution_cache USING btree (cache_key);
+CREATE INDEX IF NOT EXISTS idx_variable_resolution_metrics_context_gin ON public.variable_resolution_metrics USING gin (context_data);
+CREATE INDEX IF NOT EXISTS idx_variable_resolution_metrics_created ON public.variable_resolution_metrics USING btree (created_at);
+CREATE INDEX IF NOT EXISTS idx_variable_resolution_metrics_name ON public.variable_resolution_metrics USING btree (variable_name);
+CREATE INDEX IF NOT EXISTS idx_variable_resolution_metrics_status ON public.variable_resolution_metrics USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_variable_resolution_metrics_strategy ON public.variable_resolution_metrics USING btree (resolution_strategy);
+CREATE INDEX IF NOT EXISTS idx_variable_resolution_metrics_type ON public.variable_resolution_metrics USING btree (variable_type);
+CREATE INDEX IF NOT EXISTS idx_variable_resolution_results_created ON public.variable_resolution_results USING btree (created_at);
+CREATE INDEX IF NOT EXISTS idx_variable_resolution_results_metrics_gin ON public.variable_resolution_results USING gin (resolution_metrics);
+CREATE INDEX IF NOT EXISTS idx_variable_resolution_results_quality_gin ON public.variable_resolution_results USING gin (quality_assessment);
+CREATE INDEX IF NOT EXISTS idx_variable_resolution_results_recommendations_gin ON public.variable_resolution_results USING gin (recommendations);
+CREATE INDEX IF NOT EXISTS idx_variable_resolution_results_request ON public.variable_resolution_results USING btree (request_id);
+CREATE INDEX IF NOT EXISTS idx_variable_resolution_results_template ON public.variable_resolution_results USING btree (template_id);
+CREATE INDEX IF NOT EXISTS idx_variable_resolution_results_unresolved_gin ON public.variable_resolution_results USING gin (unresolved_variables);
+CREATE INDEX IF NOT EXISTS idx_variable_resolution_results_variables_gin ON public.variable_resolution_results USING gin (resolved_variables);
+CREATE INDEX IF NOT EXISTS idx_wbs_nodes_code ON public.wbs_nodes USING btree (project_id, wbs_code);
+CREATE INDEX IF NOT EXISTS idx_wbs_nodes_project_id ON public.wbs_nodes USING btree (project_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_wbs_nodes_idempotency ON public.wbs_nodes USING btree (project_id, idempotency_key) WHERE (idempotency_key IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_work_items_activity ON public.work_items USING btree (activity_id);
+CREATE INDEX IF NOT EXISTS idx_work_items_project ON public.work_items USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_work_items_project_id ON public.work_items USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_work_items_source_document ON public.work_items USING btree (source_document_id) WHERE (source_document_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_work_items_source_location ON public.work_items USING btree (source_document_id, source_text_start);
+CREATE INDEX IF NOT EXISTS idx_work_items_status ON public.work_items USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_worker_heartbeats_last_heartbeat ON public.worker_heartbeats USING btree (last_heartbeat);
+CREATE INDEX IF NOT EXISTS idx_workflow_executions_created_at ON public.workflow_executions USING btree (created_at);
+CREATE INDEX IF NOT EXISTS idx_workflow_executions_project_id ON public.workflow_executions USING btree (project_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_executions_status ON public.workflow_executions USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_workflow_executions_template_id ON public.workflow_executions USING btree (template_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_executions_user_id ON public.workflow_executions USING btree (user_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_presets_category ON public.workflow_presets USING btree (category);
+CREATE INDEX IF NOT EXISTS idx_workflow_presets_created_by ON public.workflow_presets USING btree (created_by);
+CREATE INDEX IF NOT EXISTS idx_workflow_presets_public ON public.workflow_presets USING btree (is_public);
 
 -- Functions
 CREATE OR REPLACE FUNCTION public.trigger_entity_extraction()
@@ -11367,24 +11095,6 @@ BEGIN
 END;
 $function$
 ;
-CREATE OR REPLACE FUNCTION public.gbtreekey8_out(gbtreekey8)
- RETURNS cstring
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbtreekey_out$function$
-;
-CREATE OR REPLACE FUNCTION public.gbtreekey_var_in(cstring)
- RETURNS gbtreekey_var
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbtreekey_in$function$
-;
-CREATE OR REPLACE FUNCTION public.gbtreekey_var_out(gbtreekey_var)
- RETURNS cstring
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbtreekey_out$function$
-;
 CREATE OR REPLACE FUNCTION public.update_portfolio_vision_updated_at()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -11523,12 +11233,6 @@ BEGIN
 END;
 $function$
 ;
-CREATE OR REPLACE FUNCTION public.ts_dist(timestamp without time zone, timestamp without time zone)
- RETURNS interval
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$ts_dist$function$
-;
 CREATE OR REPLACE FUNCTION public.update_mitigation_plans_updated_at()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -11586,60 +11290,6 @@ BEGIN
         last_searched = CURRENT_TIMESTAMP;
 END;
 $function$
-;
-CREATE OR REPLACE FUNCTION public.gbtreekey16_out(gbtreekey16)
- RETURNS cstring
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbtreekey_out$function$
-;
-CREATE OR REPLACE FUNCTION public.gbtreekey2_in(cstring)
- RETURNS gbtreekey2
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbtreekey_in$function$
-;
-CREATE OR REPLACE FUNCTION public.gbtreekey2_out(gbtreekey2)
- RETURNS cstring
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbtreekey_out$function$
-;
-CREATE OR REPLACE FUNCTION public.gbtreekey32_in(cstring)
- RETURNS gbtreekey32
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbtreekey_in$function$
-;
-CREATE OR REPLACE FUNCTION public.gbtreekey32_out(gbtreekey32)
- RETURNS cstring
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbtreekey_out$function$
-;
-CREATE OR REPLACE FUNCTION public.gbtreekey4_in(cstring)
- RETURNS gbtreekey4
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbtreekey_in$function$
-;
-CREATE OR REPLACE FUNCTION public.gbtreekey4_out(gbtreekey4)
- RETURNS cstring
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbtreekey_out$function$
-;
-CREATE OR REPLACE FUNCTION public.gbtreekey8_in(cstring)
- RETURNS gbtreekey8
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbtreekey_in$function$
-;
-CREATE OR REPLACE FUNCTION public.gbtreekey16_in(cstring)
- RETURNS gbtreekey16
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbtreekey_in$function$
 ;
 CREATE OR REPLACE FUNCTION public.advance_approval_to_next_stage(p_approval_request_id uuid)
  RETURNS boolean
@@ -12245,12 +11895,6 @@ BEGIN
 END;
 $function$
 ;
-CREATE OR REPLACE FUNCTION public.gbt_bit_consistent(internal, bit, smallint, oid, internal)
- RETURNS boolean
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_bit_consistent$function$
-;
 CREATE OR REPLACE FUNCTION public.calculate_payback_period(p_program_id uuid)
  RETURNS integer
  LANGUAGE plpgsql
@@ -12538,12 +12182,6 @@ BEGIN
 END;
 $function$
 ;
-CREATE OR REPLACE FUNCTION public.cash_dist(money, money)
- RETURNS money
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$cash_dist$function$
-;
 CREATE OR REPLACE FUNCTION public.check_approval_sla_breach(p_approval_request_id uuid)
  RETURNS boolean
  LANGUAGE plpgsql
@@ -12702,12 +12340,6 @@ AS $function$
   SELECT COALESCE(current_setting('request.jwt.claim.role', true), '')
 $function$
 ;
-CREATE OR REPLACE FUNCTION public.date_dist(date, date)
- RETURNS integer
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$date_dist$function$
-;
 CREATE OR REPLACE FUNCTION public.detect_resource_conflicts(p_program_id uuid)
  RETURNS integer
  LANGUAGE plpgsql
@@ -12769,12 +12401,6 @@ BEGIN
 END;
 $function$
 ;
-CREATE OR REPLACE FUNCTION public.gbt_bit_penalty(internal, internal, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_bit_penalty$function$
-;
 CREATE OR REPLACE FUNCTION public.determine_template_maintenance_priority(p_template_id uuid)
  RETURNS character varying
  LANGUAGE plpgsql
@@ -12834,990 +12460,6 @@ BEGIN
 END;
 $function$
 ;
-CREATE OR REPLACE FUNCTION public.float4_dist(real, real)
- RETURNS real
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$float4_dist$function$
-;
-CREATE OR REPLACE FUNCTION public.float8_dist(double precision, double precision)
- RETURNS double precision
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$float8_dist$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_bit_compress(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_bit_compress$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_bit_picksplit(internal, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_bit_picksplit$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_bit_same(gbtreekey_var, gbtreekey_var, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_bit_same$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_bit_union(internal, internal)
- RETURNS gbtreekey_var
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_bit_union$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_bool_compress(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE STRICT
-AS '$libdir/btree_gist', $function$gbt_bool_compress$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_bool_consistent(internal, boolean, smallint, oid, internal)
- RETURNS boolean
- LANGUAGE c
- IMMUTABLE STRICT
-AS '$libdir/btree_gist', $function$gbt_bool_consistent$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_bool_fetch(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE STRICT
-AS '$libdir/btree_gist', $function$gbt_bool_fetch$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_bool_penalty(internal, internal, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE STRICT
-AS '$libdir/btree_gist', $function$gbt_bool_penalty$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_bool_picksplit(internal, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE STRICT
-AS '$libdir/btree_gist', $function$gbt_bool_picksplit$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_bool_same(gbtreekey2, gbtreekey2, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE STRICT
-AS '$libdir/btree_gist', $function$gbt_bool_same$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_bool_union(internal, internal)
- RETURNS gbtreekey2
- LANGUAGE c
- IMMUTABLE STRICT
-AS '$libdir/btree_gist', $function$gbt_bool_union$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_bpchar_compress(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_bpchar_compress$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_bpchar_consistent(internal, character, smallint, oid, internal)
- RETURNS boolean
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_bpchar_consistent$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_bytea_compress(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_bytea_compress$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_bytea_consistent(internal, bytea, smallint, oid, internal)
- RETURNS boolean
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_bytea_consistent$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_bytea_penalty(internal, internal, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_bytea_penalty$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_bytea_picksplit(internal, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_bytea_picksplit$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_bytea_same(gbtreekey_var, gbtreekey_var, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_bytea_same$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_bytea_union(internal, internal)
- RETURNS gbtreekey_var
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_bytea_union$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_cash_compress(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_cash_compress$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_cash_consistent(internal, money, smallint, oid, internal)
- RETURNS boolean
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_cash_consistent$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_cash_distance(internal, money, smallint, oid, internal)
- RETURNS double precision
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_cash_distance$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_cash_fetch(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_cash_fetch$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_cash_penalty(internal, internal, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_cash_penalty$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_cash_picksplit(internal, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_cash_picksplit$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_cash_same(gbtreekey16, gbtreekey16, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_cash_same$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_cash_union(internal, internal)
- RETURNS gbtreekey16
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_cash_union$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_date_compress(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_date_compress$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_date_consistent(internal, date, smallint, oid, internal)
- RETURNS boolean
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_date_consistent$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_date_distance(internal, date, smallint, oid, internal)
- RETURNS double precision
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_date_distance$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_date_fetch(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_date_fetch$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_date_penalty(internal, internal, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_date_penalty$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_date_picksplit(internal, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_date_picksplit$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_date_same(gbtreekey8, gbtreekey8, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_date_same$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_date_union(internal, internal)
- RETURNS gbtreekey8
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_date_union$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_decompress(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_decompress$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_enum_compress(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_enum_compress$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_enum_consistent(internal, anyenum, smallint, oid, internal)
- RETURNS boolean
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_enum_consistent$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_enum_fetch(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_enum_fetch$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_enum_penalty(internal, internal, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_enum_penalty$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_enum_picksplit(internal, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_enum_picksplit$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_enum_same(gbtreekey8, gbtreekey8, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_enum_same$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_enum_union(internal, internal)
- RETURNS gbtreekey8
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_enum_union$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_float4_compress(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_float4_compress$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_float4_consistent(internal, real, smallint, oid, internal)
- RETURNS boolean
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_float4_consistent$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_float4_distance(internal, real, smallint, oid, internal)
- RETURNS double precision
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_float4_distance$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_float4_fetch(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_float4_fetch$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_float4_penalty(internal, internal, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_float4_penalty$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_float4_picksplit(internal, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_float4_picksplit$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_float4_same(gbtreekey8, gbtreekey8, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_float4_same$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_float4_union(internal, internal)
- RETURNS gbtreekey8
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_float4_union$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_float8_compress(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_float8_compress$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_float8_consistent(internal, double precision, smallint, oid, internal)
- RETURNS boolean
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_float8_consistent$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_float8_distance(internal, double precision, smallint, oid, internal)
- RETURNS double precision
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_float8_distance$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_float8_fetch(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_float8_fetch$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_float8_penalty(internal, internal, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_float8_penalty$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_float8_picksplit(internal, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_float8_picksplit$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_float8_same(gbtreekey16, gbtreekey16, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_float8_same$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_float8_union(internal, internal)
- RETURNS gbtreekey16
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_float8_union$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_inet_compress(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_inet_compress$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_inet_consistent(internal, inet, smallint, oid, internal)
- RETURNS boolean
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_inet_consistent$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_inet_penalty(internal, internal, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_inet_penalty$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_inet_picksplit(internal, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_inet_picksplit$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_inet_same(gbtreekey16, gbtreekey16, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_inet_same$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_inet_union(internal, internal)
- RETURNS gbtreekey16
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_inet_union$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_int2_compress(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_int2_compress$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_int2_consistent(internal, smallint, smallint, oid, internal)
- RETURNS boolean
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_int2_consistent$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_int2_distance(internal, smallint, smallint, oid, internal)
- RETURNS double precision
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_int2_distance$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_int2_fetch(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_int2_fetch$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_int2_penalty(internal, internal, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_int2_penalty$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_int2_picksplit(internal, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_int2_picksplit$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_int2_same(gbtreekey4, gbtreekey4, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_int2_same$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_int2_union(internal, internal)
- RETURNS gbtreekey4
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_int2_union$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_int4_compress(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_int4_compress$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_int4_consistent(internal, integer, smallint, oid, internal)
- RETURNS boolean
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_int4_consistent$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_int4_distance(internal, integer, smallint, oid, internal)
- RETURNS double precision
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_int4_distance$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_int4_fetch(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_int4_fetch$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_int4_penalty(internal, internal, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_int4_penalty$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_int4_picksplit(internal, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_int4_picksplit$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_int4_same(gbtreekey8, gbtreekey8, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_int4_same$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_int4_union(internal, internal)
- RETURNS gbtreekey8
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_int4_union$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_int8_compress(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_int8_compress$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_int8_consistent(internal, bigint, smallint, oid, internal)
- RETURNS boolean
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_int8_consistent$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_int8_distance(internal, bigint, smallint, oid, internal)
- RETURNS double precision
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_int8_distance$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_int8_fetch(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_int8_fetch$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_int8_penalty(internal, internal, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_int8_penalty$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_int8_picksplit(internal, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_int8_picksplit$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_int8_same(gbtreekey16, gbtreekey16, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_int8_same$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_int8_union(internal, internal)
- RETURNS gbtreekey16
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_int8_union$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_intv_compress(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_intv_compress$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_intv_consistent(internal, interval, smallint, oid, internal)
- RETURNS boolean
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_intv_consistent$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_intv_decompress(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_intv_decompress$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_intv_distance(internal, interval, smallint, oid, internal)
- RETURNS double precision
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_intv_distance$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_intv_fetch(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_intv_fetch$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_intv_penalty(internal, internal, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_intv_penalty$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_intv_picksplit(internal, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_intv_picksplit$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_intv_same(gbtreekey32, gbtreekey32, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_intv_same$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_intv_union(internal, internal)
- RETURNS gbtreekey32
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_intv_union$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_macad8_compress(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_macad8_compress$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_macad8_consistent(internal, macaddr8, smallint, oid, internal)
- RETURNS boolean
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_macad8_consistent$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_macad8_fetch(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_macad8_fetch$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_macad8_penalty(internal, internal, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_macad8_penalty$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_macad8_picksplit(internal, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_macad8_picksplit$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_macad8_same(gbtreekey16, gbtreekey16, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_macad8_same$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_macad8_union(internal, internal)
- RETURNS gbtreekey16
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_macad8_union$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_macad_compress(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_macad_compress$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_macad_consistent(internal, macaddr, smallint, oid, internal)
- RETURNS boolean
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_macad_consistent$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_macad_fetch(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_macad_fetch$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_macad_penalty(internal, internal, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_macad_penalty$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_macad_picksplit(internal, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_macad_picksplit$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_macad_same(gbtreekey16, gbtreekey16, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_macad_same$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_macad_union(internal, internal)
- RETURNS gbtreekey16
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_macad_union$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_numeric_compress(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_numeric_compress$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_numeric_consistent(internal, numeric, smallint, oid, internal)
- RETURNS boolean
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_numeric_consistent$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_numeric_penalty(internal, internal, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_numeric_penalty$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_numeric_picksplit(internal, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_numeric_picksplit$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_numeric_same(gbtreekey_var, gbtreekey_var, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_numeric_same$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_numeric_union(internal, internal)
- RETURNS gbtreekey_var
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_numeric_union$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_oid_compress(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_oid_compress$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_oid_consistent(internal, oid, smallint, oid, internal)
- RETURNS boolean
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_oid_consistent$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_oid_distance(internal, oid, smallint, oid, internal)
- RETURNS double precision
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_oid_distance$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_oid_fetch(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_oid_fetch$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_oid_penalty(internal, internal, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_oid_penalty$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_oid_picksplit(internal, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_oid_picksplit$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_oid_same(gbtreekey8, gbtreekey8, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_oid_same$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_oid_union(internal, internal)
- RETURNS gbtreekey8
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_oid_union$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_text_compress(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_text_compress$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_text_consistent(internal, text, smallint, oid, internal)
- RETURNS boolean
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_text_consistent$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_text_penalty(internal, internal, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_text_penalty$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_text_picksplit(internal, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_text_picksplit$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_text_same(gbtreekey_var, gbtreekey_var, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_text_same$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_text_union(internal, internal)
- RETURNS gbtreekey_var
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_text_union$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_time_compress(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_time_compress$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_time_consistent(internal, time without time zone, smallint, oid, internal)
- RETURNS boolean
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_time_consistent$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_time_distance(internal, time without time zone, smallint, oid, internal)
- RETURNS double precision
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_time_distance$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_time_fetch(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_time_fetch$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_time_penalty(internal, internal, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_time_penalty$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_time_picksplit(internal, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_time_picksplit$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_time_same(gbtreekey16, gbtreekey16, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_time_same$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_time_union(internal, internal)
- RETURNS gbtreekey16
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_time_union$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_timetz_compress(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_timetz_compress$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_timetz_consistent(internal, time with time zone, smallint, oid, internal)
- RETURNS boolean
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_timetz_consistent$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_ts_compress(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_ts_compress$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_ts_consistent(internal, timestamp without time zone, smallint, oid, internal)
- RETURNS boolean
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_ts_consistent$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_ts_distance(internal, timestamp without time zone, smallint, oid, internal)
- RETURNS double precision
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_ts_distance$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_ts_fetch(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_ts_fetch$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_ts_penalty(internal, internal, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_ts_penalty$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_ts_picksplit(internal, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_ts_picksplit$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_ts_same(gbtreekey16, gbtreekey16, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_ts_same$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_ts_union(internal, internal)
- RETURNS gbtreekey16
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_ts_union$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_tstz_compress(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_tstz_compress$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_tstz_consistent(internal, timestamp with time zone, smallint, oid, internal)
- RETURNS boolean
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_tstz_consistent$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_tstz_distance(internal, timestamp with time zone, smallint, oid, internal)
- RETURNS double precision
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_tstz_distance$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_uuid_compress(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_uuid_compress$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_uuid_consistent(internal, uuid, smallint, oid, internal)
- RETURNS boolean
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_uuid_consistent$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_uuid_fetch(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_uuid_fetch$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_uuid_penalty(internal, internal, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_uuid_penalty$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_uuid_picksplit(internal, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_uuid_picksplit$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_uuid_same(gbtreekey32, gbtreekey32, internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_uuid_same$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_uuid_union(internal, internal)
- RETURNS gbtreekey32
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_uuid_union$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_var_decompress(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_var_decompress$function$
-;
-CREATE OR REPLACE FUNCTION public.gbt_var_fetch(internal)
- RETURNS internal
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$gbt_var_fetch$function$
-;
 CREATE OR REPLACE FUNCTION public.get_ai_usage_by_date_range(start_date timestamp without time zone, end_date timestamp without time zone, p_provider_id uuid DEFAULT NULL::uuid, p_user_id uuid DEFAULT NULL::uuid, p_project_id uuid DEFAULT NULL::uuid)
  RETURNS TABLE(date timestamp without time zone, provider_type character varying, model_name character varying, request_count bigint, total_tokens bigint, avg_response_time numeric, total_cost numeric, success_rate numeric)
  LANGUAGE plpgsql
@@ -13843,12 +12485,6 @@ BEGIN
   ORDER BY date DESC, total_tokens DESC;
 END;
 $function$
-;
-CREATE OR REPLACE FUNCTION public.int4_dist(integer, integer)
- RETURNS integer
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$int4_dist$function$
 ;
 CREATE OR REPLACE FUNCTION public.get_all_entity_counts(project_id_param uuid)
  RETURNS jsonb
@@ -14306,24 +12942,6 @@ BEGIN
 END;
 $function$
 ;
-CREATE OR REPLACE FUNCTION public.int2_dist(smallint, smallint)
- RETURNS smallint
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$int2_dist$function$
-;
-CREATE OR REPLACE FUNCTION public.int8_dist(bigint, bigint)
- RETURNS bigint
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$int8_dist$function$
-;
-CREATE OR REPLACE FUNCTION public.interval_dist(interval, interval)
- RETURNS interval
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$interval_dist$function$
-;
 CREATE OR REPLACE FUNCTION public.maintain_current_state_flag()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -14374,12 +12992,6 @@ begin
   return new;
 end;
 $function$
-;
-CREATE OR REPLACE FUNCTION public.oid_dist(oid, oid)
- RETURNS oid
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$oid_dist$function$
 ;
 CREATE OR REPLACE FUNCTION public.process_scheduled_refreshes()
  RETURNS void
@@ -14693,12 +13305,6 @@ BEGIN
 END;
 $function$
 ;
-CREATE OR REPLACE FUNCTION public.time_dist(time without time zone, time without time zone)
- RETURNS interval
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$time_dist$function$
-;
 CREATE OR REPLACE FUNCTION public.trigger_update_query_analytics()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -14839,12 +13445,6 @@ BEGIN
   RETURN NEW;
 END;
 $function$
-;
-CREATE OR REPLACE FUNCTION public.tstz_dist(timestamp with time zone, timestamp with time zone)
- RETURNS interval
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/btree_gist', $function$tstz_dist$function$
 ;
 CREATE OR REPLACE FUNCTION public.update_ai_model_configurations_updated_at()
  RETURNS trigger
@@ -15669,743 +14269,6 @@ BEGIN
     RETURN NEW;
 END;
 $function$
-;
-CREATE OR REPLACE FUNCTION public.uuid_generate_v1()
- RETURNS uuid
- LANGUAGE c
- PARALLEL SAFE STRICT
-AS '$libdir/uuid-ossp', $function$uuid_generate_v1$function$
-;
-CREATE OR REPLACE FUNCTION public.uuid_generate_v1mc()
- RETURNS uuid
- LANGUAGE c
- PARALLEL SAFE STRICT
-AS '$libdir/uuid-ossp', $function$uuid_generate_v1mc$function$
-;
-CREATE OR REPLACE FUNCTION public.uuid_generate_v3(namespace uuid, name text)
- RETURNS uuid
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/uuid-ossp', $function$uuid_generate_v3$function$
-;
-CREATE OR REPLACE FUNCTION public.uuid_generate_v4()
- RETURNS uuid
- LANGUAGE c
- PARALLEL SAFE STRICT
-AS '$libdir/uuid-ossp', $function$uuid_generate_v4$function$
-;
-CREATE OR REPLACE FUNCTION public.uuid_generate_v5(namespace uuid, name text)
- RETURNS uuid
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/uuid-ossp', $function$uuid_generate_v5$function$
-;
-CREATE OR REPLACE FUNCTION public.uuid_nil()
- RETURNS uuid
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/uuid-ossp', $function$uuid_nil$function$
-;
-CREATE OR REPLACE FUNCTION public.uuid_ns_dns()
- RETURNS uuid
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/uuid-ossp', $function$uuid_ns_dns$function$
-;
-CREATE OR REPLACE FUNCTION public.uuid_ns_oid()
- RETURNS uuid
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/uuid-ossp', $function$uuid_ns_oid$function$
-;
-CREATE OR REPLACE FUNCTION public.uuid_ns_url()
- RETURNS uuid
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/uuid-ossp', $function$uuid_ns_url$function$
-;
-CREATE OR REPLACE FUNCTION public.halfvec_recv(internal, oid, integer)
- RETURNS halfvec
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$halfvec_recv$function$
-;
-CREATE OR REPLACE FUNCTION public.uuid_ns_x500()
- RETURNS uuid
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/uuid-ossp', $function$uuid_ns_x500$function$
-;
-CREATE OR REPLACE FUNCTION public.halfvec_send(halfvec)
- RETURNS bytea
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$halfvec_send$function$
-;
-CREATE OR REPLACE FUNCTION public.l2_distance(halfvec, halfvec)
- RETURNS double precision
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$halfvec_l2_distance$function$
-;
-CREATE OR REPLACE FUNCTION public.inner_product(halfvec, halfvec)
- RETURNS double precision
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$halfvec_inner_product$function$
-;
-CREATE OR REPLACE FUNCTION public.cosine_distance(halfvec, halfvec)
- RETURNS double precision
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$halfvec_cosine_distance$function$
-;
-CREATE OR REPLACE FUNCTION public.l1_distance(halfvec, halfvec)
- RETURNS double precision
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$halfvec_l1_distance$function$
-;
-CREATE OR REPLACE FUNCTION public.vector_dims(halfvec)
- RETURNS integer
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$halfvec_vector_dims$function$
-;
-CREATE OR REPLACE FUNCTION public.l2_norm(halfvec)
- RETURNS double precision
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$halfvec_l2_norm$function$
-;
-CREATE OR REPLACE FUNCTION public.l2_normalize(halfvec)
- RETURNS halfvec
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$halfvec_l2_normalize$function$
-;
-CREATE OR REPLACE FUNCTION public.binary_quantize(halfvec)
- RETURNS bit
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$halfvec_binary_quantize$function$
-;
-CREATE OR REPLACE FUNCTION public.subvector(halfvec, integer, integer)
- RETURNS halfvec
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$halfvec_subvector$function$
-;
-CREATE OR REPLACE FUNCTION public.halfvec_add(halfvec, halfvec)
- RETURNS halfvec
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$halfvec_add$function$
-;
-CREATE OR REPLACE FUNCTION public.halfvec_sub(halfvec, halfvec)
- RETURNS halfvec
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$halfvec_sub$function$
-;
-CREATE OR REPLACE FUNCTION public.halfvec_mul(halfvec, halfvec)
- RETURNS halfvec
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$halfvec_mul$function$
-;
-CREATE OR REPLACE FUNCTION public.halfvec_concat(halfvec, halfvec)
- RETURNS halfvec
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$halfvec_concat$function$
-;
-CREATE OR REPLACE FUNCTION public.halfvec_lt(halfvec, halfvec)
- RETURNS boolean
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$halfvec_lt$function$
-;
-CREATE OR REPLACE FUNCTION public.halfvec_le(halfvec, halfvec)
- RETURNS boolean
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$halfvec_le$function$
-;
-CREATE OR REPLACE FUNCTION public.halfvec_eq(halfvec, halfvec)
- RETURNS boolean
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$halfvec_eq$function$
-;
-CREATE OR REPLACE FUNCTION public.halfvec_ne(halfvec, halfvec)
- RETURNS boolean
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$halfvec_ne$function$
-;
-CREATE OR REPLACE FUNCTION public.halfvec_ge(halfvec, halfvec)
- RETURNS boolean
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$halfvec_ge$function$
-;
-CREATE OR REPLACE FUNCTION public.halfvec_gt(halfvec, halfvec)
- RETURNS boolean
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$halfvec_gt$function$
-;
-CREATE OR REPLACE FUNCTION public.halfvec_cmp(halfvec, halfvec)
- RETURNS integer
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$halfvec_cmp$function$
-;
-CREATE OR REPLACE FUNCTION public.halfvec_l2_squared_distance(halfvec, halfvec)
- RETURNS double precision
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$halfvec_l2_squared_distance$function$
-;
-CREATE OR REPLACE FUNCTION public.vector_ge(vector, vector)
- RETURNS boolean
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$vector_ge$function$
-;
-CREATE OR REPLACE FUNCTION public.vector_sub(vector, vector)
- RETURNS vector
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$vector_sub$function$
-;
-CREATE OR REPLACE FUNCTION public.vector_mul(vector, vector)
- RETURNS vector
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$vector_mul$function$
-;
-CREATE OR REPLACE FUNCTION public.vector_concat(vector, vector)
- RETURNS vector
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$vector_concat$function$
-;
-CREATE OR REPLACE FUNCTION public.vector_lt(vector, vector)
- RETURNS boolean
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$vector_lt$function$
-;
-CREATE OR REPLACE FUNCTION public.vector_le(vector, vector)
- RETURNS boolean
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$vector_le$function$
-;
-CREATE OR REPLACE FUNCTION public.vector_eq(vector, vector)
- RETURNS boolean
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$vector_eq$function$
-;
-CREATE OR REPLACE FUNCTION public.vector_ne(vector, vector)
- RETURNS boolean
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$vector_ne$function$
-;
-CREATE OR REPLACE FUNCTION public.vector_gt(vector, vector)
- RETURNS boolean
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$vector_gt$function$
-;
-CREATE OR REPLACE FUNCTION public.vector_cmp(vector, vector)
- RETURNS integer
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$vector_cmp$function$
-;
-CREATE OR REPLACE FUNCTION public.vector_l2_squared_distance(vector, vector)
- RETURNS double precision
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$vector_l2_squared_distance$function$
-;
-CREATE OR REPLACE FUNCTION public.vector_negative_inner_product(vector, vector)
- RETURNS double precision
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$vector_negative_inner_product$function$
-;
-CREATE OR REPLACE FUNCTION public.vector_spherical_distance(vector, vector)
- RETURNS double precision
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$vector_spherical_distance$function$
-;
-CREATE OR REPLACE FUNCTION public.vector_accum(double precision[], vector)
- RETURNS double precision[]
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$vector_accum$function$
-;
-CREATE OR REPLACE FUNCTION public.vector_avg(double precision[])
- RETURNS vector
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$vector_avg$function$
-;
-CREATE OR REPLACE FUNCTION public.vector_combine(double precision[], double precision[])
- RETURNS double precision[]
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$vector_combine$function$
-;
-CREATE OR REPLACE FUNCTION public.vector(vector, integer, boolean)
- RETURNS vector
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$vector$function$
-;
-CREATE OR REPLACE FUNCTION public.array_to_vector(integer[], integer, boolean)
- RETURNS vector
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$array_to_vector$function$
-;
-CREATE OR REPLACE FUNCTION public.array_to_vector(real[], integer, boolean)
- RETURNS vector
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$array_to_vector$function$
-;
-CREATE OR REPLACE FUNCTION public.array_to_vector(double precision[], integer, boolean)
- RETURNS vector
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$array_to_vector$function$
-;
-CREATE OR REPLACE FUNCTION public.array_to_vector(numeric[], integer, boolean)
- RETURNS vector
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$array_to_vector$function$
-;
-CREATE OR REPLACE FUNCTION public.vector_to_float4(vector, integer, boolean)
- RETURNS real[]
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$vector_to_float4$function$
-;
-CREATE OR REPLACE FUNCTION public.ivfflathandler(internal)
- RETURNS index_am_handler
- LANGUAGE c
-AS '$libdir/vector', $function$ivfflathandler$function$
-;
-CREATE OR REPLACE FUNCTION public.hnswhandler(internal)
- RETURNS index_am_handler
- LANGUAGE c
-AS '$libdir/vector', $function$hnswhandler$function$
-;
-CREATE OR REPLACE FUNCTION public.ivfflat_halfvec_support(internal)
- RETURNS internal
- LANGUAGE c
-AS '$libdir/vector', $function$ivfflat_halfvec_support$function$
-;
-CREATE OR REPLACE FUNCTION public.ivfflat_bit_support(internal)
- RETURNS internal
- LANGUAGE c
-AS '$libdir/vector', $function$ivfflat_bit_support$function$
-;
-CREATE OR REPLACE FUNCTION public.hnsw_halfvec_support(internal)
- RETURNS internal
- LANGUAGE c
-AS '$libdir/vector', $function$hnsw_halfvec_support$function$
-;
-CREATE OR REPLACE FUNCTION public.hnsw_bit_support(internal)
- RETURNS internal
- LANGUAGE c
-AS '$libdir/vector', $function$hnsw_bit_support$function$
-;
-CREATE OR REPLACE FUNCTION public.hnsw_sparsevec_support(internal)
- RETURNS internal
- LANGUAGE c
-AS '$libdir/vector', $function$hnsw_sparsevec_support$function$
-;
-CREATE OR REPLACE FUNCTION public.halfvec_in(cstring, oid, integer)
- RETURNS halfvec
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$halfvec_in$function$
-;
-CREATE OR REPLACE FUNCTION public.halfvec_out(halfvec)
- RETURNS cstring
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$halfvec_out$function$
-;
-CREATE OR REPLACE FUNCTION public.halfvec_typmod_in(cstring[])
- RETURNS integer
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$halfvec_typmod_in$function$
-;
-CREATE OR REPLACE FUNCTION public.vector_in(cstring, oid, integer)
- RETURNS vector
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$vector_in$function$
-;
-CREATE OR REPLACE FUNCTION public.vector_out(vector)
- RETURNS cstring
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$vector_out$function$
-;
-CREATE OR REPLACE FUNCTION public.vector_typmod_in(cstring[])
- RETURNS integer
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$vector_typmod_in$function$
-;
-CREATE OR REPLACE FUNCTION public.vector_recv(internal, oid, integer)
- RETURNS vector
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$vector_recv$function$
-;
-CREATE OR REPLACE FUNCTION public.vector_send(vector)
- RETURNS bytea
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$vector_send$function$
-;
-CREATE OR REPLACE FUNCTION public.l2_distance(vector, vector)
- RETURNS double precision
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$l2_distance$function$
-;
-CREATE OR REPLACE FUNCTION public.inner_product(vector, vector)
- RETURNS double precision
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$inner_product$function$
-;
-CREATE OR REPLACE FUNCTION public.cosine_distance(vector, vector)
- RETURNS double precision
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$cosine_distance$function$
-;
-CREATE OR REPLACE FUNCTION public.l1_distance(vector, vector)
- RETURNS double precision
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$l1_distance$function$
-;
-CREATE OR REPLACE FUNCTION public.vector_dims(vector)
- RETURNS integer
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$vector_dims$function$
-;
-CREATE OR REPLACE FUNCTION public.vector_norm(vector)
- RETURNS double precision
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$vector_norm$function$
-;
-CREATE OR REPLACE FUNCTION public.l2_normalize(vector)
- RETURNS vector
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$l2_normalize$function$
-;
-CREATE OR REPLACE FUNCTION public.binary_quantize(vector)
- RETURNS bit
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$binary_quantize$function$
-;
-CREATE OR REPLACE FUNCTION public.subvector(vector, integer, integer)
- RETURNS vector
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$subvector$function$
-;
-CREATE OR REPLACE FUNCTION public.vector_add(vector, vector)
- RETURNS vector
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$vector_add$function$
-;
-CREATE OR REPLACE FUNCTION public.halfvec_negative_inner_product(halfvec, halfvec)
- RETURNS double precision
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$halfvec_negative_inner_product$function$
-;
-CREATE OR REPLACE FUNCTION public.halfvec_spherical_distance(halfvec, halfvec)
- RETURNS double precision
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$halfvec_spherical_distance$function$
-;
-CREATE OR REPLACE FUNCTION public.halfvec_accum(double precision[], halfvec)
- RETURNS double precision[]
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$halfvec_accum$function$
-;
-CREATE OR REPLACE FUNCTION public.halfvec_avg(double precision[])
- RETURNS halfvec
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$halfvec_avg$function$
-;
-CREATE OR REPLACE FUNCTION public.halfvec_combine(double precision[], double precision[])
- RETURNS double precision[]
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$vector_combine$function$
-;
-CREATE OR REPLACE FUNCTION public.halfvec(halfvec, integer, boolean)
- RETURNS halfvec
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$halfvec$function$
-;
-CREATE OR REPLACE FUNCTION public.halfvec_to_vector(halfvec, integer, boolean)
- RETURNS vector
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$halfvec_to_vector$function$
-;
-CREATE OR REPLACE FUNCTION public.vector_to_halfvec(vector, integer, boolean)
- RETURNS halfvec
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$vector_to_halfvec$function$
-;
-CREATE OR REPLACE FUNCTION public.array_to_halfvec(integer[], integer, boolean)
- RETURNS halfvec
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$array_to_halfvec$function$
-;
-CREATE OR REPLACE FUNCTION public.array_to_halfvec(real[], integer, boolean)
- RETURNS halfvec
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$array_to_halfvec$function$
-;
-CREATE OR REPLACE FUNCTION public.array_to_halfvec(double precision[], integer, boolean)
- RETURNS halfvec
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$array_to_halfvec$function$
-;
-CREATE OR REPLACE FUNCTION public.array_to_halfvec(numeric[], integer, boolean)
- RETURNS halfvec
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$array_to_halfvec$function$
-;
-CREATE OR REPLACE FUNCTION public.halfvec_to_float4(halfvec, integer, boolean)
- RETURNS real[]
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$halfvec_to_float4$function$
-;
-CREATE OR REPLACE FUNCTION public.hamming_distance(bit, bit)
- RETURNS double precision
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$hamming_distance$function$
-;
-CREATE OR REPLACE FUNCTION public.jaccard_distance(bit, bit)
- RETURNS double precision
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$jaccard_distance$function$
-;
-CREATE OR REPLACE FUNCTION public.sparsevec_in(cstring, oid, integer)
- RETURNS sparsevec
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$sparsevec_in$function$
-;
-CREATE OR REPLACE FUNCTION public.sparsevec_out(sparsevec)
- RETURNS cstring
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$sparsevec_out$function$
-;
-CREATE OR REPLACE FUNCTION public.sparsevec_typmod_in(cstring[])
- RETURNS integer
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$sparsevec_typmod_in$function$
-;
-CREATE OR REPLACE FUNCTION public.sparsevec_recv(internal, oid, integer)
- RETURNS sparsevec
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$sparsevec_recv$function$
-;
-CREATE OR REPLACE FUNCTION public.sparsevec_send(sparsevec)
- RETURNS bytea
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$sparsevec_send$function$
-;
-CREATE OR REPLACE FUNCTION public.l2_distance(sparsevec, sparsevec)
- RETURNS double precision
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$sparsevec_l2_distance$function$
-;
-CREATE OR REPLACE FUNCTION public.inner_product(sparsevec, sparsevec)
- RETURNS double precision
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$sparsevec_inner_product$function$
-;
-CREATE OR REPLACE FUNCTION public.cosine_distance(sparsevec, sparsevec)
- RETURNS double precision
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$sparsevec_cosine_distance$function$
-;
-CREATE OR REPLACE FUNCTION public.l1_distance(sparsevec, sparsevec)
- RETURNS double precision
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$sparsevec_l1_distance$function$
-;
-CREATE OR REPLACE FUNCTION public.l2_norm(sparsevec)
- RETURNS double precision
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$sparsevec_l2_norm$function$
-;
-CREATE OR REPLACE FUNCTION public.l2_normalize(sparsevec)
- RETURNS sparsevec
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$sparsevec_l2_normalize$function$
-;
-CREATE OR REPLACE FUNCTION public.sparsevec_lt(sparsevec, sparsevec)
- RETURNS boolean
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$sparsevec_lt$function$
-;
-CREATE OR REPLACE FUNCTION public.sparsevec_le(sparsevec, sparsevec)
- RETURNS boolean
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$sparsevec_le$function$
-;
-CREATE OR REPLACE FUNCTION public.sparsevec_eq(sparsevec, sparsevec)
- RETURNS boolean
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$sparsevec_eq$function$
-;
-CREATE OR REPLACE FUNCTION public.sparsevec_ne(sparsevec, sparsevec)
- RETURNS boolean
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$sparsevec_ne$function$
-;
-CREATE OR REPLACE FUNCTION public.sparsevec_ge(sparsevec, sparsevec)
- RETURNS boolean
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$sparsevec_ge$function$
-;
-CREATE OR REPLACE FUNCTION public.sparsevec_gt(sparsevec, sparsevec)
- RETURNS boolean
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$sparsevec_gt$function$
-;
-CREATE OR REPLACE FUNCTION public.sparsevec_cmp(sparsevec, sparsevec)
- RETURNS integer
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$sparsevec_cmp$function$
-;
-CREATE OR REPLACE FUNCTION public.sparsevec_l2_squared_distance(sparsevec, sparsevec)
- RETURNS double precision
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$sparsevec_l2_squared_distance$function$
-;
-CREATE OR REPLACE FUNCTION public.sparsevec_negative_inner_product(sparsevec, sparsevec)
- RETURNS double precision
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$sparsevec_negative_inner_product$function$
-;
-CREATE OR REPLACE FUNCTION public.sparsevec(sparsevec, integer, boolean)
- RETURNS sparsevec
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$sparsevec$function$
-;
-CREATE OR REPLACE FUNCTION public.vector_to_sparsevec(vector, integer, boolean)
- RETURNS sparsevec
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$vector_to_sparsevec$function$
-;
-CREATE OR REPLACE FUNCTION public.sparsevec_to_vector(sparsevec, integer, boolean)
- RETURNS vector
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$sparsevec_to_vector$function$
-;
-CREATE OR REPLACE FUNCTION public.halfvec_to_sparsevec(halfvec, integer, boolean)
- RETURNS sparsevec
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$halfvec_to_sparsevec$function$
-;
-CREATE OR REPLACE FUNCTION public.sparsevec_to_halfvec(sparsevec, integer, boolean)
- RETURNS halfvec
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$sparsevec_to_halfvec$function$
-;
-CREATE OR REPLACE FUNCTION public.array_to_sparsevec(integer[], integer, boolean)
- RETURNS sparsevec
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$array_to_sparsevec$function$
-;
-CREATE OR REPLACE FUNCTION public.array_to_sparsevec(real[], integer, boolean)
- RETURNS sparsevec
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$array_to_sparsevec$function$
-;
-CREATE OR REPLACE FUNCTION public.array_to_sparsevec(double precision[], integer, boolean)
- RETURNS sparsevec
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$array_to_sparsevec$function$
-;
-CREATE OR REPLACE FUNCTION public.array_to_sparsevec(numeric[], integer, boolean)
- RETURNS sparsevec
- LANGUAGE c
- IMMUTABLE PARALLEL SAFE STRICT
-AS '$libdir/vector', $function$array_to_sparsevec$function$
 ;
 
 -- Views
@@ -17314,30 +15177,3 @@ DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'resource
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'playbook_scenarios' AND policyname = 'scenarios_all_policy') THEN CREATE POLICY "scenarios_all_policy" ON public."playbook_scenarios" USING (true) ; END IF; END $$;
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'playbook_step_executions' AND policyname = 'step_executions_all_policy') THEN CREATE POLICY "step_executions_all_policy" ON public."playbook_step_executions" USING (true) ; END IF; END $$;
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'playbook_response_steps' AND policyname = 'steps_all_policy') THEN CREATE POLICY "steps_all_policy" ON public."playbook_response_steps" USING (true) ; END IF; END $$;
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'morphic_ai_model_config' AND policyname = 'admins_manage_morphic_model_config') THEN CREATE POLICY "admins_manage_morphic_model_config" ON public."morphic_ai_model_config" USING ((current_setting('app.current_user_id'::text, true) IS NOT NULL)) WITH CHECK ((current_setting('app.current_user_id'::text, true) IS NOT NULL)) ; END IF; END $$;
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'morphic_ai_models' AND policyname = 'admins_manage_morphic_models') THEN CREATE POLICY "admins_manage_morphic_models" ON public."morphic_ai_models" USING ((current_setting('app.current_user_id'::text, true) IS NOT NULL)) WITH CHECK ((current_setting('app.current_user_id'::text, true) IS NOT NULL)) ; END IF; END $$;
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'morphic_ai_providers' AND policyname = 'admins_manage_morphic_providers') THEN CREATE POLICY "admins_manage_morphic_providers" ON public."morphic_ai_providers" USING ((current_setting('app.current_user_id'::text, true) IS NOT NULL)) WITH CHECK ((current_setting('app.current_user_id'::text, true) IS NOT NULL)) ; END IF; END $$;
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'morphic_chats' AND policyname = 'users_manage_own_morphic_chats') THEN CREATE POLICY "users_manage_own_morphic_chats" ON public."morphic_chats" USING (((user_id)::text = current_setting('app.current_user_id'::text, true))) WITH CHECK (((user_id)::text = current_setting('app.current_user_id'::text, true))) ; END IF; END $$;
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'morphic_chats' AND policyname = 'public_morphic_chats_readable') THEN CREATE POLICY "public_morphic_chats_readable" ON public."morphic_chats" FOR SELECT USING (((visibility)::text = 'public'::text)) ; END IF; END $$;
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'morphic_feedback' AND policyname = 'anyone_can_insert_morphic_feedback') THEN CREATE POLICY "anyone_can_insert_morphic_feedback" ON public."morphic_feedback" FOR INSERT WITH CHECK (true) ; END IF; END $$;
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'morphic_messages' AND policyname = 'users_manage_morphic_chat_messages') THEN CREATE POLICY "users_manage_morphic_chat_messages" ON public."morphic_messages" USING ((EXISTS ( SELECT 1
-   FROM morphic_chats
-  WHERE (((morphic_chats.id)::text = (morphic_messages.chat_id)::text) AND ((morphic_chats.user_id)::text = current_setting('app.current_user_id'::text, true)))))) WITH CHECK ((EXISTS ( SELECT 1
-   FROM morphic_chats
-  WHERE (((morphic_chats.id)::text = (morphic_messages.chat_id)::text) AND ((morphic_chats.user_id)::text = current_setting('app.current_user_id'::text, true)))))) ; END IF; END $$;
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'morphic_messages' AND policyname = 'public_morphic_chat_messages_readable') THEN CREATE POLICY "public_morphic_chat_messages_readable" ON public."morphic_messages" FOR SELECT USING ((EXISTS ( SELECT 1
-   FROM morphic_chats
-  WHERE (((morphic_chats.id)::text = (morphic_messages.chat_id)::text) AND ((morphic_chats.visibility)::text = 'public'::text))))) ; END IF; END $$;
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'morphic_parts' AND policyname = 'users_manage_morphic_message_parts') THEN CREATE POLICY "users_manage_morphic_message_parts" ON public."morphic_parts" USING ((EXISTS ( SELECT 1
-   FROM (morphic_messages
-     JOIN morphic_chats ON (((morphic_chats.id)::text = (morphic_messages.chat_id)::text)))
-  WHERE (((morphic_messages.id)::text = (morphic_parts.message_id)::text) AND ((morphic_chats.user_id)::text = current_setting('app.current_user_id'::text, true)))))) WITH CHECK ((EXISTS ( SELECT 1
-   FROM (morphic_messages
-     JOIN morphic_chats ON (((morphic_chats.id)::text = (morphic_messages.chat_id)::text)))
-  WHERE (((morphic_messages.id)::text = (morphic_parts.message_id)::text) AND ((morphic_chats.user_id)::text = current_setting('app.current_user_id'::text, true)))))) ; END IF; END $$;
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'morphic_parts' AND policyname = 'public_morphic_chat_parts_readable') THEN CREATE POLICY "public_morphic_chat_parts_readable" ON public."morphic_parts" FOR SELECT USING ((EXISTS ( SELECT 1
-   FROM (morphic_messages
-     JOIN morphic_chats ON (((morphic_chats.id)::text = (morphic_messages.chat_id)::text)))
-  WHERE (((morphic_messages.id)::text = (morphic_parts.message_id)::text) AND ((morphic_chats.visibility)::text = 'public'::text))))) ; END IF; END $$;
-
--- COMMIT;
