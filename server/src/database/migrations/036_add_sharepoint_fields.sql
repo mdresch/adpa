@@ -13,8 +13,14 @@ CREATE INDEX IF NOT EXISTS idx_documents_sharepoint_drive_id ON documents(sharep
 CREATE INDEX IF NOT EXISTS idx_documents_sharepoint_site_id ON documents(sharepoint_site_id);
 
 -- Add unique constraint for SharePoint file ID to prevent duplicates
-ALTER TABLE documents 
-ADD CONSTRAINT unique_sharepoint_file_id UNIQUE (sharepoint_file_id);
+-- (production already has this as a bare unique index of the same name, not
+-- a formal table constraint -- to_regclass catches that case too)
+DO $$
+BEGIN
+  IF to_regclass('public.unique_sharepoint_file_id') IS NULL THEN
+    ALTER TABLE documents ADD CONSTRAINT unique_sharepoint_file_id UNIQUE (sharepoint_file_id);
+  END IF;
+END $$;
 
 -- Update integrations table to support SharePoint configuration
 ALTER TABLE integrations 
