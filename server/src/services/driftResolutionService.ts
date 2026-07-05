@@ -682,8 +682,8 @@ OUTPUT: Revised document (Markdown only, no explanations)`
 
       // 3. Create audit log
       await client.query(
-        `INSERT INTO audit_logs (
-          user_id, action, resource_type, resource_id, new_values
+        `INSERT INTO audit_log (
+          actor_user_id, action, table_name, row_id, new_values
         ) VALUES ($1, 'drift_resolved', 'document', $2, $3)`,
         [
           userId,

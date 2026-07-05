@@ -32,28 +32,28 @@ async function checkAIAnalyticsData() {
       console.log('   → Add API keys in server/.env to enable AI usage')
     }
     
-    // 2. Check audit_logs for AI usage
-    console.log('\n2️⃣  Checking Audit Logs (AI Generation)...')
+    // 2. Check audit_log for AI usage
+    console.log('\n2️⃣  Checking Audit Log (AI Generation)...')
     const auditLogs = await pool.query(`
       SELECT COUNT(*) as count
-      FROM audit_logs
+      FROM audit_log
       WHERE action = 'ai_generate'
     `)
-    
+
     console.log(`   AI generation audit logs: ${auditLogs.rows[0].count}`)
-    
+
     if (auditLogs.rows[0].count === 0) {
       console.log('   ⚠️  No AI generation requests logged yet')
       console.log('   → Generate a document with AI to create usage data')
     } else {
       // Show breakdown by provider
       const breakdown = await pool.query(`
-        SELECT 
+        SELECT
           ap.name as provider,
           COUNT(*) as requests,
-          MAX(al.created_at) as last_used
-        FROM audit_logs al
-        JOIN ai_providers ap ON al.resource_id::uuid = ap.id
+          MAX(al.occurred_at) as last_used
+        FROM audit_log al
+        JOIN ai_providers ap ON al.row_id::uuid = ap.id
         WHERE al.action = 'ai_generate'
         GROUP BY ap.name
         ORDER BY requests DESC
@@ -119,7 +119,7 @@ async function checkAIAnalyticsData() {
     
     if (!hasTable) {
       console.log('\n🟡 Issue: ai_usage_logs table not found')
-      console.log('   Fix: Run migration or system uses audit_logs instead')
+      console.log('   Fix: Run migration or system uses audit_log instead')
     }
     
     if (hasKeys && hasUsage) {

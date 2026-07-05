@@ -1284,8 +1284,8 @@ router.post("/generate-new-version",
 
       // Log activity
       await pool.query(
-        `INSERT INTO audit_logs 
-         (id, user_id, action, resource_type, resource_id, new_values)
+        `INSERT INTO audit_log
+         (id, actor_user_id, action, table_name, row_id, new_values)
          VALUES ($1, $2, $3, $4, $5, $6)`,
         [
           uuidv4(),

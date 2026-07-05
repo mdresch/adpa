@@ -30,11 +30,11 @@ export class AnalyticsRepository {
     `, [userId]);
 
     const aiStats = await db.query(`
-      SELECT 
+      SELECT
         COUNT(*) as total_generations,
-        COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '30 days') as generations_last_30d
-      FROM audit_logs
-      WHERE user_id = $1 AND action = 'ai_generate'
+        COUNT(*) FILTER (WHERE occurred_at >= NOW() - INTERVAL '30 days') as generations_last_30d
+      FROM audit_log
+      WHERE actor_user_id = $1 AND action = 'ai_generate'
     `, [userId]);
 
     const recentActivity = await db.query(`

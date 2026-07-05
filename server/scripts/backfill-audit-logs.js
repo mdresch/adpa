@@ -1,7 +1,7 @@
 /**
  * Backfill Audit Logs for AI Analytics
  * 
- * Creates audit_logs entries for historical AI generation jobs
+ * Creates audit_log entries for historical AI generation jobs
  * so AI Analytics dashboard shows historical data.
  * 
  * Usage: node scripts/backfill-audit-logs.js
@@ -35,7 +35,7 @@ async function backfillAuditLogs() {
         AND j.status = 'completed'
         AND j.completed_at IS NOT NULL
         AND NOT EXISTS (
-          SELECT 1 FROM audit_logs al 
+          SELECT 1 FROM audit_log al
           WHERE al.new_values->>'job_id' = j.id::text
             AND al.action = 'ai_generate'
         )
@@ -88,7 +88,7 @@ async function backfillAuditLogs() {
 
         // Create audit log
         await db.query(
-          `INSERT INTO audit_logs (user_id, action, resource_type, resource_id, new_values, created_at)
+          `INSERT INTO audit_log (actor_user_id, action, table_name, row_id, new_values, occurred_at)
            VALUES ($1, $2, $3, $4, $5, $6)`,
           [
             userId || null,
@@ -137,12 +137,12 @@ async function backfillAuditLogs() {
     // Step 5: Show current analytics counts
     console.log('\n📈 Current AI Analytics Stats:');
     const statsResult = await db.query(`
-      SELECT 
-        COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days') as last_7d,
-        COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '30 days') as last_30d,
-        COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '90 days') as last_90d,
+      SELECT
+        COUNT(*) FILTER (WHERE occurred_at >= NOW() - INTERVAL '7 days') as last_7d,
+        COUNT(*) FILTER (WHERE occurred_at >= NOW() - INTERVAL '30 days') as last_30d,
+        COUNT(*) FILTER (WHERE occurred_at >= NOW() - INTERVAL '90 days') as last_90d,
         COUNT(*) as all_time
-      FROM audit_logs
+      FROM audit_log
       WHERE action = 'ai_generate'
     `);
 

@@ -129,7 +129,7 @@ export class IPLegalReviewWorkflow {
 
     // Audit log
     await pool.query(
-      `INSERT INTO audit_logs (user_id, action, resource_type, resource_id, new_values)
+      `INSERT INTO audit_log (actor_user_id, action, table_name, row_id, new_values)
        VALUES ($1, 'ip_legal_review_initiated', 'ip_claim', $2, $3)`,
       [
         triggeredBy,
@@ -198,7 +198,7 @@ export class IPLegalReviewWorkflow {
 
     // REQ-IP-006: Audit every state transition
     await pool.query(
-      `INSERT INTO audit_logs (user_id, action, resource_type, resource_id, new_values)
+      `INSERT INTO audit_log (actor_user_id, action, table_name, row_id, new_values)
        VALUES ($1, 'ip_legal_decision', 'ip_claim', $2, $3)`,
       [
         decidedBy,

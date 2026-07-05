@@ -8,7 +8,7 @@
  * Integration points:
  *   - positiveDriftChangeRequestService  (trigger at driftCategory === 'innovation')
  *   - entityAuditService                 (system origin verification)
- *   - pool / audit_logs                  (immutable evidence chain)
+ *   - pool / audit_log                   (hash-chained, tamper-evident audit trail)
  */
 
 import { pool } from '../../database/connection'
@@ -146,7 +146,7 @@ export class IPNoveltyAssessmentService {
 
     // 7. Audit log (REQ-IP-006: every state transition logged)
     await pool.query(
-      `INSERT INTO audit_logs (user_id, action, resource_type, resource_id, new_values)
+      `INSERT INTO audit_log (actor_user_id, action, table_name, row_id, new_values)
        VALUES ($1, 'ip_novelty_assessed', 'ip_claim', $2, $3)`,
       [
         trigger.triggeredBy,

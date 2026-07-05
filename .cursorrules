@@ -136,7 +136,7 @@ document_templates    -- Template definitions with variables
 ai_providers          -- AI service configurations (OpenAI, Google AI, etc.)
 ai_provider_usage     -- Usage tracking and analytics
 jobs                  -- Background job queue tracking
-audit_logs           -- Action audit trail
+audit_log            -- Action audit trail (hash-chained, tamper-evident)
 security_events      -- Security monitoring
 integrations         -- Third-party integrations (Confluence, SharePoint, GitHub)
 analytics_events     -- Custom event tracking
@@ -779,7 +779,7 @@ export function useRealtime(documentId: string) {
 - **Authorization**: Role-Based Access Control (RBAC)
   - Roles: admin, manager, user, viewer
   - Granular permissions per resource
-- **Audit Logging**: All actions logged to `audit_logs` table
+- **Audit Logging**: All actions logged to `audit_log` table
 - **Security Events**: Tracked in `security_events` table
 - **Input Validation**: Joi schemas for all API endpoints
 - **Rate Limiting**: Express rate limiter on sensitive endpoints
@@ -1114,11 +1114,11 @@ WHERE created_at > NOW() - INTERVAL '7 days'
 GROUP BY provider_name;
 
 -- Get user's recent activity
-SELECT al.action, al.resource_type, al.created_at, u.email
-FROM audit_logs al
-JOIN users u ON al.user_id = u.id
+SELECT al.action, al.table_name, al.occurred_at, u.email
+FROM audit_log al
+JOIN users u ON al.actor_user_id = u.id
 WHERE u.id = 'user-uuid'
-ORDER BY al.created_at DESC
+ORDER BY al.occurred_at DESC
 LIMIT 20;
 ```
 

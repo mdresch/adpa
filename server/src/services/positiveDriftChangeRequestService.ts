@@ -348,10 +348,9 @@ export class PositiveDriftChangeRequestService {
       )
 
       // Create audit log
-      // Note: audit_logs table uses 'new_values' column, not 'details'
       await client.query(
-        `INSERT INTO audit_logs (
-          user_id, action, resource_type, resource_id, new_values
+        `INSERT INTO audit_log (
+          actor_user_id, action, table_name, row_id, new_values
         ) VALUES ($1, 'positive_drift_cr_created', 'change_request', $2, $3)`,
         [
           userId,

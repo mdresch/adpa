@@ -112,7 +112,7 @@ export class IPRegistrationPipeline {
 
     // REQ-IP-006: Audit every state transition
     await pool.query(
-      `INSERT INTO audit_logs (user_id, action, resource_type, resource_id, new_values)
+      `INSERT INTO audit_log (actor_user_id, action, table_name, row_id, new_values)
        VALUES ($1, 'ip_registration_initiated', 'ip_claim', $2, $3)`,
       [
         approvedBy,
@@ -184,7 +184,7 @@ export class IPRegistrationPipeline {
 
     // REQ-IP-006: Audit
     await pool.query(
-      `INSERT INTO audit_logs (user_id, action, resource_type, resource_id, new_values)
+      `INSERT INTO audit_log (actor_user_id, action, table_name, row_id, new_values)
        VALUES ($1, 'ip_filing_status_updated', 'ip_claim', $2, $3)`,
       [
         updatedBy,
@@ -310,7 +310,7 @@ _Registered by ADPA IP Registration Pipeline (RPAS-CM-ENV-IP-001)_
     )
 
     await pool.query(
-      `INSERT INTO audit_logs (user_id, action, resource_type, resource_id, new_values)
+      `INSERT INTO audit_log (actor_user_id, action, table_name, row_id, new_values)
        VALUES ($1, 'ip_trade_secret_registered', 'ip_claim', $2, $3)`,
       [approvedBy, ipClaimId, JSON.stringify({ filingDocumentId, targetAgency: 'INTERNAL' })]
     )

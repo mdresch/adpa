@@ -212,12 +212,12 @@ describe('TASK-732: Drift Record Marked as Resolved', () => {
 
       // Verify audit log was created
       const auditResult = await pool.query(
-        `SELECT * FROM audit_logs 
-         WHERE user_id = $1 
-         AND action = 'drift_resolved' 
-         AND resource_type = 'document' 
-         AND resource_id = $2
-         ORDER BY created_at DESC
+        `SELECT * FROM audit_log
+         WHERE actor_user_id = $1
+         AND action = 'drift_resolved'
+         AND table_name = 'document'
+         AND row_id = $2
+         ORDER BY occurred_at DESC
          LIMIT 1`,
         [testUserId, testDocumentId]
       )

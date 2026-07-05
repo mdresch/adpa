@@ -51,7 +51,19 @@ async function run() {
     outLines.push('SET row_security = off;')
     outLines.push('\nBEGIN;')
 
-    // 1. Extensions (Soft-fail and Shim)
+    // 1. Extensions (create before the Supabase Compatibility Shim below, so
+    // a real extension like pgvector's "vector" wins instead of being blocked
+    // by a name collision with the shim's placeholder type)
+    const extensionsRes = await pool.query("SELECT extname FROM pg_extension WHERE extname NOT IN ('plpgsql')")
+    if (extensionsRes.rows.length > 0) {
+      outLines.push('\n-- Extensions')
+      for (const ext of extensionsRes.rows) {
+        outLines.push(`DO $$ BEGIN CREATE EXTENSION IF NOT EXISTS "${ext.extname}"; EXCEPTION WHEN OTHERS THEN RAISE WARNING 'Extension ${ext.extname} not available, using shim if needed'; END $$;`)
+      }
+    }
+
+    // Supabase Compatibility Shim (fallback only — each IF NOT EXISTS check
+    // below is a no-op once the matching real extension above succeeded)
     outLines.push('\n-- Supabase Compatibility Shim')
     outLines.push('DO $$ ')
     outLines.push('BEGIN')
@@ -73,14 +85,6 @@ async function run() {
     outLines.push('END $$;')
     outLines.push('\nCREATE OR REPLACE FUNCTION public.http_header(field text, value text) RETURNS public.http_header AS $$ BEGIN RETURN (field, value)::public.http_header; END; $$ LANGUAGE plpgsql;')
     outLines.push('CREATE OR REPLACE FUNCTION public.http(req public.http_request) RETURNS public.http_response AS $$ BEGIN RETURN (500, null, null, null)::public.http_response; END; $$ LANGUAGE plpgsql;')
-
-    const extensionsRes = await pool.query("SELECT extname FROM pg_extension WHERE extname NOT IN ('plpgsql')")
-    if (extensionsRes.rows.length > 0) {
-      outLines.push('\n-- Extensions')
-      for (const ext of extensionsRes.rows) {
-        outLines.push(`DO $$ BEGIN CREATE EXTENSION IF NOT EXISTS "${ext.extname}"; EXCEPTION WHEN OTHERS THEN RAISE WARNING 'Extension ${ext.extname} not available, using shim if needed'; END $$;`)
-      }
-    }
 
     // 2. Types (Enums, etc.)
     const typesRes = await pool.query(`

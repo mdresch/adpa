@@ -19,10 +19,10 @@ async function main() {
     `);
     console.log('Recent API Logs:', apiLogs.rows);
 
-    console.log('Querying audit_logs...');
+    console.log('Querying audit_log...');
     const auditLogs = await pool.query(`
-      SELECT * FROM audit_logs 
-      ORDER BY created_at DESC 
+      SELECT * FROM audit_log
+      ORDER BY occurred_at DESC
       LIMIT 10
     `);
     console.log('Recent Audit Logs:', auditLogs.rows);

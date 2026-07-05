@@ -53,7 +53,7 @@ describe('OpenAI Integration Tests', () => {
 
   afterAll(async () => {
     // Clean up test data
-    await pool.query('DELETE FROM audit_logs WHERE user_id = $1', [testUserId])
+    await pool.query('DELETE FROM audit_log WHERE actor_user_id = $1', [testUserId])
     await pool.query('DELETE FROM ai_providers WHERE id = $1', [testProviderId])
     await pool.query('DELETE FROM users WHERE id = $1', [testUserId])
     await pool.end()
