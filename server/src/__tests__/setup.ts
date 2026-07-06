@@ -115,9 +115,9 @@ beforeAll(async () => {
     return
   }
 
-  const connectionString = 
-    process.env.DATABASE_URL || 
-    `postgresql://${process.env.DB_USER || 'test_user'}:${process.env.DB_PASSWORD || 'test_pass'}@${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || '5432'}/${process.env.DB_NAME || 'adpa_test_db'}`
+  const connectionString =
+    process.env.DATABASE_URL ||
+    `postgresql://${process.env.DB_USER || 'test_user'}:${process.env.DB_PASSWORD || 'test_pass'}@${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || '5433'}/${process.env.DB_NAME || 'adpa_test_db'}`
   
   console.log(`[TEST-SETUP] Connecting to test database: ${process.env.DB_NAME || 'adpa_test_db'}`)
   
