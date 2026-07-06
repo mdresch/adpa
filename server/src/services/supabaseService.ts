@@ -1,8 +1,15 @@
 import { logger } from '../utils/logger';
 
 /**
- * Supabase Service - Wrapper for Supabase MCP operations
- * Provides access to Supabase projects, edge functions, migrations, and database operations
+ * Azure Database Service - Wrapper for database operations
+ * 
+ * Originally a Supabase MCP wrapper, this service was repurposed during the
+ * Supabase → Azure Database for PostgreSQL Flexible Server migration (July 2026).
+ * 
+ * Now provides direct access to Azure PostgreSQL database statistics and entity listings.
+ * Supabase-specific MCP operations are no longer functional.
+ * 
+ * @see docs/04-deployment/SUPABASE_TO_AZURE_MIGRATION_COMPLETE.md for migration details
  */
 export class SupabaseService {
     private mcpAvailable: boolean = false;

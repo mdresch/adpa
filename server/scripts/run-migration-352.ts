@@ -26,8 +26,8 @@ async function runMigration(): Promise<void> {
   
   const pool = new Pool({
     connectionString: DATABASE_URL,
-    ssl: DATABASE_URL.includes('sslmode=require') || DATABASE_URL.includes('supabase') 
-      ? { rejectUnauthorized: false } 
+    ssl: DATABASE_URL.includes('sslmode=require') || DATABASE_URL.includes('supabase') || DATABASE_URL.includes('azure')
+      ? { rejectUnauthorized: false }
       : undefined
   })
 
