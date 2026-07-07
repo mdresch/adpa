@@ -2,10 +2,42 @@ import type { Pool } from 'pg'
 import { logger } from '../utils/logger'
 import { safeQuery, safeUpdate } from './jobs/dbGuards'
 import { isNeverRequeueJob } from './jobs/protectedQueues'
+import { notificationService } from './notificationService'
 const REQUEUE_ENABLED = (process.env.STUCK_JOB_REQUEUE || 'false').toLowerCase() === 'true'
 const MAX_REQUEUE = Number(process.env.STUCK_JOB_MAX_REQUEUE || 3)
 const ALERT_WEBHOOK = process.env.STUCK_JOB_ALERT_WEBHOOK || ''
 import type { Server as SocketIOServer } from 'socket.io'
+
+/**
+ * Detects stuck jobs whose underlying cause can never resolve on its own, so the
+ * monitor can route them straight to 'failed' instead of parking them as 'stuck'
+ * (silently unresolved) or, for non-protected queues, requeuing them into a loop
+ * that will fail identically every time.
+ *
+ * Currently only recognizes one such precondition — an AI generation job whose
+ * `provider` isn't configured/active in this environment (the exact class of error
+ * behind the 2026-07 duplicate-document incident: see
+ * docs/07-architecture/DOCUMENT_GENERATION_PIPELINE_REVIEW_CORRECTED.md §2.3).
+ * Falls through to `null` (treated as transient) for anything it can't classify.
+ */
+async function classifyPermanentFailure(pool: Pool, jobData: any): Promise<string | null> {
+  const provider = jobData?.provider
+  if (typeof provider !== 'string' || !provider) return null
+
+  try {
+    const res = await safeQuery(
+      pool,
+      `SELECT 1 FROM ai_providers WHERE (provider_type = $1 OR LOWER(name) = LOWER($1)) AND is_active = true LIMIT 1`,
+      [provider]
+    )
+    if (!res || !res.rows || res.rows.length === 0) {
+      return `AI provider "${provider}" is not configured or active in this environment — retrying or requeuing will fail identically every time.`
+    }
+  } catch (err) {
+    logger.warn('[STUCK-JOB-MONITOR] Provider-classification lookup failed (non-fatal, treating as transient)', err)
+  }
+  return null
+}
 
 export class StuckJobMonitor {
   private pool: Pool | null
@@ -43,7 +75,7 @@ export class StuckJobMonitor {
       return
     }
 
-    const sql = `SELECT id, status, processing_started_at, started_at, worker_id, queue_name, data
+    const sql = `SELECT id, status, type, processing_started_at, started_at, worker_id, queue_name, data
                  FROM jobs
                  WHERE status = 'processing'
                    AND processing_started_at IS NOT NULL
@@ -123,6 +155,24 @@ export class StuckJobMonitor {
           }
         }
 
+        // Classify whether this job is stuck for a reason that can never resolve on
+        // its own (e.g. it targets an AI provider that isn't configured/active here).
+        // A permanent failure must go straight to 'failed', never back to 'pending'
+        // (requeue) or left parked as 'stuck' pending a retry that would fail identically.
+        const permanentFailureReason = await classifyPermanentFailure(this.pool, row.data)
+        if (permanentFailureReason) {
+          await safeQuery(
+            this.pool,
+            `UPDATE jobs SET status = 'failed', error_message = $1, completed_at = CURRENT_TIMESTAMP WHERE id = $2`,
+            [permanentFailureReason, jobId]
+          )
+          logger.error('[STUCK-JOB-MONITOR] Permanent failure detected — marking failed instead of parking/requeueing', {
+            jobId,
+            queue: row.queue_name,
+            reason: permanentFailureReason,
+          })
+        }
+
         // ─── REQUEUE POLICY ──────────────────────────────────────────────────
         // Generation jobs (ai-processing, document-processing, document-regeneration)
         // and GKG sync jobs (gkg-sync) must NEVER be auto-requeued.
@@ -139,9 +189,21 @@ export class StuckJobMonitor {
         // sync with the orphan-recovery path in queueClient.ts (initializeQueues) — the
         // two used to diverge, which is how a near-identical runaway loop happened twice.
         const isProtectedJob = isNeverRequeueJob(row.queue_name, row.type)
-        const shouldRequeue = REQUEUE_ENABLED && !isProtectedJob && stuckCount <= MAX_REQUEUE
+        const shouldRequeue = !permanentFailureReason && REQUEUE_ENABLED && !isProtectedJob && stuckCount <= MAX_REQUEUE
 
-        if (isProtectedJob) {
+        // Alert admins any time a job is found stuck, regardless of whether it's
+        // eligible for auto-requeue — a job that keeps getting requeued and
+        // re-stuck is exactly as worth surfacing as one that's permanently parked.
+        void notificationService.sendStuckJobAlert({
+          jobId,
+          queueName: row.queue_name,
+          jobType: row.type,
+          stuckCount,
+          parked: !shouldRequeue && !permanentFailureReason,
+          permanentFailureReason,
+        }).catch(err => logger.warn('[STUCK-JOB-MONITOR] Failed to send stuck-job alert', err))
+
+        if (isProtectedJob && !permanentFailureReason) {
           logger.warn('[STUCK-JOB-MONITOR] Job on protected queue — will NOT auto-requeue. User must retry manually.', {
             jobId,
             queue: row.queue_name,

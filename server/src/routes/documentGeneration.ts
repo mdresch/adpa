@@ -14,6 +14,13 @@ import { findExistingTemplateDocument, getAIProviderQuotaDetails } from "../util
 
 const router = express.Router()
 
+// DRACO Board escalation: only run the 3-judge AI review board when the Tier-1
+// policy audit didn't already clear the document, instead of on every
+// draco_enabled generation regardless of outcome. Matches the existing
+// PENDING_HUMAN_APPROVAL cutoff in documentGenerationService.ts so "needs human
+// review" and "needs DRACO review" stay in sync by default.
+const DRACO_ESCALATION_SCORE_THRESHOLD = Number(process.env.DRACO_ESCALATION_SCORE_THRESHOLD || 90)
+
 // Validation schema for template conflict check
 const checkTemplateSchema = Joi.object({
   projectId: Joi.string().uuid().required(),
@@ -715,6 +722,18 @@ router.post("/generate",
 
               if (!dracoEnabled) {
                 log.info('🎯 [DRACO] Skipping DRACO review — not enabled for template', { templateId })
+                return
+              }
+
+              // Escalate to the 3-judge Review Board only when the Tier-1 policy
+              // audit didn't already clear the document.
+              const auditScore = typeof result.compliance_score === 'number' ? result.compliance_score : null
+              if (auditScore !== null && auditScore >= DRACO_ESCALATION_SCORE_THRESHOLD) {
+                log.info('🎯 [DRACO] Skipping DRACO review — audit score cleared the escalation threshold', {
+                  templateId,
+                  auditScore,
+                  threshold: DRACO_ESCALATION_SCORE_THRESHOLD,
+                })
                 return
               }
 

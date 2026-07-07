@@ -381,6 +381,18 @@ export async function initializeQueues(): Promise<void> {
                 [row.id]
               )
               logger.warn(`[QUEUE RECOVERY] Job ${row.id} on protected queue '${row.queue_name}' — parked as 'stuck', NOT auto-requeued.`)
+              try {
+                const { notificationService } = await import("../notificationService")
+                void notificationService.sendStuckJobAlert({
+                  jobId: row.id,
+                  queueName: row.queue_name,
+                  jobType: row.type,
+                  stuckCount: 1,
+                  parked: true,
+                }).catch(alertErr => logger.warn('[QUEUE RECOVERY] Failed to send stuck-job alert', alertErr))
+              } catch (alertImportErr) {
+                logger.warn('[QUEUE RECOVERY] Failed to load notificationService for stuck-job alert', alertImportErr)
+              }
               continue
             }
 

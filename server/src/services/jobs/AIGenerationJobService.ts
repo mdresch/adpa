@@ -95,6 +95,30 @@ export class AIGenerationJobService {
     // Ensure we have a valid jobId
     const actualJobId = jobId || job.id.toString()
 
+    // Idempotency guard: check authoritative DB state (a document already tagged
+    // with this job id) rather than trusting jobData.documentId from the delivered
+    // message payload. A message redelivered from before the docId-reuse fix (or
+    // any other at-least-once broker redelivery) carries the *original* payload
+    // with no documentId — trusting it would mint another duplicate document. This
+    // check catches that case regardless of what the payload says.
+    try {
+      const existing = await db.query(
+        `SELECT id FROM documents WHERE generation_metadata->>'job_id' = $1 LIMIT 1`,
+        [actualJobId]
+      )
+      if (existing.rows.length > 0) {
+        const existingDocumentId = existing.rows[0].id
+        log.warn(`[AIGenerationJobService] Job ${actualJobId} already produced document ${existingDocumentId} — skipping reprocessing`, { jobId: actualJobId, existingDocumentId })
+        await updateJobStatus(actualJobId, "completed", 100, workerId, "ai-processing")
+        return { ai: null, documentId: existingDocumentId, skipped: true, reason: 'already produced a document for this job id' }
+      }
+    } catch (idempotencyCheckErr) {
+      log.warn('[AIGenerationJobService] Idempotency check failed (non-fatal, proceeding with generation)', {
+        jobId: actualJobId,
+        error: idempotencyCheckErr instanceof Error ? idempotencyCheckErr.message : String(idempotencyCheckErr),
+      })
+    }
+
     try {
       // Update job status to processing and assign worker
       await updateJobStatus(actualJobId, "processing", 10, workerId, "ai-processing")
@@ -715,6 +739,15 @@ export class AIGenerationJobService {
 
     } catch (docErr: any) {
       log.error(`Failed to create document for job ${jobId}:`, docErr)
+      if (!createdDocumentId) {
+        // The document itself was never persisted (the INSERT above threw, or a
+        // step before it did) — this is a genuine generation failure, not a
+        // secondary bookkeeping hiccup like a template-usage-tracking error after
+        // the document already exists. Rethrow so the caller's catch marks the
+        // job 'failed' instead of silently reporting 'completed' with no document
+        // to show for it (REQ-005).
+        throw docErr
+      }
     }
 
     return createdDocumentId

@@ -283,6 +283,74 @@ class NotificationService {
   }
 
   /**
+   * Send an admin alert when a document-generation job is found stuck in
+   * `processing` past the StuckJobMonitor threshold. Complements the
+   * STUCK_JOB_ALERT_WEBHOOK mechanism (which requires external webhook infra)
+   * with an in-repo email path that works out of the box wherever SMTP is
+   * already configured.
+   */
+  async sendStuckJobAlert(alert: { jobId: string; queueName: string | null; jobType?: string | null; stuckCount: number; parked: boolean; permanentFailureReason?: string | null }) {
+    if (!this.enabled) {
+      logger.debug('[NOTIFICATION] Email disabled, skipping stuck-job alert')
+      return
+    }
+
+    try {
+      const admins = await this.getAdminUsers()
+
+      if (admins.length === 0) {
+        logger.warn('[NOTIFICATION] No admin users for stuck-job alert')
+        return
+      }
+
+      const statusNote = alert.permanentFailureReason
+        ? `Marked 'failed' — permanent failure detected: ${alert.permanentFailureReason}`
+        : alert.parked
+        ? 'Parked as \'stuck\' — this queue is never auto-requeued. Retry manually from the Job Monitor if the work is still needed.'
+        : `Requeue attempt ${alert.stuckCount}.`
+
+      const headerColor = alert.permanentFailureReason ? '#991b1b' : '#dc2626'
+      const headerText = alert.permanentFailureReason ? 'Document generation job permanently failed' : 'Document generation job stuck'
+
+      const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body style="font-family: Arial, sans-serif; color: #333;">
+  <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+    <div style="background: ${headerColor}; color: white; padding: 20px; border-radius: 8px 8px 0 0;">
+      <h2 style="margin: 0;">${headerText}</h2>
+    </div>
+    <div style="background: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
+      <p><strong>Job ID:</strong> ${alert.jobId}</p>
+      <p><strong>Queue:</strong> ${alert.queueName || 'unknown'}</p>
+      <p><strong>Type:</strong> ${alert.jobType || 'unknown'}</p>
+      <p><strong>Stuck count:</strong> ${alert.stuckCount}</p>
+      <p>${statusNote}</p>
+    </div>
+  </div>
+</body>
+</html>`
+
+      await this.sendEmail({
+        to: admins.map(a => a.email).join(', '),
+        subject: `${alert.permanentFailureReason ? '🛑' : '⚠️'} ${alert.permanentFailureReason ? 'Permanently failed' : 'Stuck'} job on ${alert.queueName || 'unknown queue'}: ${alert.jobId}`,
+        html
+      })
+
+      logger.info('[NOTIFICATION] Stuck-job alert sent', { jobId: alert.jobId, recipientCount: admins.length })
+
+      await this.logNotification({
+        type: 'stuck_job',
+        recipientEmails: admins.map(a => a.email),
+        metadata: alert
+      })
+    } catch (error) {
+      logger.error('[NOTIFICATION] Failed to send stuck-job alert', { error })
+    }
+  }
+
+  /**
    * Send a generic notification (multi-channel support)
    * TASK-741: Bridges the gap for drift detection notifications
    */
