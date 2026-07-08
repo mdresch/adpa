@@ -119,6 +119,40 @@ export class AIGenerationJobService {
       })
     }
 
+    // Concurrency guard: atomically claim exclusive ownership of this job before
+    // doing any real work. A message can be delivered to more than one live
+    // handler invocation regardless of *why* — a dropped RabbitMQ channel
+    // triggering amqp-connection-manager's reconnect-and-redeliver, a broker
+    // consumer_timeout, a manual retry racing an in-flight attempt, or (in a
+    // future multi-node deployment) two separate workers entirely. This guard
+    // doesn't need to know why: it makes Postgres's row-level UPDATE atomicity
+    // the sole arbiter of "who gets to process this job right now," which holds
+    // regardless of the broker's state. `processing_started_at` doubles as the
+    // liveness heartbeat (already refreshed every 4s by startProgressHeartbeat
+    // below) and the staleness threshold — a lease with no heartbeat in the
+    // last AI_GENERATE_CLAIM_STALE_SECONDS is presumed dead and may be reclaimed.
+    const claimStaleSeconds = Number(process.env.AI_GENERATE_CLAIM_STALE_SECONDS) || 30
+    try {
+      const claim = await db.query(
+        `UPDATE jobs
+         SET status = 'processing', worker_id = $2, processing_started_at = CURRENT_TIMESTAMP
+         WHERE id = $1
+           AND status NOT IN ('cancelled', 'completed', 'failed')
+           AND (processing_started_at IS NULL OR processing_started_at < NOW() - ($3::int * INTERVAL '1 second'))
+         RETURNING id`,
+        [actualJobId, workerId, claimStaleSeconds]
+      )
+      if (claim.rows.length === 0) {
+        log.warn(`[AIGenerationJobService] Job ${actualJobId} is already being processed by another live invocation — skipping`, { jobId: actualJobId })
+        return { ai: null, documentId: null, skipped: true, reason: 'job already claimed by an in-flight attempt' }
+      }
+    } catch (claimErr) {
+      log.warn('[AIGenerationJobService] Concurrency claim check failed (non-fatal, proceeding with generation)', {
+        jobId: actualJobId,
+        error: claimErr instanceof Error ? claimErr.message : String(claimErr),
+      })
+    }
+
     try {
       // Update job status to processing and assign worker
       await updateJobStatus(actualJobId, "processing", 10, workerId, "ai-processing")

@@ -480,8 +480,8 @@ describe('QueueService', () => {
       await queueService.cancelJob(jobId)
 
       expect(mockDependencies.database!.query).toHaveBeenCalledWith(
-        expect.stringContaining("UPDATE jobs SET status = 'cancelled'"),
-        [jobId]
+        expect.stringContaining("status = 'cancelled'"),
+        [jobId, null]
       )
       expect(mockQueue.getJob).toHaveBeenCalledWith(jobId)
       expect(mockJob.remove).toHaveBeenCalled()

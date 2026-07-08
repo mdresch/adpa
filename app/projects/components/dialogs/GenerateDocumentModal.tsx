@@ -36,7 +36,6 @@ function getPlus5WorkingDaysDate(): string {
 const EMPTY_GENERATION_FORM: DocumentGenerationForm = {
   name: "",
   template_id: "",
-  prompt: "",
   provider: "",
   model: "",
   temperature: 0.7,
@@ -57,11 +56,21 @@ const EMPTY_PROGRESS: GenerationProgress = {
   percentage: 0,
 }
 
+// The generation prompt is never user-edited — the template's own system_prompt
+// and template_paragraphs (plus context injection) determine document structure
+// and content server-side. This only supplies the required, non-empty top-level
+// directive the API schema expects.
+function buildGenerationPrompt(project: Project, template?: Template): string {
+  if (template) {
+    return `Generate the "${template.name}" document for the ${project.name} project.`
+  }
+  return `Generate a comprehensive document for the ${project.name} project using the ${project.framework} framework.`
+}
+
 function buildInitialForm(project: Project, userId?: string, framework?: string): DocumentGenerationForm {
   return {
     name: `${project.name} - Generated Document`,
     template_id: "",
-    prompt: `Generate a comprehensive document for the ${project.name} project using the ${project.framework} framework. Include project overview, objectives, timeline, and key deliverables.`,
     provider: "",
     model: "",
     temperature: 0.7,
@@ -142,7 +151,7 @@ export function GenerateDocumentModal({ project, isOpen, onClose, aiProviders = 
 
     if (!project) return
 
-    if (!form.name || !form.prompt) {
+    if (!form.name) {
       toast.error("Please fill in required fields")
       return
     }
@@ -153,7 +162,8 @@ export function GenerateDocumentModal({ project, isOpen, onClose, aiProviders = 
     }
 
     const startTime = Date.now()
-    const templateName = templates.find((t) => t.id === form.template_id)?.name || "Custom"
+    const selectedTemplate = templates.find((t) => t.id === form.template_id)
+    const templateName = selectedTemplate?.name || "Custom"
 
     try {
       setGenerating(true)
@@ -184,7 +194,7 @@ export function GenerateDocumentModal({ project, isOpen, onClose, aiProviders = 
         projectId: project.id,
         name: form.name,
         templateId: form.template_id || undefined,
-        userPrompt: form.prompt,
+        userPrompt: buildGenerationPrompt(project, selectedTemplate),
         provider: form.provider,
         model: form.model,
         temperature: form.temperature || 0.7,

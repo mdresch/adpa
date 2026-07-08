@@ -25,7 +25,6 @@ export interface NewProjectForm {
 export interface DocumentGenerationForm {
   name: string
   template_id: string
-  prompt: string
   provider: string
   model: string
   temperature: number

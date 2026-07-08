@@ -83,13 +83,24 @@ export async function registerWorkers(): Promise<void> {
       }, deps),
       new Promise((_, reject) => {
         setTimeout(() => {
-          safeUpdate(
-            pool,
-            `UPDATE jobs SET status = 'failed', error_message = $2 WHERE id = $1 AND status = 'processing'`,
-            [actualJobId, `Permanently terminated: exceeded ${timeoutMinutes}-minute processing limit.`]
-          ).finally(() => {
-            reject(new Error(`ai-generate job ${actualJobId} exceeded ${timeoutMinutes}-minute timeout`))
-          })
+          // Rejecting here does not stop the still-running processJob() call above —
+          // Promise.race can't cancel its loser. Cancelling through the real
+          // cancelJob() path (rather than a raw status='failed' UPDATE) is what
+          // makes this terminal: updateJobStatus() refuses to write over a
+          // cancelled job, so the orphaned call's later heartbeats/completion
+          // writes can no longer resurrect it, and the owned document (if any)
+          // is cancelled too instead of being left as a stale empty draft.
+          Promise.resolve()
+            .then(async () => {
+              const { cancelJob } = await import("./queueClient")
+              await cancelJob(actualJobId, `Cancelled: exceeded ${timeoutMinutes}-minute processing limit.`)
+            })
+            .catch((cancelErr) => {
+              logger.error(`[WORKER] Failed to cancel timed-out job ${actualJobId}`, cancelErr)
+            })
+            .finally(() => {
+              reject(new Error(`ai-generate job ${actualJobId} exceeded ${timeoutMinutes}-minute timeout`))
+            })
         }, timeoutMs)
       }),
     ])

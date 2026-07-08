@@ -8,6 +8,7 @@ import { buildInlineEntityExtractionPrompt } from "./inlineEntityExtractionPromp
 import { v4 as uuidv4 } from "uuid"
 import { updateJobStatus, updateJobLlmProgress, type LlmProgressStep } from "./queueService"
 import { CompactorService } from "./compactorService"
+import { templateAuditService } from "./templateAuditService"
 import { contextRetrieval } from "./searchService"
 
 export interface DocumentGenerationRequest {
@@ -492,40 +493,52 @@ class DocumentGenerationService {
       // row, not mere presence of the field, before falling back to a fresh row.
       const candidateRow = await pool.query(`SELECT 1 FROM documents WHERE id = $1`, [docId])
       if (candidateRow.rows.length === 0) {
-        const existingDraft = await pool.query(
-          `SELECT id FROM documents
-           WHERE project_id = $1
-             AND template_id IS NOT DISTINCT FROM $2
-             AND created_by IS NOT DISTINCT FROM $3
-             AND status = 'draft'
-             AND (content IS NULL OR content = '')
-             AND created_at > NOW() - INTERVAL '2 hours'
-           ORDER BY created_at DESC
-           LIMIT 1`,
-          [request.projectId, request.templateId || null, request.userId || null]
+        // Atomic insert-or-reuse against idx_documents_one_empty_draft_per_template
+        // (migration 431): at most one empty draft may exist per (project_id,
+        // template_id) — enforced by Postgres itself, not by this application-level
+        // check. This closes the race where concurrent or broker-redelivered
+        // attempts of the same generation each ran a SELECT-then-INSERT, each saw
+        // "no existing draft" before the other's insert had committed, and each
+        // minted its own duplicate placeholder document.
+        const insertResult = await pool.query(
+          `INSERT INTO documents (id, project_id, name, content, template_id, status, created_by, version, semantic_version)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+           ON CONFLICT (project_id, template_id) WHERE status = 'draft' AND (content IS NULL OR content = '')
+           DO NOTHING
+           RETURNING id`,
+          [
+            docId,
+            request.projectId,
+            docName,
+            '',
+            request.templateId || null,
+            'draft',
+            request.userId || null,
+            1,
+            '1.0.0'
+          ]
         )
-        if (existingDraft.rows.length > 0) {
-          docId = existingDraft.rows[0].id
-          logger.info(`[DOC-GEN] Reusing existing empty draft document ${docId} for project ${request.projectId} instead of creating a new one`)
+
+        if (insertResult.rows.length === 0) {
+          // Conflict: another attempt already holds the empty draft for this
+          // project+template combination — reuse it instead of proceeding with
+          // our own now-orphaned docId.
+          const existingDraft = await pool.query(
+            `SELECT id FROM documents
+             WHERE project_id = $1
+               AND template_id IS NOT DISTINCT FROM $2
+               AND status = 'draft'
+               AND (content IS NULL OR content = '')
+             ORDER BY created_at DESC
+             LIMIT 1`,
+            [request.projectId, request.templateId || null]
+          )
+          if (existingDraft.rows.length > 0) {
+            docId = existingDraft.rows[0].id
+            logger.info(`[DOC-GEN] Reusing existing empty draft document ${docId} for project ${request.projectId} instead of creating a new one`)
+          }
         }
       }
-
-      await pool.query(
-        `INSERT INTO documents (id, project_id, name, content, template_id, status, created_by, version, semantic_version)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-         ON CONFLICT (id) DO NOTHING`,
-        [
-          docId,
-          request.projectId,
-          docName,
-          '',
-          request.templateId || null,
-          'draft',
-          request.userId || null,
-          1,
-          '1.0.0'
-        ]
-      )
       isDocumentCreated = true;
 
       // Load existing job data to check if this is a retry or has existing progress
@@ -688,14 +701,34 @@ class DocumentGenerationService {
         throw new Error("AI failed to return a valid document structure plan.")
       }
 
-      // Hard cap on planner sprawl for templates with no fixed structure — the planner
-      // prompt targets 4-6 sections, but this backstops non-compliant responses so a
-      // single generation can't balloon into an unbounded number of LLM calls.
+      // Absolute safety ceiling on planner sprawl for templates with no fixed structure.
+      // This is NOT a content cap: sections are never truncated (that silently drops
+      // whatever the plan judged necessary). A plan this large means the template's
+      // prompt/goal is asking for more than one reasonable document, so generation is
+      // aborted and a template review is flagged instead — the fix is to split the
+      // template into narrower ones and recombine the resulting documents at export
+      // time (DOCX/PDF/Markdown), not to keep stretching a single document.
       if (this.getTemplateParagraphs(template).length === 0) {
-        const maxSections = Number(process.env.DOC_GEN_MAX_SECTIONS) || 6
-        if (generationPlan.sections.length > maxSections) {
-          logger.warn(`[AGENT] Plan proposed ${generationPlan.sections.length} sections for an unstructured template; capping to ${maxSections}.`)
-          generationPlan.sections = generationPlan.sections.slice(0, maxSections)
+        const absoluteMaxSections = Number(process.env.DOC_GEN_ABSOLUTE_MAX_SECTIONS) || 20
+        if (generationPlan.sections.length > absoluteMaxSections) {
+          logger.error(`[AGENT] Plan proposed ${generationPlan.sections.length} sections — exceeds safety ceiling of ${absoluteMaxSections}. Aborting and flagging template for review.`)
+
+          if (template?.id) {
+            try {
+              const versionResult = await pool.query(`SELECT COUNT(*) FROM template_audits WHERE template_id = $1`, [template.id])
+              const version = Number(versionResult.rows[0].count) + 1
+              await templateAuditService.createPendingAudit(template.id, 'oversized_plan', version)
+            } catch (auditErr) {
+              logger.warn(`[AGENT] Failed to flag template ${template.id} for oversized-plan review (non-fatal)`, auditErr)
+            }
+          }
+
+          throw new Error(JSON.stringify({
+            error: "TEMPLATE_OVERSIZED_PLAN",
+            message: `The planner proposed ${generationPlan.sections.length} sections, exceeding the safety ceiling of ${absoluteMaxSections}. This template is asking for more than one reasonable document. A template review has been flagged — consider splitting this template into narrower ones and combining the resulting documents at export time (DOCX/PDF/Markdown).`,
+            proposedSectionCount: generationPlan.sections.length,
+            ceiling: absoluteMaxSections,
+          }))
         }
       }
 
@@ -1299,7 +1332,11 @@ Based on the type of error encountered, please follow these steps to resolve the
    If the error is related to the AI provider (e.g., Groq, OpenAI, Mistral, Gemini), the request may have timed out or hit rate/token limits.
    * **Action**: Wait a few moments and try generating the document again. If it persists, verify your API keys and model availability in the settings under [AI Models](/settings/ai-models).
 
-3. **System / Dependency Failures**:
+3. **Template Oversized (\`TEMPLATE_OVERSIZED_PLAN\`)**:
+   If the error indicates the planner proposed more sections than the safety ceiling allows, this template's prompt/goal is asking for more content than belongs in a single document. A template review has been automatically flagged.
+   * **Action**: Split this template into narrower templates, each covering a subset of the sections, and generate separate documents. Combine them at export time (DOCX/PDF/Markdown) rather than growing one document indefinitely.
+
+4. **System / Dependency Failures**:
    If this is a system database or queue error:
    * **Action**: Check if Postgres, Redis, or RabbitMQ are running and reachable by checking the server logs.
 
