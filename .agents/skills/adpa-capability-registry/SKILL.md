@@ -11,6 +11,8 @@ Every governed module needs three declared owners (`platformOperator`, `function
 
 Sibling skill: [adpa-federated-capability-ownership](../adpa-federated-capability-ownership/SKILL.md) covers Phase 0 (department identity, Firebase claims sync, `companies.created_by`) under the same governed-feature packet.
 
+This skill also now covers the read-only HTTP lookup (`CapabilityRegistryRepository`/`CapabilityRegistryController`, `GET /api/v1/capability-registry/:moduleId/:portfolioId`) that Phase 2's .NET `TaskApprovalGate` calls to resolve a module's declared owner — the orchestrator's `GovernanceDbContext` is a physically separate Postgres database (Aspire-provisioned `governance-ledger`) and cannot query `capability_registry` directly. See `adpa-task-approval-gate` for the orchestrator-side consumer.
+
 ## Invariants
 
 - Must always: scope `capability_registry` by `portfolio_id`, not `company_id`/`tenant_id` alone — activation is per-portfolio, matching Phase 0's identity scoping.
@@ -21,6 +23,7 @@ Sibling skill: [adpa-federated-capability-ownership](../adpa-federated-capabilit
 - Must always: read attestation cadence from configuration (`CAPABILITY_ATTESTATION_CADENCE_DAYS`), never hardcode the cadence as a literal at a call site.
 - Must never: treat this packet's reconciliation as the actual DB-side enforcement. The live check (querying real Postgres, actually inserting missing rows, alerting on orphans) is a separate operational job that calls this pure logic — not built in this packet, same scoping discipline Phase 0 applied to its own DDL.
 - Must never: extend `server/scripts/verify-governed-features.mjs` to do this reconciliation — that script is a static, filesystem-only checker with no DB access; conflating the two would give it a dependency it doesn't have today.
+- Must always: keep the `GET /api/v1/capability-registry/:moduleId/:portfolioId` lookup read-only and unauthenticated-by-design (no user JWT exists on this service-to-service call) — matches the existing no-auth-header convention already used by the orchestrator's other typed HttpClients (`GovernanceApiClient`, `IntelligenceClient`); trust is via the internal network boundary, not a credential.
 
 ## Interaction Rules
 
@@ -35,6 +38,9 @@ Sibling skill: [adpa-federated-capability-ownership](../adpa-federated-capabilit
 | `server/src/modules/capabilityRegistry/capabilityRegistryReconciliation.ts` | Pure logic: `reconcileCapabilityRegistry` (missing/orphaned rows), `buildCapabilityRegistryRow` (owner-column defaults), `getAttestationCadenceDays` (config-driven cadence) |
 | `server/migrations/433_capability_registry.sql` | Creates `capability_registry` (FK to `portfolio_governance`, `UNIQUE (module_id, portfolio_id)`) — DDL correctness itself is integration-test territory |
 | `server/src/__tests__/modules/federated-capability-ownership/capabilityRegistry.test.ts` | Contract Guards: REQ-CAP-001..006 |
+| `server/src/modules/capabilityRegistry/CapabilityRegistryRepository.ts` | DB-backed lookup: `findByModuleAndPortfolio(moduleId, portfolioId)` — scoped by both, never module_id alone |
+| `server/src/modules/capabilityRegistry/CapabilityRegistryController.ts` / `routes.ts` | `GET /api/v1/capability-registry/:moduleId/:portfolioId` — Phase 2's only way to read `capability_registry` from the orchestrator |
+| `server/src/__tests__/modules/federated-capability-ownership/capabilityRegistryRepository.test.ts` | Contract Guards: REQ-CAP-007..008 |
 
 ## Commands
 
@@ -48,6 +54,7 @@ npm run verify:governed-features
 ## Related Skills
 
 - `adpa-federated-capability-ownership` — Phase 0, the identity/claims-sync sibling under the same packet
+- `adpa-task-approval-gate` — Phase 2, the orchestrator-side consumer of the lookup endpoint this skill documents
 - `adpa-governed-feature-loop` — the process this packet follows
 - `adpa-projects-pillar7` — sibling tenant/portfolio scoping conventions
 - `adpa-aev-workflow` — required for the Phase 2/3/6/7 orchestrator-side work this packet precedes
